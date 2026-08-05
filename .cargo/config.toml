@@ -1,0 +1,6 @@
+# `cargo xtask` is a cargo *alias*, not a subcommand — it does not exist unless
+# it is declared here. Without this file, the command that README.md, CLAUDE.md
+# and CONTRIBUTING.md all name as "the whole gate" fails with
+# `error: no such command: xtask`.
+[alias]
+xtask = "run --package xtask --"
