@@ -1,0 +1,70 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "examples/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Wet-Ink-Corporation/eventum"
+authors = ["Ryan Britton"]
+keywords = ["event-sourcing", "dcb", "cqrs", "event-store"]
+categories = ["database", "data-structures"]
+
+# Single source of truth for every third-party version. Members write
+# `bytes.workspace = true` so the graph can never end up with two versions of
+# the same crate — the classic multi-crate Rust foot-gun.
+[workspace.dependencies]
+# --- internal ---
+# `default-features = false` here so that each member states the features it
+# actually needs. Cargo forbids a member from *removing* a workspace default,
+# so the permissive choice at this level would silently pull `memory` (and its
+# `std` requirement) into every adapter.
+eventum-core = { version = "0.1.0", path = "crates/eventum-core", default-features = false }
+eventum-testkit = { version = "0.1.0", path = "crates/eventum-testkit" }
+
+# --- external ---
+bytes = { version = "1.10", default-features = false }
+futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+thiserror = { version = "2", default-features = false }
+trait-variant = "0.1.3"
+
+# --- dev / tooling only ---
+anyhow = "1"
+proptest = "1"
+tokio = { version = "1", default-features = false }
+
+# Shared lint policy. Members opt in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# `priority = -1` lets the specific allows below override the group.
+pedantic = { level = "warn", priority = -1 }
+# Idiomatic here: `eventum_core::event::EventType` reads better than `event::Type`.
+module_name_repetitions = "allow"
+# Public fallible/panicking APIs must document why.
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+# No silent unwraps in library code; tests override locally.
+unwrap_used = "warn"
+# Stub crates are intentionally unimplemented until their adapter pass lands.
+todo = "allow"
+# We apply `#[must_use]` deliberately rather than exhaustively; the lint fires on
+# every pure accessor and drowns out real findings.
+must_use_candidate = "allow"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

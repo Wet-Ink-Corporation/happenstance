@@ -1,0 +1,23 @@
+[package]
+name = "eventum-runtime"
+description = "Typed domain layer for eventum: codecs, domain events, decision models, and projection runners. Not yet implemented."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+eventum-core = { workspace = true, features = ["std"] }
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "eventum-core/serde"]
+
+[lints]
+workspace = true

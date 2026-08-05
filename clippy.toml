@@ -1,0 +1,21 @@
+msrv = "1.85"
+
+# `clippy::doc_markdown` flags any CamelCase-looking word in prose as a missing
+# code span. These are proper nouns, not identifiers, and this crate's docs use
+# them constantly. Extending the dictionary keeps the lint useful instead of
+# turning it off wholesale.
+doc-valid-idents = [
+    "..",
+    "CBOR",
+    "Cloudflare",
+    "Cypher",
+    "DuckDB",
+    "KuzuDB",
+    "Ladybug",
+    "LadybugDB",
+    "MessagePack",
+    "Postgres",
+    "PostgreSQL",
+    "SQLite",
+    "UUIDv7",
+]

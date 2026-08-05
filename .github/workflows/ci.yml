@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The whole gate, defined once in xtask/src/main.rs rather than duplicated
+  # here. `cargo xtask ci` is the same command contributors run locally.
+  gate:
+    name: gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is first-class: the local-first application this library was
+        # written for ships there.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the channel, the components and the
+      # wasm32 target, so there is nothing to configure here.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install supplementary tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack,cargo-deny
+
+      - name: Run the gate
+        run: cargo xtask ci
+
+  # Verifies the MSRV claimed in Cargo.toml. This is the only place it is
+  # checked, so a change that silently requires a newer compiler fails here.
+  msrv:
+    name: minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@v2
+      # `--no-dev-deps` because dev-dependencies are free to require a newer
+      # compiler than the published crates do.
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - run: cargo hack check --workspace --no-dev-deps --rust-version
+
+  # Public API changes must be intentional. This fails a PR that breaks semver
+  # without a version bump.
+  semver:
+    name: semver compatibility
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          # Only the published crates have a public API contract to keep.
+          package: eventum-core, eventum-testkit
