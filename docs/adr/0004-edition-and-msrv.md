@@ -8,7 +8,7 @@
 A library crate has to state which compilers it supports, and the choice
 interacts with the language features the design depends on.
 
-What eventum actually needs:
+What happenstance actually needs:
 
 | Feature | Stabilised |
 |---|---|
@@ -40,7 +40,7 @@ design needs. Edition 2024 gets the lifetime-capture rules the ports rely on.
 toolchain. It has not been checked against a local 1.85 install. If that job
 fails, raise the MSRV rather than working around it.
 
-**Neutral.** `eventum-core` is `no_std` + `alloc` under
+**Neutral.** `happenstance` is `no_std` + `alloc` under
 `--no-default-features`, verified in the feature matrix. Nothing needs that
 today; it costs a handful of `alloc::` imports and keeps the option open.
 

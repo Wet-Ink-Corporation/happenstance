@@ -1,7 +1,12 @@
 # ADR-0002: Prefixed crate names, with a parallel claim on `eventum`
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0005](0005-rename-to-happenstance.md)
 - **Date:** 2026-08-05
+
+> **Superseded.** The project was renamed to `happenstance`, which is free on
+> crates.io, so the compromise below is moot. This ADR is kept unaltered as the
+> record of why the original naming was chosen. Everything it says about the
+> `eventum` name refers to the unrelated crate that still holds it.
 
 ## Context
 

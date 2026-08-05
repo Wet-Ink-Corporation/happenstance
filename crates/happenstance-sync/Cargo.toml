@@ -1,0 +1,22 @@
+[package]
+name = "happenstance-sync"
+description = "Instance-to-instance event replication for happenstance. Not yet implemented."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+# `serde` is non-optional here: replication is the reason `happenstance`'s
+# serde feature exists.
+happenstance = { workspace = true, features = ["std", "serde"] }
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

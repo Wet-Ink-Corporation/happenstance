@@ -1,0 +1,31 @@
+[package]
+name = "happenstance-sqlite"
+description = "SQLite event store and projection store adapters for happenstance. Not yet implemented."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+happenstance = { workspace = true, features = ["std"] }
+futures-core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+happenstance-testkit.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[features]
+default = ["event-store", "projection-store"]
+# Both roles share one driver and one connection story, so they share a crate
+# and are separated by features rather than by another package.
+event-store = []
+projection-store = []
+
+[lints]
+workspace = true

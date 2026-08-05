@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/Wet-Ink-Corporation/eventum"
+repository = "https://github.com/Wet-Ink-Corporation/happenstance"
 authors = ["Ryan Britton"]
 keywords = ["event-sourcing", "dcb", "cqrs", "event-store"]
 categories = ["database", "data-structures"]
@@ -21,8 +21,8 @@ categories = ["database", "data-structures"]
 # actually needs. Cargo forbids a member from *removing* a workspace default,
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
-eventum-core = { version = "0.1.0", path = "crates/eventum-core", default-features = false }
-eventum-testkit = { version = "0.1.0", path = "crates/eventum-testkit" }
+happenstance = { version = "0.1.0", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { version = "0.1.0", path = "crates/happenstance-testkit" }
 
 # --- external ---
 bytes = { version = "1.10", default-features = false }
@@ -48,7 +48,7 @@ unused_qualifications = "warn"
 [workspace.lints.clippy]
 # `priority = -1` lets the specific allows below override the group.
 pedantic = { level = "warn", priority = -1 }
-# Idiomatic here: `eventum_core::event::EventType` reads better than `event::Type`.
+# Idiomatic here: `happenstance::event::EventType` reads better than `event::Type`.
 module_name_repetitions = "allow"
 # Public fallible/panicking APIs must document why.
 missing_errors_doc = "warn"

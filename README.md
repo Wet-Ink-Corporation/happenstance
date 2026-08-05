@@ -1,10 +1,10 @@
-# eventum
+# happenstance
 
 An opinionated, storage-agnostic event sourcing library for Rust, built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/) —
 with batteries.
 
-[![CI](https://github.com/Wet-Ink-Corporation/eventum/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/eventum/actions/workflows/ci.yml)
+[![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 
 > **Status: early.** The contract and its conformance suite are real and
@@ -62,12 +62,12 @@ cargo run -p course-subscriptions
 
 | Crate | Role | Status |
 |---|---|---|
-| [`eventum-core`](crates/eventum-core) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
-| [`eventum-testkit`](crates/eventum-testkit) | Conformance suite adapters must pass | ✅ 27 rules + property tests |
-| [`eventum-sqlite`](crates/eventum-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
-| [`eventum-ladybug`](crates/eventum-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
-| [`eventum-sync`](crates/eventum-sync) | Instance-to-instance replication | 🔲 stub, open questions written down |
-| [`eventum-runtime`](crates/eventum-runtime) | Codecs, typed domain events, decision models | 🔲 named seam, not started |
+| [`happenstance`](crates/happenstance) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 27 rules + property tests |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
+| [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
+| [`happenstance-sync`](crates/happenstance-sync) | Instance-to-instance replication | 🔲 stub, open questions written down |
+| [`happenstance-runtime`](crates/happenstance-runtime) | Codecs, typed domain events, decision models | 🔲 named seam, not started |
 
 The stubs are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
@@ -77,11 +77,11 @@ real questions rather than rediscovering them.
 
 ```toml
 [dependencies]
-eventum-core = "0.1"
+happenstance = "0.1"
 ```
 
 ```rust
-use eventum_core::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
+use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
 
 let store = MemoryEventStore::new();
 
@@ -104,7 +104,7 @@ nothing else — an empty query cannot be constructed. `SequencePosition` wraps 
 costs no more than a bare one. `Tags` is canonically sorted at construction, so
 it can never be observed out of order and set equality is just `==`.
 
-**Payloads are opaque.** `Event` holds `Bytes`, and `eventum-core` has no
+**Payloads are opaque.** `Event` holds `Bytes`, and `happenstance` has no
 `serde` dependency by default. Adapters need no domain knowledge, and
 replication forwards events byte-for-byte without deserialising them. Encoding
 belongs to the layer above.
@@ -118,12 +118,12 @@ string to tell "retry" from "something broke".
 be implemented on `wasm32` where futures are `!Send` — which is what makes a
 Cloudflare Durable Object adapter possible at all. `SendEventStore` is derived
 from it for native use, and implementing it gives you both. Generic code binds
-the weaker one and accepts either. CI builds `eventum-core` for
+the weaker one and accepts either. CI builds `happenstance` for
 `wasm32-unknown-unknown` on every commit so this stays true.
 
 **Adapters are separate crates, not feature flags.** `rusqlite` bundles a C
 library; LadybugDB's `lbug` compiles C++ through `cmake`. Nobody who wants one
-should pay for the other, and a third party can publish `eventum-postgres` as a
+should pay for the other, and a third party can publish `happenstance-postgres` as a
 first-class citizen.
 
 ## Writing an adapter
@@ -132,7 +132,7 @@ Implement `SendEventStore` (or `EventStore` if your target cannot be `Send`),
 then inherit the entire conformance suite:
 
 ```rust
-eventum_testkit::event_store_conformance!(MyEventStore::new());
+happenstance_testkit::event_store_conformance!(MyEventStore::new());
 ```
 
 That expands to one `#[tokio::test]` per rule, so a failure names the rule that
@@ -157,15 +157,18 @@ runs. If it passes locally, it passes on CI.
 [Disintegrate](https://github.com/disintegrate-es/disintegrate) is the other
 Rust DCB library; it is Postgres-bound and macro-driven.
 [`umadb-dcb`](https://crates.io/crates/umadb-dcb) ships duplicated sync and
-async traits. eventum's bet is different: ports plus a *published* conformance
+async traits. happenstance's bet is different: ports plus a *published* conformance
 suite, so that "storage agnostic" is a claim anyone can check and third parties
 can ship adapters against.
 
-## Crate naming
+## Former name
 
-The bare `eventum` name on crates.io is taken by an unrelated, dormant crate
-(last published 2020). The prefixed names are unaffected; see
-[ADR-0002](docs/adr/0002-crate-naming.md).
+This project was called **eventum** until 2026-08-05. It was renamed because the
+bare `eventum` name on crates.io belongs to an unrelated crate, dormant since
+2020, which forced an awkward layout — prefixed crates only, and a `-core` suffix
+that existed for no reason but the collision. `happenstance` is free, so the
+contract crate simply takes the name. Nothing had been published, so no release
+is affected; see [ADR-0005](docs/adr/0005-rename-to-happenstance.md).
 
 ## Licence
 

@@ -21,7 +21,7 @@
 #![allow(clippy::print_stdout)]
 
 use anyhow::{Result, bail};
-use eventum_core::{
+use happenstance::{
     AppendCondition, AppendError, Event, EventStore, MemoryEventStore, Query, QueryItem,
     SequencePosition, Tags, read_decision_model,
 };
@@ -202,7 +202,7 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
 ///
 /// This is the second half of every DCB command handler, and it is identical
 /// every time — which is exactly why it belongs in a runtime layer rather than
-/// in each handler. See `eventum-runtime`.
+/// in each handler. See `happenstance-runtime`.
 async fn commit(
     store: &MemoryEventStore,
     events: &[Event],

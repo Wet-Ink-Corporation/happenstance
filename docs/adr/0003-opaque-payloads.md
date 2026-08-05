@@ -11,16 +11,16 @@ and the choice propagates into every adapter signature.
 
 ## Decision
 
-`Event::data` is [`bytes::Bytes`](https://docs.rs/bytes). `eventum-core` has no
+`Event::data` is [`bytes::Bytes`](https://docs.rs/bytes). `happenstance` has no
 `serde` dependency in its default feature set, and never parses a payload.
 
 A `serde` feature exists, off by default, adding `Serialize`/`Deserialize` for
 the *envelope* types (`Event`, `Tag`, `Query`, `AppendCondition`, …). It exists
-for `eventum-sync`, which has to put an envelope on the wire. It does not make
+for `happenstance-sync`, which has to put an envelope on the wire. It does not make
 the payload any less opaque.
 
 Encoding and decoding — a `Codec` trait, a `DomainEvent` mapping — belong to
-`eventum-runtime`, the layer above.
+`happenstance-runtime`, the layer above.
 
 ## Consequences
 
@@ -35,7 +35,7 @@ stable in the workspace.
 projections copies nothing.
 
 **Bad.** Application code cannot pattern-match a domain event straight out of
-the store; something must decode it first. Until `eventum-runtime` exists, that
+the store; something must decode it first. Until `happenstance-runtime` exists, that
 is the application's job — visible in the `course-subscriptions` example, which
 hand-rolls a payload parse and says so.
 

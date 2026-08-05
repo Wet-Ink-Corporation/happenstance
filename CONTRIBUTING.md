@@ -2,10 +2,12 @@
 
 ## Before you start
 
-Read [`docs/adr/`](docs/adr/). Four decisions shape everything else: the
-two-flavour async ports, the crate naming, opaque payloads, and the edition and
-MSRV. Changing one is fine — but it means writing a new ADR that supersedes the
-old one, not working around it in code.
+Read [`docs/adr/`](docs/adr/). A handful of decisions shape everything else: the
+two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
+naming. Changing one is fine — but it means writing a new ADR that supersedes
+the old one, not working around it in code. ADR-0002 and ADR-0005 are a worked
+example of that: the superseded one is left factually intact rather than
+rewritten.
 
 ## The gate
 
@@ -14,7 +16,7 @@ cargo xtask ci
 ```
 
 That is the whole thing: formatting, clippy with `-D warnings`, tests, the
-`wasm32-unknown-unknown` build of `eventum-core`, documentation, and — when the
+`wasm32-unknown-unknown` build of `happenstance`, documentation, and — when the
 tools are installed — `cargo hack` feature-powerset and `cargo deny`. It is
 defined once in `xtask/src/main.rs`, and CI runs exactly the same command. If it
 passes locally, it passes on CI.
@@ -32,7 +34,7 @@ cargo install cargo-hack cargo-deny --locked
    on `wasm32`. Implementing the former gives you the latter for free.
 2. Invoke the conformance suite:
    ```rust
-   eventum_testkit::event_store_conformance!(MyStore::new());
+   happenstance_testkit::event_store_conformance!(MyStore::new());
    ```
 3. Make it pass.
 

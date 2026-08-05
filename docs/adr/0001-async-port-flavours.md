@@ -7,7 +7,7 @@
 
 The storage ports are async. In Rust, an `async fn` in a trait produces an
 anonymous future whose `Send`-ness is fixed by the *trait definition*, not by
-the implementation. Two of eventum's targets disagree about what that should be:
+the implementation. Two of happenstance's targets disagree about what that should be:
 
 - **native / tokio** requires `Send` futures. Without it, `tokio::spawn` rejects
   the future and a store cannot be used from a multi-threaded runtime.
@@ -65,7 +65,7 @@ be a permanent source of confusion.
 
 **Good.** One definition, both targets. Native adapters get `Send` futures *and*
 `Send` streams. The Cloudflare path is open before any Cloudflare code exists,
-and CI builds `eventum-core` for `wasm32-unknown-unknown` on every commit so it
+and CI builds `happenstance` for `wasm32-unknown-unknown` on every commit so it
 stays open.
 
 **Bad.** Importing both trait names into one module makes method-call syntax

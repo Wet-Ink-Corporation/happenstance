@@ -6,8 +6,8 @@ changing anything.
 ## What this is
 
 A storage-agnostic, [DCB-compliant](https://dcb.events/specification/) event
-sourcing library. `eventum-core` defines the contract; adapter crates implement
-it; `eventum-testkit` decides whether they did.
+sourcing library. `happenstance` defines the contract; adapter crates implement
+it; `happenstance-testkit` decides whether they did.
 
 ## Who you are working with
 
@@ -24,18 +24,18 @@ When a construct is unusual, say what the alternative was and why it lost.
 ## Repository map
 
 ```
-crates/eventum-core/      the contract. types, ports, errors, in-memory store.
-crates/eventum-testkit/   conformance suite. the bar every adapter must clear.
-crates/eventum-runtime/   🔲 named seam: codecs, DomainEvent, decision models.
-crates/eventum-sqlite/    🔲 stub. event store + projection store.
-crates/eventum-ladybug/   🔲 stub. graph projection store only.
-crates/eventum-sync/      🔲 stub. instance-to-instance replication.
+crates/happenstance/             the contract. types, ports, errors, in-memory store.
+crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
+crates/happenstance-runtime/     🔲 named seam: codecs, DomainEvent, decision models.
+crates/happenstance-sqlite/      🔲 stub. event store + projection store.
+crates/happenstance-ladybug/     🔲 stub. graph projection store only.
+crates/happenstance-sync/        🔲 stub. instance-to-instance replication.
 examples/course-subscriptions/   the canonical DCB worked example.
-xtask/                    `cargo xtask ci` — the whole gate, defined once.
-docs/adr/                 the four decisions this design rests on.
+xtask/                           `cargo xtask ci` — the whole gate, defined once.
+docs/adr/                        the decisions this design rests on.
 ```
 
-Dependency rule: **everything depends on `eventum-core`; `eventum-core` depends
+Dependency rule: **everything depends on `happenstance`; `happenstance` depends
 on nothing in this workspace.** No adapter may depend on another adapter.
 
 ## Binding constraints
@@ -47,7 +47,7 @@ code around it.
    `wasm32` / Cloudflare Workers target impossible. Ports are defined once
    without a `Send` bound and `trait_variant` derives the `Send` flavour.
    (ADR-0001)
-2. **Never put `serde` in `eventum-core`'s default features.** Payloads are
+2. **Never put `serde` in `happenstance`'s default features.** Payloads are
    opaque `Bytes`. The `serde` feature covers envelope types only, for
    replication. (ADR-0003)
 3. **`EventStore::read` returns the stream at the top level and is not
@@ -66,7 +66,7 @@ code around it.
 before it is considered to exist.**
 
 ```rust
-eventum_testkit::event_store_conformance!(MyStore::new());
+happenstance_testkit::event_store_conformance!(MyStore::new());
 ```
 
 An adapter that compiles but has not run the suite is not an adapter. If a rule
@@ -100,7 +100,7 @@ cargo xtask wasm                        # just the wasm32 check
 ```
 
 `cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, the wasm32 build of
-`eventum-core`, docs, and — when installed — `cargo hack` feature-powerset and
+`happenstance`, docs, and — when installed — `cargo hack` feature-powerset and
 `cargo deny`. It is defined once in `xtask/src/main.rs` and is exactly what CI
 runs.
 
@@ -118,9 +118,9 @@ their own ADR.
   read-model write and checkpoint write in one transaction — is documented on
   the trait.
 - **SQLite driver** (`rusqlite` vs `sqlx`) and the append-condition SQL
-  strategy. Notes are in `crates/eventum-sqlite/src/`.
+  strategy. Notes are in `crates/happenstance-sqlite/src/`.
 - **Replication semantics.** `SequencePosition` is meaningful only within one
   store, so positions cannot be replicated as-is. Whether ingest re-checks
   append conditions is the central unanswered question; it is written up in
-  `crates/eventum-sync/src/lib.rs`.
-- **Whether `eventum-runtime` is the right name and the right seam.**
+  `crates/happenstance-sync/src/lib.rs`.
+- **Whether `happenstance-runtime` is the right name and the right seam.**

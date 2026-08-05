@@ -55,7 +55,7 @@ name = "course-subscriptions"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "eventum-core",
+ "happenstance",
  "tokio",
 ]
 
@@ -67,63 +67,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys",
-]
-
-[[package]]
-name = "eventum-core"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "futures-core",
- "serde",
- "thiserror",
- "tokio",
- "trait-variant",
-]
-
-[[package]]
-name = "eventum-ladybug"
-version = "0.1.0"
-dependencies = [
- "eventum-core",
- "thiserror",
-]
-
-[[package]]
-name = "eventum-runtime"
-version = "0.1.0"
-dependencies = [
- "eventum-core",
- "serde",
-]
-
-[[package]]
-name = "eventum-sqlite"
-version = "0.1.0"
-dependencies = [
- "eventum-core",
- "eventum-testkit",
- "futures-core",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "eventum-sync"
-version = "0.1.0"
-dependencies = [
- "eventum-core",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "eventum-testkit"
-version = "0.1.0"
-dependencies = [
- "eventum-core",
- "proptest",
- "tokio",
 ]
 
 [[package]]
@@ -165,6 +108,63 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
+]
+
+[[package]]
+name = "happenstance"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "serde",
+ "thiserror",
+ "tokio",
+ "trait-variant",
+]
+
+[[package]]
+name = "happenstance-ladybug"
+version = "0.1.0"
+dependencies = [
+ "happenstance",
+ "thiserror",
+]
+
+[[package]]
+name = "happenstance-runtime"
+version = "0.1.0"
+dependencies = [
+ "happenstance",
+ "serde",
+]
+
+[[package]]
+name = "happenstance-sqlite"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "happenstance",
+ "happenstance-testkit",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "happenstance-sync"
+version = "0.1.0"
+dependencies = [
+ "happenstance",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "happenstance-testkit"
+version = "0.1.0"
+dependencies = [
+ "happenstance",
+ "proptest",
+ "tokio",
 ]
 
 [[package]]

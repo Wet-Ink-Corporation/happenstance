@@ -1,6 +1,6 @@
 [toolchain]
 channel = "1.97.1"
 components = ["rustfmt", "clippy"]
-# eventum-core must compile for Cloudflare Workers (wasm32), which is what keeps
+# happenstance must compile for Cloudflare Workers (wasm32), which is what keeps
 # the `!Send` trait flavour honest. See docs/adr/0001-async-port-flavours.md.
 targets = ["wasm32-unknown-unknown"]

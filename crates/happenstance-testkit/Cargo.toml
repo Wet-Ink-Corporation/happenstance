@@ -1,0 +1,22 @@
+[package]
+name = "happenstance-testkit"
+description = "DCB conformance suite for happenstance event store adapters."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+happenstance = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+happenstance = { workspace = true, features = ["memory"] }
+proptest.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

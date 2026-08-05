@@ -66,7 +66,7 @@ const REQUIRED: &[Step] = &[
         args: &[
             "check",
             "-p",
-            "eventum-core",
+            "happenstance",
             "--target",
             "wasm32-unknown-unknown",
             "--no-default-features",
@@ -145,7 +145,7 @@ fn print_help() {
     println!("Tasks:");
     println!("  ci     Run the full gate: fmt, clippy, tests, wasm32, docs,");
     println!("         plus feature-powerset and cargo-deny when installed.");
-    println!("  wasm   Check that eventum-core builds for wasm32-unknown-unknown.");
+    println!("  wasm   Check that happenstance builds for wasm32-unknown-unknown.");
 }
 
 fn run_ci() -> Result<()> {

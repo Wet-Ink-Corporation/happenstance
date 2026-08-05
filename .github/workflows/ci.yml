@@ -74,4 +74,4 @@ jobs:
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           # Only the published crates have a public API contract to keep.
-          package: eventum-core, eventum-testkit
+          package: happenstance, happenstance-testkit
