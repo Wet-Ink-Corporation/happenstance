@@ -618,15 +618,38 @@ taken.
       the judgement about *why* a gap exists, which is where the dispositions come
       from. Expect the first run to find real errors in the table; a first run that
       finds none means the checker is not checking.
-- [ ] **Reserve ten crates.io names**, one of which has to be invented first:
-      `happenstance`, `happenstance-core`, `happenstance-testkit`,
-      `happenstance-sqlite`, `happenstance-ladybug`, `happenstance-postgres`,
-      `happenstance-neon`, `happenstance-sync`, `happenstance-sync-testkit`, and
-      the Cloudflare crate's name — choose it here. Both principal names are free
-      today and both naming ADRs list losing one as the single risk that reopens
-      them. A `0.0.0` placeholder buys nothing for `cargo-semver-checks`, because
+- [ ] **Reserve three crates.io names now — `happenstance`, `happenstance-core`,
+      `happenstance-testkit`** — and thereafter **one name per phase, when that
+      phase starts.** All three were verified free on 2026-08-06, as was
+      `happenstance-cloudflare`.
+
+      Not ten. crates.io's policy prohibits a crate that *"exists only to reserve
+      a name for a prolonged period of time … without having any genuine
+      functionality, purpose, or significant development activity on the
+      corresponding repository"*, and says the team will normally give the author
+      a chance to justify the crate first. These three exist as code today and are
+      published by phase 12, so the justification is a `cargo package --list`.
+      Seven of the original ten are stubs or nothing at all —
+      `happenstance-postgres`, `happenstance-neon`, `happenstance-sync-testkit` and
+      `happenstance-cloudflare` have no code whatsoever — and a placeholder for a
+      crate that may not exist for ten weeks is the thing the policy describes,
+      whether or not it survives a challenge.
+
+      **This buys less protection than it looks like, and that is not a reason to
+      claim more.** crates.io has no prefix reservation: owning `happenstance`
+      does nothing to protect `happenstance-sqlite`. So the exposure on the
+      adapter names is identical whether they are claimed today or at their phase,
+      and claiming them early trades a policy violation for no additional
+      security.
+
+      A `0.0.0` placeholder buys nothing for `cargo-semver-checks` either, because
       0.0.x versions are mutually incompatible in Cargo; the baseline is fixed
       separately below.
+
+      The per-phase claims, so nothing is forgotten: `happenstance-sqlite` at
+      phase 8, `happenstance-cloudflare` at 9, `happenstance-postgres` and
+      `happenstance-neon` at 10, `happenstance-ladybug` at 11, `happenstance-sync`
+      and `happenstance-sync-testkit` at 13.
 - [ ] **Rewrite the documents the rename inverts.** CLAUDE.md's "What this is",
       repository map, dependency rule, and constraint 2 — which after the rename
       would forbid `serde` to the crate whose job *is* encoding and permit it into
@@ -691,15 +714,18 @@ taken.
 **Proof artefact.** `cargo package -p happenstance-core --list` and
 `cargo package -p happenstance --list` each show both licence files and a README;
 `cargo test --doc -p happenstance-core` compiles the README's Quick start;
-crates.io shows all ten names owned; and `cargo xtask spec-trace` **fails** when a
+crates.io shows the three principal names owned; and `cargo xtask spec-trace` **fails** when a
 maturity marker is deleted from a clause and passes when it is restored. Four
 checkable facts, none of which is "the gate is green", and the fourth is the only
 one of the four that could have been faked by a checker that does nothing.
 
 **Exit criteria**
 
-- [ ] All ten names owned on crates.io, including the Cloudflare one, which means
-      it has a name.
+- [ ] Three names owned on crates.io — `happenstance`, `happenstance-core`,
+      `happenstance-testkit` — each with a description, licence, repository link
+      and a one-paragraph README, so that each is a crate with a stated purpose
+      rather than a parked name. The remaining seven are claimed at their phases;
+      each of those phases carries the item.
 - [ ] The README's code blocks are compiled by CI, and the document says which
       README that is.
 - [ ] `cargo package --list` is a gate step and asserts on its output.
@@ -876,7 +902,7 @@ borrow silently, which is how a plan acquires a cycle.
       time outside a runtime, so the spawn must be deferred into `poll_next`:
       laziness stops being a nicety and becomes load-bearing. This is the
       *serialising, `Send`, native* shape.
-- [ ] **The Cloudflare skeleton** (named in phase 0) — a `RefCell`-backed stand-in
+- [ ] **The Cloudflare skeleton**, `happenstance-cloudflare` — a `RefCell`-backed stand-in
       for `SqlStorage` and an error type that is genuinely `!Send`, implementing
       the bare `EventStore` only. This is the shape that decides ES-6, and it is
       the only instrument for the question ADR-0009 asks: does stringifying a
@@ -1838,6 +1864,10 @@ most-selective-tag-first, and SQLite cannot supply per-value cardinality —
 
 **Work**
 
+- [ ] **Claim `happenstance-sqlite` on crates.io**, per phase 0's
+      rule that a name is reserved when its phase starts, not before — the point
+      being that by now there is a crate to justify it with.
+
 - [ ] ADR-0022, including the schema and the `EventId`/`recorded_at` columns from
       phase 5 in migration 1. `AUTOINCREMENT` is load-bearing: positions must never
       be reused after a delete, and plain `rowid` does not guarantee that.
@@ -1892,9 +1922,19 @@ the suite under `workerd`.
 **Why here.** Its *design* risk moved to phase 1, which already proved a `!Send`
 store can implement the port and that the rules run off tokio — so this is
 integration, not design validation, which is what makes it safe off the 0.1 path.
-It depends on phase 5 as well as 2 and 4, because its schema needs the identity
-and time columns like every other store; the previous plan's dependency list
-omitted that (`PRESSURE-TEST.md:558`).
+It depends on phase 4 as well as 2, because its schema needs the identity and time
+columns like every other store — a dependency the previous plan omitted
+(`PRESSURE-TEST.md:558`) and then mis-attributed to phase 5, which is where those
+columns lived before the contract freeze was re-split.
+
+**The crate is `happenstance-cloudflare`** (verified free 2026-08-06). It names
+the vendor rather than the primitive, which is a deliberate departure from the
+`-sqlite`/`-postgres`/`-neon` convention: the distinguishing property here is the
+whole Workers execution model — `!Send`, single-threaded, off tokio — and not the
+storage engine, which is SQLite like two other adapters. The cost is that a second
+Cloudflare storage primitive would need a name this one has taken; if that happens,
+this crate keeps the Durable Object and the newcomer is named for its primitive.
+**Claim the name at the start of this phase**, per phase 0's rule.
 
 **Decisions it settles.** ADR-0023. Confirms or refutes ADR-0009's ES-6 prediction.
 
@@ -1979,6 +2019,10 @@ transaction. **The ADR owes a number, not a preference.**
 
 **Work**
 
+- [ ] **Claim `happenstance-postgres` and `happenstance-neon` on crates.io**, per phase 0's
+      rule that a name is reserved when its phase starts, not before — the point
+      being that by now there is a crate to justify it with.
+
 - [ ] ADR-0024, with the visibility strategy chosen on numbers and phase 5's
       columns in migration 1.
 - [ ] The Postgres event store and `PostgresProjectionStore` against phase 6's
@@ -2039,6 +2083,10 @@ specification.
 **Decisions it settles.** ADR-0025. Fills the batch-shape axis.
 
 **Work**
+
+- [ ] **Claim `happenstance-ladybug` on crates.io**, per phase 0's
+      rule that a name is reserved when its phase starts, not before — the point
+      being that by now there is a crate to justify it with.
 
 - [ ] ADR-0025: checkpoint placement — in the graph as a node or beside it, which
       hinges on what Ladybug's transaction API actually guarantees; how a projection
@@ -2182,6 +2230,10 @@ user was told had landed. The domain decides what a compensation means; the port
 provides the atomicity and the identity that makes it idempotent.
 
 **Work**
+
+- [ ] **Claim `happenstance-sync` and `happenstance-sync-testkit` on crates.io**, per phase 0's
+      rule that a name is reserved when its phase starts, not before — the point
+      being that by now there is a crate to justify it with.
 
 - [ ] ADR-0026. What ingest promises, what makes re-delivery harmless, and what
       the port may assume about a transport it cannot see. The two real peers are a
