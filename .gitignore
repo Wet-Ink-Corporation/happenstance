@@ -25,6 +25,14 @@ target
 #  lints and in `cargo xtask ci`, which is the same for every editor.
 .idea/
 
+# crates.io tokens. `cargo login` writes these to $CARGO_HOME, which is normally
+# ~/.cargo — but this repository has its own .cargo/ for the xtask alias, and a
+# CARGO_HOME pointed here would land a live token in a tracked directory. Ignored
+# defensively: the cost is a line, the cost of the accident is a revoked token and
+# a rewritten history.
+.cargo/credentials
+.cargo/credentials.toml
+
 # The RustRover MCP endpoint. The port is assigned per machine, so a committed
 # copy hands the next checkout a config that fails silently — which is worse than
 # no config, because a dead MCP server looks like a missing feature.

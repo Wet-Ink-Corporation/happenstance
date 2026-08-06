@@ -11,6 +11,8 @@ use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, bail};
 
+mod reserve;
+
 /// A step in the CI gate.
 struct Step {
     /// What this proves, shown while it runs.
@@ -119,6 +121,7 @@ fn main() -> ExitCode {
     let result = match task.as_deref() {
         Some("ci") => run_ci(),
         Some("wasm") => run_steps(wasm_step()),
+        Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some(other) => {
             eprintln!("unknown task: {other}");
             print_help();
@@ -146,6 +149,9 @@ fn print_help() {
     println!("  ci     Run the full gate: fmt, clippy, tests, wasm32, docs,");
     println!("         plus feature-powerset and cargo-deny when installed.");
     println!("  wasm   Check that happenstance-core builds for wasm32-unknown-unknown.");
+    println!("  reserve <name>");
+    println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
+    println!("         publish command; never publishes anything itself.");
 }
 
 /// The `wasm32` step, selected by name.

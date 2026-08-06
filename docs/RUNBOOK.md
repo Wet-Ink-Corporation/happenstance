@@ -650,6 +650,18 @@ taken.
       phase 8, `happenstance-cloudflare` at 9, `happenstance-postgres` and
       `happenstance-neon` at 10, `happenstance-ladybug` at 11, `happenstance-sync`
       and `happenstance-sync-testkit` at 13.
+
+      **`cargo xtask reserve <name>` generates the placeholder**; `cargo xtask
+      reserve` with no argument lists every name and its phase. It writes a
+      standalone `0.0.0` crate under `target/reserve/` carrying both licences and
+      a README that says plainly it has no functionality, then prints the publish
+      command — it never publishes anything itself. The list of names lives in
+      `xtask/src/reserve.rs`, which is what makes "which names do we intend to
+      hold?" answerable by a command rather than by reading this file.
+
+      The reason it is a command and not a note here: the claims are weeks apart,
+      and a procedure run that rarely from memory is one that drifts. Forgetting
+      the licence files once ships a crate without them permanently.
 - [ ] **Rewrite the documents the rename inverts.** CLAUDE.md's "What this is",
       repository map, dependency rule, and constraint 2 — which after the rename
       would forbid `serde` to the crate whose job *is* encoding and permit it into
