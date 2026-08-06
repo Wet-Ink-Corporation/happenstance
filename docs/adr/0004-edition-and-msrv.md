@@ -1,7 +1,19 @@
 # ADR-0004: Rust 2024 edition, MSRV 1.85
 
-- **Status:** accepted
+- **Status:** accepted — **provisional**
 - **Date:** 2026-08-05
+
+> **Provisional.** Authored on 2026-08-05 alongside the initial scaffold, before
+> any of the code this decision constrains existed.
+>
+> The Policy section below describes an obligation to downstream users. **There
+> are none** — nothing has been published, so `rust-version = "1.85"` is a
+> self-imposed constraint that can be raised at any time at zero cost to anyone.
+> Do not treat it as a hard limit when weighing a dependency: it is a preference
+> until first publish, and a promise afterwards. It has also never been checked
+> against a local 1.85 toolchain (see Consequences).
+>
+> **Lifts on first publish**, at which point the Policy section becomes real.
 
 ## Context
 

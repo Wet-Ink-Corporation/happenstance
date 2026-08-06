@@ -5,9 +5,18 @@
 Read [`docs/adr/`](docs/adr/). A handful of decisions shape everything else: the
 two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
 naming. Changing one is fine — but it means writing a new ADR that supersedes
-the old one, not working around it in code. ADR-0002 and ADR-0005 are a worked
-example of that: the superseded one is left factually intact rather than
-rewritten.
+the old one, not working around it in code. ADR-0002/ADR-0005 and
+ADR-0005/ADR-0006 are worked examples of that: the superseded body is left
+factually intact rather than rewritten.
+
+**Some ADRs are marked provisional.** ADRs 0001, 0003 and 0004 were authored in
+one sitting alongside the initial scaffold, before the code they constrain
+existed — and ADR-0002 was superseded thirty-two minutes after it was written.
+Each provisional ADR states what would have to happen for it to become
+precedent. Until that happens, treat it as a recorded intention: contradicting
+one still needs a superseding ADR, but you do not owe deference to a decision
+the code has not yet voted on. Do not let an unpublished API surface, or an
+MSRV nobody depends on, decide a design question on its own.
 
 ## The gate
 

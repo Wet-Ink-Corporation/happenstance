@@ -2,13 +2,53 @@
 //!
 //! # Status: not implemented
 //!
-//! # The target topology
+//! # This is a port, not a protocol
 //!
-//! A local-first application holds its own event store on the device and syncs
-//! with a shared instance — the motivating deployment being SQLite inside a
-//! Cloudflare Durable Object, reached through a Rust Worker. Both peers are
-//! happenstance instances; neither is privileged in the protocol, though a
-//! deployment may well designate one as authoritative.
+//! `happenstance` defines two ports — [`EventStore`](happenstance::EventStore)
+//! and [`ProjectionStore`](happenstance::ProjectionStore) — and this crate
+//! defines the third. It stands to its peer adapters as `happenstance` stands to
+//! its store adapters: the trait and the runner live here, the conformance suite
+//! lives in `happenstance-sync-testkit`, and a peer is a sibling crate.
+//!
+//! The reason is the deployment. A local-first application syncing to a Durable
+//! Object today should be able to add a Postgres as a second peer tomorrow, or
+//! swap the first for the second, without touching a line of application code.
+//! That is a port by definition, and the workspace's standing rule applies to it
+//! exactly as it applies to the other two: **a port with one implementation is
+//! shaped like that implementation.** So the trait is settled against two peers
+//! that are as unlike each other as the deployment story allows — a Durable
+//! Object reached over a socket, and a Postgres reached over one-shot HTTP with
+//! no interactive transaction available at all.
+//!
+//! The port lives here rather than in the contract crate deliberately. Putting
+//! it beside the other two would be more symmetric and would put replication
+//! back on the publish path; keeping it here is what lets `happenstance` reach
+//! 0.1 without waiting on this crate.
+//!
+//! ## One peer, and a runner above it
+//!
+//! The port describes a *single* peer. Fan-out across several, primary/secondary
+//! ordering, and what to do when two peers disagree are policy, and policy on the
+//! port would make every adapter author inherit the merge problem and would make
+//! the conformance suite test a policy rather than a transport. They belong to a
+//! runner, in the same division of labour that puts the projection runner above
+//! [`ProjectionStore`](happenstance::ProjectionStore). "Add a second peer" is
+//! then a runner configuration rather than a breaking change to the port.
+//!
+//! # The target topologies — plural
+//!
+//! **Peer-to-peer.** A local-first application holds its own event store on the
+//! device and syncs with a shared instance — the motivating deployment being
+//! SQLite inside a Cloudflare Durable Object, reached through a Rust Worker.
+//! Both peers are happenstance instances; neither is privileged in the protocol,
+//! though a deployment may well designate one as authoritative.
+//!
+//! **Hub and spoke.** Many devices sync to one authoritative store, and never to
+//! each other. This is at least as common as the symmetric case and it is not a
+//! special case of it: the hub sees every log, the spokes see one each, and the
+//! merge rule a spoke needs is not the merge rule the hub needs. Both must be
+//! expressible, which is a constraint on the port's shape and not merely on its
+//! documentation.
 //!
 //! # Why this is a thin crate and not a hard one
 //!
@@ -48,6 +88,12 @@
 //!   ingest path must be written against
 //!   [`EventStore`](happenstance::EventStore) — the flavour with no `Send`
 //!   bound — not [`SendEventStore`](happenstance::SendEventStore).
+//! * **What a peer may be asked to do.** One of the two intended peers reaches
+//!   its store over one-shot HTTP: no connection, no interactive transaction, no
+//!   cursor, one round trip per operation. A port that assumes a peer can hold
+//!   state open between calls excludes it. This is the constraint most likely to
+//!   be discovered late, which is why a skeleton for it exists before the trait
+//!   does.
 //!
 //! None of this is settled. It is written down here so the next pass starts
 //! from the real questions rather than rediscovering them.

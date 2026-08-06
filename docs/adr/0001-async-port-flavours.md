@@ -1,7 +1,19 @@
 # ADR-0001: Async ports in two flavours, `Send` and `!Send`
 
-- **Status:** accepted
+- **Status:** accepted — **provisional**
 - **Date:** 2026-08-05
+
+> **Provisional.** Authored on 2026-08-05 alongside the initial scaffold, before
+> any of the code this decision constrains existed. Its entire evidence base is
+> design reasoning, a spike, and a `cargo check` for `wasm32` — **no `!Send`
+> implementation of these ports exists anywhere**, not even a reference one. So
+> this is a recorded intention, not settled precedent: work that contradicts it
+> still needs a superseding ADR, but it does not owe deference to a decision the
+> code has not yet voted on.
+>
+> **Lifts when** a genuine `!Send` implementer passes the conformance suite. The
+> cheapest such proof is a `RefCell`-backed reference store in the testkit; the
+> full proof is the Cloudflare adapter (phase 5).
 
 ## Context
 

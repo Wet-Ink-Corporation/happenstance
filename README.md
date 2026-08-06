@@ -66,12 +66,18 @@ cargo run -p course-subscriptions
 | [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 27 rules + property tests |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
-| [`happenstance-sync`](crates/happenstance-sync) | Instance-to-instance replication | 🔲 stub, open questions written down |
+| `happenstance-postgres` | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 planned |
+| `happenstance-neon` | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 planned |
+| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 | [`happenstance-runtime`](crates/happenstance-runtime) | Codecs, typed domain events, decision models | 🔲 named seam, not started |
 
 The stubs are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
+
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md) sequences the remaining work — what comes
+next, why in that order, and what each phase has to prove before it counts as
+finished.
 
 ## Quick start
 
@@ -122,9 +128,20 @@ the weaker one and accepts either. CI builds `happenstance` for
 `wasm32-unknown-unknown` on every commit so this stays true.
 
 **Adapters are separate crates, not feature flags.** `rusqlite` bundles a C
-library; LadybugDB's `lbug` compiles C++ through `cmake`. Nobody who wants one
-should pay for the other, and a third party can publish `happenstance-postgres` as a
-first-class citizen.
+library; LadybugDB's `lbug` compiles C++ through `cmake`; Postgres needs a
+network and a container to test against. Nobody who wants one should pay for the
+other, and a third-party adapter is a first-class citizen rather than a fork.
+
+**The adapter portfolio is deliberately unlike itself.** Adapters are not only
+targets to support — they are the instrument that keeps the contract honest, and
+that only works if they disagree. A store that serialises its writers under a
+lock, one that assigns positions outside the transaction, and one reached over
+one-shot HTTP with no interactive transaction at all will each refuse a different
+part of a badly-shaped port, and a portfolio where all three behave alike proves
+nothing. So Postgres is here for what it *breaks* — it is the only target on the
+roadmap that can violate the position-visibility invariant, which is what makes
+that invariant testable rather than decorative. It is not a flagship, and if you
+want DCB on Postgres today, `disintegrate` below is the mature choice.
 
 ## Writing an adapter
 

@@ -1,8 +1,17 @@
 # ADR-0005: Rename the project to `happenstance`, and make it the contract crate
 
-- **Status:** accepted
+- **Status:** partly superseded by [ADR-0006](0006-bare-name-to-the-typed-layer.md)
 - **Date:** 2026-08-05
 - **Supersedes:** [ADR-0002](0002-crate-naming.md)
+
+> **Partly superseded.** This ADR bundles two independent decisions under one
+> "and". The first — renaming the project from `eventum` to `happenstance` —
+> **stands**, on exactly the reasoning below. The second — allocating the bare
+> name to the contract crate rather than to a batteries-included facade — is
+> reversed by [ADR-0006](0006-bare-name-to-the-typed-layer.md), which explains
+> why the argument given for it does not hold.
+>
+> The body is kept verbatim, per the rule this ADR applied to ADR-0002.
 
 ## Context
 

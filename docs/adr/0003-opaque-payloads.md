@@ -1,7 +1,18 @@
 # ADR-0003: Opaque payloads in the contract crate
 
-- **Status:** accepted
+- **Status:** accepted — **provisional**
 - **Date:** 2026-08-05
+
+> **Provisional.** Authored on 2026-08-05 alongside the initial scaffold, before
+> any of the code this decision constrains existed. The payoff it claims —
+> that a peer forwards events without deserialising them — has never been
+> exercised, because no replication code exists. So this is a recorded
+> intention, not settled precedent: work that contradicts it still needs a
+> superseding ADR, but it does not owe deference to a decision the code has not
+> yet voted on.
+>
+> **Lifts when** `happenstance-sync` round-trips an event between two stores
+> without deserialising its payload (phase 6).
 
 ## Context
 
