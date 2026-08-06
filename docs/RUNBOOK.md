@@ -618,7 +618,7 @@ taken.
       the judgement about *why* a gap exists, which is where the dispositions come
       from. Expect the first run to find real errors in the table; a first run that
       finds none means the checker is not checking.
-- [ ] **Reserve three crates.io names now — `happenstance`, `happenstance-core`,
+- [x] **Reserve three crates.io names now — `happenstance`, `happenstance-core`,
       `happenstance-testkit`** — and thereafter **one name per phase, when that
       phase starts.** All three were verified free on 2026-08-06, as was
       `happenstance-cloudflare`.
@@ -733,7 +733,7 @@ one of the four that could have been faked by a checker that does nothing.
 
 **Exit criteria**
 
-- [ ] Three names owned on crates.io — `happenstance`, `happenstance-core`,
+- [x] Three names owned on crates.io — `happenstance`, `happenstance-core`,
       `happenstance-testkit` — each with a description, licence, repository link
       and a one-paragraph README, so that each is a crate with a stated purpose
       rather than a parked name. The remaining seven are claimed at their phases;
@@ -754,6 +754,18 @@ case; it removes the friction that would otherwise be paid twelve times.
 **Estimate.** 1 day, plus 1 for `spec-trace`.
 
 **Session log**
+
+- 2026-08-06 — ADR-0006 rename executed (`7d6c1b0`); D11 fixed, all three
+  publishable crates now package both licences and a README (`48565e5`);
+  `cargo xtask reserve` added and `.cargo/credentials.toml` gitignored
+  (`7004010`). **`happenstance`, `happenstance-core` and `happenstance-testkit`
+  reserved on crates.io at `0.0.0`** — metadata verified through the API:
+  description, repository, `MIT OR Apache-2.0`, README present, `rust-version`
+  1.85, not yanked. The remaining seven names are claimed at their phases, per
+  the rule above. Gate green throughout.
+
+  Still open in this phase: `spec-trace` (CF-38), D10, D12, D13, the
+  `todo = "allow"` lint hole, the MSRV job and `CHANGELOG.md`.
 
 - 2026-08-05 — carried from the previous runbook, because it is the only dated
   evidence in the repository that the gate was ever green: `cargo xtask ci`
