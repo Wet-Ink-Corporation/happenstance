@@ -9,9 +9,10 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# No `readme` key: it must name a file inside the package, and this crate has no
-# README of its own yet. One is needed before the first publish — it is what
-# crates.io renders on the package page. See ADR-0005.
+# Stated rather than auto-discovered. Cargo would find README.md anyway, but the
+# key is what crates.io renders on the package page, and a silent default is a
+# poor thing to rely on for the first impression anyone gets of the crate.
+readme = "README.md"
 
 [dependencies]
 bytes.workspace = true

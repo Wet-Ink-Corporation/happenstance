@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 # No `features` here: every one is forwarded below, so that a consumer of the

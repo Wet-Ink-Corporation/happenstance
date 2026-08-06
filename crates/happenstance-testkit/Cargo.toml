@@ -1,7 +1,12 @@
 [package]
 name = "happenstance-testkit"
 description = "DCB conformance suite for happenstance event store adapters."
-version.workspace = true
+# Its own version, not the workspace's (CF-32). Adding a conformance rule is a
+# semver-MINOR change that can turn a passing adapter's CI red, so this crate's
+# number has to move on its own schedule — and a version inherited from the
+# workspace cannot be separated later without a release that lies about what
+# changed in it.
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -9,6 +14,7 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
