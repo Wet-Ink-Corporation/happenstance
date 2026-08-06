@@ -81,7 +81,7 @@ use crate::query::{Query, ReadOptions};
 /// thread boundary:
 ///
 /// ```
-/// use happenstance::{EventStore, Query, ReadOptions, collect};
+/// use happenstance_core::{EventStore, Query, ReadOptions, collect};
 ///
 /// async fn count_all<S: EventStore>(store: &S) -> Result<usize, S::Error> {
 ///     let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;

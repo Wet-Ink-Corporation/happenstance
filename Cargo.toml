@@ -21,6 +21,7 @@ categories = ["database", "data-structures"]
 # actually needs. Cargo forbids a member from *removing* a workspace default,
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
+happenstance-core = { version = "0.1.0", path = "crates/happenstance-core", default-features = false }
 happenstance = { version = "0.1.0", path = "crates/happenstance", default-features = false }
 happenstance-testkit = { version = "0.1.0", path = "crates/happenstance-testkit" }
 

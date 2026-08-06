@@ -4,8 +4,8 @@
 //!
 //! # This is a port, not a protocol
 //!
-//! `happenstance` defines two ports — [`EventStore`](happenstance::EventStore)
-//! and [`ProjectionStore`](happenstance::ProjectionStore) — and this crate
+//! `happenstance` defines two ports — [`EventStore`](happenstance_core::EventStore)
+//! and [`ProjectionStore`](happenstance_core::ProjectionStore) — and this crate
 //! defines the third. It stands to its peer adapters as `happenstance` stands to
 //! its store adapters: the trait and the runner live here, the conformance suite
 //! lives in `happenstance-sync-testkit`, and a peer is a sibling crate.
@@ -32,7 +32,7 @@
 //! port would make every adapter author inherit the merge problem and would make
 //! the conformance suite test a policy rather than a transport. They belong to a
 //! runner, in the same division of labour that puts the projection runner above
-//! [`ProjectionStore`](happenstance::ProjectionStore). "Add a second peer" is
+//! [`ProjectionStore`](happenstance_core::ProjectionStore). "Add a second peer" is
 //! then a runner configuration rather than a breaking change to the port.
 //!
 //! # The target topologies — plural
@@ -52,7 +52,7 @@
 //!
 //! # Why this is a thin crate and not a hard one
 //!
-//! Because [`Event`](happenstance::Event) payloads are opaque bytes, a peer
+//! Because [`Event`](happenstance_core::Event) payloads are opaque bytes, a peer
 //! forwards events **without deserialising them**. It never needs the sender's
 //! domain types, cannot fail to parse a payload it does not understand, and
 //! cannot corrupt one by re-encoding it. That is the whole payoff of keeping
@@ -62,7 +62,7 @@
 //!
 //! # The hard part, stated honestly
 //!
-//! [`SequencePosition`](happenstance::SequencePosition) is meaningful only
+//! [`SequencePosition`](happenstance_core::SequencePosition) is meaningful only
 //! within a single store. Two instances that each append independently will
 //! assign the same positions to different events, so positions cannot be
 //! replicated as-is and a naive "send everything after position N" protocol is
@@ -76,7 +76,7 @@
 //! * **Idempotent ingest.** Re-delivery must be harmless; a peer will see the
 //!   same event more than once.
 //! * **Append conditions across a boundary.** An
-//!   [`AppendCondition`](happenstance::AppendCondition) checked against the
+//!   [`AppendCondition`](happenstance_core::AppendCondition) checked against the
 //!   local log says nothing about the remote one. Whether ingest re-checks
 //!   conditions, or whether replication is defined as unconditional
 //!   append-of-facts-already-decided, is *the* central design question of this
@@ -86,8 +86,8 @@
 //!   that a replicated event's local position differs from its origin position.
 //! * **`wasm32` compatibility.** The Cloudflare side is single-threaded, so the
 //!   ingest path must be written against
-//!   [`EventStore`](happenstance::EventStore) — the flavour with no `Send`
-//!   bound — not [`SendEventStore`](happenstance::SendEventStore).
+//!   [`EventStore`](happenstance_core::EventStore) — the flavour with no `Send`
+//!   bound — not [`SendEventStore`](happenstance_core::SendEventStore).
 //! * **What a peer may be asked to do.** One of the two intended peers reaches
 //!   its store over one-shot HTTP: no connection, no interactive transaction, no
 //!   cursor, one round trip per operation. A port that assumes a peer can hold

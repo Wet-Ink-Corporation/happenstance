@@ -11,7 +11,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use happenstance::{EventType, Query, QueryItem, Tag, Tags};
+use happenstance_core::{EventType, Query, QueryItem, Tag, Tags};
 use proptest::prelude::*;
 
 /// Generates a tag from a small alphabet, so collisions and duplicates actually

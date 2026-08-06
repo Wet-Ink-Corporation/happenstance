@@ -23,7 +23,7 @@ pub const MAX_TAG_LEN: usize = 255;
 /// # Examples
 ///
 /// ```
-/// use happenstance::Tag;
+/// use happenstance_core::Tag;
 ///
 /// let tag = Tag::key_value("course", "c1")?;
 /// assert_eq!(tag.as_str(), "course:c1");
@@ -33,7 +33,7 @@ pub const MAX_TAG_LEN: usize = 255;
 /// // Opaque tags are legal too.
 /// let opaque = Tag::new("archived")?;
 /// assert_eq!(opaque.key(), None);
-/// # Ok::<(), happenstance::InvalidTag>(())
+/// # Ok::<(), happenstance_core::InvalidTag>(())
 /// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag(Box<str>);
@@ -146,7 +146,7 @@ impl TryFrom<String> for Tag {
 /// # Examples
 ///
 /// ```
-/// use happenstance::{Tag, Tags};
+/// use happenstance_core::{Tag, Tags};
 ///
 /// let tags: Tags = [Tag::new("b")?, Tag::new("a")?, Tag::new("b")?]
 ///     .into_iter()
@@ -159,7 +159,7 @@ impl TryFrom<String> for Tag {
 /// // Order of construction does not affect equality.
 /// let other: Tags = [Tag::new("a")?, Tag::new("b")?].into_iter().collect();
 /// assert_eq!(tags, other);
-/// # Ok::<(), happenstance::InvalidTag>(())
+/// # Ok::<(), happenstance_core::InvalidTag>(())
 /// ```
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tags(Box<[Tag]>);
@@ -179,11 +179,11 @@ impl Tags {
     /// # Examples
     ///
     /// ```
-    /// use happenstance::Tags;
+    /// use happenstance_core::Tags;
     ///
     /// let tags = Tags::from_pairs([("course", "c1"), ("student", "s1")])?;
     /// assert_eq!(tags.len(), 2);
-    /// # Ok::<(), happenstance::InvalidTag>(())
+    /// # Ok::<(), happenstance_core::InvalidTag>(())
     /// ```
     pub fn from_pairs<'a>(
         pairs: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -219,14 +219,14 @@ impl Tags {
     /// # Examples
     ///
     /// ```
-    /// use happenstance::Tags;
+    /// use happenstance_core::Tags;
     ///
     /// let event = Tags::from_pairs([("course", "c1"), ("student", "s1")])?;
     /// let wanted = Tags::from_pairs([("course", "c1")])?;
     ///
     /// assert!(event.contains_all(&wanted));
     /// assert!(!wanted.contains_all(&event));
-    /// # Ok::<(), happenstance::InvalidTag>(())
+    /// # Ok::<(), happenstance_core::InvalidTag>(())
     /// ```
     pub fn contains_all(&self, subset: &Self) -> bool {
         let mut haystack = self.0.iter();

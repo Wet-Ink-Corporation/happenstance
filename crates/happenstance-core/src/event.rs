@@ -19,11 +19,11 @@ pub const MAX_EVENT_TYPE_LEN: usize = 255;
 /// # Examples
 ///
 /// ```
-/// use happenstance::EventType;
+/// use happenstance_core::EventType;
 ///
 /// let ty = EventType::new("StudentSubscribed")?;
 /// assert_eq!(ty.as_str(), "StudentSubscribed");
-/// # Ok::<(), happenstance::InvalidEventType>(())
+/// # Ok::<(), happenstance_core::InvalidEventType>(())
 /// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EventType(Box<str>);
@@ -104,7 +104,7 @@ impl TryFrom<String> for EventType {
 /// # Examples
 ///
 /// ```
-/// use happenstance::SequencePosition;
+/// use happenstance_core::SequencePosition;
 ///
 /// assert_eq!(SequencePosition::FIRST.get(), 1);
 /// assert!(SequencePosition::new(0).is_none());
@@ -166,7 +166,7 @@ impl From<SequencePosition> for u64 {
 /// # Examples
 ///
 /// ```
-/// use happenstance::{Event, Tags};
+/// use happenstance_core::{Event, Tags};
 ///
 /// let event = Event::new("StudentSubscribed", &b"{\"student\":\"s1\"}"[..])?
 ///     .with_tags(Tags::from_pairs([("course", "c1"), ("student", "s1")])?);

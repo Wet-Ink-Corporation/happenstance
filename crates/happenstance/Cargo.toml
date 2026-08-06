@@ -1,6 +1,6 @@
 [package]
 name = "happenstance"
-description = "DCB-compliant event sourcing contract: types, storage ports, and an in-memory reference event store."
+description = "DCB-compliant event sourcing with batteries: typed events, decision models and projection runners over a storage-agnostic contract."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,33 +9,20 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# No `readme` key: it must name a file inside the package, and this crate has no
-# README of its own yet. One is needed before the first publish — it is what
-# crates.io renders on the package page. See ADR-0005.
 
 [dependencies]
-bytes.workspace = true
-futures-core.workspace = true
-thiserror.workspace = true
-trait-variant.workspace = true
-serde = { workspace = true, optional = true }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
+# No `features` here: every one is forwarded below, so that a consumer of the
+# facade has exactly the switches a consumer of the contract crate has. Adding a
+# default here instead would make `happenstance` and `happenstance-core` disagree
+# about what `default-features = false` means, which is the kind of difference
+# nobody discovers until a no_std build fails three crates away.
+happenstance-core = { workspace = true }
 
 [features]
 default = ["std", "memory"]
-std = ["thiserror/std", "bytes/std", "futures-core/std", "serde?/std"]
-# Wire-format derives. Required by `happenstance-sync`; deliberately NOT on by
-# default so the contract crate carries no serialization opinion.
-serde = ["dep:serde", "bytes/serde"]
-# The in-memory reference event store. Costs no extra dependencies and backs
-# every doctest in this crate, so the docs cannot drift from the API.
-memory = ["std"]
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+std = ["happenstance-core/std"]
+serde = ["happenstance-core/serde"]
+memory = ["happenstance-core/memory"]
 
 [lints]
 workspace = true

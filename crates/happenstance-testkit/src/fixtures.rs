@@ -3,7 +3,9 @@
 //! Public because adapter authors writing their own extra tests should express
 //! them in the same vocabulary the suite uses.
 
-use happenstance::{AppendCondition, Event, EventType, Query, QueryItem, SequencePosition, Tags};
+use happenstance_core::{
+    AppendCondition, Event, EventType, Query, QueryItem, SequencePosition, Tags,
+};
 
 /// Builds an event of `event_type` with no tags.
 ///

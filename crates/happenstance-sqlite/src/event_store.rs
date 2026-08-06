@@ -1,4 +1,4 @@
-//! SQLite-backed [`EventStore`](happenstance::EventStore).
+//! SQLite-backed [`EventStore`](happenstance_core::EventStore).
 //!
 //! # Status: not implemented
 //!
@@ -32,7 +32,7 @@
 //! uniqueness across the store's whole lifetime.
 
 use futures_core::Stream;
-use happenstance::{
+use happenstance_core::{
     AppendCondition, AppendError, Event, Query, ReadOptions, SendEventStore, SequencePosition,
     SequencedEvent,
 };

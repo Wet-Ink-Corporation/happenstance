@@ -21,7 +21,7 @@ use crate::query::Query;
 /// appends with the *same* query and that position:
 ///
 /// ```
-/// # use happenstance::{AppendCondition, Query, QueryItem, Tags};
+/// # use happenstance_core::{AppendCondition, Query, QueryItem, Tags};
 /// let query = Query::from_item(QueryItem::of_types(["StudentSubscribed"])?)?;
 ///
 /// // ... read with `query`, ending at `last_seen` ...
@@ -37,7 +37,7 @@ use crate::query::Query;
 /// check, expressed without an aggregate:
 ///
 /// ```
-/// use happenstance::{AppendCondition, Query, QueryItem, Tags};
+/// use happenstance_core::{AppendCondition, Query, QueryItem, Tags};
 ///
 /// let condition = AppendCondition::new(Query::from_item(QueryItem::new(
 ///     ["CourseDefined"],

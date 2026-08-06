@@ -66,7 +66,7 @@ const REQUIRED: &[Step] = &[
         args: &[
             "check",
             "-p",
-            "happenstance",
+            "happenstance-core",
             "--target",
             "wasm32-unknown-unknown",
             "--no-default-features",
@@ -118,7 +118,7 @@ fn main() -> ExitCode {
 
     let result = match task.as_deref() {
         Some("ci") => run_ci(),
-        Some("wasm") => run_steps(&REQUIRED[3..4]),
+        Some("wasm") => run_steps(wasm_step()),
         Some(other) => {
             eprintln!("unknown task: {other}");
             print_help();
@@ -145,7 +145,25 @@ fn print_help() {
     println!("Tasks:");
     println!("  ci     Run the full gate: fmt, clippy, tests, wasm32, docs,");
     println!("         plus feature-powerset and cargo-deny when installed.");
-    println!("  wasm   Check that happenstance builds for wasm32-unknown-unknown.");
+    println!("  wasm   Check that happenstance-core builds for wasm32-unknown-unknown.");
+}
+
+/// The `wasm32` step, selected by name.
+///
+/// It used to be `&REQUIRED[3..4]`. An index is silent about what it selects, so
+/// inserting a step above it would have pointed `cargo xtask wasm` at clippy and
+/// left the one check that guards [ADR-0001]'s `!Send` design running nothing —
+/// while still printing green. Panicking here is the right failure: the step is a
+/// compile-time constant, so a miss is a bug in this file and never a user error.
+///
+/// [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
+fn wasm_step() -> &'static [Step] {
+    const NAME: &str = "wasm32 build of the contract crate";
+    let index = REQUIRED
+        .iter()
+        .position(|step| step.name == NAME)
+        .expect("REQUIRED must contain the wasm32 step");
+    &REQUIRED[index..=index]
 }
 
 fn run_ci() -> Result<()> {

@@ -36,7 +36,7 @@ use crate::store::SendEventStore;
 /// The full DCB loop — read a decision model, then append conditioned on it:
 ///
 /// ```
-/// use happenstance::{
+/// use happenstance_core::{
 ///     AppendCondition, Event, EventStore, MemoryEventStore, Query, QueryItem, Tags,
 ///     read_decision_model,
 /// };

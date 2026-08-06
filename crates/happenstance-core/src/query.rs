@@ -23,7 +23,7 @@ use crate::tag::Tags;
 /// # Examples
 ///
 /// ```
-/// use happenstance::{QueryItem, Tags};
+/// use happenstance_core::{QueryItem, Tags};
 ///
 /// // "Any StudentSubscribed or StudentUnsubscribed event for course c1."
 /// let item = QueryItem::new(
@@ -127,7 +127,7 @@ impl QueryItem {
 /// # Examples
 ///
 /// ```
-/// use happenstance::{Event, Query, QueryItem, Tags};
+/// use happenstance_core::{Event, Query, QueryItem, Tags};
 ///
 /// let query = Query::from_items([
 ///     QueryItem::of_types(["CourseDefined"])?,
@@ -209,7 +209,7 @@ impl Query {
 /// # Examples
 ///
 /// ```
-/// use happenstance::{ReadOptions, SequencePosition};
+/// use happenstance_core::{ReadOptions, SequencePosition};
 ///
 /// // The specification's own example: the 50 events at or before position 321,
 /// // newest first.

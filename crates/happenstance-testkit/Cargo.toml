@@ -11,10 +11,10 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-happenstance = { workspace = true, features = ["std"] }
+happenstance-core = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-happenstance = { workspace = true, features = ["memory"] }
+happenstance-core = { workspace = true, features = ["memory"] }
 proptest.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 

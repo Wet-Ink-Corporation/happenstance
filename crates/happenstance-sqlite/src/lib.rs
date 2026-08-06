@@ -21,7 +21,7 @@
 //!   a monotonic-position guard. Which one wins depends on how tag matching is
 //!   indexed.
 //! * **Tag storage.** A join table against a canonical serialised blob against
-//!   SQLite's JSON1 functions. [`Tags`](happenstance::Tags) is canonically
+//!   SQLite's JSON1 functions. [`Tags`](happenstance_core::Tags) is canonically
 //!   sorted precisely so that the blob option stays open.
 //!
 //! # Not the Cloudflare adapter
@@ -29,8 +29,8 @@
 //! A Durable Object's SQLite is reached through the Workers `SqlStorage` API,
 //! not through a SQLite driver, and its futures are `!Send`. That is a separate
 //! adapter crate implementing
-//! [`EventStore`](happenstance::EventStore) rather than
-//! [`SendEventStore`](happenstance::SendEventStore) — not a feature of this
+//! [`EventStore`](happenstance_core::EventStore) rather than
+//! [`SendEventStore`](happenstance_core::SendEventStore) — not a feature of this
 //! one.
 
 #![doc(html_no_source)]

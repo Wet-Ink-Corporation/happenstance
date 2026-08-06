@@ -21,7 +21,7 @@
 #![allow(clippy::print_stdout)]
 
 use anyhow::{Result, bail};
-use happenstance::{
+use happenstance_core::{
     AppendCondition, AppendError, Event, EventStore, MemoryEventStore, Query, QueryItem,
     SequencePosition, Tags, read_decision_model,
 };

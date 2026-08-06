@@ -11,7 +11,7 @@
 //!
 //! It is a poor event store, though, and this crate will not offer one. An
 //! event log needs a monotonic append with a conditional write, which is what
-//! [`AppendCondition`](happenstance::AppendCondition) demands and what a graph
+//! [`AppendCondition`](happenstance_core::AppendCondition) demands and what a graph
 //! engine optimised for analytical traversal is not built to give. Forcing the
 //! event store port onto it would produce something that satisfies the trait
 //! and not the specification.
@@ -28,7 +28,7 @@
 //!
 //! * Whether the checkpoint lives in the graph as a node or beside it. The
 //!   checkpoint invariant in
-//!   [`ProjectionStore`](happenstance::ProjectionStore) requires the read-model
+//!   [`ProjectionStore`](happenstance_core::ProjectionStore) requires the read-model
 //!   write and the checkpoint write to commit together, so this hinges on what
 //!   Ladybug's transaction API actually guarantees — the question the port
 //!   needs answering before it can be frozen.

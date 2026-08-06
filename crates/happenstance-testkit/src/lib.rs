@@ -41,9 +41,9 @@
 //!
 //! # Which flavour to test
 //!
-//! The macro binds on [`EventStore`](happenstance::EventStore), the flavour
+//! The macro binds on [`EventStore`](happenstance_core::EventStore), the flavour
 //! with no `Send` bound, so it accepts both kinds of adapter. If your adapter
-//! implements [`SendEventStore`](happenstance::SendEventStore) — as every
+//! implements [`SendEventStore`](happenstance_core::SendEventStore) — as every
 //! native one should — you get that bound checked for free, because
 //! `SendEventStore` implies `EventStore`.
 
@@ -64,7 +64,7 @@ pub use suite::rules;
 /// ```
 /// # macro_rules! ignore { ($($t:tt)*) => {} }
 /// # ignore! {
-/// use happenstance::MemoryEventStore;
+/// use happenstance_core::MemoryEventStore;
 ///
 /// happenstance_testkit::event_store_conformance!(MemoryEventStore::new());
 /// # }

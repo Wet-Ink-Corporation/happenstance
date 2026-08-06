@@ -131,7 +131,7 @@ impl ConditionViolated {
 /// # Examples
 ///
 /// ```
-/// # use happenstance::{AppendError, ConditionViolated};
+/// # use happenstance_core::{AppendError, ConditionViolated};
 /// # fn handle<E: core::fmt::Debug>(result: Result<(), AppendError<E>>) {
 /// match result {
 ///     Ok(()) => {}

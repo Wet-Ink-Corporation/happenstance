@@ -12,7 +12,7 @@ categories.workspace = true
 publish = false
 
 [dependencies]
-happenstance = { workspace = true, features = ["std"] }
+happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 thiserror.workspace = true
 

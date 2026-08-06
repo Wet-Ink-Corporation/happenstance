@@ -13,7 +13,7 @@ pub mod rules {
     // non-conformant" thirty times over.
     #![allow(clippy::missing_panics_doc)]
 
-    use happenstance::{
+    use happenstance_core::{
         AppendError, EventStore, Query, ReadOptions, SequencePosition, SequencedEvent, collect,
     };
 
@@ -29,7 +29,7 @@ pub mod rules {
     /// Appends and unwraps, failing the test with context on error.
     async fn append_ok<S: EventStore>(
         store: &S,
-        events: &[happenstance::Event],
+        events: &[happenstance_core::Event],
     ) -> SequencePosition {
         match store.append(events, None).await {
             Ok(position) => position,
@@ -198,7 +198,7 @@ pub mod rules {
 
     /// Items within a query combine with OR.
     pub async fn query_items_are_or<S: EventStore, F: Fn() -> S>(factory: F) {
-        use happenstance::QueryItem;
+        use happenstance_core::QueryItem;
 
         let store = factory();
         append_ok(

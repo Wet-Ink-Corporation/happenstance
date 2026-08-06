@@ -1,4 +1,4 @@
-//! SQLite-backed [`ProjectionStore`](happenstance::ProjectionStore).
+//! SQLite-backed [`ProjectionStore`](happenstance_core::ProjectionStore).
 //!
 //! # Status: not implemented
 //!

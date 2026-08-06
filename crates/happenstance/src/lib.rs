@@ -1,106 +1,66 @@
-//! The happenstance contract: DCB-compliant event sourcing types and storage ports.
+//! DCB-compliant event sourcing, with batteries.
 //!
-//! This crate defines *what* an event store is and nothing about *how* one is
-//! built. It holds no I/O, opens no connections, and takes no opinion on
-//! serialisation. Everything else in the happenstance ecosystem — SQLite, Ladybug,
-//! replication — depends on it, so it is deliberately the smallest and most
-//! stable crate in the workspace.
+//! # Status: a facade over [`happenstance_core`]
 //!
-//! It implements the [Dynamic Consistency Boundary specification][spec].
+//! Today this crate re-exports the contract crate and adds nothing. It is
+//! published from day one anyway, so that `cargo add happenstance` is true
+//! throughout — including before the typed layer exists — and so that the name
+//! never has to move once people depend on it.
 //!
-//! [spec]: https://dcb.events/specification/
+//! [ADR-0006](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/adr/0006-bare-name-to-the-typed-layer.md)
+//! is why the bare name is here rather than on the contract: an application
+//! programs against typed events and decision models, and the crate an
+//! application reaches for first should be the one it uses. `happenstance-core`
+//! is what *adapter* authors pin, and adapter authors are the ones who read
+//! version numbers carefully.
 //!
-//! # DCB in a paragraph
+//! # What arrives here, and what stays below
 //!
-//! Classical event sourcing draws consistency boundaries ahead of time, as
-//! aggregates, and every decision must fit inside one. DCB draws them per
-//! decision instead. A command handler reads whatever events it needs — across
-//! any number of entities — and then appends conditioned on *nothing matching
-//! that same query having appeared since*. The boundary is whatever the handler
-//! actually looked at, so invariants that span entities stop requiring either an
-//! oversized aggregate or a saga.
+//! The discriminator is **encoding**. [`happenstance_core`] deals in opaque
+//! bytes on purpose — that is what keeps adapters free of domain knowledge and
+//! lets replication forward events without deserialising them. Anything that
+//! knows how a payload is *shaped* belongs here, so that the contract crate
+//! never grows a `serde` dependency in its default feature set.
 //!
-//! # The shape of the API
+//! Planned, and specified in
+//! [`docs/architecture/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md):
 //!
-//! | Concern | Type |
-//! |---|---|
-//! | What happened | [`Event`], [`EventType`], [`Tag`], [`Tags`] |
-//! | Where it sits in the log | [`SequencePosition`], [`SequencedEvent`] |
-//! | What to read | [`Query`], [`QueryItem`], [`ReadOptions`] |
-//! | What must not have changed | [`AppendCondition`] |
-//! | Storage seams | [`EventStore`], [`ProjectionStore`] |
+//! * **`Codec`** — payload encoding. Events carry a codec tag so one store can
+//!   hold more than one encoding at a time, which is what makes a migration
+//!   possible.
+//! * **`DomainEvent`** — a Rust type's mapping to its
+//!   [`EventType`](happenstance_core::EventType) and
+//!   [`Tags`](happenstance_core::Tags).
+//! * **`DecisionModel`** — folds read events into decidable state and produces
+//!   the matching [`Query`](happenstance_core::Query). Composing several into
+//!   one query is the mechanism that makes a dynamic consistency boundary
+//!   *dynamic*.
+//! * **The command loop** — read, decide, append, retry on
+//!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
+//! * **The typed projection runner** — decoded events, over the checkpoint pump
+//!   that stays in the contract crate
+//!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/adr/0007-projection-runner-decodes.md)).
 //!
-//! # Design notes
+//! # Using it today
 //!
-//! **Illegal states are unrepresentable.** [`Query`] is an enum rather than a
-//! vector because the specification permits "at least one item" or "match
-//! everything" and nothing else. [`SequencePosition`] wraps a [`NonZeroU64`],
-//! so position zero cannot exist and `Option<SequencePosition>` costs no extra
-//! space. [`Tags`] is canonically sorted at construction, so it can never be
-//! observed out of order.
+//! Everything the contract crate exports is available here under the same
+//! paths, so nothing has to be rewritten when the typed layer lands:
 //!
-//! [`NonZeroU64`]: core::num::NonZeroU64
+//! ```
+//! use happenstance::{EventStore, MemoryEventStore, Query, ReadOptions, collect};
 //!
-//! **Payloads are opaque.** [`Event::data`] is [`Bytes`](bytes::Bytes) with no
-//! `serde` bound in sight. Adapters stay free of domain knowledge, and
-//! replication can forward an event byte-for-byte without deserialising it.
-//! Encoding is a job for the layer above.
+//! # async fn example() -> Result<(), Box<dyn core::error::Error>> {
+//! let store = MemoryEventStore::new();
+//! let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
+//! assert!(events.is_empty());
+//! # Ok(())
+//! # }
+//! ```
 //!
-//! **The concurrency signal is in the type system.** An append returns
-//! [`AppendError`], which separates [`ConditionViolated`] — routine under
-//! contention, and a cue to retry — from adapter-specific failures. No caller
-//! has to match on a string to tell them apart.
-//!
-//! **There are two flavours of each port.** [`EventStore`] carries no `Send`
-//! bound so it can be implemented on `wasm32`; [`SendEventStore`] is derived
-//! from it for native use. Implementing the latter gives you the former. See
-//! the [`store`] module documentation for the full rationale.
-//!
-//! # Getting started
-//!
-//! Enable the `memory` feature (on by default) and use
-//! [`MemoryEventStore`] — see its documentation for a runnable walkthrough of
-//! the read-decide-append loop.
-//!
-//! # Feature flags
-//!
-//! * **`std`** *(default)* — standard library support.
-//! * **`memory`** *(default)* — the [`MemoryEventStore`] reference
-//!   implementation. Implies `std`.
-//! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
-//!   default so the contract crate carries no serialisation opinion; enabled by
-//!   replication adapters that need one.
+//! Adapter authors should depend on [`happenstance_core`] directly rather than
+//! on this crate: it is the smaller semver surface, and it is the one the
+//! conformance suite is written against.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(html_no_source)]
 
-extern crate alloc;
-
-mod append;
-mod error;
-mod event;
-mod query;
-mod tag;
-
-pub mod projection;
-pub mod store;
-
-#[cfg(feature = "memory")]
-#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
-mod memory;
-
-pub use append::AppendCondition;
-pub use error::{AppendError, ConditionViolated, InvalidEventType, InvalidQuery, InvalidTag};
-pub use event::{Event, EventType, MAX_EVENT_TYPE_LEN, SequencePosition, SequencedEvent};
-pub use projection::{ProjectionId, ProjectionStore, SendProjectionStore};
-pub use query::{Query, QueryItem, ReadOptions};
-pub use store::{EventStore, SendEventStore, collect, read_decision_model};
-pub use tag::{MAX_TAG_LEN, Tag, Tags};
-
-#[cfg(feature = "memory")]
-#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
-pub use memory::{MemoryEventStore, MemoryStoreError};
-
-/// Re-exported so adapters and callers can name payload types without adding a
-/// direct dependency on a specific `bytes` version.
-pub use bytes;
+pub use happenstance_core::*;

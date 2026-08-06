@@ -14,7 +14,7 @@ publish = false
 [dependencies]
 # `serde` is non-optional here: replication is the reason `happenstance`'s
 # serde feature exists.
-happenstance = { workspace = true, features = ["std", "serde"] }
+happenstance-core = { workspace = true, features = ["std", "serde"] }
 serde.workspace = true
 thiserror.workspace = true
 

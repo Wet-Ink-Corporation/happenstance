@@ -8,7 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-happenstance = { workspace = true, features = ["std", "memory"] }
+happenstance-core = { workspace = true, features = ["std", "memory"] }
 anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 

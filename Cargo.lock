@@ -55,7 +55,7 @@ name = "course-subscriptions"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "happenstance",
+ "happenstance-core",
  "tokio",
 ]
 
@@ -114,6 +114,13 @@ dependencies = [
 name = "happenstance"
 version = "0.1.0"
 dependencies = [
+ "happenstance-core",
+]
+
+[[package]]
+name = "happenstance-core"
+version = "0.1.0"
+dependencies = [
  "bytes",
  "futures-core",
  "serde",
@@ -126,16 +133,8 @@ dependencies = [
 name = "happenstance-ladybug"
 version = "0.1.0"
 dependencies = [
- "happenstance",
+ "happenstance-core",
  "thiserror",
-]
-
-[[package]]
-name = "happenstance-runtime"
-version = "0.1.0"
-dependencies = [
- "happenstance",
- "serde",
 ]
 
 [[package]]
@@ -143,7 +142,7 @@ name = "happenstance-sqlite"
 version = "0.1.0"
 dependencies = [
  "futures-core",
- "happenstance",
+ "happenstance-core",
  "happenstance-testkit",
  "thiserror",
  "tokio",
@@ -153,7 +152,7 @@ dependencies = [
 name = "happenstance-sync"
 version = "0.1.0"
 dependencies = [
- "happenstance",
+ "happenstance-core",
  "serde",
  "thiserror",
 ]
@@ -162,7 +161,7 @@ dependencies = [
 name = "happenstance-testkit"
 version = "0.1.0"
 dependencies = [
- "happenstance",
+ "happenstance-core",
  "proptest",
  "tokio",
 ]

@@ -1,0 +1,41 @@
+[package]
+name = "happenstance-core"
+description = "DCB-compliant event sourcing contract: types, storage ports, and an in-memory reference event store."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# No `readme` key: it must name a file inside the package, and this crate has no
+# README of its own yet. One is needed before the first publish — it is what
+# crates.io renders on the package page. See ADR-0005.
+
+[dependencies]
+bytes.workspace = true
+futures-core.workspace = true
+thiserror.workspace = true
+trait-variant.workspace = true
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[features]
+default = ["std", "memory"]
+std = ["thiserror/std", "bytes/std", "futures-core/std", "serde?/std"]
+# Wire-format derives. Required by `happenstance-sync`; deliberately NOT on by
+# default so the contract crate carries no serialization opinion.
+serde = ["dep:serde", "bytes/serde"]
+# The in-memory reference event store. Costs no extra dependencies and backs
+# every doctest in this crate, so the docs cannot drift from the API.
+memory = ["std"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
