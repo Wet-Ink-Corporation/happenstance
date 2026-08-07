@@ -12,7 +12,7 @@ categories.workspace = true
 publish = false
 
 [dependencies]
-# `serde` is non-optional here: replication is the reason `happenstance`'s
+# `serde` is non-optional here: replication is the reason `happenstance-core`'s
 # serde feature exists.
 happenstance-core = { workspace = true, features = ["std", "serde"] }
 serde.workspace = true

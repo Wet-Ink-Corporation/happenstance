@@ -12,7 +12,8 @@
 > yet voted on.
 >
 > **Lifts when** `happenstance-sync` round-trips an event between two stores
-> without deserialising its payload (phase 6).
+> without deserialising its payload
+> ([phase 13](../RUNBOOK.md#phase-13--happenstance-sync-and-its-testkit)).
 
 ## Context
 
@@ -22,8 +23,9 @@ and the choice propagates into every adapter signature.
 
 ## Decision
 
-`Event::data` is [`bytes::Bytes`](https://docs.rs/bytes). `happenstance` has no
-`serde` dependency in its default feature set, and never parses a payload.
+`Event::data` is [`bytes::Bytes`](https://docs.rs/bytes). `happenstance-core`
+has no `serde` dependency in its default feature set, and never parses a
+payload.
 
 A `serde` feature exists, off by default, adding `Serialize`/`Deserialize` for
 the *envelope* types (`Event`, `Tag`, `Query`, `AppendCondition`, …). It exists
@@ -31,7 +33,7 @@ for `happenstance-sync`, which has to put an envelope on the wire. It does not m
 the payload any less opaque.
 
 Encoding and decoding — a `Codec` trait, a `DomainEvent` mapping — belong to
-`happenstance-runtime`, the layer above.
+`happenstance`, the layer above.
 
 ## Consequences
 
@@ -46,9 +48,9 @@ stable in the workspace.
 projections copies nothing.
 
 **Bad.** Application code cannot pattern-match a domain event straight out of
-the store; something must decode it first. Until `happenstance-runtime` exists, that
-is the application's job — visible in the `course-subscriptions` example, which
-hand-rolls a payload parse and says so.
+the store; something must decode it first. Until `happenstance`'s typed layer
+exists, that is the application's job — visible in the `course-subscriptions`
+example, which hand-rolls a payload parse and says so.
 
 ## Alternatives rejected
 

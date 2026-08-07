@@ -1,14 +1,19 @@
 # happenstance
 
 An opinionated, storage-agnostic event sourcing library for Rust, built on the
-[Dynamic Consistency Boundary specification](https://dcb.events/specification/) —
-with batteries.
+[Dynamic Consistency Boundary specification](https://dcb.events/specification/):
+a contract for storage, and a published conformance suite that decides who meets
+it.
 
 [![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 
-> **Status: early.** The contract and its conformance suite are real and
-> tested. Every storage adapter is a documented stub. See [status](#status).
+> **Status: early, and worth being precise about.** The contract and its 27-rule
+> conformance suite are real and tested. The typed layer is a facade over the
+> contract, and every storage adapter is a documented stub. `0.1.0` is the
+> contract, the suite, the typed layer and SQLite; Postgres, Neon, Ladybug and
+> replication come after it, and the ambition is the whole list rather than the
+> first four. Nothing is published yet. See [status](#status).
 
 ---
 
@@ -99,6 +104,10 @@ finished.
 happenstance = "0.1"
 ```
 
+That version does not resolve yet: the name is held on crates.io at `0.0.0` until
+the typed layer and SQLite land, so today the only way to try this is a git
+dependency on the repository.
+
 ```rust
 use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
 
@@ -119,8 +128,13 @@ async fn define_course() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-This block is compiled by CI. It is a doctest of the `happenstance` crate, so it
-cannot drift from the API the way a README example normally does.
+This block and the DCB example above are compiled by CI, so neither can drift
+from the API the way a README example normally does. They are doctests of
+`xtask`, not of a published crate: `include_str!` resolves against the file tree,
+and a path reaching outside the package does not exist inside a packaged
+`.crate` — so attaching this file to `happenstance` would make `cargo test` fail
+for anyone who ran it. `xtask` is never published. Each crate's own `README.md`
+is compiled by that crate, where the relative path stays inside the package.
 
 ## Design
 
@@ -131,10 +145,11 @@ nothing else — an empty query cannot be constructed. `SequencePosition` wraps 
 costs no more than a bare one. `Tags` is canonically sorted at construction, so
 it can never be observed out of order and set equality is just `==`.
 
-**Payloads are opaque.** `Event` holds `Bytes`, and `happenstance` has no
-`serde` dependency by default. Adapters need no domain knowledge, and
-replication forwards events byte-for-byte without deserialising them. Encoding
-belongs to the layer above.
+**Payloads are opaque.** `Event` holds `Bytes`, and `happenstance-core` has no
+`serde` dependency by default — the optional feature covers the envelope types
+only, for replication. Adapters need no domain knowledge, and replication can
+forward events byte-for-byte without deserialising them. Encoding belongs to the
+layer above, which is what `happenstance` itself is for.
 
 **The concurrency signal is in the type system.** `append` returns
 `AppendError`, which separates `ConditionViolated` — routine under contention,
@@ -145,7 +160,7 @@ string to tell "retry" from "something broke".
 be implemented on `wasm32` where futures are `!Send` — which is what makes a
 Cloudflare Durable Object adapter possible at all. `SendEventStore` is derived
 from it for native use, and implementing it gives you both. Generic code binds
-the weaker one and accepts either. CI builds `happenstance` for
+the weaker one and accepts either. CI builds `happenstance-core` for
 `wasm32-unknown-unknown` on every commit so this stays true.
 
 **Adapters are separate crates, not feature flags.** `rusqlite` bundles a C

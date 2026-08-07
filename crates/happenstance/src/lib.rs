@@ -38,11 +38,10 @@
 //! * **`Codec`** — payload encoding. Events carry a codec tag so one store can
 //!   hold more than one encoding at a time, which is what makes a migration
 //!   possible.
-//! * **`DomainEvent`** — a Rust type's mapping to its
-//!   [`EventType`](happenstance_core::EventType) and
-//!   [`Tags`](happenstance_core::Tags).
+//! * **`DomainEvent`** — a Rust type's mapping to its [`EventType`] and
+//!   [`Tags`].
 //! * **`DecisionModel`** — folds read events into decidable state and produces
-//!   the matching [`Query`](happenstance_core::Query). Composing several into
+//!   the matching [`Query`]. Composing several into
 //!   one query is the mechanism that makes a dynamic consistency boundary
 //!   *dynamic*.
 //! * **The command loop** — read, decide, append, retry on

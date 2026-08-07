@@ -201,8 +201,9 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
 /// since `last_seen`.
 ///
 /// This is the second half of every DCB command handler, and it is identical
-/// every time — which is exactly why it belongs in a runtime layer rather than
-/// in each handler. See `happenstance-runtime`.
+/// every time — which is exactly why it belongs in the typed layer rather than
+/// in each handler. That is `happenstance`'s job (ADR-0006); it is a facade over
+/// the contract today, so the loop is spelled out here.
 async fn commit(
     store: &MemoryEventStore,
     events: &[Event],

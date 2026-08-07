@@ -93,7 +93,7 @@ already pins. This is DCB's query doing double duty, and it is free.
 store.** A projection spanning SQLite *and* Ladybug is then unrepresentable —
 which is correct, because there is no cross-store transaction and one that
 appeared to work would be lying about the invariant
-[`ProjectionStore`](../../crates/happenstance/src/projection.rs) exists to
+[`ProjectionStore`](../../crates/happenstance-core/src/projection.rs) exists to
 defend. This is the crate's own "illegal states are unrepresentable" applied at
 the point it is most likely to be got wrong.
 

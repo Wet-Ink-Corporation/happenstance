@@ -4,11 +4,13 @@
 //!
 //! # This is a port, not a protocol
 //!
-//! `happenstance` defines two ports — [`EventStore`](happenstance_core::EventStore)
-//! and [`ProjectionStore`](happenstance_core::ProjectionStore) — and this crate
-//! defines the third. It stands to its peer adapters as `happenstance` stands to
-//! its store adapters: the trait and the runner live here, the conformance suite
-//! lives in `happenstance-sync-testkit`, and a peer is a sibling crate.
+//! `happenstance-core` defines two ports —
+//! [`EventStore`](happenstance_core::EventStore) and
+//! [`ProjectionStore`](happenstance_core::ProjectionStore) — and this crate
+//! defines the third. It stands to its peer adapters as `happenstance-core`
+//! stands to its store adapters: the trait and the runner live here, the
+//! conformance suite lives in `happenstance-sync-testkit`, and a peer is a
+//! sibling crate.
 //!
 //! The reason is the deployment. A local-first application syncing to a Durable
 //! Object today should be able to add a Postgres as a second peer tomorrow, or
@@ -22,8 +24,8 @@
 //!
 //! The port lives here rather than in the contract crate deliberately. Putting
 //! it beside the other two would be more symmetric and would put replication
-//! back on the publish path; keeping it here is what lets `happenstance` reach
-//! 0.1 without waiting on this crate.
+//! back on the publish path; keeping it here is what lets `happenstance-core`
+//! reach 0.1 without waiting on this crate.
 //!
 //! ## One peer, and a runner above it
 //!
@@ -56,8 +58,8 @@
 //! forwards events **without deserialising them**. It never needs the sender's
 //! domain types, cannot fail to parse a payload it does not understand, and
 //! cannot corrupt one by re-encoding it. That is the whole payoff of keeping
-//! `happenstance` free of `serde` in its default feature set, and it is why
-//! this crate depends on `happenstance/serde` explicitly: the envelope is
+//! `happenstance-core` free of `serde` in its default feature set, and it is why
+//! this crate depends on `happenstance-core/serde` explicitly: the envelope is
 //! serialised, the payload is passed through.
 //!
 //! # The hard part, stated honestly

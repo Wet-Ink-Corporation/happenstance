@@ -20,8 +20,8 @@ claim about `trait_variant` was compiled and refuted.
 
 The larger change is that the design questions this file used to *schedule* are
 now *answered*. [`docs/architecture/SPECIFICATION.md`](architecture/SPECIFICATION.md)
-carries 193 numbered clauses across three ports — 137 `[FROZEN]`, 41
-`[PROVISIONAL]`, 14 `[DEFERRED]`, one `[NON-NORMATIVE]`. This file no longer
+carries 193 numbered clauses across three ports — 132 `[FROZEN]`, 46
+`[PROVISIONAL]`, 13 `[DEFERRED]`, two `[NON-NORMATIVE]`. This file no longer
 decides what a port promises. It executes those clauses, discharges the
 provisional and deferred ones against named experiments, and makes the 56 cases
 in [`E2E-CASES.md`](scenarios/E2E-CASES.md) writable in an order that puts the
@@ -114,7 +114,7 @@ ADR-0005 already carry superseded statuses, so phase 0's rename does not orphan
 them. All eighteen ledger rows from the previous runbook (`git show
 HEAD:docs/RUNBOOK.md`, rows at `:61-80`) are either carried or resolved against a
 clause ID; the three SQLite rows and the three Ladybug rows were merged rather than
-dropped. All fourteen `[DEFERRED]` clauses match the specification's maturity
+dropped. All thirteen `[DEFERRED]` clauses match the specification's maturity
 column exactly, and every one names an owning phase. All 56 E2E cases are claimed
 by at least one phase's *"Cases this makes writable"*. All thirteen defects D1–D13
 have a work item.
@@ -143,7 +143,7 @@ turned out to be one DCB already provides.
 
 | # | Phase | Depends on | State | Proof artefact |
 |---|---|---|---|---|
-| 0 | [Ground clear](#phase-0--ground-clear) | — | not started | a `.crate` that contains its licences and README, a README compiled by CI, ten owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
+| 0 | [Ground clear](#phase-0--ground-clear) | — | **done** | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
 | 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | not started | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
 | 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | not started | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | not started | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
@@ -440,7 +440,7 @@ Three obligations, all mechanical to check, all previously answerable only by
 prose search — and the middle one previously not answerable at all, which is why
 phase 12's audit of it had nothing behind it.
 
-### The 14 `[DEFERRED]` clauses
+### The 13 `[DEFERRED]` clauses
 
 | Clause | What it defers | Owning phase |
 |---|---|---|
@@ -475,7 +475,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 41 `[PROVISIONAL]` clauses
+### The 46 `[PROVISIONAL]` clauses
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
@@ -616,13 +616,36 @@ taken.
       and every discrepancy turned out to be a checker bug rather than a document
       one; converging on the number a reader computed by hand is the best evidence
       available that the parser now reads the document the way a person does.
-- [ ] **Regenerate `SPECIFICATION.md` §7.2 from the checker, and stop hand-editing
+- [x] **Regenerate `SPECIFICATION.md` §7.2 from the checker, and stop hand-editing
       it.** The table was computed by hand at `2a65d76` and has never been
       verified; where it and the checker disagree, the checker is right, which is
       the entire argument for having one. §7.3 – §7.6 stay authored — they carry
       the judgement about *why* a gap exists, which is where the dispositions come
       from. Expect the first run to find real errors in the table; a first run that
       finds none means the checker is not checking.
+
+      §7.1 was regenerated with it, and had to be: it was the wrong half. Its
+      hand-rolled totals read 137 / 41 / 14 / 1 while §7.2's own rows aggregate to
+      132 / 46 / 13 / 2 — so the *table* was right, the *summary* of it was wrong,
+      and it contradicted both the rows twenty lines below it and §1.3 six
+      thousand lines above it for as long as the three coexisted. Both miscounts
+      inflated FROZEN, which is the direction that flatters the document. 81 of 193
+      rows changed; the two substantive classes were thirteen phantom rule names
+      that were code-formatted ordinary words — including `` `happenstance` ``
+      itself, listed as a conformance rule — and **six alias pairs**, where §6
+      names a rule differently from the §3 clause specifying the same behaviour.
+      The unwritten-rule backlog was mis-costed at twelve where it is six. Which
+      spelling wins is recorded in §7's preamble as owed reconciliation and is
+      **phase 3's** to settle, since it is the phase that writes the registry.
+
+      The generated region is delimited by HTML comments and the gate recomputes
+      and compares it, so hand-editing inside the markers is inert rather than
+      merely discouraged. §1.3 is deliberately *not* generated: it is a count a
+      human computed by reading, which is what makes its agreement with the checker
+      evidence that the parser reads the document the way a person does — and
+      generating it would destroy the very thing it is being used to prove. It is
+      checked against the computed census instead, including its own arithmetic,
+      which is how the fossil "192 are normative" (193 − 2 = 191) surfaced.
 - [x] **Reserve three crates.io names now — `happenstance`, `happenstance-core`,
       `happenstance-testkit`** — and thereafter **one name per phase, when that
       phase starts.** All three were verified free on 2026-08-06, as was
@@ -667,7 +690,7 @@ taken.
       The reason it is a command and not a note here: the claims are weeks apart,
       and a procedure run that rarely from memory is one that drifts. Forgetting
       the licence files once ships a crate without them permanently.
-- [ ] **Rewrite the documents the rename inverts.** Partly done: CLAUDE.md's
+- [x] **Rewrite the documents the rename inverts.** Partly done: CLAUDE.md's
       repository map, dependency rule and constraint 2 are corrected, the settled
       `happenstance-runtime` open question is struck through rather than deleted,
       README's status table is repointed, and CONTRIBUTING now names
@@ -684,6 +707,28 @@ taken.
       (`PRESSURE-TEST.md:398-400`), so the gate is stricter locally than the file
       says. Append to constraint 5: *until first publish the MSRV is a preference,
       not a promise — weigh it, do not obey it.*
+
+      All of that is now done, and two things were found in the doing. ADR-0007
+      was in nobody's list: it is accepted, not superseded, and it linked
+      `ProjectionStore` to `crates/happenstance/src/projection.rs` — a path that
+      does not exist, because the facade has only `lib.rs`. It was missed
+      precisely because ADR-0006's new "On the historical record" section
+      enumerated 0001/0003/0004 and stopped; the section now names it. And
+      `crates/happenstance-sync/src/lib.rs` carried the ADR-0003 **inversion** in
+      running prose — "keeping `happenstance` free of `serde`", citing a
+      `happenstance/serde` feature path the manifest does not have — one sentence
+      of which said `happenstance` while its own intra-doc link two words later
+      said `happenstance_core`. That is the failure constraint 2 was rewritten
+      this same pass to warn about, surviving inside the crate that most needed to
+      get it right.
+
+      Two stale *phase* numbers were repointed with them: ADR-0001's banner said
+      the Cloudflare proof arrives at phase 5 (it is phase 9) and ADR-0003's said
+      sync round-trips at phase 6 (it is phase 13, and phase 6 is now
+      `ProjectionStore`). ADR-0006's three citations of "phase 3" are deliberately
+      **left wrong**, and the distinction is worth keeping: the runbook was
+      *replaced*, not renumbered, so there is no phase 3 that became phase 7 and
+      the rewrite-the-referent rule does not reach them.
 - [x] **Fix D10.** Make the README compile:
       `#![cfg_attr(doctest, doc = include_str!("../README.md"))]`, then fix
       `README.md:89-102` and the Quick start with hidden
@@ -700,6 +745,16 @@ taken.
       `readme = "README.md"`, add `homepage` to `[workspace.package]`. Add
       `cargo package -p <crate> --list` to the gate asserting the licences and
       README are in the artifact; `cargo publish --dry-run` does not warn.
+
+      **This box was ticked before its last sentence was true.** The licences and
+      READMEs landed; the gate step asserting they *stay* there did not exist for
+      three commits, which is why the exit criterion below it stayed unticked
+      while the work item read as done. The step exists now, and it parses the
+      file list rather than trusting the exit status — `cargo package --list`
+      succeeds whether or not a licence is present, which is the same reason
+      `--dry-run` does not warn. Its publishable set is derived from
+      `cargo metadata`, so deleting a `publish = false` from a stub is caught
+      rather than remembered.
 - [x] **Fix D12.** `serde = ["dep:serde", "bytes/serde", "serde/alloc"]`. The
       feature currently compiles only because `bytes` happens to enable
       `serde/alloc` transitively.
@@ -710,15 +765,44 @@ taken.
       behind a toolchain probe. Widen the wasm32 step to the feature powerset
       while keeping one mandatory plain `cargo check`, so the constraint-1 guard
       cannot become skippable. Add `--locked`.
+
+      **Ticked on its first sentence; the other three were never done.** They are
+      now. The nightly step needed more than itself: it sits in `OPTIONAL` behind
+      a `cargo +nightly --version` probe, and **nothing in `.github/` installed
+      nightly**, so it printed `skipped` on all three runners while
+      `xtask/src/main.rs` asserted "CI installs nightly, so the check is real
+      there" and phase 12 below spent it as a proof artefact. A step that always
+      skips is the decorative-rule failure applied to tooling, and it had two
+      documents vouching for it. The gate job now installs nightly with
+      `rustup toolchain install`, deliberately **not** a second
+      `dtolnay/rust-toolchain@nightly` — that action runs `rustup default`, so a
+      pair of them is order-sensitive and getting it backwards runs the *entire*
+      gate on nightly, which is worse than the skip it replaces.
+
+      A fourth thing surfaced with them, in the same class and not in D13's list:
+      rustdoc does not read `RUSTFLAGS`, so `ci.yml`'s ambient `-D warnings`
+      reached every rustc invocation in the gate and no rustdoc one. The
+      `documentation` step had been printing "generated 3 warnings" and exiting 0
+      for as long as it had existed. Both mandatory doc steps now carry
+      `RUSTDOCFLAGS=-D warnings`, and the three warnings are fixed.
 - [x] **Close the lint hole.** `Cargo.toml:59` is `todo = "allow"` workspace-wide.
       Make it `deny`, with `#![allow(clippy::todo)]` in the stub crates that need
       it. Same for `unwrap_used`, currently `warn` at `Cargo.toml:57`, since the
       test modules already opt out locally.
-- [ ] **Repoint `cargo-semver-checks`** at
+- [x] **Repoint `cargo-semver-checks`** at
       `--baseline-rev ${{ github.event.pull_request.base.sha }}` so the job does
       something today, and correct CONTRIBUTING.md, which claims a registry
       baseline that does not exist.
-- [ ] Weekly `schedule:` job running only `cargo deny check advisories`.
+
+      The checkout in that job needs `fetch-depth: 0` with it. `actions/checkout`
+      defaults to a shallow clone of one commit, so the base SHA the baseline
+      names is not in the local object store and the job fails on the thing it was
+      just repointed at.
+- [x] Weekly `schedule:` job running only `cargo deny check advisories`. Only
+      advisories, because a new advisory against an unchanged dependency is the
+      one failure that arrives with no commit to trigger CI — it needs a clock.
+      Licences and bans change only when a manifest does, and the gate already
+      catches those on every push.
 - [x] A CI job running `cargo test --workspace` at the 1.85 MSRV. `proptest
       1.11.0` and `getrandom 0.4.3` both declare `rust-version = 1.85`, and CI's
       `--no-dev-deps` cannot see them: zero headroom, verified nowhere.
@@ -732,8 +816,11 @@ taken.
       assigned per machine, so a committed copy is a config that fails silently on
       the next checkout. What the project enforces lives in `Cargo.toml`'s lints
       and `cargo xtask ci`, which is the same for every editor.
-- [ ] Soften the README's "with batteries" tagline to what phase 12 will actually
-      ship, or move the missing items into phase 7's scope explicitly.
+- [x] Soften the README's "with batteries" tagline to what phase 12 will actually
+      ship, or move the missing items into phase 7's scope explicitly. Softened:
+      0.1 is the contract, the conformance suite, the typed layer and SQLite, and
+      the differentiated claim was never the batteries anyway — it is a *published*
+      suite that makes "storage agnostic" checkable by a third party.
 
 **Proof artefact.** `cargo package -p happenstance-core --list` and
 `cargo package -p happenstance --list` each show both licence files and a README;
@@ -743,6 +830,10 @@ maturity marker is deleted from a clause and passes when it is restored. Four
 checkable facts, none of which is "the gate is green", and the fourth is the only
 one of the four that could have been faked by a checker that does nothing.
 
+**All four hold.** The fourth is the one that paid, and it paid immediately: its
+first run over §7 found that §7.1's totals had been wrong since the document was
+assembled, in the direction that flatters it. See the `§7.2` work item above.
+
 **Exit criteria**
 
 - [x] Three names owned on crates.io — `happenstance`, `happenstance-core`,
@@ -750,15 +841,48 @@ one of the four that could have been faked by a checker that does nothing.
       and a one-paragraph README, so that each is a crate with a stated purpose
       rather than a parked name. The remaining seven are claimed at their phases;
       each of those phases carries the item.
-- [ ] The README's code blocks are compiled by CI, and the document says which
-      README that is.
-- [ ] `cargo package --list` is a gate step and asserts on its output.
-- [ ] No document in the repository names `happenstance` when it means the
-      contract crate — including `SPECIFICATION.md`'s file citations.
+- [x] The README's code blocks are compiled by CI, and the document says which
+      README that is. It is the `xtask` crate that compiles the *repository*
+      README, and the reason is worth stating where a reader will find it:
+      `include_str!("../../README.md")` cannot resolve inside a packaged `.crate`,
+      so attaching it to a published crate would make `cargo test` fail for anyone
+      who ran it. `xtask` is `publish = false` and is built on every push. Each
+      per-crate README is compiled by its own crate, where the path stays inside
+      the package after publication.
+- [x] `cargo package --list` is a gate step and asserts on its output — it parses
+      the file list for both licences and the README rather than trusting the exit
+      status, and its publishable set is derived from `cargo metadata` rather than
+      hand-maintained. Both halves were demonstrated to fail: removing a licence,
+      and promoting a stub by deleting its `publish = false`.
+- [x] No document in the repository names `happenstance` when it means the
+      contract crate — including `SPECIFICATION.md`'s file citations. Verified by
+      sweep rather than asserted: every bare occurrence across the Markdown, the
+      crate sources, the examples, the manifests and `.github/` was read in
+      context, and `happenstance-runtime` now survives only where it is
+      deliberately history.
+
+      **One stated exemption, which is what keeps this criterion honest rather
+      than absolute.** The dated documents under `docs/evaluation/` are *not*
+      rewritten: they predate ADR-0006, the runbook cites several of them by
+      `file:line` as evidence, and a rewritten review is no longer the review that
+      was performed — the same rule ADR-0006 applies to superseded ADR bodies.
+      [`docs/evaluation/README.md`](evaluation/README.md) states the substitution
+      a reader must apply and names the one file where applying it mechanically
+      would garble the content, because that file *is* a rename migration table.
 - [x] `cargo xtask spec-trace` is a named step in `REQUIRED`, and it has been
       demonstrated to fail on a deliberately broken clause. A checker nobody has
       seen reject anything is the decorative-rule failure applied to tooling.
-- [ ] `git status` clean; `cargo xtask ci` green with the seven new steps.
+
+      Three further demonstrations, because the checker grew three more claims:
+      corrupting a maturity cell inside the generated §7.1–§7.2 region, corrupting
+      §1.3's census, and breaking §1.3's internal arithmetic each fail it, each
+      naming both disagreeing numbers. The two §1.3 checks are independent —
+      corrupting a count leaves the arithmetic satisfied and vice versa — so
+      neither masks the other.
+- [x] `git status` clean; `cargo xtask ci` green with the five new steps —
+      specification traceability, documentation without default features, the
+      packaged-artifact assertion, the wasm32 feature powerset, and the nightly
+      docs.rs configuration. Twelve steps, none skipped locally.
 
 **Cases this makes writable.** None. This phase writes no clause and unblocks no
 case; it removes the friction that would otherwise be paid twelve times.
@@ -766,6 +890,39 @@ case; it removes the friction that would otherwise be paid twelve times.
 **Estimate.** 1 day, plus 1 for `spec-trace`.
 
 **Session log**
+
+- 2026-08-06 — **phase 0 closed.** Gate green with twelve steps, none skipped
+  locally; `git status` clean. The five remaining work items landed together:
+  §7.1–§7.2 regenerated from the checker and held to it, the `cargo package
+  --list` assertion, D13's three unwritten halves, the semver rev-baseline and the
+  weekly advisories job, and the documents the rename inverted.
+
+  **What the closing pass found is more useful than what it built**, and three
+  findings are worth carrying forward because each is the same shape: a check that
+  had been believed rather than watched fail.
+
+  1. **§7.1 had been wrong since the document was assembled** — 137 / 41 / 14 / 1
+     against §7.2's own rows aggregating to 132 / 46 / 13 / 2, both miscounts
+     inflating FROZEN. Three copies of the census coexisted and disagreed, and no
+     reader had caught it. This file carried the wrong one too, in four places.
+  2. **The nightly `docs.rs` step was skipped on every CI runner**, because
+     nothing in `.github/` installed nightly — while `xtask/src/main.rs` asserted
+     the opposite and phase 12 below spent the step as a proof artefact. It
+     guards `#![cfg_attr(docsrs, feature(doc_cfg))]`, an unstable feature whose
+     first real compilation would otherwise have been on docs.rs, after
+     publication, when a release cannot be edited.
+  3. **`RUSTFLAGS: -D warnings` never reached rustdoc.** The `documentation` step
+     had been printing "generated 3 warnings" and exiting 0 for its whole life.
+
+  Two work items in this phase were ticked before they were true (D11's gate step,
+  D13's last three halves), which is how (2) and (3) survived to be found late.
+  Recorded in the items themselves rather than quietly corrected — a plan whose
+  boxes run ahead of its work teaches the next reader to trust the boxes.
+
+  Method note, since it is repeatable: every one of the three was found by an
+  adversarial pass whose brief was *try to prove this check is decorative*, run
+  after the pass that built them and against their author's own report. The
+  builders reported all three as done, in good faith, and all three were.
 
 - 2026-08-06 — ADR-0006 rename executed (`7d6c1b0`); D11 fixed, all three
   publishable crates now package both licences and a README (`48565e5`);
@@ -776,8 +933,9 @@ case; it removes the friction that would otherwise be paid twelve times.
   1.85, not yanked. The remaining seven names are claimed at their phases, per
   the rule above. Gate green throughout.
 
-  Still open in this phase: `spec-trace` (CF-38), D10, D12, D13, the
-  `todo = "allow"` lint hole, the MSRV job and `CHANGELOG.md`.
+  Still open in this phase at the time: `spec-trace` (CF-38), D10, D12, D13, the
+  `todo = "allow"` lint hole, the MSRV job and `CHANGELOG.md`. All closed by the
+  entry above.
 
 - 2026-08-05 — carried from the previous runbook, because it is the only dated
   evidence in the repository that the gate was ever green: `cargo xtask ci`
@@ -1826,7 +1984,12 @@ fail to compile* is the whole claim.
       now, and all three are discharged by the end of this phase — PS-35 at phase
       1, PS-32 at phase 6, PS-33 here. Move them out and leave the IDs retained so
       citations resolve, the way CF-30 already is.
-- [ ] `publish = false` removed from `happenstance`.
+- [x] `publish = false` removed from `happenstance`. Discharged early, at phase 0:
+      ADR-0006 ships the facade published from day one so that `cargo add
+      happenstance` is true throughout, so `crates/happenstance/Cargo.toml` never
+      carried the key and the name is reserved at `0.0.0`. Kept rather than
+      deleted, because the *other* phases' identical rows are still live and a
+      silently vanished one reads as forgotten.
 
 **Cases this makes writable.** E2E-31, E2E-51, the application half of E2E-26 –
 E2E-29, and **the runner half of E2E-25** — the chunked rebuild that must not lie

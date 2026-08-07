@@ -27,6 +27,13 @@ still contract-level if it belongs in `happenstance-sync-testkit` — that crate
 named in `crates/happenstance-sync/src/lib.rs:9-11` and does not exist. Those are
 marked **⚠ crate does not exist**.
 
+**⚠ `happenstance`** means something narrower, because that crate *does* exist.
+After [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md) the bare name
+belongs to the **typed** layer, which is a facade over `happenstance-core` today:
+the crate is on disk, the surface these cases need is not. The contract — ports,
+types, errors, in-memory store — is `happenstance-core`, and that is what a
+**Spans** line means when it names it.
+
 ## Index
 
 | Group | Cases |
@@ -46,7 +53,7 @@ marked **⚠ crate does not exist**.
 
 - **From:** Wattline (the 19-millisecond window); Norvant (all fifteen tower projections); Turnstile (chunked backfill); Kestrel Motor (`AuthoriseRepair` on the hub)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`; ⚠ needs a hostile fixture and, for a real adapter, `happenstance-postgres` (does not exist)
+- **Spans:** `happenstance-core`, `happenstance-testkit`; ⚠ needs a hostile fixture and, for a real adapter, `happenstance-postgres` (does not exist)
 
 **GIVEN** a store and a reader that has observed an event at position *P*.
 **WHEN** any subsequent read is issued, at any later time, with any `ReadOptions`.
@@ -72,7 +79,7 @@ until a second, later-positioned append has committed.
 
 - **From:** Turnstile (`tour-fan-ledger`'s 480-statement paginated backfill); Wattline
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`; ⚠ `happenstance-neon` (does not exist)
+- **Spans:** `happenstance-core`, `happenstance-testkit`; ⚠ `happenstance-neon` (does not exist)
 
 **GIVEN** a store holding events 1…*N* and a read stream over `Query::all()` that
 has been polled once.
@@ -97,7 +104,7 @@ Both are conformant today and they have opposite semantics.
 
 - **From:** Wattline (`StartSession`'s four items); Turnstile
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a four-item query whose items select disjoint tag families.
 **WHEN** an event matching item 1 is appended between the moment the adapter
@@ -128,7 +135,7 @@ in separate snapshots.
 
 - **From:** Wattline (`StartSession`'s 828,000-event fleet item)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked on a contract change — see [what cannot be written yet](#what-cannot-be-written-yet)
+- **Spans:** `happenstance-core`; blocked on a contract change — see [what cannot be written yet](#what-cannot-be-written-yet)
 
 **GIVEN** a four-item query where item 3 has a snapshot event at position *S* and
 items 1, 2 and 4 depend on definitional events far below *S*.
@@ -153,7 +160,7 @@ is a confident decision over a fold with holes in it.
 
 - **From:** Wattline
 - **Level:** contract
-- **Spans:** `happenstance`; blocked on the same change as E2E-04
+- **Spans:** `happenstance-core`; blocked on the same change as E2E-04
 
 **GIVEN** four separate reads, one per item, returning last-seen positions
 *p₁ > p₂ > p₃ > p₄*.
@@ -175,7 +182,7 @@ rejection rate is attributed to physics rather than to the collapse.
 
 - **From:** Kestrel Motor (every one of six appends puts the type it is appending into its own condition)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a two-event batch under a condition whose query matches **both** events,
 with `after` set past everything already stored.
@@ -200,7 +207,7 @@ whose second event matches.
 
 - **From:** Turnstile (the cancelled Worker); Kestrel Motor (`IssuePayment`, the closed browser tab)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** an `append` future built but not driven to completion.
 **WHEN** it is polled once with a no-op waker and then dropped.
@@ -251,7 +258,7 @@ snapshot, or an advisory lock scoped to a single pool member. All three pass all
 
 - **From:** Turnstile (twelve concurrent handlers sharing one store through an `Rc` inside a Durable Object)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** one store behind an `Rc`, on a single-threaded executor.
 **WHEN** two `append` futures with mutually-violating conditions are polled
@@ -303,7 +310,7 @@ positions came from a counter and the author assumed density. The purge and the
 
 - **From:** Norvant (backfill beside a live tail); Kestrel Motor (pinning two phases of an erasure to one snapshot)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked on adding `ReadOptions::to`
+- **Spans:** `happenstance-core`; blocked on adding `ReadOptions::to`
 
 **GIVEN** a log at head *H* and a backfill worker.
 **WHEN** the worker is given the closed window [1, *H*] while a tail worker owns
@@ -328,7 +335,7 @@ direction that cannot stream is right.
 
 - **From:** Norvant (`OpenTemperatureExcursion`'s `backwards().limit(1)` read)
 - **Level:** contract
-- **Spans:** `happenstance`
+- **Spans:** `happenstance-core`
 
 **GIVEN** a helper that reads a decision model with
 `ReadOptions::new().backwards().limit(1)`.
@@ -350,7 +357,7 @@ looking like contention rather than a bug.
 
 - **From:** Norvant (the 04:00 board that cannot say how stale it is); Turnstile (`block-heatmap`'s cold start)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a store holding *N* events, and generic code bound on `EventStore`.
 **WHEN** it asks for the current head.
@@ -377,7 +384,7 @@ reverses before truncating (`memory.rs:163-179`) and passes.
 
 - **From:** Kestrel Cold Chain (`ConsumeVanStock`); Kestrel Rotor (`RecordConsumption`)
 - **Level:** contract
-- **Spans:** `happenstance`
+- **Spans:** `happenstance-core`
 
 **GIVEN** two command handlers in one codebase: one that appends a fact that may
 not be refused, and one whose author omitted the condition by mistake.
@@ -404,7 +411,7 @@ one item and turns a comment into something greppable.
 
 - **From:** all six; sharpest in Kestrel Cold Chain (`van_stock`, several times a day on 138 devices) and Norvant (`excursion_register`)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`; ⚠ needs the phase-2 projection conformance suite
+- **Spans:** `happenstance-core`, `happenstance-testkit`; ⚠ needs the phase-2 projection conformance suite
 
 **GIVEN** a projection whose checkpoint is at position *P*.
 **WHEN** it is reset through the port.
@@ -427,7 +434,7 @@ the port, and it is what makes E2E-17 possible.
 
 - **From:** Norvant (03:18, the operator who "resets properly")
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** an operator with no `reset` who writes
 `commit(empty_batch, id, SequencePosition::FIRST)`.
@@ -449,7 +456,7 @@ its necessity.
 
 - **From:** Norvant (the truncate committed at 02:46:31; the pod died at 02:46:33)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a projection with rows and a checkpoint.
 **WHEN** a reset is interrupted between clearing the rows and clearing the
@@ -472,7 +479,7 @@ old checkpoint, resumes past it, applies sixty-one events into an empty table, a
 
 - **From:** Kestrel Cold Chain (`van_stock` must reset; `fgas_ledger` must never); Norvant (`excursion_register` vs `audit_trail_export`)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** one projection store holding two projections, one of which must be
 rebuildable and one of which must not.
@@ -492,7 +499,7 @@ Cheap, obvious, and it destroys the append-only regulatory ledger sharing the fi
 
 - **From:** Norvant (41 same-typed depot Durable Objects behind one runner)
 - **Level:** contract
-- **Spans:** `happenstance`
+- **Spans:** `happenstance-core`
 
 **GIVEN** two instances of the same `ProjectionStore` type, *A* and *B*.
 **WHEN** `let batch = A.begin().await?;` is followed by `B.commit(batch, id, p)`.
@@ -516,7 +523,7 @@ it into a borrow error. This is the cheapest fix in the entire catalogue.
 
 - **From:** all six
 - **Level:** contract
-- **Spans:** `happenstance`; blocked on the apply seam (`RUNBOOK.md:68`, **decided**, ADR pending)
+- **Spans:** `happenstance-core`; blocked on the apply seam (`RUNBOOK.md:68`, **decided**, ADR pending)
 
 **GIVEN** code generic over `P: ProjectionStore`.
 **WHEN** it applies an event.
@@ -544,7 +551,7 @@ that names its store. It bites a library that cannot.
 
 - **From:** Norvant (`exception_queue` looking up a route it wrote; `vehicle_contact_graph` finding co-loaded consignments)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** an open batch.
 **WHEN** a row is written through it and then read back before commit.
@@ -567,7 +574,7 @@ only under the first.
 
 - **From:** Norvant (`vehicle_contact_graph`, the determinism casualty)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a projection whose `apply` reads state it wrote for an earlier event.
 **WHEN** the same log is replayed at chunk sizes 1, 100 and 5,000.
@@ -589,7 +596,7 @@ that most needs a *reproducible* rebuild.
 
 - **From:** Norvant (`cold_chain_certificate_expiry`, ~40 matching events a day out of 37,000)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a projection whose query matched nothing in the range [*a*, *b*].
 **WHEN** it commits an empty batch at position *b*.
@@ -612,7 +619,7 @@ hazard rather than a capability gap.
 
 - **From:** Kestrel Cold Chain (`pool_availability` in a Durable Object); Turnstile (`block-availability`, `tour-fan-ledger`)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`; ⚠ needs a Durable Object or Neon projection adapter
+- **Spans:** `happenstance-core`, `happenstance-testkit`; ⚠ needs a Durable Object or Neon projection adapter
 
 **GIVEN** an adapter whose storage API offers `transactionSync(callback)` and no
 handle that can be held across an `await`, or no transaction at all.
@@ -644,7 +651,7 @@ commit — the same conclusion the Durable Object reaches.
 
 - **From:** Kestrel Cold Chain (`pool_availability`, 4.1M events, unsurvivable in one DO request); Norvant; Wattline (`fleet-usage`'s 210M-event backfill)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked on a projection lifecycle state or a documented swap protocol
+- **Spans:** `happenstance-core`; blocked on a projection lifecycle state or a documented swap protocol
 
 **GIVEN** a projection rebuilding from position 1 across many separate invocations.
 **WHEN** a reader asks for its checkpoint mid-rebuild.
@@ -667,7 +674,7 @@ nowhere.
 
 - **From:** Norvant (the panic at 4,000,001); Kestrel Motor (the deliberate crypto-shred); Wattline (the trailing-space currency code); Turnstile
 - **Level:** contract
-- **Spans:** ⚠ `happenstance-runtime` (a doc comment and one `const`, `crates/happenstance-runtime/src/lib.rs:50`)
+- **Spans:** ⚠ `happenstance` (a doc comment and one `pub use`, `crates/happenstance/src/lib.rs:76`)
 
 **GIVEN** a pump and an `apply` that returns an application error at position *P*.
 **WHEN** the pump returns.
@@ -688,7 +695,7 @@ implementation will do. `PumpError<E::Error, P::Error>` cannot carry it.
 
 - **From:** Wattline (`revenue-recognition` must halt; `site-board` must not); Kestrel Motor (a shred needs "skip and record")
 - **Level:** contract
-- **Spans:** ⚠ `happenstance-runtime`; owns `RUNBOOK.md:73`
+- **Spans:** ⚠ `happenstance`; owns `RUNBOOK.md:73`
 
 **GIVEN** two projections in one runner, one declaring halt-on-failure and one
 declaring skip-and-record.
@@ -715,7 +722,7 @@ exist is any way to record that it happened.
 
 - **From:** Norvant (nineteen kept running); Turnstile (the halted graph projection)
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ `happenstance-runtime`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance`, ⚠ e2e crate
 
 **GIVEN** twenty projections over one log, one of which panics in `apply`.
 **WHEN** the runner continues.
@@ -743,7 +750,7 @@ unwinding is available; that too is undocumented and depended on.)
 
 - **From:** Norvant (fourteen Postgres views and six Ladybug views under one control tower)
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ `happenstance-ladybug`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance-ladybug`, ⚠ e2e crate
 
 **GIVEN** projections targeting two different `ProjectionStore` types.
 **WHEN** they are held in one collection and driven by one supervisor.
@@ -765,7 +772,7 @@ discovers E0271 second. The honest answer is that runners are per store.
 
 - **From:** Norvant (rusqlite and Ladybug batches); Kestrel Cold Chain (the DO hub)
 - **Level:** contract
-- **Spans:** `happenstance`
+- **Spans:** `happenstance-core`
 
 **GIVEN** a `ProjectionStore` whose `Batch` is `!Send` — `rusqlite::Transaction`, an
 `lbug` handle.
@@ -791,7 +798,7 @@ currently discoverable only by writing the adapter and being told.
 
 - **From:** Norvant (`scan_gap_monitor`); Kestrel Cold Chain (`StockReconciliationRequired`)
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ `happenstance-runtime`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance`, ⚠ e2e crate
 
 **GIVEN** a projection whose read model implies a domain event.
 **WHEN** the projection is rebuilt.
@@ -816,7 +823,7 @@ declared out of scope. Today it is neither.
 
 - **From:** Norvant (one read, one decode, twenty applies)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** projections with queries *a* and *b*.
 **WHEN** a runner reads `Query::from_items(items(a) ++ items(b))` and re-filters each
@@ -872,7 +879,7 @@ failure is not a duplicate but an inversion.
 
 - **From:** Kestrel Cold Chain; Turnstile; Kestrel Rotor
 - **Level:** contract (sync)
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`; blocked on `RUNBOOK.md:70`'s shape
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`; blocked on `RUNBOOK.md:70`'s shape
 
 **GIVEN** an ingested event carrying a store-assigned identity.
 **WHEN** a peer asks "have I already ingested this?".
@@ -924,7 +931,7 @@ a `[(AppendCondition, Vec<Event>)]` envelope; no contract change.
 
 - **From:** Kestrel Rotor (1,840 events in a 34-minute satellite window) — the finding nothing else in the workspace would have produced
 - **Level:** contract (sync)
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`
 
 **GIVEN** a peer batch of 1,840 events, some already ingested.
 **WHEN** the receiving store ingests over a transport that costs one round trip per
@@ -952,7 +959,7 @@ lands with the already-decided identity row.
 
 - **From:** Kestrel Cold Chain (the cut `ChargeRefrigerant` decision); Kestrel Motor; Wattline (`after: Some(7730)` from a site controller)
 - **Level:** contract (sync)
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`
 
 **GIVEN** a peer-supplied `AppendCondition` deserialised from the wire.
 **WHEN** its `after` field is `Some(p)`.
@@ -1005,7 +1012,7 @@ replication semantics in the contract crate.
 
 - **From:** Kestrel Cold Chain (the whole scenario)
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** two peers that each accepted a conflicting claim under byte-identical
 position-free conditions.
@@ -1115,7 +1122,7 @@ policy. And a peer that forwards only events it originated: *C* never sees *A* a
 
 - **From:** Kestrel Rotor (which side of midnight did the issue fall on); Kestrel Cold Chain (two tablets 90 seconds apart, one six minutes fast)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked, and should be decided in the same pass as `EventId`
+- **Spans:** `happenstance-core`; blocked, and should be decided in the same pass as `EventId`
 
 **GIVEN** an event appended at a known instant.
 **WHEN** an auditor asks when the store recorded it.
@@ -1190,7 +1197,7 @@ backwards. `sync/lib.rs:45-51` already says it is not.
 
 - **From:** Kestrel Cold Chain (a 90-day slice); Kestrel Motor (a scattered purge); Kestrel Rotor (a compacted peer)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`; blocked — **not a ledger row anywhere**
+- **Spans:** `happenstance-core`, `happenstance-testkit`; blocked — **not a ledger row anywhere**
 
 **GIVEN** a store that has been pruned, purged or compacted.
 **WHEN** a runner, an ingest path or a decision model reads it.
@@ -1219,7 +1226,7 @@ strongest evidence available that it belongs in the port and not in an adapter.
 
 - **From:** Kestrel Motor (Tuesday 18:02) — the load-bearing failure of that scenario
 - **Level:** contract
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`; depends on E2E-46
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`; depends on E2E-46
 
 **GIVEN** a condition whose query ranges over events that have been destroyed.
 **WHEN** it is evaluated.
@@ -1244,7 +1251,7 @@ already was.
 
 - **From:** Kestrel Motor (`ExecuteRetentionPurge`, `ExecuteErasure`)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked — no port surface exists
+- **Spans:** `happenstance-core`; blocked — no port surface exists
 
 **GIVEN** a set of positions to destroy and a conditional marker append recording that
 they were.
@@ -1275,7 +1282,7 @@ is not, because silence is what Tuesday's ingest read as "nothing ever happened 
 
 - **From:** Kestrel Motor (`subject:S-88213` surviving a crypto-shred)
 - **Level:** contract
-- **Spans:** `happenstance`; blocked — not a ledger row anywhere
+- **Spans:** `happenstance-core`; blocked — not a ledger row anywhere
 
 **GIVEN** an erased data subject whose payloads are undecryptable.
 **WHEN** the fraud graph is rebuilt.
@@ -1302,7 +1309,7 @@ This is the strongest argument in the catalogue for a **redaction** seam rather 
 
 - **From:** Kestrel Motor (`retention-ledger`, silently under-reporting held claims for two years); Norvant; Wattline (`roaming-graph`)
 - **Level:** contract
-- **Spans:** `happenstance`, ⚠ `happenstance-runtime`
+- **Spans:** `happenstance-core`, ⚠ `happenstance`
 
 **GIVEN** a projection at checkpoint *P* whose `Query` is widened to include a type
 that has existed since long before *P*.
@@ -1325,7 +1332,7 @@ under-reported for two years is the one the retention job depends on.
 
 - **From:** Kestrel Cold Chain; Kestrel Rotor (six decisions, six times over)
 - **Level:** contract
-- **Spans:** `happenstance`
+- **Spans:** `happenstance-core`
 
 **GIVEN** a command handler in a library crate — so no `anyhow`, per house style.
 **WHEN** it calls `Tags::from_pairs`, `QueryItem::new` and `Query::from_items` and
@@ -1354,7 +1361,7 @@ into, is two lines and lands on all thirty-odd queries in this catalogue.
 
 - **From:** Turnstile (`PlaceHold`, compiled); Kestrel Cold Chain (`IngestPeerBatch` in a Durable Object)
 - **Level:** contract
-- **Spans:** `happenstance`, `happenstance-testkit`
+- **Spans:** `happenstance-core`, `happenstance-testkit`
 
 **GIVEN** a `!Send` `EventStore` behind an `Rc`, on a single-threaded executor.
 **WHEN** a generic handler bound on `EventStore` reads with a five-item query, drains it
@@ -1384,7 +1391,7 @@ gets the current code changed for the wrong reason.
 
 - **From:** Wattline (1,900 handlers a minute against one store)
 - **Level:** contract
-- **Spans:** `happenstance`; **semver-visible, must be decided before publish**
+- **Spans:** `happenstance-core`; **semver-visible, must be decided before publish**
 
 **GIVEN** one store shared as `Arc<S>` across tokio tasks.
 **WHEN** generic code bound on `EventStore` — the bound CLAUDE.md rule 4 mandates —
@@ -1409,7 +1416,7 @@ driven concurrently from generic code.
 
 - **From:** Turnstile (local SQLite when offline, the Durable Object when online)
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ e2e crate
 
 **GIVEN** an application that must pick its store at runtime.
 **WHEN** it holds `Box<dyn EventStore>`.
@@ -1431,7 +1438,7 @@ module docs pointing at `dynosaur`.
 
 - **From:** Turnstile (`ReserveTourAllocation` on Neon)
 - **Level:** contract
-- **Spans:** `happenstance`, ⚠ `happenstance-neon`
+- **Spans:** `happenstance-core`, ⚠ `happenstance-neon`
 
 **GIVEN** a store that enforces conditions by taking an advisory lock per condition tag,
 in sorted order.
@@ -1457,7 +1464,7 @@ invisible from the application side.
 
 - **From:** Kestrel Cold Chain (`ClaimPooledUnit`) — recorded because the scenario got this wrong and the corrected version is a real test
 - **Level:** integration
-- **Spans:** `happenstance`, ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** two spokes holding different slices of one hub's log, and a decision whose
 condition is made position-free by deriving a counter from the slice

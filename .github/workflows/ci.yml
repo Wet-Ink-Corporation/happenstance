@@ -5,13 +5,24 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # 07:17 on Tuesdays, driving the `advisories` job below. The offset is
+  # deliberate: GitHub queues the whole fleet's scheduled workflows on the hour
+  # and again at midnight UTC, and a run submitted into that queue is delayed by
+  # tens of minutes or silently dropped. Nothing here is time-sensitive to the
+  # minute, so an odd time costs nothing and buys a run that actually starts.
+  schedule:
+    - cron: "17 7 * * 2"
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # `github.event_name` belongs in the key because the weekly advisories run and
+  # a push to main resolve to the same `github.ref`. Without it,
+  # `cancel-in-progress` lets the scheduled job cancel a gate run that was
+  # mid-flight — a green tick on main that no gate ever produced.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -32,6 +43,40 @@ jobs:
       # rust-toolchain.toml pins the channel, the components and the
       # wasm32 target, so there is nothing to configure here.
       - uses: dtolnay/rust-toolchain@stable
+
+      # A second toolchain on the runner, for exactly one step of the gate: the
+      # `--cfg docsrs` rustdoc build. It earns its place because
+      # `#![cfg_attr(docsrs, feature(doc_cfg))]` is an *unstable* feature whose
+      # spelling has moved before, and `docsrs` is a cfg nobody sets except
+      # docs.rs — which builds *after* the crate is published. A crates.io
+      # release can be yanked but never edited, so a broken `doc_cfg` is the one
+      # class of breakage that cannot be fixed after the fact. Without this step
+      # the check probes for a toolchain that is not there and prints `skipped`
+      # on every runner, which is worse than not claiming it at all.
+      #
+      # Deliberately `rustup` rather than a second `dtolnay/rust-toolchain@…`:
+      # that action makes whatever it installs the *default* toolchain, so the
+      # pair would be order-sensitive and a misordering would quietly run clippy,
+      # the tests and the rest of the gate on nightly. `rustup toolchain install`
+      # installs and stops. `--profile minimal` is enough — rustdoc ships in the
+      # `rustc` component, not in `rust-docs`.
+      #
+      # `cargo +nightly` reaches it despite rust-toolchain.toml's
+      # `channel = "1.97.1"`: a `+toolchain` argument is the highest-precedence
+      # override rustup has, above the environment, directory overrides and the
+      # toolchain file. The pin does not neuter this step; do not delete it
+      # believing that it must.
+      #
+      # On all three runners rather than only Linux. The property is
+      # toolchain-dependent and not OS-dependent, so two of the three builds
+      # prove nothing new — but the gate is one command defined once in xtask,
+      # and the alternative is a matrix exception here plus a hedged "nothing is
+      # skipped in CI" there. A `skipped` line that is expected on two runners is
+      # a `skipped` line nobody reads on the third. Uniformity is worth the
+      # minute.
+      - name: Install nightly, for the docs.rs configuration step
+        run: rustup toolchain install nightly --profile minimal
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Install supplementary tools
@@ -75,16 +120,66 @@ jobs:
         run: cargo test --workspace --all-features
 
   # Public API changes must be intentional. This fails a PR that breaks semver
-  # without a version bump.
+  # without a version bump. The `pull_request` guard is load-bearing: it is what
+  # makes `github.event.pull_request.base.sha` below non-empty.
   semver:
     name: semver compatibility
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
+      # The baseline below names a commit, so that commit has to exist locally.
+      # `actions/checkout` defaults to `fetch-depth: 1`, which fetches only the
+      # pull request's merge ref — the base commit is not in that clone, and
+      # cargo-semver-checks cannot resolve a rev it does not have. `0` takes the
+      # full history, which is the only depth that is right regardless of how far
+      # the branch has diverged.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
-          # Only the published crates have a public API contract to keep.
-          package: happenstance-core, happenstance-testkit
+          # Compare against the commit this pull request branched from, not the
+          # registry. With no baseline the action asks crates.io, and all three
+          # names sit there at `0.0.0`: Cargo treats every `0.0.x` version as
+          # incompatible with every other, so there is no compatible predecessor
+          # to diff against and the job reports nothing while still going green.
+          #
+          # Be clear about what this buys. It catches a break introduced *by this
+          # pull request*. It says nothing about breaks against the last release —
+          # a break merged two pull requests ago is part of the baseline and
+          # therefore invisible here. Phase 12 keeps both baselines once a real
+          # `0.1.0` is published: the registry for release safety, this one for
+          # review signal.
+          baseline-rev: ${{ github.event.pull_request.base.sha }}
+          # Every published crate, the facade included. `happenstance` re-exports
+          # the contract wholesale today, so its surface is currently a duplicate
+          # of happenstance-core's — but it is the crate `cargo add happenstance`
+          # installs, and the moment the typed layer grows an API of its own it
+          # stops being a duplicate. One extra rustdoc build is cheaper than
+          # remembering to add the line later.
+          package: happenstance, happenstance-core, happenstance-testkit
+
+  # A newly published advisory against a dependency nobody has touched is the one
+  # class of failure that arrives with no commit behind it, so it needs a clock
+  # rather than a push. Licence and ban checks do not have that property — they
+  # change only when a manifest changes, and `cargo xtask ci` already runs the
+  # full `cargo deny check` on every push and pull request. Hence `check
+  # advisories` here and not `check`: a weekly job that re-litigates licences is
+  # a weekly job people learn to ignore.
+  advisories:
+    name: security advisories
+    runs-on: ubuntu-latest
+    # `schedule` is what normally fires this. `workflow_dispatch` is here so the
+    # job can be proved to work without waiting for the next Tuesday — an
+    # unproven scheduled job is indistinguishable from one that never runs.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny check advisories

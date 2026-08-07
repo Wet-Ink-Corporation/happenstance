@@ -98,11 +98,12 @@ as it exists. Where this document freezes something, it freezes it against those
 
 ### 1.1 What this document is
 
-This is the normative architectural specification for `happenstance`. It states
-what is true now about the three ports the workspace defines, the values that
-cross them, and the conformance obligation that decides whether an adapter has
-implemented one. Everything downstream — adapter crates, the testkit, the typed
-layer, the worked examples — is measured against it.
+This is the normative architectural specification for happenstance — the project,
+not the crate of that name, which is the typed layer and one consumer of what
+follows. It states what is true now about the three ports the workspace defines,
+the values that cross them, and the conformance obligation that decides whether an
+adapter has implemented one. Everything downstream — adapter crates, the testkit,
+the typed layer, the worked examples — is measured against it.
 
 It is not a design discussion. Where a question is open, the clause says so and
 names the experiment that closes it; where a question is closed, the clause says
@@ -127,15 +128,20 @@ withdrawn, narrowed or reversed, and the ADR that does it explains why to whoeve
 reads the git history in three years. What an ADR may not do is silently continue
 to describe the world after this document has recorded a different one.
 
-The drift is not hypothetical. [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md)
-decided that `happenstance-runtime` ceases to exist and the contract crate becomes
-`happenstance-core`; `ls crates/` returns `happenstance-runtime` today and
-`crates/happenstance-core/Cargo.toml:2` still names the contract crate `happenstance`.
-`CLAUDE.md` still lists `happenstance-runtime` as a "named seam" and still carries
-"whether `happenstance-runtime` is the right name" as an open question, which
-`PRESSURE-TEST.md:389-393` records as an accepted-but-unexecuted rename already
-producing wrong instructions to the two documents an agent loads first. An
-accepted ADR is a decision, not a description.
+The drift is not hypothetical, and the worked example is this document's own crate
+names. [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md) decided that
+`happenstance-runtime` ceases to exist, that the bare name goes to the typed layer
+and that the contract crate becomes `happenstance-core` — and for the length of a
+phase none of that was true on disk. `ls crates/` returned `happenstance-runtime`,
+`CLAUDE.md` still listed it as a "named seam" and still carried "whether
+`happenstance-runtime` is the right name" as an open question, and
+`PRESSURE-TEST.md:389-393` records the consequence: an accepted-but-unexecuted
+rename issuing wrong instructions to the two documents an agent loads first.
+Phase 0 executed it, and every citation below names `happenstance-core` because
+that is what the tree now holds. The lesson outlives the fix. An accepted ADR is a
+decision, not a description, and the interval between the two is where readers are
+misled — which is the argument for CF-35 through CF-38 making the citations
+machine-checked rather than proof-read.
 
 Three of the seven ADRs are marked *"accepted — provisional"* in their own front
 matter for exactly this reason —
@@ -209,7 +215,7 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 193 clause IDs, of which 192 are normative: **132
+As assembled, this document carries 193 clause IDs, of which 191 are normative: **132
 `[FROZEN]`**, **46 `[PROVISIONAL]`**, **13 `[DEFERRED]`** and **two
 `[NON-NORMATIVE]`** (CF-30, and VT-12 which is a retained pointer to ES-10). Section 7
 breaks that out per clause.
@@ -266,7 +272,7 @@ Every clause carries four things besides its marker:
   rule is named as it appears in
   [`crates/happenstance-testkit/src/suite.rs`](../../crates/happenstance-testkit/src/suite.rs);
   a rule this document specifies but which does not exist yet is marked as new.
-  `WF-n` clauses name tests in `crates/happenstance/tests/wire.rs` instead,
+  `WF-n` clauses name tests in `crates/happenstance-core/tests/wire.rs` instead,
   because the wire format has exactly one implementation and a conformance suite
   exists to police a plurality — the reasoning is in §2's preamble.
 - **`Cases:`** — the numbered cases in
@@ -291,17 +297,19 @@ the document's own test.
 
 ### 1.5 The dependency rule
 
-**Everything depends on `happenstance`; `happenstance` depends on nothing in this
-workspace.** No adapter may depend on another adapter. The workspace is
-`members = ["crates/*", "examples/*", "xtask"]` (`Cargo.toml:3`), and the rule is
-what keeps that glob from becoming a graph.
+**Everything depends on `happenstance-core`; `happenstance-core` depends on
+nothing in this workspace.** No adapter may depend on another adapter. The
+workspace is `members = ["crates/*", "examples/*", "xtask"]` (`Cargo.toml:3`), and
+the rule is what keeps that glob from becoming a graph. `happenstance` — the typed
+layer, which today re-exports the contract and adds nothing — is downstream like
+everything else; ADR-0006 gave it the bare name, not the root of the graph.
 
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters. `happenstance-sync` is itself a port crate: peer adapters depend
-on it the way store adapters depend on `happenstance`
+on it the way store adapters depend on `happenstance-core`
 (`crates/happenstance-sync/Cargo.toml:14-19`), and its conformance suite will live
 in `happenstance-sync-testkit`. It stays out of the contract crate so that
-publishing `happenstance` never waits on replication.
+publishing `happenstance-core` never waits on replication.
 
 Two Rust-specific reasons this matters more here than the equivalent rule does in
 a language with open classes.
@@ -315,21 +323,21 @@ crate every implementer must depend on. That is why `SyncPeer` and `IngestStore`
 are specified into `happenstance-sync` (VT-10, SY-8) rather than onto
 `EventStore`: putting a replication-shaped method on the store port would oblige
 every store adapter to have an opinion about replication, and coherence gives them
-no way to opt out. The alternative — define the trait in `happenstance` and let
-the sync crate implement it — loses because it inverts the dependency: the
+no way to opt out. The alternative — define the trait in `happenstance-core` and
+let the sync crate implement it — loses because it inverts the dependency: the
 contract crate would then be the thing that changes when replication changes.
 
 **Cargo features are additive across the whole build graph.** If two crates in one
 build enable different feature sets of a shared dependency, Cargo unifies them and
 every consumer gets the union. That is why ADR-0003's guarantee — `serde` is never
-in `happenstance`'s default features — is only enforceable while nothing in the
-graph turns it on for someone who did not ask. `happenstance-sync` turns it on
+in `happenstance-core`'s default features — is only enforceable while nothing in
+the graph turns it on for someone who did not ask. `happenstance-sync` turns it on
 non-optionally and deliberately (`crates/happenstance-sync/Cargo.toml:15-17`:
-*"`serde` is non-optional here: replication is the reason `happenstance`'s serde
-feature exists"*), which is sound because sync is a leaf that an application opts
-into. An adapter-to-adapter dependency would make that opt-in transitive and
-silent, and the wasm target would acquire `serde` because some unrelated crate
-wanted replication.
+*"`serde` is non-optional here: replication is the reason `happenstance-core`'s
+serde feature exists"*), which is sound because sync is a leaf that an
+application opts into. An adapter-to-adapter dependency would make that opt-in
+transitive and silent, and the wasm target would acquire `serde` because some
+unrelated crate wanted replication.
 
 ### 1.6 The three ports
 
@@ -508,13 +516,13 @@ Two conventions differ from the other sections and are deliberate.
 
 **Wire rules are tests, not conformance rules.** A conformance suite exists to
 police a plurality of implementations. The wire format has exactly one
-implementation — the `serde` impls in `happenstance` — and by CLAUDE.md's own
+implementation — the `serde` impls in `happenstance-core` — and by CLAUDE.md's own
 standard a rule no adapter can fail is decorative. So `WF-n` clauses name tests
-in `crates/happenstance/tests/wire.rs` rather than rules in
+in `crates/happenstance-core/tests/wire.rs` rather than rules in
 `happenstance-testkit`. They are no less binding; they are simply in the only
 place that can fail them.
 
-**Nothing is published.** `happenstance` has never been released, so every
+**Nothing is published.** `happenstance-core` has never been released, so every
 signature change below costs nothing but the edit. Where a clause reverses a
 decision recorded in the code, it says so.
 
@@ -873,14 +881,14 @@ compilation that `trait_variant` accepts provided methods in the hand-desugared
 form, so `ingest` could ship as a defaulted method today. It loses on scope, not
 on mechanics. Ingest is meaningless without the rest of the replication design —
 the compensation, the peer watermark, the condition policy — and putting its
-entry point in the contract crate puts `happenstance`'s publish schedule behind
+entry point in the contract crate puts `happenstance-core`'s publish schedule behind
 `happenstance-sync`'s design, which is precisely what
 `crates/happenstance-sync/src/lib.rs:23-26` says the crate exists to avoid.
 
 *A trait in `happenstance-sync`.* Chosen. It is the posture that crate already
 adopts for itself — "this crate defines the third [port]"
 (`crates/happenstance-sync/src/lib.rs:7-11`) — and the coherence question resolves cleanly: the adapter
-crate depends on both `happenstance` and `happenstance-sync`, so
+crate depends on both `happenstance-core` and `happenstance-sync`, so
 `impl IngestStore for SqliteEventStore` has a local type in the trait reference
 and the orphan rule permits it. What is *not* possible, and is worth saying
 before someone tries, is a blanket `impl<S: EventStore> IngestStore for S`: there
@@ -890,7 +898,7 @@ impossible for an adapter to supply a better one, because coherence forbids the
 overlap.
 
 The feature gate matters for a mundane reason: `happenstance-sync` depends on
-`happenstance/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:15-17`),
+`happenstance-core/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:15-17`),
 so an adapter that implements `IngestStore` unconditionally drags `serde` into
 every build of that adapter. `sqlite/sync` and its siblings keep the default
 build free of it.
@@ -1122,7 +1130,7 @@ validation error types MUST compose: `InvalidQuery` MUST implement
 
 `[FROZEN]`
 `Rule:` compile tests `event_new_accepts_a_held_event_type` and
-`command_handler_composes_validation_errors` in `crates/happenstance/tests/`
+`command_handler_composes_validation_errors` in `crates/happenstance-core/tests/`
 `Cases:` E2E-51
 `Rejects:` the current signature. `Event::new` takes
 `impl TryInto<EventType, Error = InvalidEventType>` (`event.rs:197-200`), and the
@@ -1334,8 +1342,8 @@ documentation already tells callers a wildcard arm is required
 
 #### VT-26 — A `Query` with zero items is unrepresentable from outside the crate
 
-`Query::Items` MUST NOT be constructible outside `happenstance`. The variant MUST
-carry `#[non_exhaustive]`.
+`Query::Items` MUST NOT be constructible outside `happenstance-core`. The variant
+MUST carry `#[non_exhaustive]`.
 
 `[FROZEN]`
 `Rule:` compile test `query_items_is_not_constructible_downstream`;
@@ -2050,7 +2058,8 @@ mechanism by which `Error: Send + Sync` could apply to the derived flavour alone
 Whatever ES-6 settles applies to `wasm32` too.
 
 - **Rule:** `error_bound_is_identical_on_both_flavours` **(new)** — a static
-  assertion in `happenstance`'s own tests over both flavours' `Error` projections.
+  assertion in `happenstance-core`'s own tests over both flavours' `Error`
+  projections.
 - **Cases:** E2E-53.
 - **Rejects:** the plausible compromise — abandoning `trait_variant` for two
   hand-written traits so the bound can differ. That is the `umadb-dcb` shape
@@ -3189,7 +3198,7 @@ closure, and the desktop projection materialised a row for it in four seconds.
 The rules specified above do not exist yet. They fall into five groups by what
 they need, and the ordering matters because three of the groups are blocked on
 fixtures rather than on effort. The compile-level checks that live in
-`happenstance`'s own `tests/` rather than in the suite —
+`happenstance-core`'s own `tests/` rather than in the suite —
 `send_flavour_stream_is_send_in_generic_code` (ES-2),
 `provided_method_future_is_send_in_generic_code` (ES-3, ES-4) and
 `error_bound_is_identical_on_both_flavours` (ES-5) — are not counted here,
@@ -3627,13 +3636,13 @@ for has no test.
 
 The probe, and where it lives:
 
-"The contract crate" throughout this document means the crate that is
-`crates/happenstance` on disk today and that ADR-0006 renames to
-`happenstance-core`. The rename is decided and unexecuted, and phase 0 owns it;
-nothing here depends on which name it carries, only on the probe living beside the
-port rather than in the testkit. File citations in this document use the paths the
-tree has **today**, so that CF-38's checker can resolve them before the rename as
-well as after it — phase 0 re-anchors them in the same commit that renames.
+"The contract crate" throughout this document means `happenstance-core`, which is
+`crates/happenstance-core` on disk. `happenstance` is the *typed* layer ADR-0006
+gave the bare name to, and it is never what this document means by the contract
+crate even where a paragraph predating the rename says otherwise. Nothing in this
+clause depends on which name the crate carries, only on the probe living beside
+the port rather than in the testkit — but the citations do, so they are anchored
+on the tree as it now stands and CF-38's checker resolves them.
 
 ```rust
 // the contract crate, behind `feature = "conformance"`.
@@ -6121,13 +6130,13 @@ Rejects: the current manifest (`crates/happenstance-testkit/Cargo.toml:4`,
 inheriting `version = "0.1.0"` from the workspace root at `Cargo.toml:6`). Under a
 shared version key the two crates cannot move independently in either direction,
 and both directions are wrong. Adding a rule bumps the testkit's minor, which
-drags `happenstance` to the same number and republishes an unchanged contract —
-after which a semver-checking tool has no earlier version of that contract to
-diff against. A patch release of the contract republishes the testkit and forces
-every adapter to re-run a bar that did not change. The version key is a statement
-about what a number means, and these two crates' numbers mean different things:
-the contract's is a promise about types, the testkit's is a promise about the
-bar.
+drags `happenstance-core` to the same number and republishes an unchanged
+contract — after which a semver-checking tool has no earlier version of that
+contract to diff against. A patch release of the contract republishes the testkit
+and forces every adapter to re-run a bar that did not change. The version key is a
+statement about what a number means, and these two crates' numbers mean different
+things: the contract's is a promise about types, the testkit's is a promise about
+the bar.
 
 ---
 
@@ -6256,7 +6265,8 @@ for the suite. There are no conformance rules for the wire format, because the
 wire format is private to happenstance and its only conformance question is "does
 a happenstance instance round-trip its own envelopes" — which is a property test
 over the contract's value types (CF-21's exported generators), not an adapter
-obligation. Section 2 therefore names tests in `crates/happenstance/tests/wire.rs`
+obligation. Section 2 therefore names tests in
+`crates/happenstance-core/tests/wire.rs`
 where every other section names conformance rules, and **CF-38's traceability
 check must resolve those names too**: a `WF-n` clause whose named test does not
 exist is the same defect as an `ES-n` clause whose named rule does not, and a
@@ -6297,40 +6307,83 @@ Every clause in this document, its maturity, the conformance rule that can
 observe a violation of it, and the end-to-end cases it serves. This is the
 current state of the obligation CF-35 through CF-38 impose.
 
-**It was computed by hand.** `cargo xtask spec-trace` does not exist — CF-38
-specifies it and nothing has built it — so this table is a snapshot taken by
-parsing the six section files at commit `2a65d76`, not a checked invariant. The
-first thing that pass builds should be the checker, and the first thing the
-checker should reproduce is this table. If it disagrees with this table, the
-checker is right and this table has already decayed, which is the whole argument
-for having one.
+**§7.1 and §7.2 are generated.** `cargo xtask spec-trace` — the checker CF-38
+requires — parses every clause out of this file, resolves each named rule against
+[`crates/happenstance-testkit/src/suite.rs`](../../crates/happenstance-testkit/src/suite.rs)
+and each named case against
+[`docs/scenarios/E2E-CASES.md`](../scenarios/E2E-CASES.md), and emits the two
+sections between the markers below. Run without `--write` it recomputes them and
+**fails** when the committed copy and the computed one disagree, which is the
+difference between an obligation discharged and an obligation described. Editing
+inside the markers by hand is therefore not merely discouraged, it is inert: the
+edit survives exactly until the next `cargo xtask ci`, which reports it as a
+difference and sends whoever reads the failure to `--write`, which overwrites it.
 
-Two reading conventions. A rule name marked **†** does not exist yet: it is
-specified in this document and must be written. Where a clause names more than
-three rules the cell is truncated with `…` and the clause is authoritative. The
-maturity column carries the marker only; the falsifier or experiment that
-accompanies a `[PROVISIONAL]` or `[DEFERRED]` marker is in the clause, and a
-marker with an empty one is a build failure under CF-38.
+The checker earned its keep on its first run. The hand-rolled summary claimed 137
+`[FROZEN]` clauses where §7.2's own rows already said 132 — it had miscounted `VT`
+by one and `ES` by four — so §7.1 had contradicted both §7.2 and §1.3 for as long
+as the three had coexisted, and nothing could notice. It also surfaced six rules
+that §6 names one way and §3 another for the same behaviour — CF-13's
+`positions_are_visible_in_assignment_order` against ES-10's
+`nothing_below_an_observed_position_appears_later` is the clearest — which the
+hand table had silently normalised to the §3 spelling, so twelve names read as
+six. None of them exists yet, so nothing is broken today and everything is
+mis-costed: the rules still to be written are six, not twelve, and §7.3 through
+§7.6 do not yet say which spelling wins. That reconciliation is owed.
+
+**§7.3 through §7.6 are authored, and stay that way.** A parser can tell you that
+a clause names no rule. It cannot tell you whether that is *correct* — CF-34 names
+none because a rule enforcing it would violate CF-33, and PS-37 names none because
+the compile *is* the check. Those four sections are exactly the judgements no
+parser computes, and they are where a gap is either defended or admitted. A
+generated table that swallowed them would look more complete and say less.
+
+Five reading conventions for §7.2, all of them consequences of the checker
+claiming only what it verified.
+
+- A rule name marked **†** was looked for in `suite.rs` and not found: this
+  document specifies it and it must be written.
+- Where a clause points somewhere the checker cannot resolve — a unit or compile
+  test living in the crate the clause constrains, or §2.7's wire tests — the cell
+  carries the clause's own words rather than a name list, and carries no `†`. A
+  dagger there would assert an absence nothing checked.
+- Every cell is cut to 79 characters, the `…` included, list or prose alike. The
+  clause is authoritative and the table is an index into it. It is authoritative
+  in one place the truncation does not explain, too: the checker's name parser
+  does not accept a `::`-qualified rule, so where a clause mixes a `wire::` test
+  with a plain rule name — VT-19 and WF-9 — only the plain one reaches the cell.
+  Read those two clauses, not their rows.
+- In the Cases column, `*all*` is a clause whose own text says *all
+  contract-level cases* — §6 states that of itself, and fifty-six numbers in a
+  cell would hide it rather than show it. `*(none directly; cites …)*` is a clause
+  that serves no case but names the ones that motivate it, which is the
+  distinction §7.5 turns on.
+- The maturity column carries the marker alone. A `[PROVISIONAL]` clause's
+  falsifier, a `[DEFERRED]` clause's experiment and the §6.5 axis a port clause is
+  provisional against all live in the clause; a marker with an empty one is a
+  build failure under CF-38.
+
+**What §7.1's shape says** is what §1.6 says in words. `ES` is 75 % frozen because
+it has twenty-seven rules, a reference implementation and six scenarios behind it.
+`PS` is 49 % frozen because it has no implementation at all, and its provisional
+clauses are provisional against the same missing adapter rather than against
+seventeen different ones — PS-2 is the single gate they all wait on. `SY` sits
+between them because its *shape* does not wait on a transport but its
+*measurements* do.
+
+<!-- BEGIN GENERATED: spec-trace §7.1–§7.2 -->
 
 ### 7.1 Summary
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 31 | 22 | 9 | 0 | 0 |
+| §2.1–§2.6 value types | `VT` | 31 | 21 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 40 | 34 | 3 | 3 | 0 |
+| §3 `EventStore` | `ES` | 40 | 30 | 8 | 2 | 0 |
 | §4 `ProjectionStore` | `PS` | 37 | 18 | 17 | 2 | 0 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 38 | 32 | 2 | 3 | 1 |
-| **Total** | | **193** | **137** | **41** | **14** | **1** |
-
-The shape of that table is the specification's own self-assessment, and it says
-what §1.6 says in words. `ES` is 85 % frozen because it has twenty-seven rules, a
-reference implementation and six scenarios behind it. `PS` is 46 % frozen because
-it has no implementation at all, and its provisional clauses are provisional
-against the same missing adapter rather than against seventeen different ones —
-PS-2 is the single gate they all wait on. `SY` sits between them because its
-*shape* does not wait on a transport but its *measurements* do.
+| **Total** | | **193** | **132** | **46** | **13** | **2** |
 
 ### 7.2 The table
 
@@ -6338,27 +6391,27 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| VT-1 | FROZEN | `append_preserves_event_payload`, `append_preserves_event_type_and_tags_byte_for_byte` † | E2E-33, E2E-34, E2E-43 |
+| VT-1 | FROZEN | `append_preserves_event_payload`, `append_preserves_event_type_and_tags_byte_f… | E2E-33, E2E-34, E2E-43 |
 | VT-2 | FROZEN | `appending_equal_events_yields_two_events` † | E2E-33, E2E-36 |
-| VT-3 | FROZEN | `append_preserves_event_payload` + review obligation | E2E-34, E2E-42 |
+| VT-3 | FROZEN | `append_preserves_event_payload` | E2E-34, E2E-42 |
 | VT-4 | FROZEN | `append_stamps_identity_and_time` † | E2E-34, E2E-41, E2E-43 |
-| VT-5 | FROZEN | `event_ids_are_unique_within_a_store` †, `append_stamps_a_local_event_id` †, `ingest_preserves_origin_identity` † | E2E-33, E2E-34, E2E-36, E2E-41, E2E-42 |
-| VT-6 | PROVISIONAL | `store_id_is_stable_across_reopen` †, `restored_peer_does_not_reissue_identities` † | E2E-34, E2E-42 |
-| VT-7 | FROZEN | `event_id_is_not_matchable_by_query` †, `contains_event_id_reports_membership` † | E2E-32, E2E-34, E2E-36 |
+| VT-5 | FROZEN | `event_ids_are_unique_within_a_store` †, `append_stamps_a_local_event_id` †, `… | E2E-33, E2E-34, E2E-36, E2E-41, E2E-42 |
+| VT-6 | PROVISIONAL | `store_id_is_stable_across_reopen` †, `restored_peer_does_not_reissue_identiti… | E2E-34, E2E-42 |
+| VT-7 | FROZEN | `event_id_is_not_matchable_by_query` †, `contains_event_id_reports_membership`… | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` † | E2E-33, E2E-36 |
-| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time` †, `recorded_time_survives_a_reopen` †, `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-43 |
+| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time` †, `recorded_time_survives_a_reopen` †, `conve… | E2E-41, E2E-43 |
 | VT-10 | PROVISIONAL | §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every `SY-… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic` | E2E-10, E2E-46 |
-| VT-12 | NON-NORMATIVE (pointer to ES-10) | none of its own — ES-10 names the rule | see ES-10 |
+| VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
 | VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive` (`suite.r… | E2E-10, E2E-16 |
 | VT-14 | PROVISIONAL | unit tests `rejects_invalid_event_types` (`event.rs:407-418`) and `rejects_inv… | E2E-40 |
-| VT-15 | FROZEN | `tags_differing_only_by_unicode_normalisation_are_distinct` †, `append_preserves_event_type_and_tags_byte_for_byte` † | E2E-40, E2E-49 |
-| VT-16 | FROZEN | `query_item_tags_are_and`, `query_item_tags_match_supersets`, `query_item_rejects_partial_tag_overlap` | E2E-32, E2E-40 |
+| VT-15 | FROZEN | `tags_differing_only_by_unicode_normalisation_are_distinct` †, `append_preserv… | E2E-40, E2E-49 |
+| VT-16 | FROZEN | `query_item_tags_are_and`, `query_item_tags_match_supersets`, `query_item_reje… | E2E-32, E2E-40 |
 | VT-17 | FROZEN | `tags_may_repeat_a_key` † | *(none — see clause)* |
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
-| VT-19 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set` †, `wire::decode_accepts_an_over_capacity_value` †, `append_reports_exceeded_store_limits` † | E2E-40, E2E-42 |
-| VT-20 | FROZEN | `rejects_invalid_event_types` †, `rejects_invalid_tags` †, `store_round_trips_a_maximum_length_type_and_tag` † | E2E-40 |
-| VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload` †, `append_reports_exceeded_store_limits` † | E2E-42 |
+| VT-19 | FROZEN | `append_reports_exceeded_store_limits` † | E2E-40, E2E-42 |
+| VT-20 | FROZEN | `rejects_invalid_event_types` †, `rejects_invalid_tags` †, `store_round_trips_… | E2E-40 |
+| VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload` †, `append_reports_exceeded_sto… | E2E-42 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` † | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` † | E2E-36, E2E-40 |
 | VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size` † | E2E-35, E2E-36, E2E-39 |
@@ -6366,25 +6419,25 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 | VT-26 | FROZEN | compile test `query_items_is_not_constructible_downstream`; `condition_without… | E2E-40 |
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
 | VT-28 | FROZEN | `read_limit_zero_yields_nothing` †, `read_limit_truncates` | E2E-11, E2E-13 |
-| VT-29 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to_under_backwards_bounds_the_older_end` † | E2E-11 |
-| VT-30 | PROVISIONAL | `condition_guards_carry_independent_boundaries` †, `condition_with_one_guard_behaves_as_today` † | E2E-04, E2E-05, E2E-06 |
-| VT-31 | FROZEN | `query_items_are_or`, `query_item_order_does_not_change_the_result_set` †, `query_union_is_item_concatenation` †, … | E2E-32 |
+| VT-29 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to… | E2E-11 |
+| VT-30 | PROVISIONAL | `condition_guards_carry_independent_boundaries` †, `condition_with_one_guard_b… | E2E-04, E2E-05, E2E-06 |
+| VT-31 | FROZEN | `query_items_are_or`, `query_item_order_does_not_change_the_result_set` †, `qu… | E2E-32 |
 
 #### `WF` — wire format (§2.7)
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| WF-1 | DEFERRED | `wire::query_all_is_unambiguous`, `wire::empty_object_is_not_a_condition` † + review obligation | E2E-33, E2E-42 |
-| WF-2 | FROZEN | `wire::round_trips_in_postcard` † | E2E-33, E2E-35, E2E-42 |
-| WF-3 | FROZEN | `wire::query_all_is_unambiguous` †, `wire::option_query_round_trips` † | E2E-40 |
-| WF-4 | FROZEN | `wire::empty_object_is_not_a_condition` †, `wire::condition_round_trips` †, `wire::condition_after_is_visible_to_an_ingest_policy` † | E2E-35, E2E-37, E2E-40 |
-| WF-5 | FROZEN | `wire::sequenced_event_round_trips` † | E2E-33, E2E-34, E2E-41, E2E-43 |
-| WF-6 | FROZEN | `wire::store_id_encodes_as_hex_in_json` †, `wire::store_id_encodes_as_bytes_in_postcard` † | E2E-34, E2E-42 |
-| WF-7 | FROZEN | `wire::round_trips_in_json` †, `wire::round_trips_in_postcard` † | E2E-33, E2E-42 |
-| WF-8 | FROZEN | `wire::rejects_an_unknown_format_version` †, `wire::version_is_the_first_field` † | E2E-35, E2E-42 |
-| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value` †, `append_reports_exceeded_store_limits` † | E2E-42 |
-| WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set` †, `wire::decode_rejects_an_unconstrained_query_item` †, `wire::decode_rejects_a_zero_item_query` †, … | E2E-40 |
-| WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json` †, `wire::payload_is_raw_in_postcard` † | E2E-33 |
+| WF-1 | DEFERRED | `wire::query_all_is_unambiguous` and `wire::empty_object_is_not_a_condition` a… | E2E-33, E2E-42 |
+| WF-2 | FROZEN | `wire::round_trips_in_postcard` over every envelope shape, including the all-d… | E2E-33, E2E-35, E2E-42 |
+| WF-3 | FROZEN | `wire::query_all_is_unambiguous`, `wire::option_query_round_trips` | E2E-40 |
+| WF-4 | FROZEN | `wire::empty_object_is_not_a_condition`, `wire::condition_round_trips`, `wire:… | E2E-35, E2E-37, E2E-40 |
+| WF-5 | FROZEN | `wire::sequenced_event_round_trips` | E2E-33, E2E-34, E2E-41, E2E-43 |
+| WF-6 | FROZEN | `wire::store_id_encodes_as_hex_in_json`, `wire::store_id_encodes_as_bytes_in_p… | E2E-34, E2E-42 |
+| WF-7 | FROZEN | `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, both over every … | E2E-33, E2E-42 |
+| WF-8 | FROZEN | `wire::rejects_an_unknown_format_version`, `wire::version_is_the_first_field` | E2E-35, E2E-42 |
+| WF-9 | FROZEN | `append_reports_exceeded_store_limits` † | E2E-42 |
+| WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_rejects_an_uncon… | E2E-40 |
+| WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard` | E2E-33 |
 | WF-12 | FROZEN | compile test `read_options_is_not_serialisable` | *(none — see clause)* |
 
 #### `ES` — the `EventStore` port (§3)
@@ -6392,78 +6445,78 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | ES-1 | FROZEN | every rule in `suite.rs` is generic over `S: EventStore` (`suite.rs:70`, and i… | E2E-52, E2E-53, E2E-54 |
-| ES-2 | FROZEN | `send_flavour_stream_is_send_in_generic_code` † | E2E-52 |
+| ES-2 | FROZEN | `send_flavour_stream_is_send_in_generic_code` **(new)**. The existing unit tes… | E2E-52 |
 | ES-3 | FROZEN | `provided_method_future_is_send_in_generic_code` † | E2E-13, E2E-53 |
 | ES-4 | FROZEN | `provided_method_future_is_send_in_generic_code` † | E2E-13 |
-| ES-5 | FROZEN | `error_bound_is_identical_on_both_flavours` †, `happenstance` † | E2E-53 |
-| ES-6 | DEFERRED | `store_error_crosses_a_join_handle` †, `const` † | E2E-53, E2E-52 |
+| ES-5 | FROZEN | `error_bound_is_identical_on_both_flavours` † | E2E-53 |
+| ES-6 | DEFERRED | `store_error_crosses_a_join_handle` † | E2E-53, E2E-52 |
 | ES-7 | PROVISIONAL | not a new rule but a new *invocation* of the existing suite — the `RefCell`-ba… | E2E-52, E2E-09, E2E-54 |
-| ES-8 | FROZEN | `read_defaults_to_ascending_order`, `read_from_is_inclusive`, `read_backwards_reverses_order`, … | E2E-10, E2E-12 |
-| ES-9 | FROZEN | `query_matching_nothing_yields_empty`, `read_from_a_gap_position` †, `from` † | E2E-10 |
-| ES-10 | PROVISIONAL (axis: position allocation) | `nothing_below_an_observed_position_appears_later` †, `positions_are_unique`, `positions_are_strictly_monotonic`, … | E2E-01, E2E-02 |
-| ES-11 | PROVISIONAL (axis: transport) | `read_result_is_stable_under_concurrent_append` † | E2E-02, E2E-01 |
-| ES-12 | PROVISIONAL (axis: transport) | `query_items_share_one_snapshot` † | E2E-03, E2E-05 |
+| ES-8 | FROZEN | `read_defaults_to_ascending_order`, `read_from_is_inclusive`, `read_backwards_… | E2E-10, E2E-12 |
+| ES-9 | FROZEN | `query_matching_nothing_yields_empty`, `read_from_a_gap_position` † | E2E-10 |
+| ES-10 | PROVISIONAL | `nothing_below_an_observed_position_appears_later` †, `positions_are_unique`, … | E2E-01, E2E-02 |
+| ES-11 | PROVISIONAL | `read_result_is_stable_under_concurrent_append` † | E2E-02, E2E-01 |
+| ES-12 | PROVISIONAL | `query_items_share_one_snapshot` † | E2E-03, E2E-05 |
 | ES-13 | FROZEN | `read_result_is_stable_under_concurrent_append` † | E2E-02, E2E-03 |
-| ES-14 | FROZEN | `read_limit_truncates`, `read_backwards_from_with_limit`, `limit_applies_across_items_not_per_item` †, … | E2E-12, E2E-13 |
-| ES-15 | FROZEN | `duplicate_items_do_not_duplicate_events` †, `query_item_order_does_not_change_the_result_set` † | E2E-32 |
-| ES-16 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to_under_backwards_bounds_the_older_end` † | E2E-11 |
+| ES-14 | FROZEN | `read_limit_truncates`, `read_backwards_from_with_limit`, `limit_applies_acros… | E2E-12, E2E-13 |
+| ES-15 | FROZEN | `duplicate_items_do_not_duplicate_events` †, `query_item_order_does_not_change… | E2E-32 |
+| ES-16 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to… | E2E-11 |
 | ES-17 | PROVISIONAL | `append_preserves_event_payload` | E2E-36, E2E-39 |
 | ES-18 | FROZEN | `append_is_atomic`, `condition_rejection_leaves_store_unchanged` | E2E-39, E2E-48, E2E-07 |
 | ES-19 | FROZEN | `append_returns_last_written_position`, `batch_positions_follow_slice_order` † | E2E-13, E2E-23 |
-| ES-20 | FROZEN | `append_rejects_empty_batch`, `append` †, `empty_batch_is_refused_before_the_condition_is_evaluated` † | E2E-06 |
-| ES-21 | FROZEN | `batch_is_not_evaluated_against_its_own_condition` †, `after` † | E2E-06 |
+| ES-20 | FROZEN | `append_rejects_empty_batch`, `empty_batch_is_refused_before_the_condition_is_… | E2E-06 |
+| ES-21 | FROZEN | `batch_is_not_evaluated_against_its_own_condition` † | E2E-06 |
 | ES-22 | FROZEN | `dropped_append_future_leaves_no_partial_batch` † | E2E-07 |
 | ES-23 | FROZEN | *(none — see clause)* | E2E-07 |
-| ES-24 | FROZEN | `reissued_conditional_batch_lands_once` †, `reissued_unconditional_batch_lands_twice` † | E2E-07, E2E-33, E2E-36 |
-| ES-25 | FROZEN | `condition_without_after_rejects_any_match`, `condition_without_after_allows_non_match`, `condition_after_ignores_non_matching_events`, … | E2E-08, E2E-55, E2E-39 |
-| ES-26 | FROZEN | `condition_after_ignores_events_at_the_boundary`, `condition_after_rejects_events_beyond_the_boundary`, `read_from_is_inclusive` | E2E-56, E2E-10 |
-| ES-27 | FROZEN | `condition_matches_on_tags` †, `condition_with_an_unheld_tag_does_not_reject` †, `query_item_types_are_or`, … | E2E-55, E2E-03 |
-| ES-28 | FROZEN | `condition_against_an_empty_store_admits_the_append` †, `condition_after_beyond_head_admits_the_append` † | E2E-56, E2E-08 |
+| ES-24 | FROZEN | `reissued_conditional_batch_lands_once` †, `reissued_unconditional_batch_lands… | E2E-07, E2E-33, E2E-36 |
+| ES-25 | FROZEN | `condition_without_after_rejects_any_match`, `condition_without_after_allows_n… | E2E-08, E2E-55, E2E-39 |
+| ES-26 | FROZEN | `condition_after_ignores_events_at_the_boundary`, `condition_after_rejects_eve… | E2E-56, E2E-10 |
+| ES-27 | FROZEN | `condition_matches_on_tags` †, `condition_with_an_unheld_tag_does_not_reject` … | E2E-55, E2E-03 |
+| ES-28 | FROZEN | `condition_against_an_empty_store_admits_the_append` †, `condition_after_beyon… | E2E-56, E2E-08 |
 | ES-29 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56 |
-| ES-30 | FROZEN | `head_of_an_empty_store_is_none` †, `head_is_the_highest_visible_position` †, `head` †, … | E2E-13, E2E-02, E2E-25 |
+| ES-30 | FROZEN | `head_of_an_empty_store_is_none` †, `head_is_the_highest_visible_position` †, … | E2E-13, E2E-02, E2E-25 |
 | ES-31 | FROZEN | `checkpoint_lag_is_not_a_position_difference` † | E2E-13, E2E-23, E2E-25 |
 | ES-32 | PROVISIONAL | *(none — see clause)* | E2E-32, E2E-28 |
-| ES-33 | FROZEN | this is a conformance obligation on the testkit rather than on an adapter's be… | E2E-08, E2E-46 |
-| ES-34 | FROZEN | `two_handles_share_one_consistency_boundary` †, `after` † | E2E-08 |
-| ES-35 | PROVISIONAL (axis: durability) | `acknowledged_writes_survive_a_reopen` †, `const` † | E2E-46 |
-| ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner` †, `append` †, `current_thread` † | E2E-09 |
+| ES-33 | FROZEN | `two_handles_share_one_consistency_boundary` †, `head_advances_across_two_hand… | E2E-08, E2E-46 |
+| ES-34 | FROZEN | `two_handles_share_one_consistency_boundary` † | E2E-08 |
+| ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` † | E2E-46 |
+| ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner` †, `current_thread` † | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
 | ES-38 | FROZEN | `positions_are_not_reused_after_removal` † | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
-| ES-40 | PROVISIONAL (axis: completeness) | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
+| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
 
 #### `PS` — the `ProjectionStore` port (§4)
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | PS-1 | FROZEN | `commit_is_atomic_with_the_read_model` † | E2E-17, E2E-21, E2E-23 |
-| PS-2 | FROZEN | a testkit-internal hostile store, `CheckpointOnlyStore`, in `crates/happenstan… | E2E-17, E2E-24 |
+| PS-2 | FROZEN | `commit_is_atomic_with_the_read_model` † | E2E-17, E2E-24 |
 | PS-3 | PROVISIONAL | `cargo hack --feature-powerset` in `cargo xtask ci`, which already runs; the e… | *(none directly; cites E2E-15, E2E-25)* |
 | PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` † | E2E-24 |
 | PS-5 | PROVISIONAL | `MemoryProjectionStore` and one real adapter compiling without the `where Self… | E2E-19, E2E-24 |
-| PS-6 | PROVISIONAL | the signature; no runtime rule | E2E-24 |
+| PS-6 | PROVISIONAL | the signature; no runtime rule. Enforced by the compiler on every implementer. | E2E-24 |
 | PS-7 | FROZEN | `dropped_batch_leaves_store_usable` † | E2E-24 |
 | PS-8 | FROZEN | `rollback_leaves_both_unchanged` † | E2E-24, E2E-28 |
 | PS-9 | PROVISIONAL | *(none — see clause)* | E2E-20, E2E-29 |
 | PS-10 | FROZEN | `compile_fail` † | E2E-20, E2E-29 |
 | PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` † | E2E-20, E2E-21, E2E-22, E2E-17 |
-| PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` †, `const` †, `false` † | E2E-21, E2E-22 |
+| PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` † | E2E-21, E2E-22 |
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-22 |
 | PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` † | E2E-19 |
-| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` †, `reset` †, `probe_delete_all` † | E2E-15, E2E-17 |
+| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` †, `probe_delete_all` † | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` † | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` † | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first` † | E2E-15, E2E-16 |
-| PS-20 | FROZEN | covered by `reset_is_not_commit_at_first`'s second half; no separate rule, bec… | E2E-16, E2E-23 |
+| PS-20 | FROZEN | `reset_is_not_commit_at_first` † | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` † | E2E-23 |
 | PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` † | E2E-23, E2E-25 |
 | PS-23 | PROVISIONAL | `distinct_projections_advance_independently` † | E2E-28, E2E-32 |
-| PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` †, `checkpoint` † | E2E-25 |
+| PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` † | E2E-25 |
 | PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
 | PS-26 | FROZEN | `failure_policy_is_per_projection` † | E2E-27 |
 | PS-27 | PROVISIONAL | `skip_and_record_is_atomic` †, `on_error` † | E2E-26, E2E-27 |
-| PS-28 | FROZEN | `pump_reports_the_failing_position` †, `checkpoint` † | E2E-26 |
+| PS-28 | FROZEN | `pump_reports_the_failing_position` † | E2E-26 |
 | PS-29 | FROZEN | `one_poisoned_projection_does_not_stall_the_others` † | E2E-28 |
 | PS-30 | PROVISIONAL | `panicking_apply_rolls_back` † | E2E-28 |
 | PS-31 | FROZEN | *(none — see clause)* | E2E-31 |
@@ -6471,7 +6524,7 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 | PS-33 | DEFERRED | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
 | PS-34 | PROVISIONAL | a doctest on `ProjectionStore` implementing the port for a toy store, which ca… | E2E-24 |
 | PS-35 | DEFERRED | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
-| PS-36 | FROZEN | a `compile_fail` doctest showing the diagnostic, which is documentation that C… | E2E-30 |
+| PS-36 | FROZEN | `compile_fail` † | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 
 #### `SY` — the `SyncPeer` port (§5)
@@ -6498,7 +6551,7 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 | SY-18 | DEFERRED | `peer_declares_its_own_limits` † | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
-| SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` †, `apply` † | E2E-41 |
+| SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
 | SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
 | SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` † | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
@@ -6518,44 +6571,46 @@ PS-2 is the single gate they all wait on. `SY` sits between them because its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| CF-1 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` † | *all* |
-| CF-2 | FROZEN | `mutation_coverage::mutant_registry_is_exhaustive` † | *all* |
-| CF-3 | FROZEN | `mutation_coverage::mutants_fail_exactly_their_declared_rules` † | *all* |
-| CF-4 | FROZEN | `mutation_coverage::every_mutant_states_its_provenance` † | E2E-01, E2E-08, E2E-32, E2E-55 |
-| CF-5 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` † | E2E-10 |
-| CF-6 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` † | E2E-10 |
+| CF-1 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (new meta-test). | *all* |
+| CF-2 | FROZEN | `mutation_coverage::mutant_registry_is_exhaustive` (new meta-test). | *all* |
+| CF-3 | FROZEN | `mutation_coverage::mutants_fail_exactly_their_declared_rules` (new meta-test). | *all* |
+| CF-4 | FROZEN | `mutation_coverage::every_mutant_states_its_provenance` (new meta-test). | E2E-01, E2E-08, E2E-32, E2E-55 |
+| CF-5 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` (new meta-test). | E2E-10 |
+| CF-6 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` (CF-5's gapped varian… | E2E-10 |
 | CF-7 | FROZEN | `condition_matches_on_tags` † | E2E-55, E2E-56 |
-| CF-8 | FROZEN | `condition_with_an_unheld_tag_does_not_reject` † | E2E-55, E2E-56 |
-| CF-9 | FROZEN | `duplicate_items_do_not_duplicate_events` † | E2E-32 |
-| CF-10 | FROZEN | `condition_against_an_empty_store_admits_the_append` † | E2E-47 |
+| CF-8 | FROZEN | `condition_ignores_events_whose_tags_differ` † | E2E-55, E2E-56 |
+| CF-9 | FROZEN | `query_all_yields_each_event_once` † | E2E-32 |
+| CF-10 | FROZEN | `condition_against_empty_store_allows_append` † | E2E-47 |
 | CF-11 | FROZEN | `empty_batch_is_refused_before_the_condition_is_evaluated` † | E2E-06 |
 | CF-12 | FROZEN | `read_from_composes_with_multi_item_query` † | E2E-10 |
-| CF-13 | DEFERRED | `nothing_below_an_observed_position_appears_later` † | E2E-01, E2E-02 |
-| CF-14 | DEFERRED | `acknowledged_writes_survive_a_reopen` †, `const` † | E2E-07 |
+| CF-13 | DEFERRED | `positions_are_visible_in_assignment_order` † | E2E-01, E2E-02 |
+| CF-14 | DEFERRED | `acknowledged_appends_survive_restart` † | E2E-07 |
 | CF-15 | FROZEN | `fixture_isolation` † | E2E-08, E2E-09 |
-| CF-16 | FROZEN | `two_handles_share_one_consistency_boundary` † | E2E-08 |
-| CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` † | E2E-07 |
+| CF-16 | FROZEN | `two_handles_observe_each_others_appends` † | E2E-08 |
+| CF-17 | PROVISIONAL | `acknowledged_appends_survive_restart` † | E2E-07 |
 | CF-18 | FROZEN | `capability_skips_are_reported` † | E2E-07, E2E-08 |
-| CF-19 | FROZEN | `two_handles_share_one_consistency_boundary` † | E2E-08 |
+| CF-19 | FROZEN | `two_handles_observe_each_others_appends` † | E2E-08 |
 | CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:60-77`), extended to b… | E2E-52, E2E-30 |
 | CF-21 | FROZEN | a doctest in `fixtures` constructing a strategy, which fails to compile if the… | E2E-32 |
-| CF-22 | FROZEN | `registry::every_rule_is_enumerated` † | E2E-52, E2E-30, E2E-09 |
+| CF-22 | FROZEN | `registry::every_rule_is_enumerated` (CF-24's meta-test is the enforcement). | E2E-52, E2E-30, E2E-09 |
 | CF-23 | FROZEN | the wasm32 build step of `cargo xtask ci`, extended to compile a `wasm-bindgen… | E2E-52, E2E-30 |
-| CF-24 | FROZEN | `registry::no_orphan_rules` † | *all* |
+| CF-24 | FROZEN | `registry::no_orphan_rules` (new meta-test, comparing the enumeration against … | *all* |
 | CF-25 | FROZEN | `cargo xtask spec-trace` (CF-38), which reads the portfolio table and the matu… | E2E-01, E2E-02, E2E-24, E2E-46, E2E-52 |
 | CF-26 | FROZEN | the portfolio table's `Far end exists` column, checked by `cargo xtask spec-tr… | E2E-01, E2E-24 |
-| CF-27 | DEFERRED | `suffix_store_is_distinguishable_from_a_young_store` †, `positions_are_not_reused_after_removal` †, `condition_over_removed_history_does_not_reject` † | E2E-46, E2E-47, E2E-56, E2E-33 |
+| CF-27 | DEFERRED | `suffix_store_is_distinguishable_from_a_young_store` †, `positions_are_not_reu… | E2E-46, E2E-47, E2E-56, E2E-33 |
 | CF-28 | FROZEN | the existing suite, invoked against a `RefCell`-backed store under a single-th… | E2E-52, E2E-09, E2E-30 |
-| CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` † | *all* |
+| CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (CF-1) plus a changelog check in … | *all* |
 | CF-30 | NON-NORMATIVE | *(none — see clause)* | *(none — see clause)* |
 | CF-31 | FROZEN | `cargo xtask spec-trace` (CF-38), which fails when a rule name referenced by a… | *all* |
-| CF-32 | FROZEN | a `cargo xtask ci` manifest check | *(none — see clause)* |
+| CF-32 | FROZEN | a `cargo xtask ci` manifest check. | *(none — see clause)* |
 | CF-33 | FROZEN | a `cargo xtask ci` lint step over `happenstance-testkit/src`, rejecting `std::… | *(none — see clause)* |
-| CF-34 | PROVISIONAL | *(none — see clause)* | *(none — see clause)* |
-| CF-35 | FROZEN | `cargo xtask spec-trace` (CF-38) | *all* |
+| CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1589-1593 records this as one of the two things that are neither … |
+| CF-35 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-36 | FROZEN | `cargo xtask spec-trace` (CF-38), cross-referencing each case's level marker (… | E2E-28, E2E-29, E2E-39, E2E-42 |
-| CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38) | *all* |
+| CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-38 | FROZEN | `cargo xtask spec-trace` (new step in `xtask/src/main.rs`'s `REQUIRED` list, `… | *all* |
+
+<!-- END GENERATED -->
 
 ### 7.3 Clauses with no conformance rule
 

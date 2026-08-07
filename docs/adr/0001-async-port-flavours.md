@@ -13,7 +13,8 @@
 >
 > **Lifts when** a genuine `!Send` implementer passes the conformance suite. The
 > cheapest such proof is a `RefCell`-backed reference store in the testkit; the
-> full proof is the Cloudflare adapter (phase 5).
+> full proof is the Cloudflare adapter
+> ([phase 9](../RUNBOOK.md#phase-9--cloudflare-durable-object)).
 
 ## Context
 
@@ -77,8 +78,8 @@ be a permanent source of confusion.
 
 **Good.** One definition, both targets. Native adapters get `Send` futures *and*
 `Send` streams. The Cloudflare path is open before any Cloudflare code exists,
-and CI builds `happenstance` for `wasm32-unknown-unknown` on every commit so it
-stays open.
+and CI builds `happenstance-core` for `wasm32-unknown-unknown` on every commit
+so it stays open.
 
 **Bad.** Importing both trait names into one module makes method-call syntax
 ambiguous (`error[E0034]`), because a type satisfying `SendEventStore` satisfies

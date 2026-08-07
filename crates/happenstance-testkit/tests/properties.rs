@@ -4,10 +4,10 @@
 //! query, expect that result. These check the *laws* the examples are instances
 //! of, over inputs nobody would think to write down.
 //!
-//! They live in the testkit rather than in `happenstance` because they are the
-//! same claims an adapter must satisfy — an adapter that pushes query matching
-//! down into SQL is asserting these laws about its `WHERE` clause, and should
-//! be able to reuse the generators.
+//! They live in the testkit rather than in `happenstance-core` because they are
+//! the same claims an adapter must satisfy — an adapter that pushes query
+//! matching down into SQL is asserting these laws about its `WHERE` clause, and
+//! should be able to reuse the generators.
 
 #![allow(clippy::unwrap_used)]
 

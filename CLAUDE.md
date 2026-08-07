@@ -6,8 +6,11 @@ changing anything.
 ## What this is
 
 A storage-agnostic, [DCB-compliant](https://dcb.events/specification/) event
-sourcing library. `happenstance` defines the contract; adapter crates implement
-it; `happenstance-testkit` decides whether they did.
+sourcing library. `happenstance-core` defines the contract; adapter crates
+implement it; `happenstance-testkit` decides whether they did. `happenstance`
+itself is the typed layer an application reaches for — today a five-line facade
+over the contract, holding the bare name because that is the crate most people
+will `cargo add` ([ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)).
 
 ## Who you are working with
 
@@ -35,6 +38,7 @@ crates/happenstance-sync/        🔲 stub. the replication port + peers + a run
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 docs/adr/                        the decisions this design rests on.
+docs/architecture/               SPECIFICATION.md — every clause that is true now.
 ```
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
@@ -42,9 +46,10 @@ depends on nothing in this workspace.** No adapter may depend on another adapter
 
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters: `happenstance-sync` is itself a port crate. Peer adapters
-depend on it the way store adapters depend on `happenstance`, and its conformance
-suite lives in `happenstance-sync-testkit`. It stays out of the contract crate so
-that publishing `happenstance` never waits on replication.
+depend on it the way store adapters depend on `happenstance-core`, and its
+conformance suite will live in `happenstance-sync-testkit`, which does not exist
+yet. It stays out of the contract crate so that publishing `happenstance-core`
+never waits on replication.
 
 ## Binding constraints
 
@@ -68,11 +73,23 @@ code around it.
    `async`.** Nesting it inside a future silently drops `+ Send` from the
    stream on the `Send` flavour, defeating the entire two-trait design. There
    is a unit test asserting this; if you find yourself deleting it, stop.
-   (ADR-0001)
+   Know what it is worth, though: it asserts on a concrete type, where
+   auto-trait leakage makes it pass whatever the trait says, so today the
+   constraint is protecting a test that cannot fail. Phase 1 replaces it with a
+   generic one. (ADR-0001)
 4. **Bind `EventStore`, not `SendEventStore`, in generic code.** It is the
    weaker requirement and accepts both flavours. Import only one of the two
    names per module — having both in scope makes method calls ambiguous.
 5. **No let-chains.** Stable only from 1.88; the MSRV is 1.85. (ADR-0004)
+
+   Weigh that one; do not obey it. Nothing is published, so no downstream
+   consumer is pinned to 1.85 and raising it today costs nobody anything —
+   ADR-0004 carries a **provisional** marker for exactly that reason, and loses
+   it at phase 12, when first publish turns the MSRV into a promise. Until then,
+   a design that is genuinely better for requiring 1.88 is a trade to make
+   deliberately and to record in an ADR, not a rule to route around in silence.
+   What stays forbidden is reaching for a let-chain out of habit and learning
+   from CI that the floor exists.
 
 ## The rule that matters
 
@@ -128,26 +145,43 @@ cargo xtask ci                          # the whole gate — run this before say
 cargo test --workspace --all-features
 cargo run -p course-subscriptions        # the worked example
 cargo xtask wasm                        # just the wasm32 check
+cargo xtask spec-trace                  # just the specification's cross-references
 ```
 
 `cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, the wasm32 build of
-`happenstance`, docs, and — when installed — `cargo hack` feature-powerset and
-`cargo deny`. It is defined once in `xtask/src/main.rs` and is exactly what CI
-runs.
+`happenstance-core` — that step is the standing guard on constraint 1, so it
+names the contract crate on purpose — docs, `cargo xtask spec-trace` over
+`SPECIFICATION.md`, a `--no-default-features` doc build of `happenstance-core`,
+and a `cargo package --list` assertion that each of the three publishable crates
+carries both licence files and a README. Then, where the tool or toolchain is
+present: `cargo hack` feature-powerset, `cargo deny`, a wasm32 feature-powerset
+check above the mandatory plain one, and a nightly `--cfg docsrs` rustdoc build.
+It is defined once in `xtask/src/main.rs` and is exactly what CI runs.
 
-`cargo-hack` and `cargo-deny` are not installed locally; those two steps print
-`skipped` and are enforced in CI. The MSRV is likewise verified only in CI.
+`cargo-hack` and `cargo-deny` both resolve on this machine, so those steps run
+rather than printing `skipped`: a green local gate now proves more than it used
+to, not less. A step skips only when its probe fails to find the tool — a tool
+that runs and finds a problem always fails the gate.
+
+The MSRV is the one thing the local gate still does not check. CI carries a
+dedicated `msrv` job that runs `cargo hack check --no-dev-deps --rust-version` on
+a pinned 1.85 toolchain, which is what a *consumer* sees, and then a full
+`cargo test --workspace --all-features` at 1.85, because `--no-dev-deps` is
+exactly the flag that hides `proptest` and `tokio` — both of which declare
+`rust-version = "1.85"`, leaving no headroom at all.
 
 ## Open questions, deliberately unresolved
 
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) says
-what is **true now** — 193 numbered clauses, each marked frozen, provisional or
-deferred, each naming the conformance rule that checks it and the wrong
-implementation it forbids. [`docs/RUNBOOK.md`](docs/RUNBOOK.md) says **who settles
-what is still open, and when**. Where a summary below disagrees with a clause, the
-clause wins; the summaries are orientation only.
+what is **true now** — 193 numbered clauses, each carrying a maturity marker
+(frozen, provisional, deferred, or demoted to non-normative prose) and each
+naming the conformance rule that checks it and the wrong implementation it
+forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and
+citations cannot rot into decoration. [`docs/RUNBOOK.md`](docs/RUNBOOK.md) says
+**who settles what is still open, and when**. Where a summary below disagrees
+with a clause, the clause wins; the summaries are orientation only.
 
 Changing a `[FROZEN]` clause requires a new ADR, not an edit.
 

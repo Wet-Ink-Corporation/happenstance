@@ -19,10 +19,47 @@
 //! be *disposed of* by a clause rather than merely reported: an unclaimed rule is
 //! either a decision someone made or a rule nobody is responsible for deleting,
 //! and only the author knows which.
+//!
+//! # Why it also *writes* §7.1 and §7.2
+//!
+//! Those two sections are a census and a cross-reference table — 193 rows of
+//! exactly the facts this file already parses. They were computed by hand at
+//! `2a65d76` and nothing has ever checked them, which is the same defect one
+//! level up: a table asserting what every clause is traceable to, itself
+//! traceable to nothing.
+//!
+//! So `--write` renders them. That much is only convenience. **The load-bearing
+//! half is the equality check the gate runs without the flag**, because the
+//! ability to regenerate a table does nothing on its own — a generator nobody
+//! runs decays exactly as fast as a hand-written table, and decays invisibly,
+//! since the document now *looks* mechanical. Comparing the committed region
+//! against the freshly computed one on every CI run is what converts "we could
+//! regenerate this" into "this is what the code says today".
+//!
+//! # Why it *checks* §1.3 and deliberately does not write it
+//!
+//! §1.3 states the same census a second time, in prose a person wrote. This file
+//! checks it — the total, each maturity count, the "of which N are normative"
+//! figure, and the document's own subtraction relating the three — and generating
+//! it is the one thing that must never be done.
+//!
+//! The reason is that §7.1 and §7.2 both come from the same [`parse_clauses`]
+//! output, so a parser that quietly stops recognising a clause form shifts the
+//! census and the table *together* and the equality check above stays green. §1.3
+//! is the only count in the document a human computed by reading it, which is why
+//! `docs/RUNBOOK.md` treats its agreement with the checker as the best evidence
+//! available that the parser reads the document the way a person does. Moving it
+//! inside the generated markers would destroy the very property it is being used
+//! to prove — and that will be the next contributor's first instinct, because the
+//! section now looks like the only hand-maintained number left.
+//!
+//! §7.3 through §7.6 stay authored and are never touched: they carry the
+//! judgement about *why* a gap exists, which no parser can recover.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -30,6 +67,116 @@ use anyhow::{Context, Result, bail};
 const SPEC: &str = "docs/architecture/SPECIFICATION.md";
 const CASES: &str = "docs/scenarios/E2E-CASES.md";
 const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
+
+/// A section of the specification, in the order §7.1 and §7.2 present them.
+///
+/// This is the single place the six clause families are enumerated: the parser
+/// takes its accepted prefixes from here, the census takes its rows, and §7.2
+/// takes its subsection headings. Three lists that must agree, kept as one so
+/// that adding a family cannot half-land.
+struct Section {
+    /// The clause-ID prefix, hyphen included, as it appears in the document.
+    prefix: &'static str,
+    /// The `Section` cell in §7.1.
+    summary: &'static str,
+    /// The §7.2 subsection heading, verbatim.
+    heading: &'static str,
+}
+
+const SECTIONS: &[Section] = &[
+    Section {
+        prefix: "VT-",
+        summary: "§2.1–§2.6 value types",
+        heading: "#### `VT` — value types (§2.1–§2.6)",
+    },
+    Section {
+        prefix: "WF-",
+        summary: "§2.7 wire format",
+        heading: "#### `WF` — wire format (§2.7)",
+    },
+    Section {
+        prefix: "ES-",
+        summary: "§3 `EventStore`",
+        heading: "#### `ES` — the `EventStore` port (§3)",
+    },
+    Section {
+        prefix: "PS-",
+        summary: "§4 `ProjectionStore`",
+        heading: "#### `PS` — the `ProjectionStore` port (§4)",
+    },
+    Section {
+        prefix: "SY-",
+        summary: "§5 `SyncPeer`",
+        heading: "#### `SY` — the `SyncPeer` port (§5)",
+    },
+    Section {
+        prefix: "CF-",
+        summary: "§6 conformance",
+        heading: "#### `CF` — conformance obligations (§6)",
+    },
+];
+
+/// Every maturity marker, in the order §7.1's columns and §1.3's hand count use —
+/// most settled first, rather than alphabetically, so that the shape of the
+/// document is legible from the row.
+const MATURITY: [&str; 4] = ["FROZEN", "PROVISIONAL", "DEFERRED", "NON-NORMATIVE"];
+
+/// The opening words of §1.3's hand-written census sentence.
+///
+/// An anchor rather than a marker pair, because the point of §1.3 is that it is
+/// authored: putting machine-readable delimiters around it would be the first step
+/// toward generating it, and generating it destroys the independence that makes it
+/// evidence. The cost of the anchor is that rewording this sentence's opening
+/// breaks the check loudly — which is the right failure, since a reworded census
+/// is exactly when it needs re-reading.
+const CENSUS_ANCHOR: &str = "As assembled, this document carries";
+
+/// The English number words §1.3's census may use, valued by index.
+///
+/// English prose spells small numbers as words, and §1.3 does: "**two
+/// `[NON-NORMATIVE]`**" while every larger figure is digits. The alternative was to
+/// require digits everywhere and rewrite the sentence to suit the parser, which is
+/// the tail wagging the dog on a sentence whose whole value is that a person wrote
+/// it. Twelve is where prose conventionally switches to digits, so the table stops
+/// there rather than pretending to be exhaustive.
+const NUMBER_WORDS: [&str; 13] = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve",
+];
+
+/// What §7.2 prints where a clause names no rule, or no case.
+const NONE_CELL: &str = "*(none — see clause)*";
+
+/// The width a §7.2 cell is truncated to, the `…` included.
+///
+/// The clause is authoritative and the table is an index into it, so a cell that
+/// wraps across a terminal buys nothing. 79 is the width the hand-written table
+/// settled on and there is no reason to move it — changing it would rewrite two
+/// hundred rows for no gain.
+const CELL_WIDTH: usize = 79;
+
+/// The markers delimiting the region of the specification this file owns.
+///
+/// A generated region needs a boundary a machine can find, not a convention a
+/// reader is expected to honour: without one, `--write` has to guess where the
+/// authored prose resumes, and the first wrong guess deletes judgement that no
+/// parser can reconstruct.
+const BEGIN_MARKER: &str = "<!-- BEGIN GENERATED: spec-trace §7.1–§7.2 -->";
+const END_MARKER: &str = "<!-- END GENERATED -->";
+
+/// Where the region goes the first time, before the markers exist.
+const REGION_START: &str = "### 7.1 Summary";
+const REGION_END: &str = "### 7.3 ";
+
+/// What to do about §7.1 and §7.2.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Compare the committed region against the computed one and fail if they
+    /// differ. This is what the gate runs, and it is the point of the exercise.
+    Check,
+    /// Rewrite the committed region in place.
+    Write,
+}
 
 /// A parsed normative clause.
 struct Clause {
@@ -41,17 +188,266 @@ struct Clause {
     rules: Vec<String>,
     /// Whether the clause declares any of its rules as not yet written.
     schedules_new: bool,
+    /// Whether the clause points at a test that lives outside `suite.rs` — a unit
+    /// or compile test in the crate it constrains. The checker cannot validate
+    /// those names, so §7.2 must not mark them `†`: that would assert "does not
+    /// exist yet" about something nothing looked for.
+    rule_elsewhere: bool,
+    /// The `Rule:` field verbatim, for the clauses §7.2 renders in their own words.
+    rule_text: Option<String>,
     cases: Vec<String>,
+    /// The `Cases:` field verbatim, for the same reason.
+    cases_text: Option<String>,
     retires: Vec<String>,
     has_rejects: bool,
 }
 
-/// Runs the traceability check.
+/// How many clauses of each maturity each section holds.
+///
+/// One computation, two consumers: the line `spec-trace` prints and §7.1 of the
+/// document it generates. Computing them separately is precisely how a printed
+/// summary and the table it summarises come to disagree — and the disagreement
+/// would be invisible, because nobody diffs a console line against a committed
+/// one.
+struct Census {
+    /// Per `SECTIONS` entry, counts indexed as `MATURITY` is.
+    counts: Vec<[usize; MATURITY.len()]>,
+    /// Per `SECTIONS` entry, every clause it declares.
+    totals: Vec<usize>,
+    /// Clauses carrying no marker this table knows. Already a hard failure in its
+    /// own right, so §7.1's four columns need not sum to its `Clauses` column;
+    /// hiding the shortfall would be worse than showing it.
+    unmarked: usize,
+}
+
+impl Census {
+    fn of(clauses: &[Clause]) -> Self {
+        let mut census = Self {
+            counts: vec![[0; MATURITY.len()]; SECTIONS.len()],
+            totals: vec![0; SECTIONS.len()],
+            unmarked: 0,
+        };
+        for c in clauses {
+            let Some(s) = SECTIONS.iter().position(|s| c.id.starts_with(s.prefix)) else {
+                continue;
+            };
+            census.totals[s] += 1;
+            match MATURITY
+                .iter()
+                .position(|m| Some(*m) == c.maturity.as_deref())
+            {
+                Some(m) => census.counts[s][m] += 1,
+                None => census.unmarked += 1,
+            }
+        }
+        census
+    }
+
+    fn total(&self) -> usize {
+        self.totals.iter().sum()
+    }
+
+    fn column(&self, maturity: usize) -> usize {
+        self.counts.iter().map(|row| row[maturity]).sum()
+    }
+}
+
+/// Checks that every `file:line` citation resolves.
+fn check_citations(root: &Path, spec: &str, problems: &mut Vec<String>) {
+    for (line_no, citation, path, line) in citations(spec) {
+        match fs::read_to_string(root.join(&path)) {
+            Err(_) => problems.push(format!(
+                "{SPEC}:{line_no} — citation `{citation}` names a file that does not exist"
+            )),
+            Ok(body) => {
+                let len = body.lines().count();
+                if line > len {
+                    problems.push(format!(
+                        "{SPEC}:{line_no} — citation `{citation}` points past the end of {} \
+                         ({len} lines)",
+                        path.display()
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// The census §1.3 states in prose, and the line it states it on.
+struct StatedCensus {
+    line: usize,
+    /// "carries N clause IDs".
+    total: usize,
+    /// "of which N are normative".
+    normative: usize,
+    /// One figure per `MATURITY` entry, indexed as `MATURITY` is.
+    by_maturity: [usize; MATURITY.len()],
+}
+
+/// Checks §1.3's hand count against what this run computed, and against itself.
+///
+/// Every disagreement is reported separately and names both numbers, because the
+/// remedy differs by which one is wrong and the reader is the one who decides: a
+/// checker that only says "§1.3 is wrong" leaves them diffing two censuses by eye,
+/// and a check whose failure cannot be acted on gets deleted rather than fixed.
+///
+/// Note what is *not* checked: the parenthetical naming which clauses are
+/// `[NON-NORMATIVE]` — "(CF-30, and VT-12 …)" — is prose about identity, not a
+/// count, and matching clause IDs out of a sentence would be guessing at a
+/// structure the sentence does not have. Narrow and certain beats broad and
+/// approximate here; the count itself is what decays.
+fn check_stated_census(spec: &str, census: &Census, problems: &mut Vec<String>) {
+    let stated = match stated_census(spec) {
+        Ok(s) => s,
+        Err(why) => {
+            problems.push(why);
+            return;
+        }
+    };
+    let at = format!("{SPEC}:{}", stated.line);
+
+    if stated.total != census.total() {
+        problems.push(format!(
+            "{at} — §1.3 says the document carries {} clause IDs; the checker counts {}. \
+             §1.3 is a hand count and is deliberately not generated, so one of the two is \
+             wrong and only a reader can say which.",
+            stated.total,
+            census.total()
+        ));
+    }
+    for (i, m) in MATURITY.iter().enumerate() {
+        if stated.by_maturity[i] != census.column(i) {
+            problems.push(format!(
+                "{at} — §1.3 says {} `[{m}]`; the checker counts {}.",
+                stated.by_maturity[i],
+                census.column(i)
+            ));
+        }
+    }
+
+    // §1.3's own arithmetic. The "are normative" figure is derived from the other
+    // two, so a sentence that disagrees with itself was edited in pieces — and
+    // that can be true while all three figures still match the checker, which is
+    // why this is a separate assertion rather than a consequence of the ones above.
+    let Some(i) = MATURITY.iter().position(|m| *m == "NON-NORMATIVE") else {
+        problems.push(format!(
+            "{at} — MATURITY no longer lists NON-NORMATIVE, so §1.3's normative arithmetic \
+             cannot be checked. Restore it or delete this check; leaving it is a check that \
+             reports nothing, which reads exactly like success."
+        ));
+        return;
+    };
+    let derived = stated.total.saturating_sub(stated.by_maturity[i]);
+    if derived != stated.normative {
+        problems.push(format!(
+            "{at} — §1.3 does not add up on its own terms: {} clause IDs minus {} \
+             `[NON-NORMATIVE]` is {derived}, but the sentence says {} are normative.",
+            stated.total, stated.by_maturity[i], stated.normative
+        ));
+    }
+}
+
+/// Parses §1.3's census paragraph.
+///
+/// The paragraph is joined into one line before anything is matched: the figures
+/// are hard-wrapped away from the markers they qualify — "**two\n`[NON-NORMATIVE]`**"
+/// today — so a line-at-a-time parser would find the marker with no number in
+/// front of it and report the document as unparseable every time someone reflowed
+/// a paragraph.
+fn stated_census(spec: &str) -> Result<StatedCensus, String> {
+    let lines: Vec<&str> = spec.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with(CENSUS_ANCHOR))
+        .ok_or_else(|| {
+            format!(
+                "{SPEC} — §1.3 has no sentence beginning \"{CENSUS_ANCHOR}\", so the hand count \
+                 the checker is cross-checked against cannot be found. Restore the sentence, or \
+                 update CENSUS_ANCHOR to match its new wording."
+            )
+        })?;
+    let end = lines[start..]
+        .iter()
+        .position(|l| l.trim().is_empty())
+        .map_or(lines.len(), |i| i + start);
+    let paragraph = lines[start..end]
+        .iter()
+        .map(|l| l.trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let line = start + 1;
+    let blame = |why: String| format!("{SPEC}:{line} — §1.3's census {why}");
+
+    let total = count_between(&paragraph, CENSUS_ANCHOR, "clause IDs").map_err(&blame)?;
+    let normative = count_between(&paragraph, "of which", "are normative").map_err(&blame)?;
+    let mut by_maturity = [0; MATURITY.len()];
+    for (i, m) in MATURITY.iter().enumerate() {
+        by_maturity[i] = count_before(&paragraph, m).map_err(&blame)?;
+    }
+
+    Ok(StatedCensus {
+        line,
+        total,
+        normative,
+        by_maturity,
+    })
+}
+
+/// The count between two fixed runs of words, as in "carries **193** clause IDs".
+fn count_between(text: &str, after: &str, before: &str) -> Result<usize, String> {
+    let from = text
+        .find(after)
+        .ok_or_else(|| format!("does not contain \"{after}\""))?
+        + after.len();
+    let rest = &text[from..];
+    let to = rest
+        .find(before)
+        .ok_or_else(|| format!("does not contain \"{before}\" after \"{after}\""))?;
+    count_word(&rest[..to])
+        .map_err(|why| format!("figure between \"{after}\" and \"{before}\" {why}"))
+}
+
+/// The count immediately preceding a maturity marker, as in "**46 `[PROVISIONAL]`**".
+fn count_before(text: &str, maturity: &str) -> Result<usize, String> {
+    let needle = format!("`[{maturity}]`");
+    let mut hits = text.match_indices(&needle);
+    let Some((at, _)) = hits.next() else {
+        return Err(format!("states no `[{maturity}]` figure"));
+    };
+    // Two occurrences means the sentence mentions the marker somewhere other than
+    // its count, and picking the first would be a guess. Refusing is the honest
+    // answer: a census sentence that got discursive needs re-reading anyway.
+    if hits.next().is_some() {
+        return Err(format!(
+            "names `[{maturity}]` more than once, so which figure is its count is a guess"
+        ));
+    }
+    let before = text[..at].trim_end().trim_end_matches(['*', ' ']);
+    let word = before.rsplit(' ').next().unwrap_or(before);
+    count_word(word).map_err(|why| format!("figure for `[{maturity}]` {why}"))
+}
+
+/// A census figure: ASCII digits, or one of the number words §1.3 spells out.
+fn count_word(text: &str) -> Result<usize, String> {
+    let t = text.trim().trim_matches(['*', '`', ' ']);
+    if let Ok(n) = t.parse::<usize>() {
+        return Ok(n);
+    }
+    NUMBER_WORDS
+        .iter()
+        .position(|w| w.eq_ignore_ascii_case(t))
+        .ok_or_else(|| {
+            format!("is \"{t}\", which is neither digits nor a number word from zero to twelve")
+        })
+}
+
+/// Runs the traceability check, and checks or rewrites §7.1–§7.2.
 ///
 /// # Errors
 ///
-/// Returns an error if a document cannot be read, or if any check fails.
-pub(crate) fn run() -> Result<()> {
+/// Returns an error if a document cannot be read, if any check fails, or if the
+/// committed §7.1–§7.2 region does not match the computed one.
+pub(crate) fn run(mode: Mode) -> Result<()> {
     let root = workspace_root()?;
     let spec = read(&root, SPEC)?;
     let cases_doc = read(&root, CASES)?;
@@ -147,47 +543,44 @@ pub(crate) fn run() -> Result<()> {
     }
 
     // 7. Every `file:line` citation resolves to a file that exists and is long enough.
-    for (line_no, citation, path, line) in citations(&spec) {
-        let full = root.join(&path);
-        match fs::read_to_string(&full) {
-            Err(_) => problems.push(format!(
-                "{SPEC}:{line_no} — citation `{citation}` names a file that does not exist"
-            )),
-            Ok(body) => {
-                let len = body.lines().count();
-                if line > len {
-                    problems.push(format!(
-                        "{SPEC}:{line_no} — citation `{citation}` points past the end of {} \
-                         ({len} lines)",
-                        path.display()
-                    ));
-                }
-            }
-        }
-    }
+    check_citations(&root, &spec, &mut problems);
 
-    report(&clauses, &known_rules, &known_cases, &problems)
+    let census = Census::of(&clauses);
+
+    // 8. §1.3's hand count says what this run just computed, and adds up on its
+    //    own terms.
+    check_stated_census(&spec, &census, &mut problems);
+
+    // 9. §7.1 and §7.2 say what this run just computed.
+    let generated = generated_region(&census, &clauses, &known_rules);
+    let stale = sync_region(&root, &spec, &generated, mode)?;
+
+    report(
+        &census,
+        &known_rules,
+        &known_cases,
+        &problems,
+        stale.as_deref(),
+    )
 }
 
 fn report(
-    clauses: &[Clause],
+    census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
     problems: &[String],
+    stale: Option<&str>,
 ) -> Result<()> {
-    let mut by_maturity: BTreeMap<&str, usize> = BTreeMap::new();
-    for c in clauses {
-        *by_maturity
-            .entry(c.maturity.as_deref().unwrap_or("(none)"))
-            .or_default() += 1;
-    }
-
     let mut summary = String::new();
-    let _ = write!(summary, "{} clauses (", clauses.len());
-    let parts: Vec<String> = by_maturity
+    let _ = write!(summary, "{} clauses (", census.total());
+    let mut parts: Vec<String> = MATURITY
         .iter()
-        .map(|(k, v)| format!("{v} {k}"))
+        .enumerate()
+        .map(|(i, m)| format!("{} {m}", census.column(i)))
         .collect();
+    if census.unmarked > 0 {
+        parts.push(format!("{} unmarked", census.unmarked));
+    }
     let _ = write!(summary, "{}), ", parts.join(", "));
     let _ = write!(
         summary,
@@ -197,19 +590,310 @@ fn report(
     );
     println!("{summary}");
 
-    if problems.is_empty() {
-        println!("traceability: no problems found");
+    if problems.is_empty() && stale.is_none() {
+        println!("traceability: no problems found; §7.1–§7.2 matches the checker");
         return Ok(());
     }
 
     for p in problems {
         println!("  {p}");
     }
-    bail!(
-        "{} traceability problem(s). These are defects in the specification, not in the checker — \
-         §7.2 was computed by hand and has never been verified.",
-        problems.len()
-    )
+    if let Some(diff) = stale {
+        println!();
+        println!("{diff}");
+    }
+
+    match (problems.len(), stale) {
+        (0, _) => bail!(
+            "{SPEC}'s §7.1–§7.2 is not what the checker computes. Run `cargo xtask spec-trace \
+             --write` to regenerate it; the checker is the authority, which is the entire reason \
+             the region is generated rather than authored."
+        ),
+        (n, None) => bail!(
+            "{n} traceability problem(s). These are defects in the specification, not in the \
+             checker."
+        ),
+        (n, Some(_)) => bail!(
+            "{n} traceability problem(s), and §7.1–§7.2 is stale. Fix the clauses first: \
+             regenerating the table over unfixed defects only records them in one more place."
+        ),
+    }
+}
+
+/// Renders §7.1 and §7.2, markers included, with no trailing newline.
+fn generated_region(census: &Census, clauses: &[Clause], known_rules: &BTreeSet<String>) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "{BEGIN_MARKER}");
+    let _ = writeln!(out);
+    let _ = writeln!(out, "{REGION_START}");
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "| Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | \
+         `[NON-NORMATIVE]` |"
+    );
+    let _ = writeln!(out, "|---|---|---|---|---|---|---|");
+    for (i, section) in SECTIONS.iter().enumerate() {
+        let _ = write!(
+            out,
+            "| {} | `{}` | {} |",
+            section.summary,
+            section.prefix.trim_end_matches('-'),
+            census.totals[i]
+        );
+        for m in 0..MATURITY.len() {
+            let _ = write!(out, " {} |", census.counts[i][m]);
+        }
+        let _ = writeln!(out);
+    }
+    let _ = write!(out, "| **Total** | | **{}** |", census.total());
+    for m in 0..MATURITY.len() {
+        let _ = write!(out, " **{}** |", census.column(m));
+    }
+    let _ = writeln!(out);
+    if census.unmarked > 0 {
+        let _ = writeln!(out);
+        let _ = writeln!(
+            out,
+            "{} clause(s) carry no maturity marker and appear in no column above. That is a \
+             build failure under CF-38, not a category.",
+            census.unmarked
+        );
+    }
+
+    let _ = writeln!(out);
+    let _ = writeln!(out, "### 7.2 The table");
+
+    for section in SECTIONS {
+        let mut rows: Vec<&Clause> = clauses
+            .iter()
+            .filter(|c| c.id.starts_with(section.prefix))
+            .collect();
+        // Document order is already numeric today. Sorting anyway costs nothing and
+        // means a clause inserted out of order cannot silently reorder the table.
+        rows.sort_by_key(|c| clause_number(&c.id, section.prefix));
+
+        let _ = writeln!(out);
+        let _ = writeln!(out, "{}", section.heading);
+        let _ = writeln!(out);
+        let _ = writeln!(
+            out,
+            "| Clause | Maturity | Conformance rule — † = does not exist yet | Cases |"
+        );
+        let _ = writeln!(out, "|---|---|---|---|");
+        for c in rows {
+            let _ = writeln!(
+                out,
+                "| {} | {} | {} | {} |",
+                c.id,
+                c.maturity.as_deref().unwrap_or("*(no marker)*"),
+                rule_cell(c, known_rules),
+                cases_cell(c)
+            );
+        }
+    }
+
+    let _ = writeln!(out);
+    let _ = write!(out, "{END_MARKER}");
+    out
+}
+
+/// The `Conformance rule` cell for one clause.
+///
+/// Two shapes, and which one a clause gets is decided by what the checker could
+/// actually verify. Where it validated a list of names against `suite.rs`, the
+/// cell is that list and every `†` is the checker's own answer. Where it declined
+/// — the clause points at a unit or compile test living in the crate it
+/// constrains, or it names no rule at all and describes an obligation in prose —
+/// the cell is the clause's own words, because a `†` there would assert something
+/// nothing checked.
+fn rule_cell(c: &Clause, known_rules: &BTreeSet<String>) -> String {
+    let Some(text) = &c.rule_text else {
+        return NONE_CELL.to_owned();
+    };
+    if text.trim_start().to_ascii_lowercase().starts_with("none") {
+        return NONE_CELL.to_owned();
+    }
+    if c.rules.is_empty() || c.rule_elsewhere {
+        return cell(text);
+    }
+    let names: Vec<String> = c
+        .rules
+        .iter()
+        .map(|r| {
+            if known_rules.contains(r) {
+                format!("`{r}`")
+            } else {
+                format!("`{r}` †")
+            }
+        })
+        .collect();
+    cell(&names.join(", "))
+}
+
+/// The `Cases` cell for one clause.
+fn cases_cell(c: &Clause) -> String {
+    let Some(text) = &c.cases_text else {
+        return NONE_CELL.to_owned();
+    };
+    let lower = text.trim_start().to_ascii_lowercase();
+    // "all contract-level cases" is the obligation §6 states of itself, and
+    // enumerating fifty-six numbers in a cell would hide rather than show it.
+    if lower.starts_with("all") {
+        return "*all*".to_owned();
+    }
+    if lower.starts_with("none") {
+        // A clause can serve no case *directly* and still cite ones that motivate
+        // it. Dropping the citation would make it indistinguishable from a clause
+        // no case touches at all, which is the distinction §7.5 turns on.
+        let cited = case_ids(text);
+        return if cited.is_empty() {
+            NONE_CELL.to_owned()
+        } else {
+            cell(&format!("*(none directly; cites {})*", cited.join(", ")))
+        };
+    }
+    if c.cases.is_empty() {
+        return cell(text);
+    }
+    cell(&c.cases.join(", "))
+}
+
+/// One table cell: pipes escaped, then truncated.
+fn cell(text: &str) -> String {
+    // A literal pipe ends the cell and shifts every column after it. No clause
+    // carries one today; escaping is what keeps that a fact rather than a
+    // coincidence nobody would notice breaking.
+    let escaped = text.replace('|', "\\|");
+    if escaped.chars().count() <= CELL_WIDTH {
+        return escaped;
+    }
+    let mut kept: String = escaped.chars().take(CELL_WIDTH - 1).collect();
+    // Never end on the backslash half of an escaped pipe: it would escape the
+    // ellipsis instead and render as a stray backslash.
+    while kept.ends_with('\\') {
+        kept.pop();
+    }
+    kept.push('…');
+    kept
+}
+
+/// The number in a clause ID, for ordering. `0` for an ID that has none, which
+/// `clause_id` cannot produce.
+fn clause_number(id: &str, prefix: &str) -> u32 {
+    id.get(prefix.len()..)
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0)
+}
+
+/// Compares or rewrites the generated region, and returns a description of the
+/// difference when there is one.
+///
+/// In [`Mode::Write`] it returns `None` after writing — the region has just been
+/// made true, so there is nothing left to report — but it still prints what it
+/// displaced, because the first `--write` swallows whatever authored prose sat
+/// between §7.1 and §7.3 and losing that silently is the one failure mode a
+/// generator has that a hand-written table does not.
+fn sync_region(root: &Path, spec: &str, generated: &str, mode: Mode) -> Result<Option<String>> {
+    let lines: Vec<&str> = spec.lines().collect();
+    let span = region_span(&lines)?;
+    let committed: Vec<&str> = lines[span.clone()].to_vec();
+    let computed: Vec<&str> = generated.lines().collect();
+
+    if committed == computed {
+        return Ok(None);
+    }
+
+    let difference = describe_difference(span.start + 1, &committed, &computed);
+
+    if mode == Mode::Check {
+        return Ok(Some(difference));
+    }
+
+    let mut out: Vec<&str> = lines[..span.start].to_vec();
+    out.extend_from_slice(&computed);
+    out.extend_from_slice(&lines[span.end..]);
+    let mut body = out.join("\n");
+    body.push('\n');
+    fs::write(root.join(SPEC), body).with_context(|| format!("rewriting {SPEC}"))?;
+
+    println!("{difference}");
+    println!();
+    println!("rewrote {SPEC} §7.1–§7.2 ({} lines)", computed.len());
+    Ok(None)
+}
+
+/// The half-open line range the generated region occupies.
+///
+/// Falls back to the span the headings describe when the markers are not there
+/// yet, so the first `--write` can install them. That fallback is deliberately
+/// the *only* guess this file makes about document structure: everything after it
+/// is anchored to markers a machine put there.
+fn region_span(lines: &[&str]) -> Result<Range<usize>> {
+    let begin = lines.iter().position(|l| l.trim() == BEGIN_MARKER);
+    let end = lines.iter().position(|l| l.trim() == END_MARKER);
+    match (begin, end) {
+        (Some(b), Some(e)) if e > b => return Ok(b..e + 1),
+        (Some(_), _) | (_, Some(_)) => bail!(
+            "{SPEC} has one of the generated-region markers without the other. Restore both, or \
+             delete both and let `--write` reinstall them around §7.1–§7.2."
+        ),
+        (None, None) => {}
+    }
+
+    let start = lines
+        .iter()
+        .position(|l| l.trim() == REGION_START)
+        .with_context(|| format!("{SPEC} has no `{REGION_START}` heading to anchor §7.1 to"))?;
+    let mut end = lines[start..]
+        .iter()
+        .position(|l| l.starts_with(REGION_END))
+        .map(|i| i + start)
+        .with_context(|| format!("{SPEC} has no `{REGION_END}` heading to bound §7.2 at"))?;
+    // The blank line separating §7.2 from §7.3 belongs to the document, not to
+    // the region. Swallowing it would leave the end marker jammed against the
+    // §7.3 heading, and every subsequent run would faithfully reproduce that.
+    while end > start && lines[end - 1].trim().is_empty() {
+        end -= 1;
+    }
+    Ok(start..end)
+}
+
+/// A readable account of how the committed region and the computed one differ.
+///
+/// Not a real diff. An LCS would align an insertion and report one changed line
+/// where this reports the rest of the table; the extra fidelity is not worth the
+/// code, because the remedy is never "edit the row" — it is always `--write`, and
+/// what a reader needs is enough evidence to believe that.
+fn describe_difference(first_line: usize, committed: &[&str], computed: &[&str]) -> String {
+    const SHOWN: usize = 10;
+
+    let mut out = format!(
+        "{SPEC}:{first_line} — §7.1–§7.2 differs from what the checker computes \
+         ({} committed lines, {} computed):\n",
+        committed.len(),
+        computed.len()
+    );
+    let mut shown = 0;
+    let mut differing = 0;
+    for i in 0..committed.len().max(computed.len()) {
+        let have = committed.get(i).copied();
+        let want = computed.get(i).copied();
+        if have == want {
+            continue;
+        }
+        differing += 1;
+        if shown < SHOWN {
+            shown += 1;
+            let _ = writeln!(out, "  line {}:", first_line + i);
+            let _ = writeln!(out, "    committed: {}", have.unwrap_or("(end of region)"));
+            let _ = writeln!(out, "    computed:  {}", want.unwrap_or("(end of region)"));
+        }
+    }
+    if differing > shown {
+        let _ = writeln!(out, "  … and {} more differing line(s)", differing - shown);
+    }
+    out
 }
 
 /// Splits the specification into clauses.
@@ -233,14 +917,18 @@ fn parse_clauses(spec: &str) -> Vec<Clause> {
     for (n, (start, id)) in starts.iter().enumerate() {
         let end = starts.get(n + 1).map_or(lines.len(), |(s, _)| *s);
         let body = lines[*start..end].join("\n");
+        let rules = rules_of(&body);
         out.push(Clause {
             id: id.clone(),
             line: start + 1,
             maturity: maturity_of(&body),
             falsifier: falsifier_of(&body),
-            rules: rules_of(&body).0,
-            schedules_new: rules_of(&body).1,
+            rules: rules.names,
+            schedules_new: rules.schedules_new,
+            rule_elsewhere: rules.elsewhere,
+            rule_text: field_line(&body, "Rule"),
             cases: cases_of(&body),
+            cases_text: field_line(&body, "Cases"),
             retires: retires_of(&body),
             has_rejects: field_line(&body, "Rejects").is_some(),
         });
@@ -265,8 +953,9 @@ fn clause_id(line: &str) -> Option<String> {
 
     let t = trimmed.trim_start_matches('#').trim_start();
     let t = t.strip_prefix("**").unwrap_or(t);
-    let prefix = ["ES-", "PS-", "SY-", "VT-", "WF-", "CF-"]
-        .into_iter()
+    let prefix = SECTIONS
+        .iter()
+        .map(|s| s.prefix)
         .find(|p| t.starts_with(p))?;
     let digits: String = t[prefix.len()..]
         .chars()
@@ -299,7 +988,7 @@ fn clause_id(line: &str) -> Option<String> {
 /// status. The census then over-reports frozen clauses, which is the direction
 /// that flatters the document.
 fn maturity_of(body: &str) -> Option<String> {
-    const ALL: [&str; 4] = ["FROZEN", "PROVISIONAL", "DEFERRED", "NON-NORMATIVE"];
+    const ALL: [&str; MATURITY.len()] = MATURITY;
 
     // A clause states its marker at the start or the end of a line. Anything
     // mid-sentence is the clause talking *about* a marker — CF-38 quotes
@@ -383,7 +1072,18 @@ fn field_line(body: &str, field: &str) -> Option<String> {
         out.push(' ');
         out.push_str(t);
     }
-    Some(out)
+
+    // A field whose value is a bullet list puts nothing on the marker's own line,
+    // so the joined value opens with the first bullet's `*`. That is list
+    // punctuation, not content, and leaving it defeats the `none` test every
+    // caller runs — `* none; a documented exclusion …` read as a clause naming a
+    // rule, which is the opposite of what it says.
+    let out = out.trim();
+    let out = out
+        .strip_prefix("* ")
+        .or_else(|| out.strip_prefix("- "))
+        .unwrap_or(out);
+    Some(out.trim_start().to_owned())
 }
 
 /// The field name a line declares, if it declares one.
@@ -415,13 +1115,13 @@ fn field_head(line: &str) -> Option<String> {
 /// Returning early on the first new-marker made a clause like that claim
 /// *nothing*, which reported eighteen live rules as owned by no clause. A checker
 /// whose false positives look exactly like its true ones is not usable.
-fn rules_of(body: &str) -> (Vec<String>, bool) {
+fn rules_of(body: &str) -> Rules {
     let Some(text) = field_line(body, "Rule") else {
-        return (Vec::new(), false);
+        return Rules::default();
     };
     // A clause with nothing of its own claims nothing.
     if text.trim_start().to_ascii_lowercase().starts_with("none") {
-        return (Vec::new(), false);
+        return Rules::default();
     }
     // Not every backticked identifier on a `Rule:` line is a conformance rule.
     // The specification distinguishes, in prose, between a suite rule and a unit
@@ -435,7 +1135,22 @@ fn rules_of(body: &str) -> (Vec<String>, bool) {
         || text.trim_start().starts_with("new ")
         || text.contains(" new `")
         || elsewhere;
-    (backticked_idents(&text), schedules_new)
+    Rules {
+        names: backticked_idents(&text),
+        schedules_new,
+        elsewhere,
+    }
+}
+
+/// What a clause's `Rule:` field says, decomposed.
+#[derive(Default)]
+struct Rules {
+    /// Every rule name the clause mentions.
+    names: Vec<String>,
+    /// Whether it declares any of them not yet written.
+    schedules_new: bool,
+    /// Whether it points at a test outside `suite.rs`.
+    elsewhere: bool,
 }
 
 fn retires_of(body: &str) -> Vec<String> {
@@ -467,6 +1182,11 @@ fn cases_of(body: &str) -> Vec<String> {
     if text.trim_start().to_ascii_lowercase().starts_with("none") {
         return Vec::new();
     }
+    case_ids(&text)
+}
+
+/// Every `E2E-nn` a run of prose names.
+fn case_ids(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for (i, _) in text.match_indices("E2E-") {
         let digits: String = text[i + 4..]

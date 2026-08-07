@@ -38,6 +38,22 @@ not the same as what a user needed to be told.
 - A gate step building the contract crate's documentation with
   `--no-default-features`.
 - An inbound-equals-outbound licensing statement in `CONTRIBUTING.md`.
+- `cargo xtask spec-trace`, which checks the architectural specification against
+  the conformance suite and the case catalogue — maturity markers, falsifiers,
+  rule names, case numbers and `file:line` citations — and **generates** §7.1 and
+  §7.2 of the specification, failing the gate when the committed copy and the
+  computed one disagree.
+- A gate step asserting that each publishable crate's packaged artifact really
+  contains `LICENSE-MIT`, `LICENSE-APACHE` and `README.md`. It parses the file
+  list rather than trusting the exit status, and derives the set of publishable
+  crates from `cargo metadata`, so promoting a stub is caught rather than
+  remembered.
+- Gate steps for the wasm32 feature powerset and, on nightly, the `docsrs`
+  documentation configuration. The latter is the only thing that compiles
+  `#![cfg_attr(docsrs, feature(doc_cfg))]` before docs.rs does — that is to say,
+  before publication, which is the last moment it can be fixed.
+- A weekly `cargo deny check advisories` job. A new advisory against an unchanged
+  dependency is the one failure that arrives with no commit to trigger CI.
 
 ### Changed
 
@@ -64,5 +80,23 @@ not the same as what a user needed to be told.
   rustdoc treats a broken intra-doc link as a hard error rather than a warning.
 - **The `serde` feature depended on `serde/alloc` arriving transitively** (D12)
   through `bytes/serde`, which is free to stop providing it in a patch release.
+- **The specification's §7.1 summary had been wrong since the document was
+  assembled.** It totalled 137 `[FROZEN]` / 41 `[PROVISIONAL]` / 14 `[DEFERRED]`
+  / 1 `[NON-NORMATIVE]`, while §7.2's own rows aggregate to 132 / 46 / 13 / 2 —
+  so it disagreed with the table twenty lines below it and with §1.3 six thousand
+  lines above it. Both miscounts inflated `[FROZEN]`. Regenerating it also removed
+  thirteen phantom conformance-rule names that were ordinary words in code
+  formatting, and surfaced six pairs of rules named differently by §6 and §3.
+- **The gate denied no rustdoc lint.** `RUSTFLAGS: -D warnings` reaches every
+  `rustc` invocation and no `rustdoc` one, so the documentation step had been
+  reporting warnings and exiting 0. Both documentation steps now set
+  `RUSTDOCFLAGS`, and the three warnings this exposed are fixed.
+- **Nothing in CI installed a nightly toolchain**, so the `docsrs` step's probe
+  failed and it printed `skipped` on every runner while two comments and the
+  runbook asserted it was running.
+- Documents that the `happenstance-core` rename had inverted rather than merely
+  dated — including a module that restated the "no `serde` in the contract crate"
+  constraint against the crate whose entire purpose is encoding, and an accepted
+  ADR linking to a source path that no longer exists.
 
 [Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

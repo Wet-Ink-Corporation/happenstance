@@ -169,3 +169,52 @@ made to argue against decisions the code has not voted on.
 
 This ADR is subject to the same standard. It is not marked provisional only
 because a naming decision is settled by being made, not by being tested.
+
+## On the historical record
+
+*Added when this ADR was executed, in phase 0 of
+[`docs/RUNBOOK.md`](../RUNBOOK.md), commit `7d6c1b0`.*
+
+ADR-0001, ADR-0003, ADR-0004, ADR-0007 and CLAUDE.md's binding constraints had
+their crate names **rewritten** to `happenstance-core`, rather than left as
+period spelling under a note. The same pass rewrote ADR-0003's two references to
+`happenstance-runtime`, the crate this ADR dissolved, to `happenstance`. ADR-0007
+was missed by that pass and corrected after it: its link to `ProjectionStore`
+still pointed into `crates/happenstance/`, which holds only `lib.rs`, and now
+points at `crates/happenstance-core/src/projection.rs`, where the trait is.
+
+That is not falsifying the record, and the distinction that makes it legitimate
+is a narrow one. Every rewritten sentence was always a statement about the crate
+that **defines the ports**; the rename moved the string and left the referent
+where it was. Rewriting them preserves the meaning. Leaving them would have
+preserved the spelling and inverted the meaning — and ADR-0003 is the case that
+proves it rather than merely illustrating it. Untouched, it forbids `serde` to
+whatever crate is called `happenstance`, which is now the typed layer whose
+entire job is encoding. It would have forbidden the thing this ADR exists to
+allow, while permitting `serde` into the contract crate, where ADR-0003 spent
+its whole argument keeping it out.
+
+ADR-0002 and ADR-0005 are handled the opposite way — superseded banner, body
+factually intact — and the two treatments do not conflict, because the rule is
+**rewrite the referent, never the reasoning**. A superseded ADR's body records a
+decision that was taken and then reversed, so rewriting it erases the reversal:
+ADR-0002 with `eventum` rewritten to `happenstance` would assert that the name
+is taken, which is precisely the claim ADR-0005 overturned. A corrected name
+inside a decision that still stands is not a reversal at all. Nothing was
+overturned, so an intact body would preserve nothing except a misdirection.
+
+### Stale in the body above, recorded here rather than edited
+
+The body cites **phase 3 of `docs/RUNBOOK.md`** three times: for the typed
+layer's schedule, for its exit criterion of rewriting `course-subscriptions`
+against it, and for the rejected alternative of deferring the allocation until
+it. That runbook has since been replaced (`8f2ce15`) by a fifteen-phase plan in
+which the typed layer is **phase 7** and phase 3 is the conformance suite.
+
+The argument is unaffected — what it needed was that the facade was scheduled,
+with dependencies and an exit criterion, and it still is. The number stays wrong
+in the body because this is not the case the rule above covers: a rename leaves
+the referent intact, but the runbook was rewritten rather than renamed, so there
+is no phase 3 that *became* phase 7. There is a different plan. Repointing the
+citation would put a reference to a document that did not exist into an argument
+made before it did.

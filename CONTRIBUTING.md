@@ -25,16 +25,35 @@ cargo xtask ci
 ```
 
 That is the whole thing: formatting, clippy with `-D warnings`, tests, the
-`wasm32-unknown-unknown` build of `happenstance-core`, documentation, and — when
-the tools are installed — `cargo hack` feature-powerset and `cargo deny`. It is
-defined once in `xtask/src/main.rs`, and CI runs exactly the same command. If it
-passes locally, it passes on CI.
+`wasm32-unknown-unknown` build of `happenstance-core` and its feature powerset,
+documentation — with `--all-features`, again with `--no-default-features`, and
+once more on nightly under `--cfg docsrs` when a nightly toolchain is present —
+specification traceability, a `cargo package --list` assertion that every
+publishable crate ships both licences and a README, and, when the tools are
+installed, `cargo hack` feature-powerset and `cargo deny`. It is defined once in
+`xtask/src/main.rs`, and CI runs exactly the same command. If it passes locally,
+it passes on CI.
 
-That `wasm32` step is load-bearing rather than decorative: it is the only thing
-keeping the `!Send` port flavour honest until a Cloudflare adapter exists. If you
-add a step to the gate, note that `cargo xtask wasm` looks its step up by **name**
-and not by index, deliberately — an index is silent about what it selects, and
-getting it wrong leaves that check running nothing while still printing green.
+Three of those need a word on why they exist, because each was added after
+something passed that should not have. The docs build runs twice because a broken
+intra-doc link is a hard rustdoc error rather than a warning, and three links
+resolved only with `--all-features` on — the `no_std` configuration had been
+failing for as long as the gate had existed, and nothing built it. The
+`cargo package --list` assertion exists because `cargo publish --dry-run` does
+not warn about a missing licence file; the first time you learn is when the crate
+is on crates.io and cannot be edited. And specification traceability
+(`cargo xtask spec-trace`) checks that `SPECIFICATION.md`'s cross-references
+still resolve, on the principle that a specification whose citations have rotted
+is worse than one that never made any, because it reads as though it is backed by
+tests.
+
+The plain `wasm32` check is load-bearing rather than decorative: it is the only
+thing keeping the `!Send` port flavour honest until a Cloudflare adapter exists.
+It stays mandatory and separate from the `wasm32` powerset beside it precisely so
+that the constraint-1 guard cannot become skippable. If you add a step to the
+gate, note that `cargo xtask wasm` looks its step up by **name** and not by
+index, deliberately — an index is silent about what it selects, and getting it
+wrong leaves that check running nothing while still printing green.
 
 Optional tools, if you want the full gate locally:
 
@@ -83,8 +102,22 @@ When adding one:
 Keep the reasoning in the commit message. A diff shows what changed; the message
 should say what constraint made that the right change.
 
-Pull requests run an extra `cargo-semver-checks` job against the published
-crates. A breaking change is fine — an accidental one is not.
+Pull requests run an extra `cargo-semver-checks` job over all three publishable
+crates, with `--baseline-rev` pointed at the commit the branch started from. A
+breaking change is fine — an accidental one is not.
+
+Know what that job proves and what it does not. It proves *this pull request*
+does not break the API it branched from. It proves nothing about the last
+released version: a break merged two pull requests ago is part of the baseline
+and so is invisible. The registry baseline that would catch it is not available
+yet — the three reserved names sit at `0.0.0`, and Cargo treats every `0.0.x`
+version as incompatible with every other, so there is no compatible predecessor
+to compare against. Phase 12 keeps both baselines once a real `0.1.0` exists.
+
+A separate weekly job runs `cargo deny check advisories` and nothing else. A new
+advisory against a dependency nobody has touched is the only failure that arrives
+without a commit to trigger it, so it gets a schedule; licences and bans change
+only when a manifest does, and the gate already covers those on every push.
 
 ## Licensing of contributions
 
