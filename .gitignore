@@ -37,3 +37,15 @@ target
 # copy hands the next checkout a config that fails silently — which is worse than
 # no config, because a dead MCP server looks like a missing feature.
 .mcp.json
+
+# Agent scratch: settings, and `worktrees/` — full checkouts of this repository,
+# each with its own `target/`, created when work is fanned out across isolated
+# probes. Phases 1 and 2 both used that method and both left six behind.
+#
+# Ignored for the same reason as `.idea/` above: every phase's exit gate
+# references a clean tree, and a phrase that is never true is not a gate. The
+# sharper reason is here, though — `git add -A` in this repository would
+# otherwise stage several gigabytes of build output and a second copy of every
+# source file, and the branch refs that make the worktrees findable live in
+# `.git/` regardless.
+.claude/
