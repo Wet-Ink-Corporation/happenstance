@@ -1,0 +1,32 @@
+[package]
+name = "happenstance-neon"
+description = "Neon serverless Postgres event store for happenstance, over the one-shot /sql HTTP endpoint. Not yet implemented."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+happenstance-core = { workspace = true, features = ["std"] }
+futures-core.workspace = true
+# `std` is added rather than assumed: the workspace entry is
+# `default-features = false` so members state what they need, and `serde_json`
+# below already forces `std` into the graph.
+serde = { workspace = true, features = ["std"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[features]
+default = ["event-store", "projection-store"]
+# The transport and the error type are unconditional: they are the crate's
+# actual contribution and both roles are written in terms of them.
+event-store = []
+projection-store = []
+
+[lints]
+workspace = true

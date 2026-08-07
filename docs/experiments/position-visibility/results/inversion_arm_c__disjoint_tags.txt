@@ -1,0 +1,16 @@
+case      : arm_c__disjoint_tags
+database  : arm_c
+tags      : A=[course:alpha] B=[course:beta]
+A position: 6
+B position: 7
+B blocked : no
+head H    : 5   (observation 1, A still uncommitted)
+obs 1     : 1,2,3,4,5
+head after: 7
+obs 2     : 1,2,3,4,5,6,7
+appeared <= H and not in obs 1: <none>
+verdict   : pass
+
+--- session A transcript ---
+--- session B transcript ---
+--- session C transcript ---

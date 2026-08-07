@@ -1,0 +1,27 @@
+[package]
+name = "happenstance-cloudflare"
+description = "Cloudflare Durable Object (Workers SqlStorage) event store adapter for happenstance. Not yet implemented."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+happenstance-core = { workspace = true, features = ["std"] }
+futures-core.workspace = true
+thiserror.workspace = true
+
+# NOTE: the `worker` crate is deliberately NOT a dependency. It drags a large
+# `wasm-bindgen`/`js-sys`/`web-sys` surface and its own licence graph through
+# `cargo deny` on every run of the gate, for no type-checking benefit: the shape
+# this skeleton has to pin is `!Send`, `!Sync`, synchronous `exec`, a cursor that
+# is not a snapshot. `js::JsHandle` and `sql_storage` model exactly that and
+# nothing else. Phase 9 swaps them for the real thing.
+
+[lints]
+workspace = true

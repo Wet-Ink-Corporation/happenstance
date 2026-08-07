@@ -1,6 +1,18 @@
 //! Replication between happenstance instances.
 //!
-//! # Status: not implemented
+//! # Status: a phase-2 sketch, not the protocol
+//!
+//! [`SyncPeer`] and [`IngestStore`] exist here to be *falsified by a type
+//! checker*, which is the only thing that can falsify a port before an adapter
+//! is written. Bodies outside [`memory`] are `todo!()` on purpose: the type
+//! checker is the instrument, not the runtime.
+//!
+//! The question this sketch was built to answer is falsifiable and it is not
+//! "write a good trait". It is: **can a peer be stated without naming a
+//! transport?** The evidence is in this crate's `tests/`, where the two real
+//! peers are stood in for and both implement the trait — see [`peer`] for what
+//! that proved and [`ingest`] for what the coherence experiment proved
+//! separately.
 //!
 //! # This is a port, not a protocol
 //!
@@ -50,7 +62,8 @@
 //! special case of it: the hub sees every log, the spokes see one each, and the
 //! merge rule a spoke needs is not the merge rule the hub needs. Both must be
 //! expressible, which is a constraint on the port's shape and not merely on its
-//! documentation.
+//! documentation — and it is why
+//! [`Watermark`] is a version vector rather than a scalar.
 //!
 //! # Why this is a thin crate and not a hard one
 //!
@@ -62,6 +75,16 @@
 //! this crate depends on `happenstance-core/serde` explicitly: the envelope is
 //! serialised, the payload is passed through.
 //!
+//! **The envelope types carry no `Serialize`/`Deserialize` yet, deliberately.**
+//! They did briefly, and the derives were withdrawn: a `#[derive]` on a public
+//! struct with no version field *is* a wire format, WF-8 puts a version first,
+//! and the format is phase 5's to settle against `happenstance-core`'s own
+//! private-mirror pattern (`event.rs`'s `EventWire`, `append.rs`'s `Wire`) rather
+//! than this crate's to assert in passing. Nothing here serialises anything, so
+//! the derives bought the sketch nothing and committed it to a shape nobody had
+//! authorised. `happenstance-core/serde` stays on because the argument above is
+//! still the reason this crate exists.
+//!
 //! # The hard part, stated honestly
 //!
 //! [`SequencePosition`](happenstance_core::SequencePosition) is meaningful only
@@ -70,45 +93,57 @@
 //! replicated as-is and a naive "send everything after position N" protocol is
 //! wrong.
 //!
-//! What follows from that, and must be designed rather than assumed:
+//! What follows from that, and how far this sketch got with each:
 //!
-//! * **Event identity across instances.** Something stable and globally unique
-//!   is needed — a UUIDv7 or a content hash in the event's metadata — so a peer
-//!   can recognise an event it has already ingested.
-//! * **Idempotent ingest.** Re-delivery must be harmless; a peer will see the
-//!   same event more than once.
-//! * **Append conditions across a boundary.** An
-//!   [`AppendCondition`](happenstance_core::AppendCondition) checked against the
-//!   local log says nothing about the remote one. Whether ingest re-checks
-//!   conditions, or whether replication is defined as unconditional
-//!   append-of-facts-already-decided, is *the* central design question of this
-//!   crate.
-//! * **Ordering.** The specification requires a total order per store. Merging
-//!   two independently-ordered logs means choosing a merge rule and accepting
-//!   that a replicated event's local position differs from its origin position.
-//! * **`wasm32` compatibility.** The Cloudflare side is single-threaded, so the
-//!   ingest path must be written against
-//!   [`EventStore`](happenstance_core::EventStore) — the flavour with no `Send`
-//!   bound — not [`SendEventStore`](happenstance_core::SendEventStore).
-//! * **What a peer may be asked to do.** One of the two intended peers reaches
-//!   its store over one-shot HTTP: no connection, no interactive transaction, no
-//!   cursor, one round trip per operation. A port that assumes a peer can hold
-//!   state open between calls excludes it. This is the constraint most likely to
-//!   be discovered late, which is why a skeleton for it exists before the trait
-//!   does.
-//!
-//! None of this is settled. It is written down here so the next pass starts
-//! from the real questions rather than rediscovering them.
+//! * **Event identity across instances.** Sketched, as
+//!   [`identity::EventId`] — the pair `(StoreId, SequencePosition)`.
+//!   Where it should finally live is a contract-crate question and is **not**
+//!   settled here; see [`identity`], which also records why these three types
+//!   are reachable only through their module.
+//! * **Idempotent ingest.** In the port's contract
+//!   ([`IngestStore::ingest`]) and implemented in [`memory`]. Not yet checked by
+//!   anything, because `happenstance-sync-testkit` does not exist.
+//! * **Append conditions across a boundary.** Still *the* central design
+//!   question. This sketch carries the origin's condition as
+//!   [`EventGroup::guard`](peer::EventGroup::guard) and documents it as evidence
+//!   rather than as an instruction, which is a position rather than an answer.
+//! * **Ordering.** Untouched. The merge rule is not sketched and nothing here
+//!   should be read as choosing one.
+//! * **`wasm32` compatibility.** Checked. The whole crate builds for
+//!   `wasm32-unknown-unknown`, and the bare [`SyncPeer`] and [`IngestStore`]
+//!   flavours are what the Cloudflare side implements.
+//! * **What a peer may be asked to do.** This is the one the sketch bites
+//!   hardest on. One of the two intended peers reaches its store over one-shot
+//!   HTTP: no connection, no interactive transaction, no cursor, one round trip
+//!   per operation. A port that assumes a peer can hold state open between calls
+//!   excludes it — so [`SyncPeer::pull`] returns a bounded batch and an owned
+//!   token rather than a stream. **The type checker did not force that choice**,
+//!   and the transcript showing it did not is the most useful thing this sketch
+//!   produced.
 
 #![doc(html_no_source)]
+// `clippy::todo` is denied workspace-wide. This crate is one of the phase-2
+// skeleton exceptions, scoped here rather than left open in the workspace
+// manifest so that it is visible in review. The phase that implements
+// replication removes both the bodies and this line.
+#![allow(clippy::todo)]
 
-/// How replication fails.
-///
-/// # Status: not implemented
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum SyncError {
-    /// Placeholder variant; replaced by real failure modes on implementation.
-    #[error("event replication is not implemented yet")]
-    Unimplemented,
-}
+extern crate alloc;
+
+pub mod identity;
+pub mod ingest;
+pub mod memory;
+pub mod peer;
+
+// `EventId`, `StoreId` and `RecordedAt` are deliberately absent from this list.
+// They are phase 4's types (VT-4 – VT-10, ADR-0014), placeheld here only because
+// the sketch cannot be written without an identity, and re-exporting them would
+// put a second `EventId` on the same import path as the settled one. See
+// [`identity`]'s module documentation.
+pub use identity::{ReplicatedEvent, Watermark};
+pub use ingest::{IngestStore, Ingested, SendIngestStore};
+pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
+pub use peer::{
+    Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,
+    SyncPeer,
+};

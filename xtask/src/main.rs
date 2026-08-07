@@ -163,6 +163,45 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The workspace's only `!Send` adapter and the sole instrument for ES-6.
+        // Its own rustdoc claims it compiles for this target; until this step
+        // existed nothing checked that, which is the decorative-gate shape this
+        // file's module documentation warns about — asserted in prose, guarded by
+        // nothing. Phase 9 swaps the stand-in for the real `worker` bindings and
+        // this step is what will notice if that stops being true.
+        name: "wasm32 build of the Cloudflare adapter",
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-cloudflare",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // Neon is the only crate that must build for *both* targets, so it is
+        // checked twice: here for `wasm32`, and by the ordinary workspace steps
+        // for the host. Note what the pair does and does not claim — it compiles
+        // the *bare* flavour on each target, which is not the same as satisfying
+        // both flavours (`store.rs`'s implication table).
+        name: "wasm32 build of the Neon adapter",
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-neon",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // `RUSTDOCFLAGS` rather than the ambient `RUSTFLAGS: -D warnings` that
         // `ci.yml` sets, because rustdoc does not read `RUSTFLAGS` — so until
         // this line existed the gate denied every rustc lint and no rustdoc one.
@@ -284,6 +323,11 @@ const OPTIONAL: &[Step] = &[
             "check",
             "-p",
             "happenstance-core",
+            // `happenstance-neon` is the only *adapter* with features that must
+            // hold on this target; the Cloudflare crate has none, so the
+            // mandatory plain check above is already its powerset.
+            "-p",
+            "happenstance-neon",
             "--target",
             "wasm32-unknown-unknown",
             "--feature-powerset",
@@ -372,8 +416,9 @@ fn print_help() {
     println!("         without default features, spec-trace, package-check — then, when");
     println!("         the tool is installed, the workspace and wasm32 feature powersets,");
     println!("         cargo-deny, and a nightly `--cfg docsrs` rustdoc build.");
-    println!("  wasm   Check that happenstance-core and the conformance harnesses");
-    println!("         build for wasm32-unknown-unknown.");
+    println!("  wasm   Check that happenstance-core, the conformance harnesses and the");
+    println!("         two wasm32 adapters (cloudflare, neon) build for");
+    println!("         wasm32-unknown-unknown.");
     println!("  spec-trace [--write]");
     println!("         Check the specification's clauses against the suite and the e2e");
     println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
@@ -407,6 +452,8 @@ fn wasm_steps() -> Vec<&'static Step> {
     const NAMES: &[&str] = &[
         "wasm32 build of the contract crate",
         "wasm32 check of the conformance harnesses",
+        "wasm32 build of the Cloudflare adapter",
+        "wasm32 build of the Neon adapter",
     ];
 
     NAMES
@@ -431,11 +478,18 @@ fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
     for step in steps {
         println!("\n=== {} ===", step.name);
 
-        if let Some(probe) = step.probe {
-            if !is_available(probe) {
-                println!("skipped: `{}` did not succeed", probe.join(" "));
-                continue;
-            }
+        // A let-chain, and the first in the workspace. It is here because
+        // ADR-0029 raised the MSRV to 1.97.1 and clippy noticed within the hour:
+        // `collapsible_if` had been suppressed by `clippy.toml`'s `msrv = 1.85`
+        // for as long as this function existed, and raising the floor turned the
+        // lint on rather than off. Worth a comment once, so the next person to
+        // meet a let-chain here knows it is deliberate and not a slip past a
+        // constraint that used to be real.
+        if let Some(probe) = step.probe
+            && !is_available(probe)
+        {
+            println!("skipped: `{}` did not succeed", probe.join(" "));
+            continue;
         }
 
         let status = Command::new(step.program)

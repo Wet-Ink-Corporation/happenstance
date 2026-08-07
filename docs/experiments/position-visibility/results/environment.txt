@@ -1,0 +1,28 @@
+=== server ===
+PostgreSQL 17.10 (Debian 17.10-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+
+=== settings that decide whether these numbers mean anything ===
+checkpoint_timeout = 300 s
+commit_delay = 0
+data_checksums = off
+fsync = on
+full_page_writes = on
+max_connections = 200
+max_wal_size = 1024 MB
+server_version = 17.10 (Debian 17.10-1.pgdg13+1)
+shared_buffers = 16384 8kB
+synchronous_commit = on
+wal_buffers = 512 8kB
+wal_compression = off
+wal_level = replica
+wal_sync_method = fdatasync
+
+=== container ===
+nproc = 20
+MemTotal:       16233116 kB
+MemAvailable:   15134568 kB
+cgroup cpu.max = max 100000
+cgroup memory.max = max
+
+=== pgbench ===
+pgbench (PostgreSQL) 17.10 (Debian 17.10-1.pgdg13+1)

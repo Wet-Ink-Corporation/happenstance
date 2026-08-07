@@ -883,11 +883,11 @@ on mechanics. Ingest is meaningless without the rest of the replication design �
 the compensation, the peer watermark, the condition policy — and putting its
 entry point in the contract crate puts `happenstance-core`'s publish schedule behind
 `happenstance-sync`'s design, which is precisely what
-`crates/happenstance-sync/src/lib.rs:23-26` says the crate exists to avoid.
+`crates/happenstance-sync/src/lib.rs:37-40` says the crate exists to avoid.
 
 *A trait in `happenstance-sync`.* Chosen. It is the posture that crate already
 adopts for itself — "this crate defines the third [port]"
-(`crates/happenstance-sync/src/lib.rs:7-11`) — and the coherence question resolves cleanly: the adapter
+(`crates/happenstance-sync/src/lib.rs:19-23`) — and the coherence question resolves cleanly: the adapter
 crate depends on both `happenstance-core` and `happenstance-sync`, so
 `impl IngestStore for SqliteEventStore` has a local type in the trait reference
 and the orphan rule permits it. What is *not* possible, and is worth saying
@@ -2002,7 +2002,7 @@ never call the method.
   but not `Sync` — a `Cell` in a cursor, an `Rc` in a page buffer — is rejected
   with `error[E0277]: cannot be shared between threads safely`. It also is not one
   line at the impl sites, which spell the bound by hand: `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:65` both write `+ Send` and would both
+  `crates/happenstance-sqlite/src/event_store.rs:202` both write `+ Send` and would both
   need `+ Send + Sync`. Nothing in the workspace has been checked against that.
 
 #### ES-4 — One provided body must type-check under both flavours simultaneously
@@ -2461,7 +2461,7 @@ every path.
 - **Cases:** E2E-36, E2E-39.
 - **Rejects:** an adapter that loses metadata or tag order while copying into its
   own row type — concretely, the SQLite shape that stores tags in a side table
-  (`crates/happenstance-sqlite/src/event_store.rs:21-27`) and forgets to write
+  (`crates/happenstance-sqlite/src/event_store.rs:47-53`) and forgets to write
   `metadata`. `append_preserves_event_payload` compares the whole `Event` and
   catches it.
 
@@ -2781,7 +2781,7 @@ across the query.
 - **Rejects:** an adapter that drops the tag join from its condition probe. This
   is the natural first cut, because the join is the expensive half and the planned
   SQLite schema puts tags in a separate table
-  (`crates/happenstance-sqlite/src/event_store.rs:21-27`). Every append-condition rule in
+  (`crates/happenstance-sqlite/src/event_store.rs:47-53`). Every append-condition rule in
   the suite builds its condition from `query_of_types` — `suite.rs:390`, `:447`,
   `:465`, `:483`, `:501`, `:519`, `:537`, `:561` — and the one tagged condition
   (`:603-605`) runs against a store where a type-only probe returns identical
@@ -2835,7 +2835,7 @@ the private format nothing.
 
 - **Rule:** `wire_condition_with_after_is_refused` **(new)**, in
   `happenstance-sync-testkit` — SY-6's rule, named once there and cited here; the
-  crate is named at `crates/happenstance-sync/src/lib.rs:9-11` and does not exist.
+  crate is named at `crates/happenstance-sync/src/lib.rs:23-24` and does not exist.
 - **Cases:** E2E-37, E2E-38, E2E-56.
 - **Rejects:** a hub that deserialises a peer's condition and evaluates it
   verbatim. `AppendCondition` is `#[non_exhaustive]` with **public** fields
@@ -4568,7 +4568,7 @@ is what Kestrel Cold Chain's D5 specified and what `crates/happenstance-sync/src
 one of two options. Two independent defects, either fatal:
 
 - `after` is a `SequencePosition`, meaningful only inside the store that assigned
-  it (`crates/happenstance-sync/src/lib.rs:64-69`), and it serialises as a naked integer
+  it (`crates/happenstance-sync/src/lib.rs:87-92`), and it serialises as a naked integer
   (`append.rs:117-123`). `is_violated_by` compares raw position values
   (`append.rs:95-107`), so `after: 288455` interpreted in the receiver's
   numbering names an unrelated recent event and the check runs over an arbitrary
@@ -4620,7 +4620,7 @@ is exactly the kind of thing that belongs to a runner rather than to a transport
 
 ### 5.2 One peer, and a runner above it
 
-`crates/happenstance-sync/src/lib.rs:28-36` already states this and states it correctly. It is promoted
+`crates/happenstance-sync/src/lib.rs:40-48` already states this and states it correctly. It is promoted
 to a clause because the pressure test's own finding about the projection port —
 that the *suite*, not the runner, is what forces a port's shape
 (`PRESSURE-TEST.md:220-234`) — applies here identically, and because Kestrel
@@ -4679,7 +4679,7 @@ Rule: `directional_merge_rules_compose` (new, `happenstance-sync-testkit`).
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
-push. `crates/happenstance-sync/src/lib.rs:45-51` already says why and the scenarios confirm it: the hub
+push. `crates/happenstance-sync/src/lib.rs:57-63` already says why and the scenarios confirm it: the hub
 sees every log and can therefore adjudicate; a spoke sees one and cannot. Kestrel
 Cold Chain's edge tier is strictly hub-and-spoke for a *commercial* reason — a
 spoke's slice is a confidentiality boundary, and Scottish subcontractors must not
@@ -4890,7 +4890,7 @@ peer holding a `!Send` store behind an `Rc`.
 Cases: E2E-52, E2E-30.
 
 *Rejects:* any runner that reaches for `SendEventStore` in order to
-`tokio::spawn` a per-peer task. `crates/happenstance-sync/src/lib.rs:87-90` states the wasm32
+`tokio::spawn` a per-peer task. `crates/happenstance-sync/src/lib.rs:112-114` states the wasm32
 requirement, but understates it: in Kestrel Cold Chain the `!Send` peer — SQLite
 inside a Cloudflare Durable Object — sits in the **middle** of the chain, not at
 a leaf. It is a spoke to the Neon estate store and a hub to 138 tablets. A runner
@@ -4955,7 +4955,7 @@ this belief holding: the same fourteen events sit at vessel position 38,102 and
 depot position 3,918,442, each store internally correct, each peer's total order
 naming the other as the loser. There is no expression relating the two numbers
 and none can be constructed, because `SequencePosition` carries no origin
-(`crates/happenstance-sync/src/lib.rs:64-69`).
+(`crates/happenstance-sync/src/lib.rs:87-92`).
 
 ---
 
@@ -5626,7 +5626,7 @@ Rejects: the saboteur — `struct AlwaysWrong; impl EventStore for AlwaysWrong {
 — which satisfies CF-1 mechanically and proves nothing, because no author would
 have written it. The mutant that earns its place is the one someone would ship:
 dropping the tag join because tags live in a second table
-(`crates/happenstance-sqlite/src/event_store.rs:21-27`), caching `max(position)` per
+(`crates/happenstance-sqlite/src/event_store.rs:47-53`), caching `max(position)` per
 session, evaluating each `QueryItem` as its own statement.
 
 **CF-5.** The testkit MUST also hold at least one *conformant variant* — a store
@@ -5679,7 +5679,7 @@ against a store holding one untagged `CourseDefined` (`:600`) and one tagged
 `StudentSubscribed` (`:607`), so a type-only probe returns the identical verdict
 at `:612` and `:621`. The tag join is the expensive half and lives in a separate
 table in the planned SQLite adapter
-(`crates/happenstance-sqlite/src/event_store.rs:21-27`), which makes dropping it the
+(`crates/happenstance-sqlite/src/event_store.rs:47-53`), which makes dropping it the
 natural first cut. Such an adapter rejects every command touching any course, and
 passes all twenty-seven rules while doing it: a total-availability failure
 certified as conformant, on the canonical DCB uniqueness shape.
@@ -6219,7 +6219,7 @@ vocabulary, or a running deployment. Such a rule cannot be run by an adapter
 author against their own crate, which is the one thing the suite is for; it
 belongs in the e2e crate, or — for a contract-level case that cannot be expressed
 against a single store handle — in `happenstance-sync-testkit`, named at
-`crates/happenstance-sync/src/lib.rs:9-11` and not yet existing.
+`crates/happenstance-sync/src/lib.rs:23-24` and not yet existing.
 
 **CF-37.** Every E2E case MUST name the clause or clauses it exercises. `[FROZEN]`
 Rule: `cargo xtask spec-trace` (CF-38).

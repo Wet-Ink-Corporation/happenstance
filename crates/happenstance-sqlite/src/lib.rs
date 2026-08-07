@@ -1,20 +1,59 @@
 //! SQLite adapters for happenstance: an event store and a projection store.
 //!
-//! # Status: not implemented
+//! # Status: an instrument, not yet an adapter
 //!
-//! The crate compiles and its shape is fixed, but every operation is
-//! `todo!()`. It is `publish = false` until it passes
+//! Every operation that touches SQL is `todo!()` — migration, `append`, the
+//! page query, `checkpoint` and `commit`. Two are **not**, and the exception is
+//! worth stating rather than rounding off:
+//! [`begin`](happenstance_core::SendProjectionStore::begin) and
+//! [`rollback`](happenstance_core::SendProjectionStore::rollback) have real
+//! bodies, because an
+//! owned buffer batch is created and discarded without the database being
+//! involved at all. That is a consequence of the batch shape this crate adopted,
+//! so a blanket "every operation is `todo!()`" would hide the one place the
+//! shape already shows through. The **types are real**: a live
+//! [`rusqlite::Connection`], error enums that wrap [`rusqlite::Error`], a read
+//! stream that is a genuine state machine, and a batch that owns
+//! [`rusqlite::types::Value`]. That distinction is the whole point — a skeleton
+//! that stubs its associated types has stubbed the only part of it a type
+//! checker can disagree with, so the associated types are exactly what is not
+//! stubbed here.
+//!
+//! It is `publish = false` until it passes
 //! [`happenstance-testkit`](https://docs.rs/happenstance-testkit)'s conformance suite —
 //! which is the bar for any adapter in this workspace, not a formality.
 //!
+//! # The shape this crate represents
+//!
+//! **Serialising, `Send`, native.** One connection behind one [`Mutex`](std::sync::Mutex),
+//! so writers queue by construction and positions are assigned under a lock. It
+//! implements [`SendEventStore`](happenstance_core::SendEventStore) and
+//! [`SendProjectionStore`](happenstance_core::SendProjectionStore), and it is
+//! deliberately *one* point in the portfolio rather than the reference: a port
+//! frozen against this shape alone would be frozen against SQLite wearing four
+//! hats.
+//!
+//! # What the type checker has already decided
+//!
+//! Two results, both compiled rather than reasoned:
+//!
+//! * `type Batch<'a> = rusqlite::Transaction<'a>` is **not available** on the
+//!   `Send` flavour, for two independent reasons that each fire on their own.
+//!   See [`projection_store`] for both, and for the owned batch that replaces it.
+//! * Binding an owned type to today's GAT does **not** free an implementer from
+//!   spelling the parameter `Self::Batch<'_>` literally; writing the concrete
+//!   type is still `error[E0195]`.
+//!
 //! # Open decisions
+//!
+//! The **driver** is no longer one of them: `rusqlite` is what this crate is
+//! built on, chosen for the synchronous, bundled, local-first shape it gives —
+//! and it is `rusqlite` *without* a pool, because one `Mutex`-guarded connection
+//! is the serialising instrument the portfolio needs. `sqlx` is not discarded;
+//! it is where `happenstance-postgres` sits, at the other end of that axis.
 //!
 //! These are settled in the pass that implements this crate, not before:
 //!
-//! * **Driver.** `rusqlite` (synchronous, bundles SQLite, the natural fit for a
-//!   local-first application) against `sqlx` (async-native, and a path to
-//!   Postgres later). The current lean is `rusqlite` with a small connection
-//!   pool, with writes marshalled through `spawn_blocking` on native.
 //! * **Append-condition strategy.** The append must evaluate the condition and
 //!   write in one atomic step. Candidates: `BEGIN IMMEDIATE` plus an
 //!   `EXISTS` probe; a conditional `INSERT ... SELECT ... WHERE NOT EXISTS`; or

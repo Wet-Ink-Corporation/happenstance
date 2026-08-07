@@ -1,0 +1,8 @@
+holder: an open write transaction in database 'baseline', held 5s
+probe : arm_c, unrelated database, unrelated tags
+
+--- control: no holder ---
+STALENESS_MS 0.688
+
+--- with holder ---
+STALENESS_MS 4010.719

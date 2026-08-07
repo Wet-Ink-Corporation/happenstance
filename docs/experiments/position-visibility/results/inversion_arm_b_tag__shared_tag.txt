@@ -1,0 +1,20 @@
+case      : arm_b_tag__shared_tag
+database  : arm_b_tag
+tags      : A=[course:shared] B=[course:shared]
+A position: 6
+B position: <none: append failed>
+B blocked : yes
+head H    : 5   (observation 1, A still uncommitted)
+obs 1     : 1,2,3,4,5
+head after: 6
+obs 2     : 1,2,3,4,5,6
+appeared <= H and not in obs 1: <none>
+verdict   : pass-by-serialisation
+
+--- session A transcript ---
+--- session B transcript ---
+ERROR:  canceling statement due to statement timeout
+CONTEXT:  SQL statement "SELECT pg_advisory_xact_lock(hashtext(p_tags[1])::bigint)"
+PL/pgSQL function hs_append(text,bytea,bytea,text[]) line 7 at PERFORM
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+--- session C transcript ---

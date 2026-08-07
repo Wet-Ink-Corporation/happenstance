@@ -25,6 +25,22 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **Six adapter skeletons, as instruments rather than as adapters.**
+  `happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon` are
+  new; `happenstance-sqlite`, `happenstance-ladybug` and `happenstance-sync` grew
+  real associated types. Every body is `todo!()` and every crate is
+  `publish = false`, so nothing here changes what a consumer sees — but the ports
+  have now been disagreed with by five storage shapes instead of one, and
+  [`docs/adapter-shapes.md`](docs/adapter-shapes.md) records what each one said.
+- [ADR-0009](docs/adr/0009-error-send-sync.md), settling ES-6 — the highest
+  blast-radius open question in the workspace, and the last one that was
+  semver-visible. **`Error` keeps its bound**; the stronger property becomes a
+  marker trait that generic code opts into, and which turns out not to need the
+  contract crate at all.
+- Two mandatory gate steps building `happenstance-cloudflare` and
+  `happenstance-neon` for `wasm32-unknown-unknown`. Both crates asserted that
+  target in their own documentation and nothing checked it.
+
 - **The conformance suite no longer requires `tokio`.** The rule set is
   enumerated in exactly one place, `for_each_event_store_rule!`, and the per-test
   wrapper is a parameter rather than something the testkit chooses. Three
@@ -94,8 +110,13 @@ not the same as what a user needed to be told.
   start and `cargo add happenstance` is true throughout. Adapter authors should
   depend on `happenstance-core`.
 - `clippy::todo` and `clippy::unwrap_used` are denied workspace-wide rather than
-  allowed and warned. `happenstance-sqlite` carries a scoped `#![allow]` for the
-  two `todo!()`s it still has.
+  allowed and warned. All six skeleton crates carry a scoped `#![allow]` naming
+  the phase that removes it.
+- `tokio` is a real workspace dependency rather than a dev-only one:
+  `happenstance-sqlite` names `JoinError` and `JoinHandle` in its public error
+  type and its read stream, and `happenstance-postgres` reaches it through
+  `sqlx`'s `runtime-tokio`. None of that is in the published graph, all three
+  publishable crates are unaffected, but the manifest had said otherwise.
 
 ### Fixed
 

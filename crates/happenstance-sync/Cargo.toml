@@ -13,10 +13,27 @@ publish = false
 
 [dependencies]
 # `serde` is non-optional here: replication is the reason `happenstance-core`'s
-# serde feature exists.
+# serde feature exists. This crate does not depend on `serde` *directly* yet —
+# the envelope derives were withdrawn because a versionless wire format is phase
+# 5's to settle, not this sketch's to assert. See `lib.rs`.
 happenstance-core = { workspace = true, features = ["std", "serde"] }
-serde.workspace = true
 thiserror.workspace = true
+trait-variant.workspace = true
+
+[dev-dependencies]
+# Only the cursor-shape probe needs a `Stream`; the port itself does not, which
+# is the finding rather than an omission.
+futures-core.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[features]
+default = []
+# The coherence proof for `IngestStore` lives behind this flag, because it is an
+# impl *for a type in another crate* and that type only exists when
+# `happenstance-core/memory` is on. Not a default: nothing in this crate's own
+# API depends on it, and a feature that exists to compile one experiment should
+# not be paid for by anyone who is not running the experiment.
+memory = ["happenstance-core/memory"]
 
 [lints]
 workspace = true

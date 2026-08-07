@@ -1,4 +1,4 @@
-msrv = "1.85"
+msrv = "1.97.1"
 
 # `clippy::doc_markdown` flags any CamelCase-looking word in prose as a missing
 # code span. These are proper nouns, not identifiers, and this crate's docs use

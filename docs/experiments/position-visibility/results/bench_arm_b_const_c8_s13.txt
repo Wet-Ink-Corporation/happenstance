@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /harness/bench/append.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+maximum number of tries: 1
+duration: 30 s
+number of transactions actually processed: 11225
+number of failed transactions: 0 (0.000%)
+latency average = 21.393 ms
+initial connection time = 4.055 ms
+tps = 373.951308 (without initial connection time)

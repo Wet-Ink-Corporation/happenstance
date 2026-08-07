@@ -1,0 +1,5 @@
+clients,arm,tps,tps_ratio_to_baseline,p99_ms,p99_ratio_to_baseline,bracketing_baseline_tps,baseline_drift_at_this_level
+1,arm_a,525.9,1.031,5.34,0.97,510.0,1.94x
+1,arm_b_const,371.7,0.985,6.25,1.03,377.3,1.94x
+1,arm_b_tag,336.2,0.949,6.27,1.00,354.3,1.94x
+1,arm_c,327.7,0.987,6.45,1.03,332.1,1.94x

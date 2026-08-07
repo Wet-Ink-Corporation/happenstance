@@ -5,7 +5,7 @@ members = ["crates/*", "examples/*", "xtask"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wet-Ink-Corporation/happenstance"
 authors = ["Ryan Britton"]
@@ -29,14 +29,46 @@ happenstance-testkit = { version = "0.1.0", path = "crates/happenstance-testkit"
 bytes = { version = "1.10", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
+# `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
+# system SQLite is needed on any developer machine or CI runner.
+# `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
+# default and which no native adapter wants.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
+# The `/sql` endpoint speaks JSON, so `happenstance-neon` decodes JSON. `std`
+# rather than `alloc` because the endpoint's `bigint`-as-string rendering needs
+# arbitrary-precision parsing off the `std` float path.
+serde_json = { version = "1", default-features = false, features = ["std"] }
+# No TLS backend selected here, and members must not add one casually: `sqlx`'s
+# `tls-rustls` fails `cargo deny check licenses` against this workspace's
+# allowlist. Measured, not assumed — the offender is not the one everybody
+# expects:
+#
+#   error[rejected]: failed to satisfy license requirements
+#     webpki-roots-0.26.11/Cargo.toml:25  license = "CDLA-Permissive-2.0"
+#     webpki-roots-1.0.9/Cargo.toml:26    license = "CDLA-Permissive-2.0"
+#
+# `ring` 0.17.14 is `Apache-2.0 AND ISC` and passes; it is the Mozilla CA root
+# *bundle* — data, not code — that carries CDLA-Permissive-2.0. `tls-native-tls`
+# passed on Windows, where it resolves to `schannel` (MIT); that says nothing
+# about the Linux graph, which reaches `openssl-sys` instead and has not been
+# checked here. A skeleton whose bodies are `todo!()` connects to nothing, so the
+# feature buys nothing today and the question is owed a real answer at the point
+# something actually dials out.
+sqlx = { version = "0.8", default-features = false }
 thiserror = { version = "2", default-features = false }
+# No longer dev-only, and the move is the point: `happenstance-sqlite` names
+# `JoinError` and `JoinHandle` in its error enum and its read stream, and
+# `happenstance-postgres` reaches tokio through `sqlx`'s `runtime-tokio`. Left
+# under the header below, the manifest would say "dev / tooling only" about a
+# crate two adapters link against — and `ci.yml`'s msrv job reasons out loud
+# about `--no-dev-deps` hiding tokio, which stopped being true here.
+tokio = { version = "1", default-features = false }
 trait-variant = "0.1.3"
 
 # --- dev / tooling only ---
 anyhow = "1"
 proptest = "1"
-tokio = { version = "1", default-features = false }
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published
 # graph depends on it.

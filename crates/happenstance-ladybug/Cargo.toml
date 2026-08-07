@@ -21,5 +21,8 @@ thiserror.workspace = true
 # pass that implements the adapter — which is also the reason this lives in its
 # own crate rather than behind a feature of another one.
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
 [lints]
 workspace = true

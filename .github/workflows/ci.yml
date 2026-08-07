@@ -146,7 +146,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.85"
+          # 1.97.1 as of ADR-0029, raised from 1.85. Kept spelled out here rather
+          # than deferring to `rust-toolchain.toml` so that this job fails loudly
+          # if the two ever disagree — the pin and the promise are different
+          # facts that currently happen to be the same number.
+          toolchain: "1.97.1"
       - uses: Swatinem/rust-cache@v2
       # `--no-dev-deps` because dev-dependencies are free to require a newer
       # compiler than the published crates do. This is what a *consumer* sees.
@@ -158,14 +162,15 @@ jobs:
 
       # And this is what a *contributor* sees, which the step above cannot tell
       # us: `--no-dev-deps` is precisely the flag that hides `proptest` and
-      # `tokio`, and both declare `rust-version = "1.85"` — exactly the MSRV,
-      # with no headroom at all. So the claim "you can develop this project on
-      # 1.85" was never checked by anything, and the first person to discover it
-      # was false would have been someone who trusted the README.
+      # `tokio`.
       #
-      # It passes today, verified locally at 1.85 on 2026-08-06. It is a
-      # dependency bump away from not passing, and this is the step that says so
-      # before the bump is merged rather than after.
+      # Read honestly, this job proves less than it did at 1.85, and the reason
+      # should not be discovered later: the MSRV now EQUALS the pinned toolchain,
+      # so both steps run the same compiler the gate already runs and there is no
+      # headroom left to check. It is kept because the numbers are independent
+      # facts that will diverge again — `rust-toolchain.toml` moves whenever a
+      # contributor wants a newer compiler, and this one moves only by ADR. The
+      # day they differ, this job starts proving something again.
       - name: Tests at the MSRV, dev-dependencies included
         run: cargo test --workspace --all-features
 

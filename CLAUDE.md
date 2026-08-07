@@ -30,16 +30,25 @@ When a construct is unusual, say what the alternative was and why it lost.
 crates/happenstance-core/        the contract. types, ports, errors, in-memory store.
 crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
-crates/happenstance-sqlite/      🔲 stub. event store + projection store.
-crates/happenstance-ladybug/     🔲 stub. graph projection store only.
-crates/happenstance-postgres/    🔲 planned. the target that does not serialise writers.
-crates/happenstance-neon/        🔲 planned. Postgres over one-shot HTTP.
-crates/happenstance-sync/        🔲 stub. the replication port + peers + a runner.
+crates/happenstance-sqlite/      🔩 skeleton. event store + projection store.
+crates/happenstance-cloudflare/  🔩 skeleton. the workspace's only !Send store. wasm32.
+crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
+crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
+crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
+crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 docs/adr/                        the decisions this design rests on.
 docs/architecture/               SPECIFICATION.md — every clause that is true now.
+docs/adapter-shapes.md           what the six skeletons told the type checker.
+docs/experiments/                measurements. reproducible, and not in the gate.
 ```
+
+**🔩 skeleton** means real associated types and `todo!()` bodies, `publish =
+false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
+A skeleton exists to be disagreed with by a type checker — it is an *instrument*
+first and a target second, and it is not an adapter until it has run the
+conformance suite. None of them has.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
@@ -86,16 +95,25 @@ code around it.
 4. **Bind `EventStore`, not `SendEventStore`, in generic code.** It is the
    weaker requirement and accepts both flavours. Import only one of the two
    names per module — having both in scope makes method calls ambiguous.
-5. **No let-chains.** Stable only from 1.88; the MSRV is 1.85. (ADR-0004)
+5. ~~**No let-chains.**~~ **The MSRV is 1.97.1**, raised from 1.85 at phase 2
+   ([ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004).
+   Let-chains stabilised in 1.88 and are now available.
 
-   Weigh that one; do not obey it. Nothing is published, so no downstream
-   consumer is pinned to 1.85 and raising it today costs nobody anything —
-   ADR-0004 carries a **provisional** marker for exactly that reason, and loses
-   it at phase 12, when first publish turns the MSRV into a promise. Until then,
-   a design that is genuinely better for requiring 1.88 is a trade to make
-   deliberately and to record in an ADR, not a rule to route around in silence.
-   What stays forbidden is reaching for a let-chain out of habit and learning
-   from CI that the floor exists.
+   The instruction that replaced it is the same instruction, one level up:
+   **weigh the floor, do not obey it.** Nothing is published, so no downstream
+   consumer is pinned to anything, and ADR-0004 carries a **provisional** marker
+   for exactly that reason — it loses the marker at phase 12, when first publish
+   turns the MSRV into a promise. Raising it was a deliberate trade recorded in
+   an ADR, which is what the old text asked for; what stays forbidden is moving
+   it in silence.
+
+   Two things follow that are easy to miss. The MSRV now **equals**
+   `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two
+   diverge — it is kept for the day they do, and says so. And the reason the
+   floor moved was a *dependency's build script*, not our code: five of the five
+   database crates in this workspace declare no `rust-version` at all, so
+   `cargo hack --rust-version` cannot protect a floor against them and neither
+   can `resolver = "3"`. Only running the compiler finds it.
 
 ## The rule that matters
 
@@ -154,9 +172,12 @@ cargo xtask wasm                        # just the wasm32 check
 cargo xtask spec-trace                  # just the specification's cross-references
 ```
 
-`cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, the wasm32 build of
-`happenstance-core` — that step is the standing guard on constraint 1, so it
-names the contract crate on purpose — docs, `cargo xtask spec-trace` over
+`cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, four wasm32 steps —
+the build of `happenstance-core`, which is the standing guard on constraint 1 and
+names the contract crate on purpose, a check of the conformance harnesses, and
+builds of `happenstance-cloudflare` and `happenstance-neon`, both of which claim
+that target in their own documentation and neither of which was checked by
+anything until phase 2 — docs, `cargo xtask spec-trace` over
 `SPECIFICATION.md`, a `--no-default-features` doc build of `happenstance-core`,
 and a `cargo package --list` assertion that each of the three publishable crates
 carries both licence files and a README. Then, where the tool or toolchain is
@@ -171,10 +192,12 @@ that runs and finds a problem always fails the gate.
 
 The MSRV is the one thing the local gate still does not check. CI carries a
 dedicated `msrv` job that runs `cargo hack check --no-dev-deps --rust-version` on
-a pinned 1.85 toolchain, which is what a *consumer* sees, and then a full
-`cargo test --workspace --all-features` at 1.85, because `--no-dev-deps` is
+a pinned 1.97.1 toolchain, which is what a *consumer* sees, and then a full
+`cargo test --workspace --all-features` at 1.97.1, because `--no-dev-deps` is
 exactly the flag that hides `proptest` and `tokio` — both of which declare
-`rust-version = "1.85"`, leaving no headroom at all.
+`rust-version = "1.85"`, leaving no headroom at all. **That job now runs the
+same compiler the gate runs** and proves nothing until the pin and the floor
+diverge again; ADR-0029 explains why it is kept rather than deleted.
 
 ## Open questions, deliberately unresolved
 
@@ -196,8 +219,11 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   projection adapter can be built against it. The invariant it must preserve —
   read-model write and checkpoint write in one transaction — is documented on
   the trait.
-- **SQLite driver** (`rusqlite` vs `sqlx`) and the append-condition SQL
-  strategy. Notes are in `crates/happenstance-sqlite/src/`.
+- ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
+  both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
+  and the two are in the tree for different reasons rather than as candidates.
+  The **append-condition SQL strategy** is still open and is ADR-0022's; notes
+  are in `crates/happenstance-sqlite/src/`.
 - **Replication semantics.** `SequencePosition` is meaningful only within one
   store, so positions cannot be replicated as-is. Whether ingest re-checks
   append conditions is the central unanswered question; it is written up in

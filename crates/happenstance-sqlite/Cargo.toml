@@ -14,7 +14,12 @@ publish = false
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
+rusqlite.workspace = true
 thiserror.workspace = true
+# A real dependency, not a dev one: the read stream defers its `spawn_blocking`
+# into `poll_next`, so `tokio::task::{JoinError, JoinHandle}` appear in the
+# adapter's own error enum and stream state. `rt` is the whole of what is needed.
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
 happenstance-testkit.workspace = true

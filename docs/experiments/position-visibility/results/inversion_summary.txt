@@ -1,0 +1,10 @@
+baseline__shared_tag         INVERSION                B blocked=no A=6 B=7 H=7 late=6
+baseline__disjoint_tags      INVERSION                B blocked=no A=6 B=7 H=7 late=6
+arm_a__shared_tag            pass-by-serialisation    B blocked=yes A=6 B= H=5 late=none
+arm_a__disjoint_tags         pass-by-serialisation    B blocked=yes A=6 B= H=5 late=none
+arm_b_const__shared_tag      pass-by-serialisation    B blocked=yes A=6 B= H=5 late=none
+arm_b_const__disjoint_tags   pass-by-serialisation    B blocked=yes A=6 B= H=5 late=none
+arm_b_tag__shared_tag        pass-by-serialisation    B blocked=yes A=6 B= H=5 late=none
+arm_b_tag__disjoint_tags     INVERSION                B blocked=no A=6 B=7 H=7 late=6
+arm_c__shared_tag            pass                     B blocked=no A=6 B=7 H=5 late=none
+arm_c__disjoint_tags         pass                     B blocked=no A=6 B=7 H=5 late=none

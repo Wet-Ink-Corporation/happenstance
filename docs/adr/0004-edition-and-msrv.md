@@ -2,6 +2,11 @@
 
 - **Status:** accepted — **provisional**
 - **Date:** 2026-08-05
+- **Amended by:** [ADR-0029](0029-msrv-raised-to-1-97-1.md) — **the number in this
+  ADR's title is no longer the MSRV. It is 1.97.1.** The body below stays
+  verbatim, because its *reasoning* is what ADR-0029 acted on rather than
+  overturned: it is this ADR that says the floor is a preference until first
+  publish and invites the trade. Read it as history from here down.
 
 > **Provisional.** Authored on 2026-08-05 alongside the initial scaffold, before
 > any of the code this decision constrains existed.

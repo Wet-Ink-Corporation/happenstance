@@ -145,7 +145,7 @@ turned out to be one DCB already provides.
 |---|---|---|---|---|
 | 0 | [Ground clear](#phase-0--ground-clear) | — | done | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
 | 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
-| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | not started | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
+| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | not started | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
 | 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | not started | a generic consumer doing the four things today's signatures forbid, compiled against the frozen ones — plus a `SequencedEvent` that carries identity and time and would take a third field without breaking `new` |
 | 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | not started | `wire.rs` — every envelope shape round-tripping in JSON *and* postcard, sparse shapes included. **Floats: anywhere between phase 4 and phase 12** |
@@ -280,7 +280,8 @@ scheduling defect.
 | ADR | Phase | The question it answers |
 |---|---|---|
 | ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](adr/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
-| **0009** | 2 | Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6) |
+| ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
+| **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
 | **0010** | 3 | What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29) |
 | **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13) |
 | **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24) |
@@ -319,6 +320,41 @@ scheduling defect.
   citations and to rule adequacy. Applying them to the document is scheduled at
   **phase 3**, which owns the rule registry's spellings and is already opening
   §6 and §7 — doing it there costs one pass instead of two.
+- **Phase 2's wave falsified fourteen claims in `SPECIFICATION.md`**, and they
+  join ADR-0008's four in the same phase-3 pass for the same reason. These are
+  **not** line-number rot — that was fixed in phase 2's own commit, fourteen
+  citations re-anchored — they are sentences whose *subject* stopped existing.
+  Grouped by cause, with the phase that owns the new words:
+  - **§4's "the port has zero implementers"** and its three supporting greps.
+    There are five `ProjectionStore` impls. Phase 6 needs this correct before it
+    freezes anything.
+  - **ES-7's "the bare flavour has zero implementers"**, contradicted by four —
+    `happenstance-cloudflare`, two in `happenstance-neon`, and phase 1's
+    `LocalMemoryEventStore`. ES-7 is `[PROVISIONAL]`; whether that survives the
+    corroboration is phase 4's.
+  - **ES-30's "the cost of *required* is two impls today."** There are seven.
+  - **ES-6's "`SqliteEventStoreError` is a single placeholder variant."** It is
+    seven real variants. The clause is settled by ADR-0009 regardless, but the
+    argument quoted in it no longer describes the tree.
+  - **§5's account of `happenstance-sync`** as "a doc comment and a one-variant
+    enum", and the *"None of this is settled"* sentence it quotes, which was
+    deleted. Two ports in two flavours now exist.
+  - **Three clauses rejecting a metadata-borne identity** (VT-3, VT-5, SY-12's
+    neighbourhood) whose named wrong implementation was `happenstance-sync`'s own
+    proposal. The crate now proposes `(StoreId, SequencePosition)` — what the
+    clauses mandate — so the rejection has no exemplar and needs a new one, or an
+    honest note that the workspace no longer contains a wrong answer to point at.
+  - **Two clauses framing ingest as re-checking conditions.** The crate now takes
+    the opposite position explicitly: the origin's condition travels as evidence,
+    not as an instruction. Phase 13's, but the words are wrong now.
+  - **Two deleted premises** — the ordering sentence and the transport-floor
+    phrase — quoted by §5.4 and its neighbours.
+
+  **The checker cannot catch any of this**, and that is worth stating where the
+  next person will look: `check_citations` validates that a file exists and that
+  a range's first number is within it, so a citation goes on passing when the line
+  it names has come to say something else. All eighteen amendments would have sat
+  green indefinitely.
 - **ADR-0003** loses `provisional` at phase 13, when a payload round-trips
   byte-identically between two peers.
 - **ADR-0004** loses `provisional` at phase 12, when the MSRV becomes a promise.
@@ -401,7 +437,7 @@ ADR-0026 must be written against two unlike peers, not one.
 | Decision | Phase | Status | ADR |
 |---|---|---|---|
 | Derived vs hand-written `Send` flavour; `Self: Sync` at the point of use; one decision covering both ports | 1 | **settled — ADR-0008.** One scheme, both ports, derived — though "derived vs hand-written" was already `[FROZEN]` at ES-1 and the live question was PS-35's second port. The scheme is shared; the **provided-method budget is not**, because `ProjectionStore`'s GAT admits a body that cannot be made to compile on either flavour and `EventStore` structurally cannot exhibit it | 0008 |
-| Does `Error` carry `Send + Sync + 'static`, and may the flavours differ | 2 | **deferred — ES-6.** Both existing "confirmations" are free by construction: `MemoryStoreError` is uninhabited (`memory.rs:143-145`) and `SqliteEventStoreError` is a unit variant. The Cloudflare skeleton is the only instrument | 0009 |
+| Does `Error` carry `Send + Sync + 'static`, and may the flavours differ | 2 | **settled — ADR-0009. No, and no.** The bound stays; the strength becomes a marker trait, which compiles *from downstream*, so the contract crate need not change. "May the flavours differ" was never a policy question — one edit to one declaration reported against both, which is ES-5 observed. What actually decided it was that the derived flavour does not imply a `Send` error either, so ES-6's named rule was **unwritable for every adapter**: a deferral behind an impossible experiment | 0009 |
 | Does `EventStore` grow `head` / `count`, and as provided or required methods | 4 | **settled — ES-30, ES-31.** Provided, hand-desugared, overridable. The claim that a provided method could never be added was compiled and refuted | 0012 |
 | `read` laziness, isolation, and whether one `Query`'s items share one snapshot | 4 | **settled — ES-11, ES-12, ES-13.** The contract promised laziness that the reference store does not provide (D7) | 0011 |
 | `append` ownership, empty batch, self-conflict, cancellation | 4 | **settled — ES-17 – ES-23** (D8) | 0012 |
@@ -448,7 +484,8 @@ ADR-0026 must be written against two unlike peers, not one.
 | What is a store permitted to forget, and how does it say so | 14 | **deferred — ES-39, CF-27, SY-32.** A store that has been deleted from is currently indistinguishable from a young one at every value in §2, and four of the six scenarios reach that from unrelated doors. An explicit written refusal — deletion is out of scope for `EventStore`, and here is what a deleted-from store may look like — is a legitimate answer | 0028 |
 | A projection's `Query` changed under its checkpoint | 6 | **provisional — PS-25** | 0018 |
 | SQLite driver, append-condition strategy, tag storage | 8 | **decided** — `rusqlite`; `BEGIN IMMEDIATE` plus a probe returning the conflicting position; blob on `event` with `event_tag` as a derived index carrying `event_type` as a covering column | 0022 |
-| How a Postgres adapter buys position visibility | 10 | open — deliberately. `xid8` + `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence table each cost something real, and the choice is owed a measurement rather than a preference | 0024 |
+| How a Postgres adapter buys position visibility | 10 | **measured at phase 2 — `xid8` + `pg_snapshot_xmin`, at 0.99–1.03× baseline and blocking nobody.** The other two are correct and 16×/30× slower at 64 writers; the cheap fourth (advisory locks keyed by tags) is cheap because it buys a *per-boundary* invariant where ES-10 states a global one. The mechanism is settled and its **structural** costs are not — `head` becomes a frontier, read-your-own-writes does not hold, and staleness is bounded by the longest write transaction anywhere in the cluster. ADR-0024 records the choice; phase 10 pays for it | 0024 |
+| Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do | 4 | **open, and newly so.** Raised by the phase-2 measurement rather than by a reader: the per-boundary mechanism is nearly free and the global one is not. DCB evaluates conditions against a boundary, so the question is not rhetorical. It is a clause question, not a measurement, and it is phase 4's | 0013 |
 | Benchmark harness | 8 | **decided** — `event_store_benchmarks!`, so adapters inherit it. Not a conformance rule: complexity is a benchmark, not an assertion, and a suite that asserted on timings would be flaky (CF-34) | 0022 |
 | A store holding only a suffix of its own log, as a testkit instrument | 14 | **deferred — CF-27.** The completeness axis has nothing at its far end | 0028 |
 | Is `happenstance-macros` in scope for 0.1 | 7 | open — the criterion is stated in phase 7 and evaluated in its session log | 0020 |
@@ -469,7 +506,7 @@ phase 12's audit of it had nothing behind it.
 
 | Clause | What it defers | Owning phase |
 |---|---|---|
-| ES-6 | `Error: Send + Sync` | 2 (evidence), confirmed 9 |
+| ~~ES-6~~ | ~~`Error: Send + Sync`~~ | **settled at 2 — ADR-0009.** Twelve remain, not thirteen; the specification's maturity column is amended at phase 3 with the rest |
 | ES-39 | a store reporting history it does not hold | 14 |
 | WF-1 | DCB wire interoperability | 13 |
 | PS-33 | evaluating ADR-0007's falsifier | 7 |
@@ -565,20 +602,33 @@ CF-25 forbids declaring a port frozen while an axis has no passing implementatio
 at its far end, unless the freeze names the axis and an ADR accepts the risk.
 **Six axes have empty far ends today, and the seventh has a fixture and no
 adapter**, which is the honest caveat that outranks every `[FROZEN]` marker in
-the specification: `MemoryEventStore`, a planned
-rusqlite adapter and a planned Durable Object all serialise their writers and
-assign positions under a lock they hold until commit. That is one storage shape
-wearing several hats.
+the specification: `MemoryEventStore`, the rusqlite adapter and the Durable
+Object stand-in all serialise their writers and assign positions under a lock
+they hold until commit. That is one storage shape wearing several hats.
 
-| Axis | Near end | Far end | Far end exists after |
-|---|---|---|---|
-| Position allocation | `MemoryEventStore` — under the append lock | `happenstance-postgres` — `nextval()` outside the transaction | phase 10 (skeleton phase 2) |
-| Transport | in-process | `happenstance-neon` — one-shot HTTP, no cursor, no interactive transaction | phase 10 (skeleton phase 2) |
-| Async flavour | `Send` native | `LocalMemoryEventStore`, then a Durable Object | **fixture done at phase 1**; adapter at phase 9 |
-| Batch shape | a SQL transaction | Ladybug's graph write handle | phase 11 (skeleton phase 2) |
-| Handle multiplicity | one handle per fixture | two handles onto one backing store | phase 3 (fixture), phase 8 (real) |
-| Durability | in-memory | a store that survives a process reopen | phase 8 |
-| Completeness | a whole log | a store holding only a suffix | phase 14 |
+Phase 2 changed the third column but **not the fourth**, and the difference is
+the whole point of the table. Six skeletons now exist and every one of them has
+disagreed with the ports in some way worth writing down
+([`adapter-shapes.md`](adapter-shapes.md)) — but none has run the conformance
+suite, because none has a body. An instrument is not a target.
+
+| Axis | Near end | Far end | What phase 2's skeleton settled | Far end exists after |
+|---|---|---|---|---|
+| Position allocation | `MemoryEventStore` — under the append lock | `happenstance-postgres` — `nextval()` outside the transaction | That the cost is a **measurement, not a signature**: nothing in the port's types can express the invariant `nextval()` breaks. So the skeleton settled the shape and [an experiment](experiments/position-visibility/README.md) settled the number | phase 10 |
+| Transport | in-process | `happenstance-neon` — one-shot HTTP, no cursor, no interactive transaction | That a store with no connection, no cursor and no interactive transaction satisfies `EventStore` **as written** — and that a probe-then-write `append` compiles and races. Eight capability limits, none of them a type error | phase 10 |
+| Async flavour | `Send` native | `LocalMemoryEventStore`, then a Durable Object | That a genuinely `!Send` error and a genuinely `!Send` store compile against the bare flavour on `wasm32`, and that the *derived* flavour does not imply a `Send` error either (ADR-0009) | **fixture done at phase 1**; adapter at phase 9 |
+| Batch shape | a SQL transaction | Ladybug's graph write handle | That an owned batch serves SQL, HTTP and a graph handle — **and that a borrowed GAT still works too**, which cuts against §4.2's argument and is phase 6's to weigh | phase 11 |
+| Handle multiplicity | one handle per fixture | two handles onto one backing store | Nothing. No skeleton has two handles onto one backing store | phase 3 (fixture), phase 8 (real) |
+| Durability | in-memory | a store that survives a process reopen | Nothing. Every body is `todo!()` | phase 8 |
+| Completeness | a whole log | a store holding only a suffix | Nothing | phase 14 |
+
+**A skeleton does not fill a far end**, and the fourth column exists so that
+nobody reads the third as covered. A skeleton falsifies a *signature*; a far end
+is a **passing** implementation, and phase 2 produced none — no skeleton has run
+the conformance suite, because every body is `todo!()`. What the wave did buy is
+that five storage shapes have now disagreed with the ports instead of one, which
+is the thing CLAUDE.md's second corollary asks for and which no amount of
+`MemoryEventStore` could supply.
 
 Until a row's far end exists, the freeze on the clauses that depend on it is
 conditional, and the ADR that lands the specification must record the risk
@@ -1284,49 +1334,90 @@ becomes a *decision* — if the owned shape turns out wrong there, these skeleto
 change and phase 6's ADR says so. What is not legitimate is discovering the
 borrow silently, which is how a plan acquires a cycle.
 
-- [ ] **`happenstance-sqlite`** — `rusqlite::Connection` behind a `Mutex`, a real
+- [x] **`happenstance-sqlite`** — `rusqlite::Connection` behind a `Mutex`, a real
       error enum, a real `read` stream type, and a real `Batch` for the projection
       store. Implements `SendEventStore` and `SendProjectionStore`. Because `read`
       is not `async`, `tokio::task::spawn_blocking` *panics* if called at `read`
       time outside a runtime, so the spawn must be deferred into `poll_next`:
       laziness stops being a nicety and becomes load-bearing. This is the
       *serialising, `Send`, native* shape.
-- [ ] **The Cloudflare skeleton**, `happenstance-cloudflare` — a `RefCell`-backed stand-in
+- [x] **The Cloudflare skeleton**, `happenstance-cloudflare` — a `RefCell`-backed stand-in
       for `SqlStorage` and an error type that is genuinely `!Send`, implementing
       the bare `EventStore` only. This is the shape that decides ES-6, and it is
       the only instrument for the question ADR-0009 asks: does stringifying a
       `JsValue` lose information the caller needs? `worker::Error::JsError(String)`
       suggests it does not, which is a hypothesis, not evidence.
-- [ ] **`happenstance-ladybug`** — a stand-in write-handle with `lbug`'s
+
+      **Built, and the question it was pointed at was aimed slightly wrong.**
+      Stringifying loses a *capability* (reading a field nobody has thought of
+      yet), not information any caller needs — because the conflict signal never
+      travels in `Self::Error` on any adapter, `AppendError::ConditionViolated`
+      having lifted it out. And the premise underneath was half wrong: `JsValue`
+      is `Send + Sync` on non-`atomics` `wasm32`, so `worker::Error` was never the
+      hazard. `Rc` is, which is why the instrument holds an `Rc<str>`. What
+      actually decided ADR-0009 was a fourth finding nobody had scheduled — see
+      the exit criteria.
+- [x] **`happenstance-ladybug`** — a stand-in write-handle with `lbug`'s
       `Send`/lifetime characteristics but no `lbug` dependency, implementing
       `ProjectionStore`. The *owned-handle, non-SQL* shape. Deferring the real
       dependency keeps a cold C++ build out of the gate until phase 11.
-- [ ] **`happenstance-postgres`** — `sqlx` behind a pool, a real pooled-cursor
+
+      **Built, and it ships two impls rather than one.** The owned `GraphWriteSet`
+      is the hypothesis this phase was told to adopt; `GraphWriteHandle<'a>` is a
+      second, *compiling*, GAT-borrowed impl driven across a real `tokio::spawn`.
+      So the borrowed GAT does not fail on the `Send` flavour, and §4.2's
+      rusqlite-derived argument for dropping it does not generalise. **Phase 6
+      inherits that as an input rather than a settled question.** A third shape —
+      a non-`'static` store — produced a reproducible **rustc ICE**, minimised and
+      recorded in [`adapter-shapes.md`](adapter-shapes.md) §6.
+- [x] **`happenstance-postgres`** — `sqlx` behind a pool, a real pooled-cursor
       `read` stream, and `type Batch = sqlx::Transaction<'static, Postgres>`, which
       owns its `PoolConnection` and is `Send`, unlike `rusqlite::Transaction<'a>`.
       The *networked, pooled, non-serialising* shape, and the only one on the
       roadmap that can violate the visibility invariant.
-- [ ] **`happenstance-neon`** — one-shot HTTP against Neon's `/sql` endpoint. **No
+- [x] **`happenstance-neon`** — one-shot HTTP against Neon's `/sql` endpoint. **No
       connection, no transaction handle, no cursor, one round trip per operation,
       64 MB on a response.** Implements the bare `EventStore` and compiles for both
       the host and `wasm32-unknown-unknown` — note that this means it *compiles for
       both targets implementing the bare flavour on each*, not that it satisfies
       both flavours; `store.rs:17-18`'s implication table is what makes those
       different claims (`PRESSURE-TEST.md:445-450`).
-- [ ] **A `SyncPeer` sketch** in `happenstance-sync`, plus a `MemorySyncPeer` that
+- [x] **A `SyncPeer` sketch** in `happenstance-sync`, plus a `MemorySyncPeer` that
       compiles. Not the protocol — just enough of a trait to learn whether a peer
       can be stated without naming a transport, given that the two real peers are a
       Durable Object over a socket and a Postgres over one-shot HTTP. If it cannot
       be, that is phase 13's most useful input and it is worth knowing eleven
       phases early. This is also the mitigation for the leak warning above.
-- [ ] Write `docs/adapter-shapes.md`. For each skeleton: the flavour it
+
+      **Built, and then trimmed, because the probe overshot into phases 4 and 5.**
+      The answer it found is the deliverable: a peer *can* be stated without
+      naming a transport — `pull` returns a bounded batch and an owned resume
+      token rather than a stream — and **the type checker did not force that
+      choice**, which is the more useful half. What was trimmed: the three
+      identity types (`StoreId`, `EventId`, `RecordedAt`) are phase 4's under
+      VT-4 – VT-10 and `EventId` is `[FROZEN]` at VT-5, so they are no longer
+      re-exported from the crate root — a peer adapter that also imports from
+      `happenstance` would otherwise have had two `EventId`s in scope with a plain
+      `use` picking whichever came first. And the `Serialize`/`Deserialize`
+      derives came off nine public structs: a `#[derive]` on a public struct with
+      no version field *is* a wire format, WF-8 puts a version first, and phase 5
+      owns it. Nothing in the crate serialised anything, so the derives committed
+      it to a shape nobody had authorised and bought the sketch nothing.
+
+      **The demotion the plan called for was not available**, and the reason is
+      worth keeping: `ReplicatedEvent` and `Watermark` carry all three identity
+      types in their public fields, so `pub(crate) mod identity` would have gutted
+      the peer port rather than scoping a placeholder. Withdrawing the re-exports
+      achieves the same thing — the collision becomes unwriteable by accident, and
+      every site phase 4 must revisit is greppable by one name.
+- [x] Write `docs/adapter-shapes.md`. For each skeleton: the flavour it
       implements, its `Error`, its `Batch`, its stream type, **the most ambitious
       signature attempted and its outcome**, and — a second kind of row —
       **capability** limits that are not type errors. `happenstance-neon` will
       compile against signatures it cannot honour (an interactive `append` probe, a
       streaming `read`), and a table recording only `error[E….]` would show it as
       the most compatible adapter in the workspace when it is the least.
-- [ ] Fill in the [portfolio table](#the-instrument-portfolio)'s `Far end exists`
+- [x] Fill in the [portfolio table](#the-instrument-portfolio)'s `Far end exists`
       column with what a *skeleton* proves and what it does not. A skeleton
       falsifies a signature; it does not fill a far end, because a far end is a
       *passing* implementation.
@@ -1364,29 +1455,98 @@ ES-10 is frozen at phase 4 and an invariant nothing can afford is not an invaria
 
 **Exit criteria**
 
-- [ ] Six skeletons compile: four on the host target, the Cloudflare one on
-      `wasm32-unknown-unknown`, `happenstance-neon` on both.
-- [ ] For **each** skeleton, `docs/adapter-shapes.md` records the most ambitious
+- [x] Six skeletons compile: four on the host target, the Cloudflare one on
+      `wasm32-unknown-unknown`, `happenstance-neon` on both. **And the two
+      `wasm32` claims are now guarded rather than asserted** — until this phase,
+      both crates stated that target in their own rustdoc and no gate step built
+      them for it, which is the decorative-gate shape in its purest form. `cargo
+      xtask ci` carries `wasm32 build of the Cloudflare adapter` and `wasm32 build
+      of the Neon adapter` as mandatory steps, selected by name.
+- [x] For **each** skeleton, `docs/adapter-shapes.md` records the most ambitious
       signature attempted and its outcome — a rejection with its compiler error, or
       agreement. Both outcomes are results. (The previous plan required a rejection
       per skeleton, which is an exit criterion that mandates its own outcome;
       `sqlx::Transaction<'static, Postgres>` agreeing with the owned-batch shape,
       from a networked pool that had every opportunity to hand back a borrowed
       handle, is exactly the kind of finding that rule would have suppressed.)
-- [ ] At least these three were attempted, because they are the ones later phases
+      That prediction paid: `sqlx` **agreed**.
+- [x] At least these three were attempted, because they are the ones later phases
       spend: `Batch<'a> = rusqlite::Transaction<'a>` on `SendProjectionStore`; an
       `append` that probes and writes in two statements on `happenstance-neon`; and
       an `Error` carrying `Send + Sync` on the Cloudflare skeleton.
-- [ ] ADR-0009 written, or ES-6 restated as deferred with the compiled reason.
-- [ ] **The position-visibility probe has produced a number.**
-      `docs/adapter-shapes.md` records, for each of `xid8` + `pg_snapshot_xmin`,
-      transaction-scoped advisory locks and a serialised sequence table: whether it
-      makes CF-13's hostile fixture pass, and what it costs — write throughput
-      against an unguarded baseline on the same instance. A mechanism that passes
-      is enough to lift ES-10 from `[PROVISIONAL]` at phase 4; three that do not is
-      the finding that reopens ES-25 and ES-26 with it.
-- [ ] `cargo xtask ci` green, with `clippy::todo` allowed per-crate in the
-      skeletons only.
+
+      All three, and **each is backed by an artefact rather than by prose.** The
+      probes arrived carrying two of the three as assertions with no transcript
+      and one as an uncommitted working-tree edit that any checkout would have
+      destroyed; all three were re-run and pasted. One by-product is worth
+      promoting: the six diagnostics rejecting the rusqlite GAT carry **no error
+      code** — `--message-format=json` reports `code: None` on every one. That
+      generalises ADR-0008's PS-36 finding from one diagnostic to the whole
+      `Send`-obligation family, and it means no `compile_fail,E….` doctest can pin
+      any of them. `trybuild` is the only mechanism, and it stays phase 6's
+      decision.
+- [x] ADR-0009 written, or ES-6 restated as deferred with the compiled reason.
+      [ADR-0009](adr/0009-error-send-sync.md) — **written, and it settles rather
+      than renews.** `Error` keeps its bound; the strength moves into a marker
+      trait. Note what decided it, because it was not the question the phase body
+      asked: the *derived* flavour does not imply a `Send` error either, so ES-6's
+      named rule `store_error_crosses_a_join_handle` was **unwritable against
+      today's port for every adapter**, not merely for the `!Send` one. A deferral
+      behind an impossible experiment is not a deferral. The marker makes the rule
+      writable, the wrong implementation it must reject already exists in the tree,
+      and — the part nobody predicted — **it works from a downstream crate, so
+      `happenstance-core` need not change at all.**
+- [x] **The position-visibility probe has produced a number.**
+      [`docs/experiments/position-visibility/`](experiments/position-visibility/README.md)
+      records, for each of `xid8` + `pg_snapshot_xmin`, transaction-scoped advisory
+      locks and a serialised sequence table: whether it defeats **the two-connection
+      inversion probe that the unguarded baseline demonstrably fails**, and what it
+      costs — write throughput against an unguarded baseline on the same instance.
+      A mechanism that passes is enough to lift ES-10 from `[PROVISIONAL]` at phase
+      4; three that do not is the finding that reopens ES-25 and ES-26 with it.
+
+      **The fixture clause is amended, and only the fixture clause** — not the
+      measurement, not the threshold. It read "whether it makes CF-13's hostile
+      fixture pass", and three things were wrong with that. The fixture does not
+      exist: neither spelling of the rule, nor `PreCommitPositionStore`, has a
+      single hit in any crate. Its ownership is disputed on the record — CF-13's
+      own deferral marker (`SPECIFICATION.md:5765-5772`) assigns it to "the
+      instrument-portfolio pass", which is this phase, while the [deferred-clause
+      table](#the-13-deferred-clauses) assigns it to phase 3. And it would have
+      been the **wrong instrument** either way: `PreCommitPositionStore` is an
+      in-memory Rust mutant and you cannot run `pg_snapshot_xmin` against one.
+      What this probe needs from CF-13 is the *predicate*, not the store that
+      fails it — and Postgres running `nextval()` unguarded **is** the hostile
+      fixture, failing the predicate natively with no help from the testkit.
+      Phase 3 still owes the mutant, the rule and its one settled spelling; when
+      it writes them, this probe's predicate is what the rule must be equivalent
+      to.
+
+      **Answered: `xid8` + `pg_snapshot_xmin` buys ES-10 at 0.99–1.03× baseline,
+      blocking nobody.** So ES-10 lifts at phase 4 and **ES-25 and ES-26 are not
+      reopened.** Three things phase 4's freeze must carry with it, none of which
+      is a throughput number: arm C's cost is *structural* — `head` becomes a
+      frontier, read-your-own-writes does not hold, and staleness is bounded by
+      the longest open write transaction **anywhere in the cluster** (a 5 s write
+      in an unrelated database moved it from 0.7 ms to 4,010 ms); the two
+      serialising mechanisms are correct and 16×/30× slower at 64 writers, which
+      buys the invariant by deleting the reason the adapter exists; and **B-tag
+      is cheap because it buys a per-boundary invariant where ES-10 states a
+      global one**, which is a clause question rather than a measurement and is
+      left open on purpose. Arm C also pushes *nothing* back toward the port,
+      where B-tag would have.
+
+      **A methods finding, because it nearly produced the wrong answer.** The
+      sequential design this criterion specified — arms first, baseline re-run
+      last to bound drift — *failed*: the baseline moved 2.7× at one client and
+      3.0× at 64, larger than two of the three effects. The published numbers use
+      a **paired** design, re-measuring the baseline between every pair of arms.
+      The discarded pass is kept as evidence rather than deleted. Any later
+      benchmark in this repository should assume the same instability.
+- [x] `cargo xtask ci` green, with `clippy::todo` allowed per-crate in the
+      skeletons only. Fifteen steps, none skipped locally, and two of them new.
+      `cargo hack check --workspace --no-dev-deps --rust-version` passes at 1.97.1
+      across all eleven packages — see ADR-0029 for why that is the number.
 
 **Cases this makes writable.** E2E-54 (a store chosen at runtime — the skeletons
 decide whether `append`'s argument type is erasable by `dynosaur`), and the
@@ -1395,6 +1555,89 @@ evidence half of E2E-24 (a `Batch` need not be a live transaction).
 **Estimate.** 6 days — 5 for the skeletons, 1 for the position-visibility probe.
 
 **Session log**
+
+- 2026-08-07 — **phase 2 closed.** Gate green with fifteen steps, none skipped —
+  two of them new, and both guarding a target that two crates had been claiming in
+  their own documentation with nothing checking it. Six skeletons compile on their
+  real targets with real associated types. `docs/adapter-shapes.md` is the evidence
+  base; ADR-0009 settles ES-6; the position-visibility measurement produced a
+  number and ES-10 is affordable.
+
+  **The wave was already on disk.** Six probe worktrees from an earlier session
+  had built all six skeletons and none of them had been landed, so this session
+  was harvest-and-close rather than build. That is phase 1's method working
+  exactly as its session log describes, and it repaid its own warning: **two
+  artefacts existed only as uncommitted working-tree state that any checkout would
+  have destroyed** — the ES-6 `Send + Sync` experiment, which is one of the three
+  attempts the exit criteria name, and the rustc ICE reproduction. Both were
+  captured first, before anything else was touched. Add to the next wave's brief,
+  beside "state the commit you compiled against": **commit your evidence, or it is
+  not evidence.**
+
+  **Five things this phase assumed and compilation refuted.**
+
+  1. **The `Send + Sync` bound is nearly free.** Every crate in the workspace
+     compiles with it except the one the two-flavour design exists for. The
+     question was never "what does it cost" but "what does the one exception
+     mean".
+  2. **`JsValue` is `Send + Sync` on the target builds.** `wasm-bindgen` carries
+     `unsafe impl`s gated on `not(target_feature = "atomics")`, and Workers builds
+     without atomics. ES-6's premise — that a `JsValue` error is the hazard — is
+     half wrong. `Rc` is the hazard, and `unsafe_code = "forbid"` means an adapter
+     can only ever *inherit* that escape hatch, never write it.
+  3. **The derived flavour does not imply a `Send` error.** A store satisfying
+     every `Send` obligation the flavour states, with a `!Send` `Error`, compiles.
+     So ES-6's named rule was unwritable against today's port for **every**
+     adapter. This is what decided ADR-0009, and no document had scheduled it.
+  4. **The borrowed GAT does not fail on the `Send` flavour.** Ladybug ships a
+     compiling one, driven across a real `tokio::spawn`. §4.2's argument for
+     dropping the GAT is rusqlite-derived and does not generalise — the rusqlite
+     rejection is about `Connection` being `!Sync`, not about GATs. Phase 6
+     inherits an input, not a settled question.
+  5. **The benchmark design this file specified was not sound.** Sequential arms
+     with the baseline re-run last: the baseline moved 2.7×–3.0×, larger than two
+     of the three effects. The paired design that replaced it is what the numbers
+     came from, and the failed pass is kept as evidence.
+
+  **Three findings that outlive this phase.**
+
+  *`code: None`.* The six diagnostics rejecting the rusqlite GAT carry **no error
+  code at all**. ADR-0008 found this for one diagnostic (PS-36); it holds for the
+  whole `Send`-obligation family. No `compile_fail,E….` doctest can pin any of
+  them, which makes `trybuild` the only mechanism and leaves that squarely with
+  phase 6.
+
+  *A rustc ICE, minimised.* Recorded in `adapter-shapes.md` §6. It duplicates the
+  open rust-lang/rust#158983, and the minimisation here is **smaller than the one
+  upstream** — two crates, no dependencies, and neither `async` nor `Send`
+  required. Five ingredients are each independently necessary, and one of them is
+  **`where Self: 'a` on the port's GAT**. If phase 6 drops the GAT, the
+  workspace's exposure goes with it. Reproduces on 1.85.1, 1.97.1 and nightly:
+  not a regression, not fixed. *Nothing has been filed or commented upstream* —
+  that is an outward-facing action and it is the repository owner's to take.
+
+  *The MSRV moved, and the way it broke is the lesson.*
+  [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.
+  `libsqlite3-sys` uses `cfg_select!` in a **build script** and declares no
+  `rust-version` — and neither do `rusqlite`, `sqlx`, `sqlx-core` or
+  `sqlx-postgres`. Five of five. So `cargo hack --rust-version` cannot protect a
+  floor against a database driver and `resolver = "3"` cannot either; only running
+  the compiler finds it. Two consequences land immediately: **let-chains are now
+  available** (CLAUDE.md's constraint 5 is rewritten), and the `msrv` CI job now
+  runs the same compiler as the gate and proves nothing until the pin and the
+  floor diverge again.
+
+  **What this phase found that a later one owns.** Fourteen `file:line` citations
+  in `SPECIFICATION.md` were re-anchored, and **fourteen more were left alone
+  because the claim around them is now false** — the port with "zero implementers"
+  has five, `happenstance-sync` is no longer "a doc comment and a one-variant
+  enum", the metadata-identity proposal those clauses reject no longer exists, and
+  ES-7's "the bare flavour has zero implementers" is contradicted by four. None is
+  a line number; each needs new words. They are batched into **phase 3**, which
+  already owes ADR-0008's four amendments and is opening §6 and §7 anyway. Note
+  that `spec-trace` passes over all fourteen and always would: `check_citations`
+  validates existence and a first-number bound, not that the cited line still says
+  the cited thing.
 
 ---
 
@@ -2562,7 +2805,7 @@ demonstrably reports something.
 - [ ] Every `[PROVISIONAL]` clause published at 0.1 either has its falsifier
       scheduled in a later phase of this file, or is behind an unstable feature.
       Audit it against [the provisional
-      ledger](#the-41-provisional-clauses) and `cargo xtask spec-trace`, not
+      ledger](#the-46-provisional-clauses) and `cargo xtask spec-trace`, not
       against prose — the previous revision carried this criterion with nothing to
       check it against.
 - [ ] **Every `[DEFERRED]` clause on a published surface is resolved, made
