@@ -12,6 +12,7 @@ use std::process::{Command, ExitCode, Stdio};
 use anyhow::{Context, Result, bail};
 
 mod reserve;
+mod spec_trace;
 
 /// A step in the CI gate.
 struct Step {
@@ -90,6 +91,19 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // CF-38. The specification claims, for every clause, that some rule can
+        // observe a violation and some case exercises it. Those claims were
+        // written by hand and nothing checked them until this step existed — its
+        // first run found 156 problems, of which the great majority were the
+        // checker misreading the document and 24 were real dangling citations.
+        // A specification whose cross-references have rotted is worse than one
+        // that never made them, because it reads as though it is backed by tests.
+        name: "specification traceability",
+        program: "cargo",
+        args: &["run", "--quiet", "-p", "xtask", "--", "spec-trace"],
+        probe: None,
+    },
+    Step {
         // The step above passes with every feature on, which is the one
         // configuration where every intra-doc link resolves. Three links to
         // `MemoryEventStore` were broken without `memory` for as long as this
@@ -141,6 +155,7 @@ fn main() -> ExitCode {
         Some("ci") => run_ci(),
         Some("wasm") => run_steps(wasm_step()),
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
+        Some("spec-trace") => spec_trace::run(),
         Some(other) => {
             eprintln!("unknown task: {other}");
             print_help();
@@ -168,6 +183,9 @@ fn print_help() {
     println!("  ci     Run the full gate: fmt, clippy, tests, wasm32, docs,");
     println!("         plus feature-powerset and cargo-deny when installed.");
     println!("  wasm   Check that happenstance-core builds for wasm32-unknown-unknown.");
+    println!("  spec-trace");
+    println!("         Check the specification's clauses against the suite and the e2e");
+    println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");

@@ -42,9 +42,9 @@ every append condition in all six scenarios — thirty-odd of them, including
 seven-type single-tag items, four-item cross-namespace boundaries and deliberately
 untenanted uniqueness checks — is expressible verbatim against `QueryItem::new`,
 `Query::from_items` and `AppendCondition::new`
-(`crates/happenstance/src/query.rs:57-77`, `:164-179`;
-`crates/happenstance/src/append.rs:63-88`). DCB's query language did not need
-extending once. Superset tag matching (`crates/happenstance/src/tag.rs:231-245`)
+(`crates/happenstance-core/src/query.rs:57-77`, `:164-179`;
+`crates/happenstance-core/src/append.rs:63-88`). DCB's query language did not need
+extending once. Superset tag matching (`crates/happenstance-core/src/tag.rs:231-245`)
 does real work in every scenario and needed no secondary index anywhere.
 
 **The read half, the replication half and the lifecycle half are not.** Those
@@ -108,7 +108,7 @@ decision is then made against an append condition whose query ranges over events
 the device does not have and cannot know it does not have.
 
 The 90-day prune happens entirely outside the port — `EventStore` has two methods
-and neither of them deletes (`crates/happenstance/src/store.rs:117-145`) — and
+and neither of them deletes (`crates/happenstance-core/src/store.rs:117-145`) — and
 after it the store passes all 27 rules unchanged. Including
 `query_all_matches_every_event` (`suite.rs:70-80`), whose contract is
 store-relative by wording and therefore accidentally correct. The gap is not that
@@ -198,7 +198,7 @@ AppendCondition::new(Query::from_item(QueryItem::new(
 outside the store that assigned it (`crates/happenstance-sync/src/lib.rs:64-69`).
 Worse, `AppendCondition` derives `Serialize` behind the `serde` feature and will
 cheerfully put `after: 288446` on the wire
-(`crates/happenstance/src/append.rs:117-123`), where it is a number with no
+(`crates/happenstance-core/src/append.rs:117-123`), where it is a number with no
 referent. Epoch-tagging converts the position boundary into a tag boundary and
 makes the condition replicable verbatim. Note that the position-free form is what
 `AppendCondition::new` gives you by default (`append.rs:65-70`) — the API already
@@ -544,7 +544,7 @@ boundary expresses cleanly and needs no contract change to *draw*. It needs one 
 
 **The fleet item is unbounded and cannot be bounded.** `ReadOptions.from` is one
 `Option<SequencePosition>` for the entire read
-(`crates/happenstance/src/query.rs:226-234`) and `EventStore::read` applies one
+(`crates/happenstance-core/src/query.rs:226-234`) and `EventStore::read` applies one
 `ReadOptions` to the whole `Query` (`store.rs:117-121`). The four-item query needs
 `from = <FleetPeriodClosed position>` for item 3 and `from = None` for items 1, 2
 and 4, because `CircuitDefined`, `ConnectorCommissioned`, `TokenIssued` and

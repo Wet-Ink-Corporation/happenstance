@@ -240,7 +240,7 @@ written; a callback-driven one can", and reopen `RUNBOOK.md:68`.
 
 ```
 error[E0195]: lifetime parameters or bounds on method `commit` do not match the trait declaration
- --> crates/happenstance/src/projection.rs:109:5
+ --> crates/happenstance-core/src/projection.rs:109:5
 ```
 
 Only the literal `Self::Batch<'_>` spelling compiles. `grep -rn "ProjectionStore for" --include=*.rs .`
@@ -295,7 +295,7 @@ cannot stand while five rows are missing.
   bytes, not "≈ 10". The five attributes live on three wire structs, not the five
   types `revised-runway.md:992-994` names. D1's fix path and D13's fix command
   both say `happenstance-core`, a package that does not exist
-  (`crates/happenstance/Cargo.toml:2`) — they presuppose the §3.6 rename.
+  (`crates/happenstance-core/Cargo.toml:2`) — they presuppose the §3.6 rename.
 - **D1 + D6 must land together.** `AppendCondition::Wire.fail_if_events_match`
   (`append.rs:119-122`) carries no `#[serde(default)]`; `from_str::<AppendCondition>("{}")`
   succeeds only because `Query`'s `Deserialize` is `Option`-shaped. Once D6 makes
@@ -315,7 +315,7 @@ cannot stand while five rows are missing.
   must be brought into line with it. The doc-wording half (four sites say
   "ASCII"; `char::is_control` is Unicode Cc) is a genuine two-word fix.
 - **D10 and D11 interact.** `include_str!("../README.md")` from
-  `crates/happenstance/src/lib.rs` resolves to the *per-crate* README that D11
+  `crates/happenstance-core/src/lib.rs` resolves to the *per-crate* README that D11
   tells you to create — not the workspace README whose Quick start is broken. The
   plan must name which file CI doctests and say whether the other is duplicated
   or left unverified. Phase 0's exit criterion at `revised-runway.md:413` is not

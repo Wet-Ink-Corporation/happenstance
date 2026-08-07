@@ -130,7 +130,7 @@ to describe the world after this document has recorded a different one.
 The drift is not hypothetical. [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md)
 decided that `happenstance-runtime` ceases to exist and the contract crate becomes
 `happenstance-core`; `ls crates/` returns `happenstance-runtime` today and
-`crates/happenstance/Cargo.toml:2` still names the contract crate `happenstance`.
+`crates/happenstance-core/Cargo.toml:2` still names the contract crate `happenstance`.
 `CLAUDE.md` still lists `happenstance-runtime` as a "named seam" and still carries
 "whether `happenstance-runtime` is the right name" as an open question, which
 `PRESSURE-TEST.md:389-393` records as an accepted-but-unexecuted rename already
@@ -335,8 +335,8 @@ wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance/src/store.rs:117-145` | Two methods; 27 conformance rules; one reference implementation (`memory.rs:147`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure is the seven empty far ends of §6.5's portfolio |
-| **`ProjectionStore`** | `crates/happenstance/src/projection.rs` | The trait and nothing else. `grep -rn "ProjectionStore for"` matches nothing in the workspace (`PRESSURE-TEST.md:246-248`) | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:117-145` | Two methods; 27 conformance rules; one reference implementation (`memory.rs:147`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure is the seven empty far ends of §6.5's portfolio |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait and nothing else. `grep -rn "ProjectionStore for"` matches nothing in the workspace (`PRESSURE-TEST.md:246-248`) | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | No trait at all. A module doc comment and a one-variant error enum (`:103-112`), whose own prose ends *"None of this is settled"* (`:98-99`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point. `EventStore` is frozen because it has evidence:
@@ -537,7 +537,7 @@ new `append_preserves_event_type_and_tags_byte_for_byte`
 makes history forgeable by any caller and gives two peers no way to agree on
 which of two identically-identified events is the real one.
 
-The four fields are what `crates/happenstance/src/event.rs:183-188` already has,
+The four fields are what `crates/happenstance-core/src/event.rs:183-188` already has,
 so this clause changes nothing about `Event` and exists to close the four
 questions repeatedly asked of it.
 
@@ -576,7 +576,7 @@ nothing reporting it.
 
 This is the reason the identity in VT-5 is a store-assigned pair rather than a
 hash of the event's contents. It is also why an `Event` is cheap to clone —
-`Bytes` clones are refcount bumps — and why `crates/happenstance/src/memory.rs`
+`Bytes` clones are refcount bumps — and why `crates/happenstance-core/src/memory.rs`
 cloning on the write path is a performance note rather than a correctness one.
 
 #### VT-3 — Everything replication must reason about is in the type or the tags
@@ -596,7 +596,7 @@ payload decode.
 `Rejects:` the identity scheme `crates/happenstance-sync/src/lib.rs:73-75`
 currently proposes — "a UUIDv7 or a content hash in the event's **metadata**".
 `Tags` and `EventType` are the only things `QueryItem::matches` looks at
-(`crates/happenstance/src/query.rs:113-116`), so an identity in `metadata` is
+(`crates/happenstance-core/src/query.rs:113-116`), so an identity in `metadata` is
 structurally invisible to the port. A peer that must deserialise opaque bytes to
 decide whether it has already seen an event has broken ADR-0003 at the exact
 point ADR-0003 claims to win.
@@ -747,7 +747,7 @@ a `Query` and without parsing any payload.
 `oid:sov-aurora-3f9c#38103` on every event — which is presented as free and is
 not. It puts a maximally high-cardinality entry in the one column adapters are
 told to index; it enters every `contains_all` merge-scan
-(`crates/happenstance/src/tag.rs:231-245`) on every query in the system; it makes
+(`crates/happenstance-core/src/tag.rs:231-245`) on every query in the system; it makes
 identity writer-forgeable; and because tags participate in matching, every
 tag-only query in every domain now ranges over an identity dimension nobody
 asked for.
@@ -879,7 +879,7 @@ entry point in the contract crate puts `happenstance`'s publish schedule behind
 
 *A trait in `happenstance-sync`.* Chosen. It is the posture that crate already
 adopts for itself — "this crate defines the third [port]"
-(`sync/lib.rs:7-11`) — and the coherence question resolves cleanly: the adapter
+(`crates/happenstance-sync/src/lib.rs:7-11`) — and the coherence question resolves cleanly: the adapter
 crate depends on both `happenstance` and `happenstance-sync`, so
 `impl IngestStore for SqliteEventStore` has a local type in the trait reference
 and the orphan rule permits it. What is *not* possible, and is worth saying
@@ -1994,7 +1994,7 @@ never call the method.
   but not `Sync` — a `Cell` in a cursor, an `Rc` in a page buffer — is rejected
   with `error[E0277]: cannot be shared between threads safely`. It also is not one
   line at the impl sites, which spell the bound by hand: `memory.rs:154` and
-  `happenstance-sqlite/src/event_store.rs:65` both write `+ Send` and would both
+  `crates/happenstance-sqlite/src/event_store.rs:65` both write `+ Send` and would both
   need `+ Send + Sync`. Nothing in the workspace has been checked against that.
 
 #### ES-4 — One provided body must type-check under both flavours simultaneously
@@ -2077,7 +2077,7 @@ stringifying a `JsValue` loses nothing the caller needs, and
 evidence, and the two in-tree "confirmations" are free by construction:
 `MemoryStoreError` is uninhabited (`memory.rs:143-145`) and
 `SqliteEventStoreError` is a single placeholder variant
-(`happenstance-sqlite/src/event_store.rs:52-56`). Neither could fail the bound if
+(`crates/happenstance-sqlite/src/event_store.rs:52-56`). Neither could fail the bound if
 it were wrong.
 
 This is **semver-visible and must be decided before publish** (ES-5: it cannot be
@@ -2107,7 +2107,7 @@ crate — and which is also ADR-0001's own lift condition.]**
 confirming a downstream direct impl is accepted. Nothing in the tree corroborates
 it: `grep -rn "impl EventStore for"` over the workspace returns **nothing**, and
 both existing impls are `SendEventStore` (`memory.rs:147`,
-`happenstance-sqlite/src/event_store.rs:58`), one of which is `todo!()`. The bare
+`crates/happenstance-sqlite/src/event_store.rs:58`), one of which is `todo!()`. The bare
 flavour — the entire justification for the two-trait design — has zero
 implementers, which is precisely why ADR-0001 is still marked provisional.
 
@@ -2360,6 +2360,12 @@ rewrite a query's *items*.
   both of whose items match it, asserting it appears once; and
   `query_item_order_does_not_change_the_result_set` **(new)**.
 - **Cases:** E2E-32.
+- **Retires:** `query_all_matches_every_event` — superseded by this clause's
+  `duplicate_items_do_not_duplicate_events`. The existing rule appends three
+  *untagged* events, so the fan-out a tag join without `DISTINCT` produces cannot
+  occur; it is not wrong, it is weaker than the clause it would be protecting, and
+  a clause naming it would be claiming coverage it does not have. Phase 3 rewrites
+  it rather than keeping both.
 - **Rejects:** two real implementations. A tag join without `DISTINCT`: an event
   carrying three tags yields three rows, and nothing in the suite reads
   `Query::all()` on a store holding a multi-tagged event, so it passes today. And
@@ -2446,7 +2452,7 @@ every path.
 - **Cases:** E2E-36, E2E-39.
 - **Rejects:** an adapter that loses metadata or tag order while copying into its
   own row type — concretely, the SQLite shape that stores tags in a side table
-  (`happenstance-sqlite/src/event_store.rs:21-27`) and forgets to write
+  (`crates/happenstance-sqlite/src/event_store.rs:21-27`) and forgets to write
   `metadata`. `append_preserves_event_payload` compares the whole `Event` and
   catches it.
 
@@ -2644,7 +2650,7 @@ win.
   limit — a rule that pins a *non*-guarantee, so that an adapter cannot quietly
   strengthen it and leave callers depending on behaviour the contract disclaims.
 - **Cases:** E2E-07, E2E-33, E2E-36.
-- **Rejects:** the metadata-key proposal in `happenstance-sync/src/lib.rs:73-75`,
+- **Rejects:** the metadata-key proposal in `crates/happenstance-sync/src/lib.rs:73-75`,
   and equally the naive fix of promoting identity to a tag — maximal cardinality in
   the column adapters are told to index, an entry in every `contains_all`
   merge-scan (`tag.rs:231-245`), a writer-forgeable identity, and an identity
@@ -2757,10 +2763,16 @@ across the query.
   clause's content is that the *condition* path is evaluated by those same rules,
   which no existing rule checks.
 - **Cases:** E2E-55, E2E-03; PRESSURE-TEST §3.9.
+- **Retires:** `racing_conditional_appends_elect_one_winner` — its one tagged
+  condition runs against a store where a type-only probe returns an identical
+  verdict (`crates/happenstance-testkit/src/suite.rs:603-605`), so it cannot
+  observe the property this clause exists to enforce. It is also sequential and
+  single-handle, which is why ES-34 declines to name it either. Phase 3 replaces
+  it with this clause's rule and CF-7's.
 - **Rejects:** an adapter that drops the tag join from its condition probe. This
   is the natural first cut, because the join is the expensive half and the planned
   SQLite schema puts tags in a separate table
-  (`happenstance-sqlite/src/event_store.rs:21-27`). Every append-condition rule in
+  (`crates/happenstance-sqlite/src/event_store.rs:21-27`). Every append-condition rule in
   the suite builds its condition from `query_of_types` — `suite.rs:390`, `:447`,
   `:465`, `:483`, `:501`, `:519`, `:537`, `:561` — and the one tagged condition
   (`:603-605`) runs against a store where a type-only probe returns identical
@@ -2814,7 +2826,7 @@ the private format nothing.
 
 - **Rule:** `wire_condition_with_after_is_refused` **(new)**, in
   `happenstance-sync-testkit` — SY-6's rule, named once there and cited here; the
-  crate is named at `happenstance-sync/src/lib.rs:9-11` and does not exist.
+  crate is named at `crates/happenstance-sync/src/lib.rs:9-11` and does not exist.
 - **Cases:** E2E-37, E2E-38, E2E-56.
 - **Rejects:** a hub that deserialises a peer's condition and evaluates it
   verbatim. `AppendCondition` is `#[non_exhaustive]` with **public** fields
@@ -2853,7 +2865,7 @@ provided form that survives the clone into the variant needs `where Self: Sync`
 `Rc`-shared cursor — is `!Sync`, and that adapter is the entire reason the bare
 flavour exists. A provided method the edge adapter cannot call is a method the
 port does not have. The cost of "required" is two impls today, one of which is
-`todo!()` (`memory.rs:147`, `happenstance-sqlite/src/event_store.rs:58`), and the
+`todo!()` (`memory.rs:147`, `crates/happenstance-sqlite/src/event_store.rs:58`), and the
 blanket impl forwards it for free (`variant.rs:194-237`), so generic code pays
 nothing.
 
@@ -2947,7 +2959,7 @@ ES-15 pins the algebra that runner depends on.
 
 Everything in this subsection is currently unreachable, and for one shared reason:
 the conformance macro re-evaluates its factory expression once per test
-(`testkit/src/lib.rs:83-91`) and every rule calls it exactly once
+(`crates/happenstance-testkit/src/lib.rs:83-91`) and every rule calls it exactly once
 (`suite.rs:71` and identically throughout). The signature `F: Fn() -> S` already
 *permits* two handles and nothing *asks* for it, so durability, reopen and genuine
 multi-connection rules are all foreclosed by the fixture shape rather than by any
@@ -2974,7 +2986,7 @@ points both handles at one temporary path; a pooled adapter hands out two pool
 members.
 
 - **Rule:** this is a conformance obligation on the testkit rather than on an
-  adapter's behaviour; it is the enabling condition for
+  adapter's behaviour; it is the enabling condition for the **(new)** rules
   `two_handles_share_one_consistency_boundary`,
   `head_advances_across_two_handles` and `acknowledged_writes_survive_a_reopen`,
   and it is stated as a clause because the suite cannot grow any of those three
@@ -3014,7 +3026,7 @@ readable after the backing store is closed and reopened. Durability is a declare
 capability: an adapter that does not claim it MUST document that it does not, and
 MUST NOT be presented as an event store of record.
 
-**[PROVISIONAL — axis: **durability**, whose far end is unbuilt and, until CF-17 changes the fixture, is not even expressible: `conformance_test!` re-evaluates the factory per test (`testkit/src/lib.rs:83-91`), so no rule can hold a store across a reopen. Nothing in the workspace can currently fail a store that returns `Ok` from `append` and loses the write. Falsified by the first file-backed adapter, or sooner by the fixture that lets the question be asked.]**
+**[PROVISIONAL — axis: **durability**, whose far end is unbuilt and, until CF-17 changes the fixture, is not even expressible: `conformance_test!` re-evaluates the factory per test (`crates/happenstance-testkit/src/lib.rs:83-91`), so no rule can hold a store across a reopen. Nothing in the workspace can currently fail a store that returns `Ok` from `append` and loses the write. Falsified by the first file-backed adapter, or sooner by the fixture that lets the question be asked.]**
 
 Opt-in rather than universal, because `MemoryEventStore` must keep passing and is
 by construction not durable (`memory.rs:14-33`). A capability that the reference
@@ -3236,7 +3248,7 @@ disk passes by auto-trait leakage on a concrete type and cannot fail.
 ## 4. The `ProjectionStore` port
 
 The port declares itself provisional in its own first paragraph —
-*"a port without a conformance suite is a guess"* (`crates/happenstance/src/projection.rs:3-11`).
+*"a port without a conformance suite is a guess"* (`crates/happenstance-core/src/projection.rs:3-11`).
 This section's job is not to remove that marker. It is to state precisely what
 would remove it, and to settle enough of the shape that an adapter can be built
 against something other than a guess.
@@ -3373,7 +3385,7 @@ pub trait ProjectionStore {
 
 Two enums rather than one `ProjectionError<E>` covering both operations. The
 alternative was tried on paper and lost for the reason `AppendError`
-(`crates/happenstance/src/error.rs:150-165`) is shaped the way it is: a caller
+(`crates/happenstance-core/src/error.rs:150-165`) is shaped the way it is: a caller
 matching on the result of `commit` should not have to consider `Refused`, which
 `commit` cannot produce, and `#[non_exhaustive]` already forces a wildcard arm
 without also forcing dead ones.
@@ -4543,11 +4555,11 @@ asserted nothing" and "I forgot to assert"; that remains a typed-layer concern,
 and no clause in this specification claims it.
 
 *Rejects:* the receiver that re-evaluates the origin's condition verbatim, which
-is what Kestrel Cold Chain's D5 specified and what `sync/lib.rs:78-83` frames as
+is what Kestrel Cold Chain's D5 specified and what `crates/happenstance-sync/src/lib.rs:78-83` frames as
 one of two options. Two independent defects, either fatal:
 
 - `after` is a `SequencePosition`, meaningful only inside the store that assigned
-  it (`sync/lib.rs:64-69`), and it serialises as a naked integer
+  it (`crates/happenstance-sync/src/lib.rs:64-69`), and it serialises as a naked integer
   (`append.rs:117-123`). `is_violated_by` compares raw position values
   (`append.rs:95-107`), so `after: 288455` interpreted in the receiver's
   numbering names an unrelated recent event and the check runs over an arbitrary
@@ -4599,7 +4611,7 @@ is exactly the kind of thing that belongs to a runner rather than to a transport
 
 ### 5.2 One peer, and a runner above it
 
-`sync/lib.rs:28-36` already states this and states it correctly. It is promoted
+`crates/happenstance-sync/src/lib.rs:28-36` already states this and states it correctly. It is promoted
 to a clause because the pressure test's own finding about the projection port —
 that the *suite*, not the runner, is what forces a port's shape
 (`PRESSURE-TEST.md:220-234`) — applies here identically, and because Kestrel
@@ -4658,7 +4670,7 @@ Rule: `directional_merge_rules_compose` (new, `happenstance-sync-testkit`).
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
-push. `sync/lib.rs:45-51` already says why and the scenarios confirm it: the hub
+push. `crates/happenstance-sync/src/lib.rs:45-51` already says why and the scenarios confirm it: the hub
 sees every log and can therefore adjudicate; a spoke sees one and cannot. Kestrel
 Cold Chain's edge tier is strictly hub-and-spoke for a *commercial* reason — a
 spoke's slice is a confidentiality boundary, and Scottish subcontractors must not
@@ -4700,7 +4712,7 @@ Rule: `dedupe_reaches_identity_without_decoding` (new,
 are not valid UTF-8 and not valid in any codec; a conformant peer dedupes anyway.
 Cases: E2E-33, E2E-34, E2E-36.
 
-*Rejects:* the sync crate's own current proposal. `sync/lib.rs:73-75` suggests "a
+*Rejects:* the sync crate's own current proposal. `crates/happenstance-sync/src/lib.rs:73-75` suggests "a
 UUIDv7 or a content hash in the event's **metadata**". Metadata is opaque
 `Bytes` (`event.rs:187`, `:239`) and `QueryItem::matches` filters on type and
 tags only (`query.rs:113-116`), so the identity a peer is instructed to carry is
@@ -4802,7 +4814,7 @@ scale, which is a deployment fact rather than a port defect.
 
 ### 5.4 The transport floor
 
-`sync/lib.rs:91-96` calls this "the constraint most likely to be discovered
+`crates/happenstance-sync/src/lib.rs:91-96` calls this "the constraint most likely to be discovered
 late". It is promoted from a footnote to a normative constraint on the port's
 shape, because a port that a Neon peer cannot implement is a port shaped like a
 Durable Object — and the workspace has already convicted itself of exactly that
@@ -4869,7 +4881,7 @@ peer holding a `!Send` store behind an `Rc`.
 Cases: E2E-52, E2E-30.
 
 *Rejects:* any runner that reaches for `SendEventStore` in order to
-`tokio::spawn` a per-peer task. `sync/lib.rs:87-90` states the wasm32
+`tokio::spawn` a per-peer task. `crates/happenstance-sync/src/lib.rs:87-90` states the wasm32
 requirement, but understates it: in Kestrel Cold Chain the `!Send` peer — SQLite
 inside a Cloudflare Durable Object — sits in the **middle** of the chain, not at
 a leaf. It is a spoke to the Neon estate store and a hub to 138 tablets. A runner
@@ -4892,7 +4904,7 @@ Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`).
 Cases: E2E-35.
 
 *Rejects:* the current situation, which is that there is nowhere to declare a
-capability at all — `sync/lib.rs:103-112` is the entire crate. The contract
+capability at all — `crates/happenstance-sync/src/lib.rs:103-112` is the entire crate. The contract
 bounds the two fields no engine struggles with, `MAX_EVENT_TYPE_LEN` and
 `MAX_TAG_LEN`, both 255 (`event.rs:14`, `tag.rs:14`), and leaves `Event::data`
 unbounded. So an event that is durable at its origin can be structurally
@@ -4934,7 +4946,7 @@ this belief holding: the same fourteen events sit at vessel position 38,102 and
 depot position 3,918,442, each store internally correct, each peer's total order
 naming the other as the loser. There is no expression relating the two numbers
 and none can be constructed, because `SequencePosition` carries no origin
-(`sync/lib.rs:64-69`).
+(`crates/happenstance-sync/src/lib.rs:64-69`).
 
 ---
 
@@ -4961,7 +4973,7 @@ addition, not because anything checked, and this clause is what turns that from
 luck into a property.
 
 This is the clause that makes convergence **checkable rather than hoped for**.
-`sync/lib.rs:84-86` states the premise — merging two independently-ordered logs
+`crates/happenstance-sync/src/lib.rs:84-86` states the premise — merging two independently-ordered logs
 means accepting that a replicated event's local position differs from its origin
 position — and stops there. What it does not say is that the acceptance has a
 price, and that the price is paid by every fold downstream.
@@ -5605,7 +5617,7 @@ Rejects: the saboteur — `struct AlwaysWrong; impl EventStore for AlwaysWrong {
 — which satisfies CF-1 mechanically and proves nothing, because no author would
 have written it. The mutant that earns its place is the one someone would ship:
 dropping the tag join because tags live in a second table
-(`happenstance-sqlite/src/event_store.rs:21-27`), caching `max(position)` per
+(`crates/happenstance-sqlite/src/event_store.rs:21-27`), caching `max(position)` per
 session, evaluating each `QueryItem` as its own statement.
 
 **CF-5.** The testkit MUST also hold at least one *conformant variant* — a store
@@ -5658,7 +5670,7 @@ against a store holding one untagged `CourseDefined` (`:600`) and one tagged
 `StudentSubscribed` (`:607`), so a type-only probe returns the identical verdict
 at `:612` and `:621`. The tag join is the expensive half and lives in a separate
 table in the planned SQLite adapter
-(`happenstance-sqlite/src/event_store.rs:21-27`), which makes dropping it the
+(`crates/happenstance-sqlite/src/event_store.rs:21-27`), which makes dropping it the
 natural first cut. Such an adapter rejects every command touching any course, and
 passes all twenty-seven rules while doing it: a total-availability failure
 certified as conformant, on the canonical DCB uniqueness shape.
@@ -5876,7 +5888,7 @@ Rule: a doctest in `fixtures` constructing a strategy, which fails to compile if
 the item is not public.
 Cases: E2E-32.
 Rejects: the current arrangement, which makes the testkit's own claim false.
-`tests/properties.rs:7-10` says the laws live in the testkit "because they are
+`crates/happenstance-testkit/tests/properties.rs:7-10` says the laws live in the testkit "because they are
 the same claims an adapter must satisfy — an adapter that pushes query matching
 down into SQL ... should be able to reuse the generators", and the generators are
 private functions in an integration-test binary (`properties.rs:19-29`),

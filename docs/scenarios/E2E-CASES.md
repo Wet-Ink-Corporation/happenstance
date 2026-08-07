@@ -53,9 +53,9 @@ marked **⚠ crate does not exist**.
 **THEN** no event at a position ≤ *P* is yielded that was not yielded before.
 
 **Falsifies:** that `AppendCondition::after` enforces a consistency boundary.
-`is_violated_by` compares position *values* (`crates/happenstance/src/append.rs:95-107`)
+`is_violated_by` compares position *values* (`crates/happenstance-core/src/append.rs:95-107`)
 and nothing in the contract requires an event becoming visible later to carry a
-higher position. `crates/happenstance/src/event.rs:92-97` documents uniqueness,
+higher position. `crates/happenstance-core/src/event.rs:92-97` documents uniqueness,
 monotonicity and permitted gaps — all properties of *assignment*, none of
 *visibility*.
 
@@ -82,13 +82,13 @@ exactly 1…*N*, or the contract states that it may grow and says what a caller 
 conclude from the last position it saw.
 
 **Falsifies:** that a checkpoint derived from a streamed read names a complete
-prefix. `crates/happenstance/src/store.rs:101-121` specifies laziness, ordering
+prefix. `crates/happenstance-core/src/store.rs:101-121` specifies laziness, ordering
 and inclusivity and says nothing about isolation.
 
 **Rejects:** a self-paginating adapter over one-shot HTTP that issues one
 independent `WHERE position > $last ORDER BY position LIMIT 5000` statement per
 chunk. `MemoryEventStore` filters under the lock and streams from a snapshot
-(`crates/happenstance/src/memory.rs:157-181`); the paginating adapter cannot.
+(`crates/happenstance-core/src/memory.rs:157-181`); the paginating adapter cannot.
 Both are conformant today and they have opposite semantics.
 
 ---
@@ -138,7 +138,7 @@ definitional events.
 
 **Falsifies:** that `ReadOptions` is sufficient to bound a decision model.
 `ReadOptions.from` is one `Option<SequencePosition>` for the entire read
-(`crates/happenstance/src/query.rs:226-234`) and `read` applies one `ReadOptions`
+(`crates/happenstance-core/src/query.rs:226-234`) and `read` applies one `ReadOptions`
 to the whole `Query` (`store.rs:117-121`).
 
 **Rejects:** every adapter, today, and — more usefully — it rejects the
@@ -211,7 +211,7 @@ and whichever of the two the contract states is the one observed.
 durability statement. It covers partial batches and says nothing about a dropped
 future, which at the edge is the *normal* termination path: client disconnect, CPU
 limit, Durable Object eviction, pod eviction. `AppendError` has three variants and
-none means "the outcome is unknown" (`crates/happenstance/src/error.rs:148-166`).
+none means "the outcome is unknown" (`crates/happenstance-core/src/error.rs:148-166`).
 
 **Rejects:** a pooled rusqlite adapter that does its work in `spawn_blocking`. A
 dropped `JoinHandle` does not cancel the closure: the COMMIT executes and the
@@ -285,7 +285,7 @@ Durable Object adapter would actually fail. `MemoryEventStore` cannot surface it
 
 **Falsifies:** that the documented resume recipe is safe on a gapped store.
 `ProjectionStore::checkpoint` says to feed its result to `ReadOptions::from`
-"after advancing past it" (`crates/happenstance/src/projection.rs:87-88`), `from`
+"after advancing past it" (`crates/happenstance-core/src/projection.rs:87-88`), `from`
 is inclusive (`query.rs:228-229`), and the only advance is
 `SequencePosition::next()`, whose own documentation says it is "only meaningful
 for adapters that allocate positions densely" (`event.rs:138-144`). Every existing

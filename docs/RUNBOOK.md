@@ -586,14 +586,14 @@ taken.
       `xtask/src/main.rs:121` selects that step as `&REQUIRED[3..4]` by index —
       select it by name. `.github/workflows/ci.yml`'s `package:` list needs the
       same repoint.
-- [ ] **Re-anchor the specification's crate paths.** `SPECIFICATION.md` was
+- [x] **Re-anchor the specification's crate paths.** `SPECIFICATION.md` was
       written against the tree at `2a65d76` and cites `crates/happenstance/src/…`
       for the contract crate. After the rename those are `crates/happenstance-core/src/…`.
       CF-38's checker will otherwise dangle on every one of them. The document is
       a single assembled file, so this is one pass over one file — but it must run
       *after* the rename lands, not alongside it, because a citation rewritten
       before the path it names exists cannot be verified by anything.
-- [ ] **Build `cargo xtask spec-trace`** (CF-38), which is the *only* conformance
+- [x] **Build `cargo xtask spec-trace`** (CF-38), which is the *only* conformance
       rule CF-35, CF-36 and CF-37 name and which nothing in the workspace builds.
       This file cites it twice as a live gate — here, and in phase 13's exit
       criterion that a renewed deferral without a named experiment is a build
@@ -611,6 +611,11 @@ taken.
       have to drop the check that catches a rule outliving its clause. Add it to
       `xtask`'s `REQUIRED` list **by name, not by index** — the same defect the
       wasm32 step already has at `xtask/src/main.rs:121`.
+- [x] **The checker and §1.3's hand count agree exactly** — 193 clauses, 132
+      FROZEN, 46 PROVISIONAL, 13 DEFERRED, 2 NON-NORMATIVE. They did not at first,
+      and every discrepancy turned out to be a checker bug rather than a document
+      one; converging on the number a reader computed by hand is the best evidence
+      available that the parser now reads the document the way a person does.
 - [ ] **Regenerate `SPECIFICATION.md` §7.2 from the checker, and stop hand-editing
       it.** The table was computed by hand at `2a65d76` and has never been
       verified; where it and the checker disagree, the checker is right, which is
@@ -750,7 +755,7 @@ one of the four that could have been faked by a checker that does nothing.
 - [ ] `cargo package --list` is a gate step and asserts on its output.
 - [ ] No document in the repository names `happenstance` when it means the
       contract crate — including `SPECIFICATION.md`'s file citations.
-- [ ] `cargo xtask spec-trace` is a named step in `REQUIRED`, and it has been
+- [x] `cargo xtask spec-trace` is a named step in `REQUIRED`, and it has been
       demonstrated to fail on a deliberately broken clause. A checker nobody has
       seen reject anything is the decorative-rule failure applied to tooling.
 - [ ] `git status` clean; `cargo xtask ci` green with the seven new steps.
