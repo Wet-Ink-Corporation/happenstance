@@ -34,6 +34,11 @@
 //! one.
 
 #![doc(html_no_source)]
+// `clippy::todo` is denied workspace-wide. This crate is the one exception, and
+// the exception is scoped here rather than left open in the workspace manifest so
+// that it is visible in review and disappears with the last `todo!()` rather than
+// outliving it. Phase 8 removes both the bodies and this line.
+#![allow(clippy::todo)]
 
 #[cfg(feature = "event-store")]
 pub mod event_store;

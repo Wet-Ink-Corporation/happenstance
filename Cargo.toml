@@ -54,10 +54,17 @@ module_name_repetitions = "allow"
 # Public fallible/panicking APIs must document why.
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
-# No silent unwraps in library code; tests override locally.
-unwrap_used = "warn"
-# Stub crates are intentionally unimplemented until their adapter pass lands.
-todo = "allow"
+# No silent unwraps in library code; test modules override locally with a scoped
+# `#![allow(clippy::unwrap_used)]`. Denied rather than warned: CI passes `-D
+# warnings` anyway, so `warn` differed from `deny` only in whether a local build
+# let it slide — and a lint you can ignore locally is one you learn to ignore.
+unwrap_used = "deny"
+# Was `allow`, workspace-wide, for stub crates that were "intentionally
+# unimplemented". Denied now, because a grep found no `todo!()` anywhere in the
+# workspace — the allow protected nothing and would have silently accepted the
+# first real one. A crate that needs it can opt in with a scoped
+# `#![allow(clippy::todo)]`, which is visible in review; this was not.
+todo = "deny"
 # We apply `#[must_use]` deliberately rather than exhaustively; the lint fires on
 # every pure accessor and drowns out real findings.
 must_use_candidate = "allow"

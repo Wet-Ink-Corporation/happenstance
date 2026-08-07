@@ -679,7 +679,7 @@ taken.
       (`PRESSURE-TEST.md:398-400`), so the gate is stricter locally than the file
       says. Append to constraint 5: *until first publish the MSRV is a preference,
       not a promise — weigh it, do not obey it.*
-- [ ] **Fix D10.** Make the README compile:
+- [x] **Fix D10.** Make the README compile:
       `#![cfg_attr(doctest, doc = include_str!("../README.md"))]`, then fix
       `README.md:89-102` and the Quick start with hidden
       `# #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {` wrappers,
@@ -689,23 +689,23 @@ taken.
       one whose Quick start is broken. Say whether the other is duplicated or left
       unverified; the previous plan's exit criterion was not achieved by its own
       task list (`PRESSURE-TEST.md:318-323`).
-- [ ] **Fix D11.** Copy `LICENSE-MIT` and `LICENSE-APACHE` into each publishable
+- [x] **Fix D11.** Copy `LICENSE-MIT` and `LICENSE-APACHE` into each publishable
       crate directory — Cargo will not follow paths outside the package root and
       Windows makes symlinks awkward — write a per-crate `README.md`, add
       `readme = "README.md"`, add `homepage` to `[workspace.package]`. Add
       `cargo package -p <crate> --list` to the gate asserting the licences and
       README are in the artifact; `cargo publish --dry-run` does not warn.
-- [ ] **Fix D12.** `serde = ["dep:serde", "bytes/serde", "serde/alloc"]`. The
+- [x] **Fix D12.** `serde = ["dep:serde", "bytes/serde", "serde/alloc"]`. The
       feature currently compiles only because `bytes` happens to enable
       `serde/alloc` transitively.
-- [ ] **Fix D13.** Add `cargo doc -p happenstance-core --no-default-features
+- [x] **Fix D13.** Add `cargo doc -p happenstance-core --no-default-features
       --no-deps` to the gate — three unconditional intra-doc links currently make
       the `no_std` configuration a hard error, and the powerset step runs `check`,
       not `doc`. Add a nightly `RUSTDOCFLAGS="--cfg docsrs -D warnings"` step
       behind a toolchain probe. Widen the wasm32 step to the feature powerset
       while keeping one mandatory plain `cargo check`, so the constraint-1 guard
       cannot become skippable. Add `--locked`.
-- [ ] **Close the lint hole.** `Cargo.toml:59` is `todo = "allow"` workspace-wide.
+- [x] **Close the lint hole.** `Cargo.toml:59` is `todo = "allow"` workspace-wide.
       Make it `deny`, with `#![allow(clippy::todo)]` in the stub crates that need
       it. Same for `unwrap_used`, currently `warn` at `Cargo.toml:57`, since the
       test modules already opt out locally.
@@ -714,10 +714,10 @@ taken.
       something today, and correct CONTRIBUTING.md, which claims a registry
       baseline that does not exist.
 - [ ] Weekly `schedule:` job running only `cargo deny check advisories`.
-- [ ] A CI job running `cargo test --workspace` at the 1.85 MSRV. `proptest
+- [x] A CI job running `cargo test --workspace` at the 1.85 MSRV. `proptest
       1.11.0` and `getrandom 0.4.3` both declare `rust-version = 1.85`, and CI's
       `--no-dev-deps` cannot see them: zero headroom, verified nowhere.
-- [ ] `CHANGELOG.md` with an `## [Unreleased]` section, started now rather than
+- [x] `CHANGELOG.md` with an `## [Unreleased]` section, started now rather than
       reconstructed from twelve phases of history at publish time.
 - [x] **`.idea/` and `.mcp.json` are gitignored.** Done ahead of this phase,
       because every phase's exit gate references a clean tree and until this landed
