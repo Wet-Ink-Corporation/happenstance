@@ -575,7 +575,7 @@ taken.
 
 **Work**
 
-- [ ] **Execute the ADR-0006 rename**, in its own commit with nothing else in it.
+- [x] **Execute the ADR-0006 rename**, in its own commit with nothing else in it.
       `happenstance` → `happenstance-core`; `happenstance-runtime` →
       `happenstance`, shipping day one as a five-line facade
       (`pub use happenstance_core::*;`) so `cargo add happenstance` is true
@@ -662,11 +662,18 @@ taken.
       The reason it is a command and not a note here: the claims are weeks apart,
       and a procedure run that rarely from memory is one that drifts. Forgetting
       the licence files once ships a crate without them permanently.
-- [ ] **Rewrite the documents the rename inverts.** CLAUDE.md's "What this is",
-      repository map, dependency rule, and constraint 2 — which after the rename
-      would forbid `serde` to the crate whose job *is* encoding and permit it into
-      the contract crate, the exact inversion of ADR-0003. ADR-0001/0003/0004
-      bodies. `happenstance-runtime/src/lib.rs:10`. Add the "On the historical
+- [ ] **Rewrite the documents the rename inverts.** Partly done: CLAUDE.md's
+      repository map, dependency rule and constraint 2 are corrected, the settled
+      `happenstance-runtime` open question is struck through rather than deleted,
+      README's status table is repointed, and CONTRIBUTING now names
+      `happenstance-core` in the gate description. Constraint 2 was the one that
+      *inverted*: it forbade `serde` to the crate whose job is now encoding, and
+      would have permitted it into the contract crate — the exact reverse of
+      ADR-0003. It now says which crate it means and why the distinction matters.
+
+      Still to do here: CLAUDE.md's "What this is" paragraph, the ADR-0001/0003/0004
+      bodies, and the old runtime crate docs (that file is now
+      `crates/happenstance/src/lib.rs`, rewritten as the facade). Add the "On the historical
       record" section to ADR-0006. Correct CLAUDE.md's claim that `cargo hack` and
       `cargo deny` are not installed — both resolve on this machine
       (`PRESSURE-TEST.md:398-400`), so the gate is stricter locally than the file

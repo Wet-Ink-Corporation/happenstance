@@ -24,9 +24,9 @@ When a construct is unusual, say what the alternative was and why it lost.
 ## Repository map
 
 ```
-crates/happenstance/             the contract. types, ports, errors, in-memory store.
+crates/happenstance-core/        the contract. types, ports, errors, in-memory store.
+crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
-crates/happenstance-runtime/     🔲 named seam: codecs, DomainEvent, decision models.
 crates/happenstance-sqlite/      🔲 stub. event store + projection store.
 crates/happenstance-ladybug/     🔲 stub. graph projection store only.
 crates/happenstance-postgres/    🔲 planned. the target that does not serialise writers.
@@ -37,8 +37,8 @@ xtask/                           `cargo xtask ci` — the whole gate, defined on
 docs/adr/                        the decisions this design rests on.
 ```
 
-Dependency rule: **everything depends on `happenstance`; `happenstance` depends
-on nothing in this workspace.** No adapter may depend on another adapter.
+Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
+depends on nothing in this workspace.** No adapter may depend on another adapter.
 
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters: `happenstance-sync` is itself a port crate. Peer adapters
@@ -55,9 +55,15 @@ code around it.
    `wasm32` / Cloudflare Workers target impossible. Ports are defined once
    without a `Send` bound and `trait_variant` derives the `Send` flavour.
    (ADR-0001)
-2. **Never put `serde` in `happenstance`'s default features.** Payloads are
+2. **Never put `serde` in `happenstance-core`'s default features.** Payloads are
    opaque `Bytes`. The `serde` feature covers envelope types only, for
    replication. (ADR-0003)
+
+   Read the crate name carefully: this constrains **`happenstance-core`**, and
+   after ADR-0006's rename it says the opposite of what it used to. `happenstance`
+   is now the *typed* layer, whose entire job is encoding — it is the crate that
+   will depend on `serde`, and forbidding it there would forbid the thing the
+   split exists to allow.
 3. **`EventStore::read` returns the stream at the top level and is not
    `async`.** Nesting it inside a future silently drops `+ Send` from the
    stream on the `Send` flavour, defeating the entire two-trait design. There
@@ -163,4 +169,9 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence
   table each cost something real, and the choice is owed a measurement rather
   than a preference.
-- **Whether `happenstance-runtime` is the right name and the right seam.**
+- ~~**Whether `happenstance-runtime` is the right name and the right seam.**~~
+  Settled and executed: [ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)
+  gave the bare name to the typed layer and renamed the contract to
+  `happenstance-core`; [ADR-0007](docs/adr/0007-projection-runner-decodes.md)
+  corrected where the projection runner lives. Kept here struck through rather
+  than deleted, because the crate names in older commits only make sense with it.

@@ -25,10 +25,16 @@ cargo xtask ci
 ```
 
 That is the whole thing: formatting, clippy with `-D warnings`, tests, the
-`wasm32-unknown-unknown` build of `happenstance`, documentation, and — when the
-tools are installed — `cargo hack` feature-powerset and `cargo deny`. It is
+`wasm32-unknown-unknown` build of `happenstance-core`, documentation, and — when
+the tools are installed — `cargo hack` feature-powerset and `cargo deny`. It is
 defined once in `xtask/src/main.rs`, and CI runs exactly the same command. If it
 passes locally, it passes on CI.
+
+That `wasm32` step is load-bearing rather than decorative: it is the only thing
+keeping the `!Send` port flavour honest until a Cloudflare adapter exists. If you
+add a step to the gate, note that `cargo xtask wasm` looks its step up by **name**
+and not by index, deliberately — an index is silent about what it selects, and
+getting it wrong leaves that check running nothing while still printing green.
 
 Optional tools, if you want the full gate locally:
 
@@ -79,3 +85,20 @@ should say what constraint made that the right change.
 
 Pull requests run an extra `cargo-semver-checks` job against the published
 crates. A breaking change is fine — an accidental one is not.
+
+## Licensing of contributions
+
+Unless you state otherwise, any contribution you intentionally submit for
+inclusion in this project — as defined in Apache-2.0 — is licensed under
+`MIT OR Apache-2.0`, with no additional terms or conditions.
+
+This is the Rust ecosystem's "inbound equals outbound" convention: what you send
+in is licensed on the same terms the project ships out. There is no CLA and
+nothing to sign. It exists so the project can keep dual-licensing without having
+to track down past contributors for permission — which is a problem that is
+trivial to prevent and expensive to fix, because the fix is asking every
+contributor you have ever had.
+
+Copyright in the project is held by Wet Ink Corporation (see
+[`LICENSE-MIT`](LICENSE-MIT)); you keep the copyright in what you write, and this
+section is the licence you grant, not an assignment.

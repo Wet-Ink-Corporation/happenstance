@@ -62,14 +62,14 @@ cargo run -p course-subscriptions
 
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
 | [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 27 rules + property tests |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
 | `happenstance-postgres` | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 planned |
 | `happenstance-neon` | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 planned |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
-| [`happenstance-runtime`](crates/happenstance-runtime) | Codecs, typed domain events, decision models | 🔲 named seam, not started |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | 🔲 a facade over `happenstance-core` today |
 
 The stubs are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
