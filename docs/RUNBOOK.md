@@ -143,7 +143,7 @@ turned out to be one DCB already provides.
 
 | # | Phase | Depends on | State | Proof artefact |
 |---|---|---|---|---|
-| 0 | [Ground clear](#phase-0--ground-clear) | — | **done** | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
+| 0 | [Ground clear](#phase-0--ground-clear) | — | done | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
 | 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | not started | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
 | 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | not started | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | not started | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
@@ -311,6 +311,17 @@ scheduling defect.
 - **ADR-0006** is *executed* at phase 0 and gains an "On the historical record"
   section saying that ADR-0001/0003/0004 and CLAUDE.md's constraints are rewritten
   to `happenstance-core` because they were always statements about the ports crate.
+  **Done at phase 0**, and the section enumerates **ADR-0007** too — leaving it out
+  is what let a dead citation survive in it, so the list is the load-bearing part
+  rather than the prose around it. The rule it states, for reuse: *rewrite the
+  referent, never the reasoning.* A superseded body records a reversal and stays
+  verbatim; a renamed crate inside a standing decision is not a reversal at all.
+- **ADR-0001** and **ADR-0003** had their banners' *phase numbers* repointed at
+  phase 0 under that same rule — Cloudflare is phase 9, not 5; sync is phase 13,
+  not 6. The lifting *conditions* are untouched. ADR-0006's own three citations of
+  "phase 3" are deliberately left wrong: this runbook **replaced** its predecessor
+  rather than renumbering it, so no phase 3 became phase 7 and there is no
+  referent to rewrite.
 - **ADR-0007**'s Context is corrected at phase 6 (PS-32): a runner that itself
   writes into the batch cannot be written today; a callback-driven one can, and
   was compiled (`PRESSURE-TEST.md:203-234`). Its **falsifier** — *"if the
