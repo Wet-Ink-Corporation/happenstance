@@ -1613,8 +1613,13 @@ evidence half of E2E-24 (a `Batch` need not be a live transaction).
   required. Five ingredients are each independently necessary, and one of them is
   **`where Self: 'a` on the port's GAT**. If phase 6 drops the GAT, the
   workspace's exposure goes with it. Reproduces on 1.85.1, 1.97.1 and nightly:
-  not a regression, not fixed. *Nothing has been filed or commented upstream* —
-  that is an outward-facing action and it is the repository owner's to take.
+  not a regression, not fixed. Reported upstream as
+  [a comment](https://github.com/rust-lang/rust/issues/158983#issuecomment-5218463761)
+  on the existing issue rather than as a new one, and the reproduction lives in
+  [`docs/experiments/rustc-ice-gat-foreign-trait/`](experiments/rustc-ice-gat-foreign-trait/README.md)
+  with a script that regenerates the bisection — because the table is an **input
+  to phase 6's decision**, not trivia, and a finding that only a session
+  remembers is one phase 6 will have to re-derive.
 
   *The MSRV moved, and the way it broke is the lesson.*
   [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.

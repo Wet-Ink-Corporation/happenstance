@@ -1,0 +1,3 @@
+# Reproducing the ICE means running `rustc` in this directory, which leaves an
+# `.rlib` behind. The two `.rs` files are the artefact; the build output is not.
+*.rlib

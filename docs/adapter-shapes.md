@@ -353,7 +353,12 @@ Reproduces on 1.85.1, 1.97.1 and 1.99.0-nightly, on editions 2018, 2021 and 2024
 — **not a regression, and not fixed on nightly**. It duplicates the open
 [rust-lang/rust#158983](https://github.com/rust-lang/rust/issues/158983), whose
 summary says two crates and `async` are required; the minimisation above shows
-`async` is not.
+`async` is not, and that is
+[reported there](https://github.com/rust-lang/rust/issues/158983#issuecomment-5218463761)
+rather than filed as a new issue.
+
+The reproduction, the bisection and a script that regenerates the table live in
+[`docs/experiments/rustc-ice-gat-foreign-trait/`](experiments/rustc-ice-gat-foreign-trait/README.md).
 
 This matters beyond the bug report. **`where Self: 'a` on the port's GAT is one
 of the five ingredients**, and phase 6 decides whether that GAT survives. If it
