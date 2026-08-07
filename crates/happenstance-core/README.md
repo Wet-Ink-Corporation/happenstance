@@ -32,12 +32,12 @@ would have separated.
 ```rust
 use happenstance_core::{EventStore, MemoryEventStore, Query, ReadOptions, collect};
 
-# async fn example() -> Result<(), Box<dyn core::error::Error>> {
-let store = MemoryEventStore::new();
-let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
-assert!(events.is_empty());
-# Ok(())
-# }
+async fn count_everything() -> Result<(), Box<dyn std::error::Error>> {
+    let store = MemoryEventStore::new();
+    let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
+    assert!(events.is_empty());
+    Ok(())
+}
 ```
 
 ## Guarantees

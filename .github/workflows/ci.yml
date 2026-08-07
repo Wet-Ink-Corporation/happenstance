@@ -54,12 +54,25 @@ jobs:
           toolchain: "1.85"
       - uses: Swatinem/rust-cache@v2
       # `--no-dev-deps` because dev-dependencies are free to require a newer
-      # compiler than the published crates do.
+      # compiler than the published crates do. This is what a *consumer* sees.
       - name: Install cargo-hack
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
       - run: cargo hack check --workspace --no-dev-deps --rust-version
+
+      # And this is what a *contributor* sees, which the step above cannot tell
+      # us: `--no-dev-deps` is precisely the flag that hides `proptest` and
+      # `tokio`, and both declare `rust-version = "1.85"` — exactly the MSRV,
+      # with no headroom at all. So the claim "you can develop this project on
+      # 1.85" was never checked by anything, and the first person to discover it
+      # was false would have been someone who trusted the README.
+      #
+      # It passes today, verified locally at 1.85 on 2026-08-06. It is a
+      # dependency bump away from not passing, and this is the step that says so
+      # before the bump is merged rather than after.
+      - name: Tests at the MSRV, dev-dependencies included
+        run: cargo test --workspace --all-features
 
   # Public API changes must be intentional. This fails a PR that breaks semver
   # without a version bump.

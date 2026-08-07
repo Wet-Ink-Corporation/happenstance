@@ -1,3 +1,10 @@
+// The README's code blocks are compiled as doctests. `cfg(doctest)` keeps the
+// prose out of the rendered documentation — it would otherwise appear twice, once
+// here and once in the module docs below — while still type-checking every
+// example. A README example that does not compile is worse than no example: it
+// is the first thing a reader tries, and the first impression the crate makes.
+// (D10)
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! The happenstance contract: DCB-compliant event sourcing types and storage ports.
 //!
 //! This crate defines *what* an event store is and nothing about *how* one is
@@ -58,14 +65,17 @@
 //!
 //! # Getting started
 //!
-//! Enable the `memory` feature (on by default) and use
-//! [`MemoryEventStore`] — see its documentation for a runnable walkthrough of
-//! the read-decide-append loop.
+//! Enable the `memory` feature (on by default) and use `MemoryEventStore` — see
+//! its documentation for a runnable walkthrough of the read-decide-append loop.
+//!
+//! The name is deliberately not a link here. It would be a broken one whenever
+//! the feature is off, and `cargo doc --no-default-features` treats a broken
+//! intra-doc link as a hard error rather than a warning (D13).
 //!
 //! # Feature flags
 //!
 //! * **`std`** *(default)* — standard library support.
-//! * **`memory`** *(default)* — the [`MemoryEventStore`] reference
+//! * **`memory`** *(default)* — the `MemoryEventStore` reference
 //!   implementation. Implies `std`.
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by

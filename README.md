@@ -27,26 +27,39 @@ The canonical example: a student subscribes to a course, subject to three
 invariants that do not share a boundary.
 
 ```rust
-// Everything this decision depends on, in one query.
-let query = Query::from_items([
-    // The capacity, and everyone currently holding a seat.
-    QueryItem::new(
-        ["CourseDefined", "StudentSubscribed", "StudentUnsubscribed"],
-        Tags::from_pairs([("course", "c1")])?,
-    )?,
-    // This student's own history with this course.
-    QueryItem::new(
-        ["StudentSubscribed", "StudentUnsubscribed"],
-        Tags::from_pairs([("course", "c1"), ("student", "s1")])?,
-    )?,
-])?;
+use happenstance::{
+    AppendCondition, Event, EventStore, Query, QueryItem, Tags, read_decision_model,
+};
 
-let (events, last_seen) = read_decision_model(&store, &query).await?;
-// ... fold `events` into a decision ...
+async fn subscribe<S: EventStore>(
+    store: &S,
+    subscribed: Event,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    S::Error: std::error::Error + 'static,
+{
+    // Everything this decision depends on, in one query.
+    let query = Query::from_items([
+        // The capacity, and everyone currently holding a seat.
+        QueryItem::new(
+            ["CourseDefined", "StudentSubscribed", "StudentUnsubscribed"],
+            Tags::from_pairs([("course", "c1")])?,
+        )?,
+        // This student's own history with this course.
+        QueryItem::new(
+            ["StudentSubscribed", "StudentUnsubscribed"],
+            Tags::from_pairs([("course", "c1"), ("student", "s1")])?,
+        )?,
+    ])?;
 
-// Append only if nothing matching has landed since we looked.
-let condition = AppendCondition::new(query).after_opt(last_seen);
-store.append(&[subscribed], Some(&condition)).await?;
+    let (events, last_seen) = read_decision_model(store, &query).await?;
+    // ... fold `events` into a decision ...
+
+    // Append only if nothing matching has landed since we looked.
+    let condition = AppendCondition::new(query).after_opt(last_seen);
+    store.append(&[subscribed], Some(&condition)).await?;
+    Ok(())
+}
 ```
 
 No aggregate. No saga. One append that is rejected precisely when — and only
@@ -89,17 +102,25 @@ happenstance = "0.1"
 ```rust
 use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
 
-let store = MemoryEventStore::new();
+async fn define_course() -> Result<(), Box<dyn std::error::Error>> {
+    let store = MemoryEventStore::new();
 
-store.append(
-    &[Event::new("CourseDefined", &br#"{"capacity":2}"#[..])?
-        .with_tags(Tags::from_pairs([("course", "c1")])?)],
-    None,
-).await?;
+    store
+        .append(
+            &[Event::new("CourseDefined", &br#"{"capacity":2}"#[..])?
+                .with_tags(Tags::from_pairs([("course", "c1")])?)],
+            None,
+        )
+        .await?;
 
-let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
-assert_eq!(events.len(), 1);
+    let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
+    assert_eq!(events.len(), 1);
+    Ok(())
+}
 ```
+
+This block is compiled by CI. It is a doctest of the `happenstance` crate, so it
+cannot drift from the API the way a README example normally does.
 
 ## Design
 
@@ -148,7 +169,7 @@ want DCB on Postgres today, `disintegrate` below is the mature choice.
 Implement `SendEventStore` (or `EventStore` if your target cannot be `Send`),
 then inherit the entire conformance suite:
 
-```rust
+```rust,ignore
 happenstance_testkit::event_store_conformance!(MyEventStore::new());
 ```
 

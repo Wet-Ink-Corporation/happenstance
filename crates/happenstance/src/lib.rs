@@ -1,3 +1,13 @@
+// The README's code blocks are compiled as doctests. `cfg(doctest)` keeps the
+// prose out of the rendered documentation — it would otherwise appear twice, once
+// here and once in the module docs below — while still type-checking every
+// example. A README example that does not compile is worse than no example: it is
+// the first thing a reader tries, and the first impression the crate makes. (D10)
+//
+// Only this crate's own README. The repository README lives outside the package
+// and `include_str!` would not resolve once published, so it is compiled by
+// `xtask` instead, which is never published.
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! DCB-compliant event sourcing, with batteries.
 //!
 //! # Status: a facade over [`happenstance_core`]

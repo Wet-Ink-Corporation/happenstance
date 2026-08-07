@@ -1,3 +1,10 @@
+// The README's code blocks are compiled as doctests. `cfg(doctest)` keeps the
+// prose out of the rendered documentation — it would otherwise appear twice, once
+// here and once in the module docs below — while still type-checking every
+// example. A README example that does not compile is worse than no example: it
+// is the first thing a reader tries, and the first impression the crate makes.
+// (D10)
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! The DCB conformance suite for happenstance event store adapters.
 //!
 //! "Storage agnostic" is a claim about behaviour, and a claim about behaviour

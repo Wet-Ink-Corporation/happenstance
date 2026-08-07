@@ -89,6 +89,25 @@ const REQUIRED: &[Step] = &[
         ],
         probe: None,
     },
+    Step {
+        // The step above passes with every feature on, which is the one
+        // configuration where every intra-doc link resolves. Three links to
+        // `MemoryEventStore` were broken without `memory` for as long as this
+        // gate existed, because nothing ever built the docs without it — and
+        // rustdoc treats a broken intra-doc link as a hard error, so
+        // `cargo doc --no-default-features` did not merely warn, it failed.
+        // A `no_std` consumer would have hit it on their first build. (D13)
+        name: "documentation (no default features)",
+        program: "cargo",
+        args: &[
+            "doc",
+            "-p",
+            "happenstance-core",
+            "--no-default-features",
+            "--no-deps",
+        ],
+        probe: None,
+    },
 ];
 
 const OPTIONAL: &[Step] = &[

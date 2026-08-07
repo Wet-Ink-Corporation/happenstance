@@ -72,8 +72,9 @@ use crate::query::{Query, ReadOptions};
 /// [`happenstance-testkit`](https://docs.rs/happenstance-testkit) checks every one of
 /// them. An adapter is not finished until it passes that suite.
 ///
-/// For a runnable end-to-end example see
-/// [`MemoryEventStore`](crate::MemoryEventStore).
+/// For a runnable end-to-end example see `MemoryEventStore`, which the `memory`
+/// feature provides. It is not linked because this item exists without that
+/// feature and the link would not resolve (D13).
 ///
 /// # Writing generic code over a store
 ///

@@ -9,5 +9,11 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 
+# Only so the repository README's examples can be compiled as doctests of this
+# crate's lib target — see src/lib.rs for why they cannot live in a published
+# crate. xtask itself uses neither.
+[dev-dependencies]
+happenstance = { workspace = true, features = ["std", "memory"] }
+
 [lints]
 workspace = true

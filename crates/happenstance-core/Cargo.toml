@@ -29,7 +29,11 @@ default = ["std", "memory"]
 std = ["thiserror/std", "bytes/std", "futures-core/std", "serde?/std"]
 # Wire-format derives. Required by `happenstance-sync`; deliberately NOT on by
 # default so the contract crate carries no serialization opinion.
-serde = ["dep:serde", "bytes/serde"]
+# `serde/alloc` is stated rather than inherited. This crate is `no_std` and its
+# derives need `alloc`; today `bytes/serde` happens to enable it, so omitting it
+# compiles — until `bytes` changes that in a patch release, at which point the
+# breakage lands in a downstream crate that changed nothing (D12).
+serde = ["dep:serde", "bytes/serde", "serde/alloc"]
 # The in-memory reference event store. Costs no extra dependencies and backs
 # every doctest in this crate, so the docs cannot drift from the API.
 memory = ["std"]

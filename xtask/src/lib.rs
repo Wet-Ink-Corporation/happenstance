@@ -1,0 +1,21 @@
+//! Nothing but a home for the repository README's doctests.
+//!
+//! The README at the repository root shows a Quick start, and until this file
+//! existed nothing compiled it — its example used `?` and `.await` at the top
+//! level of a `rust` block, so it had never compiled and could not have. That is
+//! the first code a visitor reads.
+//!
+//! It cannot be attached to a published crate. `include_str!` resolves at compile
+//! time against the file tree, and `crates/happenstance/src/../../../README.md`
+//! does not exist inside a packaged `.crate` — so a published crate carrying that
+//! attribute would fail `cargo test` for anyone who ran it. `xtask` has
+//! `publish = false` and is built by CI on every push, which makes it the one
+//! place the repository README can be type-checked without shipping a hazard.
+//!
+//! Each *crate* README is compiled by its own crate, where the relative path is
+//! inside the package and stays correct after publication.
+
+// `cfg(doctest)` so the README's prose is not spliced into xtask's rendered
+// documentation, where it would be actively confusing — this crate is a task
+// runner, not the library the README describes.
+#![cfg_attr(doctest, doc = include_str!("../../README.md"))]
