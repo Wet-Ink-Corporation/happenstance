@@ -9,6 +9,9 @@
 //! matching down into SQL is asserting these laws about its `WHERE` clause, and
 //! should be able to reuse the generators.
 
+// `proptest` is a native-only dev-dependency; these laws are target-independent
+// and checking them once, natively, is enough.
+#![cfg(not(target_arch = "wasm32"))]
 #![allow(clippy::unwrap_used)]
 
 use happenstance_core::{EventType, Query, QueryItem, Tag, Tags};

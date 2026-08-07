@@ -137,6 +137,32 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // CF-23 requires three harnesses in-tree, and the wasm one is the only
+        // one no native `cargo test` can reach: `memory_conformance_wasm.rs`
+        // and `local_conformance.rs`'s wasm half are both behind
+        // `cfg(target_arch = "wasm32")`, so on a native run they compile to
+        // nothing at all. Type-checking them here is what stops `__emit_wasm`
+        // from rotting into a macro nobody has compiled since the day it was
+        // written — the same decorative-check failure the nightly docs step had.
+        //
+        // `--tests` and not `--all-targets`: the latter would pull in the
+        // benchmark and example targets, which have no wasm story and are not
+        // what this step is asserting about.
+        name: "wasm32 check of the conformance harnesses",
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-testkit",
+            "--tests",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // `RUSTDOCFLAGS` rather than the ambient `RUSTFLAGS: -D warnings` that
         // `ci.yml` sets, because rustdoc does not read `RUSTFLAGS` — so until
         // this line existed the gate denied every rustc lint and no rustdoc one.
@@ -306,7 +332,7 @@ fn main() -> ExitCode {
 
     let result = match task.as_deref() {
         Some("ci") => run_ci(),
-        Some("wasm") => run_steps(wasm_step()),
+        Some("wasm") => run_steps(wasm_steps()),
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
             None => spec_trace::run(spec_trace::Mode::Check),
@@ -346,7 +372,8 @@ fn print_help() {
     println!("         without default features, spec-trace, package-check — then, when");
     println!("         the tool is installed, the workspace and wasm32 feature powersets,");
     println!("         cargo-deny, and a nightly `--cfg docsrs` rustdoc build.");
-    println!("  wasm   Check that happenstance-core builds for wasm32-unknown-unknown.");
+    println!("  wasm   Check that happenstance-core and the conformance harnesses");
+    println!("         build for wasm32-unknown-unknown.");
     println!("  spec-trace [--write]");
     println!("         Check the specification's clauses against the suite and the e2e");
     println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
@@ -361,22 +388,36 @@ fn print_help() {
     println!("         publish command; never publishes anything itself.");
 }
 
-/// The `wasm32` step, selected by name.
+/// The `wasm32` steps, selected by name.
 ///
 /// It used to be `&REQUIRED[3..4]`. An index is silent about what it selects, so
 /// inserting a step above it would have pointed `cargo xtask wasm` at clippy and
 /// left the one check that guards [ADR-0001]'s `!Send` design running nothing —
-/// while still printing green. Panicking here is the right failure: the step is a
-/// compile-time constant, so a miss is a bug in this file and never a user error.
+/// while still printing green. Panicking here is the right failure: the steps are
+/// compile-time constants, so a miss is a bug in this file and never a user error.
+///
+/// Two steps rather than one since phase 1: the contract crate proves the *port*
+/// compiles without `Send`, and the testkit's harnesses prove the *suite* does.
+/// The second is not implied by the first — `#[tokio::test]` type-checks on
+/// wasm32 and then cannot run there, which is a failure no `cargo check` of
+/// `happenstance-core` can see.
 ///
 /// [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
-fn wasm_step() -> &'static [Step] {
-    const NAME: &str = "wasm32 build of the contract crate";
-    let index = REQUIRED
+fn wasm_steps() -> Vec<&'static Step> {
+    const NAMES: &[&str] = &[
+        "wasm32 build of the contract crate",
+        "wasm32 check of the conformance harnesses",
+    ];
+
+    NAMES
         .iter()
-        .position(|step| step.name == NAME)
-        .expect("REQUIRED must contain the wasm32 step");
-    &REQUIRED[index..=index]
+        .map(|name| {
+            REQUIRED
+                .iter()
+                .find(|step| step.name == *name)
+                .unwrap_or_else(|| panic!("REQUIRED must contain the `{name}` step"))
+        })
+        .collect()
 }
 
 fn run_ci() -> Result<()> {
@@ -386,7 +427,7 @@ fn run_ci() -> Result<()> {
     Ok(())
 }
 
-fn run_steps(steps: &[Step]) -> Result<()> {
+fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
     for step in steps {
         println!("\n=== {} ===", step.name);
 

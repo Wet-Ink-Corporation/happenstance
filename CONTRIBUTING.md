@@ -15,7 +15,12 @@ existed — and ADR-0002 was superseded thirty-two minutes after it was written.
 Each provisional ADR states what would have to happen for it to become
 precedent. Until that happens, treat it as a recorded intention: contradicting
 one still needs a superseding ADR, but you do not owe deference to a decision
-the code has not yet voted on. Do not let an unpublished API surface, or an
+the code has not yet voted on.
+
+ADR-0001 is the worked example of a marker being *earned off*: it lifted when
+`LocalMemoryEventStore` — the first `!Send` implementer of either port — passed
+the conformance suite, which is the exact condition its banner had named.
+ADR-0003 and ADR-0004 still carry theirs. Do not let an unpublished API surface, or an
 MSRV nobody depends on, decide a design question on its own.
 
 ## The gate
@@ -75,6 +80,50 @@ cargo install cargo-hack cargo-deny --locked
 Step 3 is not a formality. An adapter that compiles but has not run the suite is
 not an adapter, and will not be merged as one. If a rule looks wrong, say so and
 fix the rule — a bad rule costs every future adapter author a day.
+
+## Adding a method to a port
+
+The two-flavour derivation ([ADR-0001](docs/adr/0001-async-port-flavours.md),
+[ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md)) constrains how a
+*provided* method is written, and gets it wrong in a way that is easy to
+misdiagnose. Three rules, in the order you will meet them.
+
+**A provided method is never `async fn`.** `trait_variant` clones the default
+body into the derived trait while clearing `asyncness`, and does not rewrite the
+body — so an `async fn` default becomes a non-async function containing `.await`
+and fails with `error[E0728]: await is only allowed inside async functions and
+blocks`. Hand-desugar it instead:
+
+```rust
+fn head(&self) -> impl Future<Output = Result<Option<SequencePosition>, Self::Error>>
+where
+    Self: Sync,
+{
+    async move { /* … */ }
+}
+```
+
+**`Self: Sync` goes at the point of use, never in the attribute.** A body that
+holds `&self` across an `await` holds a `&Self`, and `&Self: Send` holds exactly
+when `Self: Sync`. Taking it on the method leaves the stream alone. Putting
+`Sync` in the `trait_variant` attribute instead applies the whole bound list to
+`read`'s stream as well, so an adapter whose stream hides a `Cell` or an `Rc`
+stops compiling with `error[E0277]: cannot be shared between threads safely` —
+at the adapter, not here. Note also that rustc's own suggestion for the missing
+bound is `#[trait_variant::make(SendEventStore: Send where Self: Sync)]`, which
+does not parse: `trait_variant` accepts only `+`-separated trait bounds, and
+following the suggestion yields a confusing second error.
+
+**The trait-side and impl-side rules are opposites, and both are enforced.** The
+trait forbids `async fn`; an impl that *overrides* such a method is required to
+use it, because `clippy::manual_async_fn` is on and the gate denies warnings.
+Reading only the first rule and applying it to your impl is a build failure.
+
+One consequence worth knowing before you reach for a provided method: `Self:
+Sync` makes it uncallable on a `RefCell`-backed store, which is the shape the
+bare flavour exists to serve. If a method must be reachable there, either take
+its arguments as parameters so the future captures owned values rather than
+`&self`, or make it a required method.
 
 ## Conformance rules
 

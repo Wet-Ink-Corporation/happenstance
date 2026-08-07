@@ -25,6 +25,37 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **The conformance suite no longer requires `tokio`.** The rule set is
+  enumerated in exactly one place, `for_each_event_store_rule!`, and the per-test
+  wrapper is a parameter rather than something the testkit chooses. Three
+  emitters ship — `__emit_tokio` (still the default, so existing callers are
+  unaffected), `__emit_blocking` and `__emit_wasm` — and a runtime none of them
+  covers needs no release of `happenstance-testkit`: write a `macro_rules!` that
+  takes a list of identifiers and hand it to the registry yourself.
+- `happenstance_testkit::block_on`, a twenty-line single-threaded executor with
+  no `Send` bound and no dependencies. It is what makes the runtime-free harness
+  runtime-free.
+- A `no_orphan_rules` meta-test. A rule added to the suite without being
+  registered used to produce no signal of any kind — it compiled, `cargo test`
+  reported green, and an adapter was certified against twenty-six rules while
+  its author believed it was twenty-seven.
+- **The workspace's first `!Send` implementer of either port.**
+  `LocalMemoryEventStore` — `Rc<RefCell<Vec<SequencedEvent>>>`, implementing the
+  bare `EventStore` and nothing else — passes all twenty-seven rules under four
+  harnesses, including `wasm-bindgen-test` on `wasm32-unknown-unknown` in CI.
+  Until now the entire evidence base for the two-flavour port design was a
+  `cargo check`: a compile of the trait, with nothing implementing the flavour
+  that design exists for.
+- A `wasm-conformance` CI job that **runs** the suite on
+  `wasm32-unknown-unknown`, and a gate step that type-checks the harnesses for
+  that target on every run. The two are different claims: `#[tokio::test]`
+  type-checks for wasm32 and then cannot run there.
+- [ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md), which puts
+  `ProjectionStore` under the same derivation scheme as `EventStore` — it had
+  carried the identical construction since it was written and appeared in no ADR
+  at all — and states what a provided body owes both flavours.
+- A CONTRIBUTING section on adding a method to a port. The specification already
+  claimed this was documented there; it was not.
 - `cargo xtask reserve <name>`, which generates the `0.0.0` placeholder used to
   claim a crates.io name. Names are claimed one per phase, as the crate that
   justifies each becomes real.
@@ -67,6 +98,20 @@ not the same as what a user needed to be told.
   two `todo!()`s it still has.
 
 ### Fixed
+
+- **The one test guarding the two-flavour design could not fail.**
+  `read_stream_is_send` asserted `Send` on a *concrete* stream, where auto-trait
+  leakage satisfies it whatever the trait promises — it passed unchanged with
+  `Send` struck from the derivation attribute entirely. It is replaced by two
+  generic tests, and it takes two: writing the bound at the definition fixes the
+  leakage, but under the `async fn read(..) -> Result<impl Stream, E>` refactor
+  the outermost item is the *future*, so an assertion on the call's result is
+  discharged against the future while the stream stays `!Send`. Only
+  `spawns_from_generic`, which holds a read across an await inside a real
+  `tokio::spawn`, rejects that.
+- **`ADR-0001`'s provisional marker is lifted**, against the condition its own
+  banner named. The full proof — a real `!Send` adapter — is still the Cloudflare
+  work, and the banner now says which half is settled.
 
 - **The published `.crate` contained no licence text and no README** (D11). Both
   licence files lived at the repository root, and Cargo packages only what is

@@ -1,20 +1,35 @@
 # ADR-0001: Async ports in two flavours, `Send` and `!Send`
 
-- **Status:** accepted — **provisional**
+- **Status:** accepted
 - **Date:** 2026-08-05
+- **Provisional marker lifted:** 2026-08-06, at
+  [phase 1](../RUNBOOK.md#phase-1--the-send-proof-and-the-derivation-decision)
+- **Extended by:** [ADR-0008](0008-one-derivation-for-both-ports.md), which
+  covers `ProjectionStore` under the same scheme and states what a provided body
+  owes both flavours
 
-> **Provisional.** Authored on 2026-08-05 alongside the initial scaffold, before
-> any of the code this decision constrains existed. Its entire evidence base is
-> design reasoning, a spike, and a `cargo check` for `wasm32` — **no `!Send`
-> implementation of these ports exists anywhere**, not even a reference one. So
-> this is a recorded intention, not settled precedent: work that contradicts it
-> still needs a superseding ADR, but it does not owe deference to a decision the
-> code has not yet voted on.
+> **This was provisional until 2026-08-06, and the reason it no longer is.** It
+> was authored alongside the initial scaffold, before any of the code it
+> constrains existed, and its whole evidence base was design reasoning, a spike
+> and a `cargo check` for `wasm32` — a compile of the *trait*, with **no `!Send`
+> implementation of these ports anywhere**, not even a reference one. The stated
+> lift condition was a genuine `!Send` implementer passing the conformance suite.
 >
-> **Lifts when** a genuine `!Send` implementer passes the conformance suite. The
-> cheapest such proof is a `RefCell`-backed reference store in the testkit; the
-> full proof is the Cloudflare adapter
-> ([phase 9](../RUNBOOK.md#phase-9--cloudflare-durable-object)).
+> `LocalMemoryEventStore` — `Rc<RefCell<Vec<SequencedEvent>>>`, implementing the
+> bare `EventStore` and nothing else, in `happenstance-testkit`'s own `tests/` —
+> now passes all twenty-seven rules under three harnesses natively, and under
+> `wasm-bindgen-test` on `wasm32-unknown-unknown` in CI. The direct impl sits
+> beside the blanket `impl<T: SendEventStore> EventStore for T` in a genuinely
+> downstream crate without `error[E0119]`, which is the coherence claim at
+> "Consequences of the shape" below, compiled outside the crate that declares it
+> for the first time.
+>
+> **The full proof is still the Cloudflare adapter**
+> ([phase 9](../RUNBOOK.md#phase-9--cloudflare-durable-object)). What is settled
+> is that the design admits a `!Send` implementer and that the suite can drive
+> one on the target. Whether a real platform SDK fits — `worker::Error`, a
+> `JsValue` in an error payload, `SqlStorage`'s async shape — is phase 9's, and
+> ES-6 is deferred to it.
 
 ## Context
 
@@ -65,7 +80,13 @@ Consequences of the shape, each verified by a spike before adoption:
   `async fn read(..) -> Result<impl Stream, E>`, the *future* would have been
   `Send` and the *stream* would not — so a caller could not hold a read across
   an await inside `tokio::spawn`, which is the entire reason the `Send` flavour
-  exists. A unit test asserts the stream is `Send`.
+  exists. Two tests assert this, and it takes two: a *generic* assertion that the
+  stream is `Send` (`send_flavour_stream_is_send_in_generic_code`), and
+  `spawns_from_generic`, which holds a read across an await inside a real
+  `tokio::spawn`. Only the second rejects the `async fn read` refactor — after
+  it, the outermost item is the future, the future is `Send`, and an assertion
+  on the call's result is satisfied by the wrong thing. See
+  [ADR-0008](0008-one-derivation-for-both-ports.md)'s amendments section.
 - Laziness follows: the query executes on first poll and failures arrive as
   `Err` items rather than up front.
 

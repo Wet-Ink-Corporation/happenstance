@@ -21,8 +21,18 @@ happenstance-core = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 happenstance-core = { workspace = true, features = ["memory"] }
+futures-core.workspace = true
+
+# Split by target so the wasm harness can be *compiled* for wasm32 without
+# dragging tokio's multi-threaded runtime — which cannot exist there — into the
+# same check. The testkit's own library has no dev-dependency on either: the
+# runtime attribute is emitted into the caller's crate, never resolved here.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true

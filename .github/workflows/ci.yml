@@ -87,6 +87,56 @@ jobs:
       - name: Run the gate
         run: cargo xtask ci
 
+  # The conformance suite, executed on `wasm32-unknown-unknown` against the
+  # `!Send` reference store. This is the job that turns ADR-0001 from a design
+  # argument into precedent: until it existed, the entire evidence base for the
+  # two-flavour port design was a `cargo check` — a compile of the *trait*, with
+  # no implementation of the bare flavour anywhere and nothing ever run on the
+  # target the flavour exists for.
+  #
+  # The gate's `wasm32 check of the conformance harnesses` step type-checks this
+  # same code on every runner. That is not the same claim: `#[tokio::test]`
+  # type-checks for wasm32 and then cannot run there, which is precisely the
+  # failure CF-23 is about. Only this job actually executes the rules.
+  #
+  # No Cloudflare and no `workerd`. Those arrive at phase 9; the property under
+  # test here is the target's single-threaded, `!Send` execution model, and
+  # `wasm-bindgen-test` on node exercises that without a platform SDK.
+  wasm-conformance:
+    name: conformance on wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml already pins the wasm32-unknown-unknown target.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # `wasm-bindgen-cli` must match the `wasm-bindgen` version in the
+      # dependency graph *exactly* — the runner refuses to run against a
+      # mismatched schema, and it is right to. Reading it out of Cargo.lock
+      # rather than hard-coding it means a `cargo update` cannot leave this job
+      # installing a runner that no longer matches, which would fail as a
+      # confusing runtime error rather than as a version bump.
+      - name: Resolve the wasm-bindgen version from Cargo.lock
+        id: wasm-bindgen
+        run: |
+          version=$(cargo metadata --locked --format-version 1 \
+            | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
+          test -n "$version" || { echo "wasm-bindgen absent from the graph"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install the test runner
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+
+      # `wasm-bindgen-test` drives the tests under node by default; the runner
+      # is selected through cargo's per-target runner variable.
+      - name: Run the conformance suite on wasm32
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
+        run: cargo test --locked -p happenstance-testkit --target wasm32-unknown-unknown
+
   # Verifies the MSRV claimed in Cargo.toml. This is the only place it is
   # checked, so a change that silently requires a newer compiler fails here.
   msrv:

@@ -6062,14 +6062,24 @@ point because it contains no `.await` at all.
 |---|---|---|---|---|
 | **Position allocation** | Assigned under the lock held until commit — `memory.rs:195-223`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **No.** `happenstance-postgres` planned, unbuilt | Both. Fixture (CF-13) to make the rule bite; adapter to prove it passable |
 | **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **No.** `happenstance-neon` planned, unbuilt | Adapter |
-| **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:147`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **No.** Nothing, not even a reference store (ADR-0001:8-16) | Fixture (CF-28), then the Cloudflare adapter |
+| **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:147`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — the shape the port was designed against | A deferred write set buffered and replayed in one call at commit | **No — and neither does the near end.** `ProjectionStore for` matches nothing in the workspace | Both |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |
 | **Handle multiplicity** | One handle per store — `conformance_test!` calls the factory once (`lib.rs:83-91`) | Two or more handles onto one backing store, concurrent | **No.** Foreclosed by the fixture's type until CF-16 | Fixture |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock` | Survives a restart of the process | **No.** Not expressible until CF-17 | Fixture, then any file-backed adapter |
 
-Seven axes, seven empty far ends. That is the honest state, and it is the reason
-this section exists before the freeze rather than after it.
+Seven axes. Six far ends are still empty, and the seventh — async flavour — has
+a **fixture** instrument and no adapter one, which by CF-26 satisfies the
+falsifiability half and not the implementability half. That is the honest state,
+and it is the reason this section exists before the freeze rather than after it.
+
+The distinction is worth holding on to now that one row has moved, because the
+temptation is to read the first tick as the axis being covered.
+`LocalMemoryEventStore` proves the `!Send` rules *can* be run and *can* fail. It
+says nothing about whether a Durable Object, with a real `SqlStorage` and a
+`worker::Error`, can pass them — and ES-6 is deferred to that adapter precisely
+because a reference store's error type is chosen by whoever wrote the reference
+store.
 
 ---
 

@@ -326,17 +326,94 @@ mod tests {
     }
 
     #[test]
-    fn read_stream_is_send() {
-        // Guards the property the whole two-trait design exists for: on the
-        // `Send` flavour it is the *stream* that is `Send`, not merely the
-        // future producing it. Without that, a caller could not hold a read
-        // across an await inside `tokio::spawn`.
-        fn assert_send<T: Send>(_: &T) {}
+    fn send_flavour_stream_is_send_in_generic_code() {
+        // ES-2, first half. On the `Send` flavour it is the *stream* that is
+        // `Send`, not merely the future producing it.
+        //
+        // The bound is written at the *definition*, so inside the function the
+        // compiler knows nothing about `S` beyond what `SendEventStore`
+        // promises, and the obligation is discharged before monomorphisation.
+        // Its predecessor asserted `Send` on a concrete store, where auto-trait
+        // leakage from the hidden type satisfied it whatever the trait said: it
+        // passed unchanged with `Send` struck from the `trait_variant`
+        // attribute, which is what "cannot fail" means.
+        //
+        // This alone does NOT reject the `async fn read(..) -> Result<impl
+        // Stream, E>` refactor — after it, `read` returns a future, the future
+        // is `Send`, and this still passes. `spawns_from_generic` is what
+        // rejects that, which is why both exist. ES-2 names only this one.
+        fn assert_stream_is_send<S: crate::SendEventStore>(store: &S, query: &Query) {
+            fn is_send<T: Send>(_: &T) {}
+            is_send(&crate::SendEventStore::read(
+                store,
+                query,
+                ReadOptions::new(),
+            ));
+        }
 
-        let store = MemoryEventStore::new();
-        let query = Query::all();
-        let stream = crate::SendEventStore::read(&store, &query, ReadOptions::new());
-        assert_send(&stream);
+        assert_stream_is_send(&MemoryEventStore::new(), &Query::all());
+    }
+
+    #[tokio::test]
+    async fn spawns_from_generic() {
+        // ES-2's second half, and ES-3. The composition the `Send` flavour
+        // exists to buy: hold a read across an await inside `tokio::spawn`.
+        // This is the test that rejects `async fn read(..) -> Result<impl
+        // Stream, E>` — `trait_variant` appends `Send` to the outermost `impl
+        // Future` and nothing else, so after that refactor the stream held
+        // across `collect`'s await is `!Send` and this stops compiling.
+        //
+        // Each bound was removed in turn and the compiler asked. Two are
+        // load-bearing and one is not:
+        //   Sync     REQUIRED. Removing it: "future cannot be sent between
+        //            threads safely / captured value is not `Send`".
+        //            `Arc<S>: Send` needs `S: Send + Sync`, and the body also
+        //            holds `&*store` across an await, which needs `&S: Send` —
+        //            that is `S: Sync` again (ES-3).
+        //   'static  REQUIRED. Removing it: `error[E0310]: the parameter type
+        //            `S` may not live long enough`. `tokio::spawn` erases the
+        //            future into a task that outlives this frame.
+        //   Send     REDUNDANT. Removing it still compiles: `trait_variant`
+        //            emits `pub trait SendEventStore: Send`, so the supertrait
+        //            already supplies it. Kept because it states the requirement
+        //            at the signature rather than hiding it in the derivation —
+        //            but nobody should later "discover" it is doing work here.
+        fn spawns_from_generic<S: crate::SendEventStore + Send + Sync + 'static>(
+            store: alloc::sync::Arc<S>,
+        ) -> tokio::task::JoinHandle<usize> {
+            tokio::spawn(async move {
+                // Bound rather than inlined: edition 2024 RPITIT captures every
+                // in-scope lifetime, so the stream borrows the `&Query` even
+                // though its hidden type owns everything. Inlining is E0716.
+                let query = Query::all();
+                let stream = crate::SendEventStore::read(&*store, &query, ReadOptions::new());
+
+                // `map_or` rather than `?` or a binding, deliberately.
+                // `S::Error` carries no `Send` bound (ES-6 is deferred), so a
+                // `Result<_, S::Error>` held across the *next* await would make
+                // this future `!Send`. Collapsing to a `usize` first is what
+                // lets this test exist before ES-6 is settled; when ES-6 lands,
+                // this is the line that relaxes.
+                let seen = collect(stream).await.map_or(0, |events| events.len());
+
+                // Read-then-append: a second await against the same borrow, so
+                // `&S` really does cross two suspension points.
+                let appended = crate::SendEventStore::append(&*store, &[event("Spawned")], None)
+                    .await
+                    .is_ok();
+
+                seen + usize::from(appended)
+            })
+        }
+
+        let store = alloc::sync::Arc::new(MemoryEventStore::new());
+        store.append(&[event("A")], None).await.unwrap();
+
+        let counted = spawns_from_generic(alloc::sync::Arc::clone(&store))
+            .await
+            .unwrap();
+        assert_eq!(counted, 2);
+        assert_eq!(store.len(), 2);
     }
 
     #[tokio::test]

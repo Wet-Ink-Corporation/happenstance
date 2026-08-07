@@ -207,3 +207,44 @@ where
     let last = events.last().map(|event| event.position);
     Ok((events, last))
 }
+
+// Gated on `memory` because the assertion below has to be *instantiated* at a
+// concrete store to mean anything, and `MemoryEventStore` is the only one the
+// contract crate has. An uninstantiated generic proves nothing: the projections
+// stay opaque and the coercion is never checked.
+#[cfg(all(test, feature = "memory"))]
+mod tests {
+    // Both flavours are in scope here, which the module documentation warns
+    // against — but the warning is about *method-call* syntax, and nothing below
+    // calls a method. These are type-level assertions only.
+    use super::{EventStore, SendEventStore};
+
+    /// ES-5. The two flavours' `Error` projections are the *same type*, not
+    /// merely two types that happen to carry the same bounds.
+    ///
+    /// The assertion is the identity function's body: returning an
+    /// `<S as SendEventStore>::Error` where an `<S as EventStore>::Error` is
+    /// demanded type-checks only if the compiler can normalise both projections
+    /// to one type. Today it can, via the blanket impl `trait_variant` emits
+    /// (`type Error = <Self as SendEventStore>::Error`).
+    ///
+    /// This is deliberately *not* spelled as a bounds check —
+    /// `fn f<S: SendEventStore>() where S::Error: core::error::Error` would pass
+    /// trivially, since both traits state the same bound and the compiler would
+    /// simply believe it. Equality is the property with content: it is what
+    /// forbids ES-5's "Rejects" case, abandoning the derivation for two
+    /// hand-written traits whose associated types are independent. Under that
+    /// shape this fails with `error[E0308]: mismatched types`.
+    fn error_projections_are_one_type<S: SendEventStore>(
+        error: <S as SendEventStore>::Error,
+    ) -> <S as EventStore>::Error {
+        error
+    }
+
+    #[test]
+    fn error_bound_is_identical_on_both_flavours() {
+        // Naming the function is what instantiates the coercion check above;
+        // the body is where the assertion lives, so there is nothing to run.
+        let _ = error_projections_are_one_type::<crate::MemoryEventStore>;
+    }
+}

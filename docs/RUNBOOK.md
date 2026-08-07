@@ -144,7 +144,7 @@ turned out to be one DCB already provides.
 | # | Phase | Depends on | State | Proof artefact |
 |---|---|---|---|---|
 | 0 | [Ground clear](#phase-0--ground-clear) | — | done | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
-| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | not started | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
+| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
 | 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | not started | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | not started | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
 | 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | not started | a generic consumer doing the four things today's signatures forbid, compiled against the frozen ones — plus a `SequencedEvent` that carries identity and time and would take a third field without breaking `new` |
@@ -279,7 +279,7 @@ scheduling defect.
 
 | ADR | Phase | The question it answers |
 |---|---|---|
-| **0008** | 1 | Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once? |
+| ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](adr/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
 | **0009** | 2 | Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6) |
 | **0010** | 3 | What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29) |
 | **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13) |
@@ -303,8 +303,22 @@ scheduling defect.
 
 **Amendments to accepted ADRs, scheduled.**
 
-- **ADR-0001** loses `provisional` at phase 1 — or is superseded by ADR-0008. Its
-  full proof (a real `!Send` adapter) arrives at phase 9 and is cited there.
+- ~~**ADR-0001** loses `provisional` at phase 1 — or is superseded by ADR-0008. Its
+  full proof (a real `!Send` adapter) arrives at phase 9 and is cited there.~~
+  **Done at phase 1.** Not superseded: ADR-0008 *extends* it, since ADR-0001's
+  reasoning about `EventStore` is untouched and what was missing was the second
+  port. The banner is rewritten rather than deleted, so the record still shows
+  what the marker meant and what took it off.
+- **Four amendments to `SPECIFICATION.md` are owed by ADR-0008** and are listed
+  in its own closing section: ES-2's named rule is necessary but not sufficient,
+  ES-3's impl-site argument is false, ES-5's cited mechanism is incomplete, and
+  PS-36's `compile_fail` doctest cannot be pinned as specified — the diagnostic
+  carries no error code and rustdoc on 1.97.1 silently ignores the annotation.
+  Three touch `[FROZEN]` clauses, which is why they are an ADR's output rather
+  than an edit. **None changes a normative MUST**; all four are corrections to
+  citations and to rule adequacy. Applying them to the document is scheduled at
+  **phase 3**, which owns the rule registry's spellings and is already opening
+  §6 and §7 — doing it there costs one pass instead of two.
 - **ADR-0003** loses `provisional` at phase 13, when a payload round-trips
   byte-identically between two peers.
 - **ADR-0004** loses `provisional` at phase 12, when the MSRV becomes a promise.
@@ -386,7 +400,7 @@ ADR-0026 must be written against two unlike peers, not one.
 
 | Decision | Phase | Status | ADR |
 |---|---|---|---|
-| Derived vs hand-written `Send` flavour; `Self: Sync` at the point of use; one decision covering both ports | 1 | open — **highest blast radius in the workspace**, and now open on evidence rather than on the refuted premise that closed it (`PRESSURE-TEST.md:32-54`) | 0008 |
+| Derived vs hand-written `Send` flavour; `Self: Sync` at the point of use; one decision covering both ports | 1 | **settled — ADR-0008.** One scheme, both ports, derived — though "derived vs hand-written" was already `[FROZEN]` at ES-1 and the live question was PS-35's second port. The scheme is shared; the **provided-method budget is not**, because `ProjectionStore`'s GAT admits a body that cannot be made to compile on either flavour and `EventStore` structurally cannot exhibit it | 0008 |
 | Does `Error` carry `Send + Sync + 'static`, and may the flavours differ | 2 | **deferred — ES-6.** Both existing "confirmations" are free by construction: `MemoryStoreError` is uninhabited (`memory.rs:143-145`) and `SqliteEventStoreError` is a unit variant. The Cloudflare skeleton is the only instrument | 0009 |
 | Does `EventStore` grow `head` / `count`, and as provided or required methods | 4 | **settled — ES-30, ES-31.** Provided, hand-desugared, overridable. The claim that a provided method could never be added was compiled and refuted | 0012 |
 | `read` laziness, isolation, and whether one `Query`'s items share one snapshot | 4 | **settled — ES-11, ES-12, ES-13.** The contract promised laziness that the reference store does not provide (D7) | 0011 |
@@ -549,8 +563,9 @@ case it does not unblock and left phase 13's hardest sync case looking settled.
 
 CF-25 forbids declaring a port frozen while an axis has no passing implementation
 at its far end, unless the freeze names the axis and an ADR accepts the risk.
-**Seven axes have empty far ends today**, which is the honest caveat that outranks
-every `[FROZEN]` marker in the specification: `MemoryEventStore`, a planned
+**Six axes have empty far ends today, and the seventh has a fixture and no
+adapter**, which is the honest caveat that outranks every `[FROZEN]` marker in
+the specification: `MemoryEventStore`, a planned
 rusqlite adapter and a planned Durable Object all serialise their writers and
 assign positions under a lock they hold until commit. That is one storage shape
 wearing several hats.
@@ -559,7 +574,7 @@ wearing several hats.
 |---|---|---|---|
 | Position allocation | `MemoryEventStore` — under the append lock | `happenstance-postgres` — `nextval()` outside the transaction | phase 10 (skeleton phase 2) |
 | Transport | in-process | `happenstance-neon` — one-shot HTTP, no cursor, no interactive transaction | phase 10 (skeleton phase 2) |
-| Async flavour | `Send` native | `LocalMemoryEventStore`, then a Durable Object | phase 1, fully phase 9 |
+| Async flavour | `Send` native | `LocalMemoryEventStore`, then a Durable Object | **fixture done at phase 1**; adapter at phase 9 |
 | Batch shape | a SQL transaction | Ladybug's graph write handle | phase 11 (skeleton phase 2) |
 | Handle multiplicity | one handle per fixture | two handles onto one backing store | phase 3 (fixture), phase 8 (real) |
 | Durability | in-memory | a store that survives a process reopen | phase 8 |
@@ -987,7 +1002,7 @@ ES-1 – ES-5, ES-7, PS-37, CF-20, CF-22, CF-23, CF-28.
 
 **Work**
 
-- [ ] Replace the hand-duplicated rule list in
+- [x] Replace the hand-duplicated rule list in
       `crates/happenstance-testkit/src/lib.rs:93-129` with a **rule registry**
       using the callback ("x-macro") pattern: `for_each_rule!($callback:path)`
       hands the list to a named emitter. Two gotchas: the emitter must be
@@ -998,19 +1013,72 @@ ES-1 – ES-5, ES-7, PS-37, CF-20, CF-22, CF-23, CF-28.
       (`futures::executor::block_on`) and `__emit_wasm` (`#[wasm_bindgen_test]`).
       Not `libtest-mimic`: the case list is statically known, and one `#[test]` per
       rule is what makes `cargo test <rule_name>` and IDE gutters work.
-- [ ] `LocalMemoryEventStore` — `RefCell<Vec<SequencedEvent>>` implementing the
+
+      Landed as `crates/happenstance-testkit/src/registry.rs`, spelled
+      `for_each_event_store_rule!` — **CF-22's spelling, not this file's**
+      `for_each_rule!`; where a phase body and the specification disagree the
+      specification wins, and this is the first time that rule has actually been
+      exercised. Both gotchas reproduced before being fixed. A third was not
+      anticipated and is the useful one: **`$callback:path` does not work as a
+      macro callee in expression position.** It is fine in item position, so every
+      harness would have compiled and only the CF-24 meta-test — which needs
+      `let names = for_each_event_store_rule!(…)` — would have failed, with
+      `error: macro expansion ignores '!' and any tokens following`, a diagnostic
+      that points nowhere near the fix. `($($callback:tt)+)` works in both
+      positions and still accepts a `path` fragment forwarded from an outer macro.
+- [x] `LocalMemoryEventStore` — `RefCell<Vec<SequencedEvent>>` implementing the
       bare `EventStore` and nothing else. It is `!Send`, so it exercises the path
       no code in the workspace has ever exercised (ES-7, CF-28).
-- [ ] A CI job running the full registry under `wasm-bindgen-test` on
+
+      Landed as `Rc<RefCell<Vec<SequencedEvent>>>`, and the `Rc` is not
+      decoration: **`RefCell<T>: Send where T: Send`** — it surrenders `Sync`, not
+      `Send`. A store that was literally `RefCell<Vec<SequencedEvent>>`, which is
+      what this line and CF-28 both say, would have been `Send` and would have
+      proved nothing at all about the bare flavour. CF-28's wording is owed the
+      same correction.
+- [x] A CI job running the full registry under `wasm-bindgen-test` on
       `wasm32-unknown-unknown` against that store. No Cloudflare, no `workerd`.
-- [ ] A **generic** Send-composition compile test. The existing one
+
+      `wasm-conformance` in `ci.yml`, and run locally before it was claimed: 27
+      rules green against the `!Send` store and 27 against `MemoryEventStore`, on
+      `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`. The job reads the
+      `wasm-bindgen` version out of `Cargo.lock` rather than hard-coding it,
+      because the runner refuses a schema mismatch and a `cargo update` would
+      otherwise turn a version bump into a confusing runtime failure. `cargo xtask
+      ci` gained a `--target wasm32` *type-check* of the same harnesses, which is
+      a weaker and different claim: `#[tokio::test]` type-checks for wasm32 and
+      then cannot run there.
+- [x] A **generic** Send-composition compile test. The existing one
       (`memory.rs:328-340`) asserts the property on a concrete type, where
       auto-trait leakage makes it pass regardless of whether the design works —
       which means CLAUDE.md constraint 3 currently protects a test that cannot
       fail. Write the bound at the definition:
       `fn spawns_from_generic<S: SendEventStore + Send + Sync + 'static>(s: Arc<S>)`,
       so the obligation is discharged before monomorphisation (ES-2, ES-3).
-- [ ] **Two throwaway error-shape probes**, so this phase can exit on its own
+
+      **Two tests landed, not one, and the second is the one that matters.** The
+      rule ES-2 actually names —
+      `send_flavour_stream_is_send_in_generic_code` — does **not** reject the
+      refactor ES-2 says it rejects. Under `async fn read(..) -> Result<impl
+      Stream, E>` the outermost item is the *future*, `trait_variant` marks the
+      future `Send`, and an assertion on the call's result is discharged against
+      the future while the stream stays `!Send`. The clause's own account of the
+      mechanism implies this; its rule was written as though it did not. Landing
+      only the named rule would have swapped a test that cannot fail for one that
+      cannot catch the break it was written for. `spawns_from_generic` holds the
+      stream across an await inside a real `tokio::spawn` and is what bites.
+
+      Two bound findings ride along. `+ Send` in this file's spelling is
+      **redundant** — `trait_variant` emits `pub trait SendEventStore: Send`, a
+      supertrait, confirmed by macro expansion; `Sync` and `'static` are both
+      load-bearing and each was removed in turn to see which diagnostic appeared.
+      And the natural read-then-append body **does not compile**: a
+      `Result<_, S::Error>` held across the second await makes the spawned future
+      `!Send`, which is E2E-53 arriving nine phases early. The test survives only
+      by collapsing the read to a `usize` first. **ES-6 is therefore blocking a
+      composition a caller will obviously write**, which is a stronger statement
+      than "semver-visible" and belongs in phase 2's brief.
+- [x] **Two throwaway error-shape probes**, so this phase can exit on its own
       evidence rather than on phase 2's. One error type that is `Send + Sync`, one
       that is `!Send` (a `PhantomData<*mut u8>` field is enough), each implementing
       the port under both candidate declarations. Record which declarations both
@@ -1018,14 +1086,65 @@ ES-1 – ES-5, ES-7, PS-37, CF-20, CF-22, CF-23, CF-28.
       could not exit (`PRESSURE-TEST.md:555-558`). The *decision* about the `Error`
       bound stays deferred to phase 2 (ES-6); what this settles is whether the two
       flavours *can* differ at all.
-- [ ] Prove a provided method is writable: add a throwaway
+
+      **They cannot**, and ES-5 survived five distinct falsification attempts:
+      naming the associated type in the attribute (`expected '+'` — the macro
+      grammar is `Ident : TraitBound (+ TraitBound)*`), a supertrait owning a
+      stricter `Error` (`E0221`), the same with an associated-type bound
+      (`E0221` + `E0308` + `E0053` inside the generated blanket impl), and a
+      where-clause on the bare trait, which is copied onto *both* flavours by
+      `mk_variant`'s `..tr.clone()` and additionally breaks the blanket impl with
+      `error[E0275]: overflow evaluating the requirement`. ES-5's conclusion holds
+      and its cited mechanism is incomplete — it credits `transform_item`, and the
+      copying is `mk_variant`'s.
+
+      The matrix result that matters for phase 2: the **current** declaration
+      genuinely admits a `!Send` error on the *derived* flavour. Constructing and
+      returning one compiles; the failure appears only when the value is held
+      across an await, or at a call site demanding `F::Output: Send`. So
+      `store_error_crosses_a_join_handle` must assert on the **output type** — a
+      rule that checks only whether the future is `Send` passes against a `!Send`
+      error and is decorative. Applying `+ Send + Sync` to the real trait leaves
+      the whole workspace green, which is the specification's own warning made
+      concrete: nothing in the tree can fail that bound today.
+- [x] Prove a provided method is writable: add a throwaway
       `fn probe(&self) -> impl Future<Output = ()> { async move {} }` to the port,
       confirm an adapter that overrides it and one that does not both compile on
       both flavours, then delete it. The real provided methods land in phase 4.
-- [ ] State the rule ADR-0008 exists to make quotable: *any provided or extension
+
+      Done with a body that *does* real work, because the spelling this line
+      proposes proves nothing: `async move {}` captures nothing, so it cannot
+      exhibit the `&self`-across-an-await problem the whole rule is about. The
+      probe used a `head` whose body reads through `&self` and awaits. It compiles
+      under both flavours; `-Zunpretty=expanded` shows three copies — the bare
+      default, the derived default with `+ Send` appended, and a blanket-impl
+      *override* delegating `<Self as SendEventStore>::head(self)`, so a provided
+      body is a fallback for the bare flavour and never a shared implementation.
+      All seven of the specification's `variant.rs` citations verify exactly.
+- [x] State the rule ADR-0008 exists to make quotable: *any provided or extension
       body that holds `&self` across an await requires `Self: Sync` at the point of
       use* — and check it against `ProjectionStore`, which carries the identical
       construction at `projection.rs:70` and appears in no ADR at all (PS-37).
+
+      Checked, and the two ports **do not cost the same**. On `EventStore` the
+      rule is sufficient. On `ProjectionStore` a provided body that also holds the
+      GAT across a suspension point does not compile at all and has no remedy:
+      `for<'a> Self::Batch<'a>: Send` fails with `E0311` on
+      `TraitVariantBlanketType`, and the only clause that does compile is cloned
+      onto the `!Send` flavour where it rejects an `Rc` batch. Isolated with three
+      local traits under the same attribute — no GAT works, a GAT *without*
+      `where Self: 'a` works, a GAT *with* it gives `E0311` — so `EventStore`
+      structurally cannot exhibit it. That asymmetry is the direct answer to
+      PS-35: one scheme, but a different provided-method budget per port, and only
+      a document holding both halves can show it.
+
+      A second cost lands on both: **`Self: Sync` makes a provided method
+      uncallable on a `RefCell` store**, which is the shape the bare flavour
+      exists for. There is one escape — take the arguments as parameters so the
+      future captures owned values rather than `&self` — and it closes when the
+      method builds its own `Query`, because edition-2024 RPITIT ties the stream
+      to the query's lifetime. Phase 4 designs `head`/`count` and should spend
+      that lever deliberately rather than meet it.
 
 **Proof artefact.** Three things, and the order matters, because only the first
 discriminates the decision this phase exists to make.
@@ -1047,16 +1166,34 @@ either way, so a green wasm job and a spawnable generic exist whichever choice
 ADR-0008 makes. They are the two halves of *ADR-0001's* claim, which is a
 different claim and also worth proving. Item one is the half that was missing.
 
+**All three hold.** One caveat on item one, stated because it changes what the
+artefact proves: the phase's framing — *derived versus hand-written* — was
+already settled by ES-1, which is `[FROZEN]` on "MUST be derived". So the body
+that type-checks under both flavours is not evidence for a choice this phase
+made; it is evidence for the **obligation** ES-4 and PS-37 state and nothing had
+ever compiled. ADR-0008 is a ratification plus PS-35's extension to the second
+port, and says so in its own Context rather than claiming a decision it did not
+take.
+
 **Exit criteria**
 
-- [ ] ADR-0008 written, quoting the compiled evidence for the derived-versus-hand-written
+- [x] ADR-0008 written, quoting the compiled evidence for the derived-versus-hand-written
       choice, and covering both ports in one decision (PS-35).
-- [ ] ADR-0001's `provisional` marker removed, or ADR-0001 superseded. Its full
-      proof is cited forward to phase 9.
-- [ ] The rule list exists in exactly one place.
-- [ ] The wasm32 conformance job is in `ci.yml` and green.
-- [ ] The generic spawn test exists and CLAUDE.md constraint 3 no longer points
-      at a test that cannot fail.
+      [ADR-0008](adr/0008-one-derivation-for-both-ports.md). See the caveat above
+      on what "the choice" turned out to be.
+- [x] ADR-0001's `provisional` marker removed, or ADR-0001 superseded. Its full
+      proof is cited forward to phase 9. Removed, with the banner rewritten to
+      record what lifted it rather than deleted — a marker that vanishes teaches
+      the next reader that it was never there.
+- [x] The rule list exists in exactly one place —
+      `registry.rs`'s `for_each_event_store_rule!`. `no_orphan_rules` was watched
+      failing against a deliberately unregistered 28th rule, naming it.
+- [x] The wasm32 conformance job is in `ci.yml` and green. Run locally first: 27
+      rules against the `!Send` store and 27 against `MemoryEventStore`, executed
+      on `wasm32-unknown-unknown`.
+- [x] The generic spawn test exists and CLAUDE.md constraint 3 no longer points
+      at a test that cannot fail. It now points at **two** tests and says why one
+      is not enough.
 
 **Cases this makes writable.** E2E-52 (a whole command path with no `Send`
 bound), E2E-53 (`SendEventStore` from several tasks — its `Error` half waits on
@@ -1065,6 +1202,53 @@ ES-6), E2E-30 (a `!Send` projection store cannot be spawned, and the port says s
 **Estimate.** 4 days.
 
 **Session log**
+
+- 2026-08-06 — **phase 1 closed.** Gate green with thirteen steps, none skipped
+  locally; `git status` clean. `LocalMemoryEventStore` is the workspace's first
+  `!Send` implementer of either port and passes all twenty-seven rules under four
+  harnesses — the testkit's runtime-free `block_on`, the default multi-threaded
+  `#[tokio::test]`, a caller-supplied `current_thread` emitter, and
+  `wasm-bindgen-test` on `wasm32-unknown-unknown`. ADR-0008 landed; ADR-0001's
+  provisional marker came off against its own stated condition.
+
+  **Four things this phase assumed and compilation refuted.** Each is the same
+  shape as phase 0's findings — a belief nobody had asked the compiler about —
+  and each is recorded in the work item it belongs to rather than only here.
+
+  1. **The rule ES-2 names does not reject what ES-2 says it rejects.** Landing
+     only it would have replaced a test that cannot fail with one that cannot
+     catch the specific break it exists for. Two tests now, and CLAUDE.md
+     constraint 3 explains why one is not enough.
+  2. **`RefCell` is `Send`.** It surrenders `Sync`. The store this phase and
+     CF-28 both specify — `RefCell<Vec<SequencedEvent>>` — would have been `Send`
+     and would have lifted nothing. `Rc` is what does the work.
+  3. **`#[tokio::test]` already drove a `!Send` store.** `tokio::spawn` requires
+     `Send`; `Runtime::block_on`, which the attribute expands to, does not. The
+     registry is still right, but its justification is wasm portability, not
+     `Send`-ness — and this phase's plan had the causation backwards.
+  4. **`$callback:path` cannot be a macro callee in expression position.** Every
+     harness would have compiled; only the CF-24 meta-test would have failed, with
+     a diagnostic that points nowhere near the fix.
+
+  **What this phase found that a later one owns.** ES-6 is not merely
+  semver-visible — it blocks the read-then-append composition inside
+  `spawns_from_generic`, because `Result<_, S::Error>` held across the second
+  await makes the spawned future `!Send`. The test survives by collapsing the read
+  to a `usize`, which is not what a caller would write. Phase 2 inherits that as
+  evidence rather than as a question. A third option for it surfaced too and
+  neither prior document weighed it: a `ThreadSafeEventStore: SendEventStore<Error:
+  Send + Sync>` marker with a blanket impl, which lets generic code demand the
+  stronger property without `wasm32` paying for a native concern.
+
+  **Method note, repeatable and worth the cost.** The evidence was gathered by six
+  independent probes in isolated worktrees, each briefed to compile rather than to
+  argue and to paste transcripts. Two things followed. The probes disagreed with
+  the specification in six places and with each other in none — which is what
+  gives the six corrections above their weight. And their worktrees were seeded
+  from a stale commit; five detected it and reset, one did not and produced a
+  correct design against pre-rename paths. That its output still transferred is
+  luck, not method: **a probe's report must state the commit it compiled
+  against**, and the next wave's brief should require it.
 
 ---
 

@@ -30,6 +30,42 @@
 //! Your crate needs `tokio` with the `macros` and `rt` features in
 //! `dev-dependencies`.
 //!
+//! # Choosing a harness
+//!
+//! `#[tokio::test]` is a default, not a requirement. The per-test wrapper is a
+//! parameter — an *emitter* macro — because the testkit is in no position to
+//! know which runtime an adapter is tested on, and a `cfg` ladder in here would
+//! mean every new runtime needs a testkit release. Three emitters ship, and all
+//! three are demonstrated in this crate's `tests/`:
+//!
+//! | Emitter | Wrapper | Adapter needs |
+//! |---|---|---|
+//! | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_testkit::event_store_conformance!(
+//!     mod_name = dcb_conformance_blocking,
+//!     emit = happenstance_testkit::__emit_blocking,
+//!     factory = MyStore::new()
+//! );
+//! # }
+//! ```
+//!
+//! A runtime none of those cover needs no change here: write a `macro_rules!`
+//! that accepts a comma-separated list of identifiers and hand it to
+//! [`for_each_event_store_rule!`] yourself.
+//!
+//! # Where the rule set lives
+//!
+//! In exactly one place: [`for_each_event_store_rule!`]. Every harness, and the
+//! `no_orphan_rules` meta-test, is built by invoking it. A rule that exists in
+//! [`rules`] without appearing there is a rule nothing runs, which is the
+//! failure the meta-test is for.
+//!
 //! # What is checked
 //!
 //! Every rule traces to a MUST in the [specification][spec], plus the
@@ -57,14 +93,20 @@
 #![doc(html_no_source)]
 
 pub mod fixtures;
+mod registry;
 mod suite;
 
+pub use registry::block_on;
 pub use suite::rules;
 
 /// Generates the full DCB conformance suite for an event store adapter.
 ///
 /// Takes an expression that produces a fresh, empty store. See the [crate
 /// documentation](crate) for what is checked and what the adapter must provide.
+///
+/// The rule list is not written here; it comes from
+/// [`for_each_event_store_rule!`](crate::for_each_event_store_rule), which is
+/// the only place it is written at all.
 ///
 /// # Examples
 ///
@@ -76,64 +118,64 @@ pub use suite::rules;
 /// happenstance_testkit::event_store_conformance!(MemoryEventStore::new());
 /// # }
 /// ```
+///
+/// Choosing a different harness — the emitter is a parameter, so the testkit
+/// never decides which async runtime an adapter is tested on:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_testkit::event_store_conformance!(
+///     mod_name = blocking_conformance,
+///     emit = happenstance_testkit::__emit_blocking,
+///     factory = MemoryEventStore::new()
+/// );
+/// # }
+/// ```
 #[macro_export]
 macro_rules! event_store_conformance {
-    ($factory:expr) => {
-        $crate::event_store_conformance!(mod_name = dcb_conformance, factory = $factory);
-    };
-    (mod_name = $mod_name:ident, factory = $factory:expr) => {
+    // The general form. Listed first so that arm matching never has to back out
+    // of `factory = $factory:expr` to reach it.
+    (mod_name = $mod_name:ident, emit = $emit:path, factory = $factory:expr) => {
         mod $mod_name {
             #![allow(clippy::unwrap_used, unused_imports)]
 
             use super::*;
 
-            macro_rules! conformance_test {
-                ($name:ident) => {
-                    #[tokio::test]
-                    async fn $name() {
-                        $crate::rules::$name(|| $factory).await;
-                    }
-                };
+            // The factory, hoisted behind a function so that emitters need to
+            // know nothing about it. `impl Trait` keeps the adapter's concrete
+            // type opaque without naming it, and re-evaluates the expression on
+            // every call — a file-backed adapter still gets a fresh store per
+            // rule.
+            fn __conformance_store() -> impl $crate::__private::EventStore {
+                $factory
             }
 
-            // --- Query semantics -------------------------------------------
-            conformance_test!(query_all_matches_every_event);
-            conformance_test!(query_item_types_are_or);
-            conformance_test!(query_item_tags_are_and);
-            conformance_test!(query_item_tags_match_supersets);
-            conformance_test!(query_item_rejects_partial_tag_overlap);
-            conformance_test!(query_item_combines_types_and_tags_with_and);
-            conformance_test!(query_items_are_or);
-            conformance_test!(query_matching_nothing_yields_empty);
-
-            // --- Read options ----------------------------------------------
-            conformance_test!(read_from_is_inclusive);
-            conformance_test!(read_backwards_reverses_order);
-            conformance_test!(read_limit_truncates);
-            conformance_test!(read_backwards_from_with_limit);
-            conformance_test!(read_defaults_to_ascending_order);
-
-            // --- Sequence positions -----------------------------------------
-            conformance_test!(positions_are_unique);
-            conformance_test!(positions_are_strictly_monotonic);
-
-            // --- Append -----------------------------------------------------
-            conformance_test!(append_returns_last_written_position);
-            conformance_test!(append_is_atomic);
-            conformance_test!(append_rejects_empty_batch);
-            conformance_test!(append_preserves_event_payload);
-
-            // --- Append conditions -------------------------------------------
-            conformance_test!(condition_without_after_rejects_any_match);
-            conformance_test!(condition_without_after_allows_non_match);
-            conformance_test!(condition_after_ignores_events_at_the_boundary);
-            conformance_test!(condition_after_rejects_events_beyond_the_boundary);
-            conformance_test!(condition_after_ignores_non_matching_events);
-            conformance_test!(condition_rejection_leaves_store_unchanged);
-            conformance_test!(condition_rejection_is_reported_as_condition_violated);
-
-            // --- Concurrency --------------------------------------------------
-            conformance_test!(racing_conditional_appends_elect_one_winner);
+            // `$emit` is `$crate::`-qualified by the caller. A bare name here
+            // would be substituted verbatim and resolve in the *adapter's*
+            // crate, where the testkit's emitters do not exist.
+            $crate::for_each_event_store_rule!($emit);
         }
     };
+    (mod_name = $mod_name:ident, factory = $factory:expr) => {
+        $crate::event_store_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::__emit_tokio,
+            factory = $factory
+        );
+    };
+    ($factory:expr) => {
+        $crate::event_store_conformance!(
+            mod_name = dcb_conformance,
+            emit = $crate::__emit_tokio,
+            factory = $factory
+        );
+    };
+}
+
+/// Re-exports the macro expansions need to name, so an adapter is not required
+/// to have `happenstance-core` in scope under that exact name.
+#[doc(hidden)]
+pub mod __private {
+    pub use happenstance_core::EventStore;
 }

@@ -71,12 +71,18 @@ code around it.
    split exists to allow.
 3. **`EventStore::read` returns the stream at the top level and is not
    `async`.** Nesting it inside a future silently drops `+ Send` from the
-   stream on the `Send` flavour, defeating the entire two-trait design. There
-   is a unit test asserting this; if you find yourself deleting it, stop.
-   Know what it is worth, though: it asserts on a concrete type, where
-   auto-trait leakage makes it pass whatever the trait says, so today the
-   constraint is protecting a test that cannot fail. Phase 1 replaces it with a
-   generic one. (ADR-0001)
+   stream on the `Send` flavour, defeating the entire two-trait design.
+   **Two** tests in `memory.rs` assert this and it takes both; if you find
+   yourself deleting either, stop.
+   `send_flavour_stream_is_send_in_generic_code` writes the bound at the
+   definition, so the obligation is discharged before monomorphisation — that
+   is the fix for the old test, which asserted `Send` on a *concrete* stream
+   and passed by auto-trait leakage whatever the trait said. But it is not
+   sufficient on its own: under the `async fn read` refactor the outermost
+   item is the future, `trait_variant` marks the future `Send`, and the
+   assertion is satisfied by the wrong thing. `spawns_from_generic` is what
+   rejects that refactor, because it holds the stream across an await inside a
+   real `tokio::spawn`. (ADR-0001, ADR-0008)
 4. **Bind `EventStore`, not `SendEventStore`, in generic code.** It is the
    weaker requirement and accepts both flavours. Import only one of the two
    names per module — having both in scope makes method calls ambiguous.
