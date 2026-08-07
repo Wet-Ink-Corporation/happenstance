@@ -282,7 +282,7 @@ scheduling defect.
 | ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](adr/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
 | ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
 | **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
-| **0010** | 3 | What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29) |
+| ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](adr/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
 | **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13) |
 | **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24) |
 | **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38) |
@@ -1677,7 +1677,12 @@ violation.
 **Work**
 
 - [ ] **The mutant registry.** Every rule gets a mutant store that fails it, and
-      every mutant declares exactly which rules it fails (CF-1 – CF-5). Each mutant
+      every mutant declares exactly which rules it fails (CF-1 – CF-5). Note what
+      ADR-0010 makes load-bearing: **exactness**, not merely rejection. A mutant
+      that fails everything is what you get by accident and proves nothing about
+      the rule it was written for; and `conformant_variants_pass_everything` is
+      the positive control without which the whole registry is satisfied by a
+      harness that reports failure unconditionally. Each mutant
       states its provenance: the real implementation mistake it models. The known
       set, four of which a reviewer measured *passing* the current suite:
       `LIMIT` applied before the tag filter; an OR-ed query returning a matching
@@ -1773,7 +1778,13 @@ test suite demonstrates what it rejects.
 
 **Exit criteria**
 
-- [ ] ADR-0010 written before the code it constrains.
+- [x] ADR-0010 written before the code it constrains.
+      [ADR-0010](adr/0010-the-suite-must-prove-itself.md). Two corrections it
+      makes to clauses this phase will re-spell: CF-23's parameterised wrapper is
+      justified by **`wasm32` portability, not `Send`-ness** — `#[tokio::test]`
+      drives a `!Send` store perfectly well, because `Runtime::block_on` is not
+      `tokio::spawn` — and CF-28 must name **`Rc`** rather than `RefCell`, which
+      is `Send` and surrenders only `Sync`.
 - [ ] Every rule has at least one mutant that fails it; every mutant fails exactly
       the rules it declares; the conformant control passes everything.
 - [ ] `PreCommitPositionStore` fails at least one named rule.
