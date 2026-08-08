@@ -23,6 +23,15 @@
   reopens.
 - **Adds:** ES-41, the membership operation VT-7 `[FROZEN]` requires and
   forward-references into a §3 that does not contain it.
+- **Adopts, after this ADR was drafted:** **VT-2** `[FROZEN]`, which the queue
+  assigned to nobody and no ADR in this pass mentioned. Its MUST — *"appending
+  two structurally equal `Event` values MUST produce two distinct events with two
+  distinct positions and two distinct `EventId`s"* (`SPECIFICATION.md:601-604`) —
+  is not writable before `EventId` exists, and its rule
+  `appending_equal_events_yields_two_events` does not exist in `suite.rs`. It is
+  adopted here rather than left to the coverage audit that found it, because a
+  frozen clause whose rule is owned by no phase is indistinguishable, in a work
+  queue, from a clause that is already done. See §9.
 - **Ordered after:** [ADR-0013](0013-position-assignment-and-visibility.md).
   ES-41 is a `[FROZEN]` port clause with no adapter instrument at any axis's far
   end, so CF-25 requires it to name the ADR accepting that risk, and that ADR is
@@ -527,6 +536,51 @@ reopened by `append`, and it *is* extended by the trait — `head()` from ES-30 
 conformant impl, every skeleton and every mutant grows a body for each. The
 criterion as written is true of `append` and false of `EventStore`, and it should
 say which it means.
+
+### 9. VT-2's rule is this ADR's, because identity is what makes it writable
+
+VT-2 is `[FROZEN]` and needs nothing decided. What it needs is a **rule that does
+not exist**, and the reason it does not exist is that nobody could write it: two
+structurally equal `Event`s already get two distinct positions today, so a rule
+written before this ADR could assert two-thirds of the clause and silently skip
+the third. The MUST is *"two distinct events with two distinct positions and two
+distinct `EventId`s"*, and the last conjunct is only expressible once
+`SequencedEvent` carries `id`.
+
+So the rule the code run writes is:
+
+```rust
+/// VT-2 -- structural equality is not identity.
+///
+/// Rejects a content-hash identity scheme, and any store that deduplicates on
+/// payload equality: two byte-identical `VanStockConsumed` events collapse into
+/// one and the van's stock balance is permanently one unit high, with nothing
+/// reporting it (`SPECIFICATION.md:609-613`).
+pub async fn appending_equal_events_yields_two_events<F: Fixture>(
+    open: impl AsyncFn() -> F,
+) -> RuleOutcome
+```
+
+It appends **one batch of two `Event` values that compare `PartialEq`-equal** —
+same type, same payload, same tags, same metadata — and asserts three things:
+two events come back, their positions differ, and their `EventId`s differ. One
+batch rather than two appends is deliberate: it is the arrangement a content-hash
+scheme collapses, and it also exercises ES-19's slice-order assignment on the
+identity path.
+
+**The mutant it needs, since a rule no adapter can fail is decorative.** A
+`ContentHashIdentityStore` whose `EventId` is derived from the event's bytes
+rather than from `(StoreId, SequencePosition)`. It passes every other rule in the
+suite — its identities are unique across *distinct* events, stable across a
+reopen, and never reissued — and fails this one alone. That is the provenance
+CF-4 asks for, and it is a real adapter shape: content-addressed identity is what
+anyone reaching for idempotent ingest proposes first, and it is exactly what VT-8
+forbids by making uniqueness the store's obligation rather than the caller's.
+
+**What this ADR does *not* do to VT-2:** it does not touch the clause. VT-2 is
+frozen, correct as written, and needs no amendment — only an owner. The
+amendments section below therefore carries no VT-2 entry, and that absence is the
+point.
 
 ## Provisional, and what would refute it
 

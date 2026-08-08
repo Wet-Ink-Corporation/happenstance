@@ -283,11 +283,11 @@ scheduling defect.
 | ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
 | **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
 | ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](adr/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
-| **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13) |
-| **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24) |
-| **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38) |
-| **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10) |
-| **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25) |
+| **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13; **written**, and it also discharges ES-8, ES-9, ES-14 – ES-16 and VT-26 – VT-31's read half, which the scope below did not name) |
+| **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24; **written**, and it also discharges ES-25 – ES-29, ES-37 and VT-30) |
+| **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38; **written**, and it also discharges ES-30 – ES-32's head/count questions, ES-35 and ES-40) |
+| **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10; **written**, and it also adds ES-41 and adopts **VT-2**, which this queue assigned to nobody) |
+| **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25; **written**) |
 | **0016** | 5 | What is the wire format, and whose format is it? (WF-1 – WF-12) |
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
@@ -301,6 +301,35 @@ scheduling defect.
 | **0026** | 13 | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18) |
 | **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31) |
 | **0028** | 14 | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32) |
+
+**The parenthesised clause ranges are a scope statement, and phase 4 proved they
+are not a coverage guarantee.** Phase 4's body says it discharges ES-8 – ES-40
+and VT-1 – VT-31 — 64 clause IDs — while its five queue rows named 35. The
+missing 29 were found by a coverage audit at the end of the ADR pass, not by any
+gate: `spec-trace` cannot see this, because every one of those clauses already
+exists, already carries a marker and already names a rule, so nothing is
+dangling. A clause owned by no ADR is invisible in exactly the way a clause that
+is already finished is invisible.
+
+Audited clause by clause against the five written ADRs, most of the 29 turned out
+to be covered anyway — the rows above were stale rather than the ADRs short, and
+they now say what each ADR actually discharges. Four IDs were mentioned by no ADR
+at all, and they split two ways:
+
+- **ES-33, ES-34 and ES-36 need nothing.** All three are `[FROZEN]` and all three
+  already have passing rules from phase 3 —
+  `two_handles_observe_each_others_appends`,
+  `interleaved_appends_on_one_handle_elect_one_winner` and
+  `a_live_read_stream_does_not_block_an_append`. The phase-4 work item that asks
+  for ES-34 to "become a clause with a rule" is describing work that is done.
+- **VT-2 was a genuine hole**, and the most expensive kind: `[FROZEN]`, with a
+  rule (`appending_equal_events_yields_two_events`) that does not exist, and
+  unwritable before this phase because its third conjunct is about `EventId`.
+  Adopted by **ADR-0014 §9**, with the mutant that fails it.
+
+**The rule this leaves behind, for every later phase:** a phase's clause range and
+the union of its ADRs' clause ranges are two numbers, and nothing checks that they
+are equal. Compute both at the phase's exit.
 
 **Amendments to accepted ADRs, scheduled.**
 
@@ -2850,9 +2879,18 @@ limits). Discharges ES-8 – ES-40, VT-1 – VT-31.
       implementability review rejected for SQLite because it yields a boolean — is
       the only shape it can express. A caller writing a retry loop against the
       field needs to know before it freezes, not after.
-- [ ] **Two handles share one consistency boundary** (ES-34) and **acknowledged
+- [x] ~~**Two handles share one consistency boundary** (ES-34) and **acknowledged
       writes survive a reopen** (ES-35) become clauses with rules, gated on the
-      phase-3 fixture.
+      phase-3 fixture.~~ **Done at phase 3, and this item was stale when phase 4
+      opened.** Both are clauses with rules —
+      `two_handles_observe_each_others_appends` (ES-34, `must!`-gated on
+      `SECOND_HANDLE` per CF-16) and `acknowledged_writes_survive_a_reopen`
+      (ES-35, `require!`-gated on `REOPEN` per CF-17). What is left of ES-35 is
+      not a rule but an *adapter* at the durability axis's far end, which CF-26
+      says no fixture can supply and phase 8 owns. Kept struck rather than
+      deleted because the coverage audit reached this item from the other
+      direction — ES-33, ES-34 and ES-36 are named by no phase-4 ADR, and the
+      reason is that there is nothing left for one to decide.
 - [ ] **Decide whether `Fixture::MID_BATCH_FAULT` earns a `CF` clause of its
       own.** Phase 3 added the capability and the rule it gates
       (`append_is_atomic_under_a_mid_batch_fault`) and left the capability
@@ -3112,6 +3150,20 @@ current-text-to-required-text, in the five ADRs' closing sections. They are
 applied with the code rather than now, because the decisions that motivate them
 are not signed off yet, and a body edited ahead of its decision is a body that
 records an intention.
+
+**2026-08-08, later — the coverage gap is closed.** The 29 unclaimed clause IDs
+were audited one at a time against the five written ADRs rather than against the
+queue's stated scopes. Most were already covered and the queue rows were stale;
+they now say what each ADR discharges. Four IDs were named by no ADR: ES-33,
+ES-34 and ES-36 need nothing, because phase 3 already gave all three passing
+rules, and the ES-34 work item above is struck as stale. **VT-2 was the real
+hole** — `[FROZEN]`, its rule `appending_equal_events_yields_two_events` absent
+from `suite.rs`, and unwritable before this phase because the clause's third
+conjunct is about `EventId`. ADR-0014 §9 adopts it, specifies the rule and names
+`ContentHashIdentityStore` as the mutant that fails it and nothing else. The
+standing lesson is recorded at the ADR queue: **a phase's clause range and the
+union of its ADRs' clause ranges are two numbers, and nothing checks that they
+agree.**
 
 ---
 
