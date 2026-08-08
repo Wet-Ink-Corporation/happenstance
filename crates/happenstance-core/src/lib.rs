@@ -102,7 +102,7 @@ pub mod store;
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 mod memory;
 
-pub use append::AppendCondition;
+pub use append::{AppendCondition, Guard};
 pub use error::{AppendError, ConditionViolated, InvalidEventType, InvalidQuery, InvalidTag};
 pub use event::{
     Event, EventParts, EventType, MAX_EVENT_TYPE_LEN, SequencePosition, SequencedEvent,

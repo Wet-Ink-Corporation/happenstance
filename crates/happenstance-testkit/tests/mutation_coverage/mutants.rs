@@ -510,13 +510,10 @@ impl Defect for UninternedTypeStore {
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
         let known = Self::interned(events);
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && Self::query_matches(&condition.fail_if_events_match, &known, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && Self::query_matches(&guard.query, &known, event)
+        })
     }
 }
 
@@ -1046,8 +1043,11 @@ impl Defect for AfterValidatedAgainstHeadStore {
     ) -> Result<SequencePosition, AppendError<LogError>> {
         // THE DEFECT: input validation on an opaque ordering key.
         if let Some(condition) = condition
-            && let Some(after) = condition.after
-            && stored.last().is_none_or(|event| event.position < after)
+            && condition
+                .guards()
+                .iter()
+                .filter_map(|guard| guard.after)
+                .any(|after| stored.last().is_none_or(|event| event.position < after))
         {
             return Err(AppendError::Store(LogError::UnknownPosition));
         }
@@ -1125,7 +1125,7 @@ impl Defect for ViolationAsStoreErrorStore {
 // Append conditions — the probe
 // =====================================================================
 
-/// `condition.after.unwrap_or(FIRST)`, so an event at the first position never
+/// `guard.after.unwrap_or(FIRST)`, so an event at the first position never
 /// violates.
 pub(crate) struct AfterDefaultsToFirstStore;
 
@@ -1137,16 +1137,10 @@ impl Defect for AfterDefaultsToFirstStore {
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
         // The `Option` collapsed at the boundary because the SQL wanted a value.
-        let after = condition.after.unwrap_or(SequencePosition::FIRST);
-        events
-            .iter()
-            .find(|event| {
-                event.position > after
-                    && condition
-                        .fail_if_events_match
-                        .matches(event.event_type(), event.tags())
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            let after = guard.after.unwrap_or(SequencePosition::FIRST);
+            event.position > after && guard.query.matches(event.event_type(), event.tags())
+        })
     }
 }
 
@@ -1163,10 +1157,9 @@ impl Defect for ExistenceProbeStore {
     ) -> Option<SequencePosition> {
         // `SELECT EXISTS(SELECT 1 FROM events WHERE position > ?)` — the fast
         // path someone adds when the join is the expensive half.
-        events
-            .iter()
-            .find(|event| condition.after.is_none_or(|after| event.position > after))
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+        })
     }
 }
 
@@ -1182,15 +1175,10 @@ impl Defect for AfterIsInclusiveStore {
     ) -> Option<SequencePosition> {
         // `after` is exclusive and `from` is inclusive; one comparison served
         // both in the first draft.
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position >= after)
-                    && condition
-                        .fail_if_events_match
-                        .matches(event.event_type(), event.tags())
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position >= after)
+                && guard.query.matches(event.event_type(), event.tags())
+        })
     }
 }
 
@@ -1204,18 +1192,18 @@ impl Defect for AfterIsAnOffsetStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        let skip = condition.after.map_or(0, |after| {
-            usize::try_from(after.get()).unwrap_or(usize::MAX)
-        });
-        events
-            .iter()
-            .filter(|event| {
-                condition
-                    .fail_if_events_match
-                    .matches(event.event_type(), event.tags())
-            })
-            .nth(skip)
-            .map(|event| event.position)
+        // Applied per guard, like every other condition mutant here, so that
+        // the offset reading is the only difference from `correct::violation`.
+        condition.guards().iter().find_map(|guard| {
+            let skip = guard.after.map_or(0, |after| {
+                usize::try_from(after.get()).unwrap_or(usize::MAX)
+            });
+            events
+                .iter()
+                .filter(|event| guard.query.matches(event.event_type(), event.tags()))
+                .nth(skip)
+                .map(|event| event.position)
+        })
     }
 }
 
@@ -1237,13 +1225,10 @@ impl Defect for ExactTagMatchConditionStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && exact_tag_match(&condition.fail_if_events_match, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && exact_tag_match(&guard.query, event)
+        })
     }
 }
 
@@ -1267,13 +1252,10 @@ impl Defect for TagBlindConditionStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && type_only_match(&condition.fail_if_events_match, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && type_only_match(&guard.query, event)
+        })
     }
 }
 
@@ -1332,13 +1314,17 @@ impl Defect for UncorrelatedProbeStore {
     ) -> Option<SequencePosition> {
         let matched = events.iter().find(|event| {
             condition
-                .fail_if_events_match
-                .matches(event.event_type(), event.tags())
+                .guards()
+                .iter()
+                .any(|guard| guard.query.matches(event.event_type(), event.tags()))
         })?;
         let head = events.last().map(|event| event.position)?;
         // THE DEFECT: the two questions are asked of the whole store rather than
         // of one event.
-        let moved_on = condition.after.is_none_or(|after| head > after);
+        let moved_on = condition
+            .guards()
+            .iter()
+            .any(|guard| guard.after.is_none_or(|after| head > after));
         moved_on.then_some(matched.position)
     }
 }

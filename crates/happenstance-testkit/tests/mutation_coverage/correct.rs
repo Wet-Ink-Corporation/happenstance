@@ -41,7 +41,7 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Guard, Query,
     ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 
@@ -296,6 +296,31 @@ pub(crate) fn sequence(
         sequenced.push(stamp(position, event.clone()));
     }
     sequenced
+}
+
+/// Finds the first event that any guard rejects, given a per-guard predicate.
+///
+/// Every condition mutant in this binary models a defect in how **one** guard is
+/// evaluated, and each one uses this so the defect is applied to *every* guard.
+/// Reaching for `condition.guards()[0]` instead would be shorter and would give
+/// each mutant a second, undeclared defect — ignoring guards 2..n — so
+/// `mutants_fail_exactly_their_declared_rules` would start catching the
+/// instrument rather than the implementation. That is the failure this whole
+/// file exists to prevent, arriving through the newest field.
+pub(crate) fn first_violation(
+    events: &[SequencedEvent],
+    condition: &AppendCondition,
+    violated: impl Fn(&Guard, &SequencedEvent) -> bool,
+) -> Option<SequencePosition> {
+    events
+        .iter()
+        .find(|event| {
+            condition
+                .guards()
+                .iter()
+                .any(|guard| violated(guard, event))
+        })
+        .map(|event| event.position)
 }
 
 /// The incarnation every store in this binary mints identities under.

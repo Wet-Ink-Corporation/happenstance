@@ -1,5 +1,8 @@
 //! The append condition: DCB's consistency mechanism.
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use crate::event::SequencePosition;
 use crate::query::Query;
 
@@ -11,9 +14,17 @@ use crate::query::Query;
 /// since — which is precisely the set of writes that could have changed the
 /// decision.
 ///
-/// The store **must** reject the append if it holds at least one event matching
-/// `fail_if_events_match` after `after`. With `after` set to `None`, any match
-/// at all rejects it.
+/// A condition is a non-empty sequence of [`Guard`]s, each pairing a query with
+/// its own boundary. The store **must** reject the append if **any** guard is
+/// violated — that is, if the store holds an event matching that guard's query
+/// at a position strictly greater than that guard's `after`. A guard whose
+/// `after` is `None` is violated by any match at all.
+///
+/// Most conditions have exactly one guard, which is what
+/// [`new`](Self::new) builds and what every example below shows. More than one
+/// is for a decision model assembled from fragments read separately: four reads
+/// produce four boundaries, and there is no single boundary that is correct for
+/// all four.
 ///
 /// # The usual shape
 ///
@@ -44,54 +55,167 @@ use crate::query::Query;
 ///     Tags::from_pairs([("course", "c1")])?,
 /// )?));
 ///
-/// assert!(condition.after.is_none());
+/// assert_eq!(condition.guards().len(), 1);
+/// assert!(condition.guards()[0].after.is_none());
+/// # Ok::<(), Box<dyn core::error::Error>>(())
+/// ```
+///
+/// Two fragments read separately, each carrying its own boundary — the shape a
+/// `min(p₁, p₂)` collapse gets wrong:
+///
+/// ```
+/// use happenstance_core::{AppendCondition, Query, QueryItem, SequencePosition};
+///
+/// let busy = Query::from_item(QueryItem::of_types(["MeterReadingTaken"])?);
+/// let quiet = Query::from_item(QueryItem::of_types(["TariffPublished"])?);
+///
+/// let condition = AppendCondition::new(busy)
+///     .after_opt(SequencePosition::new(9_000))
+///     .and_guard(quiet, SequencePosition::new(12));
+///
+/// assert_eq!(condition.guards().len(), 2);
+/// // The quiet fragment's stale boundary does not govern the busy one.
+/// assert_eq!(condition.guards()[0].after, SequencePosition::new(9_000));
+/// assert_eq!(condition.guards()[1].after, SequencePosition::new(12));
 /// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AppendCondition {
+    // Private, and this is the one place the shape is stricter than it looks
+    // like it needs to be. `#[non_exhaustive]` blocks the struct-literal
+    // *expression* and exhaustive matching; it does **not** block assignment to
+    // a public field of a value the caller already owns. With a public field,
+    // one line of safe downstream code —
+    //
+    //     let mut c = AppendCondition::new(q);
+    //     c.guards = Box::new([]);
+    //
+    // — builds a condition with no guards, which nothing can ever violate. That
+    // is a conditional append that is silently unconditional: a lost update,
+    // with no diagnostic anywhere. The accessor below keeps the read that an
+    // ingest policy needs and removes the expression that reaches zero guards.
+    guards: Box<[Guard]>,
+}
+
+/// One clause of an [`AppendCondition`]: a query and the boundary it is checked
+/// from.
+///
+/// `#[non_exhaustive]` with public fields, which is a deliberate asymmetry
+/// rather than an oversight: a replication hub must be able to **read** `after`
+/// on a peer-supplied condition in order to refuse it, and must not be able to
+/// **fabricate** one. Downstream, `Guard { query, .. }` in a pattern and
+/// `guard.after` as a read both compile; `Guard { query, after }` as an
+/// expression is `error[E0639]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Guard {
     /// The append is rejected if the store holds any event matching this.
-    pub fail_if_events_match: Query,
-    /// Restricts the check to events *after* this position, exclusive.
+    pub query: Query,
+    /// Restricts this guard to events *after* this position, exclusive.
     ///
-    /// `None` checks the entire log. Set this to the last position the caller
-    /// observed, so that events it already accounted for do not reject its own
-    /// append.
+    /// `None` checks the entire log. Set it to the last position the caller
+    /// observed *for this query*, so that events it already accounted for do
+    /// not reject its own append.
     pub after: Option<SequencePosition>,
 }
 
 impl AppendCondition {
-    /// A condition checking the whole log.
-    pub const fn new(fail_if_events_match: Query) -> Self {
+    /// A condition with one unbounded guard, checking the whole log.
+    #[must_use]
+    pub fn new(fail_if_events_match: Query) -> Self {
         Self {
-            fail_if_events_match,
-            after: None,
+            guards: Box::new([Guard {
+                query: fail_if_events_match,
+                after: None,
+            }]),
         }
     }
 
-    /// Restricts the check to events after `position`, exclusive.
+    /// Adds a guard with its own boundary.
+    ///
+    /// This is what makes the specification's advice to "issue one read per
+    /// fragment" sound. Four reads produce four boundaries, and collapsing them
+    /// to `min(p₁…p₄)` — the obvious application-side workaround — means the
+    /// quietest fragment's stale boundary governs the busiest one, so a busy
+    /// consistency boundary rejects appends that never conflicted and the
+    /// deployment reads the rejection rate as contention.
+    ///
+    /// Allocation note, since this is the trade a reader coming from a language
+    /// with a growable list will not expect: `guards` is a boxed slice, which
+    /// carries no spare capacity, so this unboxes, pushes and re-boxes. A chain
+    /// of *n* calls is quadratic in allocation. For the counts this exists to
+    /// serve — four in the worked case — that is the right side of the trade
+    /// against carrying capacity in every cloned condition forever.
     #[must_use]
-    pub const fn after(mut self, position: SequencePosition) -> Self {
-        self.after = Some(position);
-        self
+    pub fn and_guard(self, query: Query, after: Option<SequencePosition>) -> Self {
+        let mut guards = Vec::from(self.guards);
+        guards.push(Guard { query, after });
+        Self {
+            guards: guards.into_boxed_slice(),
+        }
     }
 
-    /// Restricts the check to events after `position`, exclusive, or checks the
-    /// whole log when `position` is `None`.
+    /// The guards, in the order they were added. Never empty.
+    #[must_use]
+    pub fn guards(&self) -> &[Guard] {
+        &self.guards
+    }
+
+    /// Restricts **every** guard to events after `position`, exclusive.
+    #[must_use]
+    pub fn after(self, position: SequencePosition) -> Self {
+        self.after_opt(Some(position))
+    }
+
+    /// Restricts **every** guard to events after `position`, exclusive, or
+    /// checks the whole log when `position` is `None`.
     ///
     /// The `Option`-taking form exists because callers usually hold the last
     /// position they read, which is `None` when their query matched nothing.
+    ///
+    /// Applying to every guard is what keeps a single-guard condition — the
+    /// shape every existing caller builds — behaving exactly as it always has.
+    /// For per-guard boundaries, use [`and_guard`](Self::and_guard).
     #[must_use]
-    pub const fn after_opt(mut self, position: Option<SequencePosition>) -> Self {
-        self.after = position;
-        self
+    pub fn after_opt(self, position: Option<SequencePosition>) -> Self {
+        let guards = Vec::from(self.guards)
+            .into_iter()
+            .map(|guard| Guard {
+                query: guard.query,
+                after: position,
+            })
+            .collect::<Vec<_>>();
+        Self {
+            guards: guards.into_boxed_slice(),
+        }
     }
 
     /// Whether an event at `position` with this type and these tags would
     /// violate the condition.
     ///
+    /// Violated if **any** guard is violated — the guards are a conjunction of
+    /// constraints, so one broken clause rejects the append.
+    ///
     /// Adapters should push this down into storage; this is the reference
-    /// definition the conformance suite holds them to.
+    /// definition the conformance suite holds them to. An adapter generating SQL
+    /// must parenthesise each guard explicitly — `(item AND position > p) OR …`
+    /// — because the precedence bug that already threatens the single-boundary
+    /// form becomes *n* times more likely here.
+    pub fn is_violated_by(
+        &self,
+        position: SequencePosition,
+        event_type: &crate::EventType,
+        tags: &crate::Tags,
+    ) -> bool {
+        self.guards
+            .iter()
+            .any(|guard| guard.is_violated_by(position, event_type, tags))
+    }
+}
+
+impl Guard {
+    /// Whether an event at `position` would violate this guard alone.
     pub fn is_violated_by(
         &self,
         position: SequencePosition,
@@ -104,42 +228,75 @@ impl AppendCondition {
         // 1.88.
         match self.after {
             Some(after) if position <= after => false,
-            _ => self.fail_if_events_match.matches(event_type, tags),
+            _ => self.query.matches(event_type, tags),
         }
     }
 }
 
 #[cfg(feature = "serde")]
 mod serde_impls {
-    use super::AppendCondition;
+    use super::{AppendCondition, Guard};
     use crate::event::SequencePosition;
     use crate::query::Query;
+    use alloc::vec::Vec;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename = "Guard")]
+    struct GuardWire {
+        query: Query,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after: Option<SequencePosition>,
+    }
 
     #[derive(Serialize, Deserialize)]
     #[serde(rename = "AppendCondition")]
     struct Wire {
-        fail_if_events_match: Query,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        after: Option<SequencePosition>,
+        guards: Vec<GuardWire>,
     }
 
     impl Serialize for AppendCondition {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             Wire {
-                fail_if_events_match: self.fail_if_events_match.clone(),
-                after: self.after,
+                guards: self
+                    .guards()
+                    .iter()
+                    .map(|guard| GuardWire {
+                        query: guard.query.clone(),
+                        after: guard.after,
+                    })
+                    .collect(),
             }
             .serialize(serializer)
         }
     }
 
     impl<'de> Deserialize<'de> for AppendCondition {
+        /// Rejects an empty guard sequence.
+        ///
+        /// Deserialisation is the other door into the private field, and a
+        /// validity invariant that the constructor enforces and the decoder does
+        /// not is not an invariant. An empty condition decoded from a peer would
+        /// be a condition nothing can violate — the same silent lost update the
+        /// private field exists to prevent, arriving over the wire instead of
+        /// through an assignment.
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             let wire = Wire::deserialize(deserializer)?;
+            if wire.guards.is_empty() {
+                return Err(serde::de::Error::custom(
+                    "an append condition must carry at least one guard",
+                ));
+            }
+            let guards = wire
+                .guards
+                .into_iter()
+                .map(|guard| Guard {
+                    query: guard.query,
+                    after: guard.after,
+                })
+                .collect::<Vec<_>>();
             Ok(Self {
-                fail_if_events_match: wire.fail_if_events_match,
-                after: wire.after,
+                guards: guards.into_boxed_slice(),
             })
         }
     }
