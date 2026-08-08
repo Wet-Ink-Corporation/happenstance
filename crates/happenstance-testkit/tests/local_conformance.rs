@@ -129,7 +129,7 @@ impl LocalMemoryEventStore {
         };
 
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get());
+            selected.truncate(limit);
         }
 
         drop(borrowed);

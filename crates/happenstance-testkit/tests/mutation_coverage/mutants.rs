@@ -666,7 +666,7 @@ impl Defect for FetchOneExtraStore {
     fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
         let mut selected = selected;
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get().saturating_add(1));
+            selected.truncate(limit.saturating_add(1));
         }
         selected
     }

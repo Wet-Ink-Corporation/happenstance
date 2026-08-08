@@ -209,7 +209,7 @@ impl SendEventStore for SqliteEventStore {
                 query: query.clone(),
                 options,
                 resume_from: options.from,
-                remaining: options.limit.map(std::num::NonZeroUsize::get),
+                remaining: options.limit,
                 finished: false,
             })),
         }

@@ -90,7 +90,6 @@ pub fn event_type(value: &str) -> EventType {
 #[must_use]
 pub fn query_of_types(types: &[&str]) -> Query {
     Query::from_item(QueryItem::of_types(types.iter().copied()).expect("valid types"))
-        .expect("non-empty query")
 }
 
 /// Builds a single-item query constrained by tags.
@@ -101,7 +100,6 @@ pub fn query_of_types(types: &[&str]) -> Query {
 #[must_use]
 pub fn query_tagged(pairs: &[(&str, &str)]) -> Query {
     Query::from_item(QueryItem::tagged(tags(pairs)).expect("non-empty tags"))
-        .expect("non-empty query")
 }
 
 /// Builds a single-item query constrained by both type and tags.
@@ -112,7 +110,6 @@ pub fn query_tagged(pairs: &[(&str, &str)]) -> Query {
 #[must_use]
 pub fn query_of(types: &[&str], pairs: &[(&str, &str)]) -> Query {
     Query::from_item(QueryItem::new(types.iter().copied(), tags(pairs)).expect("valid query item"))
-        .expect("non-empty query")
 }
 
 /// Builds a query item constrained by type alone.

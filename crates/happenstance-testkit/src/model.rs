@@ -288,23 +288,29 @@ impl Model {
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
-        // `from` is inclusive in both directions and bounds opposite ends:
-        // forwards it is a floor, backwards a ceiling.
+        // `from` and `to` are both inclusive in both directions, and each bounds
+        // opposite ends depending on direction: forwards `from` is a floor and
+        // `to` a ceiling, backwards they swap. The model carries `to` because a
+        // model that ignores an option cannot disagree with a store that
+        // mishandles it — it would agree with every implementation, which is the
+        // one thing a reference model must not do.
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
+                .filter(|event| options.to.is_none_or(|to| event.position >= to))
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
+                .filter(|event| options.to.is_none_or(|to| event.position <= to))
                 .cloned()
                 .collect()
         };
 
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get());
+            selected.truncate(limit);
         }
         selected
     }

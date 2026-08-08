@@ -242,10 +242,27 @@ impl SequencePosition {
 
     /// The next position, or `None` on overflow.
     ///
-    /// Only meaningful for adapters that allocate positions densely; the
-    /// specification does not require the next append to land here.
+    /// **This is the resume idiom.** A consumer that has processed up to
+    /// `checkpoint` resumes with `ReadOptions::from(checkpoint.next()?)`, and
+    /// that is sound on a store with gaps: `from` is a threshold rather than a
+    /// seek, so if nothing occupies `checkpoint + 1` the read yields the next
+    /// event above it. This is not the caller doing arithmetic on an opaque
+    /// ordering key — it is the one method on this type whose whole purpose is
+    /// to advance past a position without the caller knowing what positions
+    /// mean.
+    ///
+    /// Do not read `Some` as a promise that an event exists there, or that the
+    /// next append will land there. The specification permits gaps everywhere.
     pub const fn next(self) -> Option<Self> {
-        Self::new(self.0.get().saturating_add(1))
+        // `checked_add`, not `saturating_add`. Saturating made the one method
+        // whose documented purpose is signalling overflow incapable of it:
+        // at `u64::MAX` it returned `Some(u64::MAX)`, so a consumer resuming
+        // from the last representable position would re-read it forever instead
+        // of being told it had run out of key space.
+        match self.0.get().checked_add(1) {
+            Some(next) => Self::new(next),
+            None => None,
+        }
     }
 }
 

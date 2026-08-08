@@ -130,21 +130,26 @@ impl From<core::convert::Infallible> for InvalidQuery {
 /// This is the DCB concurrency signal. Callers respond by rebuilding their
 /// decision model from the current state and retrying — it is an expected,
 /// routine outcome under contention, not a fault.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("append condition violated: the store already contains a matching event")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ConditionViolated {
     /// The position of a conflicting event, when the adapter can identify one
     /// cheaply.
     ///
-    /// Purely informational: adapters that detect the conflict without learning
-    /// which event caused it (a conditional `INSERT ... WHERE NOT EXISTS`, for
-    /// instance) report `None`, and callers must not depend on this being set.
+    /// **A hint, not a promise, and a caller must be written for `None`.** An
+    /// adapter that detects the conflict without learning which event caused it
+    /// reports `None`, and that is not a deficient adapter: a store reached over
+    /// one-shot HTTP has no interactive transaction, so the only shape it can
+    /// express is a conditional `INSERT … SELECT … WHERE NOT EXISTS`, which
+    /// yields a boolean and no row. A retry loop that branches on this field
+    /// being `Some` works against an in-process store and stops working against
+    /// a remote one.
     pub conflicting_position: Option<SequencePosition>,
 }
 
 impl ConditionViolated {
     /// A violation with no identified conflicting event.
+    #[must_use]
     pub const fn unspecified() -> Self {
         Self {
             conflicting_position: None,
@@ -152,12 +157,31 @@ impl ConditionViolated {
     }
 
     /// A violation naming the event that caused it.
+    #[must_use]
     pub const fn at(position: SequencePosition) -> Self {
         Self {
             conflicting_position: Some(position),
         }
     }
 }
+
+impl core::fmt::Display for ConditionViolated {
+    /// Renders the conflicting position when the adapter supplied one.
+    ///
+    /// Hand-written rather than a `thiserror` attribute because the message has
+    /// two shapes, and the field the store already populates was previously
+    /// carried and never shown — an operator reading a log got "the store
+    /// already contains a matching event" and no way to find which.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("append condition violated: the store already contains a matching event")?;
+        if let Some(position) = self.conflicting_position {
+            write!(f, " at position {position}")?;
+        }
+        f.write_str("; rebuild the decision model and retry")
+    }
+}
+
+impl core::error::Error for ConditionViolated {}
 
 /// Why an append failed.
 ///

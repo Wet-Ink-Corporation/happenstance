@@ -22,7 +22,7 @@ use crate::query::Query;
 ///
 /// ```
 /// # use happenstance_core::{AppendCondition, Query, QueryItem, Tags};
-/// let query = Query::from_item(QueryItem::of_types(["StudentSubscribed"])?)?;
+/// let query = Query::from_item(QueryItem::of_types(["StudentSubscribed"])?);
 ///
 /// // ... read with `query`, ending at `last_seen` ...
 /// let last_seen = None; // nothing matched
@@ -42,7 +42,7 @@ use crate::query::Query;
 /// let condition = AppendCondition::new(Query::from_item(QueryItem::new(
 ///     ["CourseDefined"],
 ///     Tags::from_pairs([("course", "c1")])?,
-/// )?)?);
+/// )?));
 ///
 /// assert!(condition.after.is_none());
 /// # Ok::<(), Box<dyn core::error::Error>>(())
@@ -162,8 +162,7 @@ mod tests {
 
     #[test]
     fn without_after_any_match_violates() {
-        let condition =
-            AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()).unwrap());
+        let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()));
 
         assert!(condition.is_violated_by(pos(1), &ty("A"), &Tags::empty()));
         assert!(!condition.is_violated_by(pos(1), &ty("B"), &Tags::empty()));
@@ -171,9 +170,8 @@ mod tests {
 
     #[test]
     fn after_is_exclusive() {
-        let condition =
-            AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()).unwrap())
-                .after(pos(5));
+        let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()))
+            .after(pos(5));
 
         // Strictly before the boundary: already accounted for.
         assert!(!condition.is_violated_by(pos(4), &ty("A"), &Tags::empty()));
@@ -185,9 +183,8 @@ mod tests {
 
     #[test]
     fn non_matching_events_after_the_boundary_are_ignored() {
-        let condition =
-            AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()).unwrap())
-                .after(pos(5));
+        let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()))
+            .after(pos(5));
 
         assert!(!condition.is_violated_by(pos(99), &ty("B"), &Tags::empty()));
     }

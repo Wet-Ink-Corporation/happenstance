@@ -49,7 +49,7 @@ use crate::store::SendEventStore;
 /// let query = Query::from_item(QueryItem::new(
 ///     ["CourseDefined"],
 ///     Tags::from_pairs([("course", "c1")])?,
-/// )?)?;
+/// )?);
 ///
 /// let (events, last_seen) = read_decision_model(&store, &query).await?;
 /// assert!(events.is_empty());
@@ -160,21 +160,29 @@ impl SendEventStore for MemoryEventStore {
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // `from` is the starting bound and `to` the stopping one, so reading
+        // backwards swaps which side of the position order each sits on. Both
+        // are inclusive in both directions.
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
+                .filter(|event| options.to.is_none_or(|to| event.position >= to))
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
+                .filter(|event| options.to.is_none_or(|to| event.position <= to))
                 .cloned()
                 .collect()
         };
 
+        // After filtering and ordering, never before: `limit` truncates the
+        // result set the caller would otherwise have seen. A limit of zero
+        // truncates to nothing, which is the point of it being `Option<usize>`.
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get());
+            selected.truncate(limit);
         }
 
         drop(guard);
@@ -294,8 +302,7 @@ mod tests {
         store.append(&[event("A")], None).await.unwrap();
         let before = store.snapshot();
 
-        let condition =
-            AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()).unwrap());
+        let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()));
         let err = store
             .append(&[event("B"), event("C")], Some(&condition))
             .await
@@ -321,9 +328,8 @@ mod tests {
         let store = MemoryEventStore::new();
         store.append(&[event("Blocker")], None).await.unwrap();
 
-        let condition = AppendCondition::new(
-            Query::from_item(QueryItem::of_types(["Blocker"]).unwrap()).unwrap(),
-        );
+        let condition =
+            AppendCondition::new(Query::from_item(QueryItem::of_types(["Blocker"]).unwrap()));
         let err = store.append(&[], Some(&condition)).await.unwrap_err();
 
         assert!(
@@ -471,8 +477,7 @@ mod tests {
         let query = Query::from_item(
             QueryItem::tagged(Tags::from_pairs([("course", "c1"), ("student", "s1")]).unwrap())
                 .unwrap(),
-        )
-        .unwrap();
+        );
 
         let matched = collect(store.read(&query, ReadOptions::new()))
             .await

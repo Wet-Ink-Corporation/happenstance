@@ -37,7 +37,6 @@
 //! workspace gets, and it is the reason this skeleton is a poor instrument for
 //! the position-allocation axis and a good one for the flavour axis.
 
-use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -233,7 +232,7 @@ impl Stream for SqlRowStream {
                         Ok(cursor) => {
                             this.state = StreamState::Draining {
                                 cursor,
-                                remaining: options.limit.map(NonZeroUsize::get),
+                                remaining: options.limit,
                             };
                         }
                         Err(err) => return Poll::Ready(Some(Err(err.into()))),

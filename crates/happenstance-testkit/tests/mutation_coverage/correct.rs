@@ -238,7 +238,7 @@ pub(crate) fn truncated(
     options: ReadOptions,
 ) -> Vec<&SequencedEvent> {
     if let Some(limit) = options.limit {
-        selected.truncate(limit.get());
+        selected.truncate(limit);
     }
     selected
 }

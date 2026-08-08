@@ -2,7 +2,6 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::num::NonZeroUsize;
 
 use crate::error::InvalidQuery;
 use crate::event::{EventType, SequencePosition};
@@ -120,7 +119,14 @@ impl QueryItem {
 ///
 /// Modelled as an enum rather than a `Vec<QueryItem>` because the specification
 /// requires a query to hold at least one item **or** to match everything. An
-/// empty item list is not a legal query, so it is not representable.
+/// empty item list is not a legal query, and is not representable from outside
+/// this crate: [`Items`](Self::Items) is `#[non_exhaustive]`, so the only way in
+/// is [`from_items`](Self::from_items), which refuses an empty sequence.
+///
+/// That seal is load-bearing rather than tidy. An `AppendCondition` built on a
+/// query with no items is a condition nothing can ever violate — a conditional
+/// append that is silently unconditional, which is a lost update with no
+/// diagnostic anywhere.
 ///
 /// Items combine with OR: an event matches the query when it matches any item.
 ///
@@ -146,6 +152,11 @@ pub enum Query {
     #[default]
     All,
     /// Matches events satisfying at least one item.
+    ///
+    /// `#[non_exhaustive]` so that no downstream crate can build one directly.
+    /// Inside this crate the variant is ordinary; outside it, it can be matched
+    /// only as `Query::Items(..)` and constructed not at all.
+    #[non_exhaustive]
     Items(Box<[QueryItem]>),
 }
 
@@ -171,11 +182,12 @@ impl Query {
 
     /// Convenience for the single-item case.
     ///
-    /// # Errors
-    ///
-    /// Infallible in practice; the signature mirrors [`Query::from_items`].
-    pub fn from_item(item: QueryItem) -> Result<Self, InvalidQuery> {
-        Self::from_items([item])
+    /// Infallible, and typed that way: one item is never zero items, so the
+    /// `Result` this used to return could not be `Err` and only taught callers
+    /// to write a `?` that never fired.
+    #[must_use]
+    pub fn from_item(item: QueryItem) -> Self {
+        Self::Items(alloc::vec![item].into_boxed_slice())
     }
 
     /// The items, or `None` for [`Query::All`].
@@ -219,18 +231,51 @@ impl Query {
 ///     .limit(50);
 ///
 /// assert!(options.backwards);
-/// assert_eq!(options.limit.map(std::num::NonZeroUsize::get), Some(50));
+/// assert_eq!(options.limit, Some(50));
+/// ```
+///
+/// A closed window, which is what `to` is for — a backfill worker owning
+/// `[1, H]` while a tail worker owns everything above it:
+///
+/// ```
+/// use happenstance_core::{ReadOptions, SequencePosition};
+///
+/// let head = SequencePosition::new(53_000_000).expect("non-zero");
+/// let backfill = ReadOptions::new().from(SequencePosition::FIRST).to(head);
+///
+/// assert_eq!(backfill.to, Some(head));
+/// ```
+///
+/// A limit of zero reads nothing, which is what makes `.limit(budget - fetched)`
+/// safe at parity:
+///
+/// ```
+/// use happenstance_core::ReadOptions;
+///
+/// assert_eq!(ReadOptions::new().limit(0).limit, Some(0));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub struct ReadOptions {
     /// Where to start, **inclusive**. `None` starts at the first event when
     /// reading forwards, or the last when reading backwards.
+    ///
+    /// A threshold, not a seek: `from` need not name an event that exists. A
+    /// read from a position nothing occupies yields the next matching event
+    /// above it (or below, reading backwards), rather than erroring or coming
+    /// back empty.
     pub from: Option<SequencePosition>,
+    /// Where to stop, **inclusive**. `None` reads to the end.
+    ///
+    /// Under [`backwards`](Self::backwards), `from` remains the starting
+    /// (higher) bound and `to` the stopping (lower) one — the two swap roles in
+    /// position order, not in meaning.
+    pub to: Option<SequencePosition>,
     /// Read in descending position order instead of ascending.
     pub backwards: bool,
-    /// Stop after this many events. `None` reads all matches.
-    pub limit: Option<NonZeroUsize>,
+    /// Stop after this many events. `None` reads all matches; `Some(0)` reads
+    /// none.
+    pub limit: Option<usize>,
 }
 
 impl ReadOptions {
@@ -238,6 +283,7 @@ impl ReadOptions {
     pub const fn new() -> Self {
         Self {
             from: None,
+            to: None,
             backwards: false,
             limit: None,
         }
@@ -251,17 +297,42 @@ impl ReadOptions {
     }
 
     /// Reads newest-first.
+    ///
+    /// One-way: there is no `forwards()`, because the default already is.
     #[must_use]
     pub const fn backwards(mut self) -> Self {
         self.backwards = true;
         self
     }
 
-    /// Reads at most `limit` events. A `limit` of zero is ignored, since
-    /// requesting nothing is never what the caller meant.
+    /// Stops at `position`, inclusive.
+    ///
+    /// This is the caller-side spelling of a window, and it must not be confused
+    /// with a store's internal pagination: **one `read` is one sample; *n*
+    /// chunked reads are *n* samples.** Nothing in the contract makes two `read`
+    /// calls one snapshot. What makes stitching windows together sound is the
+    /// visibility invariant — no event ever becomes visible below a position a
+    /// reader has already observed — and not any isolation promise about `read`.
+    #[must_use]
+    pub const fn to(mut self, position: SequencePosition) -> Self {
+        self.to = Some(position);
+        self
+    }
+
+    /// Reads at most `limit` events.
+    ///
+    /// **A limit of zero reads nothing.** This is a deliberate divergence from
+    /// the DCB reference implementation, which treats `limit: 0` as unlimited
+    /// through JavaScript falsiness — a coherent reading of `0` in a language
+    /// where `0` is falsy, and not one available here. It matches SQL's
+    /// `LIMIT 0` and every paging API instead.
+    ///
+    /// The caller this protects is the one writing `.limit(budget - fetched)`:
+    /// under the old behaviour, reaching parity turned a paging loop into a full
+    /// scan of the log, silently.
     #[must_use]
     pub const fn limit(mut self, limit: usize) -> Self {
-        self.limit = NonZeroUsize::new(limit);
+        self.limit = Some(limit);
         self
     }
 }
@@ -324,14 +395,16 @@ mod serde_impls {
     #[serde(rename = "ReadOptions", default)]
     struct ReadOptionsWire {
         from: Option<crate::event::SequencePosition>,
+        to: Option<crate::event::SequencePosition>,
         backwards: bool,
-        limit: Option<core::num::NonZeroUsize>,
+        limit: Option<usize>,
     }
 
     impl Serialize for ReadOptions {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             ReadOptionsWire {
                 from: self.from,
+                to: self.to,
                 backwards: self.backwards,
                 limit: self.limit,
             }
@@ -344,6 +417,7 @@ mod serde_impls {
             let wire = ReadOptionsWire::deserialize(deserializer)?;
             Ok(Self {
                 from: wire.from,
+                to: wire.to,
                 backwards: wire.backwards,
                 limit: wire.limit,
             })
@@ -424,7 +498,35 @@ mod tests {
     }
 
     #[test]
-    fn zero_limit_is_ignored() {
-        assert_eq!(ReadOptions::new().limit(0).limit, None);
+    fn zero_limit_means_zero_events() {
+        // This test previously asserted the opposite, and the old behaviour is
+        // worth naming rather than just deleting: `limit` stored
+        // `NonZeroUsize::new(limit)`, so zero became `None` — unlimited — before
+        // any adapter saw it. A paging loop writing `.limit(budget - fetched)`
+        // therefore read the whole log at exactly the moment its budget ran out.
+        assert_eq!(ReadOptions::new().limit(0).limit, Some(0));
+        assert_eq!(
+            ReadOptions::new().limit,
+            None,
+            "unset still means unlimited"
+        );
+    }
+
+    #[test]
+    fn to_is_recorded_and_independent_of_from() {
+        let lower = SequencePosition::new(10).unwrap();
+        let upper = SequencePosition::new(20).unwrap();
+        let options = ReadOptions::new().from(lower).to(upper);
+
+        assert_eq!(options.from, Some(lower));
+        assert_eq!(options.to, Some(upper));
+        // Direction does not reassign the fields; it reverses what they bound.
+        assert_eq!(options.backwards().to, Some(upper));
+    }
+
+    #[test]
+    fn from_item_is_infallible_and_yields_one_item() {
+        let query = Query::from_item(QueryItem::of_types(["A"]).unwrap());
+        assert_eq!(query.items().map(<[_]>::len), Some(1));
     }
 }
