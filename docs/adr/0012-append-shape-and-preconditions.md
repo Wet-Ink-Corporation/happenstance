@@ -1,16 +1,25 @@
 # ADR-0012: `append` keeps its borrowed batch, and phase 4 declines the one question it cannot measure
 
-- **Status:** proposed — with **one** part left provisional. ES-17 (batch
+- **Status:** accepted — with **one** part left provisional. ES-17 (batch
   ownership) keeps its `[PROVISIONAL]` marker, and the marker lifts at
   [phase 8](../RUNBOOK.md#phase-8--sqlite), which is the phase that builds the
   SQLite multi-row insert benchmark ES-17's own falsifier names. Nothing else
   below is provisional except CF-39, which is new and says why.
 
-  **Two lines need a human's yes specifically, not the document's.** Amendment 2
+  **The two lines that needed a human's yes have it, 2026-08-08.** Amendment 2
   (ES-18's `Rule:` bullet, which CF-39 narrows in practice) and amendment 11(a)
   (`AppendCondition::guards` becomes private, against what VT-30 `:1584-1591` and
-  ES-29 `:3253-3256` currently describe). Everything else either transcribes a
-  frozen clause, adds a rule name, or corrects a citation.
+  ES-29 `:3253-3256` currently describe) were both accepted at sign-off, which is
+  what moves this document from `proposed` to `accepted`. The reasoning recorded
+  with the decision: 11(a) is a compiled defect — `c.guards = Box::new([])`
+  compiles downstream today and yields a conditional append that is silently
+  unconditional — whose remedy costs one accessor, and it makes the collection
+  behave the way VT-26 already makes `Query::Items` behave. Amendment 2's cost,
+  narrowing a `[FROZEN]` clause that permits either answer, is bounded by CF-39
+  itself being `[PROVISIONAL]`: if a real adapter's driver absorbs every fault it
+  can arm, the narrowing reverses by a marker edit rather than by a superseding
+  ADR. Everything else here either transcribes a frozen clause, adds a rule name,
+  or corrects a citation.
 - **Date:** 2026-08-08
 - **Settles:** ES-18 – ES-24 (transcription and rules for clauses already
   `[FROZEN]`), ES-25 – ES-29 and VT-30, none of which the ADR queue had assigned
@@ -945,8 +954,8 @@ implementation is exactly what ADR-0010's corollary forbids.
    either direction, so `append_preserves_event_payload` is cited as a *round-trip*
    rather than as this clause's falsifier.
 
-2. **ES-18 (`:2728`, `[FROZEN]`) — the one operative change, and it needs a
-   human's signature.** Its `Rule:` bullet (`:2735-2738`) says the store must hold
+2. **ES-18 (`:2728`, `[FROZEN]`) — the one operative change, signed off
+   2026-08-08.** Its `Rule:` bullet (`:2735-2738`) says the store must hold
    all or none of the batch "with which of the two decided by what `append`
    answered", and `suite.rs:1250-1254` reads that as permitting a store to swallow
    the fault and answer `Ok`. CF-39 requires a *fixture* declaring

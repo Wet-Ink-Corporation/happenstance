@@ -1,12 +1,13 @@
 # ADR-0014: The store mints identity, records a time, and the caller supplies neither
 
-- **Status:** accepted — **provisional in three named parts**: VT-6 (which
+- **Status:** accepted — **provisional in four named parts**: VT-6 (which
   incarnation mechanism an adapter owes), VT-9 (that a wall clock is available at
-  append time) and VT-10 (that the ingest seam belongs in `happenstance-sync`).
-  Each falsifier and its owning phase is stated in
+  append time), VT-10 (that the ingest seam belongs in `happenstance-sync`), and
+  **ES-41**, the clause this ADR adds. Each falsifier and its owning phase is
+  stated in
   [Provisional, and what would refute it](#provisional-and-what-would-refute-it).
   Nothing here is lifted by phase 4, because phase 4 has no instrument that could
-  lift any of the three.
+  lift any of the four.
 - **Date:** 2026-08-08
 - **Settles:** the open half of VT-4 – VT-10. VT-4, VT-5, VT-7 and VT-8 are
   `[FROZEN]` and are **implemented, not reopened**; what this ADR decides is
@@ -22,7 +23,9 @@
   ES-30, whose required-method cost this ADR adds a second method to rather than
   reopens.
 - **Adds:** ES-41, the membership operation VT-7 `[FROZEN]` requires and
-  forward-references into a §3 that does not contain it.
+  forward-references into a §3 that does not contain it. It ships
+  `[PROVISIONAL]`, settled at sign-off; §5 records why, and why the marker does
+  not weaken the method.
 - **Adopts, after this ADR was drafted:** **VT-2** `[FROZEN]`, which the queue
   assigned to nobody and no ADR in this pass mentioned. Its MUST — *"appending
   two structurally equal `Event` values MUST produce two distinct events with two
@@ -32,11 +35,13 @@
   adopted here rather than left to the coverage audit that found it, because a
   frozen clause whose rule is owned by no phase is indistinguishable, in a work
   queue, from a clause that is already done. See §9.
-- **Ordered after:** [ADR-0013](0013-position-assignment-and-visibility.md).
-  ES-41 is a `[FROZEN]` port clause with no adapter instrument at any axis's far
-  end, so CF-25 requires it to name the ADR accepting that risk, and that ADR is
-  0013. This is an ordering constraint on the code run, not a dependency between
-  the decisions.
+- **Ordered after:** ~~[ADR-0013](0013-position-assignment-and-visibility.md)~~ —
+  **nothing.** The draft was ordered after 0013 because a `[FROZEN]` ES-41 would
+  have needed CF-25 risk acceptance and 0013 is the ADR that makes it. ES-41 now
+  ships `[PROVISIONAL]`, CF-25 does not reach it, and the ordering constraint
+  dissolves with the marker. Recorded struck rather than deleted because a code
+  run that had already read the draft would otherwise sequence work it no longer
+  needs to.
 
 ## A note on scope
 
@@ -411,23 +416,51 @@ test in the suite, and it reports a peer's event as already present whenever the
 local log happens to be at least that long — silently dropping real facts, which is
 the same failure mode VT-6 spends a clause preventing, arriving by a different door.
 
-**ES-41 ships `[FROZEN]` and must carry CF-25's qualification explicitly, or the
-gate rejects it.** CF-25 (`:7096-7102`) is itself `[FROZEN]` and is not a
-convention: `cargo xtask spec-trace` "reads the portfolio table and the maturity
-markers and fails when a `[FROZEN]` port clause has an axis with no far-end row
-and no named risk acceptance". ES-41 is a port clause in §3 and
-[What this decision cannot prove](#what-this-decision-cannot-prove) supplies the
-evidence that it would fail: no adapter instrument exists at the far end of any
-axis, and by CF-26 a fixture does not substitute. So the clause inherits, by name
-rather than by proximity, the acceptance ADR-0013 makes for the six axes phase 4
-does not discharge (`RUNBOOK.md:3029-3032`), and it names **transport** and
-**completeness** as the two it is most exposed on — transport because
-`contains_event_id` is one round trip on an adapter with no connection, and
-completeness because a store that cannot state what it does not hold (ES-39)
-cannot distinguish "no such event" from "not visible to me". Writing ES-41 as
-`[FROZEN]` without that sentence is not a stylistic omission; it is a red gate,
-and it is the one ordering constraint between this ADR and ADR-0013 that a code
-run cannot discover from the diff.
+**ES-41 ships `[PROVISIONAL]`, decided at sign-off, and the reasoning is worth
+keeping because the first draft got it the other way round.**
+
+The draft wrote it `[FROZEN]` and then had to rescue it: CF-25 (`:7096-7102`) is
+itself `[FROZEN]` and is not a convention — `cargo xtask spec-trace` "reads the
+portfolio table and the maturity markers and fails when a `[FROZEN]` port clause
+has an axis with no far-end row and no named risk acceptance". ES-41 is a port
+clause in §3, and [What this decision cannot
+prove](#what-this-decision-cannot-prove) supplies the evidence it would fail: no
+adapter instrument exists at the far end of any axis, and by CF-26 a fixture does
+not substitute. The rescue was to inherit ADR-0013's acceptance by name.
+
+That works, and it is the wrong trade, for a reason that is easy to miss:
+**the marker does not gate the method.** A `[PROVISIONAL]` clause is normative —
+the MUST is in force, `contains_event_id` is a required method, and every impl
+and skeleton grows a body for it in the code run exactly as it would under
+`[FROZEN]`. What the marker decides is only how expensive it is to be wrong.
+`[FROZEN]` reverses by a new ADR; `[PROVISIONAL]` lifts by a marker edit at the
+phase that supplies the instrument. Nothing downstream needs ES-41 frozen: VT-7's
+dangling forward reference is discharged by the clause **existing**, not by its
+maturity.
+
+And the strongest argument for freezing does not reach as far as it looks. VT-8
+already obliges every store to hold at most one event per `EventId`, so the index
+that answers this question exists in every conformant adapter and the method taxes
+nobody with a new one. That is a good argument that the *cost* is near zero. It is
+not evidence that an adapter implemented it — which is the exact distinction CF-26
+exists to draw, and freezing on it would be freezing on an inference about
+adapters none of which have been built.
+
+So the marker is:
+
+`[PROVISIONAL — falsified by an adapter that cannot answer membership without a
+structure VT-8 does not already oblige it to keep. The two exposed axes are
+transport, because `contains_event_id` is one more round trip on a store with no
+connection and no cursor, and completeness, because a store that cannot state
+what it does not hold (ES-39) cannot distinguish "no such event" from "not
+visible to me". The instruments are `happenstance-sqlite` at phase 8 and
+`happenstance-cloudflare` at phase 9, whichever lands first; either one
+implementing it against its existing uniqueness index lifts this clause.]`
+
+**One consequence for the code run, and it is a simplification.** Because ES-41 is
+no longer `[FROZEN]`, CF-25 does not apply to it, so it needs no risk acceptance
+and this ADR is **no longer ordered after ADR-0013**. The dependency the draft
+introduced dissolves along with the marker.
 
 ### 6. The constructor shape: `new` is superseded, not widened
 
@@ -786,7 +819,7 @@ normative sentence altered.** Every amendment to one is to a
 ES-41, which is this ADR's to write because VT-7 `[FROZEN]` requires the
 operation and forward-references the clause. This ADR is the authority for each.
 
-1. **ES-41 is new** (§3, `EventStore`), `[FROZEN]`, inserted after ES-40
+1. **ES-41 is new** (§3, `EventStore`), **`[PROVISIONAL]`**, inserted after ES-40
    (`:3679`), which is today the highest `ES` ID. There is none today, and VT-7
    `[FROZEN]` forward-references it at `:797-798`. Text: *"`EventStore` MUST
    declare `async fn contains_event_id(&self, id: EventId) -> Result<bool,
@@ -801,21 +834,33 @@ operation and forward-references the clause. This ADR is the authority for each.
    which passes every single-store rule in the suite and reports a peer's event as
    present whenever the local log is long enough.
 
-   **The clause MUST carry a CF-25 sentence or `spec-trace` fails it.** CF-25
-   (`:7096-7102`) is `[FROZEN]` and mechanically checked: a `[FROZEN]` port clause
-   with an axis that has no far-end row and no named risk acceptance is a build
-   failure. Required addendum, in the clause body: *"Frozen with no adapter
-   instrument at the far end of any axis; the exposure is transport (one round
-   trip on an adapter with no connection) and completeness (ES-39), and the risk
-   acceptance is ADR-0013's, which accepts the six axes phase 4 does not
-   discharge."* This makes ES-41 **ordered after ADR-0013's amendments**, not
-   merely concurrent with them.
+   **Required marker**, verbatim, since `spec-trace` checks that a
+   `[PROVISIONAL]` marker names a falsifier and this one must name a recognisable
+   one rather than a satisfiable one:
+   *"`[PROVISIONAL — falsified by an adapter that cannot answer membership
+   without a structure VT-8 does not already oblige it to keep. The exposed axes
+   are transport, because `contains_event_id` is one more round trip on a store
+   with no connection and no cursor, and completeness, because a store that
+   cannot state what it does not hold (ES-39) cannot distinguish "no such event"
+   from "not visible to me". The instruments are `happenstance-sqlite` at phase 8
+   and `happenstance-cloudflare` at phase 9, whichever lands first.]`"*
+
+   **No CF-25 sentence is required, and this is the change from the draft.**
+   CF-25 constrains clauses declared `[FROZEN]`; a `[PROVISIONAL]` clause carries
+   its own exposure in its own marker, which is the mechanism §1.3 already uses
+   for ES-10, ES-11, ES-12, ES-35 and ES-40. So ES-41 needs no risk acceptance
+   from ADR-0013 and **is not ordered after it**. An applier working from an
+   earlier draft of this ADR should delete that ordering, not honour it.
 
 2. **§1.3's census moves.** `:218-221` reads 193 clause IDs / 191 normative /
-   135 `[FROZEN]`. ES-41 makes it 194 / 192 / 136. **This count is hand-computed
-   and three ADRs in this phase move it** — ADR-0012 may add a CF clause for
-   `MID_BATCH_FAULT` and ADR-0013 moves a maturity marker — so the run that applies
-   these amendments must apply all of them and count **once**.
+   135 `[FROZEN]` / 46 `[PROVISIONAL]`. ES-41 makes it **194 / 192 / 135 / 47** —
+   note that the `[FROZEN]` count does **not** move, which it would have under
+   the draft, and that the `[PROVISIONAL]` count does. **This count is
+   hand-computed and three ADRs in this phase move it** — ADR-0012 adds CF-39,
+   ADR-0015 adds the fixture-limit clause, and ADR-0013 moves ES-10's marker from
+   `[PROVISIONAL]` to `[FROZEN]` — so the run that applies these amendments must
+   apply all of them and count **once**, at the end. Counting per ADR produces
+   four wrong numbers in sequence and a gate failure on each.
 
 3. **VT-6 `[PROVISIONAL]`, Rule line (`:761-762`).** Current text, both lines:
    *"`Rule:` new `store_id_is_stable_across_reopen`; the non-reissue half by

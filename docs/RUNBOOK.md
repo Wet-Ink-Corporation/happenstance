@@ -3165,6 +3165,56 @@ standing lesson is recorded at the ADR queue: **a phase's clause range and the
 union of its ADRs' clause ranges are two numbers, and nothing checks that they
 agree.**
 
+**2026-08-08, sign-off. All five ADRs are accepted.** The five questions the pass
+refused to answer on its own were taken by a human, and each went the cheaper way
+on the same principle: *where the evidence is not in yet, prefer the marker that
+lifts over the marker that must be superseded.*
+
+1. **ES-41 (`contains_event_id`) ships `[PROVISIONAL]`,** not frozen. The marker
+   does not gate the method — a provisional clause is normative, so the required
+   method ships in 0.1 either way — and VT-7's dangling forward reference is
+   discharged by the clause existing rather than by its maturity. Lifts at
+   phase 8 or 9, whichever adapter implements it first. **This dissolves the
+   ordering constraint ADR-0014 had on ADR-0013**, which existed only to inherit
+   a CF-25 risk acceptance a frozen clause would have needed.
+2. **The fixture's numeric-limit declaration lands in ADR-0015, as CF-40.**
+   Ownership follows the obligation: the rule it unblocks
+   (`append_reports_exceeded_store_limits`) checks VT-25 and VT-19, both
+   ADR-0015's, and both mutants owed with it are value-type mutants. Without it a
+   `[FROZEN]` clause would have shipped implemented and checked by nothing.
+3. **CF-25's partition is the exclusive one: four axes accepted by name, three
+   carried by live `[PROVISIONAL]` clauses.** It is the only reading that is a
+   partition, and it is auditable at phase 12. The number is bookkeeping; the
+   load-bearing part is ADR-0013's caveat that batch shape is a `ProjectionStore`
+   axis whose acceptance here is pro forma and **non-transferable** — phase 6 may
+   not treat that row as discharged. `:3032` and `SPECIFICATION.md:260` both say
+   "six" and both need correcting.
+4. **Both of ADR-0012's proposed lines are accepted**, which moves it from
+   `proposed` to `accepted`. `AppendCondition::guards` becomes private with an
+   accessor, because `#[non_exhaustive]` seals the struct *expression* and not the
+   struct, so `c.guards = Box::new([])` compiles downstream today and yields a
+   conditional append that is silently unconditional. And CF-39 requires an armed
+   fixture to produce `Err`, narrowing `[FROZEN]` ES-18 — bounded by CF-39 itself
+   being `[PROVISIONAL]`, so a driver that absorbs every injectable fault reverses
+   it by a marker edit rather than by a superseding ADR.
+5. **`read`'s return type takes no `Unpin` bound,** and the question is scheduled
+   rather than closed: a new `[PROVISIONAL]` clause whose owner is a **deadline,
+   not a phase** — re-evaluate before phase 12, because after first publish the
+   bound cannot be added at all. ADR-0001:110-112 and `E2E-CASES.md:1432` both
+   assert a `dynosaur` erasure that does not work as written and are amended with
+   it.
+
+**What this does not settle.** The three questions the reviews raised and nobody
+has taken: VT-31's owner, and with it `query_union_is_item_concatenation` — the
+only rule that would catch an adapter reordering query *items*, which ES-15's own
+`Rejects:` names; `read_from_a_gap_position`, declined in writing by both
+ADR-0011 and ADR-0013; and the five VT-4 – VT-9 rules with no named wrong
+implementation, which the code run must either supply mutants for or argue cannot
+have one. All three are rule-ownership questions rather than contract questions,
+so they are the code run's to close — but they are closed by decision, not by
+writing code, and a run that discovers them at the end will be tempted to skip
+them.
+
 ---
 
 ## Phase 5 — Freeze the wire format

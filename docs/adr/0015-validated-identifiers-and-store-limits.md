@@ -9,7 +9,10 @@
   a named owning phase; two of the four have falsifiers **no scheduled phase can
   reach**, and this ADR says which and what that marker therefore means
 - **Adds:** VT-32 (const-constructible identifiers) and VT-33 (the standard-library
-  trait surface), because both ship here and neither is claimed by any clause today
+  trait surface), because both ship here and neither is claimed by any clause
+  today; and **CF-40**, the fixture's numeric-limit declaration, placed here at
+  sign-off (see decision 8) because without it VT-25 `[FROZEN]` ships implemented
+  and checked by nothing
 - **Extends:** [ADR-0003](0003-opaque-payloads.md), whose byte-for-byte forwarding
   promise is what makes normalisation unavailable rather than merely unwanted
 
@@ -35,13 +38,16 @@ rather than absorbed:
   `happenstance-core` at all, and is phase 7's. Decision 5 says why, and says
   precisely which half of E2E-51 phase 4 does close.
 
-And one question this ADR **surfaces without answering**, which is different from
+And one question this ADR surfaced without answering, which was different from
 declining it: **where the fixture's numeric-limit declaration lands.** VT-25's
 rule cannot be written against a store with no ceiling, so it needs `Fixture` to
-state its actual limits — and no CF clause today lets a fixture declare a number
-rather than a boolean. It is phase 4's, it is not phase 4's *yet*, and the two
-candidate homes are this ADR and ADR-0012. Decision 8 lays out both; a human
-places it.
+state its actual limits, and no CF clause let a fixture declare a number rather
+than a boolean. **Settled at sign-off: it lands here, as CF-40.** Decision 8
+carries the clause and the reason the competing home lost. The draft's refusal to
+choose is kept there rather than deleted, because the argument it makes — that
+parking a blocker on an ADR which has not accepted it is indistinguishable, in a
+work queue, from having placed it — is the reason this was worth a human's
+attention rather than a coin toss.
 
 ## Context
 
@@ -580,20 +586,58 @@ anywhere else in the tree says a fixture may declare a **number**. Parking this
 blocker on ADR-0012 would therefore park it on an ADR that has not accepted it,
 which is indistinguishable in a work queue from having placed it.
 
-So the honest statement is: `append_reports_exceeded_store_limits` needs a
-fixture-contract extension that **no clause and no phase-4 ADR currently owns**,
-and a human has to place it before the rule can be written. The two candidate
-homes are this ADR's clause set, since the rule belongs to VT-25 and VT-19 which
-are this ADR's, and ADR-0012's, since it is already amending the fixture contract
-and would keep the CF numbering in one place. This ADR does not choose, because
-choosing would either duplicate ADR-0012's CF numbering or annex a decision from
-an ADR that has already started work in the same file. It is recorded here so
-that the dependency is visible rather than discovered when the rule is attempted.
-Two mutants are owed with it: a
-conformant store that declares a limit and refuses correctly, and one that reports
-the same refusal through `AppendError::Store` — which is what **every** adapter
-does today, because there is no other variant, and which `PayloadCeilingStore`
-(`mutation_coverage.rs:1116`) already models one clause over.
+So the question the draft surfaced was: `append_reports_exceeded_store_limits`
+needs a fixture-contract extension that no clause and no phase-4 ADR owned, and
+a human had to place it before the rule could be written. **Placed here at
+sign-off, 2026-08-08, as CF-40.**
+
+The reason it lands here rather than beside CF-39 is that **ownership follows the
+obligation, not the file.** The rule exists to check VT-25 and VT-19, both of
+which are this ADR's; both mutants owed with it are value-type mutants; and the
+competing argument — keeping the CF numbering in one ADR — buys tidiness at the
+price of answering *"may a fixture declare a number?"* inside a document about
+`append`'s preconditions, which is a lookup nobody makes. CF numbers are already
+spread across §6 by subject, and ADR-0012 has taken exactly one.
+
+> **CF-40.** A `Fixture` MUST be able to declare the numeric limits its store
+> actually enforces, as associated constants
+> `MAX_EVENT_DATA_LEN: Option<usize>`, `MAX_TAGS_PER_EVENT: Option<usize>` and
+> `MAX_EVENTS_PER_BATCH: Option<usize>`, each defaulting to `None`. `None` means
+> the store enforces no ceiling on that dimension and MUST be reported through
+> the same declined-capability path as a `Capability`, with a stated reason, so
+> that a skipped limit rule is distinguishable in CI output from a passing one. A
+> fixture declaring `Some(n)` asserts that its store refuses at `n + 1` with
+> `AppendError::ExceedsStoreLimit` and accepts at `n`.
+> `[PROVISIONAL — falsified by an adapter whose real ceiling is not a constant:
+> a Postgres row limited by a shared `SQLITE_MAX_VARIABLE_NUMBER`-style budget
+> across tags *and* rows together, or a Durable Object whose value cap moves with
+> its storage backend, would make `Option<usize>` the wrong shape and the
+> declaration a function of the batch rather than of the store. The instruments
+> are `happenstance-sqlite` at phase 8 and `happenstance-postgres` at phase 10;
+> neither has a body, and `MemoryEventStore` has no ceiling to declare, so this
+> clause is written against no passing implementation and says so.]`
+> `Rule:` new `append_reports_exceeded_store_limits`, which is VT-25's and is
+> unwritable without this.
+> `Cases:` E2E-35, E2E-42.
+> `Rejects:` a fixture that declares a limit it does not enforce — the rule then
+> asserts a refusal that never comes and fails, which is the correct direction —
+> and, more importantly, the **absence** this clause repairs: with no way to
+> declare a number, `append_reports_exceeded_store_limits` cannot be written at
+> all, and VT-25 ships `[FROZEN]`, implemented, and checked by nothing.
+
+**Why `Option<usize>` and not a `Capability`.** `Capability` (`contract.rs:288`)
+is an opaque newtype over `Option<&'static str>` whose whole design forbids
+representing a declined state with no reason. It is the right shape for a
+yes/no whose "no" needs explaining, and the wrong shape here: a store with no
+ceiling is not declining to cooperate, it is reporting a fact about itself. Using
+`Option<usize>` keeps the two ideas apart, and the `None` arm still routes
+through `RuleOutcome::Skipped` so the CI line is identical.
+
+Two mutants are owed with it: a conformant store that declares a limit and
+refuses correctly, and one that reports the same refusal through
+`AppendError::Store` — which is what **every** adapter does today, because there
+is no other variant, and which `PayloadCeilingStore` (`mutation_coverage.rs:1116`)
+already models one clause over.
 
 ### 9. `Tags::value_of` is declined; `Tags::values_of` ships instead
 
@@ -893,10 +937,11 @@ phase-4 ADRs land** — not five times, and not by whoever merges last.
 
 ## Amendments this decision owes the specification
 
-Seventeen items. Recorded rather than applied, because six of them touch
+Eighteen items. Recorded rather than applied, because six of them touch
 `[FROZEN]` clauses — items 2, 3, 4 and 9 amend existing ones, and items 10 and 11
 add two more — and this repository's rule is that a frozen clause changes by ADR
-and not by edit. **Where a clause below is marked frozen, this ADR is the
+and not by edit. Item 12 adds a clause too, but `[PROVISIONAL]`, so it is not in
+that six. **Where a clause below is marked frozen, this ADR is the
 authority for the change.** None of them reverses a normative MUST; three add
 one (item 2's documentation MUST on `Tag`, and the two new clauses).
 
@@ -988,11 +1033,9 @@ VT-19, VT-20 and VT-25 are all implemented as written.
    refusal is not an append outcome, so a `QueryItems` variant would be one no
    `append` could ever produce. And its `Rule:` line, which currently reads
    `new append_reports_exceeded_store_limits` and nothing else, must record that
-   the rule depends on a fixture able to declare its **actual numeric** limits,
-   that no CF clause provides that today, and that placing it is an open phase-4
-   decision (decision 8). It must **not** say ADR-0012 owns it; ADR-0012's CF-39
-   is `MID_BATCH_FAULT`, a boolean, and CF-18's closing paragraph (`:6794-6804`)
-   assigns that one to the *phase*, naming no ADR.
+   the rule depends on a fixture able to declare its **actual numeric** limits
+   and **cite CF-40** as the clause that supplies them. It must **not** cite
+   CF-39; that is `MID_BATCH_FAULT`, a boolean, and ADR-0012's.
 
 ### Clauses added
 
@@ -1021,13 +1064,27 @@ VT-19, VT-20 and VT-25 are all implemented as written.
     legitimately identical domain events as one and whose correct instrument is
     `EventId` (ADR-0014).
 
-12. **§1.3's census** — 193 clause IDs / 191 normative / **135 `[FROZEN]`** becomes
-    195 / 193 / **137** for this ADR's two additions alone. ADR-0013's ES-10 lift
-    moves the frozen/provisional split independently. **Recompute once, by hand,
-    after all five phase-4 ADRs land.** This is the one count in the document a
-    human computes by reading and `spec-trace` checks rather than generates.
+12. **CF-40 — the fixture declares its numeric limits.** New, in §6.3, beside
+    CF-39. `[PROVISIONAL]`. The clause, its marker, its `Rule:`, `Cases:` and
+    `Rejects:` are given verbatim in
+    [decision 8](#8-appenderrorexceedsstorelimit-and-the-fixture-seam-it-needs)
+    and are
+    transcribed from there rather than restated here, so the two cannot drift.
+    It is placed in this ADR rather than in ADR-0012 by the sign-off of
+    2026-08-08.
 
-13. **§7.5** (`:8058`) — VT-17's row (`:8066`, "Defect: the case is missing")
+13. **§1.3's census** — 193 clause IDs / 191 normative / **135 `[FROZEN]`** /
+    46 `[PROVISIONAL]` becomes **196 / 194 / 137 / 47** for this ADR's three
+    additions (VT-32 and VT-33 frozen, CF-40 provisional). The other phase-4
+    ADRs move it further and in both columns: ADR-0012 adds CF-39
+    (`[PROVISIONAL]`), ADR-0014 adds ES-41 (`[PROVISIONAL]`), and ADR-0013 lifts
+    ES-10 from `[PROVISIONAL]` to `[FROZEN]`, which moves two counts without
+    moving the total. **Recompute once, by hand, after all five phase-4 ADRs
+    land** — this is the one count in the document a human computes by reading
+    and `spec-trace` checks rather than generates, so a per-ADR recount produces
+    a sequence of wrong numbers and a red gate at each.
+
+14. **§7.5** (`:8058`) — VT-17's row (`:8066`, "Defect: the case is missing")
     closes, and the closing sentence at `:8074`, "two genuine holes (VT-17,
     WF-12)", becomes one (WF-12, which is phase 5's). **And §7.6** (`:8077`):
     *"None. All 56 cases are claimed by at least one clause"* becomes 57. That
@@ -1036,7 +1093,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
 
 ### Owed outside `SPECIFICATION.md`
 
-14. **`docs/scenarios/E2E-CASES.md` gains E2E-57**, VT-17's missing case:
+15. **`docs/scenarios/E2E-CASES.md` gains E2E-57**, VT-17's missing case:
     construct a `Tag` with no colon and one with two, assert both are accepted and
     that neither acquires structure — `key()` is `None` for the first and `Some`
     of the text before the *first* colon for the second, with the remainder,
@@ -1059,7 +1116,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
     nothing checks this file's cross-references; that is a live item in phase 4's
     own body.
 
-15. **`docs/RUNBOOK.md`**, five edits, all in phase 4's body or its ledger. (The
+16. **`docs/RUNBOOK.md`**, five edits, all in phase 4's body or its ledger. (The
     "1 MiB" discrepancy is **not** among them: phase 3 already corrected it at
     `:2051` and recorded the correction at `:2364`. The stale copy is
     `suite.rs:128-130`'s comment, which is item 17.)
@@ -1078,7 +1135,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
       since a `let` binding compiles and panics at run time and an associated
       const may never be evaluated at all (decision 3).
 
-16. **`RUNBOOK.md:447-451` and `:553-566`** assign VT-14 and VT-21 – VT-24 to
+17. **`RUNBOOK.md:447-451` and `:553-566`** assign VT-14 and VT-21 – VT-24 to
     "phase 5", which is now the wire format. The specification names phase 4 in
     terms at VT-14 (`:1085-1086`) and VT-21 (`:1308-1310`), and under RUNBOOK
     rule 5 the clauses win. Only the rows for this ADR's clauses are corrected
@@ -1086,7 +1143,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
     clauses, and `:558`'s assignment of VT-10 to phase 13 is **correct** and must
     not be swept up.
 
-17. **`crates/happenstance-testkit/src/suite.rs:113-142`** — the four private
+18. **`crates/happenstance-testkit/src/suite.rs:113-142`** — the four private
     consts become imports; the comment block that explains their absence becomes a
     one-line citation; and `:128-130`'s claim that the RUNBOOK "carries" the 1 MiB
     discrepancy goes, because it has not been true since phase 3 corrected it.
