@@ -8,6 +8,7 @@ use core::num::NonZeroU64;
 use bytes::Bytes;
 
 use crate::error::InvalidEventType;
+use crate::identity::{EventId, RecordedAt};
 use crate::tag::Tags;
 use crate::validate;
 
@@ -386,9 +387,37 @@ impl Event {
     }
 
     /// Decomposes the event, avoiding a clone in adapter write paths.
-    pub fn into_parts(self) -> (EventType, Bytes, Tags, Option<Bytes>) {
-        (self.event_type, self.data, self.tags, self.metadata)
+    ///
+    /// Returns a struct rather than a tuple so that the *number* of an event's
+    /// parts is not public API. Every `let (ty, data, tags, meta) = …` would
+    /// break the day a fifth part existed; reading fields by name, or
+    /// destructuring with `..`, survives it.
+    #[must_use]
+    pub fn into_parts(self) -> EventParts {
+        EventParts {
+            event_type: self.event_type,
+            data: self.data,
+            tags: self.tags,
+            metadata: self.metadata,
+        }
     }
+}
+
+/// The owned pieces of an [`Event`], from [`Event::into_parts`].
+///
+/// `#[non_exhaustive]`, so a later part is additive: downstream destructures
+/// with `..` or reads fields by name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EventParts {
+    /// The event's type.
+    pub event_type: EventType,
+    /// The opaque payload.
+    pub data: Bytes,
+    /// The tags the writer attached.
+    pub tags: Tags,
+    /// The opaque client metadata, if any.
+    pub metadata: Option<Bytes>,
 }
 
 impl fmt::Debug for Event {
@@ -416,20 +445,67 @@ impl fmt::Debug for Event {
     }
 }
 
-/// An [`Event`] that has been assigned a position by the store.
+/// An [`Event`] together with the three facts its store assigned it.
+///
+/// # Why `position` and `id.position()` are both here
+///
+/// They are the same number for a locally appended event, and different numbers
+/// for one that arrived through replication. `position` is **arrival order in
+/// this store**; `id.position()` is **authorship order in the store that first
+/// accepted it**. Keeping only one of them would be correct for local appends
+/// and would lose either the local ordering or the origin identity for
+/// replicated ones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SequencedEvent {
-    /// Where the event sits in the store's total order.
+    /// Where the event sits in **this** store's total order.
     pub position: SequencePosition,
+    /// Which store first accepted the event, and where it sat there.
+    ///
+    /// Minted by the store at `append` for a local write, and preserved
+    /// unchanged for an event accepted through ingest.
+    pub id: EventId,
+    /// When the store accepted it. Not an ordering key — see [`RecordedAt`].
+    pub recorded_at: RecordedAt,
     /// The event itself.
     pub event: Event,
 }
 
 impl SequencedEvent {
-    /// Pairs an event with its assigned position.
-    pub const fn new(position: SequencePosition, event: Event) -> Self {
-        Self { position, event }
+    /// Pairs an event with the facts its store assigned it.
+    ///
+    /// This constructor went from two arguments to four in one commit, with no
+    /// deprecated two-argument arm. That is deliberate: a compatibility shim
+    /// would have to invent a [`StoreId`](crate::StoreId) and a time, which is precisely the
+    /// wrong implementation the specification rejects by name — an adapter that
+    /// makes identity up rather than persisting it.
+    ///
+    /// A *defaultable* field added later needs no change here; it lands as a
+    /// `with_*` builder, in the shape [`with_recorded_at`](Self::with_recorded_at)
+    /// establishes. A further **required** store-assigned fact would supersede
+    /// this constructor again, and there is no signature that avoids that.
+    pub const fn new(
+        position: SequencePosition,
+        id: EventId,
+        recorded_at: RecordedAt,
+        event: Event,
+    ) -> Self {
+        Self {
+            position,
+            id,
+            recorded_at,
+            event,
+        }
+    }
+
+    /// Replaces the recorded time.
+    ///
+    /// For adapters reconstructing a stored event, and for tests that need a
+    /// fixed clock. It is the shape a later *defaultable* field follows.
+    #[must_use]
+    pub const fn with_recorded_at(mut self, recorded_at: RecordedAt) -> Self {
+        self.recorded_at = recorded_at;
+        self
     }
 
     /// The event's type. Shorthand for `self.event.event_type()`.
@@ -522,6 +598,8 @@ mod serde_impls {
     #[serde(rename = "SequencedEvent")]
     struct SequencedEventWire {
         position: SequencePosition,
+        id: crate::identity::EventId,
+        recorded_at: crate::identity::RecordedAt,
         event: Event,
     }
 
@@ -529,6 +607,8 @@ mod serde_impls {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             SequencedEventWire {
                 position: self.position,
+                id: self.id,
+                recorded_at: self.recorded_at,
                 event: self.event.clone(),
             }
             .serialize(serializer)
@@ -538,7 +618,12 @@ mod serde_impls {
     impl<'de> Deserialize<'de> for SequencedEvent {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             let wire = SequencedEventWire::deserialize(deserializer)?;
-            Ok(Self::new(wire.position, wire.event))
+            Ok(Self::new(
+                wire.position,
+                wire.id,
+                wire.recorded_at,
+                wire.event,
+            ))
         }
     }
 }

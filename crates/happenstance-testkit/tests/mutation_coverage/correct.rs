@@ -41,8 +41,8 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 
 // =====================================================================
@@ -293,9 +293,37 @@ pub(crate) fn sequence(
     for event in events {
         let position = allocate(previous);
         previous = Some(position);
-        sequenced.push(SequencedEvent::new(position, event.clone()));
+        sequenced.push(stamp(position, event.clone()));
     }
     sequenced
+}
+
+/// The incarnation every store in this binary mints identities under.
+///
+/// One constant rather than one per store, deliberately. Identity is not what
+/// these mutants are instruments for, and giving each store its own would make
+/// every mutant's output vary between runs for a reason unrelated to its defect
+/// — which is exactly the confound `correct.rs` exists to remove. A mutant that
+/// needs a *different* incarnation to express its defect overrides `stamp`, and
+/// that override is then the only difference, which is the property the registry
+/// checks.
+pub(crate) const TEST_STORE: StoreId = StoreId::from_bytes([0xA1; 16]);
+
+/// A fixed recorded time.
+///
+/// Fixed rather than read from a clock because `no_clock` (CF-33) forbids a rule
+/// depending on wall time, and a store whose output moves between runs cannot be
+/// compared against a snapshot. The value is arbitrary and nothing asserts it.
+pub(crate) const TEST_RECORDED_AT: RecordedAt = RecordedAt::from_millis(1_700_000_000_000);
+
+/// Pairs a position with the identity and time a correct store would assign.
+pub(crate) fn stamp(position: SequencePosition, event: Event) -> SequencedEvent {
+    SequencedEvent::new(
+        position,
+        EventId::new(TEST_STORE, position),
+        TEST_RECORDED_AT,
+        event,
+    )
 }
 
 /// The condition probe, as a value.

@@ -60,8 +60,8 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_testkit::Capability;
 
@@ -87,6 +87,18 @@ use happenstance_testkit::Capability;
 struct LocalMemoryEventStore {
     events: Rc<RefCell<Vec<SequencedEvent>>>,
 }
+
+/// This store's incarnation.
+///
+/// A constant rather than a per-instance value, and the reason is the `Clone`
+/// above: two handles onto one backing log must agree about the identities that
+/// log holds, and a field would be copied by `Clone` rather than shared. A
+/// durable adapter mints one per database; this one has no database.
+const LOCAL_STORE: StoreId = StoreId::from_bytes([0x1C; 16]);
+
+/// A fixed recorded time, for `no_clock`'s reason: a rule must not depend on
+/// wall time, and nothing here asserts the value.
+const LOCAL_RECORDED_AT: RecordedAt = RecordedAt::from_millis(1_700_000_000_000);
 
 impl LocalMemoryEventStore {
     /// Creates an empty store.
@@ -237,7 +249,13 @@ impl EventStore for LocalMemoryEventStore {
 
         let first_index = stored.len();
         stored.extend(events.iter().enumerate().map(|(offset, event)| {
-            SequencedEvent::new(position_at(first_index + offset), event.clone())
+            let position = position_at(first_index + offset);
+            SequencedEvent::new(
+                position,
+                EventId::new(LOCAL_STORE, position),
+                LOCAL_RECORDED_AT,
+                event.clone(),
+            )
         }));
 
         Ok(position_at(first_index + events.len() - 1))

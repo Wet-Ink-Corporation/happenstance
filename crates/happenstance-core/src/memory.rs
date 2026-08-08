@@ -1,13 +1,16 @@
 //! An in-memory reference event store.
 
 use alloc::vec::Vec;
-use std::sync::{PoisonError, RwLock};
+use core::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{OnceLock, PoisonError, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_core::Stream;
 
 use crate::append::AppendCondition;
 use crate::error::{AppendError, ConditionViolated};
 use crate::event::{Event, SequencePosition, SequencedEvent};
+use crate::identity::{EventId, RecordedAt, StoreId};
 use crate::query::{Query, ReadOptions};
 use crate::store::SendEventStore;
 
@@ -67,15 +70,42 @@ use crate::store::SendEventStore;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemoryEventStore {
     events: RwLock<Vec<SequencedEvent>>,
+    store_id: StoreId,
+}
+
+impl Default for MemoryEventStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryEventStore {
-    /// Creates an empty store.
+    /// Creates an empty store with a fresh incarnation identifier.
+    #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::with_store_id(next_store_id())
+    }
+
+    /// Creates an empty store with a caller-chosen incarnation.
+    ///
+    /// Exists for the rule that a reopened store must not reissue an identity:
+    /// "reopening" an in-memory store is constructing a new one, and the rule
+    /// needs to distinguish "the same store again" from "a different store".
+    #[must_use]
+    pub fn with_store_id(store_id: StoreId) -> Self {
+        Self {
+            events: RwLock::new(Vec::new()),
+            store_id,
+        }
+    }
+
+    /// The incarnation this store mints identities under.
+    #[must_use]
+    pub const fn store_id(&self) -> StoreId {
+        self.store_id
     }
 
     /// Creates a store pre-loaded with `events`, assigned dense positions from
@@ -84,14 +114,25 @@ impl MemoryEventStore {
     /// Useful for arranging test fixtures without going through
     /// [`append`](crate::EventStore::append).
     pub fn with_events(events: impl IntoIterator<Item = Event>) -> Self {
+        let store = Self::new();
+        let recorded_at = now();
         let sequenced = events
             .into_iter()
             .enumerate()
-            .map(|(index, event)| SequencedEvent::new(position_at(index), event))
+            .map(|(index, event)| {
+                let position = position_at(index);
+                SequencedEvent::new(
+                    position,
+                    EventId::new(store.store_id, position),
+                    recorded_at,
+                    event,
+                )
+            })
             .collect();
 
         Self {
             events: RwLock::new(sequenced),
+            store_id: store.store_id,
         }
     }
 
@@ -125,6 +166,51 @@ impl MemoryEventStore {
     fn read_guard(&self) -> std::sync::RwLockReadGuard<'_, Vec<SequencedEvent>> {
         self.events.read().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// A fresh incarnation identifier.
+///
+/// Process-local and monotonic, which is enough here and would not be enough
+/// anywhere else: nothing an in-memory store holds outlives the process, so
+/// there is no persistent state a second incarnation could be confused with. A
+/// durable adapter has the harder job — mint at database creation, and re-mint
+/// when that state is restored or cloned.
+///
+/// The salt keeps two runs from minting the same identifier, so a test that
+/// writes one down cannot accidentally pass by matching a later process's.
+fn next_store_id() -> StoreId {
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    static SALT: OnceLock<u64> = OnceLock::new();
+
+    let salt = *SALT.get_or_init(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| {
+                since.as_secs().wrapping_shl(32) | u64::from(since.subsec_nanos())
+            })
+    });
+
+    let ordinal = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&salt.to_be_bytes());
+    bytes[8..].copy_from_slice(&ordinal.to_be_bytes());
+    StoreId::from_bytes(bytes)
+}
+
+/// The host clock, as milliseconds since the Unix epoch.
+///
+/// A clock that is behind the epoch, or a system that cannot answer, yields
+/// zero rather than failing: `append` has no error variant for "the clock is
+/// broken", and inventing one would put a store failure in the caller's path
+/// for a value the caller cannot act on.
+fn now() -> RecordedAt {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| {
+            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+        });
+    RecordedAt::from_millis(millis)
 }
 
 /// The dense position for a zero-based index.
@@ -238,8 +324,19 @@ impl SendEventStore for MemoryEventStore {
         }
 
         let first_index = stored.len();
+        let recorded_at = now();
         stored.extend(events.iter().enumerate().map(|(offset, event)| {
-            SequencedEvent::new(position_at(first_index + offset), event.clone())
+            let position = position_at(first_index + offset);
+            // A locally appended event's identity is this store's incarnation
+            // paired with the position just assigned, so `id.position()` and
+            // `position` agree here. They part company only for an event that
+            // arrived through ingest, which this store has no way to accept.
+            SequencedEvent::new(
+                position,
+                EventId::new(self.store_id, position),
+                recorded_at,
+                event.clone(),
+            )
         }));
 
         Ok(position_at(first_index + events.len() - 1))
@@ -348,7 +445,77 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(seeded.snapshot(), appended.snapshot());
+        let seeded_snapshot = seeded.snapshot();
+        let appended_snapshot = appended.snapshot();
+
+        // Two stores cannot agree on identity or recorded time — those are facts
+        // about *which* store accepted the event and *when*, and the whole point
+        // of `StoreId` is that two incarnations differ. What `with_events`
+        // claims is parity of position and payload, so that is what is compared.
+        let shape = |events: &[crate::SequencedEvent]| {
+            events
+                .iter()
+                .map(|event| (event.position, event.event.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(shape(&seeded_snapshot), shape(&appended_snapshot));
+
+        // And each store stamps its own incarnation, which is the property that
+        // makes the comparison above the right one.
+        assert!(
+            seeded_snapshot
+                .iter()
+                .all(|event| event.id.store() == seeded.store_id())
+        );
+        assert!(
+            appended_snapshot
+                .iter()
+                .all(|event| event.id.store() == appended.store_id())
+        );
+        assert_ne!(
+            seeded.store_id(),
+            appended.store_id(),
+            "two stores are two incarnations"
+        );
+    }
+
+    #[tokio::test]
+    async fn append_stamps_identity_from_its_own_incarnation() {
+        let store = MemoryEventStore::new();
+        store.append(&[event("A"), event("B")], None).await.unwrap();
+
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.len(), 2);
+
+        for sequenced in &snapshot {
+            assert_eq!(sequenced.id.store(), store.store_id());
+            // For a locally appended event the two positions agree; they part
+            // company only for an event accepted through ingest, which this
+            // store cannot do.
+            assert_eq!(sequenced.id.position(), sequenced.position);
+        }
+
+        assert_ne!(
+            snapshot[0].id, snapshot[1].id,
+            "two events, two identities, even with equal payloads"
+        );
+    }
+
+    #[tokio::test]
+    async fn structurally_equal_events_get_distinct_identities() {
+        // Structural equality is not identity: appending the same event twice
+        // must produce two events, not one, and a content hash would collapse
+        // them.
+        let store = MemoryEventStore::new();
+        let twice = [event("A"), event("A")];
+        assert_eq!(twice[0], twice[1], "the two events are structurally equal");
+
+        store.append(&twice, None).await.unwrap();
+
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.len(), 2);
+        assert_ne!(snapshot[0].position, snapshot[1].position);
+        assert_ne!(snapshot[0].id, snapshot[1].id);
     }
 
     #[tokio::test]

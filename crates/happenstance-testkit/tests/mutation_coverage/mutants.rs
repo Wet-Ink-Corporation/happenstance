@@ -834,7 +834,7 @@ impl Defect for SharedBatchPositionStore {
         let position = allocate(head);
         events
             .iter()
-            .map(|event| SequencedEvent::new(position, event.clone()))
+            .map(|event| correct::stamp(position, event.clone()))
             .collect()
     }
 }
@@ -1080,7 +1080,8 @@ impl Defect for DropsMetadataStore {
 
 /// `event` with its metadata column dropped.
 fn without_metadata(event: &Event) -> Event {
-    let (event_type, data, tags, _metadata) = event.clone().into_parts();
+    let parts = event.clone().into_parts();
+    let (event_type, data, tags) = (parts.event_type, parts.data, parts.tags);
     match Event::new(event_type.as_str(), data) {
         Ok(stripped) => stripped.with_tags(tags),
         // The type round-trips through the validator that produced it, so this
@@ -1503,7 +1504,13 @@ impl Subject for NoTransactionFixture {
 /// rule with a runtime panic, which `FailureMode::Assertion` would then reject as
 /// the wrong reason.
 fn with_identifiers_mapped(event: &Event, map: impl Fn(&str) -> String) -> Event {
-    let (event_type, data, tags, metadata) = event.clone().into_parts();
+    let happenstance_core::EventParts {
+        event_type,
+        data,
+        tags,
+        metadata,
+        ..
+    } = event.clone().into_parts();
 
     let mapped: Option<Vec<Tag>> = tags
         .iter()
@@ -1746,7 +1753,13 @@ impl Defect for TruncatingPayloadStore {
                 }
                 // THE DEFECT: what fits is stored, and the caller is told the
                 // whole write landed.
-                let (event_type, data, tags, metadata) = event.clone().into_parts();
+                let happenstance_core::EventParts {
+                    event_type,
+                    data,
+                    tags,
+                    metadata,
+                    ..
+                } = event.clone().into_parts();
                 let clipped = data.slice(..PayloadCeilingStore::CEILING);
                 // `event_type` came off a valid `Event`, so reconstruction cannot
                 // fail; returning the original rather than panicking is the same
