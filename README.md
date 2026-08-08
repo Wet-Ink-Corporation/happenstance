@@ -81,7 +81,7 @@ cargo run -p course-subscriptions
 | Crate | Role | Status |
 |---|---|---|
 | [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 27 rules + property tests |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 55 rules + property tests |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
 | `happenstance-postgres` | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 planned |
@@ -182,15 +182,25 @@ want DCB on Postgres today, `disintegrate` below is the mature choice.
 ## Writing an adapter
 
 Implement `SendEventStore` (or `EventStore` if your target cannot be `Send`),
-then inherit the entire conformance suite:
+write a small `Fixture` for it, then inherit the entire conformance suite:
 
 ```rust,ignore
-happenstance_testkit::event_store_conformance!(MyEventStore::new());
+happenstance_testkit::event_store_conformance!(MyFixture::new());
 ```
 
-That expands to one `#[tokio::test]` per rule, so a failure names the rule that
-broke. **An adapter is not finished until it passes.** The suite covers query
-semantics, read options, position uniqueness and monotonicity, append
+A fixture is what tells the suite how to reach your store: one fixture instance
+is one isolated backing store, and each `connect()` on it is one handle onto
+that store. That separation is what lets rules check the things a bare
+constructor could not express — that two fixtures share nothing, and that two
+handles onto one store observe each other's writes both when reading and when
+evaluating an append condition. Your fixture also declares, as associated
+constants, whether it can hand out a second handle and whether it can be
+reopened; a rule needing something you decline still runs and prints your stated
+reason rather than disappearing.
+
+The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
+that broke. **An adapter is not finished until it passes.** The suite covers
+query semantics, read options, position uniqueness and monotonicity, append
 atomicity, the full append-condition matrix including the exact `after`
 boundary, and the concurrency case DCB exists to prevent.
 

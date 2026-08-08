@@ -68,6 +68,26 @@ const SPEC: &str = "docs/architecture/SPECIFICATION.md";
 const CASES: &str = "docs/scenarios/E2E-CASES.md";
 const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 
+/// Every file a conformance rule may be defined in.
+///
+/// Three, not one. Since stage 5 rules live in three files: the event-store
+/// family in `suite.rs`, the proptest family in `model.rs` and the threaded
+/// family in `concurrency.rs`. [`run`]'s clause checks stay scoped to [`SUITE`]
+/// on purpose — only that family's rules are claimed by clauses today — but
+/// anything asking *does this rule exist* must ask all three, or it answers a
+/// narrower question than its own message claims. Both callers of [`all_rules`]
+/// were doing exactly that until stage 6's review: `retired_rules` printed "none
+/// naming a rule still in the suite" having looked in one file of three, and
+/// CF-29 let a model or concurrency rule land with no changelog entry at all.
+///
+/// It lives here rather than in `lints` because [`collect_rules`] does, and a
+/// list of files kept next to the function that parses them cannot drift from it.
+pub(crate) const RULE_FILES: [&str; 3] = [
+    SUITE,
+    "crates/happenstance-testkit/src/model.rs",
+    "crates/happenstance-testkit/src/concurrency.rs",
+];
+
 /// A section of the specification, in the order §7.1 and §7.2 present them.
 ///
 /// This is the single place the six clause families are enumerated: the parser
@@ -563,6 +583,173 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         stale.as_deref(),
     )
 }
+
+/// Checks that no rule a clause disposes of is still live (§7.4).
+///
+/// # The hole this closes
+///
+/// [`run`]'s check 6 accepts `claimed || retired`, so a `Retires:` line satisfies
+/// it *forever*: the specification can go on saying a rule is gone while the rule
+/// sits in `suite.rs` rejecting registered mutants, and nothing notices. That is
+/// not hypothetical. Phase 3 retired three rules, reversed all three
+/// retirements, and in every case the document and the suite disagreed for a
+/// whole phase with the checker silent — §7.4 is the record, and it schedules
+/// this lint.
+///
+/// # Why a claimed rule fails too
+///
+/// §7.4 proposes the exemption "unless the clause also claims it", and this does
+/// not implement it. Two reasons, and they point the same way.
+///
+/// The first is that a claimed-and-retired rule is a document contradicting
+/// itself. One clause says the rule is disposed of and another relies on it;
+/// whichever is stale, a reader cannot tell which by reading, and check 6 stays
+/// green either way.
+///
+/// The second is [`retires_of`]'s trap. It reads the whole `Retires:` field, so a
+/// *successor* rule backticked in the reasoning — "…the strengthened successor is
+/// `duplicate_items_do_not_duplicate_events`" — registers as retired while being
+/// legitimately claimed. The exemption exists to tolerate exactly that shape, and
+/// tolerating it is what leaves the trap armed: drop the claim later and the
+/// successor is silently disposed of. Failing instead makes the convention
+/// `retires_of` documents — a `Retires:` field names the retired rule and
+/// backticks nothing else — a build failure rather than a note.
+///
+/// So the rule this enforces is the simple one: **a `Retires:` line is discharged
+/// by deleting the rule, in the same change.** Until the deletion lands the line
+/// is a claim to re-examine, which is §7.4's own conclusion.
+///
+/// # The two vacuity guards, and why the second one is not the tree's job
+///
+/// Its two sibling lints both bail when the thing they scan is empty, and this
+/// one had neither guard. The first is easy: [`RULE_FILES`] must parse to
+/// something, or "no retired rule is still live" is a statement about nothing.
+///
+/// The second is the one that matters, because it cannot be answered from the
+/// tree. There are **no `Retires:` fields in `SPECIFICATION.md` at all** — all
+/// three of phase 3's retirements were reversed — so a run over the real document
+/// exercises the parse of the field's *spelling* not at all. Rename the field to
+/// `Retired:`, or move it inside a `**bold**` paragraph that [`field_line`]'s
+/// continuation loop breaks on, and this prints the same green line for ever.
+/// [`RETIRES_PROBE`] is therefore parsed on every run: a fixture clause, held to
+/// the name it is known to contain, so "the field spelling still parses" is a
+/// failure rather than an assumption.
+///
+/// # Errors
+///
+/// Returns an error if a document cannot be read, if the probe stops parsing, or
+/// if any rule named by a `Retires:` field is still defined in [`RULE_FILES`].
+pub(crate) fn retired_rules() -> Result<()> {
+    let root = workspace_root()?;
+    let spec = read(&root, SPEC)?;
+
+    let parsed = retires_of(RETIRES_PROBE);
+    if parsed != [RETIRES_PROBE_NAME] {
+        bail!(
+            "the `Retires:` probe parsed as {parsed:?}, not `[{RETIRES_PROBE_NAME}]`. This lint \
+             reads a field that appears nowhere in {SPEC} today, so the tree cannot exercise it \
+             and a green run would prove nothing. Either `field_line`/`retires_of` have stopped \
+             recognising the field — in which case every disposition in the document is now \
+             invisible — or the convention changed and `RETIRES_PROBE` is what records it."
+        );
+    }
+
+    let clauses = parse_clauses(&spec);
+    if clauses.is_empty() {
+        bail!("parsed no clauses from {SPEC} — the disposed-rule lint would pass vacuously");
+    }
+    let known_rules = all_rules(&root)?;
+    if known_rules.is_empty() {
+        bail!(
+            "parsed no rules from {} — the disposed-rule lint would pass vacuously",
+            RULE_FILES.join(", ")
+        );
+    }
+    let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
+
+    let mut problems = Vec::new();
+    let mut dispositions = 0usize;
+
+    let defined_in = |rule: &str| {
+        RULE_FILES
+            .iter()
+            .find(|file| read(&root, file).is_ok_and(|body| collect_rules(&body).contains(rule)))
+            .copied()
+            .unwrap_or(SUITE)
+    };
+
+    for c in &clauses {
+        for rule in &c.retires {
+            dispositions += 1;
+            if !known_rules.contains(rule) {
+                continue;
+            }
+            let file = defined_in(rule);
+            if claimed.contains(rule) {
+                problems.push(format!(
+                    "{SPEC}:{} — {} retires `{rule}`, which is still in {file} *and* claimed by \
+                     a clause. The document contradicts itself. Either the `Retires:` prose \
+                     backticks a name it should not — it names the retired rule and nothing else \
+                     — or the disposition is stale and the line goes.",
+                    c.line, c.id
+                ));
+            } else {
+                problems.push(format!(
+                    "{SPEC}:{} — {} retires `{rule}`, which is still in {file} and claimed by no \
+                     clause. Check 6 is satisfied by the disposition and will stay satisfied \
+                     forever, so nothing else can notice. Delete the rule, or reverse the \
+                     retirement and have a clause claim it.",
+                    c.line, c.id
+                ));
+            }
+        }
+    }
+
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "{} disposition(s) naming a rule that is still live. A `Retires:` line is a \
+             hypothesis about a wrong implementation and it is discharged by deleting the rule, \
+             not by writing the line (§7.4: three for three were reversed).",
+            problems.len()
+        );
+    }
+
+    println!(
+        "§7.4: {dispositions} disposition(s) against {} rule(s) in {} file(s), none naming a rule \
+         still live",
+        known_rules.len(),
+        RULE_FILES.len()
+    );
+    Ok(())
+}
+
+/// A fixture clause, parsed on every run of [`retired_rules`].
+///
+/// It exists because the tree contains no `Retires:` field to exercise the parse
+/// against — see that function's second vacuity guard. Every spelling convention
+/// [`field_line`] tolerates is deliberately *not* exercised here; one canonical
+/// shape is enough to answer the question this guards, which is whether the field
+/// is recognised at all.
+///
+/// The name it retires is nonsense on purpose. It is parsed from this constant
+/// and never from the document, so it can never collide with a real rule.
+const RETIRES_PROBE: &str = "\
+#### ES-0 — a fixture clause, read by `retired_rules` and by nothing else
+
+`[FROZEN]`
+`Rule:` `a_rule_the_probe_claims`
+`Retires:` `a_rule_the_probe_retires` — and continuation prose that deliberately
+backticks nothing else, because that is the convention this field is held to.
+`Cases:` none
+`Rejects:` nothing. It is not a clause; it is a parser test with no test harness
+to live in.
+";
+
+/// The one rule [`RETIRES_PROBE`] disposes of.
+const RETIRES_PROBE_NAME: &str = "a_rule_the_probe_retires";
 
 fn report(
     census: &Census,
@@ -1129,7 +1316,18 @@ fn rules_of(body: &str) -> Rules {
     // is a unit test in `event.rs`, and no amount of looking in `suite.rs` will
     // find it. Treating those as missing rules is the checker misreading the
     // document rather than the document being wrong.
-    let elsewhere = text.contains("unit test") || text.contains("compile test");
+    //
+    // `meta-test` is the third family and it was missing, which mattered more
+    // than the other two: the CF clauses' meta-tests live in
+    // `happenstance-testkit`'s `tests/`, `collect_rules` scans only `suite.rs`,
+    // and `backticked_idents` drops a path like
+    // `mutation_coverage::every_rule_has_a_mutant` because of the colons — so a
+    // clause naming one parsed with an empty rule list and §7.2 rendered a cell
+    // that *looked* checked. Marking it `elsewhere` makes both that and
+    // `schedules_new` true, which is exactly right: nothing here looked, and the
+    // table now says so in the clause's own words.
+    let elsewhere =
+        text.contains("unit test") || text.contains("compile test") || text.contains("meta-test");
     let schedules_new = text.contains("(new)")
         || text.contains('†')
         || text.trim_start().starts_with("new ")
@@ -1153,6 +1351,24 @@ struct Rules {
     elsewhere: bool,
 }
 
+/// Every rule a clause disposes of.
+///
+/// The trap, and it is invisible from the document: this reads the *whole*
+/// `Retires:` field, continuation lines included, so **every** backticked rule
+/// name anywhere in the reasoning is registered as retired — including a live
+/// rule the same clause claims two lines earlier. Nothing fails while the rule is
+/// also claimed, because check 6 accepts either; the day someone drops the claim,
+/// the rule is silently treated as disposed of forever. Keep a `Retires:` field
+/// to the retired name and prose that backticks nothing else.
+///
+/// [`retired_rules`] is the lint that turns that paragraph from advice into a
+/// failure, and it is worth reading the two together: it fails a `Retires:` name
+/// that `collect_rules` still finds, *whether or not* a clause also claims it.
+/// Which means the trap above is no longer merely documented — a successor rule
+/// named in the reasoning is a build failure, so the "backticks nothing else"
+/// convention is enforced rather than remembered. That is the whole reason the
+/// lint does not exempt a claimed rule; §7.4 proposed the exemption, and the
+/// exemption is exactly the hole this function's own doc comment describes.
 fn retires_of(body: &str) -> Vec<String> {
     field_line(body, "Retires")
         .map(|t| backticked_idents(&t))
@@ -1210,8 +1426,23 @@ fn has_suite(clause_id: &str) -> bool {
     clause_id.starts_with("ES-") || clause_id.starts_with("VT-") || clause_id.starts_with("WF-")
 }
 
+/// Every rule defined anywhere in [`RULE_FILES`].
+///
+/// # Errors
+///
+/// Returns an error if any of [`RULE_FILES`] cannot be read. A missing rule file
+/// is a hard failure rather than an empty contribution: silently skipping one is
+/// how a check comes to scan two files while reporting on three.
+pub(crate) fn all_rules(root: &Path) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    for file in RULE_FILES {
+        out.extend(collect_rules(&read(root, file)?));
+    }
+    Ok(out)
+}
+
 /// Every rule the conformance suite actually defines.
-fn collect_rules(suite: &str) -> BTreeSet<String> {
+pub(crate) fn collect_rules(suite: &str) -> BTreeSet<String> {
     suite
         .lines()
         .filter_map(|l| {
@@ -1273,7 +1504,7 @@ fn read(root: &Path, rel: &str) -> Result<String> {
     fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"))
 }
 
-fn workspace_root() -> Result<PathBuf> {
+pub(crate) fn workspace_root() -> Result<PathBuf> {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .map(Path::to_path_buf)

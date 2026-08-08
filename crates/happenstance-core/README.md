@@ -53,8 +53,11 @@ async fn count_everything() -> Result<(), Box<dyn std::error::Error>> {
 ## An adapter is not an adapter until it passes the suite
 
 ```rust,ignore
-happenstance_testkit::event_store_conformance!(MyStore::new());
+happenstance_testkit::event_store_conformance!(MyFixture::new());
 ```
+
+The expression builds a *fixture* — one isolated backing store per instance, one
+handle per `connect()` — not a store directly. See `happenstance-testkit`.
 
 ## Licence
 

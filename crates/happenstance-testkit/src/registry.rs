@@ -31,13 +31,33 @@
 //! items placed inside the harness module. That module already contains
 //!
 //! ```text
-//! fn __conformance_store() -> impl happenstance_core::EventStore { <factory expr> }
+//! async fn __conformance_fixture() -> impl happenstance_testkit::Fixture {
+//!     <fixture expr>
+//! }
 //! ```
 //!
-//! so an emitter never needs to know the factory expression; it names
-//! `__conformance_store` and each rule calls it once per test. `macro_rules!`
-//! hygiene applies to local variables, not to items, which is what lets one
-//! macro's expansion define that function and another's refer to it.
+//! so an emitter never needs to know the fixture expression — or the fixture
+//! *type*, which it could not know, since the expression is all the macro was
+//! given. `macro_rules!` hygiene applies to local variables, not to items, which
+//! is what lets one macro's expansion define that function and another's refer
+//! to it.
+//!
+//! The emitter passes `__conformance_fixture` itself, as an
+//! `impl AsyncFn() -> F`, so the *rule* decides how many fixture instances it
+//! needs. That is the change the fixture contract bought: the old arrangement
+//! called the factory once per rule, in the emitter, and a rule that wanted a
+//! second isolated store had nowhere to ask for one.
+//!
+//! An emitter must report what a rule returns. It is not asked politely:
+//! [`RuleOutcome`](crate::RuleOutcome) is `#[must_use]`, and dropping it warns
+//! in a workspace whose CI denies warnings.
+//!
+//! [`RuleOutcome::report`](crate::RuleOutcome::report) is the stdout answer and
+//! is what the tokio and blocking emitters call.
+//! [`RuleOutcome::skip_line`](crate::RuleOutcome::skip_line) is the same line
+//! without a sink, for a harness whose target has no stdout — which is not
+//! hypothetical: it is `wasm32-unknown-unknown`, and `__emit_wasm` is why the
+//! method is public.
 
 use core::future::Future;
 use core::task::{Context, Poll, Waker};
@@ -81,6 +101,11 @@ macro_rules! for_each_event_store_rule {
     // meta-test below needs.
     ($($callback:tt)+) => {
         $($callback)+! {
+            // --- The fixture contract --------------------------------------
+            two_fixture_instances_observe_none_of_each_others_appends,
+            two_handles_observe_each_others_appends,
+            acknowledged_writes_survive_a_reopen,
+
             // --- Query semantics -------------------------------------------
             query_all_matches_every_event,
             query_item_types_are_or,
@@ -89,6 +114,9 @@ macro_rules! for_each_event_store_rule {
             query_item_rejects_partial_tag_overlap,
             query_item_combines_types_and_tags_with_and,
             query_items_are_or,
+            untagged_events_match_query_all,
+            duplicate_items_do_not_duplicate_events,
+            query_item_order_does_not_change_the_result_set,
             query_matching_nothing_yields_empty,
 
             // --- Read options ----------------------------------------------
@@ -97,6 +125,10 @@ macro_rules! for_each_event_store_rule {
             read_limit_truncates,
             read_backwards_from_with_limit,
             read_defaults_to_ascending_order,
+            reading_an_empty_store_yields_nothing,
+            read_limit_applies_after_filtering,
+            read_backwards_limit_applies_after_filtering,
+            read_from_composes_with_multi_item_query,
 
             // --- Sequence positions ----------------------------------------
             positions_are_unique,
@@ -105,8 +137,20 @@ macro_rules! for_each_event_store_rule {
             // --- Append ----------------------------------------------------
             append_returns_last_written_position,
             append_is_atomic,
+            append_is_atomic_under_a_mid_batch_fault,
             append_rejects_empty_batch,
+            empty_batch_is_refused_before_the_condition_is_evaluated,
             append_preserves_event_payload,
+
+            // --- Value edges -----------------------------------------------
+            append_preserves_an_empty_payload,
+            metadata_distinguishes_absent_from_empty,
+            store_accepts_a_max_length_identifier,
+            store_accepts_non_ascii_identifiers,
+            store_accepts_the_guaranteed_minimum_payload,
+            store_accepts_the_guaranteed_minimum_tag_count,
+            store_evaluates_a_query_at_the_guaranteed_minimum_item_count,
+            store_accepts_the_guaranteed_minimum_batch_size,
 
             // --- Append conditions -----------------------------------------
             condition_without_after_rejects_any_match,
@@ -114,11 +158,23 @@ macro_rules! for_each_event_store_rule {
             condition_after_ignores_events_at_the_boundary,
             condition_after_rejects_events_beyond_the_boundary,
             condition_after_ignores_non_matching_events,
+            condition_matches_on_tags,
+            condition_with_an_unheld_tag_does_not_reject,
+            condition_against_an_empty_store_admits_the_append,
+            condition_after_beyond_head_admits_the_append,
+            condition_after_beyond_the_last_matching_position_admits_the_append,
             condition_rejection_leaves_store_unchanged,
             condition_rejection_is_reported_as_condition_violated,
 
             // --- Concurrency -----------------------------------------------
             racing_conditional_appends_elect_one_winner,
+
+            // --- Re-entrancy -----------------------------------------------
+            interleaved_appends_on_one_handle_elect_one_winner,
+            a_live_read_stream_does_not_block_an_append,
+
+            // --- Position visibility ---------------------------------------
+            nothing_below_an_observed_position_appears_later,
         }
     };
 }
@@ -134,7 +190,9 @@ macro_rules! __emit_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::rules::$name(__conformance_store).await;
+                $crate::rules::$name(__conformance_fixture)
+                    .await
+                    .report(::core::stringify!($name));
             }
         )*
     };
@@ -152,7 +210,8 @@ macro_rules! __emit_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::rules::$name(__conformance_store));
+                $crate::block_on($crate::rules::$name(__conformance_fixture))
+                    .report(::core::stringify!($name));
             }
         )*
     };
@@ -163,6 +222,15 @@ macro_rules! __emit_blocking {
 /// The caller's crate needs `wasm-bindgen-test` in its `dev-dependencies`,
 /// gated on `cfg(target_arch = "wasm32")`; as with the tokio emitter the
 /// attribute resolves in the caller's scope.
+///
+/// This is the one emitter that does not call
+/// [`RuleOutcome::report`](crate::RuleOutcome::report), and the reason is the
+/// target rather than taste: `println!` writes nowhere on
+/// `wasm32-unknown-unknown`, so a skip reported through it leaves no record on
+/// the only target CF-20 and CF-23 exist for. `console_log!` is what the
+/// runner captures, and resolving it through the caller's `wasm_bindgen_test` —
+/// which the `#[wasm_bindgen_test]` attribute above already requires — keeps the
+/// testkit itself free of a `wasm-bindgen` dependency.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __emit_wasm {
@@ -170,7 +238,10 @@ macro_rules! __emit_wasm {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
             async fn $name() {
-                $crate::rules::$name(__conformance_store).await;
+                let __outcome = $crate::rules::$name(__conformance_fixture).await;
+                if let Some(__line) = __outcome.skip_line(::core::stringify!($name)) {
+                    ::wasm_bindgen_test::console_log!("{}", __line);
+                }
             }
         )*
     };
@@ -267,12 +338,23 @@ fn declared_rules() -> Vec<&'static str> {
 /// which `include_str!` bakes into the binary, so the test needs neither a
 /// filesystem nor a particular working directory.
 ///
-/// It catches the failure CF-24 describes: a 28th `pub async fn` lands in
+/// It catches the failure CF-24 describes: a 47th `pub async fn` lands in
 /// `suite.rs` and the enumeration is not updated. It does **not** catch a rule
 /// introduced into `rules` by a macro expansion, by a `pub use` re-export, or
 /// from a `#[path]`-included file — none of those are visible to a textual
 /// scan. The scan is fail-loud rather than fail-open: were it ever to match
-/// nothing, the second assertion reports all 27 registered rules as missing.
+/// nothing, the second assertion reports every registered rule as missing.
+///
+/// One thing it deliberately does not match, and it is worth knowing before
+/// adding another: a helper shared by two rules is spelled `    async fn`
+/// without `pub` — `seed_hits_between_misses` is the first — so the prefix that
+/// selects rules also excludes it. A helper made public would be reported as an
+/// orphan, which is the right answer rather than a false positive.
+///
+/// The scan survived the fixture contract untouched, which was worth checking
+/// rather than assuming: rules gained a generic parameter and a return type, but
+/// the prefix it matches — `    pub async fn ` at one level of indentation
+/// inside `pub mod rules` — is the part that did not move.
 ///
 /// A strictly stronger guard exists and was compiled before this one was
 /// chosen: move the bodies into a private `mod rules_impl` and generate

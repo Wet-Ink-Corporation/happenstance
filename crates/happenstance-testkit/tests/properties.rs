@@ -9,26 +9,133 @@
 //! matching down into SQL is asserting these laws about its `WHERE` clause, and
 //! should be able to reuse the generators.
 
-// `proptest` is a native-only dev-dependency; these laws are target-independent
-// and checking them once, natively, is enough.
-#![cfg(not(target_arch = "wasm32"))]
+// Two conditions, and neither is redundant (CF-21). `proptest` is an optional
+// dependency of the *non-wasm32* target table, so on wasm32 the crate is not in
+// the graph at all — but a **feature is not target-scoped**, and `--all-features`
+// therefore sets `feature = "proptest"` on every target including that one.
+// Without the target condition this file is compiled for wasm32 against a crate
+// that does not exist there. These laws are target-independent in any case, so
+// checking them once, natively, is enough.
+#![cfg(all(not(target_arch = "wasm32"), feature = "proptest"))]
 #![allow(clippy::unwrap_used)]
 
-use happenstance_core::{EventType, Query, QueryItem, Tag, Tags};
+use happenstance_core::{AppendCondition, EventType, Query, QueryItem, SequencePosition, Tags};
+// The generators are the testkit's, not this file's (CF-21). An adapter pushing
+// query matching down into SQL is asserting these same laws about its `WHERE`
+// clause, and generators private to an integration test are reachable by nobody
+// — which made that claim false for as long as they lived here.
+//
+// It was false a second time and for a subtler reason, which is why this is a
+// paragraph rather than a line. `any_query`/`any_query_item` were *copied* into
+// this file rather than imported, so the oracle properties pinned a duplicate of
+// the generator `model.rs` uses instead of the generator itself. Both copies
+// compiled, both test sets passed, and widening `strategies::any_query_item` — a
+// new item shape, a longer alphabet, a nested query form — would have started
+// the model generating inputs these properties had never seen, silently. Only
+// `any_position` is local now, and deliberately: its four-value range exists for
+// the `position == boundary` off-by-one below and has no business in the shared
+// alphabet.
+// `any_query` transitively covers `any_query_item`, which is why the latter is
+// not imported: pinning the query generator pins the item generator inside it.
+use happenstance_testkit::fixtures::strategies::{any_event_type, any_query, any_tag, any_tags};
 use proptest::prelude::*;
 
-/// Generates a tag from a small alphabet, so collisions and duplicates actually
-/// occur rather than being vanishingly unlikely.
-fn any_tag() -> impl Strategy<Value = Tag> {
-    prop::sample::select(vec!["a", "b", "c", "d", "e"]).prop_map(|value| Tag::new(value).unwrap())
+// -------------------------------------------------------------------------
+// The naive oracles
+// -------------------------------------------------------------------------
+//
+// Everything below this comment and above the `proptest!` block is written for
+// a reader, not for a machine: nested linear scans, no early exit worth the
+// name, no shared helper with the thing it is checking. That is the whole
+// design. `Query::matches` reaches for `binary_search` over a sorted type list
+// and `Tags::contains_all`'s single merge-scan over two sorted slices, both of
+// which are the kind of code that is wrong only at a boundary; the oracle is a
+// transcription of the doc comment on `QueryItem`.
+//
+// The two must not share a subroutine, or the property degenerates into
+// `f(x) == f(x)`. So `naive_item_matches` spells tag containment as
+// `wanted.iter().all(|t| held.iter().any(|h| h == t))` rather than calling
+// `Tags::contains` — `contains` is itself a `binary_search`, and routing the
+// oracle through it would leave the sorted-slice assumption unchecked on both
+// sides of the equation.
+//
+// # Which level is independently written, and which is not
+//
+// Scoping this is worth a sentence, because `model.rs`'s non-circularity claim
+// cites these two properties without qualification and a reader deciding how far
+// to trust the model will read that sentence rather than this one.
+//
+// **Independent:** `naive_item_matches` — a linear `iter().any()` against the
+// real `binary_search`, with tag containment spelled in the inverted direction
+// against `Tags::contains_all`'s merge-scan. And `naive_is_violated_by` — a
+// positive `position > boundary` against the real
+// `match self.after { Some(after) if position <= after => false, … }`, routed
+// through the naive matcher rather than through `Query::matches`.
+//
+// **Not independent:** the `Query`-level dispatch in `naive_query_matches` is the
+// same expression as the implementation reached through a different accessor —
+// real is `Self::Items(items) => items.iter().any(|item| item.matches(…))`,
+// oracle is `Some(items) => items.iter().any(|item| naive_item_matches(item, …))`.
+// So `query_matches_agrees_with_a_naive_definition` catches item-level defects
+// and cannot catch a defect in the OR-over-items dispatch. That is a deliberate
+// floor rather than an oversight: the OR has no boundary to get wrong, and the
+// `All` arm is covered separately by `query_all_is_the_top_element`. It is
+// recorded because "the model is grounded" is true of the item level and only
+// partly true one level up.
+
+/// The `QueryItem` doc comment, transcribed: an event matches when its type is
+/// one of `types` (empty means any) **and** its tags contain all of `tags`
+/// (empty means any).
+fn naive_item_matches(item: &QueryItem, event_type: &EventType, tags: &Tags) -> bool {
+    let type_ok = item.types().is_empty() || item.types().iter().any(|ty| ty == event_type);
+    let tags_ok = item
+        .tags()
+        .iter()
+        .all(|wanted| tags.iter().any(|held| held == wanted));
+    type_ok && tags_ok
 }
 
-fn any_tags() -> impl Strategy<Value = Tags> {
-    prop::collection::vec(any_tag(), 0..6).prop_map(|tags| tags.into_iter().collect())
+/// `Query::All` is true; `Query::Items` is an OR across the items.
+///
+/// Written against `Query::items()`, which returns `None` for `All`, so the
+/// oracle never touches `Query::matches` or `Query::is_all`.
+fn naive_query_matches(query: &Query, event_type: &EventType, tags: &Tags) -> bool {
+    match query.items() {
+        None => true,
+        Some(items) => items
+            .iter()
+            .any(|item| naive_item_matches(item, event_type, tags)),
+    }
 }
 
-fn any_event_type() -> impl Strategy<Value = EventType> {
-    prop::sample::select(vec!["A", "B", "C"]).prop_map(|value| EventType::new(value).unwrap())
+/// The `AppendCondition` clause, transcribed: an event violates the condition
+/// when it lies strictly after the boundary — if there is one — **and** the
+/// query matches it.
+///
+/// `>` is load-bearing and is the entire reason this oracle exists.
+/// `AppendCondition::after` is **exclusive** while `ReadOptions::from` is
+/// **inclusive**, so the two neighbouring types in the same crate disagree by
+/// one on purpose. An implementation that drifts to `>=` here still passes
+/// every test that never generates a position equal to the boundary, which is
+/// why `any_position` below is drawn from a deliberately tiny range.
+fn naive_is_violated_by(
+    condition: &AppendCondition,
+    position: SequencePosition,
+    event_type: &EventType,
+    tags: &Tags,
+) -> bool {
+    let after_the_boundary = match condition.after {
+        None => true,
+        Some(boundary) => position > boundary,
+    };
+    after_the_boundary && naive_query_matches(&condition.fail_if_events_match, event_type, tags)
+}
+
+/// Positions from a **four-value** range, for the same reason `any_tag`'s
+/// alphabet is five symbols: the interesting input is `position == boundary`,
+/// and over a realistic range it never occurs.
+fn any_position() -> impl Strategy<Value = SequencePosition> {
+    (1u64..5).prop_map(|value| SequencePosition::new(value).unwrap())
 }
 
 proptest! {
@@ -121,6 +228,58 @@ proptest! {
         event_tags in any_tags(),
     ) {
         prop_assert!(Query::all().matches(&event_type, &event_tags));
+    }
+
+    /// `Query::matches` agrees with a naive definition.
+    ///
+    /// The properties above constrain `matches` *algebraically* — it is
+    /// order-insensitive, adding an item only widens it, `All` is the top
+    /// element. Every one of those is satisfied by a function that returns
+    /// `true` unconditionally. This is the one that pins the fast
+    /// implementation to what the specification actually says, and it is what
+    /// makes it honest to build the model-based suite on `Query::matches`:
+    /// a model resting on this is not resting on itself.
+    #[test]
+    fn query_matches_agrees_with_a_naive_definition(
+        query in any_query(),
+        event_type in any_event_type(),
+        event_tags in any_tags(),
+    ) {
+        prop_assert_eq!(
+            query.matches(&event_type, &event_tags),
+            naive_query_matches(&query, &event_type, &event_tags),
+            "query = {:?}, type = {:?}, tags = {:?}",
+            query, event_type, event_tags,
+        );
+    }
+
+    /// `AppendCondition::is_violated_by` agrees with a naive definition.
+    ///
+    /// `is_violated_by` had no property at all before this: three hand-written
+    /// unit tests in `happenstance-core` and nothing else. It is the function
+    /// the whole consistency mechanism reduces to, and the one the model-based
+    /// suite's expected-outcome calculation is built on.
+    ///
+    /// The generated boundary and the generated position are drawn from the
+    /// same four values, so `position == boundary` — the exclusive/inclusive
+    /// off-by-one — is hit in roughly a quarter of the cases where `after` is
+    /// `Some`, rather than never.
+    #[test]
+    fn is_violated_by_agrees_with_a_naive_definition(
+        query in any_query(),
+        after in prop::option::of(any_position()),
+        position in any_position(),
+        event_type in any_event_type(),
+        event_tags in any_tags(),
+    ) {
+        let condition = AppendCondition::new(query).after_opt(after);
+
+        prop_assert_eq!(
+            condition.is_violated_by(position, &event_type, &event_tags),
+            naive_is_violated_by(&condition, position, &event_type, &event_tags),
+            "condition = {:?}, position = {:?}, type = {:?}, tags = {:?}",
+            condition, position, event_type, event_tags,
+        );
     }
 
     /// An event matches a tag-only item exactly when its tags are a superset.

@@ -16,23 +16,41 @@ keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
 
+# `memory` moved here from `[dev-dependencies]` at the fixture contract: the
+# testkit's own `MemoryFixture` is a *published* item in `fixtures`, not a test
+# helper, because it is the reference implementation of `Fixture` an adapter
+# author reads before writing their own.
 [dependencies]
-happenstance-core = { workspace = true, features = ["std"] }
-
-[dev-dependencies]
-happenstance-core = { workspace = true, features = ["memory"] }
+happenstance-core = { workspace = true, features = ["std", "memory"] }
+# Needed to spell `MemoryHandle`'s delegating `read` — the return type is
+# `impl Stream<…> + Send`, and the trait it satisfies is defined in terms of
+# `futures_core::Stream`.
 futures-core.workspace = true
+
+[features]
+default = []
+# The property-test generators in `fixtures::strategies` (CF-21). Off by
+# default so the mandatory `wasm32` build stays untouched — `proptest` does not
+# build for that target — and on under `--all-features`, which is what the
+# gate's clippy, test and doc steps all run.
+proptest = ["dep:proptest"]
 
 # Split by target so the wasm harness can be *compiled* for wasm32 without
 # dragging tokio's multi-threaded runtime — which cannot exist there — into the
 # same check. The testkit's own library has no dev-dependency on either: the
 # runtime attribute is emitted into the caller's crate, never resolved here.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+proptest = { workspace = true, optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-proptest.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

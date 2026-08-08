@@ -68,7 +68,7 @@ monotonicity and permitted gaps — all properties of *assignment*, none of
 
 **Rejects:** a Postgres adapter allocating positions with `nextval()` outside the
 transaction. It passes `positions_are_unique` and
-`positions_are_strictly_monotonic` (`crates/happenstance-testkit/src/suite.rs:336-365`)
+`positions_are_strictly_monotonic` (`crates/happenstance-testkit/src/suite.rs:1106-1162`)
 because both read a quiescent store after a single sequential writer. The
 deterministic fixture that must fail is a store that holds one append's row back
 until a second, later-positioned append has committed.
@@ -146,7 +146,7 @@ definitional events.
 **Falsifies:** that `ReadOptions` is sufficient to bound a decision model.
 `ReadOptions.from` is one `Option<SequencePosition>` for the entire read
 (`crates/happenstance-core/src/query.rs:226-234`) and `read` applies one `ReadOptions`
-to the whole `Query` (`store.rs:117-121`).
+to the whole `Query` (`store.rs:118-122`).
 
 **Rejects:** every adapter, today, and — more usefully — it rejects the
 *workaround*: an application that sets `from = S` for the whole query. That
@@ -191,7 +191,7 @@ with `after` set past everything already stored.
 
 **Falsifies:** nothing is claimed today — which is the point. The reference answer
 is "no": `MemoryEventStore` checks the condition against `stored` before extending
-(`memory.rs:197-221`). That is an accident of implementation order, not a stated
+(`memory.rs:218-230`). That is an accident of implementation order, not a stated
 rule, and **no conformance rule covers it.**
 
 **Rejects:** the conditional `INSERT ... SELECT ... WHERE NOT EXISTS` strategy the
@@ -233,7 +233,7 @@ real adapter must.
 
 - **From:** Kestrel Motor (compliance on one-shot HTTP and the purge batch on a pooled connection, same log)
 - **Level:** contract
-- **Spans:** `happenstance-testkit`; requires a documented obligation that `factory()` called twice yields two handles onto one backing store
+- **Spans:** `happenstance-testkit`; requires a documented obligation that a fixture can open two handles onto one backing store — **discharged** by CF-16 and ES-33, and by `Fixture::connect`
 
 **GIVEN** two store handles *A* and *B* onto the same backing store.
 **WHEN** *A* appends an event matching a condition *B* is about to use, and *B*
@@ -242,15 +242,19 @@ appends under that condition with `after` set before *A*'s write.
 
 **Falsifies:** the port's central claim — that an `AppendCondition` is sufficient
 coordination — for any deployment where one store is reached two ways. Every
-conformance rule builds one store from `factory()` and drives it through one
-handle; `racing_conditional_appends_elect_one_winner` (`suite.rs:596-638`) is
-sequential *and* single-handle.
+conformance rule built one store from `factory()` and drove it through one
+handle; `racing_conditional_appends_elect_one_winner` is sequential *and*
+single-handle. `two_handles_observe_each_others_appends` (CF-16, CF-19) is what
+now covers the read side and the append-condition side of this case; the *two
+adapters* half of it is still uncovered.
 
 **Rejects:** an adapter whose condition check is correct only within its own
 session — a cached `max(position)` fast path (a strategy the ledger explicitly
 defers rather than rules out, `RUNBOOK.md:64`), a per-connection repeatable-read
-snapshot, or an advisory lock scoped to a single pool member. All three pass all
-27 rules today.
+snapshot, or an advisory lock scoped to a single pool member. All three passed
+all twenty-seven rules the suite had before CF-19's
+`two_handles_observe_each_others_appends` landed; `CachedHeadFixture` in the
+mutant registry is the first of them, compiled.
 
 ---
 
@@ -266,7 +270,7 @@ alternately to completion.
 **THEN** exactly one succeeds, the other returns `ConditionViolated`, and neither
 panics.
 
-**Falsifies:** that `append(&self, ..)` (`store.rs:141-145`) is safe to call
+**Falsifies:** that `append(&self, ..)` (`store.rs:148-152`) is safe to call
 re-entrantly. The port says nothing about whether a second `append` may be entered
 while a first is in flight, and on the `!Send` flavour both futures interleave at
 every `.await`.
@@ -297,7 +301,7 @@ is inclusive (`query.rs:228-229`), and the only advance is
 `SequencePosition::next()`, whose own documentation says it is "only meaningful
 for adapters that allocate positions densely" (`event.rs:138-144`). Every existing
 rule feeds `from` a position the store actually assigned
-(`suite.rs:262-276`, `:306-329`).
+(`suite.rs:802-825`, `:875-909`).
 
 **Rejects:** an adapter implementing `from` as an equality seek or a
 `rowid`-offset lookup rather than a range predicate — plausible on a store where
@@ -343,8 +347,8 @@ direction that cannot stream is right.
 **THEN** that position is the maximum observed, not the last yielded.
 
 **Falsifies:** that the crate's only read helper generalises. `read_decision_model`
-hardcodes `ReadOptions::new()` (`store.rs:205`) and derives its boundary from
-`events.last()` (`:206`), which on a backwards read is the **oldest** match.
+hardcodes `ReadOptions::new()` (`store.rs:212`) and derives its boundary from
+`events.last()` (`:213`), which on a backwards read is the **oldest** match.
 
 **Rejects:** any `read_decision_model_with(store, query, options)` that copies the
 existing `.last()` idiom. The failure is not a compile error: it is a condition
@@ -392,7 +396,7 @@ not be refused, and one whose author omitted the condition by mistake.
 **THEN** the two are distinguishable.
 
 **Falsifies:** that `Option<AppendCondition>` is the right shape.
-`append(&events, None)` (`store.rs:144`) renders "I asserted nothing because there
+`append(&events, None)` (`store.rs:151`) renders "I asserted nothing because there
 was nothing to assert" and "I am a decision whose author forgot" as the same bytes
 — and a reconciliation projection must distinguish them, because an observation
 cannot lose a conflict and a decision can.
@@ -838,8 +842,11 @@ pins it.**
 
 **Rejects:** an adapter that deduplicates or reorders a query's items as an
 optimisation. `QueryItem::new` already sorts and dedups *types* (`query.rs:62-67`),
-so an author extending that to items would find it natural. Such an adapter passes
-all 27 rules and breaks the runner.
+so an author extending that to items would find it natural. Such an adapter still
+passes every rule in the suite and breaks the runner: SPECIFICATION.md's ES-15
+says in terms that no order-invariance rule can catch it, because sorting the
+items is precisely what makes their order stop mattering. VT-31's
+`query_union_is_item_concatenation` is the rule that would, and it is still owed.
 
 ---
 
@@ -915,7 +922,7 @@ writes at append time**, which is the Lamport pair the ledger already decided.
 decomposition explicit rather than emergent.
 
 **Falsifies:** that a peer's push is one unit of work. `EventStore::append` takes
-exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:141-145`), so
+exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:148-152`), so
 seven groups is seven appends with nothing spanning them. That is **correct DCB** —
 the boundary is the query, not the batch — and it is stated nowhere in the contract,
 the testkit or the sync prose.
@@ -1033,7 +1040,7 @@ doubly held.
 
 **What survives today:** the compensating write is exactly one call —
 `append(&[losing, superseded], Some(&guard))` — and `store.rs:130-133` guarantees
-all-or-nothing, conformance-tested by `append_is_atomic` (`suite.rs:385-403`). This
+all-or-nothing, conformance-tested by `append_is_atomic` (`suite.rs:1200-1221`). This
 half needs no new seam.
 
 ---
@@ -1259,7 +1266,7 @@ they were.
 **THEN** the store holds both or neither.
 
 **Falsifies:** that the port's atomicity guarantee covers the operations a regulated log
-actually performs. `append` is closed over insertion (`store.rs:141-145`); there is no
+actually performs. `append` is closed over insertion (`store.rs:148-152`); there is no
 delete, no redact, no truncate, no tombstone. A conformant adapter must open its own
 transaction outside the port, at which point **the atomicity the port spent its whole
 design defending is being provided by the adapter's private code, unobserved by any
@@ -1399,7 +1406,7 @@ spawns a handler.
 **THEN** it compiles, and the handler's error can cross a `JoinHandle`.
 
 **Falsifies:** that the two-flavour design is sufficient for a concurrent deployment.
-`#[trait_variant::make(SendEventStore: Send)]` (`store.rs:91`) yields `Send` and `Send`
+`#[trait_variant::make(SendEventStore: Send)]` (`store.rs:92`) yields `Send` and `Send`
 futures, never `Sync`; calling `&self` methods from several tasks requires `S: Sync`. And
 `type Error: core::error::Error + 'static` (`:99`) is not `Send + Sync`, so a spawned
 handler's error cannot be returned.
@@ -1571,9 +1578,16 @@ anything**, which is precisely what CLAUDE.md forbids.
 E2E-02 and E2E-03. Neon may not be able to meet the strong obligation in one round trip,
 which is the reason to settle it before freezing rather than after.
 
-**8. Multi-writer conformance.** E2E-08 needs a documented requirement that
+**8. Multi-writer conformance.** ~~E2E-08 needs a documented requirement that
 `factory()` called twice yields two handles onto the same backing store — the signature
-`F: Fn() -> S` already permits it and nothing asks for it.
+`F: Fn() -> S` already permits it and nothing asks for it.~~ **Settled at phase 3.**
+`Fn() -> S` was replaced by the `Fixture` trait, which names isolation and
+sharing apart: one instance is one backing store, each `connect()` is a handle
+onto it. CF-16 requires the second handle, CF-19 requires a rule to use it, and
+`two_handles_observe_each_others_appends` is that rule. What remains open is the
+far end rather than the obligation: every fixture in the workspace hands out
+refcount clones of one in-process object, so no *connection* has yet been opened
+twice.
 
 **9. Cancellation.** E2E-07 needs one paragraph on `append` stating whether an adapter
 may commit after its future is dropped. The honest statement is probably "may or may not

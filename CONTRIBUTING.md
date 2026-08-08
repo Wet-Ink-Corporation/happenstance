@@ -71,13 +71,26 @@ cargo install cargo-hack cargo-deny --locked
 1. Implement `SendEventStore` if your store can be shared across threads — every
    native adapter can. Implement `EventStore` only when you genuinely cannot, as
    on `wasm32`. Implementing the former gives you the latter for free.
-2. Invoke the conformance suite:
+2. Write a `Fixture` for it. A fixture instance is one **isolated backing
+   store**; each `connect()` on it returns one **handle** onto that store. Say
+   so honestly — a file-backed fixture that points every instance at the same
+   temporary path fails
+   `two_fixture_instances_observe_none_of_each_others_appends`, which is the
+   whole reason that rule exists. Declare the two capability constants that have
+   no default: `SECOND_HANDLE` if you can open a second handle onto one store,
+   `REOPEN` if you can discard process state and read back only what was durably
+   committed. A third, `MID_BATCH_FAULT`, defaults to declined — override it only
+   if your store can be made to fail while writing the *k*-th event of a batch,
+   which nothing outside the adapter can arrange. Decline with
+   `Capability::declined("…")` and a real reason; it is printed on every run.
+   `happenstance_testkit::fixtures::MemoryFixture` is the worked example.
+3. Invoke the conformance suite, handing it an expression that builds a fixture:
    ```rust
-   happenstance_testkit::event_store_conformance!(MyStore::new());
+   happenstance_testkit::event_store_conformance!(MyFixture::new());
    ```
-3. Make it pass.
+4. Make it pass.
 
-Step 3 is not a formality. An adapter that compiles but has not run the suite is
+Step 4 is not a formality. An adapter that compiles but has not run the suite is
 not an adapter, and will not be merged as one. If a rule looks wrong, say so and
 fix the rule — a bad rule costs every future adapter author a day.
 
@@ -136,6 +149,125 @@ When adding one:
 - **Never assert on literal position values.** The specification permits gaps in
   the sequence, so `assert_eq!(positions, [1, 2, 3])` fails a perfectly
   conformant adapter. Compare against positions the store actually assigned.
+- Register it in `for_each_event_store_rule!`. That is the only place the set is
+  written down, and `registry::no_orphan_rules` fails if you forget.
+- A rule takes `impl AsyncFn() -> F`, not a fixture — *how to make one*, so it
+  can make two when isolation is the thing under test — and returns a
+  `RuleOutcome`. If, and only if, the **whole** rule needs a capability that a
+  fixture may honestly decline, gate it with `require!(F: REOPEN)` and let it
+  return `Skipped`. A rule that merely strengthens itself when a second handle
+  exists has run, and must say `Ran`. `SECOND_HANDLE` is a MUST rather than a
+  trade, so a rule needing it uses `must!` and fails; `require!` on a MUST buys
+  a declining adapter a green suite and one `SKIP` line, which is the whole
+  reason the two macros are separate.
+- **Write the wrong implementation.** A rule no adapter can fail is decorative,
+  and since [ADR-0010](docs/adr/0010-the-suite-must-prove-itself.md) that is
+  enforced rather than reviewed: adding a rule fails
+  `mutation_coverage::every_rule_has_a_mutant` until a mutant declares it. Three
+  deliberately separate edits, all under
+  `crates/happenstance-testkit/tests/mutation_coverage/`:
+
+  1. `mutants.rs` — an `impl Defect` overriding **one** step of the correct
+     store in `correct.rs`. One step, because a store broken in several ways
+     proves the rule catches *something*, not that it catches this.
+  2. `for_each_mutant!` in `tests/mutation_coverage.rs` — the enumeration.
+  3. `REGISTRY` in the same file — the exact set of rules it fails, its
+     `provenance` (the real adapter shape that makes it plausible; a saboteur is
+     rejected by `every_mutant_states_its_provenance`), and its `FailureMode`.
+
+  The claim lives apart from the store on purpose. Put it on the `impl` as an
+  associated const and a reviewer edits the claim in the same keystroke as the
+  bug it describes, at which point the claim has stopped being a check.
+
+  If a rule genuinely has no plausible failing implementation, ADR-0010's honest
+  response is to **retire the rule** and say so in its clause — not to invent a
+  store no author would ship.
+- **Add a `CHANGELOG.md` entry naming the defect the rule detects** (CF-29).
+  Adding a rule is a semver-*minor* change that turns a passing adapter's CI red,
+  and an adapter author who takes the bump needs to tell "my adapter has a
+  defect" from "the suite changed". Nothing mechanical checks this; it is the one
+  step on this list that only review catches, and the clause says so.
+
+### The model family
+
+`event_store_model_conformance!` is a second rule family, in
+`crates/happenstance-testkit/src/model.rs`, and the list above applies to it with
+two substitutions. Its enumeration is `for_each_model_rule!` rather than
+`for_each_event_store_rule!` (CF-22 wants one list per *family*, and there is no
+`no_orphan_rules` on this side because `spec-trace` does not read the file). And
+its wrong implementations are not declared in `REGISTRY`, which is keyed on named
+suite rules: they are declared in `MODEL_COVERAGE`, an **exhaustive** table of
+what the model does to every store in the proof artefact, held by
+`mutation_coverage::the_model_rule_rejects_exactly_what_it_claims`.
+
+Exhaustive rather than a list of successes, because the question worth asking of
+a model-based test is what it is *blind* to. If your change moves a store from
+`Agreed` to `Rejected`, the model got stronger and the table should say so; if it
+moves one the other way, the table is the only thing that will notice.
+
+Two things not to do here. Do not reach for `proptest!` — it generates a
+synchronous test body, so a rule inside one has to choose a `block_on` inside the
+testkit, which is CF-23's prohibition one level down. And do not make the RNG
+non-deterministic: a conformance rule that fails one run in twenty teaches an
+adapter author to rerun CI until it is green.
+
+### The concurrency family
+
+`event_store_concurrency_conformance!` is the third family, in
+`crates/happenstance-testkit/src/concurrency.rs`. Its enumeration is
+`for_each_concurrency_rule!`, its wrong stores live in
+`tests/mutation_coverage/racers.rs`, and its table is `RACERS` — a separate one
+rather than more `REGISTRY` rows, because every store in it fails **none** of the
+fifty-five named rules and `mutant_registry_is_exhaustive` rejects a row with an
+empty `fails` list.
+
+**There is no `no_orphan_rules` on this side either**, for the same reason the
+model family has none: that check `include_str!`s `suite.rs` and nothing else, so
+a `pub async fn` added here and left out of `for_each_concurrency_rule!` compiles,
+never runs, and is reported by nothing.
+`the_concurrency_rules_reject_exactly_what_they_claim` does not close it —
+that test enumerates *from* the same macro, so a rule missing from the list is
+missing from the check too. Add the name to the macro in the same change as the
+rule. `SPECIFICATION.md` CF-24 records the gap and what the mechanical fix would
+be.
+
+Five rules specific to it, and the first two are the ones that will bite.
+
+**No clock, no sleep, no timeout — including the one that looks like a safety
+feature.** CF-33 is `[FROZEN]` and a watchdog is a clock. Liveness rests on the
+CI job timeout; the cost is that a deadlocking adapter hangs rather than naming a
+rule, and that cost is accepted rather than overlooked. If you find yourself
+wanting `thread::sleep` to make a race reproducible, what you want is a
+**rendezvous**: an atomic counter and `std::thread::yield_now`, bounded by a
+number of yields so nothing hangs. `Shared::wait_for_company` in `racers.rs`
+records three versions of that idea and why the first two were wrong.
+
+**Start the contenders at a barrier.** Spawning N threads in a loop does not
+start them together, and it was measured: the first contenders finished before
+the last were spawned, and a wrong store was joined by *pairs* rather than by
+everybody, so the rule meant to reject it passed about half the time. `race` in
+`concurrency.rs` owns that barrier; a rule that spawns its own threads has to
+think about it again.
+
+**Hand each contender its own handle, by value.** The bound is
+`F::Store: EventStore + Send` and it stays that way only while nothing is shared
+by reference — `&F::Store: Send` means `F::Store: Sync`, which would exclude
+adapters for nothing.
+
+**Collapse each contender's result before its thread ends.**
+`EventStore::Error` carries no `Send` bound, so a `Result<_, AppendError<S::Error>>`
+cannot leave the thread that produced it. `Attempt` is that collapse.
+
+**If a rule has a thread waiting on a flag, set the flag before you propagate a
+panic.** `std::thread::scope` joins every scoped thread even while unwinding, so
+`resume_unwind` taken *before* the flag is stored leaves the waiter spinning and
+the scope never returns — and with no watchdog anywhere, that turns a nameable
+store panic into a silent CI timeout. Join everything into a `Vec` first, set the
+flag, join the waiter, and only then walk the results. `observe_while_writing` in
+`concurrency.rs` is the one place this arises and it says so in a comment.
+The same function opens with a read on the rule's own thread before the scope,
+for the mirror-image reason: a spawned thread is not a scheduled one, and on a
+loaded host every writer can finish before the reader runs once.
 
 ## Style
 

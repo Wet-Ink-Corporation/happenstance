@@ -121,8 +121,17 @@ code around it.
 before it is considered to exist.**
 
 ```rust
-happenstance_testkit::event_store_conformance!(MyStore::new());
+happenstance_testkit::event_store_conformance!(MyFixture::new());
 ```
+
+The expression builds a **`Fixture`**, not a store — that changed at phase 3 and
+the old `factory =` spelling is gone with no deprecated arm, because nothing is
+published yet. One fixture instance is one isolated backing store; each
+`connect()` on it is one handle onto that store. A fixture also declares
+`SECOND_HANDLE` and `REOPEN` as `Capability` associated constants, and a rule
+whose capability is declined still runs, reporting the fixture's stated reason
+rather than vanishing from the binary. `happenstance_testkit::fixtures::MemoryFixture`
+is the reference implementation.
 
 An adapter that compiles but has not run the suite is not an adapter. If a rule
 seems wrong, fix the rule and explain why in the same change — do not skip it.

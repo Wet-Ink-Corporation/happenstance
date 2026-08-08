@@ -123,6 +123,106 @@ reports an unclaimed rule forever, and "known noise in the checker" is how a
 checker stops being read. Each retirement lands as a `Retires:` line on the clause
 that owned it, in the same change as the code.
 
+**Amendment, phase 3, 2026-08-07: there is a third, and it is `append_is_atomic`.**
+Asking this ADR's own question of the rules that already existed — *name the wrong
+implementation this one rejects* — turned up one more, and it is the one that
+reads most like a rule doing its job: a three-event batch, refused, the store
+asserted unchanged. But the refusal comes from the **condition check, which
+precedes any write**. The batch never reaches the write path, so the partial write
+the rule's name promises to catch was never reachable by it, and the property it
+does assert is `condition_rejection_leaves_store_unchanged`'s with a longer batch.
+It could not fail the implementation it names, which is the decorative shape
+section 1 exists to make unwriteable, so it is retired at ES-18 on that ground and
+recorded in `SPECIFICATION.md`'s §7.4 beside the other two. The successor is
+`append_is_atomic_under_a_mid_batch_fault`, and it needs a **real fault injected**
+— a decorator over an arbitrary `EventStore` failing the write of the *k*-th event
+of a batch — precisely because no condition violation can manufacture a partial
+write to observe. That the count moved from two to three before any code was
+written is the argument for the meta-tests rather than against them: the question
+is cheap to ask and nothing was asking it.
+
+**The amendment is itself amended, phase 3 stage 3, 2026-08-07: `append_is_atomic`
+is retained, and the ground the paragraph above retires it on is false.** The
+registry now holds `WriteThenCheckStore` — probe-then-insert outside the
+transaction, which is one of the four wrong implementations a reviewer measured
+passing the old suite — and its `commit` *extends the stored log first*, then
+probes, then returns `Err`. The batch reaches the write path. `append_is_atomic`
+fails it, and `InnerJoinTagStore` and `AfterDefaultsToFirstStore` fail it too;
+three registry rows name the rule. So the rule is not decorative, and retiring it
+would remove the only rule currently rejecting the write-then-check shape's
+non-atomicity.
+
+What the original amendment got right is narrower and still stands: **no
+condition violation can manufacture a partial write**, so
+`append_is_atomic_under_a_mid_batch_fault` is still owed and still needs a real
+fault injected. The two are complementary rather than successive — one rejects a
+store that writes before it decides, the other a store that cannot roll back what
+it wrote — and stage 7 must not delete the first while writing the second.
+
+Worth recording as a method note, because it is the second correction in the same
+paragraph: *reasoning about which implementations a rule can reject is exactly as
+unreliable as reasoning about whether an adapter is conformant.* The first
+amendment was written by reading the rule; this one by writing the store. That is
+the whole ADR, applied to the ADR.
+
+**Reconciled at stage 4, 2026-08-07.** `SPECIFICATION.md` disagreed with this
+paragraph for a stage — ES-18 still carried the `Retires:` line, and §7.4 still
+recorded the rule as orphaned-because-retired. ES-18 now claims
+`append_is_atomic` beside `append_is_atomic_under_a_mid_batch_fault` and states
+why the merge was reversed; §7.4 records the reversal rather than the
+retirement. One thing was learned reconciling it and is now stated at CF-38 as
+well: **a disposed rule satisfies `spec-trace`'s orphan check forever.** The rule
+was in `suite.rs`, a `Retires:` line named it, and the checker was silent
+throughout — which is precisely the hole §7.4 exists to close, seen from the
+inside. A `Retires:` line is a claim to re-examine, not a filing, and nothing
+mechanical will remind anyone.
+
+**Amended again at stage 5, 2026-08-07: the heading of this section is now false
+in both of its nouns. Zero rules are retired, not two, and the other two
+retirements have been reversed as well.** Everything above concerns only the
+third rule, `append_is_atomic`, which is why the count needs saying separately.
+
+* **`query_all_matches_every_event` is reclaimed by ES-15.** Its events were
+  rewritten to *descending* types, which is what rejects `SortByEventTypeStore`'s
+  `ORDER BY type, position`, and no other rule in the suite does so on the
+  untagged `Query::all()` path. Retiring it would have removed the only rule
+  rejecting a store that sorts its result set by anything but position.
+* **`racing_conditional_appends_elect_one_winner` is reclaimed by ES-25**, and
+  the plan this ADR was executed from said stage 5 would retire it. It does not.
+  Its content is the *iff* seen as two decisions taken from one snapshot, and two
+  of the three registered mutants it rejects are shapes ES-25's own `Rejects:`
+  paragraph names by hand. The parallel family that arrived at stage 5,
+  `event_store_concurrency_conformance!`, is **additive**: it supplies a second
+  caller, so that a probe followed by an insert stops being indistinguishable
+  from an atomic check-and-write, which is a question the sequential rule cannot
+  ask rather than one it answers worse.
+
+So the running count is **zero of three**, and the method note above is now the
+finding of this section rather than an aside on one paragraph of it: *three
+dispositions were written this phase and all three were reversed — every one of
+them by compiling a store rather than by reading a rule, which is the method §6.1
+forbids for adapters and which turns out to be no more reliable when it is a rule
+being judged.* `SPECIFICATION.md` §7.4 carries the same finding and states that
+no `Retires:` line survives in that document; this section is the reason it had
+to be said twice.
+
+**Amended at stage 6, 2026-08-08, and it is about the successor rather than the
+count: the fault is injected by the *fixture*, and "a decorator over an arbitrary
+`EventStore`" — the mechanism this section names above, at the first amendment —
+does not exist.** A decorator sits above `append`, which is the
+unit the port makes atomic: it can inject a fault before the call or after it,
+and the one shape that looks like it works — append `events[..k]`, then return
+`Err` — is a decorator writing a partial batch and then asserting that the
+*store* should have undone it. Nothing an outside caller holds can reach between
+two rows of one transaction, and that is not a gap in the port; it is the
+property under test. `append_is_atomic_under_a_mid_batch_fault` therefore lands
+capability-gated on a third `Fixture` constant, `MID_BATCH_FAULT`, with
+`arm_mid_batch_fault(after)` beside it and both defaulted to declined.
+`SPECIFICATION.md` ES-18 carries the argument and §6.2 records that the
+diagnosis — *the suite does not have the machinery* — was right while the
+machinery named was wrong. Third correction in the same paragraph, same method
+note: the shape was refuted by trying to build it.
+
 ## Consequences
 
 **Good.** The suite acquires the property it exists to give adapters. It is

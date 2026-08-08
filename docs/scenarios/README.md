@@ -19,9 +19,13 @@ The same argument applies one level up. Four adapters of one storage shape is a
 narrow spread; one worked example of one decision is a narrower one. The
 `course-subscriptions` example runs for forty milliseconds, makes two decisions,
 and never replicates, never rebuilds a read model, never deletes anything and
-never meets a store that cannot hold a transaction open. Every one of the 27
-conformance rules builds a fresh store, appends three to five events, and asserts
-something about what comes back (`crates/happenstance-testkit/src/suite.rs`).
+never meets a store that cannot hold a transaction open. Nearly every one of the
+55 conformance rules opens a fresh fixture, appends three to five events through
+one handle, and asserts something about what comes back
+(`crates/happenstance-testkit/src/suite.rs`). Phase 3 widened that population and
+did not change its shape: the exceptions are the handful of rules that take a
+second handle, reopen, or interleave two futures, and even those stay inside one
+process against one backing store.
 
 So the ports have been checked against a population that agrees with them. These
 six scenarios are the population that does not.
@@ -98,7 +102,7 @@ under charge.
 
 ### The axis
 
-**Completeness.** Everything in the workspace — `MemoryEventStore`, the 27 rules,
+**Completeness.** Everything in the workspace — `MemoryEventStore`, the 55 rules,
 the worked example, every planned adapter — assumes a store holding the complete
 log its queries range over. `Query::all()` means "everything that happened". Here
 a spoke deliberately holds a slice, chosen for size and for commercial
@@ -108,10 +112,12 @@ decision is then made against an append condition whose query ranges over events
 the device does not have and cannot know it does not have.
 
 The 90-day prune happens entirely outside the port — `EventStore` has two methods
-and neither of them deletes (`crates/happenstance-core/src/store.rs:117-145`) — and
-after it the store passes all 27 rules unchanged. Including
-`query_all_matches_every_event` (`suite.rs:70-80`), whose contract is
-store-relative by wording and therefore accidentally correct. The gap is not that
+and neither of them deletes (`crates/happenstance-core/src/store.rs:118-152`) — and
+after it the store passes all 55 rules unchanged. Including
+`query_all_matches_every_event` (`suite.rs:380-395`), whose contract is
+store-relative by wording and therefore accidentally correct — phase 3 rewrote
+that rule's events to *descending* types so it would reject a store sorting by
+type, and store-relativity is untouched by the change. The gap is not that
 the contract asserts completeness. It is that **a partial store is
 indistinguishable from a complete one at every seam an ingest or a runner can
 see.**
@@ -258,7 +264,7 @@ The rule that falls out is the best thing in this scenario and is domain-indepen
 *The correction.* The scenario filed the rule as a library breakage —
 `AppendCondition` looks identical either way. That is an ergonomic observation,
 and the domain's own answer (unconditional append, hub-side reconciliation) works
-against the port exactly as it stands (`store.rs:144` takes
+against the port exactly as it stands (`store.rs:151` takes
 `Option<&AppendCondition>`). The rule deserves an ADR. It does not deserve to be
 filed as something the library breaks on. What *is* a real ergonomic hole is that
 `append(&events, None)` is syntactically identical to a forgotten condition, and
@@ -294,11 +300,11 @@ claim rather than assert it.
 Three things break at once, and all three are real.
 
 1. **`EventStore::append` takes exactly one condition per batch**
-   (`store.rs:141-145`), so a 39-event push decomposes into seven appends and the
+   (`store.rs:148-152`), so a 39-event push decomposes into seven appends and the
    device's unit of work does not survive the boundary. A crash mid-ingest leaves
    the hub holding four of seven groups. That is *correct* DCB — the boundary is
    the query, not the batch — and it is stated nowhere in the contract, the ADRs
-   or the 27 rules.
+   or the 55 rules.
 2. **Ingest is not idempotent and cannot be made so.** `Event` is
    `(event_type, data, tags, metadata)` and `SequencedEvent` is
    `(position, event)` (`event.rs:183-188`, `:277-282`) — nothing globally unique.
@@ -424,7 +430,7 @@ The hub then has exactly three options and all of them are the design decision:
 - **Admit her claim as history and, in the same atomic append, write
   `PartClaimSuperseded`.** One `append(&[losing, superseded], Some(&guard))`,
   guaranteed all-or-nothing by `store.rs:130-133` and conformance-tested by
-  `append_is_atomic` (`suite.rs:385-403`).
+  `append_is_atomic` (`suite.rs:1200-1221`).
 
 The third is the only survivable one, and it works against the contract as it
 stands with no new seam. The merge rule is **first to the hub, not first to
@@ -439,7 +445,7 @@ position 288,491 — *after* the local `PartFitted` at 288,462. `van_stock` fold
 last-event-wins over local position and now reports a fitted compressor as
 available. Nothing errored. The checkpoint advanced.
 `positions_are_strictly_monotonic` and `positions_are_unique` both still pass
-(`suite.rs:336-365`). **The suite is measuring the property that survived and not
+(`suite.rs:1106-1162`). **The suite is measuring the property that survived and not
 the one that broke.**
 
 ---
@@ -471,7 +477,7 @@ a transaction that started later can become visible earlier.
 event the caller genuinely never saw, and the one mechanism DCB has for enforcing a
 consistency boundary silently stops enforcing it — on a store that passes all 27
 rules, because every rule tests position *values* and none tests position
-*visibility* (`suite.rs:336-365`).
+*visibility* (`suite.rs:1106-1162`).
 
 *Credit where it is due.* This is not a discovery. `docs/evaluation/revised-runway.md`
 already names `nextval()` allocating outside the transaction, the projection that
@@ -545,7 +551,7 @@ boundary expresses cleanly and needs no contract change to *draw*. It needs one 
 **The fleet item is unbounded and cannot be bounded.** `ReadOptions.from` is one
 `Option<SequencePosition>` for the entire read
 (`crates/happenstance-core/src/query.rs:226-234`) and `EventStore::read` applies one
-`ReadOptions` to the whole `Query` (`store.rs:117-121`). The four-item query needs
+`ReadOptions` to the whole `Query` (`store.rs:118-122`). The four-item query needs
 `from = <FleetPeriodClosed position>` for item 3 and `from = None` for items 1, 2
 and 4, because `CircuitDefined`, `ConnectorCommissioned`, `TokenIssued` and
 `FleetContractDefined` all predate any recent snapshot. Setting `from` at all
@@ -711,7 +717,7 @@ tag in 1.2 ms, and commits at .128. The first commits at .147. **For nineteen
 milliseconds the log has 100 and does not have 99.**
 
 A handler read the boundary inside that window. `read_decision_model` returned
-`last = 100` (`store.rs:206` takes the last observed position). It appended with
+`last = 100` (`store.rs:213` takes the last observed position). It appended with
 `after: Some(100)`. When 99 became visible the store evaluated
 `is_violated_by(99, ..)`, found `99 <= 100`, and returned false. Two active sessions
 on one connector. No error, no rejected append, no failing test.
@@ -761,10 +767,21 @@ the one this scenario exists to be.
 ### The axis
 
 **Plural readers.** Everything built or written so far is about writes: the worked
-example is one decision, one boundary, one append; 26 of the 27 conformance rules
-are about what a single reader sees or what a single appender may do, and the
-twenty-seventh is about two writers. `MemoryEventStore` is an oracle for write
-semantics. `ProjectionStore` is provisional by its own admission — *"a port without
+example is one decision, one boundary, one append; and while the suite has since
+grown rules about plural *writers* — two handles, two interleaved `append`
+futures, two fixture instances, eight contenders on real threads — **no rule in
+any family runs two concurrent readers against one store**.
+
+One rule now puts a reader beside a writer, and naming it here saves the next
+reader from rediscovering it as a contradiction:
+`a_concurrent_reader_never_sees_a_partial_batch` spawns a reader on its own
+thread, looping full `Query::all()` reads against a fifth handle while four
+writers append, and runs its assertions afterwards on a sixth handle on the
+rule's own thread. That is two readers, and the one doing the observing is not
+the one the assertions run in. It does not touch this axis: one concurrent
+reader is not plural readers, and nothing in the suite has ever asked what
+happens when twenty independent projections read the same log at once.
+`MemoryEventStore` is an oracle for write semantics. `ProjectionStore` is provisional by its own admission — *"a port without
 a conformance suite is a guess"* (`projection.rs:3-11`) — and it has never had a
 consumer at all, let alone a plural one.
 
@@ -811,14 +828,14 @@ could fix it. None can.
 decision model is a fold to a single boolean over a set that only grows, and
 `ReadOptions::new().backwards().limit(1)` is exactly right and the only shape that
 keeps it O(1). That is a conformance-tested read option
-(`read_backwards_from_with_limit`, `suite.rs:306-329`) being load-bearing for
+(`read_backwards_from_with_limit`, `suite.rs:875-909`) being load-bearing for
 production behaviour rather than for the specification's worked example, and
 `MemoryEventStore` implements it correctly — it reverses *before* truncating, so the
 limit applies to the newest matches (`memory.rs:163-179`).
 
 The trap sits next to it. `read_decision_model` hardcodes `ReadOptions::new()`
-(`store.rs:205`) so this read cannot use the helper, and the helper derives its
-boundary from `events.last()` (`:206`) — which on a **backwards** read is the
+(`store.rs:212`) so this read cannot use the helper, and the helper derives its
+boundary from `events.last()` (`:213`) — which on a **backwards** read is the
 *oldest* match. A caller copying the idiom onto `backwards().limit(1)` must know to
 take `.first()`. Nothing stops them, and the failure is not a compile error: it is a
 condition that starts at the first excursion of the consignment's life and rejects
@@ -846,9 +863,9 @@ to say about conformance.
 **Incremental consumption does not exist.** `EventStore::read` returns
 `impl Stream` and the contract crate exports exactly one consumer, `collect`, whose
 own documentation forbids the use every rebuild here requires: *"Convenient for
-tests, small reads... Do not use it to replay an entire log"* (`store.rs:148-152`).
+tests, small reads... Do not use it to replay an entire log"* (`store.rs:158-159`).
 There is no `for_each`, no chunked take, and no `futures-util` dependency — an
-omission `store.rs:154-156` states is deliberate. So an application either buffers
+omission `store.rs:161-163` states is deliberate. So an application either buffers
 the whole log in a `Vec` or hand-rolls `poll_next` with `core::pin::pin!`. Twenty
 projections doing this is twenty hand-rolled stream drivers, and ADR-0007's own
 `pump` sketch cannot be written without one.
@@ -941,11 +958,21 @@ marker — so the read model is permanently wrong for one consignment with nothi
 saying so, and the next rebuild hits the same event again.
 
 **And, underneath all of it:** the authoritative store is Postgres allocating
-positions by `nextval()`, and neither `EventStore` nor any of the 27 rules says that
-once you have observed position *P*, nothing below *P* will appear later. Every one of
-the twenty checkpointing projections is unsound on the store the scenario names as
-authoritative. `MemoryEventStore::last_position` exists as an *inherent* method only
-(`memory.rs:109-111`), so no generic code can even ask.
+positions by `nextval()`, and when this scenario was written neither `EventStore`
+nor any rule in the suite said that once you have observed position *P*, nothing
+below *P* will appear later. Every one of the twenty checkpointing projections
+was unsound on the store the scenario names as authoritative.
+
+*Half of that has since been closed.* The invariant is stated — ES-10 — and
+`nothing_below_an_observed_position_appears_later` pins it, driving two `append`
+futures from one handle in the order that opens the window and failing
+`PreCommitPositionStore`, which is the mutant written to allocate outside the
+transaction. What is still missing is the far end: **no adapter in the workspace
+allocates positions that way**, so nothing has yet demonstrated that a real
+Postgres store can be made to *pass* it. That is §6.5's position-allocation row
+and it is phase 10's. `MemoryEventStore::last_position` remains an *inherent*
+method only (`memory.rs:109-111`), so generic code still cannot ask a store for
+its head.
 
 ### Dropped
 
@@ -1006,7 +1033,7 @@ Worth stating, because it is the property that makes polling work and it is the
 strongest argument against adding a tail seam. `ReadOptions::from` is an inclusive
 lower bound, not a seek, and positions may have gaps — so `checkpoint.next()` is a
 correct resume point even when position *checkpoint*+1 does not exist, and
-`read_from_is_inclusive` (`suite.rs:262-276`) is what pins it. Because backfill and
+`read_from_is_inclusive` (`suite.rs:802-825`) is what pins it. Because backfill and
 tail are the same loop at different rates, **there is no moment at which one hands over
 to the other and therefore no catch-up race at all.** A subscription seam would create
 that race where none exists today — and it would be unimplementable on the one-shot
@@ -1110,14 +1137,14 @@ The complaint that `Query` has no negation and no payload predicate is accurate
 
 **D3 — IssuePayment.** The BACS instruction is a side effect outside the store; the
 append is the record that it happened. `EventStore::append` is an `async fn`
-(`store.rs:141`) so its future can be dropped — a payments operator closing a browser
+(`store.rs:148`) so its future can be dropped — a payments operator closing a browser
 tab is routine — and `AppendError` has three variants, none meaning "the outcome is
 unknown" (`error.rs:148-166`). On a pooled rusqlite path a dropped `JoinHandle` does
 not cancel the blocking closure: the COMMIT executes and the caller is told nothing.
 
 *The correction.* The scenario names the wrong saving mechanism. It says "DCB would
 save this if the batch's own events matched the condition query". `MemoryEventStore`
-checks the condition against `stored` **before** extending (`memory.rs:197-221`), so
+checks the condition against `stored` **before** extending (`memory.rs:218-230`), so
 the batch is explicitly not matched against itself — and if it were, `RegisterClaim`
 would self-reject. What actually makes the retry safe is either re-reading (the handler
 then sees the payment and declines) or reusing the *original* condition object, whose
@@ -1134,11 +1161,13 @@ What makes it structurally interesting is that it runs on the one-shot HTTP adap
 read-decide-append collapses into a single conditional statement — while the purge
 batch runs against **the same logical log** through the pooled adapter. Two adapters,
 one store, no shared session state, and the only thing standing between them is
-`AppendCondition`. Nothing in the workspace exercises that: every conformance rule
-builds one store from `factory()` and drives it through one handle
-(`suite.rs:596-638`), so an adapter whose condition check is correct only within its
-own session — a cached max position, a per-connection snapshot, a pool-scoped advisory
-lock — passes all 27.
+`AppendCondition`. Nothing in the workspace exercised that: every conformance rule
+built one store from `factory()` and drove it through one handle, so an adapter whose
+condition check is correct only within its own session — a cached max position, a
+per-connection snapshot, a pool-scoped advisory lock — passed all 27. Phase 3's fixture
+contract closed the single-adapter half: `two_handles_observe_each_others_appends`
+(CF-16, CF-19) runs two handles onto one backing store and `CachedHeadFixture` is the
+wrong implementation it rejects. Two *adapters* onto one store remains uncovered.
 
 **D5 — ExecuteRetentionPurge. Cannot be written.** `EventStore` has two methods and
 neither deletes. There is no seam that says "delete these positions in the same
@@ -1319,7 +1348,7 @@ statements, and the caller vanishing mid-append is the *normal* case.
 
 *The correction, and it halves the claim.* The Durable Object is **not** at that far end,
 and the scenario says so itself: the DO's input gate does what `MemoryEventStore` does with
-an `RwLock` (`memory.rs:189-195`). A DO serialises its writers and assigns positions under
+an `RwLock` (`memory.rs:71-73`). A DO serialises its writers and assigns positions under
 an implicit lock, which makes it the **fifth adapter of the same storage shape** CLAUDE.md
 warns about. Only the Neon half sits at the other end, and Neon is already the workspace's
 designated instrument for exactly that axis. The scenario overclaims for half its
@@ -1364,12 +1393,12 @@ reasoned about: a `RefCell`-backed `EventStore`, a generic
 `place_hold<S: EventStore>(store: &Rc<S>, ..)` that builds five items, calls
 `store.read(&query, ReadOptions::new())`, drains it through `collect`, builds the condition
 and calls `store.append` — **no `Send` bound anywhere on that path.** `read` returning
-`impl Stream` at the top level of the return type (`store.rs:117-121`) is exactly what makes
+`impl Stream` at the top level of the return type (`store.rs:118-122`) is exactly what makes
 it work, and ADR-0001's insistence on that is load-bearing. This confirms the two-flavour
 design from the wasm side for the first time; every previous justification was a
 `cargo check`.
 
-Because `append` takes `&self` (`store.rs:141-145`), twelve concurrent requests inside one
+Because `append` takes `&self` (`store.rs:148-152`), twelve concurrent requests inside one
 Durable Object share one store through an `Rc` with no `&mut` and no lock of the adapter's
 own. Which raises the question the port does not answer: **may a second `append` be entered
 while a first is in flight on the same `&self`?** On the `!Send` flavour both futures
@@ -1397,11 +1426,14 @@ durable, and nobody is left to be told.
 
 The contract's only atomicity statement is `store.rs:130-133` — *"Either every event lands or
 none does. A rejected append must leave the store byte-identical"* — which is about **partial
-batches** and says nothing about a dropped future. None of the 27 rules polls a future once
-and drops it. `AppendError` needs no new variant for this, because a dropped future returns
-nothing at all; what it needs is one paragraph stating whether an adapter may commit after
-its future is dropped. `MemoryEventStore` passes any such rule trivially, which is exactly
-why the reference store cannot answer the question and a real adapter must.
+batches** and says nothing about a dropped future. None of the 55 rules polls a future once
+and drops it. `nothing_below_an_observed_position_appears_later` is the nearest thing and it
+deliberately stops short: it polls without awaiting, and then *drains* whatever the schedule
+left unfinished rather than abandoning it. `AppendError` needs no new variant for this,
+because a dropped future returns nothing at all; what it needs is one paragraph stating
+whether an adapter may commit after its future is dropped. `MemoryEventStore` passes any such
+rule trivially, which is exactly why the reference store cannot answer the question and a real
+adapter must.
 
 **D3 — ReserveTourAllocation.** The entitlement leg, on Neon over one round trip. This is
 the invariant that cannot live in any Durable Object because it spans 4,912 of them.
@@ -1562,13 +1594,27 @@ finance reconciles against the card ledger and finds 1,847 fans over a cap of fo
 at eight tickets, which are the bot farms, because they queued on more devices than anyone else
 and therefore harvested the bug most efficiently.
 
-The Neon adapter passes all 27 conformance rules. It passes
+The Neon adapter passes all 55 conformance rules. It passes
 `racing_conditional_appends_elect_one_winner`, **because that rule is written sequentially on
-purpose**: a genuinely parallel version would need `Send + Sync + 'static` bounds `EventStore`
-deliberately does not carry, and the rule's own doc comment says so (`suite.rs:589-595`). Every
-other adapter in the workspace serialises its writers and satisfies the rule for free. The suite
-has never been shown to reject a store that gets append conditions wrong under real concurrency,
-because until this deployment no such store existed to reject.
+purpose** (`suite.rs:2404-2526`): its subject is the *iff* seen as two decisions taken from one
+snapshot, which one caller can pose. Every other adapter in the workspace serialises its writers
+and satisfies it for free.
+
+*Two corrections, both of them measurements phase 3 made.* The scenario said a genuinely parallel
+version would need `Send + Sync + 'static` bounds `EventStore` deliberately does not carry — which
+is CF-22's prediction, and it is wrong in three of its four parts. What compiles is
+`F::Store: EventStore + Send`; `Sync` and `'static` are `tokio::spawn`'s obligations rather than
+the port's, and `std::thread::scope` imposes neither, while the future never crosses a thread
+boundary because the *handle* does. `concurrency.rs`'s module documentation carries the
+measurement, bound by bound. And the suite *has* since been shown to reject stores that get
+append conditions wrong under real concurrency: `event_store_concurrency_conformance!` drives
+five threaded rules against six `Arc`/`Mutex` contenders, and
+`the_concurrency_rules_reject_exactly_what_they_claim` pins every verdict in both directions.
+
+What is still genuinely uncovered is what this scenario is actually about, and it is narrower than
+the sentence it replaces: **two adapters onto one store, and a store that does not serialise its
+writers.** Every contender in that family is an in-process `Arc`, and no adapter in the workspace
+sits at the far end of the concurrency axis.
 
 ---
 
@@ -1607,13 +1653,13 @@ against it is evaluated against the complete set of facts.
 
 This sits at *N*, with *N* unbounded and its membership changing as vessels charter in and out, and
 with the incompleteness of any one log being the **steady state rather than a fault**. It is the
-only shape in which two fully conformant stores, both passing all 27 rules, jointly produce a
+only shape in which two fully conformant stores, both passing all 55 rules, jointly produce a
 wrong answer — the failure has no within-one-store expression at all.
 
 *One framing correction.* The scenario says the closest existing rule,
 `racing_conditional_appends_elect_one_winner`, "is precisely the rule that must NOT hold across
-the boundary". That presents an absence as a contradiction. The rule is written against one store
-from one factory (`suite.rs:596-638`) and makes no cross-store claim; there is no cross-store rule
+the boundary". That presents an absence as a contradiction. The rule is written against one
+store, reached through one handle, and makes no cross-store claim; there is no cross-store rule
 to be in tension with. The honest statement is that **the suite has nothing to say about two
 stores**, which is a gap rather than a conflict.
 
@@ -1659,7 +1705,7 @@ Its soundness is accidental as far as the library is concerned. It is partition-
 the tag set contains a location key **exactly one peer ever writes**, so the local log is complete
 with respect to *this query* even when it is incomplete with respect to everything else.
 AND-within-an-item is what makes that work, and that semantic is conformance-pinned
-(`suite.rs:96-120`, `:148-163`).
+(`suite.rs:414-441`, `:498-548`).
 
 **Partition-tolerance is bought here by the tag vocabulary, not by the port.** Nothing lets a domain
 declare `location:*` peer-owned, and nothing can check that a query is closed under a peer's write
@@ -1691,7 +1737,7 @@ is about `SequencedEvent`, not about `AppendCondition`.
 **D6 — RecordConsumption.** The bearing is torqued into the pitch system and the technician has
 climbed down. There is **no invariant that may refuse**; the log's job is to record what happened,
 and a store that declines is simply wrong about the world. `append(&events, None)` is expressible
-and cheap (`store.rs:144`) — DCB does not force a condition on a command that may not be refused,
+and cheap (`store.rs:151`) — DCB does not force a condition on a command that may not be refused,
 and neither does the contract.
 
 What is missing is the **discriminator**. `Option<AppendCondition>` renders "I asserted nothing
@@ -1721,7 +1767,7 @@ non-convergent so that a convergence check knows to skip it.
 
 **`conflict-queue`** — the projection whose whole job is to see conditions, and the one the port cannot
 subscribe. **No append condition is persisted by anything, anywhere.** `append` takes it as a
-parameter, evaluates it, and drops it (`store.rs:141-145`); `Event` has four fields and none of them
+parameter, evaluates it, and drops it (`store.rs:148-152`); `Event` has four fields and none of them
 is a condition (`event.rs:183-188`). The scenario says the condition is "envelope rather than event",
 which understates it — **there is no envelope either.** The only place to put it is
 `Event::metadata`, an `Option<Bytes>` the writer fills in by hand, which means the store never checks
@@ -1801,8 +1847,8 @@ to be coordinated across the peer set, and no port in the workspace has a place 
 The sharpest finding in this scenario, and the one nothing else in the catalogue would have found:
 
 **`append` takes `events: &[Event]` and a single `Option<&AppendCondition>`**, so one consistency
-boundary covers the whole batch and the batch is all-or-nothing (`store.rs:141-145`, atomicity at
-`:130-133`, pinned by `suite.rs:385-403`). Idempotent bulk ingest needs **one boundary per event**. The
+boundary covers the whole batch and the batch is all-or-nothing (`store.rs:148-152`, atomicity at
+`:130-133`, pinned by `suite.rs:1200-1221`). Idempotent bulk ingest needs **one boundary per event**. The
 three options are all wrong:
 
 - One `append` per event: 1,840 round trips, fatal on the one-shot HTTP peer in a 34-minute satellite

@@ -1,0 +1,434 @@
+//! The fixture contract: what a harness hands the rules, and what a rule may
+//! ask of it.
+//!
+//! A conformance rule needs two things a bare `Fn() -> S` cannot tell apart: a
+//! **fresh, isolated backing store**, and a **handle onto one that already
+//! exists**. The old signature was asked to promise neither. Its documentation
+//! said "a fresh, empty store" while the type would happily have accepted
+//! `|| store.clone()`, so no rule could call it twice — it could not know
+//! whether the second call bought isolation or sharing. That single ambiguity
+//! foreclosed durability, reopen, and every genuinely multi-connection rule at
+//! once.
+//!
+//! [`Fixture`] names the two operations apart. One *fixture instance* is one
+//! backing store; each [`connect`](Fixture::connect) returns a handle onto that
+//! store; two fixture instances share nothing.
+//!
+//! # A rule is handed how to make a fixture, not a made one
+//!
+//! Every rule takes `impl AsyncFn() -> F`. That is deliberate, and it is what
+//! lets *isolation itself* be a conformance rule rather than a testkit-only
+//! meta-test: pointing every fixture instance at one temporary directory is an
+//! **adapter's** mistake, and no test the testkit writes about the testkit's own
+//! fixture could ever observe it. A rule that can call `open()` twice can.
+//!
+//! # Capabilities
+//!
+//! Not every store can do everything a rule might want to ask, and the honest
+//! answers differ per adapter rather than per rule. [`Capability`] is how a
+//! fixture says so, as an associated `const` — available before the rule body
+//! runs, and constant after monomorphisation.
+//!
+//! A rule whose capability is unmet is **still emitted as a test**. It returns
+//! [`RuleOutcome::Skipped`] and the harness reports it. The alternative —
+//! `#[cfg]`-ing the rule out of the expansion — produces a test binary in which
+//! a skipped rule is indistinguishable from a passing one, so an adapter author
+//! who declines a capability to turn a red build green gets a green build and no
+//! record of the trade.
+//!
+//! One capability is exempt from that, because it is not a trade at all:
+//! [`SECOND_HANDLE`](Fixture::SECOND_HANDLE) is a MUST, and the rule requiring it
+//! fails rather than skips. See its documentation for why the enforcement is in
+//! the rule and not in a meta-test.
+//!
+//! # `Skipped` means *all* of the rule needed the capability
+//!
+//! This is the distinction an adapter author gets wrong first. A rule returns
+//! [`RuleOutcome::Skipped`] only when its **entire** content depends on the
+//! capability. A rule whose base assertion runs against every fixture and which
+//! merely *strengthens* itself where a second handle exists — reading the same
+//! claim back through a second connection, say — has genuinely run, and returns
+//! [`RuleOutcome::Ran`].
+
+use core::future::Future;
+
+use happenstance_core::EventStore;
+
+/// One isolated backing store, plus the ways a rule is allowed to reach it.
+///
+/// Implement this for whatever a rule should be given a fresh instance of: a
+/// temporary directory holding a SQLite file, a connection pool aimed at a
+/// throwaway schema, a `MemoryEventStore` behind an `Arc`. Each instance is one
+/// store. Each [`connect`](Self::connect) is one handle onto it.
+///
+/// # No `Send` bound, and no `trait_variant`
+///
+/// [`EventStore`] needs two flavours because a *caller* may want to
+/// `tokio::spawn` a store's future, and a `Send` bound that helps there is
+/// unsatisfiable on `wasm32` (ADR-0001). None of that applies here: **nothing
+/// ever spawns a fixture**. The harness owns the executor, and a fixture is only
+/// ever driven by the rule holding it. A second flavour would double the surface
+/// to buy a property no caller wants — and would exclude precisely the adapters
+/// ADR-0001 exists for.
+///
+/// # Why the methods are spelled `-> impl Future` rather than `async fn`
+///
+/// The same reason `happenstance-neon`'s transport records: `async fn` in a
+/// *public* trait fires rustc's `async_fn_in_trait` lint, and the gate runs
+/// `-D warnings`. The desugared form is also strictly better documentation
+/// here, because it makes the **absence** of `+ Send` visible at the
+/// declaration, which is the whole ADR-0001 point.
+///
+/// An implementation may still use `async fn` — the two are the same signature
+/// after desugaring, and the lint fires only on the declaration.
+///
+/// # Why `Store` is an owned associated type and not a GAT
+///
+/// A borrowing `type Store<'a> where Self: 'a` is the obvious shape for "a
+/// handle onto this fixture", and it is the shape to keep away from. `where Self:
+/// 'a` on a GAT implemented for a foreign trait is one of the five independently
+/// necessary ingredients of the rustc ICE this repository already minimised
+/// (rust-lang/rust#158983; `docs/experiments/rustc-ice-gat-foreign-trait/`),
+/// which still reproduces on 1.97.1.
+///
+/// Nothing is lost. A pool-backed fixture holds its pool in an `Arc` and returns
+/// an owned handle that keeps the pool alive; that is exactly what
+/// [`MemoryFixture`](crate::fixtures::MemoryFixture) does with an `Arc` clone,
+/// and what a `!Send` fixture would do with an `Rc`. The handle owning a
+/// refcount instead of borrowing a lifetime is the difference between a
+/// compiling contract and an ICE.
+///
+/// # Capability constants are checked at codegen, not at `cargo check`
+///
+/// An empty reason string cannot be written — [`Capability::declined`] rejects
+/// it — but for an *associated* const the rejection arrives later than one would
+/// like. [`Capability::declined`]'s own documentation states exactly when, and
+/// what each of `check`, `clippy` and `build` reports; it is written there rather
+/// than here so that a reader looking at the constructor finds it.
+pub trait Fixture {
+    /// A handle onto this fixture's backing store.
+    ///
+    /// Bound on [`EventStore`], the flavour with no `Send` requirement, because
+    /// it is the weaker one and accepts both kinds of adapter.
+    type Store: EventStore;
+
+    /// Whether this fixture can hand out a **second, independent handle** onto
+    /// the one backing store.
+    ///
+    /// A fixture that can is what lets a rule catch the adapter whose
+    /// correctness is per-session: a cached `max(position)` fast path, a
+    /// per-connection repeatable-read snapshot, an advisory lock scoped to one
+    /// pool member.
+    ///
+    /// **This one is a MUST, and it is the only capability here that is.**
+    /// SPECIFICATION.md CF-16 requires every fixture to be able to open a second
+    /// handle; [`REOPEN`](Self::REOPEN) is a `SHOULD`, because a volatile store
+    /// declining it is an honest answer. Declining *this* is not a trade, it is a
+    /// fixture that does not meet the contract, and the shape cannot tell the two
+    /// apart: the type says `Capability` in both places.
+    ///
+    /// # What enforces it
+    ///
+    /// [`two_handles_observe_each_others_appends`](crate::rules::two_handles_observe_each_others_appends)
+    /// **panics** on a declined `SECOND_HANDLE` rather than reporting a skip,
+    /// quoting the reason the fixture gave. That is deliberately in the rule
+    /// rather than in the testkit's own meta-tests, because the meta-tests never
+    /// run in an adapter's CI and the fixture declining a MUST is *there*. An
+    /// adapter author who meets a red rule, declines the capability and re-runs
+    /// gets a red rule again, with an explanation.
+    ///
+    /// It stays spelled as a `Capability` so that the rules which merely
+    /// *strengthen* themselves where a second handle exists have somewhere to
+    /// ask, and so that the failure names the fixture's own words.
+    ///
+    /// The second line is
+    /// `mutation_coverage::capability_skips_are_reported`
+    /// (`crates/happenstance-testkit/tests/mutation_coverage.rs`), which drives
+    /// a fixture declining everything and asserts the rule *rejects* it, and
+    /// separately holds the testkit's own registered instruments to the MUST.
+    const SECOND_HANDLE: Capability;
+
+    /// Whether this fixture can be **reopened**: every outstanding handle's
+    /// process-level state discarded, such that a subsequent
+    /// [`connect`](Self::connect) observes only what was durably committed.
+    ///
+    /// This is deliberately the weaker of the two operations one might mean by
+    /// "restart". A Durable Object's storage outlives its isolate, so it can
+    /// discard handle state and read the store again; its isolate cannot be
+    /// restarted from inside a test at all. Naming the stronger operation would
+    /// have bought a capability every fixture in the workspace declines, which
+    /// is a skip reported on every run and evidence of nothing.
+    const REOPEN: Capability;
+
+    /// Whether this fixture can make its store **fail part way through writing
+    /// one batch**.
+    ///
+    /// ES-18 says either every event of a batch lands or none does, and the two
+    /// rules that check it today both reach the store through the *condition*
+    /// path — where a conformant store decides before it writes anything, so a
+    /// partial write was never on the table. The case that is left is a fault
+    /// between two rows, and reaching it needs the store's co-operation.
+    ///
+    /// # Why this is a fixture capability and not a decorator
+    ///
+    /// `SPECIFICATION.md` ES-18 asks for "a fault-injecting decorator over any
+    /// `EventStore`", and that shape does not exist. A decorator sits **above**
+    /// `append`, which is the unit the port makes atomic: the only fault it can
+    /// inject is one that happens before the call or after it, and a decorator
+    /// that appended `events[..k]` and then returned `Err` would be asserting
+    /// that the *store* must undo a partial batch the *decorator* wrote. Nothing
+    /// in the port lets an outside caller reach between two rows of one
+    /// transaction, which is precisely why the atomicity being tested is worth
+    /// having.
+    ///
+    /// So the injection is the adapter's: a trigger that raises on the third
+    /// insert, a `CHECK` constraint armed for one write, a connection killed
+    /// mid-statement. Every store that can do it does it differently, which is
+    /// what makes it a capability rather than testkit machinery.
+    ///
+    /// A store with no way to fail one row of a batch declines, and the default
+    /// below is that answer. It is defaulted rather than required — unlike
+    /// [`SECOND_HANDLE`](Self::SECOND_HANDLE) and [`REOPEN`](Self::REOPEN),
+    /// which every fixture must answer deliberately — because an in-memory store
+    /// has no fault to inject and demanding an answer would buy one more line of
+    /// boilerplate per fixture and no information.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "this fixture cannot make its store fail between two rows of one batch; \
+         nothing in the port can reach inside an `append`, so the injection has \
+         to come from the adapter and this one has none to offer",
+    );
+
+    /// Arms the store so that the **next** append of more than `after` events
+    /// fails while writing event `after + 1`.
+    ///
+    /// The fault fires once. Whether the store answers `Err` or swallows it is
+    /// the adapter's business; what ES-18 requires is that the two answers stay
+    /// consistent with what is in the log afterwards, which is what
+    /// [`append_is_atomic_under_a_mid_batch_fault`](crate::rules::append_is_atomic_under_a_mid_batch_fault)
+    /// checks.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for
+    /// [`reopen`](Self::reopen)'s reason and with the same two ways of reaching
+    /// it: a fixture that declares [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)
+    /// supported and forgets the override, or a rule that reached here without a
+    /// `require!` gate.
+    fn arm_mid_batch_fault(&self, after: usize) -> impl Future<Output = ()> {
+        let _ = (self, after);
+        async move {
+            panic!(
+                "`Fixture::arm_mid_batch_fault` was called but not implemented: \
+                 either this fixture declares MID_BATCH_FAULT supported and does \
+                 not override it, or a rule reached it without a \
+                 `require!(F: MID_BATCH_FAULT)` gate"
+            );
+        }
+    }
+
+    /// Opens a handle onto this fixture's backing store.
+    ///
+    /// Async because a real fixture acquires its handle over I/O — a pool
+    /// checkout, a connection, an HTTP client's first request.
+    ///
+    /// # Panics
+    ///
+    /// Implementations panic rather than returning `Result`. A fixture that
+    /// cannot connect is a broken **test environment**, not a non-conformant
+    /// adapter, and a `Result` here would put "the database is down" into the
+    /// same channel as "the adapter is wrong" — where the suite's own error
+    /// messages would then have to guess which it was reading.
+    fn connect(&self) -> impl Future<Output = Self::Store>;
+
+    /// Closes and reopens the underlying storage, discarding every outstanding
+    /// handle's process-level state.
+    ///
+    /// After this returns, a fresh [`connect`](Self::connect) must observe
+    /// exactly what was durably committed and nothing else. Handles obtained
+    /// before the call may stop working; a rule must not use one afterwards.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, and it names both ways of reaching it because
+    /// only one of them is the suite's fault. Nothing in the trait ties
+    /// `REOPEN: Capability::SUPPORTED` to overriding this method, so the
+    /// reachable path an adapter author actually hits is: declare it supported,
+    /// forget the override, run the suite. Blaming a missing `require!` gate
+    /// there would send them reading the testkit for a bug that is in their
+    /// fixture.
+    fn reopen(&self) -> impl Future<Output = ()> {
+        // `let _ = self;` is load-bearing rather than decorative: the body never
+        // touches `self`, that is an `unused_variables` warning, and the gate
+        // denies warnings.
+        let _ = self;
+        async move {
+            panic!(
+                "`Fixture::reopen` was called but not implemented: either this \
+                 fixture declares REOPEN supported and does not override \
+                 `reopen`, or a rule reached `reopen` without a \
+                 `require!(F: REOPEN)` gate"
+            );
+        }
+    }
+}
+
+/// Whether a fixture supports one optional operation, and if not, why not.
+///
+/// # Why this is an opaque struct rather than a public enum
+///
+/// The obvious spelling is `enum Capability { Supported, Declined(&'static str) }`,
+/// and it has one hole: `Declined("")` is a perfectly good value of that type.
+/// The requirement that a declined capability *names a reason* would then be
+/// prose, enforced by a meta-test somebody has to remember to write.
+///
+/// Making the field private moves the check into the only constructor, where an
+/// `assert!` inside a `const fn` can reject the empty string at compile time.
+/// See [`declined`](Self::declined) for exactly when that fires — it is later
+/// than one would like, and worth knowing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// No `#[non_exhaustive]`: the field is already private, which seals the type
+// against outside construction more tightly than the attribute would, and the
+// sealing is the entire point of the shape.
+pub struct Capability(Option<&'static str>);
+
+impl Capability {
+    /// The fixture supports this operation, and rules requiring it will run.
+    pub const SUPPORTED: Self = Self(None);
+
+    /// The fixture does not support this operation, for the stated reason.
+    ///
+    /// The reason is not a formality. It is printed on every run for every rule
+    /// the decision skips, so it lands in the adapter's CI log where both a
+    /// reviewer and a user of the adapter can read it. Write the real one:
+    /// *why* this store cannot do it, not *that* it cannot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `reason` is empty. Because this is a `const fn`, a panic at
+    /// const-evaluation time is a **compile error** rather than a run-time one:
+    ///
+    /// ```compile_fail
+    /// use happenstance_testkit::Capability;
+    ///
+    /// const REOPEN: Capability = Capability::declined("");
+    ///
+    /// fn main() {
+    ///     let _ = REOPEN;
+    /// }
+    /// ```
+    ///
+    /// The doctest above is spelled bare `compile_fail`, never
+    /// `compile_fail,E0080`. This diagnostic family has bitten the repository
+    /// before: rustdoc on 1.97.1 silently ignores an error-code annotation it
+    /// cannot match, so the stricter-looking spelling is the weaker check.
+    ///
+    /// **Where it does *not* fire.** A free `const` like the one above fails at
+    /// `cargo check`. An **associated** const in a `Fixture` impl does not: an
+    /// associated const is evaluated lazily, only when monomorphised code reads
+    /// it, and that is after `check` and `clippy` have both stopped. It fails at
+    /// codegen — so `cargo build` and `cargo test` catch it and `cargo clippy`
+    /// does not.
+    #[must_use]
+    pub const fn declined(reason: &'static str) -> Self {
+        assert!(
+            !reason.is_empty(),
+            "a declined capability must name a reason: it is printed on every \
+             run and is the only record of the trade"
+        );
+        Self(Some(reason))
+    }
+
+    /// Whether rules requiring this capability should run.
+    #[must_use]
+    pub const fn is_supported(self) -> bool {
+        self.0.is_none()
+    }
+
+    /// The stated reason for declining, or `None` if the capability is
+    /// supported.
+    #[must_use]
+    pub const fn reason(self) -> Option<&'static str> {
+        self.0
+    }
+}
+
+/// What a conformance rule did.
+///
+/// There is no `Failed` variant, and its absence is deliberate: a failing rule
+/// **panics**. That is what fails the enclosing `#[test]`, and it is what gives
+/// libtest a message, a location and a backtrace to print. Threading failure
+/// back as a value would buy a second, worse reporting channel.
+///
+/// The `#[must_use]` is what turns "an emitter must report the skip" from prose
+/// into a build failure. A caller-supplied emitter that drops the outcome warns,
+/// and CI denies warnings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Deliberately exhaustive. The house rule puts `#[non_exhaustive]` on types that
+// will grow; this one is designed not to — see the note above on `Failed`.
+#[must_use = "a rule's outcome must be reported, or a skipped rule is \
+              indistinguishable in CI output from a rule that passed"]
+pub enum RuleOutcome {
+    /// The rule ran, and every assertion in it held.
+    Ran,
+    /// The rule required a capability this fixture declines, and did nothing.
+    Skipped {
+        /// The name of the [`Fixture`] associated const, e.g. `"REOPEN"`.
+        capability: &'static str,
+        /// The fixture's stated reason, from [`Capability::declined`].
+        reason: &'static str,
+    },
+}
+
+impl RuleOutcome {
+    /// The one line worth showing a human, or `None` when there is nothing to
+    /// say.
+    ///
+    /// This is the target-independent half of reporting, and it is public
+    /// because *where* a line goes is a property of the harness rather than of
+    /// the rule. [`report`](Self::report) writes it to stdout, which is right on
+    /// every target that has one; `__emit_wasm` routes it to `console.log`,
+    /// because `wasm32-unknown-unknown` does not (see [`report`](Self::report)).
+    /// A caller-supplied emitter for a runtime the testkit has never heard of —
+    /// CF-23's extension point — picks its own sink from here.
+    ///
+    /// The returned [`Option`] is itself `#[must_use]`, so the obligation to
+    /// report survives one step further down the chain.
+    #[must_use]
+    pub fn skip_line(self, rule: &str) -> Option<String> {
+        match self {
+            Self::Ran => None,
+            Self::Skipped { capability, reason } => Some(format!(
+                "SKIP {rule}: fixture declines `{capability}` — {reason}"
+            )),
+        }
+    }
+
+    /// Reports this outcome to stdout, under the name of the rule that produced
+    /// it.
+    ///
+    /// Prints nothing for [`Ran`](Self::Ran) — libtest already reports a test
+    /// that passed — and one `SKIP` line for a skip.
+    ///
+    /// # Two honest limitations, one per target
+    ///
+    /// Natively, libtest suppresses a *passing* test's stdout unless it is run
+    /// with `--show-output` (or `--nocapture`), which is why the gate passes it.
+    /// That makes the line reachable by a human; it does not make anyone read
+    /// it. The machine-checked half of the obligation is the
+    /// `mutation_coverage::capability_skips_are_reported` meta-test in
+    /// `crates/happenstance-testkit/tests/mutation_coverage.rs`, which asserts on
+    /// [`RuleOutcome`] *values* rather than on stdout — and not this function.
+    ///
+    /// On `wasm32-unknown-unknown` this function is a **no-op**, measured rather
+    /// than assumed: the suite was run under `wasm-bindgen-test-runner` with
+    /// `--nocapture` and no `SKIP` line appeared. That target's `std` has no
+    /// host stdio to write to and declares no import that would give it one, and
+    /// `wasm-bindgen-test` hooks `console.*` rather than `println!`. So the wasm
+    /// emitter does not call this; it calls [`skip_line`](Self::skip_line) and
+    /// hands the result to `console_log!`, which the runner does capture.
+    pub fn report(self, rule: &str) {
+        if let Some(line) = self.skip_line(rule) {
+            println!("{line}");
+        }
+    }
+}

@@ -135,6 +135,12 @@ pub trait EventStore {
     ///
     /// # Errors
     ///
+    /// * [`AppendError::NoEvents`] when `events` is empty. The specification
+    ///   defines a batch as non-empty, so there is no position to return. This
+    ///   check MUST precede the condition check: an empty batch is the caller's
+    ///   own bug and retrying cannot fix it, whereas `ConditionViolated` means
+    ///   "retry", so reporting the violation for an empty batch puts a correct
+    ///   client into a loop that never terminates.
     /// * [`AppendError::ConditionViolated`] when the store already holds an
     ///   event matching `condition`. This is routine under contention: rebuild
     ///   the decision model and retry.

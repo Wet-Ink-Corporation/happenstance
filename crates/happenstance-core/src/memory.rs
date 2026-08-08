@@ -186,9 +186,30 @@ impl SendEventStore for MemoryEventStore {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        // The whole operation runs under one write lock, which is what makes it
-        // atomic: no reader can observe a partially-applied batch, and no
-        // concurrent appender can slip between the condition check and the
+        // Emptiness first, and **above the lock** — ES-20 `[FROZEN]`.
+        //
+        // The specification defines `Events` as a non-empty collection, so there
+        // is no position to return. Adapters must reject this rather than invent
+        // one. The *precedence* is the part that was wrong here until phase 3:
+        // evaluating the condition first made `append(&[], Some(&c))` answer
+        // `NoEvents` or `ConditionViolated` depending on what the store happened
+        // to hold, so two conformant adapters could disagree — and a caller whose
+        // retry loop branches on `is_condition_violated()` sees the DCB
+        // concurrency signal for what is unambiguously its own bug and retries
+        // forever. `ConditionViolated` means "rebuild the decision model and try
+        // again"; an empty batch will still be empty next time.
+        //
+        // It is checked above the lock because emptiness is a precondition on the
+        // **argument**, not a question about the store. Nothing in the log can
+        // change the answer, so taking a write lock to find out would be a lock
+        // acquired to learn something already known.
+        if events.is_empty() {
+            return Err(AppendError::NoEvents);
+        }
+
+        // From here the whole operation runs under one write lock, which is what
+        // makes it atomic: no reader can observe a partially-applied batch, and
+        // no concurrent appender can slip between the condition check and the
         // write. That race is precisely what an append condition exists to
         // prevent, so getting it wrong here would make the reference
         // implementation useless as an oracle.
@@ -206,13 +227,6 @@ impl SendEventStore for MemoryEventStore {
                     conflict.position,
                 )));
             }
-        }
-
-        if events.is_empty() {
-            // The specification defines `Events` as a non-empty collection, so
-            // there is no position to return. Adapters must reject this rather
-            // than invent one.
-            return Err(AppendError::NoEvents);
         }
 
         let first_index = stored.len();
@@ -295,6 +309,28 @@ mod tests {
     async fn empty_append_is_rejected() {
         let store = MemoryEventStore::new();
         assert!(store.append(&[], None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn empty_append_is_refused_before_the_condition_is_evaluated() {
+        // ES-20's precedence, at the reference implementation. The conformance
+        // suite carries the same claim as
+        // `empty_batch_is_refused_before_the_condition_is_evaluated`; this is
+        // here as well because `MemoryEventStore` is the oracle the suite is
+        // validated against, and the ordering used to be wrong in both.
+        let store = MemoryEventStore::new();
+        store.append(&[event("Blocker")], None).await.unwrap();
+
+        let condition = AppendCondition::new(
+            Query::from_item(QueryItem::of_types(["Blocker"]).unwrap()).unwrap(),
+        );
+        let err = store.append(&[], Some(&condition)).await.unwrap_err();
+
+        assert!(
+            !err.is_condition_violated(),
+            "an empty batch is the caller's own bug, and `ConditionViolated` \
+             means `retry`: a caller branching on it loops forever. Got {err:?}"
+        );
     }
 
     #[tokio::test]

@@ -215,26 +215,42 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 193 clause IDs, of which 191 are normative: **132
-`[FROZEN]`**, **46 `[PROVISIONAL]`**, **13 `[DEFERRED]`** and **two
-`[NON-NORMATIVE]`** (CF-30, and VT-12 which is a retained pointer to ES-10). Section 7
-breaks that out per clause.
+As assembled, this document carries 193 clause IDs, of which 191 are normative:
+**135 `[FROZEN]`**, **46 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **two
+`[NON-NORMATIVE]`** (CF-30, and VT-12 which is a retained pointer to ES-10).
+Section 7 breaks that out per clause.
 
 **One standing qualification on every `[FROZEN]` port clause.** CF-25 forbids
 declaring a port frozen while an axis of §6.5's instrument portfolio has no
 passing implementation at its far end, unless the freeze names the axis and the
-ADR accepting the risk. All seven axes have empty far ends today, so the
-qualification is not hypothetical and it is not discharged by asserting it.
+ADR accepting the risk.
+
+**Seven axes, and not one of them has an adapter instrument at its far end.**
+Phase 3 produced none, and could not have: it builds fixtures. What it did move
+is the other half. Four axes — async flavour, handle multiplicity, durability
+and, since CF-13's fixture landed, position allocation — now carry a **fixture**
+instrument, which by CF-26 discharges CF-25's falsifiability half and explicitly
+not its implementability half. The remaining three — transport, batch shape and
+completeness — have nothing at either end. So the qualification is not
+hypothetical, it is not discharged by asserting it, and it is not discharged by a
+fixture tick either; §6.5 says which axes are which and why the distinction is
+the whole point of that table.
 
 It is discharged three ways, and the split matters more than the total:
 
 - **Position allocation is measured, not accepted.** It is the axis the pressure
-  test and all six scenarios independently ranked first, and what is missing is
+  test and all six scenarios independently ranked first, and what was missing was
   not an adapter but a number: which of `xid8` + `pg_snapshot_xmin`,
   transaction-scoped advisory locks, or a serialised sequence table buys the
-  invariant, and what each costs. That is a throwaway probe against a real
-  Postgres, and the runbook's phase 2 owns it — before the phase-4 freeze, not
-  after it at phase 10.
+  invariant, and what each costs. Phase 2 ran the probe against a real Postgres
+  ([`docs/experiments/position-visibility/README.md`](../experiments/position-visibility/README.md)):
+  `xid8` + `pg_snapshot_xmin` at 0.99–1.03× baseline, the other two correct and
+  16×/30× slower at 64 writers. That is the one affordable answer ES-10 says
+  lifts it to `[FROZEN]` at phase 4; the mechanism is settled and its
+  *structural* costs are not, and phase 10 pays them. What phase 3 added is the
+  other half — a *fixture* that violates the invariant, so the rule is now known
+  to bite — and CF-26 is explicit that this is not the adapter the axis is
+  waiting for.
 - **Five `ES` clauses carry the residual exposure and say so in their own
   markers** rather than in a preamble a reader skips: **ES-10** (position
   allocation), **ES-11** and **ES-12** (transport — a one-shot-HTTP adapter that
@@ -343,21 +359,21 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:117-145` | Two methods; 27 conformance rules; one reference implementation (`memory.rs:147`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure is the seven empty far ends of §6.5's portfolio |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait and nothing else. `grep -rn "ProjectionStore for"` matches nothing in the workspace (`PRESSURE-TEST.md:246-248`) | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
-| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | No trait at all. A module doc comment and a one-variant error enum (`:103-112`), whose own prose ends *"None of this is settled"* (`:98-99`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:92-153` | Two methods; 55 conformance rules; one reference implementation (`memory.rs:147`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and no adapter instrument at any far end**. Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; three — transport, batch shape, completeness — are empty at both ends. Five `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-10, ES-11, ES-12, ES-35, ES-40); the other axes are accepted risk in the landing ADR |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five skeleton impls straddling the batch-shape axis — owned write sets in `happenstance-sqlite`, `happenstance-neon` and `happenstance-ladybug`, a live borrowed handle in `live_handle.rs:174`, a `Transaction<'static, Postgres>` in `happenstance-postgres`. **Two** of the five are `todo!()` throughout — `LadybugProjectionStore` (`crates/happenstance-ladybug/src/projection_store.rs:270-292`) and `PostgresProjectionStore` (`crates/happenstance-postgres/src/projection_store.rs:105-127`). The other three carry real bodies: `NeonProjectionStore` in all four methods (`crates/happenstance-neon/src/projection_store.rs:164-202` — its two `todo!()`s are in the free functions `decode_checkpoint` and `decode_commit`, which are not port methods), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`crates/happenstance-ladybug/src/live_handle.rs:187-223`), and `SqliteProjectionStore` in `begin` and `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:235-260`). That distinction is the whole reason the count is stated: a `todo!()` has type `!` and coerces to anything, so a body of them proves a signature is nameable, not that it can be satisfied. Nothing runs against any of the five | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:89`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point. `EventStore` is frozen because it has evidence:
-twenty-seven rules, a reference implementation, six deployment scenarios walked
+fifty-five rules, a reference implementation, six deployment scenarios walked
 line by line, and one pressure test whose contested claims were settled by
 compiling them. `ProjectionStore` is not frozen because it has none: no adapter
 has ever been written against it, and the suite that would freeze it cannot
 currently observe half of the invariant the port exists to defend
 (`PRESSURE-TEST.md:220-234`). `SyncPeer` is specified before it is built because
-the alternative is worse — `docs/RUNBOOK.md:80` records that deferring the sync
-port *"leaks `EventId` and a tail seam back into `EventStore`"*, and a leak into a
-frozen port is not a deferral, it is a decision taken by omission in the crate
-that can least afford it.
+the alternative is worse — `docs/RUNBOOK.md:409-410` records that deferring the
+sync port *"leaks `EventId` and a tail seam back into `EventStore`"*, and a leak
+into a frozen port is not a deferral, it is a decision taken by omission in the
+crate that can least afford it.
 
 ### 1.7 What is settled, and what will move
 
@@ -401,10 +417,11 @@ scenarios have been walked against them.
 **Expect these to move.** Do not design a downstream crate that depends on the
 answer.
 
-- **Whether `Error` gains `Send + Sync`** (ES-6). Deferred against a compiled
-  `!Send` error shape; `PRESSURE-TEST.md:139-153` shows both existing
-  "confirmations" are free by construction, because `MemoryStoreError` is
-  uninhabited and `SqliteEventStoreError` is a unit variant.
+- **Whether `happenstance-core` ships the `Send + Sync` marker trait itself**
+  (ES-6). The capability question is closed: `Error` keeps
+  `core::error::Error + 'static`, and the strength lives in a marker a downstream
+  crate can declare for itself over a foreign trait, which is ordinary coherence
+  (ADR-0009). What is left is naming and surface, and phase 4 owns it.
 - **The whole of `ProjectionStore`** until PS-2's bar is met. The batch shape, the
   write seam, reset, read-your-writes and the failure policy are all specified,
   and all of them are specified against zero adapters.
@@ -418,13 +435,17 @@ answer.
   not omitted.
 
 **And the honest caveat that outranks all of them.** Section 6.5's portfolio has
-seven axes and seven empty far ends. Every port in this document has been checked
-against a population of implementations that agree with it: `MemoryEventStore`, a
-planned rusqlite adapter and a planned Durable Object all serialise their writers
-and assign positions under a lock they hold until commit. That is one storage
-shape wearing several hats. The clauses that will turn out to be wrong are the
-clauses that assume a property all of them happen to share, and §6.5 names which
-ones those are.
+seven axes and **not one adapter instrument at a far end**. Four of the seven —
+async flavour, handle multiplicity, durability and position allocation — carry a
+*fixture* instrument, which proves the rules at that end can fail and says
+nothing about whether a real implementation there can pass (CF-26). The other
+three — transport, batch shape and completeness — are empty at both ends. Every
+port in this document has been checked against a population of implementations
+that agree with it: `MemoryEventStore`, a rusqlite skeleton and a planned Durable
+Object all serialise their writers and assign positions under a lock they hold
+until commit. That is one storage shape wearing several hats. The clauses that
+will turn out to be wrong are the clauses that assume a property all of them
+happen to share, and §6.5 names which ones those are.
 
 ### 1.8 The evidence base
 
@@ -538,12 +559,21 @@ an identity, a position, a time, or the `AppendCondition` under which it was
 appended.
 
 `[FROZEN]`
-`Rule:` `append_preserves_event_payload` (`crates/happenstance-testkit/src/suite.rs:417`);
-new `append_preserves_event_type_and_tags_byte_for_byte`
+`Rule:` `append_preserves_event_payload`; new
+`append_preserves_event_type_and_tags_byte_for_byte`;
+`append_preserves_an_empty_payload`;
+`metadata_distinguishes_absent_from_empty`
 `Cases:` E2E-33, E2E-34, E2E-43
 `Rejects:` a store that stamps a writer-supplied identity into the log, which
 makes history forgeable by any caller and gives two peers no way to agree on
-which of two identically-identified events is the real one.
+which of two identically-identified events is the real one. And, on the two
+fields that look optional, the adapter that stores `data` and `metadata` in
+nullable columns and writes an empty slice as `NULL`: `metadata: None` and
+`Some(&[])` both read back as `None`, a zero-length `data` reads back as
+absent, and one row mapper produces both. The existing round-trip rule cannot
+see either, because the single event `append_preserves_event_payload` builds
+carries a thirteen-byte payload and eight bytes of `metadata` — the two values
+that make the mapping look total.
 
 The four fields are what `crates/happenstance-core/src/event.rs:183-188` already has,
 so this clause changes nothing about `Event` and exists to close the four
@@ -594,20 +624,36 @@ The contract layer, a store adapter, and a peer MUST NOT parse `data` or
 be able to see MUST be carried in the `EventType` or in `Tags`.
 
 `[FROZEN]`
-`Rule:` `append_preserves_event_payload` checks the mechanical half — that the
-payload survives byte-for-byte. The "MUST NOT parse" half is not mechanically
-checkable and is a review obligation; it is stated as a clause rather than prose
-because the *positive* requirement — put it in the tags — is what an adapter
-author needs, and it is checkable at review by grepping an adapter for a
-payload decode.
+`Rule:` `append_preserves_event_payload` checks the mechanical half
+— that the payload survives byte-for-byte. The "MUST NOT parse" half is not
+mechanically checkable and is a review obligation; it is stated as a clause
+rather than prose because the *positive* requirement — put it in the tags — is
+what an adapter author needs, and it is checkable at review by grepping an
+adapter for a payload decode.
 `Cases:` E2E-34, E2E-42
-`Rejects:` the identity scheme `crates/happenstance-sync/src/lib.rs:73-75`
-currently proposes — "a UUIDv7 or a content hash in the event's **metadata**".
-`Tags` and `EventType` are the only things `QueryItem::matches` looks at
-(`crates/happenstance-core/src/query.rs:113-116`), so an identity in `metadata` is
-structurally invisible to the port. A peer that must deserialise opaque bytes to
-decide whether it has already seen an event has broken ADR-0003 at the exact
-point ADR-0003 claims to win.
+`Rejects:` an ingest path
+that writes the origin's identity into `Event::metadata`. `Tags` and
+`EventType` are the only things `QueryItem::matches` looks at
+(`crates/happenstance-core/src/query.rs:113-116`), so an identity in `metadata`
+is structurally invisible to the port, and a peer that must deserialise opaque
+bytes to decide whether it has already seen an event has broken ADR-0003 at the
+exact point ADR-0003 claims to win.
+
+The exemplar this clause was written against was `happenstance-sync`'s own
+proposal — "a UUIDv7 or a content hash in the event's **metadata**" — and it
+was withdrawn: the crate now proposes `(StoreId, SequencePosition)`
+(`crates/happenstance-sync/src/identity.rs:87-101`), which is what VT-5
+mandates. The replacement is stronger than the proposal was, because the tree
+now *forces* the wrong answer rather than merely suggesting it.
+`SequencedEvent` carries a position and an event and nothing else, so the
+crate's own compiled finding is that `impl IngestStore for MemoryEventStore`
+"cannot be written truthfully" — nowhere to put an accepted `EventId`, nowhere
+to read one back to answer `holds`
+(`crates/happenstance-sync/src/ingest.rs:38-50`). `Event::with_metadata`
+(`crates/happenstance-core/src/event.rs:216-220`) is then the only free-form
+slot left on the type, and it is the one field the contract never inspects.
+That is where an implementer under deadline will put it, which is what makes
+this clause bite until VT-5 lands on `SequencedEvent`.
 
 This is the standing constraint the scenario catalogue arrived at from six
 directions and states in its closing line
@@ -623,7 +669,7 @@ cannot cover `tags`. "Put it in the tags" is not free advice.
 
 **Prose, not a clause:** `Event::into_parts` (`event.rs:243-246`) documents
 itself as "avoiding a clone in adapter write paths". That is false as written,
-because `EventStore::append` takes `&[Event]` (`store.rs:141-145`) and no trait
+because `EventStore::append` takes `&[Event]` (`store.rs:148-152`) and no trait
 implementation can reach an owned `Event` at all. The method still earns its
 keep on the ingest path, where a peer owns an `Event` it decoded from the wire
 and wants to move its parts into an adapter's row struct. The doc comment must
@@ -675,7 +721,7 @@ of an event it accepts through ingest.
 `Cases:` E2E-33, E2E-34, E2E-36, E2E-41, E2E-42
 `Rejects:` a store that re-mints an `EventId` on ingest. That is the
 implementation the port invites today — `append` has no slot for a foreign
-identity (`store.rs:141-145`) so an ingesting peer's store assigns its own — and
+identity (`store.rs:148-152`) so an ingesting peer's store assigns its own — and
 it makes re-delivery of a dropped batch produce a second copy of every event.
 E2E-33 shows the failure is worse than a duplicate: the hub's own copy now
 matches the origin condition, the re-delivered group takes the violated branch,
@@ -916,8 +962,7 @@ as a count, and the difference between two positions MUST NOT be treated as a
 number of events.
 
 `[FROZEN]`
-`Rule:` `positions_are_unique` (`suite.rs:336`),
-`positions_are_strictly_monotonic` (`suite.rs:355`)
+`Rule:` `positions_are_unique`, `positions_are_strictly_monotonic`
 `Cases:` E2E-10, E2E-46
 `Rejects:` an adapter that reuses a position after a delete, and one that packs
 positions into a dense range on compaction. Both are natural first cuts on a
@@ -964,9 +1009,9 @@ an exclusive lower bound; the contract MUST document that `checkpoint.next()` is
 therefore the correct resume idiom and that it is sound on a store with gaps.
 
 `[FROZEN]`
-`Rule:` unit test `position_next_signals_overflow`; `read_from_is_inclusive`
-(`suite.rs:262`), `condition_after_ignores_events_at_the_boundary`
-(`suite.rs:477`); new `read_from_a_gap_position` (ES-9's name for it)
+`Rule:` unit test `position_next_signals_overflow`; `read_from_is_inclusive`,
+`condition_after_ignores_events_at_the_boundary`; new
+`read_from_a_gap_position` (ES-9's name for it)
 `Cases:` E2E-10, E2E-16
 `Rejects:` for the overflow half, the current implementation —
 `Self::new(self.0.get().saturating_add(1))` at `event.rs:138-144` returns
@@ -1006,19 +1051,44 @@ U+2066–U+2069). They MUST NOT reject Unicode category `Cf` generally.
 explicit bidirectional formatting control; no such value is known and the
 scenarios contain none]`
 `Rule:` unit tests `rejects_invalid_event_types` (`event.rs:407-418`) and
-`rejects_invalid_tags` (`tag.rs:337-352`), extended; new
-`store_round_trips_a_maximum_length_type_and_tag`
+`rejects_invalid_tags` (`tag.rs:337-352`), which today cover the `Cc` half only,
+because **phase 4 owns the bidirectional extension and phase 3 wrote none of it**;
+`store_accepts_a_max_length_identifier`, which VT-20 claims too — one round trip,
+two clauses with a stake in it, and the boundary here is the boundary of
+*validity*; `store_accepts_non_ascii_identifiers` — a Persian tag, a Devanagari
+one and an emoji sequence carrying U+200D, appended and read back byte-for-byte. The constructors' half of this clause is a unit test; the store's
+half is a rule, because the value the constructor accepts still has to survive a
+column.
 `Cases:` E2E-40
 `Rejects:` a validator that bans all of `Cf`, which is the natural
 over-correction and which breaks Persian, Hindi and every emoji sequence by
 rejecting U+200C and U+200D. And a validator that bans only ASCII C0, which is
-what four doc comments in the crate currently claim happens.
+what four doc comments in the crate currently claim happens. On the store side it
+rejects an ASCII-only column — `VARCHAR` under a `latin1` collation, or a `CHECK`
+written against a `[[:ascii:]]` class — and an adapter that honours the 255-byte
+bound by truncating bytes, which splits a codepoint and stores a tag that is not
+valid UTF-8 and therefore matches nothing, including itself.
 
 The behaviour today is already right and the documentation is already wrong.
 `char::is_control` (`event.rs:46`, `tag.rs:56`) is Unicode `Cc`, which includes
 the C1 range U+0080–U+009F; `event.rs:37`, `tag.rs:47`, `error.rs:29` and
 `error.rs:53` all say "ASCII control characters". Four sites, one two-word fix,
 and the fix is to the prose.
+
+**Neither half of that paragraph has been carried out, and this clause said
+otherwise for a whole stage.** `char::is_control` is still the only character
+test either constructor runs, no bidirectional codepoint is refused anywhere in
+the workspace, and the four doc comments still say ASCII. The `Rule:` line above
+read "extended", which a reader takes as done — and `cargo xtask spec-trace`
+structurally cannot notice, because it reconciles suite rule names and a clause
+citing *unit tests* is invisible to it. So the ownership is stated here in the
+shape VT-28 uses for the same situation: **phase 4 owns both the bidirectional
+`matches!` and the prose fix**, and until they land this clause describes an
+obligation rather than a behaviour. The pairing is deliberate — the two-word doc
+fix argues *from* the current wrongness (`Latin1IdentifierStore`'s provenance in
+the mutant registry cites those four sites as what invites an ASCII-only column),
+so landing it alone would make three provenance paragraphs false in the same
+change while the MUST they explain stayed unwritten.
 
 The bidirectional half is a new decision and it is narrow on purpose. U+202E in
 an event type is a log-spoofing vector — a type that renders as one thing in
@@ -1075,9 +1145,8 @@ MUST implement subset semantics — every tag of the argument present in the
 receiver — and a partial overlap MUST NOT match.
 
 `[FROZEN]`
-`Rule:` `query_item_tags_are_and` (`suite.rs:96`),
-`query_item_tags_match_supersets` (`suite.rs:123`),
-`query_item_rejects_partial_tag_overlap` (`suite.rs:148`)
+`Rule:` `query_item_tags_are_and`, `query_item_tags_match_supersets`,
+`query_item_rejects_partial_tag_overlap`
 `Cases:` E2E-32, E2E-40
 `Rejects:` an adapter that implements a tagged query with `IN`-style semantics —
 any tag matching rather than all tags matching. It passes the OR rules and the
@@ -1207,8 +1276,14 @@ bytes, and MUST remain enforced by `EventType::new` and `Tag::new` and on
 deserialisation.
 
 `[FROZEN]`
-`Rule:` `rejects_invalid_event_types`, `rejects_invalid_tags`, new
-`store_round_trips_a_maximum_length_type_and_tag`
+`Rule:` unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`;
+`store_accepts_a_max_length_identifier` — named for what the store does rather
+than for what the test does, on the rule the six §6-versus-§3 pairs were settled
+on: the name states the observable behaviour, not the mechanism. VT-14 claims the
+same rule, and deliberately. There is one round trip and two clauses with a stake
+in it — VT-14 owns the boundary of *validity*, this clause the boundary of the
+*constant* — so a second rule under a second name would buy two tests that can
+only ever fail together.
 `Cases:` E2E-40
 `Rejects:` an adapter that truncates an over-length tag to fit its column. It
 produces an event whose tags do not match the query that should have selected it,
@@ -1230,8 +1305,11 @@ oversized payload with `AppendError::ExceedsStoreLimit` rather than truncating.
 `[PROVISIONAL — falsified by a named target that cannot honour 64 KiB; the
 legacy KV-backed Durable Object with a 128 KiB value cap is the closest and it
 clears the floor with room for the envelope]`
-`Rule:` new `store_accepts_the_guaranteed_minimum_payload`, new
-`append_reports_exceeded_store_limits`
+`Rule:` `store_accepts_the_guaranteed_minimum_payload` — written at phase 3
+against **this clause's number rather than against a constant**, because
+`MIN_SUPPORTED_EVENT_DATA_LEN` does not exist until phase 4 introduces it; new
+`append_reports_exceeded_store_limits`, which waits on `ExceedsStoreLimit`
+(VT-25) and is phase 4's
 `Cases:` E2E-42; and Turnstile's peer D
 (`docs/scenarios/README.md:1517-1524`), which has no case number
 `Rejects:` a ceiling. A single `MAX_EVENT_DATA_LEN` is either a straitjacket on
@@ -1257,7 +1335,7 @@ MUST refuse beyond it with `AppendError::ExceedsStoreLimit`.
 `[PROVISIONAL — falsified by a domain event legitimately carrying more than 64
 tags; the richest event in the six scenarios is Wattline's `SessionStarted` at
 eight]`
-`Rule:` new `store_accepts_the_guaranteed_minimum_tag_count`
+`Rule:` `store_accepts_the_guaranteed_minimum_tag_count`
 `Cases:` E2E-40
 `Rejects:` a `Tags` constructor that enforces a count, which would make the
 capacity limit a type invariant and re-create the decode-time refusal VT-19
@@ -1278,7 +1356,7 @@ larger one.
 
 `[PROVISIONAL — falsified by a decision model in a real domain that legitimately
 needs more than 128 items; the largest in the six scenarios is four]`
-`Rule:` new `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`
+`Rule:` `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`
 `Cases:` E2E-36, E2E-40
 `Rejects:` an adapter that generates one SQL parameter per item and silently
 fails past a driver limit, and an adapter that emits one statement per item
@@ -1300,7 +1378,7 @@ and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`.
 `[PROVISIONAL — falsified by a domain whose smallest indivisible unit of work
 exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is
 under forty]`
-`Rule:` new `store_accepts_the_guaranteed_minimum_batch_size`
+`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
 event and per tag and discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time — that
@@ -1347,7 +1425,7 @@ MUST carry `#[non_exhaustive]`.
 
 `[FROZEN]`
 `Rule:` compile test `query_items_is_not_constructible_downstream`;
-`condition_without_after_rejects_any_match` (`suite.rs:438`)
+`condition_without_after_rejects_any_match`
 `Cases:` E2E-40
 `Rejects:` `Query::Items(Vec::new().into_boxed_slice())` from any downstream
 crate — the exact state `Query::from_items` rejects with `InvalidQuery::NoItems`
@@ -1389,7 +1467,7 @@ This is the section's new finding and it deserves its cost stated plainly rather
 than resolved by a field.
 
 `ReadOptions` carries one `from` for the entire read (`query.rs:226-234`) and
-`read` applies one `ReadOptions` to the whole `Query` (`store.rs:117-121`). So
+`read` applies one `ReadOptions` to the whole `Query` (`store.rs:118-122`). So
 Wattline's four-item `StartSession` boundary cannot bound its 828,000-event fleet
 item without blinding the three items whose definitional events sit far below any
 recent snapshot. Setting `from` at all folds an absent circuit rating, a vanished
@@ -1420,8 +1498,8 @@ round trip merely costs latency.
 events.
 
 `[FROZEN]`
-`Rule:` new `read_limit_zero_yields_nothing`; `read_limit_truncates`
-(`suite.rs:292`)
+`Rule:` new `read_limit_zero_yields_nothing`, which **phase 4 owns**;
+`read_limit_truncates`
 `Cases:` E2E-11, E2E-13
 `Rejects:` the current implementation. `self.limit = NonZeroUsize::new(limit)`
 (`query.rs:260-266`) turns zero into `None`, documented as "A `limit` of zero is
@@ -1429,6 +1507,15 @@ ignored, since requesting nothing is never what the caller meant". The premise i
 true for a literal and false for a computed value: a paging loop writing
 `.limit(budget - fetched)` that reaches parity does not read zero events, it
 reads **the entire log, unbounded, silently**.
+
+Phase 3 does not write the rule and the reason is the type rather than the
+effort: `limit` takes a `usize` and stores a `NonZeroUsize`
+(`crates/happenstance-core/src/query.rs:263-266`), so `limit(0)` is `None` before
+any adapter sees it and the input the rule needs is not expressible through the
+API. The rule lands with the `Option<usize>` this clause requires, which is phase
+4's. A rule recorded as unwritable, with an owner and a reason, is not a gap —
+that is the ownership distinction §7.4 turns on, and it is why the name is left
+here rather than dropped until it can be written.
 
 This is a deliberate divergence from the DCB reference implementation, which
 treats `limit: 0` as unlimited through JavaScript falsiness, and the ADR that
@@ -1486,7 +1573,7 @@ measures as immaterial on a Wattline-shaped workload; the Postgres adapter and
 the benchmark harness are the two instruments and both are unbuilt]`
 `Rule:` new `condition_guards_carry_independent_boundaries`, new
 `condition_with_one_guard_behaves_as_today`; the existing
-`condition_after_*` family (`suite.rs:477-527`) becomes the single-guard case
+`condition_after_*` family becomes the single-guard case
 `Cases:` E2E-04, E2E-05, E2E-06
 `Rejects:` the application-side fix E2E-05 names — four reads, four last-seen
 positions, and a condition on `min(p₁…p₄)`. That is sound and it re-admits every
@@ -1514,7 +1601,7 @@ it.
 What this clause does **not** do is change what a batch's own events are checked
 against. A batch's events MUST NOT be evaluated against its own condition
 (E2E-06); `MemoryEventStore` already behaves that way by accident of ordering
-(`memory.rs:197-221`) and §3 owns turning that accident into a rule.
+(`memory.rs:218-230`) and §3 owns turning that accident into a rule.
 
 #### VT-31 — The query algebra is fixed and adapters may not change the match set
 
@@ -1525,7 +1612,7 @@ adapter MAY reorder or deduplicate items, and MUST NOT do so in a way that
 changes the match set.
 
 `[FROZEN]`
-`Rule:` `query_items_are_or` (`suite.rs:200`); new
+`Rule:` `query_items_are_or`; new
 `query_item_order_does_not_change_the_result_set`, new
 `query_union_is_item_concatenation`, new
 `duplicate_items_do_not_duplicate_events` — the same four ES-15 names, because
@@ -1536,7 +1623,7 @@ side there
 optimisation in a way that is not match-set preserving — natural to reach for,
 because `QueryItem::new` already sorts and deduplicates *types*
 (`query.rs:62-67`), so extending the idea to items looks like the same move. Such
-an adapter passes all 27 existing rules and breaks the fan-out projection runner,
+an adapter passes every existing rule and breaks the fan-out projection runner,
 which reads one union query and re-filters each projection's stream locally with
 `Query::matches` (`query.rs:194-204`) and is correct only if the algebra holds.
 
@@ -1878,7 +1965,7 @@ that is where it lands.
 This is the port the specification freezes. Everything else in the workspace is
 downstream of it: the conformance suite measures adapters against it, the
 projection runner reads through it, and the sync port replicates what it holds.
-It is also the port with the most evidence behind it — twenty-seven conformance
+It is also the port with the most evidence behind it — fifty-five conformance
 rules, one reference implementation, six deployment scenarios walked line by line
 against it, and one adjudicated pressure test. Where the evidence runs out, the
 clause says so and names the experiment that ends the argument.
@@ -1898,7 +1985,7 @@ not exist yet; §3.8 collects them.
 ### 3.1 Derivation — why there are two traits, and what that costs
 
 The port is declared once without any `Send` requirement and the `Send` flavour
-is derived (`store.rs:91`, ADR-0001). The mechanism is not folklore and its
+is derived (`store.rs:92`, ADR-0001). The mechanism is not folklore and its
 consequences are not guesses: `trait-variant 0.1.3` is 248 lines of `syn`
 rewriting and every claim below cites it at
 `~/.cargo/registry/src/index.crates.io-*/trait-variant-0.1.3/src/variant.rs`,
@@ -1935,11 +2022,17 @@ MUST import only one of the two names per module.
 
 **[FROZEN]**
 
-- **Rule:** every rule in `suite.rs` is generic over `S: EventStore`
-  (`suite.rs:70`, and identically at each of the twenty-seven), so an adapter
-  implementing only `SendEventStore` proves the implication by passing the suite —
-  which `MemoryEventStore` does (`memory.rs:147`). `cargo xtask wasm` proves the
-  bare flavour still builds for `wasm32-unknown-unknown`.
+- **Rule:** the suite binds the bare flavour and nothing else. Since the fixture
+  contract, that is carried by `Fixture::Store: EventStore`
+  (`crates/happenstance-testkit/src/contract.rs:113`) rather than by a bound
+  written out on each rule — the rules are generic over `F: Fixture`, and the
+  only `<S: EventStore>` bounds left in `suite.rs` are on its four private
+  helpers. One associated-type bound is a better falsifier than thirty identical
+  ones, not a weaker one: it cannot be relaxed for a single rule, only for the
+  whole suite at once, and doing so fails every harness. An adapter implementing
+  only `SendEventStore` proves the implication by passing the suite — which
+  `MemoryEventStore` does (`memory.rs:147`). `cargo xtask wasm` proves the bare
+  flavour still builds for `wasm32-unknown-unknown`.
 - **Cases:** E2E-52, E2E-53, E2E-54.
 - **Rejects:** any redefinition that injects `+ Send` unconditionally. Such a port
   compiles and passes every behavioural rule on native and fails
@@ -1949,7 +2042,7 @@ MUST import only one of the two names per module.
 The naming departs from `trait_variant`'s own convention, which would call the
 bare flavour `LocalEventStore`. "Local" already names a local-first
 application's on-device store in this project; the collision would be permanent
-(ADR-0001:71-75).
+(ADR-0001:93-96).
 
 #### ES-2 — `read` returns the stream at the top level and is not `async`
 
@@ -1958,21 +2051,29 @@ the outermost item of its return type, and MUST NOT be `async`.
 
 **[FROZEN]**
 
-- **Rule:** `send_flavour_stream_is_send_in_generic_code` **(new)**. The existing
-  unit test at `memory.rs:328-340` is vacuous: it asserts `Send` on a *concrete*
-  stream type, which holds by auto-trait leakage whatever the trait says. The
-  replacement is a generic function — `fn assert<S: SendEventStore>(s: &S, q:
-  &Query) { fn is_send<T: Send>(_: &T) {} is_send(&SendEventStore::read(s, q,
-  ReadOptions::new())); }` — which type-checks only if the *trait* promises it.
+- **Rule:** two unit tests in `happenstance-core`, and it takes both.
+  `send_flavour_stream_is_send_in_generic_code` (`memory.rs:364-391`) writes the
+  bound at the *definition* — `fn assert<S: SendEventStore>(s: &S, q: &Query) {
+  fn is_send<T: Send>(_: &T) {} is_send(&SendEventStore::read(s, q,
+  ReadOptions::new())); }` — so the obligation is discharged before
+  monomorphisation and only the *trait*'s promise can satisfy it. Its predecessor
+  asserted `Send` on a *concrete* stream, where auto-trait leakage from the hidden
+  type satisfies it whatever the trait says. That is necessary and not sufficient:
+  under the refactor below the outermost item is the *future*, `trait_variant`
+  marks the future `Send`, and the assertion is discharged against the wrong
+  thing. `spawns_from_generic` (`memory.rs:393-453`) is what rejects it, because
+  it holds the stream across an await inside a real `tokio::spawn`
+  (ADR-0008:220-228).
 - **Cases:** E2E-52.
 - **Rejects:** the refactor to `async fn read(..) -> Result<impl Stream, E>`.
   `transform_item`'s `async fn` arm (`variant.rs:133-145`) appends `Send` to the
   outermost `impl Future` and nothing else, so the future would be `Send` and the
   stream would not: a caller could not hold a read across an await inside
   `tokio::spawn`, which is the entire reason the `Send` flavour exists. The
-  refactor compiles, passes all twenty-seven rules, and silently deletes the
-  design. CLAUDE.md constraint 3 protects this; the test it names must be replaced
-  by the one above, because the one on disk cannot fail.
+  refactor compiles, passes every behavioural rule, and silently deletes the
+  design. CLAUDE.md constraint 3 protects this and names both tests, for the
+  reason above: a clause naming only the first would have been satisfied by the
+  refactor it forbids.
 
 #### ES-3 — The `Self: Sync` rule, stated once
 
@@ -2000,10 +2101,19 @@ never call the method.
   like one line. `transform_item`'s second arm (`variant.rs:147-155`) appends the
   *whole* bound list to `read`'s stream, so a stream whose hidden type is `Send`
   but not `Sync` — a `Cell` in a cursor, an `Rc` in a page buffer — is rejected
-  with `error[E0277]: cannot be shared between threads safely`. It also is not one
-  line at the impl sites, which spell the bound by hand: `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:202` both write `+ Send` and would both
-  need `+ Send + Sync`. Nothing in the workspace has been checked against that.
+  with `error[E0277]: cannot be shared between threads safely`. That leg carries
+  the clause on its own, which is as well, because the second leg this bullet used
+  to offer is false: it said `memory.rs:154` and
+  `crates/happenstance-sqlite/src/event_store.rs:202` "both write `+ Send` and
+  would both need `+ Send + Sync`", and they would not. Flipping the attribute and
+  running `cargo check --workspace --all-features` produced *zero* errors and
+  touched neither impl — an RPITIT impl need not restate the trait's auto-trait
+  bounds, and rustc checks the hidden type instead (ADR-0008:201-211). It is
+  recorded as refuted rather than deleted because it is the argument a reader
+  reconstructs unprompted, and because the real hazard is sharper than the one it
+  named: an adapter author who writes `+ Send` at the impl site is silently held
+  to `+ Send + Sync`, and learns of it only when some future hidden type fails,
+  far from the cause.
 
 #### ES-4 — One provided body must type-check under both flavours simultaneously
 
@@ -2051,11 +2161,16 @@ MUST NOT be varied between flavours.
 **[FROZEN]**
 
 `transform_item` returns non-`Fn` trait items unchanged (`variant.rs:129-132`), so
-`type Error: core::error::Error + 'static` (`store.rs:99`) is copied into the
+`type Error: core::error::Error + 'static` (`store.rs:100`) is copied into the
 variant verbatim, and the blanket impl forwards it as
-`type Error = <Self as SendEventStore>::Error` (`variant.rs:238-245`). There is no
-mechanism by which `Error: Send + Sync` could apply to the derived flavour alone.
-Whatever ES-6 settles applies to `wasm32` too.
+`type Error = <Self as SendEventStore>::Error` (`variant.rs:238-245`). The other
+spelling is carried by a different line, and it is the one worth naming, because a
+`where` clause is the first thing anyone reaches for and it is the one
+`transform_item` never sees: `mk_variant` builds the variant with `..tr.clone()`
+(`variant.rs:123`), which copies the trait's generics — the `where` clause
+included — across untouched. There is no mechanism by which `Error: Send + Sync`
+could apply to the derived flavour alone. Whatever ES-6 settles applies to
+`wasm32` too.
 
 - **Rule:** `error_bound_is_identical_on_both_flavours` **(new)** — a static
   assertion in `happenstance-core`'s own tests over both flavours' `Error`
@@ -2066,40 +2181,61 @@ Whatever ES-6 settles applies to `wasm32` too.
   ADR-0001:99-100 rejected, it doubles the surface the suite must cover, and it
   loses the blanket impl that makes ES-1's "bind the weaker one" work.
 
-#### ES-6 — Whether `Error` gains `Send + Sync`
+#### ES-6 — `Error` carries no `Send` or `Sync` bound, and the strength is a marker
 
-**[DEFERRED — settled by the four-skeleton experiment: one adapter skeleton per
-storage shape (rusqlite, tokio-postgres, a Workers HTTP client, Neon over
-one-shot HTTP), each declaring its real `Error`, future and stream types with
-`todo!()` bodies, compiled against both flavours; plus the `JsValue`
-stringification probe on the Cloudflare skeleton. Owning phase: the phase that
-produces ADR-0008, which cannot exit without it. PS-35 requires that ADR to
-cover `ProjectionStore` in the same document, so this is one experiment and one
-decision, not two.]**
+**[FROZEN]**
 
-`type Error: core::error::Error + 'static` (`store.rs:99`) carries no `Send` or
-`Sync` bound today, so an adapter error holding a `JsValue` or an `Rc<str>`
-satisfies it. A spawned handler's error therefore cannot cross a `JoinHandle`,
-which is E2E-53's failure. Adding the bound is free on `wasm32` only if
-stringifying a `JsValue` loses nothing the caller needs, and
-`worker::Error::JsError(String)` suggests it does not — but *suggests* is not
-evidence, and the two in-tree "confirmations" are free by construction:
-`MemoryStoreError` is uninhabited (`memory.rs:143-145`) and
-`SqliteEventStoreError` is a single placeholder variant
-(`crates/happenstance-sqlite/src/event_store.rs:52-56`). Neither could fail the bound if
-it were wrong.
+`type Error: core::error::Error + 'static` (`store.rs:100`) carries no `Send` or
+`Sync` bound, so an adapter error holding a value that is not thread-safe
+satisfies it, and a spawned handler's error cannot cross a `JoinHandle` — which
+is E2E-53's failure. Whether that trade was the right one could not be settled
+while nothing in the tree could fail the bound, and for a long time nothing
+could: `MemoryStoreError` is uninhabited (`memory.rs:143-145`) and
+`SqliteEventStoreError` *was* a single placeholder variant. Phase 2 built errors
+that can. `SqliteEventStoreError` is now seven real variants over
+`rusqlite::Error`, `JoinError` and `TryCurrentError`
+(`crates/happenstance-sqlite/src/event_store.rs:151-193`), and
+`CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
+`SqlError::Thrown` carries a `JsHandle`, whose payload is an `Rc<str>`
+(`crates/happenstance-cloudflare/src/js.rs:45-58`).
 
-This is **semver-visible and must be decided before publish** (ES-5: it cannot be
-added to one flavour later). It is the highest-blast-radius open question in the
-workspace, and the pressure test's adjudication is that the evaluation's verdict
-imposing it must be withdrawn to open (PRESSURE-TEST §3.1).
+**The `Rc` is the instrument, and it is not what this clause first assumed.** A
+real `JsValue` **is** `Send + Sync` on the target Workers actually builds:
+`wasm-bindgen` carries an `unsafe impl` of each under
+`cfg(not(target_feature = "atomics"))`, and Workers builds
+`wasm32-unknown-unknown` without atomics
+(`crates/happenstance-cloudflare/src/js.rs:29-39`). So `worker::Error` is not the
+hazard — an instrument whose `!Send`-ness is one `cfg` away from evaporating
+cannot falsify a bound, which is why the stand-in holds an `Rc<str>` rather than
+mimicking the `unsafe impl`. Nor is that hatch available here: the workspace sets
+`unsafe_code = "forbid"`, so an adapter can only ever *inherit* it by holding a
+`JsValue`, never write it.
 
-- **Rule:** `store_error_crosses_a_join_handle` **(new)**, writable only once
-  decided; it belongs in an opt-in `Send`-flavour rule group, because the bare
-  flavour cannot be spawned by construction.
+Compiled against that instrument, `+ Send + Sync` costs exactly one crate — the
+`wasm32` target the two-trait design exists to serve — and ES-5 leaves no
+mechanism to scope it to the native flavour.
+[ADR-0009](../adr/0009-error-send-sync.md) therefore settles the clause the other
+way: **`Error` keeps `core::error::Error + 'static` on both ports and both
+flavours, and the stronger property becomes a marker trait that generic code asks
+for** (`docs/adr/0009-error-send-sync.md:117-126`). Nothing is left to time
+against publication. The bound would have been semver-visible and one-way; a
+marker declared downstream is additive, and needs nothing from the contract
+crate.
+
+- **Rule:** `store_error_crosses_a_join_handle` **(new)**, in a rule group whose
+  bound is the marker rather than `SendEventStore` — the bare flavour cannot be
+  spawned by construction, and the derived one does not imply a `Send` error. It
+  asserts on the future's `Output`, not on the future: `Send` on a future is a
+  property of what it holds across a suspension point, so a future with no
+  suspension point is `Send` whatever it returns, and a rule that spawns `append`
+  and reports "it compiled" passes against an error that can never cross a
+  `JoinHandle` (`docs/adr/0009-error-send-sync.md:98-115`).
 - **Cases:** E2E-53, E2E-52.
 - **Rejects:** deciding it by argument. Both prior documents did, in opposite
-  directions, from the same file.
+  directions, from the same file. The implementation the rule rejects is already
+  in the tree: `SendStoreWithLocalError`
+  (`crates/happenstance-cloudflare/src/send_shape.rs:137`) satisfies every `Send`
+  obligation the derived flavour states and carries a `!Send` error, and compiles.
 
 #### ES-7 — A downstream crate may implement the bare flavour directly
 
@@ -2111,17 +2247,23 @@ downstream `impl EventStore for LocalType`. The named test is the `!Send`
 reference store, which lives in `happenstance-testkit` — a genuinely downstream
 crate — and which is also ADR-0001's own lift condition.]**
 
-`mk_blanket_impl` (`variant.rs:171-192`) emits
-`impl<T: SendEventStore> EventStore for T`. ADR-0001:59-60 records a spike
-confirming a downstream direct impl is accepted. Nothing in the tree corroborates
-it: `grep -rn "impl EventStore for"` over the workspace returns **nothing**, and
-both existing impls are `SendEventStore` (`memory.rs:147`,
-`crates/happenstance-sqlite/src/event_store.rs:58`), one of which is `todo!()`. The bare
-flavour — the entire justification for the two-trait design — has zero
-implementers, which is precisely why ADR-0001 is still marked provisional.
+`mk_blanket_impl` (`variant.rs:171-192`) emits `impl<T: SendEventStore>
+EventStore for T`. ADR-0001:70-76 recorded a spike confirming a downstream
+direct impl is accepted, and for as long as nothing in the tree corroborated it
+the ADR stayed provisional. Four impls now do, and one of them is the proof
+rather than the breadth: `LocalMemoryEventStore`
+(`crates/happenstance-testkit/tests/local_conformance.rs:181`) is a direct
+`impl EventStore for` in a genuinely downstream crate, sitting beside the
+blanket impl without `error[E0119]` and passing every rule natively and on
+`wasm32`. `CloudflareEventStore`
+(`crates/happenstance-cloudflare/src/event_store.rs:146`) and
+`happenstance-neon`'s two (`event_store.rs:168`, `:405`) are skeletons and
+widen the evidence without adding to it. ADR-0001's provisional marker was
+lifted on that basis at phase 1 (`docs/adr/0001-async-port-flavours.md:5-6`);
+what remains open, and is phase 9's, is whether a real platform SDK fits.
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
-  `RefCell`-backed `!Send` reference store CF-28 requires in
+  `Rc`-backed `!Send` reference store CF-28 requires in
   `happenstance-testkit`'s own `tests/`, running the whole suite. CF-28 owns the
   instrument; this clause is what it is evidence for.
 - **Cases:** E2E-52, E2E-09, E2E-54.
@@ -2149,9 +2291,8 @@ directions: forwards it is a lower bound, backwards it is an upper bound.
 
 **[FROZEN]**
 
-- **Rule:** `read_defaults_to_ascending_order` (`suite.rs:248-259`),
-  `read_from_is_inclusive` (`:262`), `read_backwards_reverses_order` (`:279`),
-  `read_backwards_from_with_limit` (`:306`).
+- **Rule:** `read_defaults_to_ascending_order`, `read_from_is_inclusive`,
+  `read_backwards_reverses_order`, `read_backwards_from_with_limit`.
 - **Cases:** E2E-10, E2E-12.
 - **Rejects:** an adapter that implements `from` as a lower bound irrespective of
   direction — the natural reading of `WHERE position >= ?` copied into the
@@ -2167,20 +2308,51 @@ NOT return empty on that ground alone.
 
 **[FROZEN]**
 
-- **Rule:** `query_matching_nothing_yields_empty` (`suite.rs:231`) is the
-  complementary half already in the suite — an empty result is the correct answer
-  when nothing matches, and never an error — and it is named here because no
-  other clause names it. `read_from_a_gap_position` **(new)** — arrange a store with a gap
-  (append three events, remove one through the adapter's own fixture, or use an
-  adapter that allocates sparsely), then read `from` a position between two
-  assigned ones and assert the higher neighbour is yielded. Every existing rule
-  feeds `from` a position the store actually assigned (`suite.rs:262-276`,
-  `:306-329`), so none of them can fail this.
+- **Rule:** `query_matching_nothing_yields_empty` is the
+  complementary half already in the suite — an empty result is the correct
+  answer when nothing matches, and never an error — and it is named here
+  because no other clause names it. `read_from_a_gap_position` **(new)** —
+  arrange a store with a gap (append three events, remove one through the
+  adapter's own fixture, or use an adapter that allocates sparsely), then read
+  `from` a position between two assigned ones and assert the higher neighbour
+  is yielded. Every existing rule feeds `from` a position the store actually
+  assigned — `read_from_is_inclusive` and `read_backwards_from_with_limit` are
+  the only two that pass `from` at all — so none of them can fail this.
+  `reading_an_empty_store_yields_nothing` is the same answer one
+  degenerate step further out — a read against a store that has never been
+  appended to yields an empty stream and no error — and every rule in the suite
+  seeded the store before it read. It landed at phase 3 with `NullHeadPagingStore`
+  beside it, and the pairing is worth recording because this rule looked like the
+  suite's best candidate for *having no plausible failing implementation*, which
+  ADR-0010 says to record in the clause and skip rather than to invent a mutant
+  for. It has one, and this clause's own `Rejects:` had already named it: the
+  paginating adapter ES-11 prescribes, anchoring its window on the head at the
+  first poll. `max(position)` over no rows is `NULL`, and decoding it into a
+  non-nullable integer is a decode error rather than a zero. The rule also
+  exercises the read options against the empty store, because the missing head is
+  *spent* on the paging arithmetic rather than merely observed.
+
+  **One half of that rule has a saboteur and the other half does not, and
+  ADR-0010 §1 requires the asymmetry stated rather than papered over.**
+  `reading_an_empty_store_yields_nothing` makes two claims — the read yields
+  nothing, and it does not error. `NullHeadPagingStore` is registered against the
+  *error* half, and it is deliberately modelled as an `Err` item on the stream
+  rather than as a panic, so the rule's own `read_ok` raises the rejection and
+  the registry can hold the row to an origin check. The "yields the wrong
+  events" half has **no plausible failing implementation**: nobody ships a store
+  that invents rows for a log nothing has been written to, and inventing a
+  saboteur for it would be the strawman CF-4 rejects. That half is retained
+  because it is one line and it is the sentence a reader of the rule expects to
+  find, not because anything demonstrates it.
 - **Cases:** E2E-10.
 - **Rejects:** an adapter implementing `from` as an equality seek or a
   `rowid`-offset lookup rather than a range scan — plausible wherever positions
   came from a dense counter and the author assumed density. `event.rs:94-96` says
-  gaps are permitted; nothing checks that anyone believed it.
+  gaps are permitted; nothing checks that anyone believed it. It also rejects the
+  paginating adapter ES-11 prescribes, which anchors its window on `head()` at
+  the first poll: on an empty store `head()` is `None` (ES-30), and the arithmetic
+  written against that bound errors or panics on a store whose only fault is
+  being new — the state every adapter is in on its first run.
 
 #### ES-10 — Position order is visibility order
 
@@ -2189,7 +2361,7 @@ against that store MAY yield an event at a position ≤ *P* that was not already
 visible. An adapter MUST NOT make an event visible at a position below one it has
 already exposed.
 
-**[PROVISIONAL — axis: **position allocation**, whose far end is unbuilt. Every adapter in and planned for the workspace assigns positions under a lock it holds until commit (`memory.rs:195-223`), so nothing here can violate this clause and nothing here votes for it. Falsified if the phase-2 measurement finds no affordable Postgres mechanism among `xid8` + `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence table — in which case the invariant is not free and ES-25 and ES-26, which are sound only where it holds, are reopened with it.]**
+**[PROVISIONAL — axis: **position allocation**, whose *adapter* far end is unbuilt. Every adapter in and planned for the workspace assigns positions under a lock it holds until commit (`memory.rs:216-237`), so no adapter here can violate this clause and none of them votes for it. The hostile **fixture** CF-13 required now exists and does violate it, which makes the rule falsifiable and settles nothing about cost — a fixture proves the rule bites, and only an adapter proves a real store can pass it (CF-26). Falsified if the phase-2 measurement finds no affordable Postgres mechanism among `xid8` + `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence table — in which case the invariant is not free and ES-25 and ES-26, which are sound only where it holds, are reopened with it.]**
 
 **This clause is the sole statement of the visibility invariant.** VT-12 carried a
 second copy; the two drifted apart within one editing pass, which is the argument
@@ -2216,20 +2388,29 @@ contract requires an event becoming visible later to carry a higher position.
 `event.rs:92-97` documents uniqueness, monotonicity and permitted gaps — all
 properties of *assignment*, none of *visibility*.
 
-- **Rule:** `nothing_below_an_observed_position_appears_later` **(new)**. The rule
-  is worthless without something that can fail it: the testkit's own `tests/` must
-  carry a deliberately hostile store that holds one append's row back until a
-  second, later-positioned append has committed. `positions_are_unique` and
-  `positions_are_strictly_monotonic` (`suite.rs:336-365`) both read a quiescent
-  store through a single sequential writer and are vacuous here — indeed vacuous
-  generally, since both read back through `read`, which every adapter returns in
-  position order.
+- **Rule:** `nothing_below_an_observed_position_appears_later`. The rule is
+  worthless without something that can fail it, and that store is now in the tree.
+  `PreCommitPositionStore`, in
+  `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs`, takes its
+  position from a sequence before its transaction commits and publishes the row
+  afterwards, so a writer that started first and commits last becomes visible
+  underneath a position a reader has already observed. The rule creates two
+  `append` futures from one handle, drives them one poll at a time in the order
+  A, B, B, A, and reads after every step; CF-13 records why the reversal on
+  resumption is load-bearing and why the whole thing is single-threaded.
+  `positions_are_unique` and `positions_are_strictly_monotonic` both read a
+  quiescent store through a single sequential writer and are vacuous here — indeed
+  vacuous generally, since both read back through `read`, which every adapter
+  returns in position order.
 - **Cases:** E2E-01, and the read-side half of E2E-02.
 - **Rejects:** a Postgres adapter allocating positions with `nextval()` outside
   the transaction. A position is taken before the work and released at commit, so
   a transaction that started later can become visible earlier; a caller then
   conditions on `after: 100` while 99 is still invisible, and the boundary silently
-  stops enforcing. It passes all twenty-seven rules today.
+  stops enforcing. It passed every rule in the suite until the rule above and
+  ES-36's landed — the same window seen twice, which is why
+  `PreCommitPositionStore`, the adapter in its non-concurrent deterministic form,
+  is registered against both.
 
   Wattline is the worked failure, and it is worth carrying the numbers because
   "the window is small" is the argument that gets made here. A handler reads a
@@ -2276,6 +2457,20 @@ argument for weakening the obligation rather than for supplying the primitive.
   for `happenstance-neon`, and one of the two instruments the workspace has
   already chosen. It is conformant today.
 
+**A coverage hole opened when this rule's neighbour was promoted, and it is
+recorded here so it is not rediscovered.** `a_live_read_stream_does_not_block_an_append`
+was a `#[tokio::test]` in the testkit's own `tests/` until phase 3, and it
+asserted that the drained stream held **one** event — "the stream is a snapshot
+taken at read". Promoting it to a portable rule correctly dropped that
+assertion, because a genuinely streaming adapter may legally see the later row
+and this clause is the one that decides whether it may; the promoted rule asserts
+only that the pre-existing event is still yielded and defers the rest here. The
+consequence is that **nothing in the workspace now asserts that any store's read
+stream is a snapshot** — `MemoryEventStore` and `LocalMemoryEventStore` both are
+one, and neither is checked. This rule is what restores it portably. A unit test
+in `happenstance-core` would restore the specific coverage sooner without
+over-specifying the port, and is the cheaper half if this stays blocked.
+
 #### ES-12 — All items of one `Query` share one snapshot
 
 Every item of a `Query` MUST be evaluated against the same snapshot as every
@@ -2319,7 +2514,7 @@ the lifetimes of all of the method's inputs, including `&query`. Writing
 temporary `Query` that is dropped at the end of that statement while the stream
 still borrows it: `error[E0716]: temporary value dropped while borrowed`. The
 existing rules never hit it because they pass the temporary and drain the stream
-inside one expression (`suite.rs:46`).
+inside one expression, which is what the suite's `read_ok` helper does.
 
 The alternative was taking `Query` by value. It loses on cost and on retry
 ergonomics: `Query::Items` is a `Box<[QueryItem]>` (`query.rs:149`) whose items
@@ -2343,16 +2538,33 @@ not *n* per query item and not an arbitrary *n*.
 
 **[FROZEN]**
 
-- **Rule:** `read_limit_truncates` (`suite.rs:292`),
-  `read_backwards_from_with_limit` (`:306`), plus
+- **Rule:** `read_limit_truncates`, `read_backwards_from_with_limit`, plus
   `limit_applies_across_items_not_per_item` **(new)** — a two-item query matching
-  three events each, `limit(4)`, asserting four events in position order.
+  three events each, `limit(4)`, asserting four events in position order — and
+  `read_limit_applies_after_filtering` with its mirror
+  `read_backwards_limit_applies_after_filtering`: a store laid out
+  `Miss, Hit, Hit, Hit, Miss`, read at `limit(2)` through a query selecting the
+  hits, asserting two *matches* rather than whatever survives among the first two
+  rows scanned. The mirror is not decoration and the layout is why: `LIMIT`
+  pushed into a descending scan takes the *highest* rows, so a non-matching event
+  at only one end would let one direction pass while the other failed. CF-12 is
+  the obligation to run any read option against a filtering query at all, and
+  names `limit` and `backwards` as belonging in the same pass.
 - **Cases:** E2E-12, E2E-13.
 - **Rejects:** an adapter implementing a multi-item query as one statement per
   item with `LIMIT n` on each — the same shape ES-12 rejects, failing here for an
   independent reason, which is why both rules are worth having. It also rejects a
   backwards adapter that truncates before reversing; `MemoryEventStore` reverses
-  first (`memory.rs:163-179`) and this is the behaviour E2E-12 depends on.
+  first (`memory.rs:163-179`) and this is the behaviour E2E-12 depends on. And it
+  rejects the adapter that pushes `LIMIT` down into the scan and applies the
+  query's predicate to the rows that come back, which returns fewer than *n*
+  matches and sometimes none. Nothing in the suite could see that until
+  `read_limit_applies_after_filtering` and its mirror landed: every read-option
+  rule issued `Query::all()` — `read_defaults_to_ascending_order`,
+  `read_from_is_inclusive`, `read_limit_truncates` and
+  `read_backwards_from_with_limit` alike — where the scanned set and the matched
+  set are the same set. `LimitBeforeFilterStore` is the compiled adapter, and a
+  reviewer measured the shape passing the suite as it stood.
 
 #### ES-15 — Query item algebra: order-free, duplicate-free, and All absorbs
 
@@ -2364,23 +2576,71 @@ rewrite a query's *items*.
 
 **[FROZEN]**
 
-- **Rule:** `duplicate_items_do_not_duplicate_events` **(new)** — a store holding
+- **Rule:** `duplicate_items_do_not_duplicate_events` — a store holding
   one multi-tagged event, read through `Query::all()` and through a two-item query
-  both of whose items match it, asserting it appears once; and
-  `query_item_order_does_not_change_the_result_set` **(new)**.
+  both of whose items match it, asserting it appears once;
+  `query_item_order_does_not_change_the_result_set`;
+  `untagged_events_match_query_all` — one event with no tags at all,
+  yielded by `Query::all()`; and `query_all_matches_every_event`.
 - **Cases:** E2E-32.
-- **Retires:** `query_all_matches_every_event` — superseded by this clause's
-  `duplicate_items_do_not_duplicate_events`. The existing rule appends three
-  *untagged* events, so the fan-out a tag join without `DISTINCT` produces cannot
-  occur; it is not wrong, it is weaker than the clause it would be protecting, and
-  a clause naming it would be claiming coverage it does not have. Phase 3 rewrites
-  it rather than keeping both.
-- **Rejects:** two real implementations. A tag join without `DISTINCT`: an event
-  carrying three tags yields three rows, and nothing in the suite reads
-  `Query::all()` on a store holding a multi-tagged event, so it passes today. And
+
+**Two of those four are *hosted* here rather than entailed by the sentence
+above, and saying so is the point of saying it.** The clause's MUSTs are about
+item algebra: union across items, order-independence, yield-exactly-once.
+`untagged_events_match_query_all` and `query_all_matches_every_event` assert a
+**totality** property of `Query::all()` — that it selects every event in the
+store, including one carrying no tags — and no MUST in this document states it.
+They are here because this is the clause whose retirement would have lost them
+and because the title's "All absorbs" gestures at it; that is a placement, not a
+derivation. The consequence to be aware of is narrow and real: editing the
+algebra sentence above would put nobody on notice that these two rules'
+justification had moved. A totality clause of its own is owed, and it is an
+ADR's to write rather than an edit's, because this clause is `[FROZEN]`.
+
+**`query_all_matches_every_event` was retired here, and the retirement is
+reversed.** The paragraph in this position said the rule was superseded by
+`duplicate_items_do_not_duplicate_events`, on the reasoning that its three
+*untagged* events cannot produce the fan-out a tag join without `DISTINCT`
+gives, so it was weaker than the clause it would protect. The first half of that
+is still true and is not the question. What the disposition missed is that a
+retired rule is a rule nobody owns, and this one was doing work no other rule
+does: phase 3 rewrote its three events into **descending** types `Cee, Bee, Ay`,
+which is four characters and the difference between a rule and a decoration —
+with `A, B, C` the expected answer is simultaneously insertion order and type
+order, so `ORDER BY type, position`, which is what a covering index on
+`(type, position)` gives you, passes. `SortByEventTypeStore` is that adapter and
+`InnerJoinTagStore` is the other one; both are registered against this rule and
+nothing else in the suite rejects the first on the untagged `Query::all()` path.
+
+The lesson is ES-18's, arrived at a second time and worth stating here rather
+than only cross-referenced: **reasoning about what a rule can reject is exactly
+as unreliable as reasoning about whether an adapter is conformant.** The
+retirement was written by reading the rule; the reversal by strengthening it and
+then compiling the adapters it rejects. A reader who finds only the outcome will
+re-derive the merge.
+
+- **Rejects:** three real implementations. A tag join without `DISTINCT`: an event
+  carrying three tags yields three rows, and nothing in the suite read
+  `Query::all()` on a store holding a multi-tagged event until
+  `duplicate_items_do_not_duplicate_events` landed — `TagJoinFanOutStore` is
+  registered against it. The
+  same join written as an `INNER JOIN`, which is the other half of getting one
+  join wrong: an event with no tags has no row to join to and disappears from
+  `Query::all()` entirely, which is silent data loss on the query every
+  projection runner starts from. And
   an adapter that sorts and dedups *items* as an optimisation —
   `QueryItem::new` already sorts and dedups *types* (`query.rs:62-67`), so
-  extending it one level up is the natural next step. The fan-out projection
+  extending it one level up is the natural next step.
+
+  **That third one has no rule, and saying so is the honest answer rather than a
+  gap.** `query_item_order_does_not_change_the_result_set` cannot catch it:
+  sorting the items is precisely what makes their order stop mattering, so an
+  adapter that sorts them passes an order-invariance rule by construction. What
+  the rule does catch — and what the registry's `ItemOrderedUnionStore` is — is a
+  store whose *output* order is the item order, one statement per item unioned
+  client-side and never merge-sorted. The sorting adapter would be caught by a
+  match-*set* rule with an item whose presence changes the set, which is VT-31's
+  `query_union_is_item_concatenation` and is still owed. The fan-out projection
   runner (one read of the union query, twenty local re-filters through
   `Query::matches`, `query.rs:194-204`) rests entirely on this algebra, and
   nothing in the crate states it.
@@ -2440,7 +2700,7 @@ the SQLite adapter's multi-row insert benchmark, in the phase that builds it. A
 positive result changes the signature to take `Vec<Event>` **and** obliges the
 contract to give callers a cheap way to keep a copy for retry.]**
 
-An owning adapter must clone — `memory.rs:219-221` does. The consequence nobody
+An owning adapter must clone — `memory.rs:233-235` does. The consequence nobody
 had written down is that `Event::into_parts` (`event.rs:243-246`) is unreachable
 from any trait impl, so its doc comment, "Decomposes the event, avoiding a clone
 in adapter write paths", is **false as written**. This specification requires that
@@ -2450,13 +2710,13 @@ typed layer, which can reach it, rather than for adapters, which cannot.
 The borrow wins on three grounds. `Event`'s expensive fields are `Bytes`
 (`event.rs:185`, `:187`), so a clone bumps a refcount rather than copying the
 payload; the remaining cost is one `Box<str>` and one boxed tag slice, bounded by
-the tag count. A rejected append clones **nothing** — `memory.rs:205` returns
+the tag count. A rejected append clones **nothing** — `memory.rs:226` returns
 before the `extend` — and rejection is the routine outcome under contention. And
 `ConditionViolated` obliges the caller to keep its events across the call, so
 by-value would move the clone from the adapter's success path to the caller's
 every path.
 
-- **Rule:** `append_preserves_event_payload` (`suite.rs:417`) — the round-trip
+- **Rule:** `append_preserves_event_payload` — the round-trip
   that catches a lossy clone.
 - **Cases:** E2E-36, E2E-39.
 - **Rejects:** an adapter that loses metadata or tag order while copying into its
@@ -2472,18 +2732,94 @@ the store byte-identical.
 
 **[FROZEN]**
 
-- **Rule:** `append_is_atomic` (`suite.rs:385`),
-  `condition_rejection_leaves_store_unchanged` (`:529`).
+- **Rule:** `append_is_atomic`, `condition_rejection_leaves_store_unchanged`,
+  plus `append_is_atomic_under_a_mid_batch_fault` — failing the write of the
+  *k*-th event of a batch, and asserting the store afterwards holds all of the
+  batch or none of it, with which of the two decided by what `append` answered.
 - **Cases:** E2E-39, E2E-48, E2E-07.
 - **Rejects:** a per-row conditional `INSERT ... SELECT ... WHERE NOT EXISTS`,
-  which can write the first event of a batch and refuse the second.
+  which can write the first event of a batch and refuse the second; and
+  probe-then-insert outside a transaction, which writes the whole batch and then
+  discovers it should not have. The first needs a fault injected between two
+  rows, which is what the new rule is for. The second needs nothing injected at
+  all, which is the correction below.
+
+**`append_is_atomic` was retired here, and the retirement is reversed.** The
+paragraph that stood in this position said the rule was merged into
+`condition_rejection_leaves_store_unchanged`, on the reasoning that a rejection
+comes from the condition check, the condition check precedes any write, and so a
+rejected batch never reaches the write path and no partial write was ever
+possible. Every step of that is true of `MemoryEventStore` and none of it is true
+of the contract. **The reasoning was refuted by compiling a store.**
+
+`WriteThenCheckStore` — autocommit plus a separate probe, which is the
+non-concurrent form of the "probe-then-insert outside the transaction" shape a
+reviewer measured passing the suite — extends its log with all three events,
+*then* probes, then returns `Err`. The batch reaches the write path, the store is
+left holding a partial batch it has just told the caller it refused, and
+`append_is_atomic` is what catches it. `AfterDefaultsToFirstStore` and
+`InnerJoinTagStore` fail it too; three registry rows name it.
+
+The two rules are **complementary rather than successive**, and the distinction
+is the whole reason this paragraph is here rather than just an outcome: one
+rejects a store that writes before it decides, the other a store that cannot roll
+back what it wrote. Whoever writes
+`append_is_atomic_under_a_mid_batch_fault` must not delete the first while
+writing the second. Stage 6 wrote it and did not.
+
+**Stage 5 looked for it in the concurrency family and did not find it there.**
+That is worth recording, because the concurrency family is where the next reader
+will look too. A fault injected between two rows of a batch is **not a race**:
+the rule that needs it has one caller and no threads, and putting it among the
+racing rules would put it behind a `Send` bound it has no use for. Stage 5 gave
+the mechanism as "a decorator over a store" and stage 6 refuted that — the
+paragraph below is where it goes, and the fault turns out to be the *fixture's* —
+but the conclusion the mechanism was offered in support of is unaffected: one
+caller, no threads, wrong family. What the concurrency family *did* land is the
+adjacent half, and the two
+are easy to mistake for each other — `a_concurrent_reader_never_sees_a_partial_batch`
+rejects a store whose batch is **visible** part-written, against
+`RowAtATimeStore`, whose rows all land in the end. That is visibility. The rule
+still owed is the one where a row does **not** land and the store has to undo the
+rest, which is rollback, and it belongs with the fault instruments.
+
+Worth recording as method, because it is the phase's own thesis applied to
+itself: *reasoning about which implementations a rule can reject is exactly as
+unreliable as reasoning about whether an adapter is conformant.* The retirement
+was written by reading the rule; the reversal by writing the store. ADR-0010's
+amendment carries both, and a reader who finds only the outcome will re-derive
+the merge.
+
+**"A fault-injecting decorator over any `EventStore`" was this clause's own
+words, and there is no such thing.** It said so from stage 1 until stage 6 tried
+to build it. A decorator sits *above* `append`, which is the unit the port makes
+atomic: the only faults it can inject are before the call and after it. The one
+shape that looks like it works — append `events[..k]`, then return `Err` — is a
+decorator writing a partial batch and then asserting that the **store** should
+have undone it, which is a test of the decorator. Nothing an outside caller holds
+can reach between two rows of one transaction, and that is not an oversight in
+the port; it is the property under test.
+
+So the injection is the **fixture's**, and the rule is capability-gated on
+`Fixture::MID_BATCH_FAULT` with `arm_mid_batch_fault(after)` beside it. Every
+store that can fail one row does it differently — a trigger that raises on the
+third insert, a constraint armed for one write, a connection killed
+mid-statement — which is what makes it a capability rather than testkit
+machinery, and a store with none declines and the rule reports a skip. It is
+defaulted-declined on the trait, unlike `SECOND_HANDLE` and `REOPEN`, because an
+in-memory store has no fault to offer and demanding the answer would buy
+boilerplate rather than information. `GappedPositionStore` supplies it and rolls
+back; `NoTransactionStore` supplies it with the `BEGIN` removed and is the
+registry row.
 
 This clause is what makes the ingest decision implementable without a new seam.
 Under unconditional ingest with compensation, the receiving side appends
 `[losing_event, compensating_event]` as one batch under a guard keyed on the
 compensation's own identity — one call, `append(&[losing, superseded],
 Some(&guard))`, all-or-nothing by this clause and conformance-tested by
-`append_is_atomic`. No reader ever observes the losing event unresolved. The half
+`append_is_atomic` and by
+`append_is_atomic_under_a_mid_batch_fault`. No reader
+ever observes the losing event unresolved. The half
 of that design that needs new machinery is the identity that makes the guard
 idempotent, not the atomicity.
 
@@ -2495,7 +2831,7 @@ ascending.
 
 **[FROZEN]**
 
-- **Rule:** `append_returns_last_written_position` (`suite.rs:372`), plus
+- **Rule:** `append_returns_last_written_position`, plus
   `batch_positions_follow_slice_order` **(new)** — append a batch of three
   distinguishable events and assert their read-back order matches the slice order,
   rather than inferring it from `all.last()` as the existing rule does.
@@ -2532,15 +2868,26 @@ so reporting the violation puts a correct client into a loop that never
 terminates and attributes a code defect to contention. `NoEvents` names the actual
 fault.
 
-- **Rule:** `append_rejects_empty_batch` (`suite.rs:406`) covers only
+- **Rule:** `append_rejects_empty_batch` covers only
   `append(&[], None)`, so it cannot see the precedence.
-  `empty_batch_is_refused_before_the_condition_is_evaluated` **(new)** — seed an
+  `empty_batch_is_refused_before_the_condition_is_evaluated` — seed an
   event, then `append(&[], Some(&condition_that_matches_it))`, assert `NoEvents`.
 - **Cases:** E2E-06; PRESSURE-TEST §6 S3.
-- **Rejects:** `MemoryEventStore` as it stands. `memory.rs:197-216` evaluates the
-  condition first and returns `ConditionViolated` where `NoEvents` is the caller's
-  actual bug. A rule whose first casualty is the reference implementation is the
-  opposite of decorative.
+- **Rejects:** `MemoryEventStore` as it stood, which is the sharpest possible
+  answer to "can this rule fail anything". It evaluated the condition first and
+  returned `ConditionViolated` where `NoEvents` is the caller's actual bug. **A
+  rule whose first casualty is the reference implementation is the opposite of
+  decorative.**
+
+  D8 is fixed and it had **two** sites, which is itself the argument for the
+  rule. `MemoryEventStore` now checks emptiness first and does it *above the
+  lock*, because emptiness is a precondition on the argument and nothing behind
+  the lock can change the answer; `LocalMemoryEventStore` in the testkit's own
+  `tests/` copied the ordering deliberately and said so in a comment, and the
+  comment moved with the fix. The mutant registry's correct core copied it a
+  third time. Three implementations, one defect, and every non-empty batch made
+  them indistinguishable — which is how it survived. `ConditionBeforeEmptinessStore`
+  is the old order, kept as the mutant that fails the rule.
 
 #### ES-21 — A batch's own events are not evaluated against its own condition
 
@@ -2560,7 +2907,7 @@ in the batch being appended MUST NOT be considered.
   `ClaimPooledUnit`, `PlaceHold` and `ReserveTourAllocation` across four
   scenarios — and on any multi-event batch whose second event matches. The
   reference answer is "no" only by accident of implementation order
-  (`memory.rs:197-221` checks `stored` before extending), and no rule covers it.
+  (`memory.rs:218-230` checks `stored` before extending), and no rule covers it.
 
 #### ES-22 — Dropping an `append` future leaves no partial batch
 
@@ -2645,7 +2992,7 @@ queryable, which an identity in `metadata` is not.
 The unknown outcome of ES-23 is resolvable only if a caller can ask "did my event
 land?" without knowing a position. Today it cannot: `Event` is
 `(event_type, data, tags, metadata)` (`event.rs:183-188`) and carries no identity,
-`append` has no slot for a caller-supplied one (`store.rs:141-145`), and a query
+`append` has no slot for a caller-supplied one (`store.rs:148-152`), and a query
 matches on type and tags only (`query.rs:113-116`), so an identity in `metadata`
 is structurally unqueryable and breaks ADR-0003 at the point ADR-0003 claims to
 win.
@@ -2659,11 +3006,17 @@ win.
   limit — a rule that pins a *non*-guarantee, so that an adapter cannot quietly
   strengthen it and leave callers depending on behaviour the contract disclaims.
 - **Cases:** E2E-07, E2E-33, E2E-36.
-- **Rejects:** the metadata-key proposal in `crates/happenstance-sync/src/lib.rs:73-75`,
-  and equally the naive fix of promoting identity to a tag — maximal cardinality in
-  the column adapters are told to index, an entry in every `contains_all`
-  merge-scan (`tag.rs:231-245`), a writer-forgeable identity, and an identity
-  dimension visible to every tag-only query.
+- **Rejects:** a caller-supplied dedup key written into `Event::metadata`
+  (`event.rs:216-220`) — and equally the naive fix of promoting identity to a
+  tag: maximal cardinality in the column adapters are told to index, an entry
+  in every `contains_all` merge-scan (`tag.rs:231-245`), a writer-forgeable
+  identity, and an identity dimension visible to every tag-only query. The
+  metadata half used to point at `happenstance-sync`'s own proposal; that
+  proposal was withdrawn in favour of `(StoreId, SequencePosition)`
+  (`crates/happenstance-sync/src/identity.rs:87-101`), and what replaces it is
+  not a proposal but the shape the tree leaves open — `metadata` is the only
+  slot on `Event` that no store, query or peer is permitted to look inside,
+  which is exactly what makes it the tempting one.
 
 ---
 
@@ -2697,16 +3050,40 @@ reported as `AppendError::ConditionViolated`, never as `AppendError::Store`. A
 
 **[FROZEN]**
 
-- **Rule:** `condition_without_after_rejects_any_match` (`suite.rs:438`),
-  `condition_without_after_allows_non_match` (`:458`),
-  `condition_after_ignores_non_matching_events` (`:512`),
-  `condition_rejection_is_reported_as_condition_violated` (`:549`),
-  `condition_rejection_leaves_store_unchanged` (`:529`).
+- **Rule:** `condition_without_after_rejects_any_match`,
+  `condition_without_after_allows_non_match`,
+  `condition_after_ignores_non_matching_events`,
+  `condition_rejection_is_reported_as_condition_violated`,
+  `condition_rejection_leaves_store_unchanged`,
+  `condition_after_beyond_the_last_matching_position_admits_the_append`
+  — matching events at and below `after`, non-matching events above it,
+  asserting the append is admitted. This is the "if and only if" seen from the
+  side nothing covers, and the case the DCB specification singles out in a Note:
+  `condition_after_ignores_non_matching_events` (`:512`) reaches it only with the
+  matching set empty, so an adapter can pass every rule in the suite without ever
+  comparing a *matching* event's position against `after`.
+  Plus `racing_conditional_appends_elect_one_winner`, which is this clause's
+  sentence seen as two decisions taken from one snapshot: the second append's
+  `after` sits below an event the first one wrote and matching its own query, so
+  the rejection is compulsory and exactly one batch may land. ES-27 disposed of
+  it and the disposition is reversed there; it belongs here because what it pins
+  is the *iff*, not the tag algebra. Two of the three mutants it rejects are the
+  shapes named below.
 - **Cases:** E2E-08, E2E-55, E2E-39.
 - **Rejects:** an adapter that folds the violation into its own error type, which
   destroys the caller's only means of telling "retry the decision" from "something
   broke" without pattern-matching on strings; and an optimistic adapter that
-  inserts, then probes, then reports the violation without rolling back.
+  inserts, then probes, then reports the violation without rolling back. And an
+  adapter whose probe ANDs two uncorrelated predicates — *does any event match the
+  query* and *is the store's head above `after`* — which is what the check becomes
+  when the existence test and the position test are written as separate
+  subqueries. It is correct on every case the suite exercises, and it rejects
+  every command whose caller read to a boundary above the last event touching its
+  own entity: the steady state of a quiet entity in a busy store, reported as
+  contention. That last one is `UncorrelatedProbeStore` in the mutant registry,
+  and it is the reason the new rule exists rather than the other way round:
+  `condition_after_ignores_non_matching_events` reaches the same shape only with
+  the matching set *empty*, where the two probes agree.
 
 `ConditionViolated::conflicting_position` (`error.rs:96-104`) is informational.
 An adapter that detects the conflict without learning which event caused it — a
@@ -2744,9 +3121,9 @@ after the checkpoint, inclusively from the store's first position when
 `NeverRun` — and VT-13 fixes `next()` so the idiom is sound over gaps; it is
 named here because it is the same boundary seen from the other side.
 
-- **Rule:** `condition_after_ignores_events_at_the_boundary` (`suite.rs:477`),
-  `condition_after_rejects_events_beyond_the_boundary` (`:494`),
-  `read_from_is_inclusive` (`:262`).
+- **Rule:** `condition_after_ignores_events_at_the_boundary`,
+  `condition_after_rejects_events_beyond_the_boundary`,
+  `read_from_is_inclusive`.
 - **Cases:** E2E-56, E2E-10; PRESSURE-TEST §6 S10.
 - **Rejects:** an adapter that writes `position >= after` in its probe. It rejects
   the caller's own last-seen event, so every command on a busy boundary fails on
@@ -2762,33 +3139,58 @@ across the query.
 
 **[FROZEN]**
 
-- **Rule:** `condition_matches_on_tags` **(new)** — two events sharing a type and
+- **Rule:** `condition_matches_on_tags` — two events sharing a type and
   differing in tags, a condition tagged for one of them, asserting rejection; and
-  `condition_with_an_unheld_tag_does_not_reject` **(new)**, its mirror, asserting
+  `condition_with_an_unheld_tag_does_not_reject`, its mirror, asserting
   acceptance for a tag no event carries. CF-7 and CF-8 are the obligations to
-  have the pair. The read-side statement of the same semantics is pinned by
-  `query_item_types_are_or` (`suite.rs:83`), `query_item_tags_are_and`
-  (`:96`) and `query_item_combines_types_and_tags_with_and` (`:167`) — this
+  have the pair, and the pair is not redundant: the first rejects a probe that
+  compares serialised tags with `=` (which is why the event it names carries an
+  *extra* tag), the second a probe that drops the tag join entirely. Each of the
+  two wrong probes passes the other's rule. The read-side statement of the same
+  semantics is pinned by
+  `query_item_types_are_or`, `query_item_tags_are_and` and
+  `query_item_combines_types_and_tags_with_and` — this
   clause's content is that the *condition* path is evaluated by those same rules,
   which no existing rule checks.
 - **Cases:** E2E-55, E2E-03; PRESSURE-TEST §3.9.
-- **Retires:** `racing_conditional_appends_elect_one_winner` — its one tagged
-  condition runs against a store where a type-only probe returns an identical
-  verdict (`crates/happenstance-testkit/src/suite.rs:603-605`), so it cannot
-  observe the property this clause exists to enforce. It is also sequential and
-  single-handle, which is why ES-34 declines to name it either. Phase 3 replaces
-  it with this clause's rule and CF-7's.
+
+**`racing_conditional_appends_elect_one_winner` was retired here, and the
+retirement is reversed — the rule is retained and ES-25 claims it.** The
+paragraph in this position said the rule was replaced by this clause's rule and
+CF-7's, on the reasoning that its one tagged condition runs against a store where
+a type-only probe returns an identical verdict, so it cannot observe *this*
+clause's property, and that being sequential and single-handle it cannot observe
+ES-34's either. Both halves are still true, and neither is a reason to delete a
+rule. What the disposition confused is "this clause is not the rule's owner" with
+"no clause is": what the rule actually pins is ES-25's *if and only if* seen as
+two decisions taken from one snapshot — the second append holds a matching event
+strictly above its `after`, so it MUST be rejected, and exactly one batch may
+land. Three registry rows fail it and two of them are shapes ES-25's own
+`Rejects:` names by hand: `WriteThenCheckStore` (insert, then probe, then report
+without rolling back), `ViolationAsStoreErrorStore` (the violation folded into
+the adapter's own error type) and `AfterIsAnOffsetStore`.
+
+The lesson is ES-18's, met for the third time in one phase: a disposition written
+by reading a rule is a hypothesis, and the evidence that settles it is a compiled
+store. All three of this specification's retirements were written the same way
+and two of the three were wrong.
+
 - **Rejects:** an adapter that drops the tag join from its condition probe. This
   is the natural first cut, because the join is the expensive half and the planned
   SQLite schema puts tags in a separate table
-  (`crates/happenstance-sqlite/src/event_store.rs:47-53`). Every append-condition rule in
-  the suite builds its condition from `query_of_types` — `suite.rs:390`, `:447`,
-  `:465`, `:483`, `:501`, `:519`, `:537`, `:561` — and the one tagged condition
-  (`:603-605`) runs against a store where a type-only probe returns identical
-  verdicts. **No rule's verdict depends on the condition path matching tags
-  today.** The adapter that drops the join passes the whole suite while rejecting
-  every command that touches any tagged entity: a total-availability failure
-  certified as conformant, on the canonical DCB uniqueness shape.
+  (`crates/happenstance-sqlite/src/event_store.rs:47-53`). Until this clause's
+  rules landed, **no rule's verdict depended on the condition path matching
+  tags**: every append-condition rule built its condition from `query_of_types`,
+  with two exceptions and neither closed the gap —
+  `racing_conditional_appends_elect_one_winner` ran its tagged condition against
+  a store where a type-only probe returns identical verdicts, and
+  `two_handles_observe_each_others_appends` (CF-19) ran one where the property
+  under test is *visibility across handles* rather than matching. The adapter
+  that drops the join therefore passed the whole suite while rejecting every
+  command that touches any tagged entity: a total-availability failure certified
+  as conformant, on the canonical DCB uniqueness shape.
+  `condition_matches_on_tags` and `condition_with_an_unheld_tag_does_not_reject`
+  close it as a pair, and `TagBlindConditionStore` is the compiled adapter.
 
 #### ES-28 — Degenerate condition inputs
 
@@ -2798,14 +3200,25 @@ NOT error.
 
 **[FROZEN]**
 
-- **Rule:** `condition_against_an_empty_store_admits_the_append` **(new)** and
-  `condition_after_beyond_head_admits_the_append` **(new)**. No rule evaluates a
-  condition against an empty store today.
+- **Rule:** `condition_against_an_empty_store_admits_the_append` and
+  `condition_after_beyond_head_admits_the_append`. No rule evaluated a
+  condition against an empty store before phase 3. The *at* half of "at or beyond" needs no
+  rule of its own, and this is worth stating so nobody writes one:
+  `condition_after_ignores_events_at_the_boundary` sets
+  `after` to the position of the only event in the store, which is the head, so
+  it already runs that case. A second rule over it would be one no adapter could
+  fail — CLAUDE.md's first corollary — and the decorative rule is the one that
+  survives longest, because nothing ever goes red to draw attention to it.
 - **Cases:** E2E-56, E2E-08.
 - **Rejects:** an `EXISTS`-probe adapter whose SQL returns a NULL the code reads
   as true on an empty table, and an adapter that validates `after` against its own
   head and errors on a position it has not assigned — plausible, defensible, and
-  fatal to a peer resuming after a gap.
+  fatal to a peer resuming after a gap. Both are compiled and registered:
+  `NullAggregateProbeStore` and `AfterValidatedAgainstHeadStore`. The second is
+  the reason the anchor in the rule is `head + 1` derived from a position the
+  store assigned rather than a literal — on a store allocating in steps, *every*
+  position between two assigned ones is one it never assigned, so the case is the
+  norm rather than the edge.
 
 #### ES-29 — `after` is store-local
 
@@ -2868,15 +3281,27 @@ holds nothing. It MUST be a **required** method, not a provided one.
 
 **[FROZEN]**
 
-Required rather than provided, and the reason is ES-3 rather than taste. The only
-provided form that survives the clone into the variant needs `where Self: Sync`
-(ES-4). A single-threaded on-device store — a `RefCell` in a Durable Object, an
-`Rc`-shared cursor — is `!Sync`, and that adapter is the entire reason the bare
-flavour exists. A provided method the edge adapter cannot call is a method the
-port does not have. The cost of "required" is two impls today, one of which is
-`todo!()` (`memory.rs:147`, `crates/happenstance-sqlite/src/event_store.rs:58`), and the
-blanket impl forwards it for free (`variant.rs:194-237`), so generic code pays
-nothing.
+Required rather than provided, and the reason is ES-3 rather than taste. The
+only provided form that survives the clone into the variant needs `where Self:
+Sync` (ES-4). A single-threaded on-device store — a `RefCell` in a Durable
+Object, an `Rc`-shared cursor — is `!Sync`, and that adapter is the entire
+reason the bare flavour exists. A provided method the edge adapter cannot call
+is a method the port does not have. The cost of "required" is seven impls
+today, five of them skeletons: `memory.rs:147`,
+`crates/happenstance-testkit/tests/local_conformance.rs:181`,
+`crates/happenstance-sqlite/src/event_store.rs:195`,
+`crates/happenstance-postgres/src/event_store.rs:121`,
+`crates/happenstance-cloudflare/src/event_store.rs:146` and
+`crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
+forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
+only implementers do — two when this clause was written, seven now, and seven
+is the figure a required method has to be re-costed against. The count is of
+impls meant to be conformant. Three more exist and are excluded on that
+criterion: `BorrowHoldingStore` and `AwaitAcrossBorrowStore`, the two mutants in
+`crates/happenstance-testkit/tests/local_conformance.rs`'s `mutants` module,
+which are written to fail, and `SendStoreWithLocalError`
+(`crates/happenstance-cloudflare/src/send_shape.rs:137`), which exists to be
+rejected by a bound.
 
 `head` is deliberately **not** parameterised by a query. A narrow projection's
 problem is that it cannot advance past events it examined and did not match; the
@@ -2966,13 +3391,22 @@ ES-15 pins the algebra that runner depends on.
 
 ### 3.6 Multi-writer, re-entrancy and durability
 
-Everything in this subsection is currently unreachable, and for one shared reason:
-the conformance macro re-evaluates its factory expression once per test
-(`crates/happenstance-testkit/src/lib.rs:83-91`) and every rule calls it exactly once
-(`suite.rs:71` and identically throughout). The signature `F: Fn() -> S` already
-*permits* two handles and nothing *asks* for it, so durability, reopen and genuine
-multi-connection rules are all foreclosed by the fixture shape rather than by any
-decision. ES-33 is therefore a precondition on the other three.
+Everything in this subsection was unreachable until phase 3, and for one shared
+reason. `event_store_conformance!` hoisted its `factory =` expression behind a
+`fn __conformance_store()` that re-evaluated it on every call, and each rule
+called that function exactly once. The signature `F: Fn() -> S` *permitted* two
+handles onto one backing store and nothing *asked* for it, so durability, reopen
+and genuine multi-connection rules were foreclosed by the fixture shape rather
+than by any decision. ES-33 is therefore a precondition on the other three, and
+it is the one that has since been discharged.
+
+What replaced it is CF-15's `Fixture` trait
+(`crates/happenstance-testkit/src/contract.rs:108-207`), which names the two
+operations apart: one fixture instance is one isolated backing store, and each
+`connect()` on it returns one handle onto that store. A rule is handed
+`impl AsyncFn() -> F` — *how to make a fixture*, not a made one — so the rule
+rather than the emitter decides how many instances it needs
+(`crates/happenstance-testkit/src/registry.rs:28-59`).
 
 #### ES-33 — The fixture yields handles onto one backing store
 
@@ -2983,29 +3417,30 @@ An adapter MUST supply both.
 
 **[FROZEN]**
 
-Concretely, the current `$factory: Fn() -> S` becomes a two-level fixture — a
-value created per rule, with a `connect()` method returning an `S` — because "call
-the factory twice" and "get two handles onto one store" cannot both be true of one
-closure that also has to produce an empty store. CF-15 owns the fixture contract
-and makes it a trait rather than a closure; `connect()` is its spelling and this
-clause uses it. `MemoryEventStore` needs a
-shared-backing constructor for this (its `RwLock<Vec<SequencedEvent>>` at
-`memory.rs:72` moves behind an `Arc` that a handle clones); a file-backed adapter
-points both handles at one temporary path; a pooled adapter hands out two pool
-members.
+This was discharged at phase 3. `$factory: Fn() -> S` became a two-level fixture
+— a value created per rule, with a `connect()` returning an `S` — because "call
+the factory twice" and "get two handles onto one store" cannot both be true of
+one closure that also has to produce an empty store. CF-15 owns the fixture
+contract and made it a trait; `connect()` is its spelling and this clause uses
+it. `MemoryEventStore` needed no change in the end: `MemoryFixture` holds it
+behind an `Arc` and `MemoryHandle` is the clone, which is the same move one level
+out. A file-backed adapter points both handles at one temporary path; a pooled
+adapter hands out two pool members. Both remain unwritten, which is why §6.5
+records this axis as having a fixture instrument and no adapter one.
 
 - **Rule:** this is a conformance obligation on the testkit rather than on an
-  adapter's behaviour; it is the enabling condition for the **(new)** rules
-  `two_handles_share_one_consistency_boundary`,
-  `head_advances_across_two_handles` and `acknowledged_writes_survive_a_reopen`,
-  and it is stated as a clause because the suite cannot grow any of those three
-  until it lands.
+  adapter's behaviour; it is the enabling condition for
+  `two_handles_observe_each_others_appends` and
+  `acknowledged_writes_survive_a_reopen`, both of which landed at phase 3 stage
+  2, and for `head_advances_across_two_handles` **(new)**, which is still owed
+  because `head()` itself is. It is stated as a clause because the suite could
+  not grow any of the three until it landed.
 - **Cases:** E2E-08, E2E-46; PRESSURE-TEST §6 S6.
 - **Rejects:** an adapter whose "second handle" is a clone of the first that
   shares one connection and one cache — which is how a pooled adapter would
   accidentally satisfy the letter of the fixture while defeating every rule built
   on it. The fixture's own documentation must require independent handles, and
-  `two_handles_share_one_consistency_boundary` is what detects the cheat.
+  `two_handles_observe_each_others_appends` is what detects the cheat.
 
 #### ES-34 — Two handles share one consistency boundary
 
@@ -3014,18 +3449,27 @@ through another handle onto the same backing store.
 
 **[FROZEN]**
 
-- **Rule:** `two_handles_share_one_consistency_boundary` **(new)** — handle *A*
+The clause names the boundary and the rule names the observation, and that is the
+right way round. `two_handles_share_one_consistency_boundary` was this clause's
+own first spelling and CF-16's was the other; CF-16's wins, because an implementer
+checks a rule against what it *does*, and what this one does is append through one
+handle and see the append through a second. A shared boundary is the property; two
+handles observing each other's appends is the evidence for it.
+
+- **Rule:** `two_handles_observe_each_others_appends` — handle *A*
   appends an event matching a condition, handle *B* appends under that condition
   with `after` set before *A*'s write, asserting `ConditionViolated`.
 - **Cases:** E2E-08.
-- **Rejects:** three adapters that pass all twenty-seven rules today. A cached
+- **Rejects:** three adapters that passed all twenty-seven rules the suite had
+  before CF-19 landed, and that `CachedHeadFixture` in the testkit's own `tests/`
+  now models for the first of them. A cached
   `max(position)` fast path — a strategy the ledger explicitly defers rather than
   rules out (`RUNBOOK.md:64`). A per-connection repeatable-read snapshot, where
   the probe is correct only within its own session. An advisory lock scoped to a
   single pool member. All three are correct single-handle and wrong for any
   deployment where one store is reached two ways, which is every deployment with a
   connection pool.
-  `racing_conditional_appends_elect_one_winner` (`suite.rs:596-638`) does not
+  `racing_conditional_appends_elect_one_winner` does not
   reach them: it is sequential *and* single-handle.
 
 #### ES-35 — Acknowledged writes survive a reopen, where durability is claimed
@@ -3035,13 +3479,13 @@ readable after the backing store is closed and reopened. Durability is a declare
 capability: an adapter that does not claim it MUST document that it does not, and
 MUST NOT be presented as an event store of record.
 
-**[PROVISIONAL — axis: **durability**, whose far end is unbuilt and, until CF-17 changes the fixture, is not even expressible: `conformance_test!` re-evaluates the factory per test (`crates/happenstance-testkit/src/lib.rs:83-91`), so no rule can hold a store across a reopen. Nothing in the workspace can currently fail a store that returns `Ok` from `append` and loses the write. Falsified by the first file-backed adapter, or sooner by the fixture that lets the question be asked.]**
+**[PROVISIONAL — axis: **durability**. The question became expressible at CF-17: `Fixture::REOPEN` and `acknowledged_writes_survive_a_reopen` exist, and `DurableFixture` in the testkit's own `tests/` supplies the capability, so a store that returns `Ok` from `append` and loses the write now fails a named rule rather than passing everything. What is still unbuilt is the *adapter* far end — a real store that can lose a write under a real fault, rather than one instructed to. Falsified by the first file-backed adapter.]**
 
 Opt-in rather than universal, because `MemoryEventStore` must keep passing and is
 by construction not durable (`memory.rs:14-33`). A capability that the reference
 implementation cannot have is a capability the base suite cannot require.
 
-- **Rule:** `acknowledged_writes_survive_a_reopen` **(new)**, using ES-33's
+- **Rule:** `acknowledged_writes_survive_a_reopen`, using ES-33's
   fixture to close every handle and reopen the backing store. It is
   capability-gated by CF-18's mechanism — an associated `const` on the fixture
   plus a non-empty reason string — and **not** by a second macro an adapter may
@@ -3053,8 +3497,16 @@ implementation cannot have is a capability the base suite cannot require.
 - **Rejects:** an adapter that acknowledges before the write is durable — rusqlite
   with `synchronous = OFF`, a Durable Object handler that returns before
   `storage.put` resolves, a Postgres adapter with `synchronous_commit = off`.
-  Nothing in the workspace can currently express the question, let alone fail it:
-  this is the axis with nothing at either end.
+  Nothing in the workspace could express the question until CF-17: the rule, the
+  `REOPEN` capability and `DurableFixture` landed together, and `LosingFixture`
+  in the mutant registry is a store that returns `Ok` from `append` and loses the
+  write, failing a named rule rather than passing everything. What is still
+  missing is the *adapter* end, and it is missing in a specific way worth stating
+  rather than generalising: no fixture in that binary has a medium outside the
+  process, so `LosingFixture` **models** acknowledge-before-commit and does not
+  test it — a store that survives `reopen` there has survived a pointer swap.
+  The axis has an instrument at one end and nothing at the other, which is what
+  the marker above says and this paragraph used to contradict.
 
 #### ES-36 — Two `append` futures on one `&self` interleave safely
 
@@ -3064,17 +3516,80 @@ MUST succeed and the other MUST return `ConditionViolated`. Neither MUST panic.
 
 **[FROZEN]**
 
-- **Rule:** `interleaved_appends_on_one_handle_elect_one_winner` **(new)** — a
-  `tokio::join!` of two `append` futures on a `current_thread` runtime, which
-  needs no `Send` bound and so runs on both flavours.
+- **Rule:** `interleaved_appends_on_one_handle_elect_one_winner` — two `append`
+  futures created from one handle, each polled once before either is allowed to
+  finish, then drained — and
+  `a_live_read_stream_does_not_block_an_append`, the read/write
+  pairing of the same property: build a `read` stream, do not drain it, append
+  through the same handle, and require the append to complete. ES-11's
+  stability rule performs exactly that choreography and asserts what the stream
+  *yields*; against a store that cannot be re-entered it never reaches its
+  assertion, and a hung test reports a timeout rather than a violation. This
+  rule is what separates "the store cannot answer the question" from "the store
+  answers it wrongly".
+
+  This clause was drafted naming `tokio::join!` on a `current_thread` runtime,
+  which is what the two tests it was drafted from used —
+  `tests/local_conformance.rs`'s `reentrancy` module, now deleted, since a rule
+  in the suite runs against that store under all four of its harnesses. The
+  spelling changed and the choreography did not: the suite must run under an
+  emitter that has **no runtime at all** (`block_on`), so a rule needing `tokio`
+  would be a rule one shipped harness could not carry. Hand-polling reaches the
+  same state — both futures exist, each has been entered, neither has finished.
+  The rule also declines to say *which* of the two wins, and counts instead;
+  fixing the winner would be asserting a scheduling order the contract does not
+  give.
 - **Cases:** E2E-09.
 - **Rejects:** a `RefCell`-backed adapter that holds its borrow across an awaited
-  storage call, which panics at runtime; and, more subtly, one that drops the
+  storage call, which panics at runtime — `AwaitAcrossBorrowStore` in the mutant
+  registry; and, more subtly, one that drops the
   borrow around the await and therefore leaves an unspecified window between the
-  condition probe and the write, which the winner assertion catches. This is the
+  condition probe and the write, which the winner assertion catches —
+  `PreCommitPositionStore`, which is registered against this rule as well as
+  against ES-10's, because the window is one defect seen twice. This is the
   rule a Durable Object adapter would actually fail, and `MemoryEventStore` cannot
-  surface it: `memory.rs:184-224` holds no lock across a suspension point because
-  it has no suspension point.
+  surface it: `memory.rs` holds no lock across a suspension point because
+  it has no suspension point. The same borrow taken by a *lazily streaming* read
+  is what the second rule catches — a rusqlite adapter yielding rows from a live
+  statement, or an `Rc`-shared cursor, each holding the handle for as long as the
+  caller holds the stream; `BorrowHoldingStore` is that shape.
+  `MemoryEventStore` survives it only by filtering,
+  ordering and truncating under the read lock and streaming from the resulting
+  `Vec`, so its stream holds nothing at all.
+
+  **One asymmetry belongs in the clause rather than only in the registry.** For a
+  `RefCell` store the failure is a panic; for a pooled SQL adapter holding one
+  connection the identical defect is a **deadlock**. It is the only entry in the
+  workspace's instrument catalogue where a real adapter hangs where the mutant
+  falls over, and a hung conformance run names no rule at all. CF-33 forbids a
+  clock inside a rule, so the suite cannot convert the hang into a message; what
+  it can do is make the two cases distinguishable when the store *does* answer,
+  which is what the second rule is for.
+
+**A third obligation is enforced by a rule and stated by no clause, including
+this one, and it is recorded here rather than left to be discovered by an
+adapter that hangs.** ES-10's
+`nothing_below_an_observed_position_appears_later` drives a full `read` to
+completion at four points where one or both of its `append` futures are pinned,
+entered and unfinished — so it requires that **a `read` issued while an `append`
+on the same handle is suspended must complete**. This clause states the
+append-versus-append direction; `a_live_read_stream_does_not_block_an_append`
+states the read-then-append direction. Neither states this one.
+
+The hazard is the same asymmetry one step worse. An adapter holding an exclusive
+resource across its append's suspension point — one pooled connection, a
+`futures::lock::Mutex`, a Durable Object storage transaction — has its `read`
+block on what the suspended `append` still holds, and the suspended future cannot
+be re-polled because the rule is blocked inside the read on the same stack. The
+executor parks and never wakes. There is no watchdog by design (CF-33), so this
+is a hung CI job naming no rule, and it is *harder* to diagnose than the pooled
+case above because the thing that hangs is the read rather than the append.
+
+Whether this becomes a fourth sentence here or a clause of its own is deferred:
+this one is `[FROZEN]`, so it is an ADR's decision and not an edit's, and the
+rule's own doc comment carries the warning in the meantime. What is not deferred
+is the record that a rule introduced a MUST and no clause ratified it — which is
+§7.4's failure mode seen from the other end.
 
 ---
 
@@ -3084,9 +3599,9 @@ A store that holds only a suffix, or a scattered subset, of its own log is
 indistinguishable from a complete one at every seam an ingest path or a runner can
 see. Four scenarios reached this from different doors: a pruned device slice, a
 regulated purge, a compacted peer, and a crypto-shred. The contract does not
-assert completeness anywhere — `query_all_matches_every_event` (`suite.rs:70-80`)
+assert completeness anywhere — `query_all_matches_every_event`
 is store-relative by wording and therefore accidentally correct — so a pruned
-store passes all twenty-seven rules unchanged. That is not the gap. The gap is
+store passes every rule unchanged. That is not the gap. The gap is
 that nothing can *ask*.
 
 #### ES-37 — `EventStore` is closed over insertion
@@ -3195,33 +3710,51 @@ closure, and the desktop projection materialised a row for it in four seconds.
 
 ### 3.8 New conformance rules this section requires
 
-The rules specified above do not exist yet. They fall into five groups by what
+The rules specified above do not exist yet. They fall into six groups by what
 they need, and the ordering matters because three of the groups are blocked on
-fixtures rather than on effort. The compile-level checks that live in
-`happenstance-core`'s own `tests/` rather than in the suite —
-`send_flavour_stream_is_send_in_generic_code` (ES-2),
+fixtures rather than on effort. The checks that live in `happenstance-core`'s own
+tests rather than in the suite — `send_flavour_stream_is_send_in_generic_code`
+and `spawns_from_generic` (both ES-2, and it takes both),
 `provided_method_future_is_send_in_generic_code` (ES-3, ES-4) and
 `error_bound_is_identical_on_both_flavours` (ES-5) — are not counted here,
 because CF-22's enumeration covers the suite and not the contract crate's tests.
 
-**Writable against the suite as it stands (single handle, one store):**
-`read_from_a_gap_position`, `read_result_is_stable_under_concurrent_append`,
+**Writable against the suite as it stands (single handle, one store).** Fourteen
+of them were written at phase 3 stage 4 and are struck: ~~`reading_an_empty_store_yields_nothing`~~,
+~~`a_live_read_stream_does_not_block_an_append`~~,
+~~`read_limit_applies_after_filtering`~~,
+~~`read_backwards_limit_applies_after_filtering`~~,
+~~`duplicate_items_do_not_duplicate_events`~~, ~~`untagged_events_match_query_all`~~,
+~~`query_item_order_does_not_change_the_result_set`~~,
+~~`empty_batch_is_refused_before_the_condition_is_evaluated`~~,
+~~`condition_matches_on_tags`~~,
+~~`condition_with_an_unheld_tag_does_not_reject`~~,
+~~`condition_against_an_empty_store_admits_the_append`~~,
+~~`condition_after_beyond_head_admits_the_append`~~,
+~~`condition_after_beyond_the_last_matching_position_admits_the_append`~~,
+~~`interleaved_appends_on_one_handle_elect_one_winner`~~. What remains:
+`read_from_a_gap_position`,
+`read_result_is_stable_under_concurrent_append`,
 `limit_applies_across_items_not_per_item`,
-`duplicate_items_do_not_duplicate_events`,
-`query_item_order_does_not_change_the_result_set`,
 `batch_positions_follow_slice_order`,
-`empty_batch_is_refused_before_the_condition_is_evaluated`,
 `batch_is_not_evaluated_against_its_own_condition`,
-`dropped_append_future_leaves_no_partial_batch`, `condition_matches_on_tags`,
-`condition_with_an_unheld_tag_does_not_reject`,
-`condition_against_an_empty_store_admits_the_append`,
-`condition_after_beyond_head_admits_the_append`,
+`dropped_append_future_leaves_no_partial_batch`,
 `head_of_an_empty_store_is_none`, `head_is_the_highest_visible_position`,
-`interleaved_appends_on_one_handle_elect_one_winner`, `read_to_is_inclusive`,
+`read_to_is_inclusive`,
 `read_from_and_to_bound_a_closed_window`,
 `read_to_under_backwards_bounds_the_older_end`.
 
-**Blocked on ES-33's fixture:** `two_handles_share_one_consistency_boundary`,
+The struck names are kept struck rather than deleted because the *grouping* is
+the claim this subsection makes — which rules need a fixture and which need only
+effort — and a group that empties silently leaves no evidence the claim was ever
+tested. Fourteen of them needed only effort, which is the first confirmation the
+grouping has had.
+
+One entry moved between groups rather than being discharged.
+`read_from_composes_with_multi_item_query` was never listed here at all — it is
+CF-12's and §6.2 carried it — and it belonged in this group throughout.
+
+**Blocked on ES-33's fixture:** `two_handles_observe_each_others_appends`,
 `head_advances_across_two_handles`, `acknowledged_writes_survive_a_reopen`.
 
 **Blocked on the completeness instrument (CF-27):**
@@ -3231,26 +3764,52 @@ a store that holds only a scattered subset of its own log, and CF-27 owns buildi
 it.
 
 **Blocked on a hostile fixture in the testkit's own `tests/`:**
-`nothing_below_an_observed_position_appears_later` (the name VT-12 and CF-13 also
-use),
-`query_items_share_one_snapshot`. Both ship with the store that can fail them or
-they do not ship at all — a rule that has never failed anything is what CLAUDE.md
-forbids, and both of these would otherwise pass on every adapter in the workspace
-on the day they were written.
+`query_items_share_one_snapshot`. It ships with the store that can fail it or it
+does not ship at all — a rule that has never failed anything is what CLAUDE.md
+forbids, and it would otherwise pass on every adapter in the workspace on the day
+it was written.
 
-**Blocked on a decision:** `store_error_crosses_a_join_handle`
-(ES-6), `reissued_batch_after_a_dropped_future_lands_once` (ES-24),
-`a_store_reports_the_history_it_does_not_hold` (ES-39),
+`nothing_below_an_observed_position_appears_later` (the name VT-12 and CF-13 also
+use) was the second entry here and is no longer blocked: its hostile store is
+`PreCommitPositionStore`, the rule is in `suite.rs`, and CF-13's `[DEFERRED]`
+marker came off with it. It is left named here rather than deleted because the
+paragraph's point is the *policy* — the rule and the store that fails it land
+together — and one discharged example is the only evidence that the policy is
+survivable.
+
+**Blocked on machinery the suite does not have yet:**
+`store_error_crosses_a_join_handle` (ES-6) needs the opt-in rule group whose
+bound is ADR-0009's marker trait; the decision it waited on is taken, and what is
+left is the group.
+
+`append_is_atomic_under_a_mid_batch_fault` (ES-18) stood here until stage 6 and
+is now written. The machinery it needed turned out **not** to be the
+fault-injecting decorator this paragraph asked for — a decorator sits above
+`append`, which is the unit the port makes atomic, so it can inject a fault
+before the call or after it and nowhere in between. It is a *fixture* capability,
+`MID_BATCH_FAULT`, and ES-18 carries the argument. Recorded rather than deleted,
+because "the suite does not have the machinery" was the right diagnosis and the
+machinery named was the wrong one, and the next entry in this group deserves the
+same scepticism.
+
+**Blocked on a decision:** `reissued_batch_after_a_dropped_future_lands_once`
+(ES-24), `a_store_reports_the_history_it_does_not_hold` (ES-39),
 `wire_condition_with_after_is_refused` (ES-29 and SY-6, and it lives in a crate
 that does not exist).
 
 Two existing rules are demoted rather than deleted. `positions_are_unique` and
-`positions_are_strictly_monotonic` (`suite.rs:336-365`) both read back through
+`positions_are_strictly_monotonic` both read back through
 `read`, which every adapter returns in position order, so both are vacuous for any
 sorted read path; the rules that actually pin cross-batch ordering are the
-append-condition rules and ES-19's new one. And `memory.rs:328-340`'s
-`read_stream_is_send` is replaced by ES-2's generic version, because the one on
-disk passes by auto-trait leakage on a concrete type and cannot fail.
+append-condition rules and ES-19's new one. A third demotion has already landed
+rather than being scheduled: `read_stream_is_send` no longer exists in
+`crates/happenstance-core/src/memory.rs`. It asserted `Send` on a *concrete*
+stream and passed by auto-trait leakage whatever the trait said, and the pair
+named above replaced it —
+`send_flavour_stream_is_send_in_generic_code`
+(`crates/happenstance-core/src/memory.rs:364-391`), which writes the bound at the
+definition, and `spawns_from_generic` (`:393-453`), which is what rejects the
+`async fn read` refactor the first one cannot see.
 
 ---
 
@@ -3273,19 +3832,38 @@ reading a stronger claim than this section makes.
 
 Four facts frame everything below.
 
-**The port has zero implementers.** `grep -rn "ProjectionStore for" --include=*.rs`
-returns nothing across the workspace; `crates/happenstance-sqlite/src/projection_store.rs:28`
-is `pub struct SqliteProjectionStore {}` and
-`crates/happenstance-ladybug/src/lib.rs:46` is an error enum with one
-`Unimplemented` variant. Every claim the module documentation makes about
-transactions is a claim about code that has never been written.
+**The port has five implementers and not one adapter.** `grep -rn
+"ProjectionStore for"` matches `SqliteProjectionStore`
+(`crates/happenstance-sqlite/src/projection_store.rs:208`),
+`PostgresProjectionStore`
+(`crates/happenstance-postgres/src/projection_store.rs:94`),
+`LadybugProjectionStore`
+(`crates/happenstance-ladybug/src/projection_store.rs:258`),
+`LiveHandleProjectionStore`
+(`crates/happenstance-ladybug/src/live_handle.rs:174`) and
+`NeonProjectionStore<T>`
+(`crates/happenstance-neon/src/projection_store.rs:153`). All five are phase-2
+skeletons, and none has run a suite because none exists. What changed is the
+*kind* of ignorance rather than its amount: the signatures have now been
+disagreed with by a type checker, and every claim the module documentation
+makes about transactions is still a claim about behaviour nothing has executed.
 
-**The one attempt to write one hits `error[E0195]`.** Spelling the impl with the
-concrete batch type — `async fn commit(&self, _batch: MyBatch<'_>, …)` — fails
-against `projection.rs:109-114`; only the literal `Self::Batch<'_>` compiles
-(compiled and reproduced, `docs/evaluation/PRESSURE-TEST.md` §3.5). Nothing in
-the crate says so and there is no impl to copy. That, not the missing `apply`
-seam, is the strongest available explanation for why the port has no adapters.
+**`error[E0195]` is real, reproduced twice, and explains nothing about the
+absence.** Spelling the impl with the concrete batch type — `async fn
+commit(&self, _batch: MyBatch<'_>, …)` — fails against `projection.rs:109-114`;
+only the literal `Self::Batch<'_>` compiles, and phase 2 hit it independently
+from both ends (`crates/happenstance-sqlite/src/projection_store.rs:215-224`,
+`crates/happenstance-ladybug/src/live_handle.rs:68-83`). It is a tax every
+implementer pays, not a barrier: five impls were written straight through it.
+The strongest available explanation for why none of them is an adapter is the
+next fact down — there is nothing for one to pass. Two findings phase 2 *did*
+produce are stronger arguments against the GAT than E0195 ever was, and both
+belong to PS-5: a store carrying a lifetime **ICEs** rustc 1.97.1 rather than
+diagnosing the region error
+(`crates/happenstance-ladybug/src/live_handle.rs:38-66`), and any store generic
+over a type parameter is forced to `'static` by the GAT whether or not its
+batch borrows anything
+(`crates/happenstance-neon/src/projection_store.rs:140-152`).
 
 **The conformance suite cannot observe a read model.** `type Batch<'a>`
 (`projection.rs:80-83`) carries no trait bounds, so generic code holding a
@@ -3306,8 +3884,8 @@ the signal this section is built on.
 
 Clauses in this section are `PS-n` and are numbered only within it. Conformance
 rules named below are **all new** — `crates/happenstance-testkit/src/suite.rs`
-contains 27 rules and every one of them binds `S: EventStore` (`suite.rs:70`
-onward). There is no projection rule to reuse.
+contains 55 rules, every one of them written against the `EventStore` port by
+way of `Fixture::Store: EventStore`. There is no projection rule to reuse.
 
 The shape the clauses add up to, given once so the rest reads as commentary on
 it rather than as a puzzle:
@@ -3784,8 +4362,8 @@ error, which is strictly better.]`
 begin on the first, commit on the second, assert `ForeignBatch` and assert both
 stores unchanged. This rule does **not** need CF-16's second handle: it wants two
 *isolated* stores, which is exactly what CF-15's fixture instances already are,
-and what `conformance_test!`'s per-test re-evaluation of `$factory`
-(`crates/happenstance-testkit/src/lib.rs:83-91`) already produces.
+and what two `open()` calls on the `impl AsyncFn() -> F` every rule is handed
+already produce (`crates/happenstance-testkit/src/registry.rs:45-49`).
 **Cases:** E2E-19.
 **Rejects:** every adapter that can be written today, all of which corrupt
 silently. The implementation is one word: `begin` stamps the batch with an
@@ -4195,34 +4773,53 @@ belongs in the same phase as the freeze rather than after it.
 ### 4.10 Derivation and the two flavours
 
 `projection.rs:70` carries `#[trait_variant::make(SendProjectionStore: Send)]` —
-the identical construction to `store.rs:91` — and appears in **no ADR at all**.
-ADR-0001 argues the scheme for `EventStore` and never mentions this port. That
-is the gap this subsection closes; the *value* of the bound is section 3's and
-is not re-decided here.
+the identical construction to `store.rs:92`. ADR-0001 argued the scheme for
+`EventStore` alone and never mentioned this port, so until phase 2 the attribute
+appeared in no ADR at all: two ports with one construction between them and one
+ADR covering half of it. That gap is what this subsection was written to close,
+and [ADR-0008](../adr/0008-one-derivation-for-both-ports.md) closed it by taking
+both ports together. What the subsection holds open now is the *joint*-ness, not
+the omission. The *value* of the bound is section 3's and is not re-decided here.
 
-**PS-35 — The derivation decision MUST cover both ports in one ADR. `EventStore`
-and `ProjectionStore` MUST NOT be given different flavour schemes.**
-`[DEFERRED — settled by the derivation ADR, the next free number after 0007;
-PRESSURE-TEST §3.6 records that both prior documents allocate 0007 to it and
-that 0007 is already accepted on disk for the runner split. The experiment is
-one skeleton per adapter shape declaring its real future and stream types with
-`todo!()` bodies, which is the only way to learn whether any real adapter
-produces a `!Sync` future. Owned by the derivation phase (revised-runway phase
-1).]`
+**PS-35 — The derivation decision MUST cover both ports in one ADR.
+`EventStore` and `ProjectionStore` MUST NOT be given different flavour
+schemes.**
+`[FROZEN]`
+The experiment this clause was held open for — one skeleton per adapter shape,
+declaring its real future and stream types with `todo!()` bodies, which is the
+only way to learn whether any real adapter produces a `!Sync` future — ran at
+phase 2, and both halves of the demand are now discharged in documents that hold
+both ports at once. [ADR-0008](../adr/0008-one-derivation-for-both-ports.md)
+takes the derivation scheme for `EventStore` and `ProjectionStore` together and
+records where their consequences diverge;
+[ADR-0009](../adr/0009-error-send-sync.md) does the same for the `Error` bound
+(ES-6), and there the consequences do not diverge at all.
 **Rule:** none at adapter level; the ADR is the artefact.
 **Cases:** E2E-30, E2E-52, E2E-53.
-**Rejects:** settling `EventStore`'s bounds and leaving `projection.rs:70`
-undiscussed, which is the present state and which produces a workspace where two
-ports with identical constructions have one ADR between them. An application
-holding a `!Send` projection store and a `Send` event store is not exotic —
-Norvant's rusqlite and Ladybug batches sit beside Postgres ones — so the two
-decisions compose at every call site and must be taken together.
+**Rejects:** settling `EventStore`'s bounds and leaving
+`projection.rs:70` undiscussed — which was the state of the workspace when this
+clause was written, two ports with identical constructions and one ADR between
+them, and which ADR-0008 ended by arguing the scheme for both at once. What the
+clause forbids from here is the same split arriving later: a change that gives
+the two ports different flavour schemes, or that revisits one port's derivation
+in an ADR which does not say what happens to the other. An application holding a
+`!Send` projection store and a `Send` event store is not exotic — Norvant's
+rusqlite and Ladybug batches sit beside Postgres ones — so the two decisions
+compose at every call site and must be taken together.
 
 **PS-36 — The `Send` flavour transitively requires `Batch: Send`, and the port
 MUST document it rather than leaving it to be discovered.**
 `[FROZEN]`
-**Rule:** a `compile_fail` doctest showing the diagnostic, which is documentation
-that CI checks.
+**Rule:** none that gates, and the reason is a finding rather than an omission.
+The `compile_fail` doctest this clause first named cannot be pinned as specified:
+the diagnostic carries no error code at all — `--message-format=json` reports
+`code: None` — and rustdoc on stable 1.97.1 *silently ignores* a
+`compile_fail,E0308` annotation, passing a doctest annotated with a code the
+diagnostic demonstrably does not have. So the annotation asserts nothing and the
+bare `compile_fail` passes on any compile error, a typo in the example included.
+The doctest is worth keeping as documentation; it is not a gate. Pinning the
+diagnostic needs a `trybuild`-style stderr snapshot, which is a dependency
+decision phase 6 owns (ADR-0008:234-240).
 **Cases:** E2E-30.
 **Rejects:** the assumption that runner topology is a free choice. `Batch`
 appears in `commit`'s and `rollback`'s parameter lists, so on
@@ -4336,25 +4933,39 @@ two candidates are both plausible enough to name.
 
 ## 5. The `SyncPeer` port
 
-Nothing in `happenstance-sync` is a trait. The crate is a module doc comment and
-a one-variant error enum (`crates/happenstance-sync/src/lib.rs:103-112`), and its
-own prose ends by admitting as much: *"None of this is settled"* (`:98-99`). This
-section is what settles it.
+`happenstance-sync` is now a phase-2 sketch rather than an empty crate: two
+ports in two flavours each — `SyncPeer`/`SendSyncPeer`
+(`crates/happenstance-sync/src/peer.rs:81-82`) and
+`IngestStore`/`SendIngestStore`
+(`crates/happenstance-sync/src/ingest.rs:88-89`) — a `memory` reference peer, a
+three-variant `SyncError` (`peer.rs:393`), and two stand-in peers in the
+crate's own `tests/` chosen to be as unlike each other as the deployment
+allows. The prose that used to end *"None of this is settled"* was replaced by
+a per-question ledger (`crates/happenstance-sync/src/lib.rs:96-122`) recording
+which of the six questions the sketch answered and which it left alone. None of
+it is the protocol; it was built to be falsified by a type checker. This
+section is still what settles the shape, and what changed is that several of
+its clauses now have something in the tree to disagree with.
 
-It is written before the code exists, and the clauses that depend on measurement
-rather than on argument are consequently `[DEFERRED]` against the phase that
-builds the port against two real peers — five of the thirty-five, with a further
-nine `[PROVISIONAL]`. The rest are frozen, because the shape does not wait on the
-transport. They are written anyway, and the reason is recorded in the decision
-ledger:
-`docs/RUNBOOK.md:80` says deferring the sync port **"leaks `EventId` and a tail
-seam back into `EventStore`"**. That is a claim about coupling, and the pressure
-test confirms it survives — `PRESSURE-TEST.md:288-290` faults the revised runway
-for dropping exactly that warning while resting two of its largest deferrals on
-the coupling being absent. A deferral you have not written down is not a
-deferral; it is a decision the next pass makes by accident, in the crate that can
-least afford it. So the port's shape is specified here, and the *experiments* are
-deferred — not the shape.
+It was written before that code existed, and the clauses that depend on
+measurement rather than on argument are consequently `[DEFERRED]` against the
+phase that builds the port against two real peers — five of the thirty-five,
+with a further nine `[PROVISIONAL]`. The rest are frozen, because the shape
+does not wait on the transport. They are written anyway, and the reason is
+recorded in the decision ledger: `docs/RUNBOOK.md:409-410` says deferring the
+sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
+claim about coupling, and phase 2 compiled it rather than arguing it: `impl
+IngestStore for MemoryEventStore` — local trait, foreign type — compiles with
+`happenstance-core` untouched, so the *trait* seam is discharged by coherence
+and `append` keeps its signature. The **value-type** seam is not:
+`SequencedEvent` has nowhere to hold an `EventId` it has accepted, so the body
+is `todo!()` and would be `todo!()` with unlimited time
+(`crates/happenstance-sync/src/ingest.rs:14-50`). The leak is smaller than the
+warning claimed and real, and it is a claim about a struct's fields rather than
+a port's signature — which is the cheaper of the two to land, and is VT-5's. A
+deferral you have not written down is not a deferral; it is a decision the next
+pass makes by accident, in the crate that can least afford it. So the port's
+shape is specified here, and the *experiments* are deferred — not the shape.
 
 Three inputs bound this section and are not re-opened in it:
 
@@ -4397,8 +5008,9 @@ predicate over local state does to a replicated set.
 **Kestrel Cold Chain's argument is not the opposite of it.** Cold Chain needs the
 hub to *notice* a conflict and do something about it, and what it does is
 `append(&[losing_event, PartClaimSuperseded], Some(&guard))` — one call,
-all-or-nothing by `store.rs:130-133`, conformance-tested by `append_is_atomic`
-(`suite.rs:385-403`). That is an **append**. It adds a fact; it refuses nothing;
+all-or-nothing by `store.rs:131-134`, conformance-tested by `append_is_atomic`
+and by `append_is_atomic_under_a_mid_batch_fault`. That is an
+**append**. It adds a fact; it refuses nothing;
 it deletes nothing. Both events land at the receiver and both are forwarded
 onward like any other. Convergence is untouched. What Cold Chain calls
 "re-checking" is a domain decision *about* facts already accepted, running after
@@ -4430,14 +5042,20 @@ accept a conflicting fact under byte-identical position-free conditions; assert
 both facts are present in both logs after a full exchange.
 Cases: E2E-33, E2E-39, E2E-42, E2E-45, E2E-47.
 
-*Rejects:* the implementation `crates/happenstance-sync/src/lib.rs:78-83` names
-first — "whether ingest re-checks conditions". Concretely: an ingest that calls
-`append(events, Some(&origin_condition))` and routes `AppendError::ConditionViolated`
-into a rejection path. It is the natural first cut, because
-`AppendCondition` arrives on the wire already (`append.rs:117-123`) and the
-receiving store's `append` will happily take it. It passes every event-store
-conformance rule, because it is one correct `append` call. It produces a peer set
-that never converges, and nothing in the workspace today can observe that.
+*Rejects:* an ingest that calls `append(events, Some(&origin_condition))` and
+routes `AppendError::ConditionViolated` into a rejection path. The crate has
+since taken the opposite position in prose — the origin's condition travels
+as **evidence, not as an instruction**
+(`crates/happenstance-sync/src/peer.rs:230-235`) — and that makes this
+rejection more necessary rather than less, because prose is not a type
+constraint: `EventGroup::guard` is a **public** `Option<AppendCondition>` field
+on the wire type (`peer.rs:236-243`), so a receiver is handed exactly the value
+it would need to re-evaluate, and whether it may use it for anything at all is
+the crate's own stated open question. It is the natural first cut, because the
+condition arrives on the wire already (`append.rs:117-123`) and the receiving
+store's `append` will happily take it. It passes every event-store conformance
+rule, because it is one correct `append` call. It produces a peer set that
+never converges, and nothing in the workspace today can observe that.
 
 ---
 
@@ -4450,10 +5068,15 @@ The losing event and its compensation are one batch:
 observe a state in which the log holds the losing event with nothing resolving
 it.
 
+The store-side half of that guarantee is ES-18's, and phase 3 changes which rule
+carries it. The rule that can actually reach a partly-written batch is the one
+that injects a fault mid-append; a condition violation rejects before anything is
+written, so it can never produce the state this clause's reader must not observe.
+ES-18 owns the replacement and disposes of what it replaces.
+
 `[FROZEN]`
 Rule: `compensation_is_atomic_with_the_losing_event` (new,
-`happenstance-sync-testkit`), riding on the existing `append_is_atomic`
-(`suite.rs:385-403`) for the store-side half.
+`happenstance-sync-testkit`), riding for its store-side half on ES-18.
 Cases: E2E-39.
 
 *Rejects:* compensate-after-commit — ingest the losing event, return, then have a
@@ -4563,17 +5186,22 @@ rather than as a named constructor in the contract crate. What the clause does
 asserted nothing" and "I forgot to assert"; that remains a typed-layer concern,
 and no clause in this specification claims it.
 
-*Rejects:* the receiver that re-evaluates the origin's condition verbatim, which
-is what Kestrel Cold Chain's D5 specified and what `crates/happenstance-sync/src/lib.rs:78-83` frames as
-one of two options. Two independent defects, either fatal:
+*Rejects:* the receiver that re-evaluates the origin's condition verbatim,
+which is what Kestrel Cold Chain's D5 specified and what the wire type still
+permits: the origin's condition is a **public** field on `EventGroup`
+(`crates/happenstance-sync/src/peer.rs:236-243`). The crate's own prose now
+rules it out — "evidence, not an instruction" (`peer.rs:230-235`) — and rules
+it out on the first of the two defects below, but a doc comment does not stop
+an implementer and the crate says so, calling what a receiver may do with the
+guard its central open question. Two independent defects, either fatal:
 
-- `after` is a `SequencePosition`, meaningful only inside the store that assigned
-  it (`crates/happenstance-sync/src/lib.rs:87-92`), and it serialises as a naked integer
-  (`append.rs:117-123`). `is_violated_by` compares raw position values
-  (`append.rs:95-107`), so `after: 288455` interpreted in the receiver's
-  numbering names an unrelated recent event and the check runs over an arbitrary
-  tail and passes **vacuously**. That is worse than no check, because it looks
-  like enforcement.
+- `after` is a `SequencePosition`, meaningful only inside the store that
+  assigned it (`crates/happenstance-sync/src/lib.rs:90-94`), and it serialises
+  as a naked integer (`append.rs:117-123`). `is_violated_by` compares raw
+  position values (`append.rs:95-107`), so `after: 288455` interpreted in the
+  receiver's numbering names an unrelated recent event and the check runs over
+  an arbitrary tail and passes **vacuously**. That is worse than no check,
+  because it looks like enforcement.
 - Even with `after: None`, re-evaluation is not idempotent. On first delivery the
   receiver accepts and writes; on re-delivery the same condition now matches the
   receiver's own copy, returns `ConditionViolated`, and the receiver adjudicates
@@ -4721,16 +5349,27 @@ Rule: `dedupe_reaches_identity_without_decoding` (new,
 are not valid UTF-8 and not valid in any codec; a conformant peer dedupes anyway.
 Cases: E2E-33, E2E-34, E2E-36.
 
-*Rejects:* the sync crate's own current proposal. `crates/happenstance-sync/src/lib.rs:73-75` suggests "a
-UUIDv7 or a content hash in the event's **metadata**". Metadata is opaque
-`Bytes` (`event.rs:187`, `:239`) and `QueryItem::matches` filters on type and
-tags only (`query.rs:113-116`), so the identity a peer is instructed to carry is
-structurally unreachable from anything the port exposes. A peer that must parse
-opaque bytes to dedupe has broken ADR-0003 at the exact point ADR-0003 claims to
-win — and ADR-0003's own lift condition is *"`happenstance-sync` round-trips an
-event between two stores without deserialising its payload"*
-(`docs/adr/0003-opaque-payloads.md:14-15`). The metadata proposal fails the ADR's
-own test.
+*Rejects:* a peer that carries the identity in `Event::metadata`. Metadata is
+opaque `Bytes` (`event.rs:187`, `:239`) and `QueryItem::matches` filters on
+type and tags only (`query.rs:113-116`), so the identity a peer is instructed
+to carry is structurally unreachable from anything the port exposes. A peer
+that must parse opaque bytes to dedupe has broken ADR-0003 at the exact point
+ADR-0003 claims to win — and ADR-0003's own lift condition is
+*"`happenstance-sync` round-trips an event between two stores without
+deserialising its payload"* (`docs/adr/0003-opaque-payloads.md:14-15`). A
+metadata-borne identity fails the ADR's own test.
+
+The exemplar was the sync crate's own proposal and it was withdrawn: the crate
+now mints `(StoreId, SequencePosition)`
+(`crates/happenstance-sync/src/identity.rs:87-101`) and carries it on
+`ReplicatedEvent`, reachable without touching a payload byte, which is what
+this clause requires. The rejection keeps a live target anyway, and phase 2
+sharpened rather than removed it — `impl IngestStore for MemoryEventStore`
+cannot be written truthfully because `SequencedEvent` has nowhere to hold an
+accepted `EventId` and nowhere to read one back for `holds`
+(`crates/happenstance-sync/src/ingest.rs:38-50`). Until VT-5's identity lands
+on `SequencedEvent`, `metadata` is the only place an adapter author has left,
+and this clause is what stands between them and it.
 
 It also rejects the naïve fix, which is why this clause names `EventId` rather
 than "some queryable identity". Promoting identity to a `Tag` makes it queryable
@@ -4823,11 +5462,19 @@ scale, which is a deployment fact rather than a port defect.
 
 ### 5.4 The transport floor
 
-`crates/happenstance-sync/src/lib.rs:91-96` calls this "the constraint most likely to be discovered
-late". It is promoted from a footnote to a normative constraint on the port's
-shape, because a port that a Neon peer cannot implement is a port shaped like a
-Durable Object — and the workspace has already convicted itself of exactly that
-error once, at the level of the projection store.
+`crates/happenstance-sync/src/lib.rs:115-122` calls this the constraint the
+sketch "bites hardest on", and settles `SyncPeer::pull` on a bounded batch and
+an owned resume token rather than a stream because of it. It stays a normative
+constraint on the port's shape rather than an adapter's choice, and phase 2
+supplied the reason the port cannot carry it alone: **the type checker did not
+force the decision.** The cursor shape was pointed at both peers and compiled
+against both — the one-shot HTTP peer satisfies `impl Stream` by buffering a
+whole response into a `Vec` and replaying it, which is legal, `Send`, and a lie
+(`crates/happenstance-sync/src/peer.rs:43-50`, kept compiling as
+`crates/happenstance-sync/tests/cursor_shape_probe.rs`). A port that a Neon
+peer cannot implement is a port shaped like a Durable Object; a port a Neon
+peer can *pretend* to implement is worse, and only a fixture that counts its
+own round trips tells them apart.
 
 ---
 
@@ -4912,14 +5559,23 @@ the two peer adapters.]`
 Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`).
 Cases: E2E-35.
 
-*Rejects:* the current situation, which is that there is nowhere to declare a
-capability at all — `crates/happenstance-sync/src/lib.rs:103-112` is the entire crate. The contract
-bounds the two fields no engine struggles with, `MAX_EVENT_TYPE_LEN` and
-`MAX_TAG_LEN`, both 255 (`event.rs:14`, `tag.rs:14`), and leaves `Event::data`
-unbounded. So an event that is durable at its origin can be structurally
-unrepresentable at a peer, and the incompatibility is discovered at ingest —
-after the write has already committed somewhere else, which is the one moment at
-which nothing useful can be done about it.
+*Rejects:* the asynchronous form of the declaration, which is the shape a peer
+with one round trip per operation invites. The sketch has already built what
+this clause asks for — `SyncPeer::limits()` is **not** `async`
+(`crates/happenstance-sync/src/peer.rs:150-158`) and returns a `PeerLimits`
+carrying `max_event_bytes`, `max_batch_bytes`, `max_batch_events` and a
+`retention_floor` (`peer.rs:282-302`) — on the reasoning that a runner made to
+await a round trip to learn a size cap will skip the check, and a limit nobody
+checks is a limit discovered at ingest. What the sketch cannot do is show the
+declaration *prevents* the failure rather than relocating it:
+`PeerLimits::admits` is explicitly advisory (`peer.rs:319-324`), so the
+deferral below is untouched by the type existing. The contract bounds the two
+fields no engine struggles with, `MAX_EVENT_TYPE_LEN` and `MAX_TAG_LEN`, both
+255 (`event.rs:14`, `tag.rs:14`), and leaves `Event::data` unbounded. So an
+event that is durable at its origin can be structurally unrepresentable at a
+peer, and the incompatibility is discovered at ingest — after the write has
+already committed somewhere else, which is the one moment at which nothing
+useful can be done about it.
 
 Section 2 supplies two of the three things this clause needs and stops short of
 the third. VT-21 gives every store a **floor** it must accept
@@ -4982,10 +5638,14 @@ addition, not because anything checked, and this clause is what turns that from
 luck into a property.
 
 This is the clause that makes convergence **checkable rather than hoped for**.
-`crates/happenstance-sync/src/lib.rs:84-86` states the premise — merging two independently-ordered logs
-means accepting that a replicated event's local position differs from its origin
-position — and stops there. What it does not say is that the acceptance has a
-price, and that the price is paid by every fold downstream.
+The premise is now stated where an implementer meets it — `EventId::position`
+is documented as the origin's position and "*not where it landed here*", local
+position being arrival order and unrelated
+(`crates/happenstance-sync/src/identity.rs:116-119`) — and the merge rule that
+would reconcile the two is explicitly untouched, with the crate warning that
+nothing in it should be read as choosing one (`lib.rs:110-111`). What neither
+says is that the acceptance has a price, and that the price is paid by every
+fold downstream. This clause is where it is charged.
 
 ---
 
@@ -5111,7 +5771,7 @@ The catalogue contains one clean statement of the problem: `e2`'s author had see
 `e1`, and nothing anywhere records that. `Event` has four fields — type, data,
 tags, metadata (`event.rs:183-188`) — and none of them is a parent. The
 `AppendCondition` that encoded what the author had looked at is taken as a
-parameter, evaluated, and dropped (`store.rs:141-145`); it is not persisted by
+parameter, evaluated, and dropped (`store.rs:148-152`); it is not persisted by
 anything, anywhere.
 
 ---
@@ -5241,7 +5901,7 @@ Cases: E2E-35, E2E-39.
 
 *Rejects:* the flat wire format, which is what a first implementation produces
 and which hides a real fact about cost and atomicity. `EventStore::append` takes
-exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:141-145`),
+exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:148-152`),
 so a 39-event push carrying seven independently-decided groups is seven appends
 with nothing spanning them, and a crash mid-ingest leaves the receiver holding
 four of seven. That is **correct DCB** — the boundary is the query, not the batch
@@ -5503,9 +6163,9 @@ rather than by discipline.
 **`Push` holds `SequencedEvent`, not `Event`.** The `EventId` must travel (SY-12)
 and `Event` has no field for it (`event.rs:183-188`). This is the clause that
 makes `EventId`'s placement on `SequencedEvent` load-bearing outside the store —
-and it is the concrete form of `RUNBOOK.md:80`'s warning that deferring this port
-leaks `EventId` back into `EventStore`. The leak is real, it is here, and naming
-it is cheaper than discovering it.
+and it is the concrete form of `docs/RUNBOOK.md:409-410`'s warning that
+deferring this port leaks `EventId` back into `EventStore`. The leak is real, it
+is here, and naming it is cheaper than discovering it.
 
 ---
 
@@ -5531,10 +6191,20 @@ Recorded so that silence is never mistaken for agreement.
   of it.
 - **The projection port's apply seam.** SY-31 depends on it; section 4 owns it and
   PS-9 decides it against a universal write vocabulary.
-- **`Error: Send + Sync` on either flavour.** Ranked first by blast radius in
-  `PRESSURE-TEST.md:481-492` and open on evidence. It reaches this port through
-  `type Error` in the sketch above and is settled for the whole workspace at once
-  or not at all.
+- **`Error: Send + Sync` on either flavour.** Settled, and recorded here because
+  it reaches this port through `type Error` in the sketch above rather than
+  through anything section 5 decided. It was ranked first by blast radius in
+  `PRESSURE-TEST.md:481-492` and held open on evidence until phase 2 built an
+  instrument that could fail the bound; ES-6 is now `[FROZEN]` and
+  [ADR-0009](../adr/0009-error-send-sync.md) keeps
+  `core::error::Error + 'static` on both ports and both flavours, putting the
+  stronger property in a marker trait that generic code asks for. That answer was
+  taken for the whole workspace at once, `SyncPeer` included, which is why this
+  section neither adds to it nor may diverge from it. What is still open is
+  narrower and is not section 5's: whether `happenstance-core` ships the marker
+  itself, and under what name — a surface question deferred to phase 4 with the
+  capability question already answered
+  (`docs/adr/0009-error-send-sync.md:210-213`).
 
 ---
 
@@ -5543,13 +6213,23 @@ Recorded so that silence is never mistaken for agreement.
 The suite is the project's claim to exist. `happenstance-testkit`'s own module
 documentation says an adapter "is not considered to exist until it invokes
 `event_store_conformance!` and passes"
-(`crates/happenstance-testkit/src/lib.rs:1-6`), and CLAUDE.md repeats it as the
+(`crates/happenstance-testkit/src/lib.rs:12-13`), and CLAUDE.md repeats it as the
 rule that matters. Everything downstream of that sentence — every adapter, every
 freeze, the whole "storage agnostic" claim — is worth exactly what the suite
 measures.
 
-Measured, it is worth less than it says. Twenty-seven rules
-(`lib.rs:93-129`), and a store that ignores tags entirely when evaluating an
+Measured at the start of phase 3, it was worth less than it says. The
+measurement is of *that* tree, `b4b593d`, line numbers included — which is why
+those numbers do not resolve against the working copy and are not meant to. That
+covers the rest of this paragraph as well as §6.1 and §6.2 below: the sentence
+naming the scope and the first measurement it scopes are two clauses of the same
+thought, and a reader who takes "§6.1 and §6.2 below" literally is left with
+eight citations that look current and are not. §6.3 onward is written in the
+present tense, and where CF-15 – CF-21 have since changed what the measurement
+describes, the clause says so in place. Twenty-seven rules,
+enumerated then as now in exactly one place
+(`crates/happenstance-testkit/src/registry.rs:98-140`), and a store that ignores
+tags entirely when evaluating an
 append condition passes all of them; a store that assigns positions outside its
 transaction passes all of them; a store that returns `Ok` from `append` and loses
 the write on restart passes all of them, because nothing in the workspace can
@@ -5573,33 +6253,115 @@ conformance rule, and the clause says which.
 
 ### 6.1 The suite's own proof obligation
 
-CLAUDE.md's corollary — *a rule that no adapter can fail is decorative* — is
-currently enforced by intention. The testkit's `tests/` holds two files:
-`memory_conformance.rs`, which runs the suite against the reference store, and
-`properties.rs`, which proptests the contract's value types. Neither can fail a
-rule. There is no wrong implementation anywhere in the workspace, so the standing
-rule has never been checked against a single rule it governs.
+CLAUDE.md's corollary — *a rule that no adapter can fail is decorative* — was
+still enforced by a reviewer at `b4b593d`, but phase 2 had closed the half of the
+gap that was about evidence. The testkit's `tests/` held five files, and
+`local_conformance.rs` carried a `mutants` module with two deliberately wrong
+stores: `BorrowHoldingStore`, whose `read` returned a stream that keeps the
+`RefCell` borrow alive, and `AwaitAcrossBorrowStore`, whose `append` held the
+exclusive borrow across an `.await`. Both type-checked, both were wrong in a way
+an adapter author would plausibly be wrong, and both panicked when driven.
+
+What was missing is everything between them and the rule set. Each was driven by
+a bespoke `#[should_panic(expected = "already borrowed")]` test rather than by
+the suite, so no rule was named, no rule was *shown* to reject them, and adding a
+rule with no wrong implementation behind it still cost nothing. CF-2's rejected
+shape was therefore already on disk — hand-written per-mutant tests standing in
+for a registry — which is a better argument for this section than the absence it
+used to make, because the thing being forbidden could be read rather than
+imagined.
+
+**Both are now registry rows**, and the two halves landed in the order this
+section prescribes rather than in the order that would have been convenient: the
+`#[should_panic]` drivers survived stage 3, when the registry was built, because
+`mutant_registry_is_exhaustive` rejects a mutant whose `fails` list is empty and
+against the rules that existed then that list *was* empty. They moved at stage 4
+with ES-36's two rules, in the same change, and `tests/local_conformance.rs`'s
+`mutants` and `reentrancy` modules are both gone. Deleting the drivers earlier to
+satisfy CF-2's shape would have deleted the evidence and kept nothing.
 
 The fix is to make the mutant a first-class artefact of the suite, registered as
 data, and to let a meta-test rather than a reviewer decide whether the obligation
 was met.
 
+The **six** meta-tests — CF-1 through CF-5, and CF-18, which needed the same
+machinery and is the clause the fixture contract left owing one — live in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`, outside the event-store
+suite and outside CF-22's enumeration of it, because they take the rule set as
+their *input* and a rule that enumerated them would be enumerating itself.
+`cargo xtask spec-trace` reads only `suite.rs`, so it neither resolves their names
+nor reports them as orphans, and §7.2 renders them in the clause's own words
+rather than marking them `†`. This is the convention §1.4 already states for the
+`WF` clauses' wire tests, applied to the second family that needed it.
+
+A **seventh and an eighth** joined them at stage 5 and neither is one of these
+six: `the_model_rule_rejects_exactly_what_it_claims` and
+`the_concurrency_rules_reject_exactly_what_they_claim` both belong to CF-22,
+which is where they are described. They share this file because they share the
+wrong stores, not because they share the obligation — the eighth drives a second
+table, `RACERS`, because every store in it fails no rule of the event-store
+family and `mutant_registry_is_exhaustive` rejects a row with an empty `fails`
+list.
+
+That exemption leaves the file itself unguarded by the checker, so the gate names
+it instead: `cargo xtask proof-artefact` asserts **all eight** names out of
+`cargo test -- --list` before running them. Naming the target alone was not
+enough — `cargo test` exits 0 on `running 0 tests`, so a file truncated to its
+attributes passed the step that its deletion failed. The list is
+`xtask/src/proof.rs`'s `META_TESTS`, and it is a *subset* check so that a ninth
+meta-test needs no gate edit; the seventh and eighth are in it anyway, because
+this section and CF-22 cite them by name and the list is what notices when a
+cited name moves.
+
+**Since measured, 2026-08-07.** The registry landed and this section's opening
+measurement is of the tree before it. Three things it describes have moved, and
+they are recorded here rather than by editing the measurement, so the argument
+keeps its provenance:
+
+* The testkit's `tests/` holds seven files, not five: `fixture_instruments.rs`
+  arrived with the fixture contract and `mutation_coverage.rs` with the registry.
+* `fixture_instruments.rs`'s hand-written `#[should_panic]` drivers — CF-2's
+  rejected shape, cited above as being already on disk — were **deleted**. Its
+  two wrong fixtures are now registered rows driven through every rule.
+* `local_conformance.rs`'s two remained under `#[should_panic]` through stage 3,
+  deliberately and with the argument written beside them: `BorrowHoldingStore`
+  and `AwaitAcrossBorrowStore` failed no rule the suite had, because no rule held
+  a read stream open across an append, and `mutant_registry_is_exhaustive`
+  rejects a mutant with an empty `fails` list. **They moved at stage 4**, with
+  ES-36's two rules, in the same change — which is the ordering CF-1 forces
+  rather than one anybody chose. That file's `mutants` and `reentrancy` modules
+  are both gone.
+
 **CF-1.** Every conformance rule MUST be paired with at least one *mutant store*
 in `happenstance-testkit`'s own `tests/`, which fails that rule. A rule
 introduced without one is a defect in the suite and MUST NOT be merged.
 `[FROZEN]`
-Rule: `mutation_coverage::every_rule_has_a_mutant` (new meta-test).
+Rule: `mutation_coverage::every_rule_has_a_mutant` — a meta-test in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`.
 Cases: all contract-level cases; the obligation is stated at E2E-CASES.md:8-15.
 Rejects: `positions_are_unique` and `positions_are_strictly_monotonic`
-(`suite.rs:336-365`) as they stand. Both read a quiescent store back through
-`read`, which every adapter returns in position order, so both are satisfied by
-sorting on the way out. No store in the workspace can fail either, and neither
-has ever been paired with one that could.
+(`suite.rs:336-365` in `b4b593d`) as they stood. Both read a quiescent store back
+through `read`, which every adapter returns in position order, so both were
+satisfied by sorting on the way out, and neither had ever been paired with a store
+that could fail them.
+
+*Resolved at stage 3, 2026-08-07, and the resolution is what the clause is for.*
+Both now have one: `SharedBatchPositionStore` binds a single position for a whole
+multi-event batch — `INSERT … VALUES (?1,…), (?1,…)`, correct when `?1` is
+`nextval()` and wrong the moment the value is precomputed in Rust — so the batch
+comes back with duplicate, non-increasing positions that no sort can repair. It is
+declared against both rules and `mutants_fail_exactly_their_declared_rules`
+passes. Two things this clause claims are therefore now demonstrated rather than
+argued: that these two rules were decorative as written, and that writing the
+wrong implementation is what settles the question. Note also what the mutant
+needed — a **multi-event batch**; every other rule in the suite appends one event
+at a time, which is why the defect was invisible.
 
 **CF-2.** Mutants MUST be registered as data — a `const` table naming, per
 mutant, the exact set of rules it fails — and MUST NOT be exercised only by
 hand-written per-mutant tests. `[FROZEN]`
-Rule: `mutation_coverage::mutant_registry_is_exhaustive` (new meta-test).
+Rule: `mutation_coverage::mutant_registry_is_exhaustive` — a meta-test in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`.
 Cases: all contract-level cases.
 Rejects: the natural cheap version — a `tests/wrong_stores.rs` that invokes
 `event_store_conformance!` against each mutant with `#[should_panic]`. That
@@ -5609,8 +6371,8 @@ proof. The registry exists so the meta-test can assert the *set*, not the count.
 
 **CF-3.** The meta-test MUST assert both directions: every registered mutant
 fails every rule it declares, **and** passes every rule it does not. `[FROZEN]`
-Rule: `mutation_coverage::mutants_fail_exactly_their_declared_rules` (new
-meta-test).
+Rule: `mutation_coverage::mutants_fail_exactly_their_declared_rules` — a
+meta-test in `crates/happenstance-testkit/tests/mutation_coverage.rs`.
 Cases: all contract-level cases.
 Rejects: a mutant that is broken in more ways than it claims — the commonest way
 a mutant set decays. A store that drops tags from its condition probe *and*
@@ -5620,7 +6382,8 @@ scalpel.
 
 **CF-4.** Every mutant MUST carry a non-empty provenance string naming the real
 adapter shape or scenario that makes it plausible. `[FROZEN]`
-Rule: `mutation_coverage::every_mutant_states_its_provenance` (new meta-test).
+Rule: `mutation_coverage::every_mutant_states_its_provenance` — a meta-test in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`.
 Cases: E2E-01, E2E-08, E2E-32, E2E-55.
 Rejects: the saboteur — `struct AlwaysWrong; impl EventStore for AlwaysWrong { … }`
 — which satisfies CF-1 mechanically and proves nothing, because no author would
@@ -5632,7 +6395,8 @@ session, evaluating each `QueryItem` as its own statement.
 **CF-5.** The testkit MUST also hold at least one *conformant variant* — a store
 that is legally different from `MemoryEventStore` and MUST pass every rule.
 `[FROZEN]`
-Rule: `mutation_coverage::conformant_variants_pass_everything` (new meta-test).
+Rule: `mutation_coverage::conformant_variants_pass_everything` — a meta-test in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`.
 Cases: E2E-10.
 Rejects: an over-specified rule. The specification permits gaps, and a store
 assigning positions in steps of seven, or starting at 4,096, is conformant; a
@@ -5643,7 +6407,15 @@ catch over-specification, and nothing in the workspace catches it today.
 **CF-6.** No rule may assert on a literal sequence-position value. Every position
 assertion MUST be anchored on a value the store under test assigned. `[FROZEN]`
 Rule: `mutation_coverage::conformant_variants_pass_everything` (CF-5's gapped
-variant is the enforcement).
+variant is the enforcement), plus a `cargo xtask ci` lint step over the three
+files rules live in — `suite.rs`, `model.rs` and `concurrency.rs` — rejecting an
+integer-list literal outside index position and a `SequencePosition` built from a
+literal. The variant is the check and the lint is the cheap second line, in that
+order: the variant refutes a rule *behaviourally*, and a reader who takes the
+grep for the enforcement will eventually delete the store that does the work. The
+lint found nothing on its first run, which is what four phases of the convention
+being honoured by hand looks like; what it buys is that the next violation fails
+naming the rule rather than the mutant.
 Cases: E2E-10.
 Rejects: `assert_eq!(positions_of(&found), [1, 2, 3])`. The suite honours this
 today — `query_item_combines_types_and_tags_with_and` compares against
@@ -5668,7 +6440,7 @@ the checks those semantics have been going without.
 **CF-7.** At least one rule MUST demonstrate that an append condition's verdict
 depends on **tags**: two stored events sharing a type and differing in tags, a
 condition tagged to match one of them, asserting `ConditionViolated`. `[FROZEN]`
-Rule: `condition_matches_on_tags` (new; ES-27 specifies it and names it, and this
+Rule: `condition_matches_on_tags` (ES-27 specifies it and names it, and this
 clause is the obligation to have it).
 Cases: E2E-55, E2E-56; scenario S3 in PRESSURE-TEST.md:590-596.
 Rejects: an adapter that drops the tag join from its condition probe and keeps it
@@ -5677,17 +6449,33 @@ only in `read`. Every condition call site in the suite builds its query from
 `racing_conditional_appends_elect_one_winner` at `suite.rs:603-605` — runs
 against a store holding one untagged `CourseDefined` (`:600`) and one tagged
 `StudentSubscribed` (`:607`), so a type-only probe returns the identical verdict
-at `:612` and `:621`. The tag join is the expensive half and lives in a separate
+at `:612` and `:621`. CF-19 has since added a second tagged condition —
+`two_handles_observe_each_others_appends` — and it does not close this gap: it
+asks whether a committed append is *visible* across handles, and returns the
+same verdict whether or not the probe joins on tags. The residual gap is
+unchanged and is exactly what this clause names. The tag join is the expensive
+half and lives in a separate
 table in the planned SQLite adapter
 (`crates/happenstance-sqlite/src/event_store.rs:47-53`), which makes dropping it the
 natural first cut. Such an adapter rejects every command touching any course, and
 passes all twenty-seven rules while doing it: a total-availability failure
 certified as conformant, on the canonical DCB uniqueness shape.
 
+**Discharged at phase 3 stage 4**, and the rule is narrower than the clause's own
+sentence in one respect worth recording. The clause asks for two events sharing a
+type and differing in tags; the rule adds that the one the condition names
+carries an **extra** tag it does not, because without that the exact-match probe
+— tags serialised to one column and compared with `=` — returns the correct
+verdict and the rule catches only CF-8's defect. `ExactTagMatchConditionStore` is
+the mutant, and it is `ExactTagMatchReadStore`'s sibling one code path over: the
+pairing is CF-9's own argument, that the read path and the probe are different
+code.
+
 **CF-8.** At least one rule MUST demonstrate the mirror: a condition carrying a
 tag no stored event carries MUST NOT reject the append, even when a stored event
 matches the condition's types. `[FROZEN]`
-Rule: `condition_ignores_events_whose_tags_differ` (new).
+Rule: `condition_with_an_unheld_tag_does_not_reject` (ES-27 names it as
+CF-7's mirror, and this clause is the obligation to have it).
 Cases: E2E-55, E2E-56.
 Rejects: the over-rejecting adapter — one that treats a condition's tags as
 advisory and rejects on type alone. CF-7 alone catches only the fail-open
@@ -5695,10 +6483,16 @@ direction; an adapter tuned to be "safe" by ignoring tags in the narrowing
 direction is equally non-conformant and equally invisible today. The two clauses
 are a pair and neither is sufficient.
 
+**Discharged at phase 3 stage 4.** `TagBlindConditionStore` is the mutant, and it
+passes CF-7's rule — a type-only probe finds the superset event and rejects,
+correctly, by accident — which is the mechanical demonstration that the pair is a
+pair.
+
 **CF-9.** At least one rule MUST read `Query::all()` against a store holding an
 event carrying several tags, and assert each event is yielded exactly once.
 `[FROZEN]`
-Rule: `query_all_yields_each_event_once` (new).
+Rule: `duplicate_items_do_not_duplicate_events` (ES-15 specifies it and
+names it, and this clause is the obligation to have its `Query::all()` half).
 Cases: E2E-32.
 Rejects: an adapter whose tag storage is a row-per-tag side table joined without
 `DISTINCT`. `query_all_matches_every_event` (`suite.rs:70-80`) appends three
@@ -5707,9 +6501,18 @@ untagged events, so the fan-out cannot occur; `query_item_tags_match_supersets`
 query, which an adapter may satisfy with a different code path. The duplicate is
 invisible in both.
 
+**Discharged at phase 3 stage 4.** `TagJoinFanOutStore` models the fan-out only
+where **no item constrains tags**, which is the faithful version rather than a
+weakened one: the tag-AND path has to be written as `GROUP BY … HAVING COUNT(*) =
+n` or "all of these tags" is wrong, and that grouping collapses the duplicates
+for free. So the defect lives exactly on `Query::all()` — the query every
+projection runner starts from, and the query every other rule in the suite reads
+over untagged events.
+
 **CF-10.** At least one rule MUST evaluate an append condition against an
 **empty** store and assert the append succeeds. `[FROZEN]`
-Rule: `condition_against_empty_store_allows_append` (new).
+Rule: `condition_against_an_empty_store_admits_the_append` (ES-28
+specifies it and names it).
 Cases: E2E-47 (adjacent; a condition over history a store does not hold).
 Rejects: an adapter whose condition probe is a correlated subquery or a
 `MIN`/`MAX` aggregate that returns `NULL` on an empty table and then compares
@@ -5721,10 +6524,15 @@ store first (`suite.rs:442`, `:460`, `:481`, `:498`, `:516`, `:533`, `:556`,
 case directly; it comes from PRESSURE-TEST.md:352-356, and the traceability
 obligation CF-37 requires the catalogue to gain one.
 
+**Discharged at phase 3 stage 4**, with `NullAggregateProbeStore` as the nesting
+that rejects. The rule asserts only that the append is admitted, deliberately: a
+read-back afterwards would import another mutant's defect into a rule whose
+subject is the probe.
+
 **CF-11.** At least one rule MUST exercise the empty batch against a **non-null**
 condition, and assert the precedence ES-20 fixes: `AppendError::NoEvents`, with
 the emptiness check preceding the condition check. `[FROZEN]`
-Rule: `empty_batch_is_refused_before_the_condition_is_evaluated` (new; ES-20
+Rule: `empty_batch_is_refused_before_the_condition_is_evaluated` (ES-20
 specifies it and names it).
 Cases: E2E-06 (adjacent; the batch's own events against its own condition).
 Rejects: `MemoryEventStore` as it stands, which is the sharpest possible answer
@@ -5742,9 +6550,19 @@ Section 2 does not own it — the empty-batch/condition precedence is an `append
 semantic and §3 owns `append` — and ES-20 settles it `[FROZEN]`. The rule's
 assertion is therefore writable now.
 
+**Discharged at phase 3 stage 4, and D8 is fixed at both of its sites.**
+`MemoryEventStore` now checks emptiness *above the lock*, because emptiness is a
+precondition on the argument and nothing behind the lock can change the answer;
+`LocalMemoryEventStore` in the testkit's own `tests/` copied the old ordering
+deliberately and said so in a comment, and the comment moved with the fix. The
+mutant registry's own correct core copied it a third time. Three implementations,
+one defect, indistinguishable on every non-empty batch — which is how it
+survived, and is the argument for the rule rather than against it.
+`ConditionBeforeEmptinessStore` is the old order, retained as the mutant.
+
 **CF-12.** At least one rule MUST compose `ReadOptions::from` with a
 **multi-item** query. `[FROZEN]`
-Rule: `read_from_composes_with_multi_item_query` (new).
+Rule: `read_from_composes_with_multi_item_query`.
 Cases: E2E-10; scenario S7 in PRESSURE-TEST.md:620-624.
 Rejects: an adapter generating `WHERE a OR b AND position >= ?` without
 parentheses — the textbook operator-precedence bug, which silently returns every
@@ -5759,123 +6577,243 @@ clause requires `from` × multi-item because that is where the generated SQL is
 most likely to be wrong; `backwards` and `limit` against a filtering query
 SHOULD be covered in the same rule.
 
+**Discharged at phase 3 stage 4, and the SHOULD was taken.** All three options are
+exercised against the same two-item query in the one rule, because the measured
+finding is *one* gap — no read option against a filtering query at all — and three
+rules would have suggested three. `UnparenthesisedPredicateStore` is the mutant
+the clause names, and it is a scalpel: with a single item there is nothing for the
+`OR` to bind wrongly across, so it is invisible to every read-option rule the
+suite had. Four other mutants fail the rule as well, which is what a rule
+exercising three options against a filtering query should do — `LimitBeforeFilterStore`,
+`ItemOrderedUnionStore`, `FetchOneExtraStore` and `BackwardsIgnoredStore` each on
+their own axis.
+
 **CF-13.** A rule MUST assert the visibility invariant — that once a reader has
 observed position *P*, no event at a position at or below *P* becomes visible
-afterwards — and it MUST be accompanied by a fixture that fails it.
-`[DEFERRED — the experiment is a deterministic hostile fixture in the testkit's
-own tests/: a store that withholds one append's row until a second,
-later-positioned append has committed, driven from a single-threaded harness.
-Owned by the instrument-portfolio pass, the same pass that builds
-`happenstance-postgres` as an instrument. If the fixture cannot be made
-deterministic without a `Send + Sync` sub-trait to bind parallel rules on, that
-sub-trait becomes the deliverable instead, and this clause is re-derived against
-it.]`
-Rule: `positions_are_visible_in_assignment_order` (new).
+afterwards — and it MUST be accompanied by a fixture that fails it. `[FROZEN]`
+Rule: `nothing_below_an_observed_position_appears_later` (ES-10 specifies it and
+names it, and this clause is the obligation to have it).
 Cases: E2E-01, E2E-02.
 Rejects: a Postgres adapter allocating positions with `nextval()` outside the
 transaction. Both existing position rules read a quiescent store after a single
-sequential writer (`suite.rs:336-365`), so they measure assignment and say
+sequential writer (`suite.rs:336-365` in `b4b593d`), so they measure assignment
+and say
 nothing about visibility — the property Wattline's nineteen-millisecond window
 breaks and the property `AppendCondition::after` is sound only under. Shipping
-this rule without the fixture violates CF-1: it would be a rule that has never
-failed anything, which is precisely what E2E-CASES.md:1555-1561 warns against.
+this rule without the fixture would violate CF-1: it would be a rule that has
+never failed anything, which is precisely what E2E-CASES.md:1555-1561 warns
+against.
+
+**The experiment this clause deferred has been run, and it is why the marker
+moved.** It was drafted `[DEFERRED]` against a deterministic hostile fixture in
+the testkit's own `tests/` — a store that withholds one append's row until a
+second, later-positioned append has committed, driven from a single-threaded
+harness — with a reserve deliverable named in the same breath: *if the fixture
+cannot be made deterministic without a `Send + Sync` sub-trait to bind parallel
+rules on, that sub-trait becomes the deliverable instead.* It could, and the
+sub-trait was **not** needed. Recording that is the point of writing the reserve
+option down in the first place.
+
+What made it deterministic is that nothing is scheduled. Two `append` futures are
+created from one handle and neither is polled by being created, because an
+`async fn` body runs nothing until its first `poll`. The rule then polls them by
+hand, one at a time, and reads after every step. There is no executor, no thread,
+no `Send` bound anywhere, and — CF-33 — no clock: a wall-clock deadline inside a
+conformance rule is a flake inside a conformance rule.
+
+The **order** is A, B, B, A, and it is the half a reimplementation will get wrong.
+Both writers take their positions, and then the writer that started *second* is
+resumed first. Plain alternation is not a substitute and this was measured rather
+than argued: under A, B, A, B the hostile store commits in allocation order, no
+reader can tell it from a correct one, and
+`mutants_fail_exactly_their_declared_rules` reports the rule as passing the store
+it exists to reject. The reversal on resumption is what models the slow
+transaction that took a low number and published it late.
+
+`MemoryEventStore` passes the rule trivially — its `append` body contains no
+`.await`, so the first poll runs it to completion and there is no window to have —
+and that is the correct outcome rather than a weakness. A store with no window
+cannot have a window bug, and the schedule skips a future that has already
+finished rather than polling it again.
+
+What is **not** discharged is CF-26's other half. The fixture proves the rule
+bites; whether a real Postgres adapter can *pass* it, and at what cost among
+`xid8` + `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised
+sequence table, is a measurement that is still owed and still owned by the
+position-allocation row of §6.5's portfolio table.
 
 **CF-14.** A rule MUST assert that an append acknowledged with `Ok` survives a
-restart of the store's process-level state. `[DEFERRED — blocked on the fixture
-contract CF-17; owned by the same testkit-hardening pass. The experiment is
-whether a `restart` capability can be honoured by rusqlite, a Durable Object and
-a one-shot HTTP client with one shape, or whether "durable" needs to be graded.]`
-Rule: `acknowledged_appends_survive_restart` (new).
+reopen — CF-17's operation, which discards the store's process-level state and
+leaves only what was durably committed. `[DEFERRED — the rule itself has landed
+early, as the named exception recorded below; what is still deferred is the
+experiment, which is whether a `reopen` capability can be honoured by rusqlite,
+a Durable Object and a one-shot HTTP client with one shape, or whether "durable"
+needs to be graded. Falsified by the first adapter that cannot express it.]`
+Rule: `acknowledged_writes_survive_a_reopen` (new; ES-35 specifies it and names
+it, and this clause is the obligation to have it).
 Cases: E2E-07.
 Rejects: an adapter that acknowledges before `COMMIT` — a pooled rusqlite store
 doing its work in `spawn_blocking` and returning on the join, a Durable Object
 relying on output-gate semantics it does not actually have, any store with
-`PRAGMA synchronous = OFF` in its connection setup. Nothing in the workspace can
-fail such a store today, because `conformance_test!` hands each rule one factory
-call (`lib.rs:83-91`) and there is no second call whose results would be
-meaningful.
+`PRAGMA synchronous = OFF` in its connection setup. Nothing in the workspace
+could fail such a store while `event_store_conformance!` handed each rule one
+factory call and there was no second call whose results would be meaningful.
+
+The rule was landed early, as a **named exception to this clause's own
+deferral**, and the name is here because a deferral nobody records is
+indistinguishable from an oversight. It landed with CF-17 rather than at phase 8
+because without it the fixture contract shipped with one capability-gated rule
+and no second one to observe, leaving `REOPEN`'s provisional marker and the skip
+machinery both untested. `DurableFixture` in the testkit's own `tests/` supplies
+`REOPEN`, and `LosingFixture` beside it acknowledges before recording, so the
+rule both runs and is shown to fail. What stays deferred to phase 8 is the
+adapter far end: a store that loses a write because of a real fault rather than
+because a test told it to.
 
 ---
 
 ### 6.3 The fixture contract
 
-`conformance_test!` expands to `$crate::rules::$name(|| $factory).await`
-(`lib.rs:87`), re-evaluating `$factory` per test, and each rule calls it exactly
-once. So `F: Fn() -> S` is doing two incompatible jobs at once and has been asked
-to promise neither: the macro's documentation says the expression must build "a
-**fresh, empty** store" (`lib.rs:17-21`), while the *signature* would accept
-`|| store.clone()` — two handles onto one backing store — and nothing in the
-suite either requires or forbids it. A rule therefore cannot call the factory
-twice, because it cannot know whether it gets isolation or sharing. That
-ambiguity is what forecloses CF-14, CF-19 and every genuine multi-connection
-rule, and it is a type problem before it is a coverage problem.
+This subsection was written against the arrangement it replaced, and the
+arrangement is worth stating in the past tense rather than deleted, because every
+clause below is an answer to it. `event_store_conformance!` hoisted `$factory`
+behind a `fn __conformance_store()` and the emitter expanded to
+`$crate::rules::$name(__conformance_store).await`, so the expression was
+re-evaluated on every call and each rule called it exactly once. `F: Fn() -> S`
+was therefore doing two incompatible jobs at once and had been asked to promise
+neither: the macro's documentation said the expression must build "a **fresh,
+empty** store", while the *signature* would have accepted `|| store.clone()` —
+two handles onto one backing store — and nothing in the suite either required or
+forbade it. A rule could not call the factory twice, because it could not know
+whether it got isolation or sharing. That ambiguity is what foreclosed CF-14,
+CF-19 and every genuine multi-connection rule, and it was a type problem before
+it was a coverage problem.
 
 The remedy is to name the two operations separately, which means a trait rather
 than a closure. A closure has one call signature and no place to hang an
 associated store type, a capability declaration, or a second constructor; a trait
 has all three, and in Rust the capability declaration can be an associated
-`const`, which makes it available to the macro at expansion time rather than at
-run time.
+`const`, which makes it available before the rule body runs and constant after
+monomorphisation.
+
+That trait is `Fixture` (`crates/happenstance-testkit/src/contract.rs:108-207`),
+and the keyword is now `fixture =`. What follows is what it must satisfy.
 
 **CF-15.** The fixture MUST be a trait, not a bare `Fn() -> S`. Each *fixture
 instance* is one isolated backing store; each `connect()` on that instance
 returns a handle onto it. Two fixture instances MUST share nothing. `[FROZEN]`
-Rule: `fixture_isolation` (new meta-test; two fixture instances, an append to
-one, an empty read from the other).
+Rule: `two_fixture_instances_observe_none_of_each_others_appends` (the suite
+rule; two instances, an append to one, an empty read from the other), and
+`fixture_isolation` (the meta-test; a deliberately shared-backing fixture in the
+testkit's own `tests/`, asserting the suite rule fails against it).
 Cases: E2E-08, E2E-09.
 Rejects: the file-backed adapter that points every fixture at one temp path — the
-mistake `lib.rs:19-21` warns about in prose and nothing detects. Under the
-current shape it produces cross-test contamination that surfaces as an unrelated
-rule failing intermittently; under CF-15 it fails one named meta-test.
+mistake the crate documentation used to warn about in prose and nothing detected
+("*The expression is re-evaluated for every test; a file-backed adapter should
+point it at a temporary directory*", `git show 23fd446:crates/happenstance-testkit/src/lib.rs`,
+`:26-28`; the sentence is gone, and the rule is what replaced it). Under the
+factory shape it produced cross-test contamination that surfaced as an unrelated
+rule failing intermittently; under CF-15 it fails one named rule. It takes both,
+and which does what is the whole point: the mistake is an **adapter's**, and a
+meta-test over the testkit's own fixture never sees an adapter's fixture, so only
+a rule the adapter runs can catch it. The meta-test is CF-1's half — the proof
+that the rule can fail at all.
 
 **CF-16.** The fixture MUST be able to open a **second handle** onto the same
 backing store, and rules MAY require it. `[FROZEN]`
-Rule: `two_handles_observe_each_others_appends` (new).
+Rule: `two_handles_observe_each_others_appends`.
 Cases: E2E-08.
 Rejects: an adapter whose correctness is per-session — a cached `max(position)`
 fast path, a per-connection repeatable-read snapshot, an advisory lock scoped to
-one pool member. All three pass all twenty-seven rules today, and all three are
-strategies the decision ledger defers rather than rules out.
+one pool member. All three passed all twenty-seven rules the suite had before
+this clause landed, and all three are strategies the decision ledger defers
+rather than rules out.
 
-**CF-17.** The fixture SHOULD be able to **restart**: invalidate every
+It also rejects the escape route, and that is the half stage 3 added. The
+capability is spelled `SECOND_HANDLE` on `Fixture`, so an adapter author meeting
+a red `two_handles_observe_each_others_appends` can decline it — and under
+CF-18's skip machinery that bought a green suite and one `SKIP` line for an
+adapter nothing had reached through two connections. The rule therefore uses
+`must!` rather than `require!`: a declined `SECOND_HANDLE` **fails** the rule,
+quoting the fixture's own stated reason. The MUST is enforced in the rule an
+adapter runs, not only in the testkit's own meta-tests, which never execute in an
+adapter's CI. `DecliningFixture` in
+`crates/happenstance-testkit/tests/mutation_coverage/variants.rs` is the wrong
+implementation it is shown to reject.
+
+**CF-17.** The fixture SHOULD be able to **reopen**: invalidate every
 outstanding handle's process-level state such that a subsequent `connect()`
-observes only what was durably committed.
+observes only what was durably committed. The capability constant is `REOPEN`.
 `[PROVISIONAL — falsified by a legitimate adapter that is durable and cannot
-express restart through this contract. A Durable Object, whose storage outlives
-the isolate but whose isolate cannot be restarted from inside a test, is the
-candidate; if it forces a second shape, `restart` splits into "reopen the handle"
-and "restart the host" and this clause is rewritten.]`
-Rule: `acknowledged_appends_survive_restart` (CF-14).
+express even a reopen through this contract. The Durable Object is why the weaker
+half is the one named: its storage outlives the isolate, so it can discard handle
+state and read the store again, and its isolate cannot be restarted from inside a
+test at all.]`
+Rule: `acknowledged_writes_survive_a_reopen` — the same rule CF-14 and ES-35
+name. `DurableFixture` in the testkit's own `tests/` is the only fixture in the
+workspace that supplies this capability, and therefore the only reason the rule
+executes rather than reporting a skip everywhere.
 Cases: E2E-07.
 Rejects: nothing on its own — it is an enabling clause, and CF-14 carries the
 rejection. It is `SHOULD` rather than `MUST` because `MemoryEventStore` is
 legitimately volatile and must stay a first-class fixture; CF-18 is what stops
 that from becoming an excuse.
 
+This clause's first draft deferred a split — `restart` into "reopen the handle"
+and "restart the host" — to whichever adapter forced it. The split is
+pre-empted rather than deferred: the contract names the weaker operation,
+because that is the half every fixture in and planned for the workspace can
+honour, and the stronger one gets its own clause when an adapter needs it.
+Naming the stronger one first would have bought a capability every fixture
+declares `false`, which under CF-18 is a skip reported on every run and
+evidence of nothing.
+
 **CF-18.** A fixture MUST declare its capabilities as associated `const`s, and a
 rule whose capability requirement is unmet MUST still be emitted as a test that
 **reports** the skip with the fixture's stated reason. A rule MUST NOT be
 silently omitted. `[FROZEN]`
-Rule: `capability_skips_are_reported` (new meta-test: a fixture declaring no
+Rule: `mutation_coverage::capability_skips_are_reported` — a meta-test in
+`crates/happenstance-testkit/tests/mutation_coverage.rs`: a fixture declaring no
 capabilities must produce the full rule count, with the capability-gated ones
-reported as skipped).
+reported as skipped.
 Cases: E2E-07, E2E-08.
 Rejects: `#[cfg]`-ing capability-gated rules out of the expansion. A rule that
 does not appear in the test binary is indistinguishable in CI output from a rule
-that passed, so an adapter author who declares `RESTART: false` to make a red
+that passed, so an adapter author who declares `REOPEN: false` to make a red
 build green gets a green build and no record of the trade. Requiring a non-empty
 reason string alongside each `false` puts the trade in the log where a reviewer
 and a user of the adapter can both see it.
 
+The clause governs a capability that is a genuine **trade**, which on `Fixture`
+means `REOPEN` and `MID_BATCH_FAULT`. `SECOND_HANDLE` is a MUST (CF-16) and a
+MUST is not skippable, so the rule requiring it fails rather than skips; the two
+are deliberately not the same mechanism, and reading this clause as licence to
+skip a MUST is the misreading CF-16's `Rejects:` now names in terms.
+
+`MID_BATCH_FAULT` arrived at stage 6 with
+`append_is_atomic_under_a_mid_batch_fault` and has **no clause of its own**,
+which is stated here rather than left to be noticed. ES-18 carries the argument
+for why the injection has to be the fixture's; what is missing is a CF clause in
+this section saying what a fixture promises when it declares the capability
+supported, in the way CF-16 and CF-17 do for the other two. Phase 4 owns the
+decision, and the reason it is not taken here is that phase 3's clause set was
+frozen at its own stage 1 — adding a clause now would move §1.3's census for a
+capability whose shape one adapter has exercised. It is unlike the other two in
+one way that may matter to that decision: it is defaulted on the trait, so a
+fixture that never mentions it declines it, which is the answer an in-memory
+store would give anyway.
+
 **CF-19.** A rule MUST assert that an append made through one handle is visible
 to an append condition evaluated through a second handle onto the same backing
 store. `[FROZEN]`
-Rule: `two_handles_observe_each_others_appends` (new).
+Rule: `two_handles_observe_each_others_appends`. `CachedHeadFixture`, in the
+testkit's own `tests/`, is the wrong implementation it is shown to reject: it
+reads correctly through a second handle and evaluates its append condition
+against a `max(position)` cache only its own appends refresh.
 Cases: E2E-08.
 Rejects: the same three session-scoped strategies as CF-16, from the append side
-rather than the read side.
-`racing_conditional_appends_elect_one_winner` (`suite.rs:596-638`) is the rule
-this looks like and is not: it is sequential *and* single-handle, so it pins the
+rather than the read side. `racing_conditional_appends_elect_one_winner` is the
+rule this looks like and is not: it is sequential *and* single-handle, so it pins the
 semantics of a race without ever running one.
 
 **CF-20.** The fixture trait MUST be defined without a `Send` bound and MUST NOT
@@ -5896,23 +6834,30 @@ flavour would double the surface to buy a property no caller wants.
 Rule: a doctest in `fixtures` constructing a strategy, which fails to compile if
 the item is not public.
 Cases: E2E-32.
-Rejects: the current arrangement, which makes the testkit's own claim false.
-`crates/happenstance-testkit/tests/properties.rs:7-10` says the laws live in the testkit "because they are
-the same claims an adapter must satisfy — an adapter that pushes query matching
-down into SQL ... should be able to reuse the generators", and the generators are
-private functions in an integration-test binary (`properties.rs:19-29`),
-reachable by nothing. An adapter author writing their own will not reproduce
-`properties.rs:17-18`'s five-symbol alphabet, chosen so that collisions and
-duplicates actually occur, and their property tests will therefore never generate
-the inputs that break a merge-scan at its boundaries.
+Rejects: the arrangement this clause was written against, which made the
+testkit's own claim false. `crates/happenstance-testkit/tests/properties.rs:6-10`
+says the laws live in the testkit "because they are the same claims an adapter
+must satisfy — an adapter that pushes query matching down into SQL ... should be
+able to reuse the generators", and the generators were private functions in that
+same integration-test binary, reachable by nothing. They now live in the
+`strategies` module of `crates/happenstance-testkit/src/fixtures.rs`, beside a
+re-export of the `proptest` they speak — exporting a generator without the trait
+its return type names is only half an export — and `properties.rs` imports
+them. An adapter author writing their own will not reproduce the five-symbol tag
+alphabet, chosen so that collisions and duplicates actually occur, and their
+property tests will therefore never generate the inputs that break a merge-scan
+at its boundaries — which is why the alphabet is exported rather than described.
 
 ---
 
 ### 6.4 Runtime independence
 
-`conformance_test!` emits `#[tokio::test]` (`lib.rs:85`), and the crate
-documentation tells adapter authors to add tokio to their dev-dependencies
-(`lib.rs:23-24`). That is a hard exclusion of the target the two-flavour port
+`event_store_conformance!` emits `#[tokio::test]` — from `__emit_tokio`, in
+`crates/happenstance-testkit/src/registry.rs`, which is where the attribute is
+still written — and the crate documentation tells adapter authors to add tokio
+to their dev-dependencies (`crates/happenstance-testkit/src/lib.rs:28-29`). That
+is a hard exclusion of the
+target the two-flavour port
 design exists to serve: a Workers runtime cannot run a tokio test, so the wasm
 adapter — the whole justification for ADR-0001 — cannot run the suite that would
 prove it conformant. The rules are the asset. The `#[tokio::test]` attribute is
@@ -5936,20 +6881,158 @@ bound.
 **CF-22.** The rule set MUST be enumerated in exactly one place, as a macro
 taking a callback — `for_each_event_store_rule!($emit)` — and every harness MUST
 be built by invoking it. `[FROZEN]`
-Rule: `registry::every_rule_is_enumerated` (CF-24's meta-test is the
-enforcement).
+Rule: `registry::no_orphan_rules`, at the foot of
+`crates/happenstance-testkit/src/registry.rs` — the same meta-test CF-24 claims, and deliberately so. Two clauses over one check is legitimate when
+the check answers both: it walks the enumeration and a scan of `suite.rs` in both
+directions, so a rule in one and not the other fails it whichever side is short.
+There is no second meta-test named *every_rule_is_enumerated* — the name is
+written unbacked here because it resolves to nothing, and this clause used to
+claim it did.
+What the check does *not* see is the half of this clause that is structural. A
+second hand-maintained list would not make the enumeration and `suite.rs`
+disagree; it would run a subset under a different name and the meta-test would
+stay green. That half is held by review, and by there being exactly one macro to
+call.
 Cases: E2E-52, E2E-30, E2E-09.
-Rejects: the current arrangement, in which the rule bodies live in `suite.rs` and
-a hand-maintained list of twenty-seven `conformance_test!` invocations lives in
-`lib.rs:93-129`. The two agree today. Nothing makes them agree.
+Rejects: the arrangement this clause was written against, and it is worth naming
+exactly because seven other passages in this document went on citing it after it
+was gone. The rule bodies lived in `suite.rs`, and `event_store_conformance!`
+expanded to an inner `macro_rules! conformance_test` followed by a
+hand-maintained list of twenty-seven `conformance_test!(…)` invocations in the
+same expansion (`git show 927d291:crates/happenstance-testkit/src/lib.rs`,
+`:90-97` for the inner macro and `:100-136` for the list). The two agreed by hand
+and nothing made them agree. That arrangement was retired at phase 1 (`23fd446`)
+and `conformance_test!` no longer exists anywhere in the workspace:
+`for_each_event_store_rule!`, in
+`crates/happenstance-testkit/src/registry.rs`, has been the single enumeration
+ever since, `event_store_conformance!`
+(`crates/happenstance-testkit/src/lib.rs:238`) is built by invoking it, and
+`no_orphan_rules` is what now makes the two agree. What the clause forbids from
+here is a second hand-maintained list of the *same* family — reintroducing the
+pair that drifts, under whatever name — which is the arrangement the paragraph
+below distinguishes from the three per-family enumerations that are intended.
+
+"Exactly one place" is per rule *family*, and phase 3 lands two more of them.
+`event_store_model_conformance!` and `event_store_concurrency_conformance!` carry
+their own enumerations because their bounds differ: the concurrency flavour needs
+`S: SendEventStore + Send + Sync + 'static` and an `Arc<S>`, which is the bound
+ADR-0001 refuses to put on `EventStore` and therefore the bound
+`for_each_event_store_rule!` cannot carry. Each enumeration lives beside the
+rules it enumerates — `suite.rs` for the event-store family, their own modules
+for the other two, neither of which `spec-trace` reads. What this clause forbids
+is a second list of the *same* family, because that is the pair that drifts;
+three families with one list each is the arrangement, not the exception.
+
+**The model family landed at stage 5**, and it is the worked example of the
+paragraph above rather than a plan for one. Its enumeration is
+`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:706`, and it
+lives beside the single rule it names, `ops_agree_with_the_model` at
+`crates/happenstance-testkit/src/model.rs:592`. `event_store_model_conformance!`
+is built by invoking it exactly as `event_store_conformance!` is built by
+invoking `for_each_event_store_rule!`. Two things it settles, and both were
+open:
+
+* **The emitters are duplicated, not parameterised.** An emitter is invoked as
+  `emitter!(rule_a, rule_b, …)` and the rules' *module path* is baked into its
+  expansion rather than passed, so a second family needs `__emit_model_tokio`
+  and `__emit_model_blocking`. That is duplication of eight lines against a
+  change to a contract three shipped emitters, three in-tree harnesses and CF-23
+  all depend on. The alternative that avoids both — re-exporting the model rules
+  into `rules` so `__emit_tokio` resolves them — is refused: it puts an
+  unregistered name into the module `no_orphan_rules` scans, in the one blind
+  spot that test documents.
+* **It is additive, and its blind spot is measured rather than argued.**
+  `mutation_coverage::the_model_rule_rejects_exactly_what_it_claims` drives the
+  model family against every store in the proof artefact and pins the answer for
+  each. It rejects thirty of the fifty mutants and neither of the two
+  conformant variants — `GappedPositionStore` included, which is what the
+  symbolic anchor exists for (CF-6). The twenty it does not reject are **three**
+  shapes rather than twenty defects. The first nine are *reachability*: the
+  model drives one handle, on one fixture, through a strictly sequential stream
+  of non-empty batches, and never reopens, so a defect whose content is the empty
+  batch, a second handle, a second fixture instance, durability, or a *window*
+  between two overlapping futures is unreachable from it however many cases it
+  runs. Three of those are the concurrency family's own subject matter, which is
+  the argument for that family arriving from the other direction.
+
+  The tenth is a shape of its own and was mis-filed under the second until stage
+  6's review: `NoTransactionStore`'s defect does not exist until a fault has been
+  **armed**, and arming is a call on the *fixture*. A generator that emitted one
+  would be generating a fixture call rather than a store operation, which is not
+  what an `Op` is; unarmed, that store is an ordinary correct one.
+
+  The other ten arrived at stage 6 and are *value range*: the generators emit
+  typical values — a small non-empty payload, metadata that is `None` or
+  non-empty, up to six tags from a five-symbol alphabet, queries of up to three
+  items — and every value-edge mutant is wrong only at a boundary none of those
+  reach. That is the honest shape of a property test's coverage and it is the
+  reason the value edges are *named* rules rather than generated cases: two of
+  the exclusions are written on the generator itself, where they were left
+  because the clause that owned the question had not been written yet.
+
+**The concurrency family landed at stage 5 as well**, and it settles the same
+paragraph from the other end — *and corrects the bound this clause predicts for
+it.* Its enumeration is `for_each_concurrency_rule!` in
+`crates/happenstance-testkit/src/concurrency.rs`, beside the five rules it names,
+and `event_store_concurrency_conformance!` is built by invoking it. Four things
+it settles:
+
+* **The predicted bound was wrong in three of its four parts, and the correction
+  is a measurement rather than a preference.** This clause says the flavour needs
+  `S: SendEventStore + Send + Sync + 'static` and an `Arc<S>`. What it needs is
+  `F::Store: EventStore + Send`. `Sync` and `'static` are obligations of
+  `tokio::spawn` rather than of the port, and the family's contenders are
+  `std::thread::scope` threads, which impose neither — a contender may borrow the
+  condition and the events from the rule's own frame. `SendEventStore` is not
+  needed because **the future never crosses a thread boundary**: the *handle*
+  does, and the future is created on the contender's thread by `block_on` and
+  finishes there. Each was established by removing the bound and compiling, which
+  is `spawns_from_generic`'s method. The normative content of this clause — one
+  enumeration per family, and no second list of the same family — is untouched;
+  what is corrected is the illustration, and the illustration was written before
+  anybody had compiled the thing it describes.
+* **It is opt-in and target-gated.** `wasm32-unknown-unknown` has no threads to
+  race on, so the module does not exist there, and a `!Send` adapter cannot
+  invoke it and must not be expected to. That is the same asymmetry CF-20 draws
+  for the fixture trait, and it is why the *port* still carries no `Send` bound.
+* **One shipped emitter would have been enough and two are shipped anyway.**
+  `wasm_bindgen_test` is unreachable for a rule set that does not exist on that
+  target, and the parallelism lives in `std::thread::scope` rather than in the
+  runtime, so the blocking emitter races exactly as hard as the tokio one. CF-23's
+  content is that the wrapper is a *parameter*; a family with exactly one emitter
+  reads as a family that forgot.
+* **Non-vacuity is measured, by a table of its own.**
+  `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim` drives
+  six `Arc`/`Mutex` stores — one conformant control and five defects that no
+  sequential rule in the suite can see — through all five rules and pins every
+  verdict, in both of CF-3's directions and with a per-rule assertion pin. They
+  are a second table (`RACERS`) rather than rows in `REGISTRY`, and the reason is
+  mechanical: every one of them fails **no** rule of the event-store family, and
+  `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
 
 **CF-23.** The testkit MUST NOT emit any runtime-specific attribute from its own
-expansion. The per-test wrapper MUST be a parameter supplied by the adapter.
-`[FROZEN]`
+expansion. The per-test wrapper MUST be a parameter supplied by the adapter. The
+reason is `wasm32` portability and not `Send`-ness: `tokio::spawn` requires
+`Send`, but `Runtime::block_on` — which `#[tokio::test]` expands to — does not, so
+the shipped tokio emitter already drives a `!Send` store, and
+`crates/happenstance-testkit/tests/local_conformance.rs:418-426` — harness **2**,
+the testkit's macro verbatim on the multi-threaded runtime — is the live
+demonstration (ADR-0010:107-112). The citation named harness 1 for a stage, which
+is the runtime-free `__emit_blocking` one whose own comment reads *"No async
+runtime is involved at all"*: in range, so `check_citations` was silent, and
+pointing at the harness that proves nothing about tokio. What no tokio attribute can do is exist on a
+target that has no tokio. `[FROZEN]`
 Rule: the wasm32 build step of `cargo xtask ci`, extended to compile a
 `wasm-bindgen-test` harness over the same rule set.
 Cases: E2E-52, E2E-30.
-Rejects: `#[tokio::test]` at `lib.rs:85`, and equally a "fix" that swaps it for a
+Rejects: a runtime attribute emitted from the testkit's own expansion — the
+shape, not a line, because the line moves and the shape is the defect.
+`#[tokio::test]` is still written inside this crate, but only inside
+`__emit_tokio`, which is a *parameter* the adapter selects and can replace;
+what this clause forbids is the version where no such parameter exists and every
+harness gets tokio whether or not the target has one. It is rejected for where it
+cannot run rather than for what it cannot drive; and equally a "fix" that swaps
+it for a
 `cfg`-selected attribute inside the testkit — that keeps the list of supported
 runtimes in the testkit's source, so a runtime nobody anticipated (a `LocalSet`
 harness, `futures::executor::block_on`, an embedded executor) needs a testkit
@@ -5959,14 +7042,36 @@ one-off accident pass for a design.
 
 **CF-24.** No rule may exist in the suite without appearing in the enumeration.
 `[FROZEN]`
-Rule: `registry::no_orphan_rules` (new meta-test, comparing the enumeration
-against the public items of `rules`).
+Rule: `registry::no_orphan_rules`, at the foot of
+`crates/happenstance-testkit/src/registry.rs`, which is on disk and green. It compares the enumeration against a scan of `suite.rs`'s own source,
+baked in with `include_str!`, because Rust has no reflection and "the public
+items of `rules`" cannot be asked for at run time. The scan's limits are stated
+on the test: it cannot see a rule introduced by a macro expansion, by a
+`pub use`, or from a `#[path]`-included file.
+
+**It covers the event-store family and only that family.** `include_str!` names
+`suite.rs`, so a `pub async fn` added to `concurrency::rules` or `model::rules`
+and left out of `for_each_concurrency_rule!` or `for_each_model_rule!` is unrun
+and unreported — the same silent no-op this clause is about, one family over.
+That is a different gap from CF-22's, which records only that `spec-trace` does
+not *read* those two modules: `the_concurrency_rules_reject_exactly_what_they_claim`
+closes CF-1 for its family but not this clause, because it enumerates *from*
+`for_each_concurrency_rule!` and a rule missing from that list is missing from
+the check too. The mechanical fix is cheap and deliberately not taken yet —
+extend `declared_rules()` to scan the two modules against their own
+enumerations, behind the same `#[cfg(test)]` — because a third family is
+plausible in phase 4 and one scanner written against three is better than three
+written one at a time. CONTRIBUTING states the same gap where a rule author will
+meet it.
 Cases: all contract-level cases.
 Rejects: the silent no-op — a rule written, reviewed, merged, and never run
-because its registration line was forgotten. Under the present two-list shape
-this failure produces no signal of any kind: the rule compiles, `cargo test`
-reports green, and the adapter is certified against twenty-six rules while its
-author believes it was twenty-seven.
+because its registration line was forgotten. Under the two-list shape CF-22
+describes, that failure produced no signal of any kind: the rule compiled,
+`cargo test` reported green, and an adapter was certified against twenty-six
+rules while its author believed it was twenty-seven. That shape was retired at
+phase 1 (`23fd446`) together with the second list itself, so this clause is now
+enforced rather than aspirational — and the two clauses agree, which they did not
+while this one still called `no_orphan_rules` new.
 
 ---
 
@@ -5975,8 +7080,9 @@ author believes it was twenty-seven.
 CLAUDE.md's standing rule: *a port is only as well-designed as the spread of what
 implements it*, and before freezing a port you must name the axis it is most
 likely to be wrong about and check that something in the workspace sits at the
-other end. The rule is stated. It has never been executed, because the workspace
-holds one storage shape wearing several hats.
+other end. The rule is stated. It has been executed on four axes with a
+*fixture* and on none with an adapter, because every implementation the workspace
+can run is still one storage shape wearing several hats.
 
 Two kinds of instrument satisfy it and they answer different questions. A
 **fixture instrument** lives in the testkit's `tests/` and exists to prove a rule
@@ -5998,7 +7104,7 @@ Cases: E2E-01, E2E-02, E2E-24, E2E-46, E2E-52.
 Rejects: freezing `EventStore` against `MemoryEventStore`, a `RefCell` store,
 rusqlite and a Durable Object — four adapters, one storage shape, every one of
 them serialising its writers and assigning positions under a lock it holds until
-commit (`memory.rs:195-223`). A port frozen against that population is frozen
+commit (`memory.rs:216-237`). A port frozen against that population is frozen
 against SQLite wearing four hats, and the property it will be wrong about is the
 one all four share.
 
@@ -6009,11 +7115,12 @@ Rule: the portfolio table's `Far end exists` column, checked by
 `cargo xtask spec-trace` (CF-38).
 Cases: E2E-01, E2E-24.
 Rejects: declaring the position-allocation axis covered because the hostile
-visibility fixture of CF-13 exists. The fixture proves the rule bites. Whether a
-real Postgres adapter can *pass* it — and at what cost among `xid8` +
-`pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence
-table — is a measurement, and PRESSURE-TEST.md:662-666 is right that it is owed
-one.
+visibility fixture of CF-13 exists. It does exist now —
+`PreCommitPositionStore` — which is what turns this from a hypothetical into the
+live reading error. The fixture proves the rule bites. Whether a real Postgres
+adapter can *pass* it — and at what cost among `xid8` + `pg_snapshot_xmin`,
+transaction-scoped advisory locks and a serialised sequence table — is a
+measurement, and PRESSURE-TEST.md:662-666 is right that it is owed one.
 
 **CF-27.** The workspace MUST hold a **completeness instrument**: a
 testkit-adjacent store that deliberately holds only a suffix of its own log, and
@@ -6032,8 +7139,9 @@ have assertions and are waiting only on this instrument to be written against.
 Cases: E2E-46, E2E-47, E2E-56, E2E-33.
 Rejects: every conformant store's silence about its own history. A 90-day prune
 happens entirely outside the port — `EventStore` has two methods and neither
-deletes (`store.rs:117-145`) — and afterwards the store passes all twenty-seven
-rules unchanged, including `query_all_matches_every_event` (`suite.rs:70-80`),
+deletes (`read` at `store.rs:118-122`, `append` at `store.rs:148-152`) — and
+afterwards the store passes every rule
+unchanged, including `query_all_matches_every_event`,
 whose contract is store-relative by wording and therefore accidentally correct. A
 holed log and a young log are the same value. Four of the six scenarios reach
 this from unrelated doors — a pruned device slice, a regulated scattered purge, a
@@ -6043,43 +7151,74 @@ CLAUDE.md names an instrument for the two axes it had already noticed and nothin
 for this one.
 
 **CF-28.** The workspace MUST hold a `!Send` reference store in the testkit's own
-`tests/`, and it MUST pass the suite. `[FROZEN]`
-Rule: the existing suite, invoked against a `RefCell`-backed store under a
-single-threaded harness (CF-23).
+`tests/`, and it MUST pass the suite. `Rc` is what supplies the `!Send`, not
+`RefCell`: `RefCell<T>: Send where T: Send` — it surrenders `Sync`, not `Send` —
+so a store built from `RefCell<Vec<_>>` alone is perfectly `Send` and would prove
+nothing about the bare flavour, which is why the reference store holds its log
+through an `Rc` (`crates/happenstance-testkit/tests/local_conformance.rs:59-74`,
+ADR-0010:113-115). `[FROZEN]`
+Rule: the existing suite, invoked against that `Rc<RefCell<Vec<_>>>`-backed store
+under any harness that does not require `Send` — which, as CF-23 records, includes
+the default multi-threaded `#[tokio::test]`, because the attribute expands to
+`Runtime::block_on` and only `tokio::spawn` needs the bound.
 Cases: E2E-52, E2E-09, E2E-30.
-Rejects: ADR-0001's own provisional status. That ADR states plainly that **no
-`!Send` implementation of these ports exists anywhere, not even a reference one**
-(`docs/adr/0001-async-port-flavours.md:8-16`), and names this exact store as the
-cheapest proof that lifts it. Until it exists, the two-flavour design's entire
-evidence base is a `cargo check` for `wasm32` — a compile of the trait, not of an
-implementation. The store also carries E2E-09's re-entrancy question, which
-`MemoryEventStore` cannot: `memory.rs:184-224` holds no lock across a suspension
-point because it contains no `.await` at all.
+Rejects: ADR-0001's own provisional status, which this store is what retired. The
+ADR stated plainly that **no `!Send` implementation of these ports exists
+anywhere, not even a reference one** (`docs/adr/0001-async-port-flavours.md:8-16`)
+and named this exact store as the cheapest proof that lifts it; until it existed,
+the two-flavour design's entire evidence base was a `cargo check` for `wasm32` — a
+compile of the trait, not of an implementation. `LocalMemoryEventStore` landed at
+phase 1 and the marker was lifted on 2026-08-06
+(`docs/adr/0001-async-port-flavours.md:5-6`). What the clause forbids from here is
+deleting the store, or weakening it to a shape that would compile without the
+`Rc` — which is the same reversal arriving as a tidy-up. The store also carries
+E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
+`memory.rs:184-224` holds no lock across a suspension point because it contains no
+`.await` at all.
 
 #### The portfolio
 
 | Axis | Near end — what exists | Far end | Far end exists? | Kind of instrument needed |
 |---|---|---|---|---|
-| **Position allocation** | Assigned under the lock held until commit — `memory.rs:195-223`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **No.** `happenstance-postgres` planned, unbuilt | Both. Fixture (CF-13) to make the rule bite; adapter to prove it passable |
-| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **No.** `happenstance-neon` planned, unbuilt | Adapter |
+| **Position allocation** | Assigned under the lock held until commit — `memory.rs:216-237`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **Fixture yes, adapter no.** `PreCommitPositionStore` in the testkit's own `tests/` takes its position before commit and publishes after, and `nothing_below_an_observed_position_appears_later` (CF-13) fails it deterministically on one thread. `happenstance-postgres` is still a phase-2 skeleton (`crates/happenstance-postgres/src/event_store.rs:121`), which falsifies a signature and is not a far end | Fixture (CF-13) — **done**; then a Postgres adapter to prove it passable, and at what cost |
+| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **No.** `happenstance-neon` is a phase-2 skeleton (`crates/happenstance-neon/src/event_store.rs:168`), which falsifies a signature and is not a far end | Adapter |
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:147`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
-| **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — the shape the port was designed against | A deferred write set buffered and replayed in one call at commit | **No — and neither does the near end.** `ProjectionStore for` matches nothing in the workspace | Both |
+| **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`crates/happenstance-ladybug/src/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Skeletons at both ends, a passing implementation at neither.** Five impls, of which only two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, `SqliteProjectionStore` in `begin` and `rollback`. The far end is therefore better evidenced than the near one, and still there is no suite to run any of them against (`docs/adapter-shapes.md:297`) | The projection conformance suite, which does not exist |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle per store — `conformance_test!` calls the factory once (`lib.rs:83-91`) | Two or more handles onto one backing store, concurrent | **No.** Foreclosed by the fixture's type until CF-16 | Fixture |
-| **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock` | Survives a restart of the process | **No.** Not expressible until CF-17 | Fixture, then any file-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter no.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object, so no *connection* has ever been opened twice | Fixture (CF-16) — **done**; then a pool-backed adapter |
+| **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter no.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; then any file-backed adapter |
 
-Seven axes. Six far ends are still empty, and the seventh — async flavour — has
-a **fixture** instrument and no adapter one, which by CF-26 satisfies the
-falsifiability half and not the implementability half. That is the honest state,
-and it is the reason this section exists before the freeze rather than after it.
+Seven axes, and **the adapter column is empty on every one of them**. Three far
+ends are empty at both ends — transport, batch shape and completeness. The other
+four — async flavour, handle multiplicity, durability and, since CF-13's fixture
+landed, position allocation — have a **fixture** instrument and no adapter one,
+which by CF-26 satisfies the falsifiability half and not the implementability
+half. Phase 3 produced four fixture instruments and zero adapter instruments,
+which is the most it could produce; the adapter column moves at phases 8, 9, 10,
+11 and 14 and nowhere earlier. That is the honest state, and it is the reason
+this section exists before the freeze rather than after it.
 
-The distinction is worth holding on to now that one row has moved, because the
+The distinction is worth holding on to now that four rows have moved, because the
 temptation is to read the first tick as the axis being covered.
 `LocalMemoryEventStore` proves the `!Send` rules *can* be run and *can* fail. It
 says nothing about whether a Durable Object, with a real `SqlStorage` and a
-`worker::Error`, can pass them — and ES-6 is deferred to that adapter precisely
-because a reference store's error type is chosen by whoever wrote the reference
-store.
+`worker::Error`, can pass them. The three rows CF-16, CF-17 and CF-13 moved are
+weaker still: an `Arc` clone is a second handle in the sense the *contract* needs
+and in no sense a connection pool would recognise, a fixture that reopens by
+replaying a `Vec` has never met a fault, and a store that suspends between
+allocating and publishing because a rule polled it that way has never met a
+transaction. ES-6 was settled on a purpose-built instrument rather than on this
+store for the same reason: a reference store's error type is chosen by whoever
+wrote the reference store.
+
+**Position allocation is the row where the gap between the two halves is widest,
+and it is worth saying so where the tick is.** It is the axis the pressure test
+and all six scenarios independently ranked first; what CF-13 bought is a rule that
+bites, and what is still missing is a *number* — which of `xid8` +
+`pg_snapshot_xmin`, transaction-scoped advisory locks or a serialised sequence
+table buys the invariant on a real Postgres, and what each costs at write rate.
+ES-10 stays `[PROVISIONAL]` against exactly that measurement, and CF-26's
+`Rejects:` names reading this tick as coverage.
 
 ---
 
@@ -6093,8 +7232,26 @@ decision the crate has never made, and the crate is the moat.
 **CF-29.** A conformance rule MAY be added in a minor release, and MUST land in
 the same release as its mutant (CF-1) and its changelog entry naming the defect
 it detects. `[FROZEN]`
-Rule: `mutation_coverage::every_rule_has_a_mutant` (CF-1) plus a changelog check
-in `cargo xtask ci`.
+Rule: `mutation_coverage::every_rule_has_a_mutant` (CF-1) enforces the mutant
+half mechanically. The changelog half is a `cargo xtask ci` lint step, added at
+phase 3 stage 6, and **it is the weakest check in the gate** — which is said here
+because the alternative is a clause that reads as though the obligation is
+mechanised. It asserts two things: that every rule name in `suite.rs` appears in
+`CHANGELOG.md`, and that some entry naming it carries at least 120 characters of
+prose per rule it names. The second is a proxy for substance and not a
+measurement of it. It cannot tell whether the sentence names a defect, whether
+the defect is that rule's, or whether it is true; a keyword test was written
+first and produced nine false positives against nine entries that name a defect
+as well as anything in the file, which is the evidence that the content question
+is review's and not a grep's. What the step does catch is what actually happened:
+its first run found **twenty-five of fifty-five rules** with no entry at all,
+including every one of the seventeen founding rules, which had been counted here
+since phase 1 and never named. The earlier text of this clause said no check was
+possible and named the one shape that is not — "`CHANGELOG.md` changed in the
+same commit as `suite.rs`", defeated by the amend and unavailable on a dirty tree
+— and concluded from that that no check was worth having. That inference was
+wrong, and the correction is recorded rather than the sentence deleted.
+CONTRIBUTING's rule checklist still carries the half nothing can check.
 Cases: all contract-level cases.
 Rejects: a rule added quietly in a patch release. An adapter author who takes a
 patch bump and finds their build red has no way to distinguish "my adapter has a
@@ -6133,11 +7290,18 @@ rules and new clauses; existing rules get corrections, not extensions.
 
 **CF-32.** `happenstance-testkit` MUST carry its own `version` key rather than
 `version.workspace = true`. `[FROZEN]`
-Rule: a `cargo xtask ci` manifest check.
+Rule: a `cargo xtask ci` manifest check, added at phase 3 stage 6. It reads the
+`[package]` table of `crates/happenstance-testkit/Cargo.toml` and fails on an
+absent `version` key or on one whose value mentions `workspace`. It found nothing
+on its first run and that is expected: the manifest has carried its own key, and
+a comment saying why, since the clause was written — what had never existed was
+anything that would notice the key being folded back into the workspace during a
+tidy-up, which is a one-line edit that no test and no compile can see.
 Cases: none — this is a packaging obligation with a machine check and no
 behavioural case, which CF-35 permits so long as the clause says so. It does.
-Rejects: the current manifest (`crates/happenstance-testkit/Cargo.toml:4`,
-inheriting `version = "0.1.0"` from the workspace root at `Cargo.toml:6`). Under a
+Rejects: the manifest as it stood when this clause was written, inheriting
+`version = "0.1.0"` from the workspace root at `Cargo.toml:6`
+(`git show 23fd446:crates/happenstance-testkit/Cargo.toml`). Under a
 shared version key the two crates cannot move independently in either direction,
 and both directions are wrong. Adding a rule bumps the testkit's minor, which
 drags `happenstance-core` to the same number and republishes an unchanged
@@ -6165,7 +7329,20 @@ on an operation count. `[FROZEN]`
 Rule: a `cargo xtask ci` lint step over `happenstance-testkit/src`, rejecting
 `std::time`, `Instant`, `elapsed` and `sleep`. It is a grep, not a type — there
 is no lint that expresses "this crate may not observe time" — and saying so is
-better than pretending otherwise.
+better than pretending otherwise. Landed at phase 3 stage 6, with three
+properties worth stating because each is a place the next person will reach for
+the wrong repair. It is scoped to `src/` **deliberately**: `tests/` is where the
+concurrency racers live, and a wrong implementation that must lose an update
+across two OS threads may legitimately synchronise — CF-33 constrains
+conformance rules, which are the library's. It matches **code only**, with
+comments removed and string-literal contents blanked, because `concurrency.rs`
+explains at length why the watchdog it does not have is forbidden and the word
+`sleep` appears four times in that explanation; a lint that fired on the sentence
+justifying it would be repaired by deleting the sentence. And its list is the
+four constructs above and no others — `Duration` and `timeout` are **not** on it,
+because a step that quietly checks more than the clause specifies makes the gate
+and the document disagree with the gate winning silently. Extending the list is
+an edit to this line, in the same change.
 Cases: none; this constrains the suite, not an adapter.
 Rejects: the plausible-looking rule that asserts a `backwards().limit(1)` read
 returns within some bound. It passes on the author's machine, fails on a loaded
@@ -6243,14 +7420,34 @@ stays authored is §7.3 through §7.6 — the judgement about *why* a gap exists
 which no checker can produce.
 
 **Dispositions are how the two meet.** The second check would otherwise fail
-forever on rules the specification deliberately leaves unclaimed:
-`query_all_matches_every_event` and `racing_conditional_appends_elect_one_winner`
-are orphaned **because they are being retired**, and §7.4 says so in prose the
-checker cannot read. So a clause MAY dispose of a rule it does not claim, in the
-form `Retires: <rule> — <reason>`, and a disposed rule satisfies the check. An
-orphan with no disposition still fails. The distinction is the whole point: an
-unclaimed rule is either a decision someone made or a rule nobody is responsible
-for deleting, and only the author knows which.
+forever on rules the specification deliberately leaves unclaimed. When this
+clause was written, `query_all_matches_every_event` and
+`racing_conditional_appends_elect_one_winner` were two such rules — orphaned on
+the ground that they were being retired, with §7.4 saying so in prose the checker
+cannot read. So a clause MAY dispose of a rule it does not claim, in the form
+`Retires: <rule> — <reason>`, and a disposed rule satisfies the check. An orphan
+with no disposition still fails. The distinction is the whole point: an unclaimed
+rule is either a decision someone made or a rule nobody is responsible for
+deleting, and only the author knows which.
+
+**Both of those dispositions were later reversed**, along with the third named
+below, and the mechanism outlived the examples it was introduced with: ES-15
+claims `query_all_matches_every_event` and ES-25 claims
+`racing_conditional_appends_elect_one_winner`, no `Retires:` field survives
+anywhere in this document, and §7.4 records three reversals out of three. The
+mechanism stays specified because the *next* disposition needs it; what the
+history shows is that the examples were the weakest part of it.
+
+**And it is the mechanism that hid a mistake for a phase, which is worth stating
+where the mechanism is defined rather than only where the mistake was.** A
+disposed rule satisfies check 6 *forever*. `append_is_atomic` was a third entry
+in the list above; the rule stayed in `suite.rs`, ES-18's `Retires:` line named
+it, the checker was silent, and the retirement turned out to be wrong — the rule
+rejects three registered mutants and is the only thing in the suite that rejects
+the write-then-check shape's non-atomicity. Nothing mechanical could have caught
+that, because a `Retires:` line is an assertion about the *future* and the
+checker only reads the present. §7.4 is where the judgement lives, and the moral
+is that a `Retires:` line is a claim to re-examine rather than a filing.
 
 The first run's disagreements with the hand-computed table are therefore a defect
 list to work through, not a question about who wins. Expect it to find real
@@ -6335,11 +7532,14 @@ by one and `ES` by four — so §7.1 had contradicted both §7.2 and §1.3 for a
 as the three had coexisted, and nothing could notice. It also surfaced six rules
 that §6 names one way and §3 another for the same behaviour — CF-13's
 `positions_are_visible_in_assignment_order` against ES-10's
-`nothing_below_an_observed_position_appears_later` is the clearest — which the
+`nothing_below_an_observed_position_appears_later` was the clearest — which the
 hand table had silently normalised to the §3 spelling, so twelve names read as
-six. None of them exists yet, so nothing is broken today and everything is
-mis-costed: the rules still to be written are six, not twelve, and §7.3 through
-§7.6 do not yet say which spelling wins. That reconciliation is owed.
+six. None of them existed yet, which is the only reason the reconciliation was
+cheap: the rules still to be written are six, not twelve, and CF-31 makes a rename
+after the first one ships a major release. All six are settled in the clauses now,
+on one rule — **the name states the observable behaviour, not the mechanism.**
+Five kept §3's spelling and one, ES-34's, took §6's, which is the measure of what
+the hand table's silent normalisation was worth.
 
 **§7.3 through §7.6 are authored, and stay that way.** A parser can tell you that
 a clause names no rule. It cannot tell you whether that is *correct* — CF-34 names
@@ -6374,7 +7574,7 @@ claiming only what it verified.
   build failure under CF-38.
 
 **What §7.1's shape says** is what §1.6 says in words. `ES` is 75 % frozen because
-it has twenty-seven rules, a reference implementation and six scenarios behind it.
+it has forty-six rules, a reference implementation and six scenarios behind it.
 `PS` is 49 % frozen because it has no implementation at all, and its provisional
 clauses are provisional against the same missing adapter rather than against
 seventeen different ones — PS-2 is the single gate they all wait on. `SY` sits
@@ -6389,11 +7589,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 31 | 21 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 40 | 30 | 8 | 2 | 0 |
-| §4 `ProjectionStore` | `PS` | 37 | 18 | 17 | 2 | 0 |
+| §3 `EventStore` | `ES` | 40 | 31 | 8 | 1 | 0 |
+| §4 `ProjectionStore` | `PS` | 37 | 19 | 17 | 1 | 0 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
-| §6 conformance | `CF` | 38 | 32 | 2 | 3 | 1 |
-| **Total** | | **193** | **132** | **46** | **13** | **2** |
+| §6 conformance | `CF` | 38 | 33 | 2 | 2 | 1 |
+| **Total** | | **193** | **135** | **46** | **10** | **2** |
 
 ### 7.2 The table
 
@@ -6413,25 +7613,25 @@ between them because its *shape* does not wait on a transport but its
 | VT-10 | PROVISIONAL | §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every `SY-… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic` | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
-| VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive` (`suite.r… | E2E-10, E2E-16 |
+| VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive`, `conditi… | E2E-10, E2E-16 |
 | VT-14 | PROVISIONAL | unit tests `rejects_invalid_event_types` (`event.rs:407-418`) and `rejects_inv… | E2E-40 |
 | VT-15 | FROZEN | `tags_differing_only_by_unicode_normalisation_are_distinct` †, `append_preserv… | E2E-40, E2E-49 |
 | VT-16 | FROZEN | `query_item_tags_are_and`, `query_item_tags_match_supersets`, `query_item_reje… | E2E-32, E2E-40 |
 | VT-17 | FROZEN | `tags_may_repeat_a_key` † | *(none — see clause)* |
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
 | VT-19 | FROZEN | `append_reports_exceeded_store_limits` † | E2E-40, E2E-42 |
-| VT-20 | FROZEN | `rejects_invalid_event_types` †, `rejects_invalid_tags` †, `store_round_trips_… | E2E-40 |
-| VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload` †, `append_reports_exceeded_sto… | E2E-42 |
-| VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` † | E2E-40 |
-| VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` † | E2E-36, E2E-40 |
-| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size` † | E2E-35, E2E-36, E2E-39 |
+| VT-20 | FROZEN | unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`; `store_ac… | E2E-40 |
+| VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
+| VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
+| VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
+| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size` | E2E-35, E2E-36, E2E-39 |
 | VT-25 | FROZEN | `append_reports_exceeded_store_limits` † | E2E-35, E2E-42 |
 | VT-26 | FROZEN | compile test `query_items_is_not_constructible_downstream`; `condition_without… | E2E-40 |
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
 | VT-28 | FROZEN | `read_limit_zero_yields_nothing` †, `read_limit_truncates` | E2E-11, E2E-13 |
 | VT-29 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to… | E2E-11 |
 | VT-30 | PROVISIONAL | `condition_guards_carry_independent_boundaries` †, `condition_with_one_guard_b… | E2E-04, E2E-05, E2E-06 |
-| VT-31 | FROZEN | `query_items_are_or`, `query_item_order_does_not_change_the_result_set` †, `qu… | E2E-32 |
+| VT-31 | FROZEN | `query_items_are_or`, `query_item_order_does_not_change_the_result_set`, `quer… | E2E-32 |
 
 #### `WF` — wire format (§2.7)
 
@@ -6454,24 +7654,24 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| ES-1 | FROZEN | every rule in `suite.rs` is generic over `S: EventStore` (`suite.rs:70`, and i… | E2E-52, E2E-53, E2E-54 |
-| ES-2 | FROZEN | `send_flavour_stream_is_send_in_generic_code` **(new)**. The existing unit tes… | E2E-52 |
+| ES-1 | FROZEN | the suite binds the bare flavour and nothing else. Since the fixture contract,… | E2E-52, E2E-53, E2E-54 |
+| ES-2 | FROZEN | two unit tests in `happenstance-core`, and it takes both. `send_flavour_stream… | E2E-52 |
 | ES-3 | FROZEN | `provided_method_future_is_send_in_generic_code` † | E2E-13, E2E-53 |
 | ES-4 | FROZEN | `provided_method_future_is_send_in_generic_code` † | E2E-13 |
 | ES-5 | FROZEN | `error_bound_is_identical_on_both_flavours` † | E2E-53 |
-| ES-6 | DEFERRED | `store_error_crosses_a_join_handle` † | E2E-53, E2E-52 |
-| ES-7 | PROVISIONAL | not a new rule but a new *invocation* of the existing suite — the `RefCell`-ba… | E2E-52, E2E-09, E2E-54 |
+| ES-6 | FROZEN | `store_error_crosses_a_join_handle` † | E2E-53, E2E-52 |
+| ES-7 | PROVISIONAL | not a new rule but a new *invocation* of the existing suite — the `Rc`-backed … | E2E-52, E2E-09, E2E-54 |
 | ES-8 | FROZEN | `read_defaults_to_ascending_order`, `read_from_is_inclusive`, `read_backwards_… | E2E-10, E2E-12 |
-| ES-9 | FROZEN | `query_matching_nothing_yields_empty`, `read_from_a_gap_position` † | E2E-10 |
-| ES-10 | PROVISIONAL | `nothing_below_an_observed_position_appears_later` †, `positions_are_unique`, … | E2E-01, E2E-02 |
+| ES-9 | FROZEN | `query_matching_nothing_yields_empty`, `read_from_a_gap_position` †, `read_fro… | E2E-10 |
+| ES-10 | PROVISIONAL | `nothing_below_an_observed_position_appears_later`, `positions_are_unique`, `p… | E2E-01, E2E-02 |
 | ES-11 | PROVISIONAL | `read_result_is_stable_under_concurrent_append` † | E2E-02, E2E-01 |
 | ES-12 | PROVISIONAL | `query_items_share_one_snapshot` † | E2E-03, E2E-05 |
 | ES-13 | FROZEN | `read_result_is_stable_under_concurrent_append` † | E2E-02, E2E-03 |
 | ES-14 | FROZEN | `read_limit_truncates`, `read_backwards_from_with_limit`, `limit_applies_acros… | E2E-12, E2E-13 |
-| ES-15 | FROZEN | `duplicate_items_do_not_duplicate_events` †, `query_item_order_does_not_change… | E2E-32 |
+| ES-15 | FROZEN | `duplicate_items_do_not_duplicate_events`, `query_item_order_does_not_change_t… | E2E-32 |
 | ES-16 | FROZEN | `read_to_is_inclusive` †, `read_from_and_to_bound_a_closed_window` †, `read_to… | E2E-11 |
 | ES-17 | PROVISIONAL | `append_preserves_event_payload` | E2E-36, E2E-39 |
-| ES-18 | FROZEN | `append_is_atomic`, `condition_rejection_leaves_store_unchanged` | E2E-39, E2E-48, E2E-07 |
+| ES-18 | FROZEN | `append_is_atomic`, `condition_rejection_leaves_store_unchanged`, `append_is_a… | E2E-39, E2E-48, E2E-07 |
 | ES-19 | FROZEN | `append_returns_last_written_position`, `batch_positions_follow_slice_order` † | E2E-13, E2E-23 |
 | ES-20 | FROZEN | `append_rejects_empty_batch`, `empty_batch_is_refused_before_the_condition_is_… | E2E-06 |
 | ES-21 | FROZEN | `batch_is_not_evaluated_against_its_own_condition` † | E2E-06 |
@@ -6480,16 +7680,16 @@ between them because its *shape* does not wait on a transport but its
 | ES-24 | FROZEN | `reissued_conditional_batch_lands_once` †, `reissued_unconditional_batch_lands… | E2E-07, E2E-33, E2E-36 |
 | ES-25 | FROZEN | `condition_without_after_rejects_any_match`, `condition_without_after_allows_n… | E2E-08, E2E-55, E2E-39 |
 | ES-26 | FROZEN | `condition_after_ignores_events_at_the_boundary`, `condition_after_rejects_eve… | E2E-56, E2E-10 |
-| ES-27 | FROZEN | `condition_matches_on_tags` †, `condition_with_an_unheld_tag_does_not_reject` … | E2E-55, E2E-03 |
-| ES-28 | FROZEN | `condition_against_an_empty_store_admits_the_append` †, `condition_after_beyon… | E2E-56, E2E-08 |
+| ES-27 | FROZEN | `condition_matches_on_tags`, `condition_with_an_unheld_tag_does_not_reject`, `… | E2E-55, E2E-03 |
+| ES-28 | FROZEN | `condition_against_an_empty_store_admits_the_append`, `condition_after_beyond_… | E2E-56, E2E-08 |
 | ES-29 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56 |
 | ES-30 | FROZEN | `head_of_an_empty_store_is_none` †, `head_is_the_highest_visible_position` †, … | E2E-13, E2E-02, E2E-25 |
 | ES-31 | FROZEN | `checkpoint_lag_is_not_a_position_difference` † | E2E-13, E2E-23, E2E-25 |
 | ES-32 | PROVISIONAL | *(none — see clause)* | E2E-32, E2E-28 |
-| ES-33 | FROZEN | `two_handles_share_one_consistency_boundary` †, `head_advances_across_two_hand… | E2E-08, E2E-46 |
-| ES-34 | FROZEN | `two_handles_share_one_consistency_boundary` † | E2E-08 |
-| ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` † | E2E-46 |
-| ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner` †, `current_thread` † | E2E-09 |
+| ES-33 | FROZEN | `two_handles_observe_each_others_appends`, `acknowledged_writes_survive_a_reop… | E2E-08, E2E-46 |
+| ES-34 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
+| ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-46 |
+| ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
 | ES-38 | FROZEN | `positions_are_not_reused_after_removal` † | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
@@ -6533,8 +7733,8 @@ between them because its *shape* does not wait on a transport but its
 | PS-32 | FROZEN | *(none — see clause)* | E2E-20 |
 | PS-33 | DEFERRED | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
 | PS-34 | PROVISIONAL | a doctest on `ProjectionStore` implementing the port for a toy store, which ca… | E2E-24 |
-| PS-35 | DEFERRED | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
-| PS-36 | FROZEN | `compile_fail` † | E2E-30 |
+| PS-35 | FROZEN | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
+| PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 
 #### `SY` — the `SyncPeer` port (§5)
@@ -6542,7 +7742,7 @@ between them because its *shape* does not wait on a transport but its
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` † | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
-| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` †, `append_is_atomic` | E2E-39 |
+| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` † | E2E-39 |
 | SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` † | E2E-42 |
@@ -6581,38 +7781,38 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| CF-1 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (new meta-test). | *all* |
-| CF-2 | FROZEN | `mutation_coverage::mutant_registry_is_exhaustive` (new meta-test). | *all* |
-| CF-3 | FROZEN | `mutation_coverage::mutants_fail_exactly_their_declared_rules` (new meta-test). | *all* |
-| CF-4 | FROZEN | `mutation_coverage::every_mutant_states_its_provenance` (new meta-test). | E2E-01, E2E-08, E2E-32, E2E-55 |
-| CF-5 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` (new meta-test). | E2E-10 |
+| CF-1 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` — a meta-test in `crates/happenst… | *all* |
+| CF-2 | FROZEN | `mutation_coverage::mutant_registry_is_exhaustive` — a meta-test in `crates/ha… | *all* |
+| CF-3 | FROZEN | `mutation_coverage::mutants_fail_exactly_their_declared_rules` — a meta-test i… | *all* |
+| CF-4 | FROZEN | `mutation_coverage::every_mutant_states_its_provenance` — a meta-test in `crat… | E2E-01, E2E-08, E2E-32, E2E-55 |
+| CF-5 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` — a meta-test in `cra… | E2E-10 |
 | CF-6 | FROZEN | `mutation_coverage::conformant_variants_pass_everything` (CF-5's gapped varian… | E2E-10 |
-| CF-7 | FROZEN | `condition_matches_on_tags` † | E2E-55, E2E-56 |
-| CF-8 | FROZEN | `condition_ignores_events_whose_tags_differ` † | E2E-55, E2E-56 |
-| CF-9 | FROZEN | `query_all_yields_each_event_once` † | E2E-32 |
-| CF-10 | FROZEN | `condition_against_empty_store_allows_append` † | E2E-47 |
-| CF-11 | FROZEN | `empty_batch_is_refused_before_the_condition_is_evaluated` † | E2E-06 |
-| CF-12 | FROZEN | `read_from_composes_with_multi_item_query` † | E2E-10 |
-| CF-13 | DEFERRED | `positions_are_visible_in_assignment_order` † | E2E-01, E2E-02 |
-| CF-14 | DEFERRED | `acknowledged_appends_survive_restart` † | E2E-07 |
-| CF-15 | FROZEN | `fixture_isolation` † | E2E-08, E2E-09 |
-| CF-16 | FROZEN | `two_handles_observe_each_others_appends` † | E2E-08 |
-| CF-17 | PROVISIONAL | `acknowledged_appends_survive_restart` † | E2E-07 |
-| CF-18 | FROZEN | `capability_skips_are_reported` † | E2E-07, E2E-08 |
-| CF-19 | FROZEN | `two_handles_observe_each_others_appends` † | E2E-08 |
+| CF-7 | FROZEN | `condition_matches_on_tags` | E2E-55, E2E-56 |
+| CF-8 | FROZEN | `condition_with_an_unheld_tag_does_not_reject` | E2E-55, E2E-56 |
+| CF-9 | FROZEN | `duplicate_items_do_not_duplicate_events` | E2E-32 |
+| CF-10 | FROZEN | `condition_against_an_empty_store_admits_the_append` | E2E-47 |
+| CF-11 | FROZEN | `empty_batch_is_refused_before_the_condition_is_evaluated` | E2E-06 |
+| CF-12 | FROZEN | `read_from_composes_with_multi_item_query` | E2E-10 |
+| CF-13 | FROZEN | `nothing_below_an_observed_position_appears_later` | E2E-01, E2E-02 |
+| CF-14 | DEFERRED | `acknowledged_writes_survive_a_reopen` | E2E-07 |
+| CF-15 | FROZEN | `two_fixture_instances_observe_none_of_each_others_appends` (the suite rule; t… | E2E-08, E2E-09 |
+| CF-16 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
+| CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-07 |
+| CF-18 | FROZEN | `mutation_coverage::capability_skips_are_reported` — a meta-test in `crates/ha… | E2E-07, E2E-08 |
+| CF-19 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
 | CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:60-77`), extended to b… | E2E-52, E2E-30 |
 | CF-21 | FROZEN | a doctest in `fixtures` constructing a strategy, which fails to compile if the… | E2E-32 |
-| CF-22 | FROZEN | `registry::every_rule_is_enumerated` (CF-24's meta-test is the enforcement). | E2E-52, E2E-30, E2E-09 |
+| CF-22 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | E2E-52, E2E-30, E2E-09 |
 | CF-23 | FROZEN | the wasm32 build step of `cargo xtask ci`, extended to compile a `wasm-bindgen… | E2E-52, E2E-30 |
-| CF-24 | FROZEN | `registry::no_orphan_rules` (new meta-test, comparing the enumeration against … | *all* |
+| CF-24 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | *all* |
 | CF-25 | FROZEN | `cargo xtask spec-trace` (CF-38), which reads the portfolio table and the matu… | E2E-01, E2E-02, E2E-24, E2E-46, E2E-52 |
 | CF-26 | FROZEN | the portfolio table's `Far end exists` column, checked by `cargo xtask spec-tr… | E2E-01, E2E-24 |
 | CF-27 | DEFERRED | `suffix_store_is_distinguishable_from_a_young_store` †, `positions_are_not_reu… | E2E-46, E2E-47, E2E-56, E2E-33 |
-| CF-28 | FROZEN | the existing suite, invoked against a `RefCell`-backed store under a single-th… | E2E-52, E2E-09, E2E-30 |
-| CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (CF-1) plus a changelog check in … | *all* |
+| CF-28 | FROZEN | the existing suite, invoked against that `Rc<RefCell<Vec<_>>>`-backed store un… | E2E-52, E2E-09, E2E-30 |
+| CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (CF-1) enforces the mutant half m… | *all* |
 | CF-30 | NON-NORMATIVE | *(none — see clause)* | *(none — see clause)* |
 | CF-31 | FROZEN | `cargo xtask spec-trace` (CF-38), which fails when a rule name referenced by a… | *all* |
-| CF-32 | FROZEN | a `cargo xtask ci` manifest check. | *(none — see clause)* |
+| CF-32 | FROZEN | a `cargo xtask ci` manifest check, added at phase 3 stage 6. It reads the `[pa… | *(none — see clause)* |
 | CF-33 | FROZEN | a `cargo xtask ci` lint step over `happenstance-testkit/src`, rejecting `std::… | *(none — see clause)* |
 | CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1589-1593 records this as one of the two things that are neither … |
 | CF-35 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
@@ -6662,37 +7862,198 @@ and the document says so rather than implying otherwise.
 
 ### 7.4 Conformance rules no clause names
 
-Two of the twenty-seven rules in
-[`crates/happenstance-testkit/src/suite.rs`](../../crates/happenstance-testkit/src/suite.rs)
-are named by no clause's `Rule:` line. Both are mentioned in the surrounding prose
-of §3 and §6, which is not the same thing: prose that discusses a rule does not
-put it under a clause's protection, and CF-38 is specified to fail on exactly this
-gap.
+**None.** Three rules were named by no clause's `Rule:` line when this section was
+first written. All three were discussed in the surrounding prose of §3 and §6,
+which is not the same thing — prose that discusses a rule does not put it under a
+clause's protection, and CF-38 is specified to fail on exactly that gap. All
+three were then disposed of by a `Retires:` line, and **all three dispositions
+have since been reversed: every one of the rules is retained, and a clause now
+claims each.** That is the more instructive outcome and is why this section
+exists at all. What follows is the record of what was retired, on what reasoning,
+and what refuted it.
 
-**`query_all_matches_every_event`** (`suite.rs:70-80`). The natural home is VT-31
-or ES-15, and both instead name the new `duplicate_items_do_not_duplicate_events`.
-That is deliberate and it is also a hole. The existing rule appends three
-*untagged* events, so the fan-out a tag join without `DISTINCT` produces cannot
-occur (CF-9). The rule is not wrong; it is weaker than the clause it would be
-protecting, and a clause that named it would be claiming coverage it does not
-have. The resolution is that CF-9's strengthened successor supersedes it — which
-means the rule should be *rewritten* rather than kept alongside, and no clause
-currently says so. **This is a defect: name the disposition of the existing rule
-in ES-15, or the traceability checker will report it forever.**
+**Three for three is the finding, not a coincidence.** Each disposition was
+written by reading the rule and asking what it could reject; each was refuted by
+building or strengthening the thing it said could not exist. The method that
+produced the wrong answer three times is the same method §6.1 forbids for
+adapters, applied to rules — so the rule this section leaves behind is:
+**a `Retires:` line is a hypothesis about a wrong implementation, and it is
+discharged the way CF-1 discharges any other, by naming the store and compiling
+it.** Until then it stays a claim to re-examine.
 
-**`racing_conditional_appends_elect_one_winner`** (`suite.rs:596-638`). ES-34
-discusses it and deliberately does not name it: the rule is sequential *and*
-single-handle, so it does not reach the three adapters ES-34 exists to reject.
-§6 additionally records that its one tagged condition runs against a store where a
-type-only probe returns identical verdicts (`suite.rs:603-605`), which is why CF-7
-and CF-8 specify replacements. So the rule is orphaned because it is being
-retired, and again no clause says so. **Same defect, same fix**: ES-25 or ES-27
-should name its disposition.
+The count is deliberately not stated as a fraction of the suite. §7.2 is generated
+and the suite's rule count moves every phase, so a fraction here would be a second
+census to keep in step with §1.3's, decaying the same way and for the same reason.
+What is permanent is the disposition: which rule was retired, why it was weaker
+than the clause it would have protected, and which rule replaces it.
 
-Both are the same shape of error, and it is worth naming the shape. A
-specification that only ever names the rules it wants written leaves the rules
-that already exist unowned, and an unowned rule is one nobody is responsible for
-deleting when it stops meaning anything.
+**`query_all_matches_every_event` — retired at ES-15, and the retirement
+reversed. The rule is retained and ES-15 claims it.** It appended three *untagged*
+events and read them back through `Query::all()`. The retirement's reasoning was
+that this is weaker than the clause it would be protecting, because with no
+multi-tagged event in the store the fan-out a tag join without `DISTINCT`
+produces cannot occur (CF-9). That much is true, and ES-15's
+`duplicate_items_do_not_duplicate_events` is the strengthened successor for that
+half. It is not a reason to delete the rule, because the successor does not carry
+what the retired rule was good at, and there turned out to be *two* such halves
+rather than one. An untagged event has no row to join to and an `INNER JOIN`
+drops it from `Query::all()` entirely — that half went to
+`untagged_events_match_query_all`. The other half nobody had noticed: the rule's
+three events were rewritten to **descending** types, so a store answering
+`ORDER BY type, position` — a covering index on `(type, position)`, which is what
+anyone reaches for — fails it. `SortByEventTypeStore` is that adapter and
+`InnerJoinTagStore` is the second; both are registered, and no other rule rejects
+the first on the untagged `Query::all()` path. A retirement that silently narrows
+coverage is the failure this section exists to catch, and this one was one edit
+away from doing it twice.
+
+**`racing_conditional_appends_elect_one_winner` — retired at ES-27, and the
+retirement reversed. The rule is retained and ES-25 claims it.** It ran two
+conditional appends sequentially, on one handle, and its single tagged condition
+ran against a store where a type-only probe returns the identical verdict — one
+untagged `CourseDefined`, one tagged `StudentSubscribed`. The disposition
+concluded from that that it pinned neither of the two things its name claims. Not
+the tags: ES-27's `condition_matches_on_tags` and its mirror
+`condition_with_an_unheld_tag_does_not_reject` pin those as a pair — CF-7 and
+CF-8 are the obligations to have them — because either alone leaves one direction
+open. And not the race: CF-19's `two_handles_observe_each_others_appends` runs it
+across two handles and ES-36's
+`interleaved_appends_on_one_handle_elect_one_winner` runs it within one. ES-34
+declined to name the rule for exactly this reason and said so before there was
+anywhere to put the disposition — which is what a missing mechanism looks like
+from the inside.
+
+**Both halves of that are correct, and the conclusion drawn from them is not.**
+"Neither of the two clauses whose names the rule evokes owns it" is not the same
+proposition as "no clause owns it", and the rule's actual content is a third
+clause's: ES-25's *if and only if*, seen as two decisions taken from one
+snapshot. The second append's `after` sits below an event matching its own query,
+so the rejection is compulsory and exactly one batch may land. Three registry
+rows fail it — `WriteThenCheckStore`, `ViolationAsStoreErrorStore`,
+`AfterIsAnOffsetStore` — and the first two are shapes ES-25's own `Rejects:`
+paragraph names by hand, which is the evidence that the clause and the rule were
+always about the same thing.
+
+**`append_is_atomic` — retired at ES-18, and the retirement reversed. The rule is
+retained and ES-18 claims it.** This one was found by asking CF-1's question of a
+rule that already existed — name the wrong implementation it rejects — and the
+answer given was: none. A three-event batch, refused, the store asserted
+unchanged; but the condition is evaluated before anything is written, so the
+batch never reaches the write path, a partial write was never possible, and the
+rule asserts `condition_rejection_leaves_store_unchanged`'s property with a
+longer batch and no more reach.
+
+**That answer was wrong, and what refuted it was writing the store rather than
+reading the rule.** `WriteThenCheckStore` — autocommit plus a separate probe,
+the non-concurrent form of the probe-then-insert shape a reviewer measured
+passing the suite — extends the log with all three events, *then* probes, then
+returns `Err`. The batch reaches the write path; the rule catches the partial
+write. `AfterDefaultsToFirstStore` and `InnerJoinTagStore` fail it too, and three
+registry rows now name it. Retiring it would have removed the only rule in the
+suite rejecting that shape's non-atomicity.
+
+`append_is_atomic_under_a_mid_batch_fault` landed at stage 6 beside it, and the
+two are complementary rather than successive: one rejects a store that writes
+before it decides, the other a store that cannot roll back what it wrote. No
+condition violation can manufacture a partial write, which is the part of the
+original reasoning that survives.
+
+The mechanism that let the mistake sit is CF-38's, and it is stated there as well
+as here: **a disposed rule satisfies check 6 forever.** The rule was in
+`suite.rs`, a `Retires:` line named it, and the checker was silent — which is
+precisely the hole this section exists to close, seen from the inside. A
+`Retires:` line is a claim to re-examine, not a filing.
+
+All three are the same shape of error, seen twice at two levels. A specification
+that only ever names the rules it wants written leaves the rules that already
+exist unowned, and an unowned rule is one nobody is responsible for deleting when
+it stops meaning anything — that is how the three came to be here. A rule
+*disposed of* by a clause is owned by nobody either, and the disposition is the
+only thing standing between it and deletion — that is how all three nearly went.
+
+**The checker gap is closed.** `spec_trace.rs`'s check 6 accepts
+`claimed || retired`, so it cannot tell a `Retires:` line that describes a
+deleted rule from one that names a rule still in `suite.rs` and still rejecting
+registered mutants. `cargo xtask lint-retired-rules` is the lint that closes it,
+added at phase 3 stage 6 and mandatory in the gate.
+
+**It is stricter than this section proposed, and the difference is the point.**
+The lint scheduled here was *a rule named in any clause's `Retires:` that
+`collect_rules` still finds in the suite is an error **unless the clause also
+claims it***. The exemption was there to tolerate `retires_of`'s second trap —
+that function reads the whole `Retires:` field, continuation lines included, so a
+*successor* rule backticked in the reasoning registers as retired while being
+legitimately claimed. Tolerating that shape is what leaves the trap armed: the
+day someone drops the claim, the successor is silently disposed of forever, which
+is this section's own failure one turn further round. So the lint carries no
+exemption. A `Retires:` name still found in `suite.rs` fails whether or not a
+clause claims it, with two different messages — *the document contradicts itself*
+where it is claimed, *nothing else can notice this* where it is not — and the
+rule it enforces is the simple one this section arrived at by other means: **a
+`Retires:` line is discharged by deleting the rule, in the same change.** Until
+the deletion lands, the line is a claim to re-examine.
+
+The consequence for check 6 is worth stating because it looks like duplication
+and is not. With the lint in place, a live rule must be *claimed*, and being
+*retired* can no longer save one — so check 6's `retired` disjunct now only
+decides which of the two steps reports the problem, and it is the lint's, whose
+message names the remedy. It found nothing on its first run, exactly as this
+section predicts: every disposition was reversed at stages 4 and 5 and no
+`Retires:` line survives in the document. That is the one nil result in this
+phase's lints that was known in advance, and it is why the lint was demonstrated
+against a `Retires:` line added and removed rather than against the tree.
+
+**A nil result demonstrated by hand is still a nil result, and stage 6's review
+said so.** A lint whose input does not exist reports success identically whether
+it works or has stopped parsing: rename the field to `Retired:`, or move it
+inside a bold paragraph that `field_line`'s continuation loop breaks on, and it
+prints the same green line for ever. Its two sibling lints both bail when what
+they scan is empty and this one had no such guard. It now parses a fixture clause
+of its own on every run — a constant in `xtask/src/spec_trace.rs`, held to the one
+name it is known to dispose of — which converts "the field spelling still parses"
+from an assumption into a failure. The guard earned its keep on the first run: the
+probe as first written backticked a second identifier in its own reasoning, which
+is precisely the trap the field's convention exists to avoid, and the check caught
+it.
+
+**Both this lint and CF-29's resolved rule names against `suite.rs` alone, which
+is one file of the three rules live in.** Since stage 5 there are three: the
+event-store family in `suite.rs`, the proptest family in `model.rs`, and the
+threaded family in `concurrency.rs`. A `Retires:` line naming a live model or
+concurrency rule passed, under a message asserting the thing the run had not
+checked; a rule of either family could land with no changelog entry at all while
+CF-29 reported every rule satisfied. Both now resolve over all three. Note what
+did *not* widen: check 6 — every rule is claimed by a clause — stays scoped to
+`suite.rs`, because only that family's rules are claimed by clauses today. The
+two questions differ, and conflating them would report every model and
+concurrency rule as unowned.
+
+**The changelog lint of CF-29 also matched rule names as bare substrings, and two
+rules were passing on a collision.** `append_is_atomic` is a prefix of
+`append_is_atomic_under_a_mid_batch_fault` and `positions_are_unique` is a prefix
+of `positions_are_unique_under_concurrent_appends`; in both cases the longer
+rule's entry was the only one in the file carrying either name, and it discharged
+the shorter rule's obligation while inflating the per-rule prose share by
+counting the same entry twice. Both now have entries of their own. The first is
+not an incidental rule — this section records it above as the only thing in the
+suite that rejects the write-then-check shape's non-atomicity.
+
+**The clock lint's construct list is short on `wasm32`, and this is where that is
+recorded rather than fixed.** CF-33 names four constructs — `std::time`,
+`Instant`, `elapsed`, `sleep` — and the gate runs exactly those, because quietly
+extending a `[FROZEN]` clause's specified check would leave the document and the
+gate disagreeing about what the bar is, with the gate winning silently. But
+`std::time::Instant::now()` *panics* on `wasm32-unknown-unknown`, and the gate
+type-checks the testkit's tests for that target: the clock an author would reach
+for there is `js_sys::Date::now()` or `chrono::Utc::now()`, and neither contains
+any of the four needles. So the list forbids the spelling that cannot be used on
+a target the crate advertises and permits the ones that can. (`web_time::Instant`
+and `instant::Instant` are caught incidentally, by the type name; the absence of
+`Duration` and `timeout` is correct, because a duration is not a clock read.)
+Closing it means amending CF-33's own `Rule:` line to name the wasm-reachable
+clocks in the same change that extends the array, which is an ADR-shaped edit to
+a frozen clause and belongs to whoever writes the first `wasm32` conformance
+rule that wants one.
 
 ### 7.5 Clauses that name no case
 
