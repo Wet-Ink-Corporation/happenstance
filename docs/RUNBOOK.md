@@ -3064,6 +3064,55 @@ E2E-12, E2E-13, E2E-14, E2E-43, E2E-51, E2E-54.
 
 **Session log**
 
+**2026-08-08 — the ADR pass. Decisions written, no code.** State stays
+`not started`, because a phase is done when its proof artefact exists and phase
+4's does not. What exists is
+[`docs/evaluation/phase-4-reconciliation.md`](evaluation/phase-4-reconciliation.md)
+and ADR-0011 – ADR-0015, all five adversarially reviewed and repaired, awaiting
+sign-off. Baseline and close both green (`cargo xtask ci`, exit 0).
+
+The pass was organised the way step 4 of the session protocol asks — ADRs before
+the code they constrain — and the first thing it found is that **this phase body
+disagrees with the specification in two places**, so rule 5 applies:
+
+- *"`read` takes its query by value"* (`:2768-2774`) contradicts **ES-13**
+  `[FROZEN]`, whose `Rejects:` line names that exact fix verbatim. ADR-0011
+  keeps `&Query`. It does not pay ES-13's stated price either: the escaping
+  cases are discharged by owning the query in a **parameter** rather than a
+  local, which keeps all four proof cases instead of costing two. Precise
+  capturing (`+ use<'a, Self>`) was compiled to work on a plain trait and
+  compiled to be unavailable under `#[trait_variant::make]` (E0799), so the
+  option exists but costs ADR-0001's and ADR-0008's derivation mechanism.
+- *"`append` takes its events by value"* (`:2759-2767`) contradicts **ES-17**,
+  whose falsifier is a measurement phase 8 owns. ADR-0012 keeps `&[Event]` and
+  leaves the marker provisional. Both alternatives this body offers are
+  independently dead: VT-24 forbids an `EventBatch` type in terms, and
+  `impl IntoIterator<Item = Event>` was compiled to be unerasable by `dynosaur`
+  (E0191) — which is `RUNBOOK.md:563`'s own falsifier for ES-17 *firing*.
+
+**The proof artefact is partly invalid as written, and two of its four cases were
+executed rather than argued about.** Case 3 is already green as
+`spawns_from_generic`. Case 4 — append a `Vec<Event>`, then `into_parts` an event
+you still own — **compiles and runs today** against unmodified
+`happenstance-core` (`test tests::runs ... ok`), because the caller never gave
+the Vec away; the real cost `&[Event]` imposes is inside the adapter, which is
+ES-17's measurement and not this phase's. Exit criteria 2, 3, 4, 6 and 7 collide
+with something and are enumerated in the dossier.
+
+**Two findings nobody was looking for.** The ADR queue (`:284-288`) scopes the
+five ADRs to 35 clause IDs while `:2755` says this phase discharges 64 — **29
+clauses, including everything governing `head()`, all of `ReadOptions` and
+`Query`, and all of the condition semantics, are claimed by no ADR in the
+queue.** And `:2866`'s *"No phase owns freezing CF-16 – CF-21"* is stale: five of
+the six are `[FROZEN]` and CF-17 is phase 8's. Its poll-count half is live,
+unclaused, and verbatim true.
+
+**What the body still owes.** Every edit rule 5 requires here is enumerated,
+current-text-to-required-text, in the five ADRs' closing sections. They are
+applied with the code rather than now, because the decisions that motivate them
+are not signed off yet, and a body edited ahead of its decision is a body that
+records an intention.
+
 ---
 
 ## Phase 5 — Freeze the wire format
