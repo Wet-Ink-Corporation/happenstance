@@ -109,37 +109,18 @@ pub mod rules {
     use crate::{Fixture, RuleOutcome};
 
     // ---------------------------------------------------------------------
-    // The four guaranteed minima
+    // The four guaranteed minima (VT-21 – VT-24)
     //
-    // Written out here rather than read from `happenstance-core`, because the
-    // constants VT-21 – VT-24 mandate — `MIN_SUPPORTED_EVENT_DATA_LEN` and its
-    // three siblings — **do not exist yet**. They are phase 4's, along with the
-    // `AppendError::ExceedsStoreLimit` variant a store refuses beyond them with
-    // (VT-25). The clause is the source here and the code is not, which is the
-    // right way round for a rule written before the thing it protects: a rule
-    // that read the constant would assert whatever the constant happened to say,
-    // including nothing.
-    //
-    // All four clauses are `[PROVISIONAL]`, and phase 4 freezes them. When it
-    // does, these four lines become `use happenstance_core::{…}` and any number
-    // that moved takes its rule with it. `docs/RUNBOOK.md`'s phase-3 session log
-    // lists what that re-check owes.
-    //
-    // Note the discrepancy the runbook's own prose carries: its value-edge item
-    // says "a 1 MiB payload" and VT-21 says 65,536 bytes. The clause wins.
+    // Imported rather than written out. Phase 3 spelled the numbers here because
+    // the constants did not exist and a rule that read a missing constant would
+    // have asserted whatever it happened to say, including nothing; phase 4
+    // created them, so the clause and the code now agree by construction and
+    // raising a floor takes its rules with it.
     // ---------------------------------------------------------------------
-
-    /// VT-21 — every store MUST accept a payload of at least this many bytes.
-    const MIN_SUPPORTED_EVENT_DATA_LEN: usize = 65_536;
-
-    /// VT-22 — every store MUST accept an event carrying at least this many tags.
-    const MIN_SUPPORTED_TAGS_PER_EVENT: usize = 64;
-
-    /// VT-23 — every store MUST evaluate a query of at least this many items.
-    const MIN_SUPPORTED_QUERY_ITEMS: usize = 128;
-
-    /// VT-24 — every store MUST accept an append of at least this many events.
-    const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
+    use happenstance_core::{
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
+        MIN_SUPPORTED_TAGS_PER_EVENT,
+    };
 
     // ---------------------------------------------------------------------
     // Helpers

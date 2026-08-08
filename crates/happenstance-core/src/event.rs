@@ -1,6 +1,6 @@
 //! Events, their types, and their positions in the store's total order.
 
-use alloc::boxed::Box;
+use alloc::borrow::Cow;
 use alloc::string::String;
 use core::fmt;
 use core::num::NonZeroU64;
@@ -9,12 +9,19 @@ use bytes::Bytes;
 
 use crate::error::InvalidEventType;
 use crate::tag::Tags;
+use crate::validate;
 
 /// Longest permitted event type, in bytes.
 pub const MAX_EVENT_TYPE_LEN: usize = 255;
 
 /// The identifier a store filters on: `CourseDefined`, `StudentSubscribed`, and
 /// so on.
+///
+/// Backed by `Cow<'static, str>` so that one type expresses both identifiers
+/// written in the source and baked into the binary, and identifiers that
+/// arrived from a peer at run time and had to be allocated. Ingest needs the
+/// second; a codec registry wants the first; a newtype over `&'static str`
+/// alone could only express the first, which is why it lost.
 ///
 /// # Examples
 ///
@@ -25,8 +32,18 @@ pub const MAX_EVENT_TYPE_LEN: usize = 255;
 /// assert_eq!(ty.as_str(), "StudentSubscribed");
 /// # Ok::<(), happenstance_core::InvalidEventType>(())
 /// ```
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EventType(Box<str>);
+///
+/// Constructed in a `const`, it is validated by the compiler and allocates
+/// nothing:
+///
+/// ```
+/// use happenstance_core::EventType;
+///
+/// const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+/// assert_eq!(COURSE_DEFINED.as_str(), "CourseDefined");
+/// ```
+#[derive(Clone)]
+pub struct EventType(Cow<'static, str>);
 
 impl EventType {
     /// Creates an event type.
@@ -34,42 +51,122 @@ impl EventType {
     /// # Errors
     ///
     /// Returns [`InvalidEventType`] if the value is empty, longer than
-    /// [`MAX_EVENT_TYPE_LEN`] bytes, or contains ASCII control characters.
+    /// [`MAX_EVENT_TYPE_LEN`] bytes, contains a character in Unicode general
+    /// category `Cc`, or contains one of the seven explicit bidirectional
+    /// formatting controls.
     pub fn new(value: impl Into<String>) -> Result<Self, InvalidEventType> {
         let value = value.into();
-        if value.is_empty() {
-            return Err(InvalidEventType::Empty);
+        match validate::check(&value, MAX_EVENT_TYPE_LEN) {
+            validate::Refusal::Accepted => Ok(Self(Cow::Owned(value))),
+            validate::Refusal::Empty => Err(InvalidEventType::Empty),
+            validate::Refusal::TooLong => Err(InvalidEventType::TooLong { len: value.len() }),
+            validate::Refusal::ControlCharacter => Err(InvalidEventType::ControlCharacter),
+            validate::Refusal::BidirectionalControl => Err(InvalidEventType::BidirectionalControl),
         }
-        if value.len() > MAX_EVENT_TYPE_LEN {
-            return Err(InvalidEventType::TooLong { len: value.len() });
+    }
+
+    /// Creates an event type from a string literal, validating at compile time.
+    ///
+    /// Enforces exactly the rules [`new`](Self::new) enforces — one function
+    /// checks both — so an `EventType` is always a validated value, with some of
+    /// that validation having happened before the program ran.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value would be rejected by [`new`](Self::new). **Where
+    /// that panic surfaces depends on the call site, and the difference is
+    /// sharp enough to be worth stating:**
+    ///
+    /// | Call site | When the invalid value is caught |
+    /// |---|---|
+    /// | a free `const` | `cargo check`, as `error[E0080]` |
+    /// | an associated `const` that is read somewhere | `cargo build` |
+    /// | an associated `const` that is never read | **never** |
+    /// | a `let` binding | at run time, as a panic |
+    ///
+    /// The third row is the one to design around: an associated const is
+    /// evaluated lazily, so an invalid one that nothing reads survives `check`,
+    /// `clippy`, `build` and `test`. Prefer a free `const` for anything whose
+    /// validity you want the compiler to guarantee.
+    #[must_use]
+    pub const fn from_static(value: &'static str) -> Self {
+        match validate::check(value, MAX_EVENT_TYPE_LEN) {
+            validate::Refusal::Accepted => Self(Cow::Borrowed(value)),
+            validate::Refusal::Empty => panic!("an event type must not be empty"),
+            validate::Refusal::TooLong => {
+                panic!("an event type must be at most MAX_EVENT_TYPE_LEN bytes")
+            }
+            validate::Refusal::ControlCharacter => {
+                panic!("an event type must not contain control characters")
+            }
+            validate::Refusal::BidirectionalControl => {
+                panic!("an event type must not contain bidirectional formatting controls")
+            }
         }
-        if value.chars().any(char::is_control) {
-            return Err(InvalidEventType::ControlCharacter);
-        }
-        Ok(Self(value.into_boxed_str()))
     }
 
     /// The event type as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+// `Eq`, `Ord` and `Hash` are written out rather than derived. A derive on a
+// single-field tuple struct produces exactly these bodies today and would
+// silently produce different ones the moment a second field lands — and this
+// phase is adding fields to neighbouring types for that very reason. Writing
+// them here also puts the `Borrow<str>` obligation at the place it is
+// discharged: `Borrow` promises the borrowed form hashes and compares
+// *identically* to the owner, and a `HashMap` whose key breaks that promise
+// loses entries with no diagnostic anywhere.
+impl PartialEq for EventType {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for EventType {}
+
+impl PartialOrd for EventType {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for EventType {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl core::hash::Hash for EventType {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl core::borrow::Borrow<str> for EventType {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl fmt::Debug for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EventType({:?})", &*self.0)
+        write!(f, "EventType({:?})", self.as_str())
     }
 }
 
 impl fmt::Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.as_str())
     }
 }
 
 impl AsRef<str> for EventType {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
@@ -85,6 +182,14 @@ impl TryFrom<String> for EventType {
     type Error = InvalidEventType;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl core::str::FromStr for EventType {
+    type Err = InvalidEventType;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::new(value)
     }
 }
@@ -194,10 +299,33 @@ impl Event {
     ///
     /// Returns [`InvalidEventType`] if `event_type` fails
     /// [`EventType::new`]'s validation.
-    pub fn new(
-        event_type: impl TryInto<EventType, Error = InvalidEventType>,
-        data: impl Into<Bytes>,
-    ) -> Result<Self, InvalidEventType> {
+    ///
+    /// # Examples
+    ///
+    /// The bound accepts a `&str`, which is validated here, and an
+    /// already-built [`EventType`], which is not validated twice:
+    ///
+    /// ```
+    /// use happenstance_core::{Event, EventType};
+    ///
+    /// const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+    ///
+    /// let from_str = Event::new("CourseDefined", &b"{}"[..])?;
+    /// let from_const = Event::new(COURSE_DEFINED, &b"{}"[..])?;
+    /// assert_eq!(from_str.event_type(), from_const.event_type());
+    /// # Ok::<(), happenstance_core::InvalidEventType>(())
+    /// ```
+    pub fn new<T>(event_type: T, data: impl Into<Bytes>) -> Result<Self, InvalidEventType>
+    where
+        // Deliberately not `TryInto<EventType, Error = InvalidEventType>`. That
+        // equality constraint excludes the *infallible* identity conversion, so
+        // an already-built `EventType` — the thing a codec registry interns once
+        // per domain event — could not be passed at all (`error[E0271]`). The
+        // looser pair below accepts both, and is the shape `QueryItem::new`
+        // already uses one file over.
+        T: TryInto<EventType>,
+        InvalidEventType: From<T::Error>,
+    {
         Ok(Self {
             event_type: event_type.try_into()?,
             data: data.into(),

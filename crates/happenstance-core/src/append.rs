@@ -98,8 +98,10 @@ impl AppendCondition {
         event_type: &crate::EventType,
         tags: &crate::Tags,
     ) -> bool {
-        // Note: written without a let-chain so the crate keeps its 1.85 MSRV;
-        // let-chains only stabilised in 1.88.
+        // Written as a match rather than a let-chain because the two arms read
+        // as the two rules they are, not because the floor forbids one: ADR-0029
+        // raised the MSRV to 1.97.1 and let-chains have been available since
+        // 1.88.
         match self.after {
             Some(after) if position <= after => false,
             _ => self.fail_if_events_match.matches(event_type, tags),

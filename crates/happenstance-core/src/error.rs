@@ -26,9 +26,19 @@ pub enum InvalidTag {
         /// The rejected length, in bytes.
         len: usize,
     },
-    /// The tag contained an ASCII control character.
+    /// The tag contained a control character (Unicode `Cc`).
     #[error("a tag must not contain control characters")]
     ControlCharacter,
+    /// The tag contained one of the seven explicit bidirectional formatting
+    /// controls: U+202A–U+202E or U+2066–U+2069.
+    ///
+    /// Separate from [`ControlCharacter`](Self::ControlCharacter) because the
+    /// two refusals have different remedies. A control character in an
+    /// identifier is almost always an encoding bug; a bidirectional override is
+    /// almost always an attack — a tag that renders as one thing in every
+    /// console and matches another in every query.
+    #[error("a tag must not contain bidirectional formatting controls")]
+    BidirectionalControl,
     /// The key half of a `key:value` pair itself contained a colon, which would
     /// make [`Tag::key`](crate::Tag::key) ambiguous.
     #[error("the key of a `key:value` tag must not contain a colon")]
@@ -50,9 +60,30 @@ pub enum InvalidEventType {
         /// The rejected length, in bytes.
         len: usize,
     },
-    /// The event type contained an ASCII control character.
+    /// The event type contained a control character (Unicode `Cc`).
     #[error("an event type must not contain control characters")]
     ControlCharacter,
+    /// The event type contained one of the seven explicit bidirectional
+    /// formatting controls: U+202A–U+202E or U+2066–U+2069.
+    ///
+    /// Separate from [`ControlCharacter`](Self::ControlCharacter) for the reason
+    /// [`InvalidTag::BidirectionalControl`] gives.
+    #[error("an event type must not contain bidirectional formatting controls")]
+    BidirectionalControl,
+}
+
+impl From<core::convert::Infallible> for InvalidEventType {
+    /// Lets [`Event::new`](crate::Event::new) accept both `&str`, which
+    /// converts fallibly, and an already-built [`EventType`](crate::EventType),
+    /// whose conversion cannot fail.
+    ///
+    /// The match has no arms because [`Infallible`](core::convert::Infallible)
+    /// has no values, and the compiler accepts an empty match on an uninhabited
+    /// type as exhaustive. That is what lets an infallible conversion satisfy a
+    /// fallible bound.
+    fn from(never: core::convert::Infallible) -> Self {
+        match never {}
+    }
 }
 
 /// A [`Query`](crate::Query) or [`QueryItem`](crate::QueryItem) failed
@@ -72,6 +103,15 @@ pub enum InvalidQuery {
     /// One of the item's event types was itself invalid.
     #[error(transparent)]
     EventType(#[from] InvalidEventType),
+    /// One of the item's tags was itself invalid.
+    ///
+    /// This is what lets a command handler in a library crate build tags, items
+    /// and a query, propagate all three with `?`, and still have one error type
+    /// — without a bespoke enum and without reaching for `anyhow`, which the
+    /// house style forbids in library code. The conversion direction is
+    /// unambiguous: a query can contain tags, and a tag cannot contain a query.
+    #[error(transparent)]
+    Tag(#[from] InvalidTag),
 }
 
 impl From<core::convert::Infallible> for InvalidQuery {
@@ -160,6 +200,25 @@ pub enum AppendError<E> {
     #[error("an append must contain at least one event")]
     NoEvents,
 
+    /// The batch exceeded a capacity the store documents.
+    ///
+    /// Distinct from [`Store`](Self::Store) on purpose, and the distinction is
+    /// the whole reason the variant exists: a caller that cannot tell "this will
+    /// never fit here, park it and tell a human" from "the disk is full, retry"
+    /// has to guess, and a sync runner that guesses wrong drops an event
+    /// permanently.
+    ///
+    /// A store MUST report a capacity refusal through this variant rather than
+    /// through [`Store`](Self::Store), and MUST NOT truncate instead.
+    #[error("append exceeds the store's {limit} limit: {len}")]
+    ExceedsStoreLimit {
+        /// Which limit was exceeded.
+        limit: crate::limits::StoreLimit,
+        /// The value that exceeded it — a byte count, a tag count or an event
+        /// count, according to `limit`.
+        len: usize,
+    },
+
     /// The adapter failed for its own reasons.
     #[error(transparent)]
     Store(E),
@@ -182,6 +241,7 @@ impl<E> AppendError<E> {
         match self {
             Self::ConditionViolated(violation) => AppendError::ConditionViolated(violation),
             Self::NoEvents => AppendError::NoEvents,
+            Self::ExceedsStoreLimit { limit, len } => AppendError::ExceedsStoreLimit { limit, len },
             Self::Store(err) => AppendError::Store(f(err)),
         }
     }

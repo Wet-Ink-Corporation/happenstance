@@ -43,11 +43,28 @@ pub struct ProjectionId(Box<str>);
 
 impl ProjectionId {
     /// Creates a projection identifier.
+    ///
+    /// **Infallible, and that is an open question rather than a decision.**
+    /// Both sibling identifiers — [`EventType`](crate::EventType) and
+    /// [`Tag`](crate::Tag) — validate and return a `Result`; this one accepts
+    /// anything, including the empty string, and the value becomes the primary
+    /// key of a checkpoint row.
+    ///
+    /// Do not read the inconsistency as a deliberate "opaque operator-chosen
+    /// key" design. There is no decision behind it. It is left standing because
+    /// `ProjectionId` belongs to [`ProjectionStore`], which is provisional, has
+    /// no conformance suite, and is frozen at a later phase — and a validating
+    /// constructor with nothing able to check it would be exactly the decorative
+    /// rule this project's conformance discipline exists to prevent. Adding a
+    /// fallible `parse` beside this constructor would be worse than either
+    /// choice: two constructors enforcing different rules is the defect that
+    /// makes an invalid value reachable through the weaker one.
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into().into_boxed_str())
     }
 
     /// The identifier as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
