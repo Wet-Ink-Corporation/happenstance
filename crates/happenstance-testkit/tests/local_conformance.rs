@@ -260,6 +260,35 @@ impl EventStore for LocalMemoryEventStore {
 
         Ok(position_at(first_index + events.len() - 1))
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // `MemoryEventStore::head`'s body, through this store's borrow
+        // discipline: `try_borrow` so that a conflicting borrow is reported in
+        // `Self::Error` rather than panicking, and the `Ref` released before the
+        // value leaves the function — the same rule `select` states, and for the
+        // same reason. There is no `.await` here to hold it across.
+        let borrowed = self
+            .events
+            .try_borrow()
+            .map_err(|_| LocalStoreError::AlreadyBorrowed)?;
+
+        let head = borrowed.last().map(|event| event.position);
+        drop(borrowed);
+        Ok(head)
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        // A scan, like the reference store: this log has no index, and the point
+        // of both is to be obviously correct rather than fast.
+        let borrowed = self
+            .events
+            .try_borrow()
+            .map_err(|_| LocalStoreError::AlreadyBorrowed)?;
+
+        let found = borrowed.iter().any(|event| event.id == id);
+        drop(borrowed);
+        Ok(found)
+    }
 }
 
 /// The stream returned by [`LocalMemoryEventStore::read`].

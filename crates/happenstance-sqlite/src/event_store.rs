@@ -66,7 +66,7 @@ use std::vec;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, InvalidEventType, InvalidTag, Query, ReadOptions,
+    AppendCondition, AppendError, Event, EventId, InvalidEventType, InvalidTag, Query, ReadOptions,
     SendEventStore, SequencePosition, SequencedEvent,
 };
 use rusqlite::Connection;
@@ -221,6 +221,27 @@ impl SendEventStore for SqliteEventStore {
         _condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         todo!("SQLite event store: append")
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // `SELECT max(position) FROM event`, on a blocking thread like every
+        // other statement here, and asked of the database *every time*. What it
+        // must not become is a field this store caches and `append` updates:
+        // one file backs several handles, so a second connection would then
+        // report a head that predates the first connection's commit — the stale
+        // head ES-30 exists to reject. The row is `NULL` on an empty table,
+        // which is the `None` arm rather than an error.
+        todo!("SQLite event store: head")
+    }
+
+    async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
+        // `SELECT 1 FROM event WHERE origin_store = ? AND origin_position = ?
+        // LIMIT 1`. Those two columns are absent from the schema in the module
+        // documentation because nothing had asked a stored row for its identity
+        // until now; the migration that lands `append` adds them `UNIQUE`
+        // together, which is both the index this probe seeks and the constraint
+        // that keeps ingest from storing one event twice.
+        todo!("SQLite event store: contains_event_id")
     }
 }
 

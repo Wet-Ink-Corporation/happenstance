@@ -72,7 +72,7 @@ use std::rc::{Rc, Weak};
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, EventType, Query,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
     QueryItem, ReadOptions, SequencePosition, SequencedEvent, Tag, Tags,
 };
 use happenstance_testkit::{Capability, Fixture};
@@ -272,6 +272,27 @@ impl<D: Defect> EventStore for MutantStore<D> {
             .try_borrow_mut()
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         D::commit(&mut stored, events, condition)
+    }
+
+    // Not an eighth [`Defect`] step, and deliberately: every mutant in this file
+    // declares its defect elsewhere, so both answers here are `crate::correct`'s
+    // for every `D`. A defect that leaked in through this pair would be a second,
+    // undeclared one, and `mutants_fail_exactly_their_declared_rules` would then
+    // be catching the instrument rather than the implementation.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
     }
 }
 
@@ -1423,6 +1444,20 @@ impl EventStore for NoTransactionStore {
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
     }
+
+    // Delegated to a correct store over the same log rather than answered here.
+    // A `Log`'s events are private to `crate::correct`, and the alternative —
+    // reaching them through `select` with a contrived `ReadOptions` — would be a
+    // second implementation of `head` in the one file whose whole premise is that
+    // there is only ever one. This store's declared defect is the missing
+    // `BEGIN`, and nothing else may differ.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        LogStore::over(&self.log).head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        LogStore::over(&self.log).contains_event_id(id).await
+    }
 }
 
 /// One log, one arming slot, and any number of transaction-less handles.
@@ -2012,6 +2047,27 @@ impl EventStore for CachedHeadStore {
         self.head.set(Some(position));
         Ok(position)
     }
+
+    // Answered from the log, **not** from `self.head`, for the reason `read` is
+    // delegated in full: this store's declared defect is the staleness of the
+    // *condition probe*, and a handle that also reported its cache as the store's
+    // head would fail rules it does not declare. The realistic shape is the one
+    // modelled — the cache exists because the probe is the expensive half.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
 }
 
 /// One log, and handles that each cache its head when they open.
@@ -2275,6 +2331,38 @@ impl EventStore for PreCommitPositionStore {
 
         Ok(last)
     }
+
+    // Over the committed rows, not over `self.sequence`. The sequence holds a
+    // number that has been *allocated*, which is precisely the value no reader is
+    // entitled to see yet; answering with it would make the visibility window
+    // observable through a second door and give the store a defect it does not
+    // declare. Postgres' own `currval()` is the same distinction.
+    //
+    // And `max`, not `correct::head_of`, which is this store's one departure from
+    // the shared core and needs its reason on the page. `head_of` returns the
+    // *last* element, which is the highest only where positions ascend — and
+    // rows arriving out of position order is this store's entire declared defect.
+    // Every committed row here is visible (there is no frontier predicate, so
+    // committed and visible are the same set), so "the highest position currently
+    // visible" is the maximum. Answering `last()` would make `head` lag a row a
+    // reader can already see, which is a *second* defect on top of the declared
+    // one — and `mutants_fail_exactly_their_declared_rules` would then be
+    // reporting the instrument rather than the implementation.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .committed
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(stored.iter().map(|event| event.position).max())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .committed
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
 }
 
 /// One sequence and one set of committed rows, shared by every handle.
@@ -2393,6 +2481,18 @@ impl EventStore for BorrowHoldingStore {
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         correct::commit(&mut self.0.borrow_mut(), events, condition, dense)
     }
+
+    // `borrow`, like the two methods above, and the borrow is released before
+    // either returns — this store's declared defect is the lifetime of what
+    // `read` hands back, so a shared borrow taken and dropped here is
+    // indistinguishable from a conformant store's.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(correct::head_of(&self.0.borrow()))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(correct::contains(&self.0.borrow(), id))
+    }
 }
 
 /// One log, and handles that hand out borrow-holding streams.
@@ -2469,6 +2569,18 @@ impl EventStore for AwaitAcrossBorrowStore {
         let mut stored = self.0.borrow_mut();
         YieldOnce(false).await;
         correct::commit(&mut stored, events, condition, dense)
+    }
+
+    // No suspension point, so no borrow is held across one. The defect this store
+    // exists for is `append`'s alone; a second `.await` under a live borrow here
+    // would make it fail the re-entrancy rules twice over and pin neither failure
+    // to the declared half.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(correct::head_of(&self.0.borrow()))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(correct::contains(&self.0.borrow(), id))
     }
 }
 

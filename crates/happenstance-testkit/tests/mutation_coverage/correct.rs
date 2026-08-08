@@ -579,4 +579,41 @@ impl EventStore for LogStore {
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let log = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(head_of(&log.events))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let log = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(contains(&log.events, id))
+    }
+}
+
+/// The highest position in a log.
+///
+/// A free function so that a mutant of `head` is one step from correct, in the
+/// same way `select` and `commit` make a mutant of the read and write paths one
+/// step from correct.
+///
+/// # Precondition, and the one store that breaks it
+///
+/// Returns the **last** element, which is the highest only where the slice is in
+/// ascending position order. That holds for every store here whose rows are
+/// appended in the order they are allocated — which is all of them but one.
+///
+/// `PreCommitPositionStore` publishes rows in *commit* order, and rows arriving
+/// out of position order is its whole declared defect, so it computes a `max`
+/// instead and says so at its own `head`. Anything else would give it a second
+/// defect — `head` lagging a row a reader can already see — and the meta-test
+/// that checks mutants fail exactly their declared rules would then be reporting
+/// this file rather than the store.
+pub(crate) fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
+    events.last().map(|event| event.position)
+}
+
+/// Whether a log holds an event with this identity.
+pub(crate) fn contains(events: &[SequencedEvent], id: EventId) -> bool {
+    events.iter().any(|event| event.id == id)
 }

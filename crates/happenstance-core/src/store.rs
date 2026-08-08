@@ -58,6 +58,7 @@ use futures_core::Stream;
 use crate::append::AppendCondition;
 use crate::error::AppendError;
 use crate::event::{Event, SequencePosition, SequencedEvent};
+use crate::identity::EventId;
 use crate::query::{Query, ReadOptions};
 
 /// A DCB-compliant event store.
@@ -150,6 +151,57 @@ pub trait EventStore {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>>;
+
+    /// The highest position currently visible in the store, or `None` when it
+    /// holds nothing.
+    ///
+    /// # Why this is required rather than provided
+    ///
+    /// A provided body would have to be
+    /// `read(&Query::all(), backwards().limit(1))`, which is a scan on any store
+    /// that cannot push the ordering down, and a blanket implementation cannot
+    /// be overridden per adapter. A SQLite adapter wants `SELECT max(position)`.
+    /// The cost of `required` is a body in every implementation; the cost of
+    /// `provided` is a fast path no adapter can install.
+    ///
+    /// There is a second reason, and it is the one that settles it: the only
+    /// provided form holds `&self` across an `await`, which needs
+    /// `where Self: Sync` — and the `!Send` edge adapter that the bare flavour
+    /// exists for is not `Sync`, so the convenience body would fail to compile
+    /// for exactly the adapter it was meant to spare.
+    ///
+    /// # What it is for
+    ///
+    /// Answering "am I caught up?" — a projection runner compares its checkpoint
+    /// with this for **equality or ordering**. Do not subtract two positions and
+    /// read the difference as a count of outstanding events: positions are an
+    /// opaque ordering key and the specification permits gaps, so the difference
+    /// is not a number of anything.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if the head cannot be determined.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error>;
+
+    /// Whether this store holds an event with `id`.
+    ///
+    /// The membership question a replicating peer must be able to ask without
+    /// constructing a [`Query`] and without parsing any payload — which is why
+    /// [`EventId`] is deliberately outside the query language.
+    ///
+    /// # Why every store can answer this cheaply
+    ///
+    /// Every store already holds at most one event per `EventId`, so the index
+    /// that answers this exists wherever the contract is honoured, and no
+    /// adapter is taxed with a new one. A store that has never ingested anything
+    /// can answer without an index at all: if the identifier's store half is not
+    /// its own incarnation the answer is `false`, and if it is, the question
+    /// reduces to whether that position exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if the lookup fails.
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error>;
 }
 
 /// Drains a [`read`](EventStore::read) stream into a `Vec`, stopping at the

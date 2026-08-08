@@ -41,8 +41,8 @@
 use std::sync::{Arc, Mutex};
 
 use happenstance_core::{
-    AppendCondition, AppendError, Event, MemoryEventStore, MemoryStoreError, Query, ReadOptions,
-    SendEventStore, SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, Event, EventId, MemoryEventStore, MemoryStoreError, Query,
+    ReadOptions, SendEventStore, SequencePosition, SequencedEvent,
 };
 use happenstance_testkit::{Capability, Fixture};
 
@@ -110,6 +110,25 @@ impl SendEventStore for DurableHandle {
         // otherwise fire here.
         self.log.lock().unwrap().extend(events.iter().cloned());
         Ok(position)
+    }
+
+    // Both of the below ask the live store rather than the log, and that is the
+    // honest answer rather than the convenient one: the "disk" here is a
+    // `Vec<Event>`, which carries neither positions nor identities, so it cannot
+    // answer either question — only the store that replayed it can. That is also
+    // what makes the durability assertion mean something, because `reopen`
+    // rebuilds the live store *from* the log, so a head read through a
+    // post-reopen handle is a head over exactly what survived.
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // Read through on every call, never remembered at `connect`: a handle
+        // that caches the head is `CachedHeadFixture`'s declared defect in
+        // `tests/mutation_coverage/mutants.rs`, and this file is its control.
+        self.live.head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        self.live.contains_event_id(id).await
     }
 }
 

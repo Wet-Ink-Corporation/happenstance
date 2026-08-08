@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventType, MemoryEventStore, Query, QueryItem,
+    AppendCondition, AppendError, Event, EventId, EventType, MemoryEventStore, Query, QueryItem,
     ReadOptions, SendEventStore, SequencePosition, SequencedEvent, Tags,
 };
 
@@ -205,6 +205,14 @@ impl SendEventStore for MemoryHandle {
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         self.0.append(events, condition).await
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        self.0.head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        self.0.contains_event_id(id).await
     }
 }
 

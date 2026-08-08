@@ -102,8 +102,8 @@ pub mod send_flavour {
 
     use futures_core::Stream;
     use happenstance_core::{
-        AppendCondition, AppendError, Event, Query, ReadOptions, SendEventStore, SequencePosition,
-        SequencedEvent,
+        AppendCondition, AppendError, Event, EventId, Query, ReadOptions, SendEventStore,
+        SequencePosition, SequencedEvent,
     };
 
     use crate::event_store::CloudflareEventStoreError;
@@ -150,6 +150,20 @@ pub mod send_flavour {
             _events: &[Event],
             _condition: Option<&AppendCondition>,
         ) -> Result<SequencePosition, AppendError<Self::Error>> {
+            todo!("phase 9: this probe exists for its type, not its behaviour")
+        }
+
+        // `head` and `contains_event_id` are here because the trait requires
+        // them, and they are worth having: both return `Self::Error` *bare*,
+        // without `AppendError` wrapping it, so they widen finding 4 — the
+        // derived flavour does not imply a `Send` error on any method, not just
+        // on the one whose error is wrapped. Bodies stay `todo!()` so the probe
+        // keeps proving a fact about types and nothing about behaviour.
+        async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+            todo!("phase 9: this probe exists for its type, not its behaviour")
+        }
+
+        async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
             todo!("phase 9: this probe exists for its type, not its behaviour")
         }
     }

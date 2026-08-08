@@ -341,6 +341,22 @@ impl SendEventStore for MemoryEventStore {
 
         Ok(position_at(first_index + events.len() - 1))
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // The whole log is behind one lock, so the highest visible position is
+        // the last element. An adapter over SQL answers with
+        // `SELECT max(position)`; what neither may do is cache it outside the
+        // transaction that assigns it, which is what makes a second handle
+        // observe a stale head.
+        Ok(self.read_guard().last().map(|event| event.position))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        // A scan, because this store has no index and never will — it exists to
+        // be correct and readable, not fast. The shape an adapter uses is
+        // `WHERE origin_store = ? AND origin_position = ?`.
+        Ok(self.read_guard().iter().any(|event| event.id == id))
+    }
 }
 
 /// The stream returned by [`MemoryEventStore::read`].

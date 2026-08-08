@@ -32,7 +32,7 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventStore, Query, ReadOptions, SequencePosition,
+    AppendCondition, AppendError, Event, EventId, EventStore, Query, ReadOptions, SequencePosition,
     SequencedEvent,
 };
 use happenstance_testkit::{Capability, Fixture};
@@ -147,6 +147,23 @@ impl EventStore for GappedPositionStore {
             .extend(events.iter().cloned());
 
         Ok(position)
+    }
+
+    // Both forwarded to the correct store over the same log rather than written
+    // out again: `Log`'s events are private to `correct`, and a second copy of
+    // these bodies would be a second way for a *conformant control* to differ
+    // from correct — which is the one thing this variant is not allowed to have.
+    // Note what forwarding buys here specifically: `head_of` answers with the
+    // last position *assigned*, which under [`gapped`] is 4096 + 7n and never a
+    // count of events. `live` and not `committed`, because head and identity are
+    // properties of what this handle can read back, and a reopen is what replays
+    // one into the other.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        LogStore::over(&self.live).head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        LogStore::over(&self.live).contains_event_id(id).await
     }
 }
 
@@ -315,6 +332,18 @@ impl EventStore for PagedStreamStore {
             .try_borrow_mut()
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
+    }
+
+    // Forwarded, as [`GappedPositionStore`]'s are. Deliberately *not* made to
+    // pend first: this variant's axis is stream readiness, and neither of these
+    // returns a stream, so a `Poll::Pending` future here would be a second
+    // difference on a control that is only allowed one.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        LogStore::over(&self.0).head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        LogStore::over(&self.0).contains_event_id(id).await
     }
 }
 
