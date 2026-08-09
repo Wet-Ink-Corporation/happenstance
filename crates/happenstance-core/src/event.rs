@@ -558,11 +558,144 @@ mod serde_impls {
     //! yields `None` with no attribute at all; that asymmetry is accepted rather
     //! than closed with a hand-written visitor, because `None` fails closed
     //! everywhere this crate reads it.
+    //!
+    //! Payloads carry a second obligation, which [`payload`] holds: opaque bytes
+    //! encode as base64 where a human will read them and as raw bytes where
+    //! nobody will (WF-11, ADR-0016 §10).
+    //!
+    //! ```
+    //! use happenstance_core::Event;
+    //!
+    //! let event = Event::new("SeatMapPublished", &b"\xde\xad\xbe\xef"[..])?;
+    //! let json = serde_json::to_string(&event)?;
+    //!
+    //! // Base64 text, not the array of decimal integers `bytes` would emit —
+    //! // 2.6786x smaller on a 340 KiB seat map, and legible in a log.
+    //! assert!(json.contains(r#""data":"3q2+7w==""#), "{json}");
+    //! assert!(json.contains(r#""metadata":null"#), "{json}");
+    //!
+    //! // An empty payload is not an absent one: ADR-0003 promises byte-for-byte
+    //! // forwarding, and "the peer sent nothing" is not "the peer sent none".
+    //! let empty = event.clone().with_metadata(&b""[..]);
+    //! assert!(serde_json::to_string(&empty)?.contains(r#""metadata":"""#));
+    //!
+    //! // postcard is not human-readable: the four bytes travel as themselves.
+    //! let binary = postcard::to_stdvec(&event)?;
+    //! assert!(binary.windows(4).any(|w| w == b"\xde\xad\xbe\xef"));
+    //! assert_eq!(postcard::from_bytes::<Event>(&binary)?, event);
+    //! # Ok::<(), Box<dyn core::error::Error>>(())
+    //! ```
     use super::{Event, EventType, SequencePosition, SequencedEvent};
     use alloc::string::String;
     use bytes::Bytes;
     use core::num::NonZeroU64;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    /// The opaque-payload encoding: base64 in human-readable formats, raw bytes
+    /// otherwise (WF-11, ADR-0016 §10).
+    ///
+    /// `bytes`' own impl renders a JSON array of decimal integers, which is
+    /// 3.5715x the raw size and unreadable; standard-alphabet base64 with
+    /// padding is 1.3333x and copies out of a log in one selection.
+    ///
+    /// # The wrong implementation this exists to reject
+    ///
+    /// An **inverted** `is_human_readable` branch: raw bytes in the JSON arm,
+    /// base64 in the postcard one. Each arm is internally consistent, so
+    /// encode-then-decode agrees with itself whichever one ran and a round-trip
+    /// test passes in **both** formats — measured, on a deliberately inverted
+    /// newtype over `[de ad be ef]`, in
+    /// `docs/experiments/wire-format/tests/decorative_inverted_branch.rs`. That
+    /// is why WF-11 names two rules asserting the bytes actually on the wire
+    /// (`wire::payload_is_base64_in_json` and `wire::payload_is_raw_in_postcard`)
+    /// rather than one asserting a round trip.
+    ///
+    /// The human-readable arm materialises the whole payload, and no encoding
+    /// avoids that: serde's data model has no streaming entry point for a string,
+    /// so `serialize_str` and `collect_str` both write the entire rendering.
+    /// WF-11's falsifier is about that property, not about base64.
+    mod payload {
+        use super::{Bytes, Deserialize, Deserializer, Serialize, Serializer};
+        use alloc::string::String;
+        use base64::Engine as _;
+        use base64::engine::general_purpose::STANDARD;
+
+        pub(super) fn serialize<S: Serializer>(
+            value: &Bytes,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            if serializer.is_human_readable() {
+                serializer.serialize_str(&STANDARD.encode(value))
+            } else {
+                serializer.serialize_bytes(value)
+            }
+        }
+
+        pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Bytes, D::Error> {
+            if deserializer.is_human_readable() {
+                let text = String::deserialize(deserializer)?;
+                STANDARD
+                    .decode(text)
+                    .map(Bytes::from)
+                    .map_err(serde::de::Error::custom)
+            } else {
+                Bytes::deserialize(deserializer)
+            }
+        }
+
+        /// The same branch for `Option<Bytes>`.
+        ///
+        /// The `Option` layer stays serde's, rather than being folded into one
+        /// impl, because that is what keeps `Some(Bytes::new())` — the JSON
+        /// string `""` — apart from `None`, which is `null`.
+        pub(super) mod optional {
+            use super::{Bytes, Deserialize, Deserializer, Serialize, Serializer};
+
+            /// Routes one payload through the branch above. Borrowed on the way
+            /// out so an `Option<Bytes>` is not cloned to be written.
+            struct Encode<'a>(&'a Bytes);
+
+            impl Serialize for Encode<'_> {
+                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                    super::serialize(self.0, serializer)
+                }
+            }
+
+            /// The same, on the way in, where the bytes must be owned.
+            struct Decode(Bytes);
+
+            impl<'de> Deserialize<'de> for Decode {
+                fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                    super::deserialize(deserializer).map(Self)
+                }
+            }
+
+            // `Option<&Bytes>` would be the idiomatic parameter, and serde's
+            // `with` attribute does not offer it: the derive passes the field by
+            // reference, so the signature is `&Option<T>` or nothing.
+            #[allow(
+                clippy::ref_option,
+                reason = "the signature serde's `with` attribute calls"
+            )]
+            pub(in crate::event::serde_impls) fn serialize<S: Serializer>(
+                value: &Option<Bytes>,
+                serializer: S,
+            ) -> Result<S::Ok, S::Error> {
+                match value {
+                    Some(payload) => serializer.serialize_some(&Encode(payload)),
+                    None => serializer.serialize_none(),
+                }
+            }
+
+            pub(in crate::event::serde_impls) fn deserialize<'de, D: Deserializer<'de>>(
+                deserializer: D,
+            ) -> Result<Option<Bytes>, D::Error> {
+                Ok(Option::<Decode>::deserialize(deserializer)?.map(|decoded| decoded.0))
+            }
+        }
+    }
 
     impl Serialize for EventType {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -596,6 +729,7 @@ mod serde_impls {
     #[serde(rename = "Event")]
     struct EventWire {
         event_type: EventType,
+        #[serde(with = "payload")]
         data: Bytes,
         tags: crate::Tags,
         /// `Some(Bytes::new())` and `None` must stay distinguishable on the wire
@@ -603,6 +737,7 @@ mod serde_impls {
         /// "the peer sent an empty metadata blob" is not "the peer sent none".
         /// Writing the field unconditionally is what keeps them apart: `null`
         /// against `""` in JSON, `[00]` against `[01 00]` in postcard.
+        #[serde(with = "payload::optional")]
         metadata: Option<Bytes>,
     }
 
