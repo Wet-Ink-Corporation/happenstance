@@ -13,10 +13,13 @@ publish = false
 
 [dependencies]
 # `serde` is non-optional here: replication is the reason `happenstance-core`'s
-# serde feature exists. This crate does not depend on `serde` *directly* yet —
-# the envelope derives were withdrawn because a versionless wire format is phase
-# 5's to settle, not this sketch's to assert. See `lib.rs`.
+# serde feature exists.
 happenstance-core = { workspace = true, features = ["std", "serde"] }
+# Direct as of phase 5. It was not, because the envelope derives were withdrawn
+# pending a versioned wire format; ADR-0016 §11 settles that, and `wire::Envelope`
+# carries a `Serialize` derive and a hand-written `Deserialize`. The message types
+# still carry none — see `lib.rs`.
+serde.workspace = true
 thiserror.workspace = true
 trait-variant.workspace = true
 
@@ -24,6 +27,11 @@ trait-variant.workspace = true
 # Only the cursor-shape probe needs a `Stream`; the port itself does not, which
 # is the finding rather than an omission.
 futures-core.workspace = true
+# WF-8's two rules run in both formats, because the obligation the clause states
+# is discharged differently in each: by position in postcard, by an explicit
+# check in `serde_json`, where key order is not observable (ADR-0016 §11).
+postcard.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]

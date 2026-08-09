@@ -20,8 +20,15 @@ futures-core.workspace = true
 thiserror.workspace = true
 trait-variant.workspace = true
 serde = { workspace = true, optional = true }
+# Optional, and reachable only through the `serde` feature below — a payload
+# encoder is not a thing the contract crate has an opinion about until somebody
+# asks it to serialise one (WF-11, ADR-0016 §10).
+base64 = { workspace = true, optional = true }
 
 [dev-dependencies]
+postcard.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [features]
@@ -33,7 +40,13 @@ std = ["thiserror/std", "bytes/std", "futures-core/std", "serde?/std"]
 # derives need `alloc`; today `bytes/serde` happens to enable it, so omitting it
 # compiles — until `bytes` changes that in a patch release, at which point the
 # breakage lands in a downstream crate that changed nothing (D12).
-serde = ["dep:serde", "bytes/serde", "serde/alloc"]
+#
+# `base64/alloc` is stated for exactly the same reason, one crate over: the
+# encoder returns a `String`, so `alloc` is not optional in practice, and
+# `default-features = false` at the workspace level means nothing else turns it
+# on. The D12 lesson generalises — a feature this crate needs is named here even
+# when today's graph happens to supply it.
+serde = ["dep:serde", "dep:base64", "base64/alloc", "bytes/serde", "serde/alloc"]
 # The in-memory reference event store. Costs no extra dependencies and backs
 # every doctest in this crate, so the docs cannot drift from the API.
 memory = ["std"]
