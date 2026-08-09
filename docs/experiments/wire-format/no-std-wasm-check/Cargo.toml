@@ -1,0 +1,15 @@
+# A separate, `#![no_std]` sub-crate, deliberately. `base64`'s `no_std`/`alloc`
+# build (M1 in `phase5-my-measurements.md`) can only be demonstrated by a crate
+# that is itself `no_std` and targets `wasm32-unknown-unknown` — the parent
+# `wire-format-probes` crate pulls in `happenstance-core` with `std`, which
+# would defeat the point. Same `[workspace]` isolation trick as the parent.
+[workspace]
+
+[package]
+name = "no-std-wasm-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
