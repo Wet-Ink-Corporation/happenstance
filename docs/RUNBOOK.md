@@ -151,12 +151,12 @@ turned out to be one DCB already provides.
 | 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | not started | `wire.rs` — every envelope shape round-tripping in JSON *and* postcard, sparse shapes included. **Floats: anywhere between phase 4 and phase 12** |
 | 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
 | 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
-| — | **`0.1.0-alpha.1`** | 7 | — | — |
+| — | **`0.2.0-alpha.1`** | 7 | — | — |
 | 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.1.0`**](#phase-12--publish-010) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
@@ -170,7 +170,7 @@ phase 3 into phase 6 while the table above makes phase 4 depend on it, and nobod
 noticed for a whole document revision.
 
 ```
-0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.1.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
+0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
 
 one branch that rejoins the trunk:
     1 ─▶ 3 ─▶ 4          phase 4 is frozen against the instrument phase 3 builds
@@ -206,7 +206,7 @@ Treat it as the buffer, because it is the only one this plan has.
 | 7 | Typed layer | 8 | 44 |
 | — | **alpha** | — | **≈ 9 weeks** |
 | 8 | SQLite | 10 | 54 |
-| 12 | Publish 0.1.0 | 2 | 56 |
+| 12 | Publish 0.2.0 | 2 | 56 |
 
 Phase 0 gained a day for `cargo xtask spec-trace`, which nothing was building and
 two later phases were already citing as a gate.
@@ -3676,9 +3676,32 @@ phase.
 
 ---
 
-## Release: `0.1.0-alpha.1`, here
+## Why the first release is `0.2.0` and not `0.1.0`
 
-**Publish `0.1.0-alpha.1` immediately after phase 7, and not before.**
+The plan said `0.1.0` until phase 4 landed. It moved because **phase 4 is a
+breaking change to a version that had not moved**, and `cargo-semver-checks`
+said so on the pull request: seven major lints against `happenstance-core`,
+every one of them a decision an ADR had already taken — `Query::Items` gaining
+`#[non_exhaustive]` (VT-26), `AppendCondition`'s public fields becoming a private
+guard sequence (VT-30), `SequencedEvent::new` going from two arguments to four
+(VT-4), `Event::new`'s widened bound (VT-18), `head` and `contains_event_id`
+arriving on the trait (ES-30, ES-41), and `AppendCondition`'s constructors
+ceasing to be `const` because a boxed slice allocates.
+
+Nothing is published, so nothing downstream broke. The number still has to move,
+for the reason this repository applies to every other gate: **the finding was
+true, and a true finding is not silenced.** In `0.x`, the breaking position is
+the minor, so `0.1.0` becomes `0.2.0` and the planned alpha becomes
+`0.2.0-alpha.1`.
+
+`happenstance-testkit` moves with it, on its own reasoning rather than by
+inheritance — CF-32 gives it an independent number precisely because adding a
+conformance rule can turn a passing adapter's CI red, and phase 4 added
+thirty-four.
+
+## Release: `0.2.0-alpha.1`, here
+
+**Publish `0.2.0-alpha.1` immediately after phase 7, and not before.**
 
 Name reservation and feedback have different deadlines and different instruments.
 Reservation is urgent and phase 0 handles it. Feedback is only worth having about
@@ -3993,7 +4016,7 @@ have been three.
 
 ---
 
-## Phase 12 — Publish `0.1.0`
+## Phase 12 — Publish `0.2.0`
 
 **Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit` and
 `happenstance-sqlite` on crates.io, rendering on docs.rs.
@@ -4011,7 +4034,7 @@ Publishing starts the feedback loop; it does not create the obligation.
 Most of the old phase-7 list moved to phase 0, where it was cheaper. What remains
 is the release.
 
-- [ ] `CHANGELOG.md` finalised for 0.1.0 — it has been accumulating since phase 0.
+- [ ] `CHANGELOG.md` finalised for 0.2.0 — it has been accumulating since phase 0.
 - [ ] `cargo publish --dry-run` per crate; verify each `.crate` against phase 0's
       `--list` assertion.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
