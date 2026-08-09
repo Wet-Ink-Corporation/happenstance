@@ -325,6 +325,35 @@ This gives `ProjectionStore` a concrete role it did not have in revision 2, and 
 critical path. It also re-acquires PS-25 (a checkpoint must not survive a change to the `Query` that
 produced it), which for a device means a rebuild on app update — normal, but it must be designed for.
 
+### 5.7 The read path: invalidate, don't push
+
+Once the `ProjectionStore` has folded the log into a queryable, indexed surface, a second option
+opens that is better than anything in the Photoroom series: **the shell reads that surface directly,
+and Crux's job on the read side collapses to saying what changed.**
+
+`Render` becomes `Invalidate(keys)`. Structurally this is what Photoroom did when they replaced
+`Render` with `ChangeNotifications` — but carrying cache keys rather than patches, which maps
+directly onto the key/invalidate model of TanStack Query, SWR, Compose paging, and every other
+modern client cache. It needs no `difficient`, no `pathogen`, no whole-`ViewModel` transfer, and no
+hand-authored change vocabulary. It is a proper CQRS split, and it sidesteps the problem that
+consumed eighteen months of their series.
+
+Two things bite, and they should be designed for rather than discovered:
+
+- **Ordering.** The invalidation must be emitted **after the `ProjectionStore` transaction commits**,
+  not when the fact is appended — otherwise the client refetches and reads pre-write data. PS-1's
+  "read-model write and checkpoint write in one transaction" is what makes the correct point
+  expressible; hang the invalidation off the commit.
+- **The web read path is unresolved.** On native the shell can open the same SQLite file. On the web,
+  "the shell queries SQLite" means sqlite-wasm plus OPFS, probably in a worker, with two sides of the
+  FFI touching one database. The alternative is a `query(key) -> bytes` method on `CoreFfi` beside
+  `view()` — trivially addable since that `impl` is ours, and a pure read that violates nothing. This
+  is an open question, not a solved one.
+
+Note that this also changes what §5.5 costs. If the shell queries projections directly, the
+convergence rules bind the **projection**, which is where they belong, and `view()` may shrink to
+almost nothing or disappear.
+
 ---
 
 ## 6. The guard across a peer set — what an `AppendCondition` is actually for
