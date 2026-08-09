@@ -42,7 +42,7 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 | [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32 |
 | [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
 | [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51 |
-| [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-57 |
+| [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-58 |
 | [What cannot be written yet](#what-cannot-be-written-yet) | — |
 
 ---
@@ -1499,6 +1499,8 @@ in the crate (`read_decision_model`, `store.rs:198-208`) exists to produce the
 lands on "conditions must be position-free to replicate", that helper is pointing the
 wrong way, and it belongs in the ADR rather than being inverted silently.
 
+---
+
 ### E2E-57 — A tag is a string, and a repeated key is two tags
 
 - **From:** Wattline (D3), and it serves **VT-17**, whose `Cases:` line read "none" until phase 4
@@ -1525,6 +1527,40 @@ shared log that is a cross-tenant correctness failure produced entirely by an in
 choice, and the tenant whose tag was dropped stops seeing its own events with no error
 anywhere. `tags_may_repeat_a_key` is the rule and `KeyedTagMapStore` is the registered
 implementation that fails it.
+
+---
+
+### E2E-58 — `ReadOptions` cannot be put on the wire
+
+- **From:** ADR-0016 (WF-8 removed `ReadOptions` from the wire), and it serves **WF-12**,
+  whose `Cases:` line read "none directly" until phase 5
+- **Level:** contract
+- **Spans:** `happenstance-core`
+
+**GIVEN** `ReadOptions` as it stands after WF-8's removal.
+**WHEN** a `Detect<T>` marker is asked, at const evaluation, whether `ReadOptions: Serialize`
+and whether `ReadOptions: DeserializeOwned` holds — an inherent associated constant that
+shadows a trait-default `false` only where the bound is satisfied, so the answer is decided
+by the compiler rather than read back from a runtime value.
+**THEN** both answers are `false`, and a `const _: () = assert!(...)` fails the *build* — not
+a `#[test]`, and not a doctest — the moment either ever turns `true`.
+
+**Falsifies:** that "compiles" is a strong enough word for this obligation, and that a
+`compile_fail` doctest is the instrument to say so. WF-12's own clause reached for one;
+measured (ADR-0016 §13, D1–D4 in `docs/experiments/wire-format/src/lib.rs`), of four
+spellings of that doctest only the honest one correctly failed against a serialisable
+`ReadOptions` — a type-name typo, a misspelt trait bound and a wrong crate path all reported
+green against the same false claim. And `tests/` cannot host a `compile_fail` doctest at all:
+rustdoc collects doctests from the lib target only, so a failing-to-compile snippet under
+`tests/` fails the whole integration test's build rather than being graded.
+
+**Rejects:** `#[derive(Serialize, Deserialize)]` added to `ReadOptions` — the obvious mistake
+if it is reached for as a replication "send me more" request, which is exactly wrong,
+since `from` is a store-local position with no meaning at a peer and `backwards`/`limit` are
+a local reader's traversal choices. `tests/wire.rs`'s `read_options_is_not_serialisable`
+module is the registered instrument, and it carries its own negative control: two companion
+consts assert the same detector answers `true` for `Event`, which does derive both, so the
+two assertions above are not passing vacuously against a detector that stopped detecting.
 
 ---
 

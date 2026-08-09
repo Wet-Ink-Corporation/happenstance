@@ -148,7 +148,7 @@ turned out to be one DCB already provides.
 | 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
 | 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
-| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | not started | `wire.rs` — every envelope shape round-tripping in JSON *and* postcard, sparse shapes included. **Floats: anywhere between phase 4 and phase 12** |
+| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | **done** | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
 | 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
 | 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
@@ -288,7 +288,7 @@ scheduling defect.
 | **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38; **written**, and it also discharges ES-30 – ES-32's head/count questions, ES-35 and ES-40) |
 | **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10; **written**, and it also adds ES-41 and adopts **VT-2**, which this queue assigned to nobody) |
 | **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25; **written**) |
-| **0016** | 5 | What is the wire format, and whose format is it? (WF-1 – WF-12) |
+| ~~**0016**~~ | 5 | ~~What is the wire format, and whose format is it? (WF-1 – WF-12)~~ **Written**, as [ADR-0016](adr/0016-the-wire-format.md), and accepted. The format is **private to happenstance**, which is what makes every reversal in it free rather than breaking. WF-1's interoperability half stays `[DEFERRED]` on a *stronger* reason than the one its marker gave. The ADR adds no clause, removes none and moves no marker — D12's fix gets an xtask manifest lint rather than a WF-13 (§14), so §1.3's census is unchanged |
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
 | **0019** | 6 | What happens when `apply` fails? (PS-26 – PS-30) |
@@ -477,8 +477,8 @@ ADR-0026 must be written against two unlike peers, not one.
 | A store-assigned time on `SequencedEvent` | 5 | **provisional — VT-9** | 0014 |
 | Const-constructible `EventType` / `Tag`; Unicode normalisation | 5 | **settled — VT-14 – VT-20** (D4, D9). Doing nothing and saying nothing was the only option that was definitely wrong | 0015 |
 | Store limits: payload size, tag count, query items, batch size | 5 | **provisional — VT-21 – VT-25.** Guaranteed minima the store MUST accept, plus an error variant for what it refuses | 0015 |
-| Wire format: `Query::All`'s encoding, sparse shapes, versioning | 5 | **settled — WF-1 – WF-12** (D1 critical, D6, D12). The format is **private to happenstance**; the `serde` feature moves events between happenstance instances and is not an interoperability surface | 0016 |
-| DCB wire interoperability | 13 | **deferred — WF-1.** The named home is ADR-0026's envelope section. The experiment is a second DCB implementation to interoperate *with*; until one is named there is nothing to test against, and the divergence (`{items: […]}` versus a bare sequence, and happenstance's inability to parse the reference's match-all `[]`) is recorded rather than fixed | 0026 |
+| Wire format: `Query::All`'s encoding, sparse shapes, versioning | 5 | **settled — WF-2 – WF-12** (D1 critical, D6). The format is **private to happenstance**; the `serde` feature moves events between happenstance instances and is not an interoperability surface. Two qualifications this row used to swallow: **WF-1 is settled in its scope half only** and its interoperability half stays `[DEFERRED]` on the row below; and **D12 is not phase 5's to close** — it was closed at phase 0 by `927d291` and phase 5 adds a manifest lint against its recurrence rather than a fix | 0016 |
+| DCB wire interoperability | 13 | **deferred — WF-1**, and the reason changed at phase 5. The named home is still ADR-0026's envelope section, but the deferral no longer waits on *"a bridge exercised against the DCB reference implementation's encoding"*: **there is no such encoding.** The DCB specification and its reference TypeScript library publish **no wire format at all** — `EventStore.ts` contains no serialisation code of any kind, and the specification's JSON snippets are labelled *"a **potential** JSON representation"* beside an explicit disclaimer that *"implementations are not required to use the same terms or function/field names"*. A bridge built today would be built against an illustration the specification disclaims, and the first real DCB peer would break it. **That makes the deferral stronger rather than weaker.** The surviving divergence is recorded rather than fixed: happenstance spells match-all as a value that cannot syntactically collide with a filtered query (`null` before phase 5, `"All"` after), while the reference spells it `{items: []}` — structurally identical to an illegal empty filtered query and distinguished only by which function built it | 0016, 0026 |
 | Durability across a process boundary | 8 | **deferred — CF-14; provisional — CF-17.** Nothing in the workspace could express the question, because the fixture took one handle. **Phase 3 changed the fixture and went one step further than CF-14's deferral allows, deliberately**: `REOPEN` and `acknowledged_writes_survive_a_reopen` landed against `DurableFixture`, with `LosingFixture` failing it, because without a gated rule `capability_skips_are_reported` had nothing to observe and CF-17's `[PROVISIONAL]` marker was untested. The far end is untouched — nothing in the tree loses a write to a *fault* rather than to an instruction — so CF-14 stays `[DEFERRED]` and phase 8 is still the first store that can lose one | 0010, 0022 |
 
 ### Projections
@@ -573,7 +573,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 46 `[PROVISIONAL]` clauses
+### The 49 `[PROVISIONAL]` clauses
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
@@ -588,7 +588,7 @@ seventeen.
 | Const-constructible identifiers | VT-14 | `from_static` failing to move the `?` count in the worked example | 5 |
 | Store limits | VT-21 – VT-24 | a real adapter that cannot honour a stated minimum | 5, tested 8 and 10 |
 | Per-item boundaries on a condition | VT-30 | E2E-04 and E2E-05 still unwritable after phase 4 | 4 |
-| `Bytes`' human-readable form | WF-11 | a JSON payload nobody can read in a log | 5 |
+| `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
 | The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
 | No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 |
 | The whole batch shape and write seam | PS-4 – PS-6, PS-9, PS-11, PS-12, PS-15 | **PS-2 alone** — `CheckpointOnlyStore` passing, or a third adapter disagreeing with the two that froze it | 6, re-tested 11 |
@@ -612,8 +612,23 @@ exposure — the five phase 4's exit criteria have to cite — and a phase-12 au
 reading this table alone would have found forty-one falsifiers scheduled under a
 heading that says forty-six and concluded that everything was owned. The heading
 was right; the rows were short. Counted again at phase 3's close, group by group,
-against `spec-trace`'s own list of `[PROVISIONAL]` clause IDs: the two sets are
-now equal.
+against `spec-trace`'s own list of `[PROVISIONAL]` clause IDs: the two sets were
+equal **at that commit**.
+
+**They are not equal now, and phase 5 recounted rather than repaired.** The
+heading said forty-six; the specification says **49** (`SPECIFICATION.md:219-221`,
+and §7.1's totals row at `:8138`, whose per-section column sums to the same
+number). The heading is corrected above. The rows have not been, because the
+arithmetic is phase 4's rather than ADR-0016's and adding a row means deciding a
+falsifier and an owning phase, which is not a thing to do in passing: phase 4
+added CF-39, CF-40, ES-41 and **ES-42**, and lifted ES-10 — 46 − 1 + 4 = 49.
+Counted clause by clause against the specification's own `PROVISIONAL` rows, the
+groups above are short by **ES-41, ES-42, CF-39 and CF-40**, and the last row
+still carries **ES-10**, which is no longer provisional. That is five edits and
+it is the next pass's, not this one's — but it is phase 12's audit that reads
+this table, so it cannot wait past then. Recorded here, and in ADR-0016's
+amendment section, precisely because a table that quietly disagrees with its own
+heading is what the previous paragraph is about.
 
 ### The blocked cases
 
@@ -3335,84 +3350,360 @@ It cannot slip past phase 12, because publishing makes the representation
 semver-visible, and a private format that has shipped wrong is still a format two
 peers disagree about.
 
-**Do not wait for this phase to fix D1.** D1 is a defect, not a decision: five
-`skip_serializing_if` attributes make sparse shapes fail to decode in postcard and
-bincode today. Phase 0 may delete them the moment anyone is annoyed by them. What
-this phase owns is the *freeze* — the representation, the versioning and the
-proof — not the bug.
+**Do not wait for this phase to fix D1.** D1 was a defect, not a decision: five
+`skip_serializing_if` attributes made sparse shapes fail to decode in postcard and
+bincode. Any phase could have deleted them the moment anyone was annoyed by them;
+none did, and this phase deleted them at `20ab863`. What this phase owns is the
+*freeze* — the representation, the versioning and the proof — not the bug.
 
-**Decisions it settles.** ADR-0016 (the wire). Discharges WF-1 – WF-12.
+**Decisions it settles.** ADR-0016 (the wire). Discharges WF-2 – WF-12, and WF-1's
+scope half only: the format is private, and the interoperability half stays
+`[DEFERRED]` to phase 13 on a reason this phase made stronger rather than weaker.
 
 **Work**
 
-- [ ] **Fix D1 (critical)**: delete every `skip_serializing_if` — `event.rs:342`,
-      `:344`, `query.rs:281`, `:283`, `append.rs:121`. They shorten the field count
-      passed to `serialize_struct`, and a format with no field names feeds the
-      deserializer exactly `FIELDS.len()` values positionally, so `Event`,
-      `SequencedEvent`, `QueryItem`, `Query` and `AppendCondition` produce bytes
-      that cannot be deserialised in *any* non-self-describing format, for their
-      most common shapes. Serialisation succeeds silently and produces plausible
-      bytes. Postcard and bincode are exactly what a Worker-side wire would choose.
-      Keep `#[serde(default)]` so existing JSON still parses; the cost is a bare
-      `Event` going from 35 to 61 bytes of JSON.
-- [ ] **Fix D6, with D1, in the same change** (WF-3, WF-4). `Query::All`
-      serialises to JSON `null`, so the most destructive value in the protocol —
-      the one an `AppendCondition` uses to reject any append at all — is what a
-      buggy peer produces by accident, and `{}` deserialises to it too. Give it an
-      unambiguous tag. Note two things the defect list does not: `query.rs:306`
-      documents the current behaviour as *intent*, so the ADR is reversing a choice
-      rather than fixing an oversight; and `AppendCondition::Wire.fail_if_events_match`
-      carries no `#[serde(default)]`, so once `Query` is explicitly tagged, `{}`
-      becomes a hard error unless a default is added deliberately.
-- [ ] **The format is private** (WF-1). The `serde` feature moves events between
-      happenstance instances; it is not an interoperability surface. That is what
-      makes the two fixes above free rather than breaking. Record the divergence
-      from the DCB reference's published shape — `{items: […]}` versus a bare
-      sequence, and happenstance's inability to parse the reference's match-all
-      `[]` — as an explicitly deferred decision with a named home (ADR-0026's
-      envelope section), not as silence.
-- [ ] **Version the envelope** (WF-8): a format version as the first field, so a
-      bound change is a private-format change rather than an undiagnosable parse
-      failure. Every new bound the plan proposes is otherwise a wire break with no
-      quarantine path, because `AppendError` has no variant meaning "refused, park
-      this".
-- [ ] Decide `Bytes`' human-readable representation (WF-11): document that the
-      feature targets binary formats, or branch on `is_human_readable()` and emit
-      base64. A 1 KiB payload is currently ~4 KiB of unreadable JSON on a path
-      ADR-0003 justifies partly on efficiency grounds.
+- [x] **Fix D1 (critical)** (WF-2): delete every `skip_serializing_if`. Five sites
+      across `event.rs`, `query.rs` and `append.rs`, deleted at commit `20ab863`.
+      This body used to cite them as `event.rs:342`, `:344`, `query.rs:281`, `:283`
+      and `append.rs:121`; they had drifted some two hundred lines before anyone
+      reached them and the attributes are gone now, so a closed defect names its
+      **commit** rather than a line — a line number for deleted code is a citation
+      that can only ever be wrong. They shortened the field count passed to
+      `serialize_struct`, and a format with no field names feeds the deserializer
+      exactly `FIELDS.len()` values positionally, so `Event`, `SequencedEvent`,
+      `QueryItem`, `Query` and `AppendCondition` produced bytes that cannot be
+      deserialised in *any* non-self-describing format, for their most common
+      shapes. Serialisation succeeded silently and produced plausible bytes.
+      Postcard and bincode are exactly what a Worker-side wire would choose.
+- [x] **`#[serde(default)]` goes with them**, at the same five sites. This body used
+      to say *"Keep `#[serde(default)]` so existing JSON still parses"*, and that is
+      **reversed** — the one place the phase body and the plan disagreed. It is
+      reversed on ADR-0016 §4's own reasoning and **not under rule 5**: nothing is
+      published and `happenstance-sync` is `publish = false`, so the compatibility
+      the attribute protects does not exist. Measured, it is inert on the write side
+      (postcard output is byte-identical with it, without it, and with a
+      whole-struct `default`), so it was never the positional hazard WF-12's "fifth
+      hazard" sentence claimed. Its only effect is on decode, and a `default` on a
+      field the encoder **always** writes means the decoder accepts a document the
+      encoder can never produce — a second, wider, undocumented format only the
+      decoder knows about, in which a peer's bug survives a round trip and
+      reappears as a default value three hops later. **What the deletion does not
+      buy**: it closes the read side at **three of the five sites only**.
+      `Event::metadata` and `Guard::after` are `Option`-typed, and `missing_field`
+      succeeds for any type whose `Deserialize` calls `deserialize_option`, so an
+      `Option` field accepts absence with **no attribute at all**. The presence
+      obligation therefore binds the **encoder only**, which ADR-0016 §5 records as
+      a decision rather than leaving to inference — it fails closed, because a
+      missing `after` decodes to `None` and `None` checks the whole log.
+- [x] The cost in JSON is **+26 bytes per value**, not a fixed pair. This body used
+      to quote *"a bare `Event` going from 35 to 61 bytes"*; that figure holds only
+      for a single-digit payload. Worked instances: **35 → 61**, **39 → 65** and
+      **28 → 54**. In postcard the saving the attributes bought was one byte per
+      absent field — the tagged `Event` 18 → 19, the all-defaults `Event` 7 → 9 —
+      and what it bought back was a decoder that reads a neighbour's bytes. The
+      trade was always correct and both of its numbers were wrong.
+- [x] **Fix D6, with D1, in the same change** (WF-3, WF-4). Both landed at
+      `20ab863`. `Query::All` serialised to JSON `null`, so the most destructive
+      value in the protocol — the one an `AppendCondition` uses to reject any append
+      at all — was what a buggy peer produced by accident. It is now an externally
+      tagged `"All"`. Two things the defect list did not note: `query.rs` documented
+      the old behaviour as *intent*, so the ADR reverses a choice rather than fixing
+      an oversight; and the field this item called
+      `AppendCondition::Wire.fail_if_events_match` is **`GuardWire::query`** — VT-30
+      renamed it at `1b2a565` and WF-4 froze the dead spelling (ADR-0016 §2). The
+      hazard is real and the input was wrong: bare `"{}"` **already** errored at
+      HEAD, and the live input is `{"guards":[{}]}`, which decoded to
+      match-everything through the same `missing_field` mechanism above.
+      `wire::empty_object_is_not_a_condition` tests both, because a rule that only
+      tries `"{}"` rejects no implementation anyone would write.
+- [x] **The format is private** (WF-1, scope half). The `serde` feature moves events
+      between happenstance instances; it is not an interoperability surface. That is
+      what makes every fix above free rather than breaking. The interoperability
+      half stays `[DEFERRED]` and its reason changed: the DCB reference publishes no
+      wire format to bridge against at all. Recorded on the
+      [DCB-interoperability ledger row](#event-store-and-value-types), not as
+      silence.
+- [x] **WF-5 was already implemented and this body did not know it.** `Guard::after`
+      survives the round trip and reaches an ingest policy; what it cost was one
+      round-trip test, `wire::condition_after_is_visible_to_an_ingest_policy`
+      (ADR-0016 §8).
+- [x] **WF-6: split the two formats** (`9706f9f`). A `StoreId` crosses a
+      human-readable format as the thirty-two lowercase hex digits its `Display`
+      already produced, and a binary one as sixteen raw bytes with no length prefix.
+      The clause froze the field as `origin`; ADR-0014 renamed it `store`, and both
+      numbers in the clause's `Rejects:` line were wrong (the JSON cost is 1.7353×,
+      not "four times"). The wrong implementation each module names is an
+      **inverted** `is_human_readable` branch, which is internally consistent in
+      each arm and so round-trips cleanly in **both** formats — which is why the
+      rules assert on the encoding and not on the round trip.
+- [x] **WF-7: the two-format matrix is the instrument** (ADR-0016 §6), and its
+      *"maximum-size values"* half was owned by nobody. Both round-trip proptests
+      run over every envelope shape, and the strategies are local rather than
+      imported from `happenstance-testkit` — core cannot dev-depend on the testkit
+      without a cycle, and the wire generator must also produce the two shapes
+      `any_event` deliberately excludes: the empty payload, and
+      `metadata: Some(<empty>)` as distinct from `None`.
+- [x] **Version the envelope** (WF-8, `99ba69d`): a format version as the first
+      field, so a bound change is a private-format change rather than an
+      undiagnosable parse failure. `happenstance-sync` gains `FORMAT_VERSION`,
+      `Envelope<T>` and its own `WireError`. The `Deserialize` is **hand-written**,
+      because a derive reads every field into a local `Option` and only then
+      constructs the struct — so a derived envelope decodes the message before
+      anything examines the version, which is the partial decode WF-8's MUST NOT
+      forbids.
+- [x] **WF-9's decode half** (ADR-0016 §12). The variant meaning "refused, park
+      this" and
+      its suite rule both predate this phase; what phase 5 owed was
+      `wire::decode_accepts_an_over_capacity_value`, and the clause has to name the
+      ceiling the value exceeds or the rule is decorative — `happenstance-core`
+      enforces no store ceiling, and `MIN_SUPPORTED_EVENT_DATA_LEN` and its
+      neighbours are floors an adapter must *support*.
+- [x] **WF-10's four rules.** A decode re-runs the constructor's invariants:
+      `wire::decode_rejects_a_non_canonical_tag_set`,
+      `wire::decode_rejects_an_unconstrained_query_item`,
+      `wire::decode_rejects_a_zero_item_query`, and the over-capacity rule above.
+      `Tags` re-canonicalises rather than erroring, so the first asserts a
+      **canonical `Ok`**; its teeth are that `Tags::contains` is a binary search, so
+      an unsorted `Tags` silently answers `false` for a tag that is present.
+- [x] **WF-12: `ReadOptions` leaves the wire** (`99ba69d`). `from` is a store-local
+      position with no meaning at a peer. The clause's stated reason and its stated
+      instrument are both corrected — see the exit criterion below.
+- [x] Decide `Bytes`' human-readable representation (WF-11): branch on
+      `is_human_readable()` and emit standard-alphabet base64. The clause's *"1 KiB
+      payload is ~4 KiB of unreadable JSON"* is measured at **3.5715×** on a 340 KiB
+      seat map — so ~3.6 KiB — against base64's 1.3333×. `Some(Bytes::new())` stays
+      distinct from `None` (`""` against `null`), because ADR-0003 promises
+      byte-for-byte forwarding and an empty metadata blob is not an absent one.
 
-**Proof artefact.** `crates/happenstance-core/tests/wire.rs`: a `round_trip<T>`
-proptest asserting equality through **both** `serde_json` and `postcard`,
-exercising the sparse shapes specifically — a bare `Event` with no tags, a
-types-only `QueryItem`, a tags-only `QueryItem`, `Query::All`, an
-`AppendCondition` with and without `after` — plus direct tests that deliberately
-unsorted and duplicated tags come back canonical and that an over-length `Tag` is
-rejected on the way in. Two formats, because a self-describing and a
-non-self-describing format break differently, and the whole class of defect above
-is invisible to one of them. A proptest that passes in `serde_json` alone is the
-test that would have shipped D1.
+**Proof artefact.** `crates/happenstance-core/tests/wire.rs` **and
+`crates/happenstance-sync/tests/wire.rs`** — 21 tests and four const assertions,
+both files wrapping everything in an inner `mod wire` so `cargo test --list`
+prints the qualified name the clauses cite. A `round_trip<T>` proptest asserts
+equality through **both** `serde_json` and `postcard`, exercising the sparse
+shapes specifically — a bare `Event` with no tags, a types-only `QueryItem`, a
+tags-only `QueryItem`, `Query::All`, an `AppendCondition` with and without
+`after` — plus direct tests that deliberately unsorted and duplicated tags come
+back canonical and that an over-length `Tag` is rejected on the way in. Two
+formats, because a self-describing and a non-self-describing format break
+differently, and the whole class of defect above is invisible to one of them. A
+proptest that passes in `serde_json` alone is the test that would have shipped D1.
+
+Two things the plan did not anticipate. **Every postcard round trip is framed
+against a known trailer** — a standalone round trip reports a field-count
+desynchronisation as *"unexpected end of buffer"*, which is the weaker regression
+test; a value with something after it reports the same defect as a **wrong value
+with no error at all**, which is what D1 actually was in a real message. And
+**three negative controls** put a paired half through identical framing, so the
+failure is attributable to the defect rather than to the harness or the byte
+count; `xtask/src/proof.rs` generalises from a three-const single-artefact
+checker to a table and asserts them **by name**, because nothing about a negative
+control looks load-bearing and the first person to find them confusing will
+delete them as dead code.
 
 **Exit criteria**
 
-- [ ] ADR-0016 written first.
-- [ ] The wire proptest passes in `serde_json` **and** postcard.
-- [ ] D1, D6 and D12 are closed, and each is demonstrated to have failed before
-      the change — a decode that returns the wrong value is a better regression
-      test than a decode that errors.
-- [ ] The envelope carries a format version, and a peer built at an older bound
-      rejects an over-bound message with a variant that means "refused, park this"
-      rather than a parse failure.
-- [ ] **WF-12's missing E2E case is written.** `SPECIFICATION.md` §7.5 records it
-      as a genuine hole: assert `ReadOptions` does not implement `Serialize`. It is
-      a compile test, which is why the clause reached for one.
-- [ ] `cargo xtask ci` green, including `cargo hack --feature-powerset`, which is
-      the only thing that compiles this feature in isolation.
+- [x] ADR-0016 written first. Commit `7331453`, before any code.
+- [x] The wire proptest passes in `serde_json` **and** postcard. The committed
+      proptest seed is the corner that matters: the shrunk counterexample is the
+      all-defaults `Event`, which is D1's shape exactly.
+- [x] **D1 and D6** are closed, and each is demonstrated to have failed before the
+      change — a decode that returns the wrong value is a better regression test
+      than a decode that errors, and the three negative controls make that
+      demonstration a **standing property** rather than a transcript in a commit
+      message. **D12 is not on this list and could not be.** It was closed at
+      phase 0 by commit `927d291`, and its failure is not reproducible today:
+      `bytes` 1.12.1 declares its own optional `serde` with `features = ["alloc"]`,
+      so deleting the token would still compile *by the manifest*. A behavioural
+      rule would observe nothing in every configuration on this lockfile and start
+      observing something only on the day `bytes` changes its mind — the day the
+      check was meant to have prevented. The failure mode is a manifest edit, so
+      the check is a **manifest lint** in `xtask`, in the shape
+      `lints::testkit_version` already has, and deliberately **no WF-13**: a clause
+      in a frozen section to describe a `grep`. §1.3's census does not move
+      (ADR-0016 §14).
+- [x] **The envelope carries a format version** (WF-8). The rule is a **witness**
+      that the message's `Deserialize` never ran, not the byte-layout assertion the
+      clause reached for — measured, a derive plus a version check afterwards
+      returns the same `Err` in both formats and produces byte-identical postcard
+      framing, so neither the error nor the front of the buffer distinguishes the
+      two designs. The one observation that does is whether the message decoded at
+      all.
+- [x] **An append that exceeds a store limit is refused with a variant meaning
+      "refused, park this"** (WF-9), and **the demonstration is core-only and needs
+      no peer.** This and the criterion above were one sentence, and the word
+      *"peer"* is what made this half look like phase 13's work. WF-9 is about a
+      **store limit**, not a format version — a bound change is explicitly *not* a
+      wire change, which is WF-9's whole MUST, so a version bump is the wrong
+      instrument for it. `AppendError::ExceedsStoreLimit { limit, len }`
+      (`error.rs:237-244`) and `append_reports_exceeded_store_limits`
+      (`suite.rs:4282`, registered at `registry.rs:187`) both predate this phase.
+      What phase 5 owed was the decode half, and it is written (ADR-0016 §12).
+- [x] **WF-12's missing case is written.** `SPECIFICATION.md` §7.5 recorded it as a
+      genuine hole: assert `ReadOptions` does not implement `Serialize`. Its
+      instrument is a **const-evaluation assertion** in
+      `crates/happenstance-core/tests/wire.rs`, not a compile test — three of four
+      `compile_fail` spellings were measured green against a false assertion
+      (ADR-0016 §13). Proved three ways before it landed: pointed at a serialisable
+      type it fails with `E0080`; misspelt it fails with `E0425`, which is a build
+      failure rather than a green test; and the `Deserialize` half needs
+      `DeserializeOwned`, since `impl<T: serde::Deserialize>` is `E0106`. Two
+      **inverse** assertions on `Event` stay in the file permanently, because every
+      negated assertion is otherwise satisfied by a detector whose inherent impl
+      never applies, and that failure is silent.
+- [x] `cargo xtask ci` green, including `cargo hack --feature-powerset`, which is
+      the only thing that compiles this feature in isolation. Green on the whole
+      branch, with `cargo-hack` and `cargo-deny` both resolving on this machine so
+      those steps ran rather than printing `skipped`.
 
 **Cases this makes writable.** E2E-33, E2E-34, E2E-37 (its wire half), E2E-40.
 
 **Estimate.** 3 days.
 
 **Session log**
+
+**2026-08-09 — the phase, in seven commits.** ADR-0016 was written and accepted
+before any code, so for once the code ran downhill from a decision instead of
+alongside one. Every number quoted below is reproducible from
+[`docs/experiments/wire-format/`](experiments/wire-format/) — seven programs and
+four doctests, outside the workspace and outside the gate, which is what
+`docs/experiments/` is for. It is a **record of a measurement taken on a date**,
+not a test of the current tree, and two of its doctests document pre-removal HEAD
+by construction.
+
+1. **`7331453` — ADR-0016 and the experiment.** The finding that set the phase's
+   tone: **the specification got here first, and three `[FROZEN]` clauses
+   described a type that no longer existed.** §2.7 already carried WF-1 – WF-12,
+   nine of them frozen, each naming the test in
+   `crates/happenstance-core/tests/wire.rs` that discharges it — and that file did
+   not exist, nor did a single serde round-trip assertion anywhere in the
+   workspace. 354 lines of hand-written wire format across five modules, checked
+   by nothing. WF-4 froze a wire field named `fail_if_events_match`, which VT-30
+   deleted at `1b2a565`; WF-6 froze `origin`, which ADR-0014 renamed `store` —
+   two clauses in one document disagreeing, and one of them having to lose. So
+   the ADR discharges several clauses by **amending** them rather than by
+   satisfying their letter, and says so in its own status line.
+2. **`a7d6779` — the two dependencies**, `base64` for WF-11 and `postcard` for
+   WF-7's second format. The commit that found RUSTSEC-2023-0089; see below.
+3. **`20ab863` — D1 and D6, one commit**, because neither fix is worth much
+   alone. Five `skip_serializing_if` attributes and five `#[serde(default)]`s
+   deleted; `Query` becomes externally tagged.
+4. **`9706f9f` — WF-6's and WF-11's human-readable halves**, both branching on
+   `is_human_readable`. The hex decoder refuses uppercase **deliberately rather
+   than by omission**: `from_str_radix` accepts `A`–`F` silently, so a peer
+   emitting two spellings of one store would round-trip perfectly and reach the
+   log as two identities. No round-trip test can catch that, which is why the
+   comment on `nibble` says so.
+5. **`99ba69d` — WF-8's envelope, and `ReadOptions` off the wire.** They land
+   together because both are about what the format refuses to promise rather than
+   about what it encodes.
+6. **`dfc7bcd` — the proof artefact.** Twenty-one tests, four const assertions,
+   three negative controls, and `xtask/src/proof.rs` generalised from a
+   three-const single-artefact checker to a table. Seventeen of the eighteen
+   rules the WF clauses name now exist under the spelling the clauses use; the
+   eighteenth, `condition_round_trips`, is deliberately absent because ADR-0016
+   drops it from WF-4 — it rejects nothing the two round-trip rules do not
+   already reject.
+7. **This commit — `spec-trace`'s parser, D12's manifest lint, and the
+   documents.** Planned as two and landed as one; the reason is the last finding
+   below.
+
+**`frozen_signatures.rs:221-235`'s `compile_fail` doctest has never run, and this
+is phase 4's artefact found by phase 5.** rustdoc collects doctests from the
+**lib target only**, so a `compile_fail` block inside an integration test is
+compiled as prose — it is never handed to a compiler and can never fail. Verified
+twice, independently: `cargo test -p happenstance-core --all-features --doc --
+--list` lists 28 doctests and every one of them comes from a file under `src/`;
+nothing from `tests/` appears at all. Phase 4's proof artefact is *"plus a
+`compile_fail` doctest pinning the arrangement that does **not** compile"*, and
+that half of it has been decorative since the day it landed. **It is recorded
+here rather than silently fixed.** WF-12's own instrument moved from a
+`compile_fail` doctest to a const assertion in `tests/wire.rs` for the adjacent
+reason — three of four spellings were measured green against a false assertion —
+and that is the precedent: an instrument that cannot fail is a finding, and a
+finding belongs to whoever owns the clause, not to whoever tripped over it.
+
+**`postcard`'s default features fail `cargo deny`, and the flag is the whole of
+that commit's surprise.** The default turns on `heapless-cas`, which reaches
+`heapless 0.7` and then `atomic-polyfill 1.0.3`: unmaintained,
+RUSTSEC-2023-0089, *"no safe upgrade is available"*, and `cargo deny check
+advisories` **fails** on it. Measured rather than reasoned about — the first
+attempt at the commit added **eleven** crates and turned the gate red. With
+`default-features = false` it adds **three** (`postcard`, `cobs`,
+`embedded-io`), all dev-only, all four `deny` checks pass, and the
+duplicate-crate warning list is unchanged at seventeen. `base64` is pinned
+`"0.22"` and not `"0.23"` on the same kind of measurement: `sqlx` already pulls
+`base64 0.22.1` into this graph and `base64` has no transitive dependencies of
+its own, so the addition is a new **edge to an existing node** — zero new crates
+for the workspace, exactly one leaf crate for a consumer taking
+`happenstance-core/serde` without `sqlx`. That is the number ADR-0003 should be
+priced against.
+
+**`postcard::Error` is a fieldless enum, so a marker string does not survive the
+crossing — and the test found it on the first run.** `serde::de::Error::custom`
+takes a `Display` and `postcard`'s implementation drops it **entirely**, mapping
+every custom error onto one variant. `WireError`'s marker text therefore crosses
+`serde_json` and does **not** cross `postcard`. The doc on that constant now says
+so and points `postcard` receivers at `check_format_version`, which is what it
+was made public for. Worth stating as a general fact rather than as a bug: any
+contract carried in the *text* of a serde error is a contract only
+self-describing formats keep.
+
+**`spec-trace`'s `Rule:`-field parser demands any backticked snake_case token in
+the field, and ADR-0016's own amendment texts tripped it three times before they
+landed.** The whole field is handed to `backticked_idents`, so a clause that
+writes *"`wire::round_trips_in_postcard` over every envelope shape, including the
+all-defaults `event`"* has just demanded a rule named `event`. The rule is: **a
+`Rule:` field may backtick rule names and nothing else.** `retires_of` already
+carries that comment one field over; `rules_of` did not, and now does. It is
+load-bearing rather than tidy — it is the rule this phase's own ADR broke three
+times.
+
+**Commits 7 and 8 of the planned sequence landed as one, and the argument is
+§15's one level up.** The plan had `spec-trace`'s parser fix as one commit and
+the clause amendments as the next. They cannot be separated: making
+`backticked_idents` accept `::` un-silences ten WF clauses at once, and two of
+the names they then resolve are **stale** — WF-4's `wire::condition_round_trips`,
+which ADR-0016 §7 drops, and WF-8's `wire::version_is_the_first_field`, which §11
+replaces with a witness. So the parser fix alone leaves check 4 reporting two
+clauses naming rules that do not exist, and **writing more tests does not clear
+it**, because the fix is to the clauses. §15 already makes this argument about
+the three changes *inside* the parser fix — that a phase landing only the obvious
+half breaks a gate step and cannot repair it by doing more of the work the
+clauses ask for. The same shape holds one level up, between the tool and the
+document it checks.
+
+**That box was the last one open, and the run that closed it is the one this text
+landed in.** `cargo xtask spec-trace` reported the two stale rule names and a
+§7.1–§7.2 region stale against what the checker now computes for VT-19 and
+WF-1 – WF-9; the clause amendments and one `--write` closed both. The checker now
+reports `200 clauses (139 FROZEN, 49 PROVISIONAL, 10 DEFERRED, 2 NON-NORMATIVE),
+89 suite rules, 58 e2e cases` and `no problems found; §7.1–§7.2 matches the
+checker`, and `cargo xtask ci` prints `all checks passed`. The census is
+**unchanged** from before the phase, which is the intended outcome: ADR-0016 §14
+gives D12 a manifest lint rather than a WF-13 precisely so that §1.3 does not move.
+
+**State at hand-off.** Phase 5's work is complete and committed on
+`phase-5-freeze-the-wire-format`; what is left is a pull request and a merge,
+matching how phase 4 landed (`19f0901`). Two things are recorded here rather than
+done, because neither is this phase's:
+
+- **The completeness critic never ran.** The phase's own adversarial passes did —
+  three lenses over ADR-0016, a closure audit, an executability trace of §15
+  against `spec_trace.rs`, and a per-slice verification of the code — but the
+  final "what did we miss" sweep over the *documents* was cut short. The specific
+  questions it was to answer, for whoever picks this up: is every entry in
+  ADR-0016's amendment section actually applied and applied where the ADR says;
+  does §1.3's census survive a hand count of the markers rather than a trust of
+  the heading; and are §2.7's `file.rs:NNN` citations still saying what the
+  surrounding prose claims, given `check_citations` only validates that a file
+  exists and that a range's first number is inside it, so a citation can be green
+  and wrong.
+- **`wire::bare_event_postcard_encoding_is_pinned` is named by no clause.** It is
+  the golden vector for a bare `Event`'s postcard bytes, and it is deliberately
+  uncited: after §15, resolution is one-way — clauses may name wire tests, wire
+  tests need not be named by clauses — and check 6 sweeps only the suite's own
+  rules. If a later phase wants the encoding itself frozen rather than merely
+  pinned, that is the clause to write and this is the test it would name.
 
 ---
 

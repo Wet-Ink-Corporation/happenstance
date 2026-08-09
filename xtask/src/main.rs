@@ -17,9 +17,11 @@
 //! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; five
-//! file-reading lints described below; and `cargo xtask package-check`, which
-//! asserts the licences and README are actually inside each publishable artifact
-//! rather than merely promised by its metadata.
+//! file-reading lints described below; a sixth manifest lint for D12, kept out
+//! of that group of five because it names no clause (ADR-0016 §14); and
+//! `cargo xtask package-check`, which asserts the licences and README are
+//! actually inside each publishable artifact rather than merely promised by
+//! its metadata.
 //!
 //! # The five lints, and why a grep is in a Rust gate
 //!
@@ -433,6 +435,29 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // D12. A manifest check, the same shape as CF-32 above: `serde/alloc`
+        // and `base64/alloc` are stated in `happenstance-core`'s `serde`
+        // feature line rather than left to arrive by accident through a
+        // dependency's own default. Not reproducible at HEAD — deleting
+        // either token still compiles today, because `bytes` 1.12.1 happens
+        // to enable `alloc` for its own optional `serde` dependency — which
+        // is exactly why this is a gate step and not a conformance rule
+        // (ADR-0016 §14): a behavioural check would be decorative here.
+        name: "happenstance-core names serde/alloc and base64/alloc",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-core-alloc-features",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // The step above passes with every feature on, which is the one
         // configuration where every intra-doc link resolves. Three links to
         // `MemoryEventStore` were broken without `memory` for as long as this
@@ -598,6 +623,7 @@ fn main() -> ExitCode {
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),
+        Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),

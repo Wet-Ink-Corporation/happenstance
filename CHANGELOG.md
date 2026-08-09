@@ -990,6 +990,27 @@ not the same as what a user needed to be told.
   `--all-features` sets `proptest` on a target where the crate is not in the
   graph at all, and nothing was checking that the guard held.
 
+- **The wire format changed, and anything written under `serde` before this
+  release is a different document now** ([ADR-0016](docs/adr/0016-the-wire-format.md)).
+  There is no compatibility arm and none is offered: nothing publishable has
+  shipped and no peer is deployed, so this is the last release in which that
+  is true. Concretely — `Event`, `QueryItem` and `Guard` previously omitted a
+  field that carried its default; every field is now always written, on both
+  ends. `Query` gains a shape it never had: `Query::All` serialises as the
+  externally tagged `"All"` where it used to be JSON `null`, and
+  `Query::Items(..)` as `{"Items":[...]}`. `StoreId` serialises as a
+  32-character lowercase hex string in JSON, not an array of sixteen
+  integers, and rejects anything else — including the string it was
+  previously accepting with separators, `0f1e2d3c-...`, which now fails to
+  parse. Event and metadata payloads serialise as base64, not as an array of
+  per-byte integers. `ReadOptions` no longer implements `Serialize` or
+  `Deserialize` at all — it never crossed the wire correctly, and phase 5
+  stopped pretending it did rather than fix an encoding nothing consumed.
+  `happenstance-sync` gains `wire::Envelope<T>`, the one type this workspace
+  puts on a wire: it carries a `format_version` next to the message and is
+  the only place a peer should look to find out whether it can read what it
+  was just sent.
+
 ### Fixed
 
 - **`happenstance` and `happenstance-core`'s READMEs promised "MSRV 1.85,
@@ -1108,5 +1129,23 @@ not the same as what a user needed to be told.
   dated — including a module that restated the "no `serde` in the contract crate"
   constraint against the crate whose entire purpose is encoding, and an accepted
   ADR linking to a source path that no longer exists.
+
+- **A bare `Event` with no tags could not be read back under `postcard`, and
+  next to another value in the same buffer it decoded to the wrong value
+  instead of an error** (D1). An empty `tags` field and an omitted one are the
+  same eight bytes in postcard's format, which has no field names to tell them
+  apart by, so a zero-tag event either failed to decode on its own or, with a
+  neighbour in the buffer, quietly consumed that neighbour's bytes and
+  produced a different, valid-looking `Event`. Every field that used to be
+  skipped when it held its default is now always written, which is what makes
+  the boundary between one value and the next unambiguous.
+- **`{"guards":[{}]}` and `{"guards":[{"query":null}]}` both decoded to an
+  `AppendCondition` that matched every event in the store** (D6). Both are
+  what a `Guard` missing its `query` field defaulted to, and the default for
+  an append condition's query was `Query::All` — so the most destructive value
+  the protocol can express was also the one a peer produced by leaving a field
+  out, whether by a bug or by economy on the wire. `Guard::query` is no longer
+  optional on the wire: an append condition now has to name what it is
+  guarding, and a document that omits it is rejected rather than decoded.
 
 [Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

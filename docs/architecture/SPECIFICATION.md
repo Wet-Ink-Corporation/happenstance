@@ -1792,16 +1792,19 @@ event above the minimum for **all four** items, so the quiet fragment's stale
 boundary governs the busy one and the deployment reads the resulting rejection
 rate as physics.
 
-Today `AppendCondition` is `{ fail_if_events_match: Query, after:
-Option<SequencePosition> }` (`append.rs:50-61`) with public fields on a
-`#[non_exhaustive]` struct. Replacing `fail_if_events_match` with `guards` is a
-breaking field change and costs nothing, because nothing is published. The
+**Before commit `1b2a565`**, `AppendCondition` was `{ fail_if_events_match:
+Query, after: Option<SequencePosition> }` with public fields on a
+`#[non_exhaustive]` struct. It is now `{ guards: Box<[Guard]> }`
+(`append.rs:84-99`) with `pub struct Guard { pub query: Query, pub after:
+Option<SequencePosition> }` (`:111-121`); the clause landed at phase 4 and it
+stays `[PROVISIONAL]` until its two instruments are built. The
 `Guard` type MUST itself be `#[non_exhaustive]` with public fields, for the same
 reason `AppendCondition` is: E2E-37's ingest rule must *read* `after` on a
 peer-supplied condition without being able to construct one literally, and
 readable-but-not-literal-constructible is precisely what enables that refusal.
 
-`is_violated_by` (`append.rs:95-107`) becomes a fold over the guards; the
+`is_violated_by` (`append.rs:205-214`), delegating to `Guard::is_violated_by` at
+`:219-233`, becomes a fold over the guards; the
 single-guard path is byte-for-byte the current behaviour, which is why every
 existing condition rule survives unchanged. Adapters pushing this into SQL must
 generate `(item AND position > p) OR …` with explicit parentheses — the textbook
@@ -1856,7 +1859,13 @@ published shape is deferred.
 `[DEFERRED — settled by a bridge exercised against the DCB reference
 implementation's encoding, in a `happenstance-dcb-interop` crate with its own
 ADR, owned by the phase that first needs to read another implementation's log.
-No phase currently needs it.]`
+No phase currently needs it. The DCB specification and its reference TypeScript
+library publish **no** wire format: `EventStore.ts` contains no serialisation
+code, and the specification's JSON snippets are labelled a "potential JSON
+representation" beside an explicit disclaimer that "implementations are not
+required to use the same terms or function/field names". There is nothing to
+build a bridge against, which makes the deferral stronger rather than weaker
+(ADR-0016 §1, reading of 2026-08-05).]`
 `Rule:` `wire::query_all_is_unambiguous` and `wire::empty_object_is_not_a_condition`
 are the two tests that fail if this clause is abandoned in practice; the scope
 half is a review obligation, and the clause says so rather than pretending
@@ -1873,34 +1882,66 @@ patch rather than as a design decision, and it reintroduces WF-2's positional
 desynchronisation and WF-3's match-everything-by-accident in one commit.
 
 Two divergences from the reference are known and are not defects under this
-clause. The reference emits a query as a bare sequence of items where
-happenstance emits an `{items: […]}`-shaped value, and it emits `[]` for
-match-all where happenstance cannot parse `[]` at all. Both are recorded so the
-future bridge starts from a list rather than from a discovery.
+clause. Both halves of them were recorded backwards. **happenstance** emits a
+bare sequence — `Query::Items` goes through `serialize_some` (`query.rs:380`) —
+while **the reference** is the `{items: […]}` side: its `Query` is `{ items:
+QueryItem[]; matchesEvent(…); merge(…) }` and `queryAll()` returns `{items: []}`.
+happenstance did not fail to *parse* `[]` before ADR-0016 §7 either: it parsed to
+an empty item list and rejected it semantically through `Query::from_items`.
+Under the externally tagged encoding `[]` is refused by the representation
+itself, which strengthens the divergence — happenstance spells match-all as a
+value that cannot syntactically collide with a filtered query, the reference as
+`{items: []}`, structurally identical to an illegal empty filtered query. Three
+further facts a bridge needs: the reference's `QueryItem` tags are bare opaque
+strings, not key/value `Tags`; its `Query` carries methods and is not
+serialisable without a step somebody must define; and its `AppendCondition` is a
+single `{failIfEventsMatch, after?}` guard rather than a sequence. Both are
+recorded so the future bridge starts from a list rather than from a discovery.
 
 #### WF-2 — Every field of every wire struct is always present
 
 No wire struct may use `skip_serializing_if`, and no attribute may make the
 number of serialised fields depend on a value. Every field MUST be written, in
-declaration order, on every serialisation.
+declaration order, on every serialisation. **This obligation binds the
+encoder.** A `Deserialize` that accepts an absent `Option` field does not violate
+it: serde's `missing_field` succeeds for any type whose `Deserialize` calls
+`deserialize_option`, with or without `#[serde(default)]` (measured, ADR-0016
+§5), so the read side is asymmetric at `Event::metadata` and `Guard::after`. The
+asymmetry is deliberate and fails closed — a missing `after` decodes to `None`,
+which checks the whole log. `#[serde(default)]` is nevertheless deleted
+everywhere, on ADR-0016 §4's own preference.
 
 `[FROZEN]`
 `Rule:` `wire::round_trips_in_postcard` over every envelope shape, including the
-all-defaults shape
+all-defaults shape. After ADR-0016 §3 no type in `happenstance-core` can fail
+these rules, because every wire struct writes every field.
+**`wire::round_trips_in_postcard` is therefore paired with a negative control** —
+a mirror struct carrying `#[serde(skip_serializing_if = "…")]`, asserted to fail
+the same round trip — and that control is the whole of its discriminating power
+below maximum size: deleting it is deleting the rule.
 `Cases:` E2E-33, E2E-35, E2E-42
-`Rejects:` the five `skip_serializing_if` attributes at `event.rs:342`,
-`event.rs:344`, `query.rs:281`, `query.rs:283` and `append.rs:121`. The attribute
+`Rejects:` the five `skip_serializing_if` attributes at `event.rs:578`,
+`event.rs:580`, `query.rs:352`, `query.rs:354` and `append.rs:248`. The attribute
 shortens the field count passed to `serialize_struct`; a non-self-describing
 format feeds the deserializer exactly `FIELDS.len()` values positionally, so a
 skipped field desynchronises the stream. Serialisation *succeeds* and produces
 plausible-looking bytes. `Event::new("A", data)` with no tags — what every
 doctest builds — is a failing input, as are `QueryItem::of_types([…])`,
-`QueryItem::tagged(…)` and `AppendCondition::new(q)`.
+`QueryItem::tagged(…)` and `AppendCondition::new(q)`. Measured: a **lone**
+`Event` fails to round-trip in postcard for three of its four shapes, erroring
+with `Hit the end of buffer` at 7, 18 and 11 bytes; only the all-fields-present
+shape (22 bytes) survives. The **silent** wrong value needs a neighbouring value
+in the same buffer, and the neighbour matters: of nine tried after the tags-only
+`Event`, three decode to a wrong `Event` with no error, two decode to a value
+equal to the original while consuming the neighbour, and four error. The rule
+needs both a solo shape and a framed pair.
 
-The cost is bytes in JSON — a bare `Event` goes from 35 to 61 — and nothing at
-all in postcard, where an absent `Option` is one byte and an empty sequence is
-one byte. That is the correct direction to trade: the format that is used for
-diagnostics pays, the format that is used in bulk does not.
+The cost is **+26 bytes in JSON** for the two restored fields — `,"tags":[]` is
+10 and `,"metadata":null` is 16 — which for a bare `Event` with a four-byte
+single-digit payload is 35 → 61, for the same shape carrying `11 22 33 44` is
+39 → 65, and for a zero-length payload 28 → 54; and **one byte per absent field
+in postcard** — measured, the tagged single-field case is 18 → 19 and the
+all-defaults two-field case 7 → 9. That is still the correct direction to trade.
 
 #### WF-3 — `Query::All` has an unambiguous encoding
 
@@ -1913,7 +1954,7 @@ absent field, or as an empty sequence. `Option<Query>` MUST round-trip, with
 `Rule:` `wire::query_all_is_unambiguous`, `wire::option_query_round_trips`
 `Cases:` E2E-40
 `Rejects:` the current implementation. `Serialize` maps `All` to
-`serialize_none` and `Items` to `serialize_some` (`query.rs:304-321`), so
+`serialize_none` and `Items` to `serialize_some` (`query.rs:375-392`), so
 `Query::All` becomes JSON `null`, `Some(Query::All)` and `None` are
 indistinguishable, and serde's `missing_field` succeeds for `Option`-shaped
 types — which means a *missing* field decodes to the broadest condition in the
@@ -1922,7 +1963,7 @@ protocol. A peer that emits `null` by accident gets match-everything. Inside an
 ingest policy that is E2E-40's unbounded scan inside a single-threaded actor
 with a fixed CPU ceiling.
 
-This reverses a documented decision, not an oversight: `query.rs:306` states the
+This reverses a documented decision, not an oversight: `query.rs:377` states the
 intent — "`None` is the match-all query; `Some(items)` is a filtered one" — and
 the ADR that lands it must say it is reversing a choice. The `Option`-shaped
 encoding was chosen for compactness in JSON and it is exactly the compactness
@@ -1936,26 +1977,42 @@ payload; in JSON it is `"All"` or `{"Items":[…]}`.
 #### WF-4 — An `AppendCondition` encodes its guards explicitly, and an empty object is not one
 
 `AppendCondition` MUST encode as a struct with a single `guards` field holding a
-non-empty sequence. Each guard MUST encode both `fail_if_events_match` and
-`after`, with `after` always present as an explicit `Option`.
-`serde_json::from_str::<AppendCondition>("{}")` MUST fail.
+non-empty sequence. Each guard MUST **serialise** both `query` and `after`, both
+always written, with `after` an explicit `Option`; as in WF-2 the presence
+obligation binds the encoder, and a decoder that accepts an absent `after` fails
+closed to `None`. `serde_json::from_str::<AppendCondition>("{}")` MUST fail —
+satisfied since ADR-0012's guard sequence landed, and retained as a floor rather
+than a live obligation — **and so MUST `{"guards":[{}]}` and
+`{"guards":[{"query":null}]}`, which are the inputs the rule actually tests.**
+The field is named `query` because VT-30 moved the boundary into `Guard { query,
+after }` (ADR-0012 §9), and this clause's earlier `fail_if_events_match` named a
+field that move deleted; the MUST is about presence (E2E-37) and not about
+spelling. **VT-30 is itself `[PROVISIONAL]` (`:1781-1784`) with both instruments
+unbuilt, so this noun tracks a provisional clause's landed implementation:
+falsifying VT-30 withdraws the guard sequence and returns this clause to a
+single-guard spelling. It does not reopen the `after`-presence obligation, which
+is E2E-37's and independent of the guard count.**
 
 `[FROZEN]`
-`Rule:` `wire::empty_object_is_not_a_condition`, `wire::condition_round_trips`,
+`Rule:` `wire::empty_object_is_not_a_condition`,
 `wire::condition_after_is_visible_to_an_ingest_policy`
 `Cases:` E2E-35, E2E-37, E2E-40
-`Rejects:` the current pair of behaviours, which must be fixed together.
-`AppendCondition::Wire.fail_if_events_match` carries no `#[serde(default)]`
-(`append.rs:117-123`), and `from_str::<AppendCondition>("{}")` nevertheless
-returns `Ok` with `Query::All` — it succeeds only because `Query`'s `Deserialize`
-is `Option`-shaped. Once WF-3 makes `Query` explicitly tagged, `{}` becomes a
-hard error, which is the intended outcome, and the two changes must land in one
-commit or the intermediate state is a decode that fails for the wrong reason.
+`Rejects:` the input that still decodes to match-everything after ADR-0012's
+guard sequence landed. Measured at HEAD, `"{}"`, `"[]"` and `{"guards":[]}` all
+already error. What is **not** closed is `{"guards":[{}]}`, which returns
+`Ok(AppendCondition { guards: [Guard { query: All, after: None }] })`, as does
+`{"guards":[{"query":null}]}` — and `AppendCondition::new(Query::all())`
+serialises today as exactly that (`append.rs:246-250`). It succeeds only because
+`Query`'s `Deserialize` is `Option`-shaped; once WF-3 makes `Query` explicitly
+tagged it becomes a hard error (measured: ``missing field `query` `` and
+`expected value`), and the two changes must land in one commit.
 
 `after` is always present because E2E-37's ingest rule depends on seeing it. A
 store-local position on the wire has no referent at the receiver —
-`is_violated_by` compares raw positions (`append.rs:95-107`), so `after: 288455`
-in hub numbering names an unrelated recent event and the check passes vacuously,
+`is_violated_by` compares raw positions (`append.rs:205-214`, delegating to
+`Guard::is_violated_by` at `:219-233`, where `position <= after` at `:230` is the
+comparison), so `after: 288455` in hub numbering names an unrelated recent event
+and the check passes vacuously,
 which is worse than being rejected because it looks like enforcement. An ingest
 policy can only refuse what it can see.
 
@@ -1984,15 +2041,30 @@ is impossible.
 `StoreId` MUST encode as 32 lowercase hexadecimal digits without separators in
 human-readable formats and as sixteen raw bytes otherwise, selected with
 `Serializer::is_human_readable` / `Deserializer::is_human_readable`. `EventId`
-MUST encode as a struct of `origin` and `position`.
+MUST encode as a struct of **`store`** and `position`. **The field is `store`
+because that is `EventId`'s own field and accessor (`identity.rs:97-100`,
+`:110-113`), named as such by VT-5's body at `:770-772`.** The binary half is
+already satisfied at HEAD: `StoreId` serialises as `[u8; 16]`
+(`identity.rs:194-198`) and postcard renders sixteen raw bytes with no length
+prefix. **The wrong implementation both rules exist to reject is an inverted
+`is_human_readable` branch, invisible to every round-trip rule** — measured, an
+inverted branch round-trips cleanly in both formats — so
+`wire::store_id_encodes_as_hex_in_json` asserts the JSON value is the
+32-character string and `wire::store_id_encodes_as_bytes_in_postcard` asserts
+sixteen raw bytes and no ASCII hex.
 
 `[FROZEN]`
 `Rule:` `wire::store_id_encodes_as_hex_in_json`,
 `wire::store_id_encodes_as_bytes_in_postcard`
 `Cases:` E2E-34, E2E-42
 `Rejects:` encoding a `StoreId` as a byte sequence in JSON, which produces a
-32-element array of integers that no operator can read and that costs four times
-the bytes. Also rejects encoding it in UUID form with hyphens and version
+**sixteen**-element array of integers — `StoreId` is `[u8; 16]`
+(`identity.rs:44`), one element per byte — that no operator can read. Measured:
+59 bytes against 34 of quoted hex, a factor of **1.7353**; the arithmetic
+maximum, an all-`0xff` id, is 65 bytes = 1.9118×, and an all-`0x01` id is 33
+bytes = 0.9706×, i.e. **cheaper** than hex. "Four times the bytes" is not
+reachable, and the argument that carries this clause is illegibility rather than
+size. Also rejects encoding it in UUID form with hyphens and version
 nibbles: it is not a UUID, and formatting it as one invites the next reader to
 parse a version field that carries no meaning and to assume a time ordering that
 does not exist.
@@ -2010,13 +2082,29 @@ The wire format MUST be exercised by the round-trip tests in `serde_json` and
 
 `[FROZEN]`
 `Rule:` `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, both over
-every envelope shape including all-defaults and maximum-size values
+every envelope shape including all-defaults and maximum-size values. After
+ADR-0016 §3 no type in `happenstance-core` can fail these rules, because every
+wire struct writes every field. **`wire::round_trips_in_postcard` is therefore
+paired with a negative control** — a mirror struct carrying
+`#[serde(skip_serializing_if = "…")]`, asserted to fail the same round trip —
+and that control is the whole of its discriminating power below maximum size:
+deleting it is deleting the rule. **`wire::round_trips_in_json` takes no such
+control, and must not be given one:** the same mirror round-trips cleanly in
+serde_json — measured, all four `Event` shapes do — which is the very fact this
+clause exists to state. Its own job is the **maximum-size** half, shared with
+WF-9's decode rule: an `Event` whose `data` is `MIN_SUPPORTED_EVENT_DATA_LEN`
+(65,536 bytes, `limits.rs:22`), which is where a truncating payload encoder or a
+`Deserialize` that grew a length check first shows.
 `Cases:` E2E-33, E2E-42
 `Rejects:` a test matrix of one format. One self-describing format and one
 non-self-describing format is the minimum that discriminates: D1's five
-attributes serialise and deserialise perfectly in JSON and desynchronise the
-stream in postcard, so a JSON-only matrix certifies a broken format. A third and
-fourth format add maintenance and no information, because every failure mode
+attributes serialise and deserialise perfectly in JSON and in postcard are
+**undecodable for three of an `Event`'s four shapes** — `Hit the end of buffer`
+at 7, 18 and 11 bytes — and silently decode to a **wrong** value when a
+neighbour follows them in the buffer (measured). A JSON-only matrix certifies a
+broken format either way; the correction strengthens the clause, because all
+four shapes round-trip in `serde_json`. A third and fourth format add
+maintenance and no information, because every failure mode
 either belongs to the self-describing class or to the positional class.
 
 Postcard specifically, rather than bincode, because it is `no_std`-friendly and
@@ -2024,22 +2112,50 @@ is the format a constrained replication peer would actually reach for.
 
 #### WF-8 — The envelope is versioned, once per message, and an unknown version is refused whole
 
-Every replication message MUST carry a `format_version` as its first field. The
-version MUST be bumped whenever the shape of any wire type changes. A receiver
-that does not implement a version MUST refuse the entire message with a
-distinguishable error and MUST NOT attempt a partial decode.
+Every replication message MUST carry a `format_version`, and a receiver MUST read
+and check it **before any part of the message is decoded**. In a positional
+format the version MUST be the first field, so that `take_from_bytes::<u16>` on
+the front of the buffer yields it; in a self-describing format the format itself
+imposes no order — measured, a derived `Deserialize` accepts
+`{"message":null,"format_version":999}` and returns `Ok` — so the obligation
+there is discharged by an explicit check in a hand-written `Deserialize` and not
+by position. **That check is what gives key order its one meaning there, and it
+is exactly one:** a document whose `message` arrives before an accepted
+`format_version` MUST be refused, because a version read second cannot be checked
+before the message decodes, and buffering the message into a self-describing
+intermediate to defer the decision is itself the partial decode this clause
+forbids (`crates/happenstance-sync/src/wire.rs:268-296`; found during
+implementation, ADR-0016 §11). The version MUST be bumped whenever the shape of
+any wire type changes. A receiver that does not implement a version MUST refuse
+the entire message with a distinguishable error and MUST NOT attempt a partial
+decode.
 
 `[FROZEN]`
 `Rule:` `wire::rejects_an_unknown_format_version`,
-`wire::version_is_the_first_field`
+`wire::version_is_readable_before_the_message`, replacing the unwritten
+wire::version_is_the_first_field — unbackticked deliberately, because a `Rule:`
+field may backtick rule names and nothing else (ADR-0016 §15). **The replacement
+is a witness test, not a byte-layout test**: measured, a derived `Deserialize`
+with a post-hoc version check returns the same `Err` in both formats *and*
+produces byte-identical postcard framing — `[01 07]` at version 1, `[80 03 07]`
+at 384, same `take_from_bytes::<u16>` value and `[07]` remainder — so neither the
+error nor the front-of-buffer remainder distinguishes it from the hand-written
+impl this clause requires. The rule decodes an `Envelope<Witness>` at an unknown
+version, where `Witness`'s `Deserialize` records that it ran, and asserts the
+count is **zero** in both formats; the derive records **one**. The byte-position
+spelling was rejected separately, because a `u16` varint is one, two or three
+bytes.
 `Cases:` E2E-35, E2E-42
 `Rejects:` per-type versioning, which costs bytes on every event in the log and
 still cannot express a change to the *relationship* between two types — for
 instance, the move of `after` from `AppendCondition` into `Guard` (VT-30), which
-changes no single type's shape in isolation. Also rejects a version field placed
-anywhere but first: in a positional format, a decoder that has already consumed
-two fields incorrectly cannot recover to read a version, so a trailing version is
-a version nobody can read when they need it.
+changes no single type's shape in isolation. Also rejects, **in a positional
+format**, a version field placed anywhere but first: a decoder that has already
+consumed two fields incorrectly cannot recover to read a version, so a trailing
+version is a version nobody can read when they need it. In a self-describing
+format the equivalent refusal is a decoder that reads the message before checking
+the version — key order is not observable there, so position is not the property
+and a pre-message check is.
 
 The version lives on the sync message envelope, in `happenstance-sync`, not on
 `Event` or `Query`. The value types are not independently versioned because they
@@ -2062,7 +2178,14 @@ wire-compatibility break with no quarantine path". It is a break only if the
 bound is enforced in `Deserialize`, which VT-19 forbids for exactly this reason.
 It also rejects the alternative repair — bumping the format version whenever a
 limit changes — which would make every peer in a heterogeneous deployment
-unreachable from every other the moment one of them raised a limit.
+unreachable from every other the moment one of them raised a limit. The rule
+decodes an `Event` whose `data` exceeds `MIN_SUPPORTED_EVENT_DATA_LEN` (65,536
+bytes, `limits.rs:22`) — a floor adapters must support, not a limit the contract
+crate applies — and asserts `Ok`. The wrong implementation it rejects is a
+`Deserialize` that grew a length check, a live hazard precisely because WF-10
+asks the same impls to re-run their constructor's invariants; that
+implementation is written into `crates/happenstance-core/tests/wire.rs` as a
+negative control.
 
 Raising a floor is always safe: a peer that accepts more accepts everything it
 accepted before. Lowering one is a semver-major change to the contract and an
@@ -2086,10 +2209,11 @@ limit.
 obvious implementation and which would let a peer construct every value the
 constructors exist to prevent — an unsorted `Tags`, an unconstrained `QueryItem`,
 a zero-item `Query` — directly in the receiver's memory. The current impls
-already do this correctly (`tag.rs:317-324` re-canonicalises, `query.rs:297-302`
-re-validates through `QueryItem::new`) and E2E-40 credits them: "the envelope
-defends its own invariants; only cost is unguarded". This clause is what stops
-that being an accident.
+already do this correctly (`tag.rs:497-504` re-canonicalises, `query.rs:368-373`
+re-validates through `QueryItem::new`, `query.rs:385-392` routes `Query` through
+`from_items`, and `append.rs:274-289` rejects an empty guard sequence) and E2E-40
+credits them: "the envelope defends its own invariants; only cost is unguarded".
+This clause is what stops that being an accident.
 
 One consequence retires a concern recorded in PRESSURE-TEST §6: re-canonicalising
 `Tags` on the way in means a foreign peer's hash over its own tag order will not
@@ -2102,26 +2226,68 @@ identity the re-canonicalisation costs nothing.
 `Event::data` and `Event::metadata` MUST encode as standard-alphabet base64 in
 human-readable formats and as raw byte strings otherwise.
 
-`[PROVISIONAL — falsified if the base64 implementation cannot be made `no_std`,
-or if a peer must forward a payload too large to buffer through an encoder; the
-Workers peer under a memory limit is the instrument]`
+`[PROVISIONAL — falsified if a peer must forward a payload too large to buffer,
+which would make this MUST unsatisfiable on that peer and force the clause to be
+re-scoped to formats rather than to peers. **This is a property of serde's data
+model rather than of base64** — read from serde's `Serializer` API rather than
+measured: `serialize_str` takes a `&str`, so **any** human-readable payload
+encoding, hex included, must materialise the whole payload. It therefore
+falsifies human-readable payload encoding as a category, and its instrument is
+the Workers peer under a memory limit at **phase 9**. The `no_std` half of the
+earlier falsifier is **closed**: measured at phase 5, a `#![no_std]` + `alloc`
+crate depending on `base64` with `default-features = false, features = ["alloc"]`
+checks clean for `wasm32-unknown-unknown` (ADR-0016 §10)]`
 `Rule:` `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard`
 `Cases:` E2E-33
 `Rejects:` the default. `bytes::Bytes` serialises through `serialize_bytes`, and
-`serde_json` renders that as an array of decimal integers — so Turnstile's 340 KB
-seat map becomes roughly 1.3 MB of JSON that no human can read. The format that
-exists for diagnostics should be diagnosable.
+`serde_json` renders that as an array of decimal integers — so Turnstile's seat
+map (`docs/scenarios/README.md:1367`), taken as 340 KiB = 348,160 bytes, becomes
+**1,243,464 bytes** of JSON that no human can read — 1.243 MB in 10⁶ units, 1.186
+MiB in 2²⁰, and 3.5715× the raw payload. Base64 is 464,218 bytes (453.34 KiB,
+1.3333×) and 2.6786× smaller than the array of integers; lowercase hex is 696,322
+bytes (680.00 KiB, 2.0000×); postcard is 348,163 bytes (1.0000×). Measured; the
+programs are in `docs/experiments/wire-format/`. The format that exists for
+diagnostics should be diagnosable.
 
 The dependency is confined to the optional `serde` feature and is one small
 crate. That is a real addition to a crate whose dependency graph is deliberately
-tiny (ADR-0003), which is why the clause is provisional rather than frozen.
+tiny (ADR-0003), which is why the clause is provisional rather than frozen. The
+cost is measured and it is the smallest a dependency has: `base64 0.22.1` is
+already in this workspace's graph, pulled by `sqlx-core` and `sqlx-postgres`, and
+has no transitive dependencies of its own — zero new crates for the workspace,
+exactly one leaf crate for a consumer taking the `serde` feature without sqlx.
+`base64` also appears in no public signature, so it does not touch the semver
+surface ADR-0003 protects. The feature line becomes `serde = ["dep:serde",
+"dep:base64", "base64/alloc", "bytes/serde", "serde/alloc"]`. Both named rules
+exist to reject an **inverted `is_human_readable` branch**, invisible to WF-7's
+rules: measured, `[de ad be ef]` must render as the JSON string `"3q2+7w=="` and
+as four raw bytes in postcard, and an inverted implementation renders
+`[222,173,190,239]` and the ASCII of `"3q2+7w=="` respectively while passing both
+round trips.
 
 #### WF-12 — `ReadOptions` is not part of the wire format
 
 `ReadOptions` MUST NOT implement `Serialize` or `Deserialize`.
 
 `[FROZEN]`
-`Rule:` compile test `read_options_is_not_serialisable`
+`Rule:` `read_options_is_not_serialisable`, a **const-evaluation assertion in
+`crates/happenstance-core/tests/wire.rs`**, and **not a compile test** — that
+phrase is kept deliberately, because `spec_trace`'s `elsewhere` trigger reads it
+and a `const _` is not a `#[test]` any rule resolver could find. A `compile_fail`
+doctest passes whenever the snippet fails to compile for any reason: measured, of
+four spellings only the honest one detected that `ReadOptions` is serialisable at
+HEAD, while a type-name typo, a misspelt trait and a wrong crate path all
+reported green — and `RUNBOOK.md:3112-3117` already recorded that
+`compile_fail,E0080` is "the same check wearing a claim". The assertion is
+`const _: () = assert!(!Detect::<ReadOptions>::IS_SERIALIZE, …)`, where an
+inherent `impl<T: Serialize> Detect<T> { const IS_SERIALIZE: bool = true; }`
+shadows a defaulted trait constant of `false`, because inherent associated items
+win over trait ones; a misspelt type is then `error[E0425]`, a build failure
+rather than a green test. The `Deserialize` half needs
+`impl<T: serde::de::DeserializeOwned> Detect<T>`, not `impl<T:
+serde::Deserialize>` — the latter is `error[E0106]`, since `Deserialize<'de>` is
+lifetime-parameterised. What enforces the whole is that the test target must
+build, which `xtask/src/proof.rs` already does in order to list it.
 `Cases:` none directly; this removes a surface rather than adding one, and it is
 a clause because the impls exist today and something must say to delete them.
 `Rejects:` a replication protocol that ships a `ReadOptions` as its "send me
@@ -2131,10 +2297,16 @@ traversal options for a local reader that a peer has no business setting. A sync
 request message carries its own fields, defined in `happenstance-sync`, whose
 meaning is negotiated between the two peers.
 
-The impls at `query.rs:323-351` are on no wire path that exists and are
-maintenance the crate does not owe. They also carry a fifth
-`skip_serializing_if`-shaped hazard by using `#[serde(default)]` on the whole
-struct, which is the same positional-desynchronisation class as WF-2.
+The impls at `query.rs:394-425` are on no wire path that exists and are
+maintenance the crate does not owe. **The claim that their whole-struct
+`#[serde(default)]` is a fifth hazard of WF-2's class is withdrawn**, measured:
+it is byte-for-byte inert in postcard on both encode and decode, because postcard
+treats running out of bytes as a hard parse error rather than an end-of-sequence
+signal, so the derive's default-fallback path never executes. Its only observable
+effect is in a self-describing format, where it lets the decoder accept a
+document the encoder cannot produce — a reason to delete it everywhere (ADR-0016
+§4), but **not** the positional class, and `ReadOptionsWire` carried no
+`skip_serializing_if` at all.
 
 ---
 
@@ -3412,17 +3584,14 @@ win.
 
 ### 3.4 Append conditions
 
-The shape shown here is the one on disk today:
+The shape on disk since commit `1b2a565` is `pub struct AppendCondition { guards:
+Box<[Guard]> }` with `pub struct Guard { pub query: Query, pub after:
+Option<SequencePosition> }` (`append.rs:84-99`, `:111-121`). VT-30 landed at
+phase 4.
 
-```rust
-pub struct AppendCondition {
-    pub fail_if_events_match: Query,
-    pub after: Option<SequencePosition>,
-}
-```
-
-VT-30 replaces it with a non-empty sequence of guards, each a `(Query,
-Option<SequencePosition>)` pair, and that clause is `[PROVISIONAL]`. Every clause
+VT-30 replaced the single `fail_if_events_match` / `after` pair with that
+non-empty sequence of guards, each a `(Query, Option<SequencePosition>)` pair,
+and that clause is still `[PROVISIONAL]`. Every clause
 in this subsection is written for one guard and generalises to N by conjunction:
 the append is rejected if **any** guard is violated, and each guard is evaluated
 by exactly the rules stated here. Nothing below depends on there being only one,
@@ -8020,7 +8189,16 @@ where every other section names conformance rules, and **CF-38's traceability
 check must resolve those names too**: a `WF-n` clause whose named test does not
 exist is the same defect as an `ES-n` clause whose named rule does not, and a
 checker that only reads `happenstance-testkit` would report the whole wire format
-as untraceable. If the format is ever opened to other DCB implementations, that
+as untraceable. **That obligation is discharged.** ADR-0016 §15 taught
+`backticked_idents` to keep a `::`-qualified name and gave check 4 and
+`rule_cell` a second resolution source — the `#[test] fn` names inside
+`crates/happenstance-core/tests/wire.rs` and
+`crates/happenstance-sync/tests/wire.rs`, each qualified by its enclosing `mod
+wire` — so a `wire::` name a clause cites now resolves, and an unwritten one
+renders `†` instead of being silently dropped. Check 6 deliberately keeps
+sweeping the suite set alone: resolution is one-way, clauses may name wire tests
+and wire tests need not be named by clauses, for the reason this paragraph
+already gives. If the format is ever opened to other DCB implementations, that
 decision brings a `happenstance-wire-testkit` with it, and its meta-rules are
 CF-1 through CF-6 unchanged.
 
@@ -8093,18 +8271,18 @@ generated table that swallowed them would look more complete and say less.
 Five reading conventions for §7.2, all of them consequences of the checker
 claiming only what it verified.
 
-- A rule name marked **†** was looked for in `suite.rs` and not found: this
-  document specifies it and it must be written.
+- A rule name marked **†** was looked for in
+  `crates/happenstance-testkit/src/suite.rs`, and — for a `wire::`-qualified name
+  — in `crates/happenstance-core/tests/wire.rs` and
+  `crates/happenstance-sync/tests/wire.rs`, and not found in any of them. It must
+  be written.
 - Where a clause points somewhere the checker cannot resolve — a unit or compile
-  test living in the crate the clause constrains, or §2.7's wire tests — the cell
-  carries the clause's own words rather than a name list, and carries no `†`. A
-  dagger there would assert an absence nothing checked.
+  test living in the crate the clause constrains — the cell carries the clause's
+  own words rather than a name list, and carries no `†`. A dagger there would
+  assert an absence nothing checked. §2.7's wire tests left that category at
+  ADR-0016 §15: they resolve, so an unwritten one is a `†` like any other.
 - Every cell is cut to 79 characters, the `…` included, list or prose alike. The
-  clause is authoritative and the table is an index into it. It is authoritative
-  in one place the truncation does not explain, too: the checker's name parser
-  does not accept a `::`-qualified rule, so where a clause mixes a `wire::` test
-  with a plain rule name — VT-19 and WF-9 — only the plain one reaches the cell.
-  Read those two clauses, not their rows.
+  clause is authoritative and the table is an index into it.
 - In the Cases column, `*all*` is a clause whose own text says *all
   contract-level cases* — §6 states that of itself, and fifty-six numbers in a
   cell would hide it rather than show it. `*(none directly; cites …)*` is a clause
@@ -8161,7 +8339,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-16 | FROZEN | `query_item_tags_are_and`, `query_item_tags_match_supersets`, `query_item_reje… | E2E-32, E2E-40 |
 | VT-17 | FROZEN | `tags_may_repeat_a_key` | E2E-57 |
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
-| VT-19 | FROZEN | `append_reports_exceeded_store_limits` | E2E-40, E2E-42 |
+| VT-19 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_accepts_an_over_… | E2E-40, E2E-42 |
 | VT-20 | FROZEN | unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`; `store_ac… | E2E-40 |
 | VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
@@ -8182,18 +8360,18 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| WF-1 | DEFERRED | `wire::query_all_is_unambiguous` and `wire::empty_object_is_not_a_condition` a… | E2E-33, E2E-42 |
-| WF-2 | FROZEN | `wire::round_trips_in_postcard` over every envelope shape, including the all-d… | E2E-33, E2E-35, E2E-42 |
+| WF-1 | DEFERRED | `wire::query_all_is_unambiguous`, `wire::empty_object_is_not_a_condition` | E2E-33, E2E-42 |
+| WF-2 | FROZEN | `wire::round_trips_in_postcard` | E2E-33, E2E-35, E2E-42 |
 | WF-3 | FROZEN | `wire::query_all_is_unambiguous`, `wire::option_query_round_trips` | E2E-40 |
-| WF-4 | FROZEN | `wire::empty_object_is_not_a_condition`, `wire::condition_round_trips`, `wire:… | E2E-35, E2E-37, E2E-40 |
+| WF-4 | FROZEN | `wire::empty_object_is_not_a_condition`, `wire::condition_after_is_visible_to_… | E2E-35, E2E-37, E2E-40 |
 | WF-5 | FROZEN | `wire::sequenced_event_round_trips` | E2E-33, E2E-34, E2E-41, E2E-43 |
 | WF-6 | FROZEN | `wire::store_id_encodes_as_hex_in_json`, `wire::store_id_encodes_as_bytes_in_p… | E2E-34, E2E-42 |
-| WF-7 | FROZEN | `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, both over every … | E2E-33, E2E-42 |
-| WF-8 | FROZEN | `wire::rejects_an_unknown_format_version`, `wire::version_is_the_first_field` | E2E-35, E2E-42 |
-| WF-9 | FROZEN | `append_reports_exceeded_store_limits` | E2E-42 |
+| WF-7 | FROZEN | `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, `wire::round_tri… | E2E-33, E2E-42 |
+| WF-8 | FROZEN | `wire::rejects_an_unknown_format_version`, `wire::version_is_readable_before_t… | E2E-35, E2E-42 |
+| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-42 |
 | WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_rejects_an_uncon… | E2E-40 |
 | WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard` | E2E-33 |
-| WF-12 | FROZEN | compile test `read_options_is_not_serialisable` | *(none — see clause)* |
+| WF-12 | FROZEN | `read_options_is_not_serialisable`, a **const-evaluation assertion in `crates/… | *(none — see clause)* |
 
 #### `ES` — the `EventStore` port (§3)
 
@@ -8613,20 +8791,20 @@ serves, so this list is a defect list, not a note.
 | Clause | What it names instead | Verdict |
 |---|---|---|
 | **VT-17** — `key:value` is convention, not enforced | Nothing. It comes from Wattline (`docs/scenarios/README.md:628-635`) and no case covers it | **Defect: the case is missing.** A case is writable — construct a `Tag` with no colon and one with two, assert both are accepted and that neither acquires structure |
-| **WF-12** — `ReadOptions` is not on the wire | Nothing; it removes a surface | **Defect, minor.** A case is writable and trivial: assert `ReadOptions` does not implement `Serialize`. It is a compile test, which is why the clause reached for one |
+| **WF-12** — `ReadOptions` is not on the wire | Nothing; it removes a surface | **Defect, minor.** A case is writable and trivial: assert `ReadOptions` does not implement `Serialize`. Its instrument is a const-evaluation assertion, not a compile test (ADR-0016 §13). |
 | **CF-32** — the testkit carries its own `version` key | Nothing; a packaging obligation with a machine check | **Acceptable.** CF-35 permits a clause whose check is a manifest check rather than a behavioural one, and there is no user-visible behaviour to write a case against |
 | **CF-33** — no rule may read a clock | Nothing; it constrains the suite | **Acceptable**, same reason |
 | **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1589-1593`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
 | **PS-3** — ship behind `unstable-projection` | "none directly", then E2E-15 through E2E-25 | **Acceptable.** It is a packaging decision that makes a range of cases safe to answer before publication |
 | **PS-33** — evaluate ADR-0007's falsifier | "none directly", then E2E-26 through E2E-28 | Already listed in §7.3 as belonging in a work list |
 
-So: one genuine hole (WF-12, which is phase 5's) and five clauses where naming no
-case is the honest answer and the clause says why. VT-17 was the second and
-closed at phase 4 with E2E-57.
+So: no genuine holes left, and five clauses where naming no case is the honest
+answer and the clause says why. VT-17 closed at phase 4 with E2E-57, and WF-12
+closed at phase 5 with E2E-58.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 57 cases are claimed by at least one clause.**
+**None. All 58 cases are claimed by at least one clause.**
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.
