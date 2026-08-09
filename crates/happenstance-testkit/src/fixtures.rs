@@ -231,6 +231,14 @@ impl SendEventStore for MemoryHandle {
 ///   workspace's first fixture to decline anything, which is what makes the skip
 ///   machinery non-vacuous — until something declines a capability, "a skip is
 ///   reported" is a claim about code no fixture executes.
+///
+/// It also states no CF-40 store limit, inheriting `None` three times, so
+/// `append_reports_exceeded_store_limits` reports a skip against it. That is the
+/// honest answer — `MemoryEventStore` has no ceiling on a payload, a tag count or
+/// a batch size — and it is the first rule in the suite the *reference* fixture
+/// cannot run. `GappedPositionFixture` in the testkit's own
+/// `tests/mutation_coverage/variants.rs` is the conformant variant that states
+/// all three and enforces them, which is what keeps the rule non-vacuous.
 #[derive(Debug, Default)]
 pub struct MemoryFixture(Arc<MemoryEventStore>);
 

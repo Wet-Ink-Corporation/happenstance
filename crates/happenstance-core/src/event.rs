@@ -89,6 +89,21 @@ impl EventType {
     /// evaluated lazily, so an invalid one that nothing reads survives `check`,
     /// `clippy`, `build` and `test`. Prefer a free `const` for anything whose
     /// validity you want the compiler to guarantee.
+    ///
+    /// An invalid value at a free `const` site is a compile error:
+    ///
+    /// ```compile_fail
+    /// use happenstance_core::EventType;
+    ///
+    /// const EMPTY: EventType = EventType::from_static("");
+    /// # let _ = EMPTY;
+    /// ```
+    ///
+    /// Spelled bare `compile_fail` rather than `compile_fail,E0080`: rustdoc on
+    /// 1.97.1 silently ignores an error-code annotation it cannot match, so the
+    /// stricter-looking spelling is the weaker check. It is also deliberately
+    /// weaker than a `trybuild` snapshot — it does not pin the diagnostic — and
+    /// ADR-0015 records that phase 6 owns the `trybuild` dependency decision.
     #[must_use]
     pub const fn from_static(value: &'static str) -> Self {
         match validate::check(value, MAX_EVENT_TYPE_LEN) {
@@ -633,6 +648,125 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    /// `next()` returns `None` at the top of the key space rather than
+    /// repeating itself.
+    ///
+    /// VT-13. `saturating_add` clamped, `u64::MAX` is non-zero, and `new`
+    /// wrapped it back in `Some` — so the one method whose documented purpose is
+    /// signalling overflow was incapable of it, and the resume idiom
+    /// `checkpoint.next()` re-read the same event forever at exactly the
+    /// position nobody tests. `NonZeroU64::checked_add` is `const`, so the
+    /// repair costs neither the `const` nor a byte: the newtype's forbidden zero
+    /// is the niche `Option` spends on `None`.
+    #[test]
+    fn position_next_signals_overflow() {
+        // Declared first, not beside the assertion that reads it, because
+        // `clippy::items_after_statements` is on and is right to be: an item
+        // declared mid-function is in scope from the top of the function
+        // regardless of where it is written.
+        //
+        // It is evaluated by the compiler rather than at run time, which is what
+        // makes it the `const`-ness assertion. `const` is load bearing on
+        // `next`: it is what lets a checkpoint advance in a `const` initialiser,
+        // and it is the reason the body is a `match` rather than `?` or `map` —
+        // neither is available to a `const fn` on this toolchain.
+        const OVERFLOW: Option<SequencePosition> = match SequencePosition::new(u64::MAX) {
+            Some(last) => last.next(),
+            None => None,
+        };
+
+        let last = SequencePosition::new(u64::MAX).unwrap();
+        assert_eq!(
+            last.next(),
+            None,
+            "there is no position above the last representable one, and the \
+             signature has a way to say so"
+        );
+
+        // The step below it still advances, which is what keeps the assertion
+        // above from being satisfied by a `next` that returns `None` always.
+        let second = SequencePosition::FIRST.next().unwrap();
+        assert!(second > SequencePosition::FIRST);
+
+        assert!(OVERFLOW.is_none());
+    }
+
+    /// `from_static` and `new` accept exactly the same values.
+    ///
+    /// VT-32's MUST, and the divergence a byte walk appears to force and does
+    /// not: there is one validator, `validate::check`, and both constructors
+    /// call it. This asserts the agreement rather than describing it, because
+    /// the day a second `const`-only path is added is the day the two stop
+    /// agreeing and nothing else notices.
+    #[test]
+    fn from_static_and_new_agree() {
+        // One value from each boundary `validate::check` decides: ordinary, the
+        // format characters scripts need, the invisible one VT-14 keeps legal,
+        // and the four neighbours of the two closed bidirectional runs.
+        for value in [
+            "CourseDefined",
+            "a\u{200C}b",
+            "a\u{200D}b",
+            "a\u{200B}b",
+            "a\u{2029}b",
+            "a\u{202F}b",
+            "a\u{2065}b",
+            "a\u{206A}b",
+        ] {
+            let runtime = EventType::new(value).unwrap();
+            assert_eq!(EventType::from_static(value).as_str(), runtime.as_str());
+        }
+    }
+
+    /// `from_static` refuses everything `new` refuses — by panicking, which is a
+    /// compile error at a free `const` site.
+    ///
+    /// One `#[should_panic]` per refusal class, because a panic is the only
+    /// channel a `const fn` has. The bidirectional class is the one VT-14 added
+    /// at phase 4 and is therefore the one most likely to be dropped from a
+    /// future edit of the validator.
+    #[test]
+    #[should_panic(expected = "bidirectional formatting controls")]
+    fn from_static_rejects_a_bidirectional_control() {
+        let _ = EventType::from_static("Order\u{202E}Placed");
+    }
+
+    #[test]
+    #[should_panic(expected = "control characters")]
+    fn from_static_rejects_a_c1_control() {
+        // U+0085 NEL is `Cc` and is not ASCII — the case four doc comments used
+        // to claim was out of scope.
+        let _ = EventType::from_static("Order\u{85}Placed");
+    }
+
+    /// `Borrow<str>` hashes and compares as the owner does, so a map keyed by
+    /// `EventType` can be probed with a `&str`.
+    ///
+    /// VT-33 requires this asserted rather than claimed. `Borrow` carries a
+    /// documented extra obligation — the borrowed form must hash and compare
+    /// exactly as the owner — and `Eq`/`Hash` are hand-written here (a derive
+    /// would be correct today and quietly wrong the moment a second field
+    /// lands). A violation loses `HashMap` entries with no diagnostic anywhere,
+    /// which is why the assertion is a real map lookup rather than a comparison
+    /// of two hashes.
+    ///
+    /// Gated on `std` rather than written against a hand-rolled `Hasher`:
+    /// `happenstance-core` is `#![cfg_attr(not(feature = "std"), no_std)]` and
+    /// `HashMap` is `std`'s, so an ungated test would break the
+    /// `--no-default-features` arm the gate builds. The claim is about a
+    /// `HashMap`, so the test may honestly need one.
+    #[cfg(feature = "std")]
+    #[test]
+    fn a_map_keyed_by_event_type_is_probed_by_str() {
+        let mut registry = std::collections::HashMap::new();
+        registry.insert(EventType::from_static("CourseDefined"), "decode");
+        // The probe that does not allocate and does not re-validate, which is
+        // the whole reason the impl exists.
+        assert_eq!(registry.get("CourseDefined"), Some(&"decode"));
+        // And an owned key inserted the other way is the same key.
+        assert!(registry.contains_key(&EventType::new("CourseDefined").unwrap()));
+    }
 
     #[test]
     fn rejects_invalid_event_types() {

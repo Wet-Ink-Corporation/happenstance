@@ -1,14 +1,24 @@
 # happenstance-testkit
 
 The conformance suite for [happenstance](https://github.com/Wet-Ink-Corporation/happenstance)
-event store adapters. Fifty-five rules, each tracing to a MUST in the
-[Dynamic Consistency Boundary specification](https://dcb.events/specification/).
+event store adapters. Eighty-nine rules, each tracing to a MUST in the
+[Dynamic Consistency Boundary specification](https://dcb.events/specification/)
+and each shown to reject a named wrong implementation before it was trusted to
+pass.
 
-> **Status: early.** The suite runs and is green against the reference store, but
-> it is measurably weaker than it needs to be — deliberately-broken adapters have
-> passed it. Strengthening it is scheduled work, not an aspiration; see
+> **Status: early, and the reason has moved.** It used to be that
+> deliberately-broken adapters passed the suite. That is no longer true of the
+> event-store family: every rule now has at least one wrong store in this
+> crate's own `tests/` that fails it, and a meta-test asserts each of those
+> stores fails *exactly* the rules its registry row claims — so a rule that
+> stopped discriminating is a red build rather than a green one.
+>
+> What is still early is everything around that. **No adapter has run this
+> suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
+> port has no suite at all, and several axes of the instrument portfolio have
+> no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md)
-> §6, which states what the suite must itself be shown to fail.
+> §6.2 and §6.5, which name them rather than summarising them.
 
 ## Use
 
@@ -44,7 +54,7 @@ runs your store through generated sequences of appends, conditional appends and
 reads, checking each one against a model of what the log should be — and
 *predicting* every conditional append's outcome before it calls you.
 
-It replaces none of the fifty-five rules and catches nothing whose content is
+It replaces none of the named rules and catches nothing whose content is
 concurrency, durability, a second handle or the empty batch. What it catches is
 the combinatorial middle the named rules cannot enumerate: `query × from ×
 backwards × limit × condition`, over a log it built rather than one it chose.
@@ -98,8 +108,8 @@ wrong implementation it rejects has to be named — and written into
 `tests/mutation_coverage/mutants.rs`, with a row in that file's sibling
 `REGISTRY` declaring the exact set of rules it fails. (A *concurrency* rule's
 wrong store goes in `tests/mutation_coverage/racers.rs` and `RACERS`, because a
-store that fails only a racing rule fails none of the fifty-five and cannot have a
-`REGISTRY` row.) That is not a convention:
+store that fails only a racing rule fails none of the named rules and cannot have
+a `REGISTRY` row.) That is not a convention:
 `mutation_coverage::every_rule_has_a_mutant` fails until the row exists, so the
 rule is demonstrated to fail before it is trusted to pass. `CONTRIBUTING.md`'s
 "Conformance rules" section is the checklist.

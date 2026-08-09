@@ -32,8 +32,9 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, EventStore, Query, ReadOptions, SequencePosition,
-    SequencedEvent,
+    AppendCondition, AppendError, Event, EventId, EventStore, MIN_SUPPORTED_EVENT_DATA_LEN,
+    MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT, Query, ReadOptions,
+    SequencePosition, SequencedEvent, StoreLimit,
 };
 use happenstance_testkit::{Capability, Fixture};
 
@@ -83,6 +84,25 @@ fn gapped(previous: Option<SequencePosition>) -> SequencePosition {
 /// reason this variant can support `REOPEN` honestly where `MemoryFixture`
 /// cannot.
 ///
+/// # What replaying does *not* reproduce, and why it is invisible here
+///
+/// Positions are a pure function of the previous position; a `RecordedAt` is
+/// not. A durable side of `Event` can only be reopened by replaying, and a
+/// replay **restamps** — which is exactly the shape
+/// `recorded_time_survives_a_reopen` exists to reject, and which
+/// `tests/fixture_instruments.rs`'s `DurableFixture` avoids by carrying
+/// `SequencedEvent` on its own durable side and restoring rather than
+/// replaying.
+///
+/// This variant passes that rule anyway, and only because `correct::stamp`
+/// spends a **constant** — `TEST_RECORDED_AT`, fixed rather than read from a
+/// clock because CF-33 forbids one. So the restamp lands on the same value it
+/// replaced and nothing can see it. That is a property of the instrument, not
+/// of the store: the day this binary's stamp varies, this variant starts
+/// failing `recorded_time_survives_a_reopen`, and the answer will be to give
+/// the durable side `SequencedEvent`s rather than to weaken the rule. Recorded
+/// here so that the failure arrives with its cause attached.
+///
 /// It carries the **fault-injection** capability too, and that is a second axis
 /// on one instrument rather than an accident. `capability_skips_are_reported`'s
 /// closing assertion is that a fixture supporting everything skips nothing —
@@ -128,6 +148,42 @@ impl EventStore for GappedPositionStore {
         {
             self.fault.set(None);
             return Err(AppendError::Store(LogError::WriteFailed));
+        }
+
+        // The capacity refusal, reported through the variant VT-25 introduces
+        // rather than through `Self::Error`. This is a second conformant
+        // difference from `MemoryEventStore` and it is deliberate: VT-21 – VT-24
+        // require every store to document a limit and to refuse beyond it
+        // distinguishably.
+        //
+        // It precedes the write and returns before `self.committed` is extended,
+        // so a refused append moves neither the live log nor the durable record
+        // and `acknowledged_writes_survive_a_reopen` is untouched. The comparisons
+        // are `>`, so the three guaranteed-minimum rules — which write exactly the
+        // floor — are still accepted.
+        if let Some(event) = events
+            .iter()
+            .find(|event| event.data().len() > MIN_SUPPORTED_EVENT_DATA_LEN)
+        {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::EventDataLen,
+                len: event.data().len(),
+            });
+        }
+        if let Some(event) = events
+            .iter()
+            .find(|event| event.tags().len() > MIN_SUPPORTED_TAGS_PER_EVENT)
+        {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::TagsPerEvent,
+                len: event.tags().len(),
+            });
+        }
+        if events.len() > MIN_SUPPORTED_EVENTS_PER_BATCH {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::EventsPerBatch,
+                len: events.len(),
+            });
         }
 
         let position = {
@@ -186,6 +242,22 @@ impl Fixture for GappedPositionFixture {
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
     const REOPEN: Capability = Capability::SUPPORTED;
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
+
+    // CF-40. Stated at the floors rather than above them, so that this variant is
+    // simultaneously the tightest legal store and a passing one: VT-21 – VT-24
+    // make these numbers the minimum every store must accept, and a store that
+    // accepts exactly the minimum and refuses beyond it is conformant. Choosing
+    // anything larger would leave the refusal path exercised at a number no clause
+    // has an opinion about.
+    //
+    // This is why the variant is the one that states them: it is already the
+    // fixture that supports every capability, and `capability_skips_are_reported`
+    // asserts it skips *nothing* — so a portfolio in which no conformant variant
+    // has a ceiling is a portfolio in which
+    // `append_reports_exceeded_store_limits` never runs.
+    const MAX_EVENT_DATA_LEN: Option<usize> = Some(MIN_SUPPORTED_EVENT_DATA_LEN);
+    const MAX_TAGS_PER_EVENT: Option<usize> = Some(MIN_SUPPORTED_TAGS_PER_EVENT);
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(MIN_SUPPORTED_EVENTS_PER_BATCH);
 
     async fn connect(&self) -> Self::Store {
         GappedPositionStore {

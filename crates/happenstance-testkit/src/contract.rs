@@ -41,6 +41,18 @@
 //! fails rather than skips. See its documentation for why the enforcement is in
 //! the rule and not in a meta-test.
 //!
+//! # Limits are facts, not trades
+//!
+//! Three of the associated items below are `Option<usize>` rather than
+//! [`Capability`], and the distinction is the one thing about this trait most
+//! likely to be got wrong. A capability a fixture declines is a **trade** — it
+//! could have co-operated — and the reason it states is the only record of what
+//! was given up. A limit is a **fact**: a store either has a ceiling on a
+//! payload, a tag count and a batch size, or it has none, and neither answer is
+//! a decision anybody has to justify. `None` still produces a reported skip,
+//! because the reporting obligation attaches to *a rule that did not run* rather
+//! than to *a capability that was declined*.
+//!
 //! # `Skipped` means *all* of the rule needed the capability
 //!
 //! This is the distinction an adapter author gets wrong first. A rule returns
@@ -198,6 +210,74 @@ pub trait Fixture {
          to come from the adapter and this one has none to offer",
     );
 
+    /// The largest `data` payload this fixture's store accepts, in bytes, or
+    /// `None` if it has no ceiling.
+    ///
+    /// # Why this is an `Option<usize>` and not a [`Capability`]
+    ///
+    /// The three constants here look like capabilities and are deliberately not
+    /// spelled as ones. A declined [`Capability`] is a **trade**: the fixture
+    /// could have co-operated and chose not to, and the reason string is the
+    /// record of that choice, printed on every run so a reviewer and a user of
+    /// the adapter can both read what was given up. `None` here is not a trade.
+    /// It is a store reporting a **fact about itself** — that it has no ceiling
+    /// on this value — and there is nothing it could have done differently and
+    /// no reason it owes anybody. Asking it to write one would put a fiction in
+    /// the CI log.
+    ///
+    /// What `None` shares with a declined capability is the *reporting*
+    /// obligation, and only that: the rule cannot run, so it must say so. It
+    /// therefore returns [`RuleOutcome::Skipped`] through the same path, carrying
+    /// [`NO_STORE_LIMITS`] as the capability name and [`NO_CEILING_REASON`] as
+    /// the reason. A rule silently omitted is indistinguishable in CI output from
+    /// a rule that passed, which is CF-18's whole argument and does not stop
+    /// being true because the thing being reported is a fact rather than a
+    /// decision.
+    ///
+    /// # What stating a number commits the store to
+    ///
+    /// [`append_reports_exceeded_store_limits`](crate::rules::append_reports_exceeded_store_limits)
+    /// appends a payload of exactly this many bytes and requires it to be
+    /// **accepted**, then a payload one byte larger and requires it to be refused
+    /// as `AppendError::ExceedsStoreLimit { limit: StoreLimit::EventDataLen, .. }`
+    /// — never as `AppendError::Store`, and never by truncating. A number that is
+    /// not where the store's real ceiling is fails that rule in one direction or
+    /// the other, which is the point: this constant is the store's documented
+    /// limit (VT-21 requires one), and the suite is what holds the documentation
+    /// to the code.
+    ///
+    /// A store MAY state a ceiling below `MIN_SUPPORTED_EVENT_DATA_LEN`, and it
+    /// will then fail `store_accepts_the_guaranteed_minimum_payload` —
+    /// correctly, because VT-21 makes 65,536 bytes a floor every store must
+    /// clear. The two rules are independent and both are owed an answer.
+    const MAX_EVENT_DATA_LEN: Option<usize> = None;
+
+    /// The largest number of tags on one event this fixture's store accepts, or
+    /// `None` if it has no ceiling.
+    ///
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) for why these three
+    /// are `Option<usize>` rather than [`Capability`], and for what stating a
+    /// number commits the store to. The floor is `MIN_SUPPORTED_TAGS_PER_EVENT`
+    /// (VT-22).
+    const MAX_TAGS_PER_EVENT: Option<usize> = None;
+
+    /// The largest number of events this fixture's store accepts in one append,
+    /// or `None` if it has no ceiling.
+    ///
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN). The floor is
+    /// `MIN_SUPPORTED_EVENTS_PER_BATCH` (VT-24).
+    ///
+    /// Note what this is **not**: VT-24 forbids a `MAX_EVENTS_PER_BATCH` constant
+    /// in `happenstance-core` and forbids an `EventBatch` newtype to carry one,
+    /// because the bound is adapter-specific. That prohibition is about the
+    /// *contract*. Naming the number here is the opposite move — one store saying
+    /// what one store does, in the one place a conformance rule can read it.
+    ///
+    /// There is deliberately no `MAX_QUERY_ITEMS` beside these three. A
+    /// query-item refusal is not an append outcome, so it has no `StoreLimit`
+    /// variant to be reported through and no rule to gate.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = None;
+
     /// Arms the store so that the **next** append of more than `after` events
     /// fails while writing event `after + 1`.
     ///
@@ -351,6 +431,29 @@ impl Capability {
         self.0
     }
 }
+
+/// The `capability` name a rule reports when a fixture states **no ceiling at
+/// all** on any store limit.
+///
+/// Not a [`Fixture`] associated const, and it names all three because the rule
+/// gated on it needs all three to be absent before it has nothing to do. A skip
+/// naming only one of them would send an adapter author to look for the constant
+/// they did set.
+pub const NO_STORE_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH";
+
+/// The reason a rule reports when a fixture states no ceiling on any store
+/// limit.
+///
+/// Written by the testkit rather than by the fixture, which is the one place the
+/// skip machinery here differs from [`Capability::declined`]'s, and it is the
+/// difference the shape is for: a declined capability's reason is the adapter's
+/// account of a trade it made and only the adapter can write it, while "this
+/// store has no ceiling" is the same sentence for every store that says it.
+/// Asking each fixture to phrase it would buy a paraphrase per adapter and no
+/// information.
+pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any store limit, so there is no capacity \
+     refusal for a rule to observe; a store with no ceiling is reporting a fact \
+     about itself rather than declining to co-operate";
 
 /// What a conformance rule did.
 ///

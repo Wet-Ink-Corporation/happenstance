@@ -184,7 +184,7 @@ pub mod model;
 mod registry;
 mod suite;
 
-pub use contract::{Capability, Fixture, RuleOutcome};
+pub use contract::{Capability, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
 pub use registry::block_on;
 pub use suite::rules;
 

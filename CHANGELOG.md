@@ -548,6 +548,405 @@ not the same as what a user needed to be told.
   SQL adapter holding one connection it is a **deadlock**, and a hung conformance
   run names no rule at all.
 
+- **Nine conformance rules for read options, the query algebra and read
+  isolation, 55 → 64.** Phase 4 is the phase that could write them: three needed
+  `ReadOptions::to`, which did not exist; one needed `limit` to be
+  `Option<usize>`, because a zero was discarded by the builder before any adapter
+  saw it; and two needed nothing but the observation that a rule can supply its
+  own pause point by polling a stream once, which is what ADR-0011 corrected. Each
+  ships with the wrong implementation it rejects, and
+  [ADR-0011](docs/adr/0011-read-laziness-and-isolation.md) is the decision behind
+  all nine.
+
+  - **`read_to_is_inclusive`** — an adapter that accepts `ReadOptions` by value,
+    matches on the fields it recognises and ignores the rest. It is the shape
+    every `#[non_exhaustive]` options struct invites: the code compiles unchanged
+    when a field is added, and a backfill worker given the closed window [1, *H*]
+    reads to the end of the log instead. There is no error anywhere — the tail
+    worker beside it simply processes the overlap a second time. The second
+    implementation it rejects reads the bound as exclusive, which costs one event
+    at every chunk boundary and is invisible until the chunks are reassembled.
+
+  - **`read_from_and_to_bound_a_closed_window`** — the two bounds applied to
+    different halves of the same statement. A store that honours the upper bound
+    and treats the lower one as an `OFFSET` — the parameter already sitting in its
+    paging query — slides the whole window down by the lower bound's numeric
+    value, which is a different window entirely on any store whose positions do
+    not start at one. The result is the right *number* of events and the wrong
+    ones, which is the failure mode nobody notices in a smoke test.
+
+  - **`read_to_under_backwards_bounds_the_older_end`** — `WHERE position <= ?`
+    copied verbatim into the descending branch, so the upper bound never swaps
+    ends. It is *correct* reading forwards, which is what makes it survivable:
+    every forward rule passes and a backwards read comes back with the oldest
+    events instead of the newest. This is its own rule rather than a third
+    assertion elsewhere precisely because one registered adapter fails it and
+    nothing else in the suite sees that adapter at all.
+
+  - **`read_limit_zero_yields_nothing`** — a budget of zero read as no budget,
+    which is the DCB reference implementation's `if (limit)` falsiness and,
+    equivalently, `happenstance-core`'s own pre-phase-4 `NonZeroUsize::new(limit)`.
+    The caller it breaks is the one who computed the zero: a paging loop writing
+    `.limit(budget - fetched)` that reaches parity does not read nothing, it reads
+    **the entire log, unbounded, silently**, and the memory ceiling it was
+    protecting stops being a ceiling with no error and no failing test. The second
+    implementation it rejects is the `LIMIT n + 1` cursor probe, which hands back
+    one event when it was asked for none.
+
+  - **`limit_applies_across_items_not_per_item`** — a store that cannot express a
+    disjunction in one statement, emits one per query item, and writes the row
+    budget onto each of them, because that is where the paging clause lives. The
+    union is then merge-sorted perfectly well, so every ordering rule still
+    passes, and a caller who asked for four events is handed a page it did not
+    size — while its own paging arithmetic goes on being computed from the number
+    it asked for.
+
+  - **`read_from_a_gap_position`** — an anchor implemented as an equality seek or
+    a `rowid` offset rather than as a range scan, which is plausible wherever
+    positions came from a dense counter and the author assumed density. The
+    specification permits gaps, so a projection resuming at a position nothing
+    occupies must be given the next event past it; a seek returns empty and the
+    projection stalls forever with no error anywhere. The rule anchors on the one
+    unoccupied position every store has — the one above its head — and reads
+    backwards from it, which is a case nothing in the suite reached before.
+
+  - **`query_union_is_item_concatenation`** — a store that interns a query's items
+    **by their type list**, so a second item carrying the same types is dropped
+    and its tag constraint goes with it. `QueryItem::new` already sorts and
+    deduplicates *types*, so extending the idea one level up looks like the same
+    move; the query then selects a strictly smaller set than the caller asked for.
+    No order-invariance rule can catch it — deduplicating the items is precisely
+    what makes their order stop mattering — so only a match-set claim over an item
+    whose presence changes the set rejects it.
+
+  - **`read_result_is_stable_under_concurrent_append`** — a store with no cursor
+    issuing an independent statement per page against whatever it holds *now*,
+    which is the natural shape for a transport that answers one buffered document
+    per round trip. The result grows under the caller's feet, and the damage is
+    not the extra event: the caller derives its append condition's boundary from
+    the maximum position the read observed, that maximum sits above an event the
+    read never showed it, and the condition then instructs the store to ignore
+    exactly what was missed. A torn read does not become a rejected append; it
+    becomes an accepted one.
+
+  - **`query_items_share_one_snapshot`** — the same tear one level finer: an
+    adapter emitting one SQL statement per query item, so an event matching the
+    first item that lands between two statements is silently absent while the
+    observed maximum position sits above it. It needs no visibility hole and no
+    sequence trick, only two statements, and it is the natural shape for a
+    one-round-trip peer. The rule is portable because the pause point is the poll
+    boundary the rule itself controls rather than a fixture that can be halted
+    between round trips — which is the correction ADR-0011 makes to the
+    specification's own account of why this was blocked.
+
+- **Seven wrong implementations behind those rules**, in the testkit's mutation
+  registry, because a rule no implementation can fail is decorative:
+  `ToBoundIgnoredStore`, `ToIsExclusiveStore`, `BackwardsToIsAnUpperBoundStore`,
+  `LimitZeroIsUnlimitedStore`, `LimitPerItemStore`, `ItemDedupByTypeStore` and
+  `RefetchingPagedStore`. The last of those is the self-paginating adapter
+  ES-11 has always named and nothing had compiled: it is the *recommended*
+  pagination with the position ceiling missing, which is one line rather than a
+  redesign, and is why phase 4 promotes that ceiling from advice in a
+  justification paragraph to a MUST.
+
+- **Nine conformance rules for the facts a store assigns rather than the caller.**
+  `SequencedEvent` grew an `EventId` and a `RecordedAt` this phase, and a field
+  nothing can be wrong about is a field no rule needs. These nine are what makes
+  them checkable, together with seven new mutants in the testkit's own registry.
+  Two of the nine are gated on `Capability::REOPEN` and report a skip against any
+  fixture with no durable medium behind it.
+
+  - `append_stamps_identity_and_time` catches the adapter that **makes an event's
+    identity or time up at read time instead of persisting it at write time** — a
+    row mapper that synthesises an `EventId` from the row's ordinal in the result
+    set, or fills `recorded_at` from the connection's clock, because the column was
+    never added. Such a store agrees with itself perfectly under any single query,
+    which is why the rule reaches one event twice, once through `Query::all()` and
+    once through a query that selects it alone, and compares the whole
+    `SequencedEvent`. It is the defect that passes everything until the first
+    reopen, and then loses an audit trail rather than an assertion.
+
+- `append_stamps_a_local_event_id` catches two stores that disagree with the
+    contract about where a locally appended event's identity comes from. One
+    computes it from something other than the position it assigned — a content
+    hash, or a `RETURNING` value read once per statement — so `id.position()` and
+    `position` part company for an event that never left the store it was written
+    to. The other mints a fresh `StoreId` for every **append** rather than for
+    every open: it never reissues a pair, so it satisfies the letter of the
+    incarnation rule, and it makes every event its own origin, which is what a
+    peer's watermark and the replication sort both degenerate under.
+
+- `event_ids_are_unique_within_a_store` catches the store that lets one
+    `EventId` name two events, which the specification makes the store's
+    obligation and not the caller's. The realistic shape is a multi-row `INSERT …
+    RETURNING` whose returned identity is read once and bound to every row of the
+    batch — the positions stay correct, so both position rules pass and nothing
+    else in the suite notices, and the store is left holding two events it has no
+    way to tell apart. An ingest path that deduplicates on that identity then drops
+    a real fact with no error and no symptom.
+
+- `appending_equal_events_yields_two_events` catches a **content-hash identity
+    scheme, and any store that deduplicates on payload equality**. Appending two
+    structurally equal events in one batch must produce two events, at two
+    positions, with two identities; a store that derives identity from the bytes
+    collapses them into one. The failure has no error path: a refrigeration
+    engineer consuming two of the same part on one work order writes two
+    byte-identical events, the second disappears, and the van's stock balance is
+    permanently one unit high with nothing reporting it.
+
+- `event_id_is_not_matchable_by_query` catches the **tag-materialised identity**:
+    a store that writes an extra row into its tag side table so that membership can
+    be answered out of the index it already has. The tempting part is that the tag
+    is the adapter's rather than the caller's, so events still round-trip
+    byte-for-byte and every payload-fidelity rule keeps passing. What it costs is
+    structural — identity is a point lookup on a unique key and a query item is a
+    set-superset predicate, so grafting one onto the other gives the item a third
+    semantic and breaks the union identity the fan-out runner depends on.
+
+- `reopened_store_does_not_reissue_an_event_id` catches **a store that keeps its
+    incarnation across a reopen and restarts its position counter**, which is what
+    a restored backup looks like from the inside: genuinely new events are minted
+    with pairs the store has already issued to different ones, every peer's
+    deduplication treats them as already-seen, and real facts are silently dropped
+    — the one failure mode in the replication design with no error path and no
+    observable symptom. It replaces the rule the specification originally named,
+    which would have failed the perfectly legal adapter that mints a fresh
+    incarnation on every open. Gated on `Capability::REOPEN`.
+
+- `append_stamps_a_recorded_time` catches the store whose recorded time is a
+    property of the **read** rather than of the append — a row mapper filling the
+    field from the connection's clock because the column was added to the port
+    after the schema was written. It asserts presence and stability and nothing
+    else: comparing two events' times, comparing a time against a position, or
+    checking one against the harness's own clock are all forbidden, because the
+    contract states no relationship between recorded-time order and position order
+    and a rule that asserted one would state it on the contract's behalf.
+
+- `recorded_time_survives_a_reopen` catches the store that **restamps on
+    replay**: one that rebuilds its log from a durable medium carrying the events
+    but not the times it recorded them at, so every auditor is handed the time of
+    the last restart instead. The one clock reading whose provenance the log itself
+    attests is then gone, with no error and no symptom, and the question the field
+    exists to answer — which side of midnight did this land — cannot be asked. It
+    asserts only that the same event's own value is unchanged. Gated on
+    `Capability::REOPEN`.
+
+- `contains_event_id_reports_membership` catches the store that answers a
+    membership question **by position alone, ignoring which store minted the
+    identity**. `SELECT 1 FROM events WHERE position = ?` is what an adapter writes
+    when its table has a position column and no origin columns yet, which is every
+    adapter before it implements ingest; it passes every single-store rule in the
+    suite, because a store that has ingested nothing only ever holds its own
+    incarnation. Against a peer it reports a foreign event as already present
+    whenever the local log happens to be at least that long, and the batch carrying
+    it is dropped.
+
+- **`batch_positions_follow_slice_order`** — a conformance rule for ES-19's
+  second sentence, which nothing checked. `append_returns_last_written_position`
+  asks *which position came back* and never *which event got it*, so a store that
+  writes a batch backwards and returns the maximum satisfies it on any quiescent
+  store. The defect it catches is a multi-row `INSERT` assembled by draining a
+  stack, or one that groups a batch by event type to bind one interned type id per
+  group and does not notice that grouping is reordering: the batch reads back in
+  the wrong order, so a decision that appended `Held` then `Released` replays as
+  `Released` then `Held` and the projection is wrong with no error anywhere.
+
+- **`batch_is_not_evaluated_against_its_own_condition`** — a batch can never
+  conflict with itself (ES-21), and until now the reference store answered that
+  correctly only by accident of implementation order. The defect it catches is the
+  per-row conditional `INSERT … SELECT … WHERE NOT EXISTS`, which is a live
+  candidate for the append-condition SQL strategy and the only shape a store with
+  no interactive transaction can express: carried per row, the guard travels with
+  every statement, so the second row of a batch is checked against a store that
+  already holds the first. On the canonical DCB uniqueness shape — where the
+  condition names the very type being written — such an adapter refuses **every**
+  conditional append and passes every other rule in the suite.
+
+- **`dropped_append_future_leaves_no_partial_batch`** — ES-22, and the half of
+  cancellation a conformance rule can see. In Rust, cancelling is dropping the
+  future, and at the edge that is the *normal* termination path: a client
+  disconnect, a CPU limit, a Durable Object eviction, a pod eviction. The defect it
+  catches is a batch executed as one statement per row with an `.await` between
+  them and no transaction around them — a drop after the first poll leaves rows in
+  the log that no caller was ever told about and that no `Result` exists to report,
+  because a dropped future produces none. `MemoryEventStore` passes it trivially,
+  which is exactly why the reference store cannot answer this question.
+
+- **`arming_a_mid_batch_fault_makes_the_append_fail`** — the rule that makes
+  `append_is_atomic_under_a_mid_batch_fault` non-vacuous, and a new specification
+  clause (CF-39) behind it. A fixture whose `arm_mid_batch_fault` has an empty body
+  passed the atomicity rule for free: no fault, `Ok`, every row present,
+  all-or-nothing satisfied — a capability declared, nothing contributed, and a
+  green atomicity result for a store that has never been faulted. A fixture
+  declaring the capability must now arm a fault its store cannot absorb, so the
+  append returns `Err`; a store that can absorb every fault it is able to arm must
+  decline the capability and say so. A *forgotten* override was never the hazard:
+  the trait's provided body panics and names this mistake.
+
+- **`reissued_conditional_batch_lands_once`** — ES-24's guarantee, made
+  checkable. A conditional append whose condition matches its own events is
+  at-most-once under verbatim reissue, which is how a caller resolves the outcome
+  of a dropped future with no identity, no idempotency key and no new API. The
+  defect it catches is a store that writes before it decides: autocommit plus a
+  separate probe puts the batch into the set its own condition reads, so the
+  **first** attempt is refused while its rows stay down — and a caller following
+  the documented resolution procedure reads that refusal as "my write already
+  landed", stops, and has written nothing at all.
+
+- **`reissued_unconditional_batch_lands_twice`** — a rule that pins a
+  *non*-guarantee, which is unusual enough to say why. ES-24 states that an
+  unconditional append has no at-most-once property, and a guarantee whose limits
+  are unstated is read as universal: callers write retry loops against the adapter
+  they happened to test on. The defect it catches is a content-addressed store,
+  or one built to be safe under at-least-once ingest, that hashes
+  `(event_type, tags, data)` and quietly refuses a duplicate — it would ship as a
+  feature, and it makes the same retry loop double-charge on the next adapter and
+  not on this one, with nothing in either CI to say so.
+
+- **`reissued_batch_conditioned_on_other_events_lands_twice`** — ES-24's second
+  stated limit, which the clause has carried in prose and given no rule since it
+  was written, and which is the *common* shape rather than an exotic corner. A
+  decision that reads one thing and writes another — conditioning on
+  `CourseCapacityChanged` while appending `StudentSubscribed` — leaves a retry
+  indistinguishable from a first attempt, because nothing the retry wrote is in
+  the set its own condition looks at. Without it a caller reads the guarantee
+  above as "conditional appends are idempotent"; they are not, and the difference
+  is one line in the caller's decision model.
+
+- **`append_reports_exceeded_store_limits`** — VT-25's variant, made checkable
+  by a fixture that states its store's ceilings (a new clause, CF-40). The
+  distinction it protects is a sync runner's: *this event will never fit here,
+  park it and tell a human* against *the disk is full, retry*. A runner that
+  cannot tell them apart guesses, and a runner that guesses wrong drops an event
+  permanently. Four defects are caught, in two pairs of one column configured two
+  ways: a payload ceiling and a driver parameter ceiling reported through
+  `AppendError::Store` — which is what every adapter does today, because until now
+  there was nowhere else to put it — and the same two limits met by storing what
+  fits, answering `Ok` with a real position, and telling the caller the whole
+  write landed.
+
+- **`condition_guards_carry_independent_boundaries`** — VT-30's rule, and what
+  makes VT-27's frozen refusal sound. An application whose decision model is
+  assembled from fragments read separately gets one boundary per fragment and is
+  told to issue one read per fragment; that is only sound if the boundaries can be
+  carried into one condition. The defect it catches is the application-side
+  workaround promoted into an adapter: a condition collapsed to `min(p₁…p₄)`. It
+  never admits an append it should have refused, so it is *sound* and it is a
+  liveness failure — the quiet fragment's stale boundary governs the busy one, a
+  consistency boundary that never conflicted starts refusing, and the deployment
+  reads the rejection rate as contention. It passes the entire existing
+  `condition_after_*` family, because every rule in that family carries one guard.
+
+- **`condition_with_one_guard_behaves_as_today`** — VT-30's compatibility half,
+  and the regression the guard refactor invites. The defect it catches is a store
+  with two code paths that disagree: an adapter generalising to N guards keeps a
+  fast path for one, because one guard is the overwhelmingly common case and a
+  `UNION` per guard is pure overhead there — and that fast path is the *old*
+  statement, the uniqueness probe written before boundaries existed, kept because
+  it was already working while the general path was the one that got reviewed. The
+  result is a store whose answer depends on how many fragments the caller's
+  decision model happened to read. Its coverage overlaps the single-guard family by
+  construction, and `docs/architecture/SPECIFICATION.md` VT-30 records that.
+
+- **Seven wrong implementations** in `happenstance-testkit`'s own `tests/`, one
+  per new rule and none of them a saboteur: `ReverseOrderBatchStore` (a bulk
+  insert that reorders the batch), `PerRowConditionStore` (the guard carried per
+  row, rolling back so that it fails ES-21's rule rather than the atomicity one),
+  `YieldingRowAtATimeStore` (a suspension point between two rows),
+  `PayloadDedupStore` (`ON CONFLICT (content_hash) DO NOTHING`),
+  `MinCollapseStore` and `SingleGuardFastPathStore` (the two mirror-image ways a
+  guard fold goes wrong), and `NoopFaultFixture` (a declared fault capability whose
+  arm does nothing).
+
+- **Three rules for `head()`, 55 → 58 rules** (ES-30, ES-33). `head` became a
+  required method of the port at phase 4 and nothing checked it; a required
+  method no rule exercises is a signature, not a contract.
+
+  - **`head_of_an_empty_store_is_none`** — a store that holds nothing reports a
+    position anyway. `MAX(position)` over an empty table is `NULL`, the driver's
+    scalar decode wants a column type that can hold what comes back,
+    `IFNULL(…, 0)` is the one-token fix, and `SequencePosition` is a `NonZero`
+    newtype whose constructor returns an `Option` that library code may not
+    `unwrap` — so `unwrap_or(SequencePosition::FIRST)` is the shortest spelling
+    that satisfies every local rule and reports position 1 on a store with no
+    events in it. ES-11 prescribes anchoring a paginating read on `head()` at the
+    first poll and ES-31 makes "am I caught up?" a comparison against it, so a
+    runner starting against a fresh store checkpoints past an event that does not
+    exist and the first event ever appended is the one it skips.
+
+  - **`head_is_the_highest_visible_position`** — a head that covers the part of
+    the log some default query matches rather than the store. In a two-table tag
+    schema there is one joined view, the read path is built around it, and
+    reusing it for `SELECT max(position)` is the obvious move; an event carrying
+    no tags has no row on the other side of the `INNER JOIN`, so the store
+    under-reports its head to every projection runner and every paginating caller
+    and the events past the under-reported head are exactly the ones nothing else
+    in the deployment tags. The rule asserts a **bound** rather than an equality
+    against what `append` returned, because an adapter buying ES-10's visibility
+    invariant with `xid8` + `pg_snapshot_xmin` reports a frontier and does not
+    satisfy read-your-own-writes — ADR-0013 §4 has the measurement and the
+    argument.
+
+  - **`head_advances_across_two_handles`** — a handle that answers `head()` from
+    the position its own last `append` returned. A field, a session variable, or
+    Postgres' `currval()`, which is session-scoped by documentation and is
+    therefore the version of this defect the database hands you ready-made. It is
+    exactly right against a single handle, which is every test anybody writes
+    before they have a connection pool, and stale the moment one store is reached
+    two ways — which is every deployment with a pool. It is the second of the two
+    places one cached head gets spent: `CachedHeadFixture` spends it on the
+    condition probe, `LastWrittenHeadStore` on the head itself, and the two are
+    separate registry rows because a mutant with two defects evidences neither.
+
+- **Three rules for the identifier edges, 58 → 61 rules** (VT-1, VT-15, VT-17).
+  Every one of them writes an identifier the rest of the suite does not, because
+  the middle of a range is what every other rule exercises and a lossy mapping
+  only looks total there.
+
+  - **`tags_differing_only_by_unicode_normalisation_are_distinct`** — a tag
+    column under a normalising or case-insensitive collation.
+    `CREATE COLLATION … (provider = icu, deterministic = false)` is one line and
+    is what somebody reaches for when a search stops matching an accented word;
+    a normaliser called in the row mapper "because tags should be canonical" is
+    the same defect written by hand. `"café"` in NFC and in NFD render
+    identically in every console, so a macOS client and a Linux client writing
+    the "same" tag silently stop conflicting — two consistency boundaries where
+    the application intended one, with no visible cue at all — and the tag read
+    back is no longer the tag written, which breaks byte-faithful replication.
+
+  - **`tags_may_repeat_a_key`** — a tag index shaped as a key-to-value map. A
+    `JSONB` object, a `HashMap<String, String>` column, or a side table under
+    `UNIQUE (event_id, key)` written with `ON CONFLICT DO UPDATE`: all three are
+    natural schemas for something the contract itself invites you to read as a
+    pair, and all three keep one value per key.
+    `Tags::from_pairs([("tenant", "a"), ("tenant", "b")])` is a **two**-element
+    set, because deduplication is on the whole `key:value` string. The event
+    stays in the store and stops matching one of the two queries that should
+    select it, so on a 4,200-tenant shared log the tenant whose tag was dropped
+    stops seeing its own events and nothing anywhere reports a fault.
+
+  - **`append_preserves_event_type_and_tags_byte_for_byte`** — an adapter that
+    trims an identifier, because a trailing space "must be a typo". `TRIM()` in
+    the insert or `value.trim()` in the row mapper moves the decision about what
+    an identifier *is* out of the application and into the store, and the value
+    the caller wrote is then no longer in the log, so nothing downstream can
+    detect what happened. Kestrel Rotor replicated `turbine:HW2-A14 ` with a
+    trailing space; `Tag::new` accepts it, `contains_all` is a strict merge-scan
+    on equality that does not match the unpadded tag, and a lot-recall query
+    silently missed a turbine. `append_preserves_event_payload` cannot see any of
+    this: the identifiers it writes are `"A"` and `"course:c1"`, which are fixed
+    points of every transformation an adapter might apply.
+
+- **Six mutants, and the eighth `Defect` step that two of them needed.**
+  `EmptyHeadIsFirstStore`, `DefaultQueryHeadStore`, `NormalisingTagStore`,
+  `KeyedTagMapStore`, `TrimmingIdentifierStore` and `LastWrittenHeadStore` are
+  the compiled wrong implementations for the six rules above, one rule each.
+  `Defect` gained `head_of`, so a mutant of `head` is one step from correct in
+  the same way a mutant of the read path is; `correct::head_of` had been written
+  as a free function against exactly that possibility and says so.
+  `contains_event_id` deliberately did **not** become a step: no rule calls it,
+  so a defect there would be a claim nothing evaluates.
+
 ### Changed
 
 - **`event_store_conformance!` takes `fixture =`, not `factory =`, and the
@@ -592,6 +991,15 @@ not the same as what a user needed to be told.
   graph at all, and nothing was checking that the guard held.
 
 ### Fixed
+
+- **`happenstance` and `happenstance-core`'s READMEs promised "MSRV 1.85,
+  checked in CI".** Phase 2 raised the floor to 1.97.1
+  ([ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md)) and neither README moved
+  with it, so the one artefact `cargo package` ships to a reader who has not
+  cloned the repository carried a compatibility promise twelve minor versions
+  below the manifest's own `rust-version`. Nothing checks a README's prose
+  against a manifest, which is why it survived a phase: the gate asserts the
+  file is *present* in the package, not that it is true.
 
 - **`cargo xtask spec-trace` rendered a clause whose rule is a meta-test as
   though it were checked, and it is not — not by `spec-trace`.** `collect_rules`

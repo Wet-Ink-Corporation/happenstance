@@ -136,6 +136,38 @@ impl MemoryEventStore {
         }
     }
 
+    /// Reconstructs a store from a snapshot of what a durable medium held.
+    ///
+    /// The counterpart of [`snapshot`](Self::snapshot), and deliberately not
+    /// [`with_events`](Self::with_events): that one *arranges* a store, assigning
+    /// fresh positions, identities and a time, which is what a caller wants when
+    /// seeding a fixture. This one *reopens* one, preserving every store-assigned
+    /// fact on every event — which is what a real adapter's open does, because it
+    /// reads rows it wrote rather than re-accepting events. A store whose reopen
+    /// restamps hands every auditor the time of the last restart.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use happenstance_core::{Event, EventStore, MemoryEventStore};
+    /// # async fn demo() -> Result<(), Box<dyn core::error::Error>> {
+    /// let store = MemoryEventStore::new();
+    /// store.append(&[Event::new("Issued", &b"{}"[..])?], None).await?;
+    ///
+    /// // What a durable medium would have kept, and what reopening finds.
+    /// let reopened = MemoryEventStore::restore(store.store_id(), store.snapshot());
+    /// assert_eq!(reopened.snapshot(), store.snapshot());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn restore(store_id: StoreId, events: impl IntoIterator<Item = SequencedEvent>) -> Self {
+        Self {
+            events: RwLock::new(events.into_iter().collect()),
+            store_id,
+        }
+    }
+
     /// The number of events held.
     pub fn len(&self) -> usize {
         self.read_guard().len()

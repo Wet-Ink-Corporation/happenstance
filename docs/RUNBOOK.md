@@ -20,10 +20,10 @@ claim about `trait_variant` was compiled and refuted.
 
 The larger change is that the design questions this file used to *schedule* are
 now *answered*. [`docs/architecture/SPECIFICATION.md`](architecture/SPECIFICATION.md)
-carries 193 numbered clauses across three ports — 135 `[FROZEN]`, 46
+carries 200 numbered clauses across three ports — 139 `[FROZEN]`, 49
 `[PROVISIONAL]`, 10 `[DEFERRED]`, two `[NON-NORMATIVE]`. This file no longer
 decides what a port promises. It executes those clauses, discharges the
-provisional and deferred ones against named experiments, and makes the 56 cases
+provisional and deferred ones against named experiments, and makes the 57 cases
 in [`E2E-CASES.md`](scenarios/E2E-CASES.md) writable in an order that puts the
 highest blast radius first.
 

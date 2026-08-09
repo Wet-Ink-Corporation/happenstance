@@ -199,11 +199,15 @@ pub(crate) fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&
         .collect()
 }
 
-/// Step 2 — apply the direction and the **inclusive** `from` bound.
+/// Step 2 — apply the direction and the **inclusive** `from` and `to` bounds.
 ///
 /// `from` is inclusive in both directions and bounds opposite ends: forwards it
 /// is a floor, backwards a ceiling. Getting that backwards is the whole of
 /// `read_backwards_from_with_limit`'s subject matter.
+///
+/// `to` is the *stopping* bound and sits on the other side of the position order
+/// from `from` in whichever direction the read runs — so backwards it is a floor
+/// where `from` is a ceiling. Both are inclusive in both directions (ES-16).
 // The lifetime is elided rather than named: `matched` is the only input carrying
 // one, so elision ties the output to it and `clippy::needless_lifetimes` denies
 // spelling it out. [`matching`] above keeps its `'a` for the opposite reason —
@@ -218,11 +222,13 @@ pub(crate) fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Ve
             .into_iter()
             .rev()
             .filter(|event| options.from.is_none_or(|from| event.position <= from))
+            .filter(|event| options.to.is_none_or(|to| event.position >= to))
             .collect()
     } else {
         matched
             .into_iter()
             .filter(|event| options.from.is_none_or(|from| event.position >= from))
+            .filter(|event| options.to.is_none_or(|to| event.position <= to))
             .collect()
     }
 }

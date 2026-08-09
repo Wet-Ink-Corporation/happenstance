@@ -127,15 +127,20 @@ impl LocalMemoryEventStore {
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // `from` is the starting bound and `to` the stopping one, so reading
+        // backwards swaps which side of the position order each sits on. Both
+        // are inclusive in both directions (ES-16).
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
+                .filter(|event| options.to.is_none_or(|to| event.position >= to))
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
+                .filter(|event| options.to.is_none_or(|to| event.position <= to))
                 .cloned()
                 .collect()
         };

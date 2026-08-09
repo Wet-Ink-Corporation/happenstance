@@ -208,12 +208,15 @@ struct Declared {
 /// *Covered:* the SQL query builder in all six of the ways it is joined wrongly
 /// (a type list conjoined, a tag set disjoined, tags compared for equality, the
 /// two clauses of an item disjoined, items conjoined, the type clause dropped
-/// when interning misses); the tag side table joined with `INNER JOIN` and again
-/// without `DISTINCT`; a multi-item query unioned per item and never
-/// merge-sorted; ordering by a covering index; `from` read as an `OFFSET`;
-/// `backwards` lost between two structs; `LIMIT n + 1`, and `LIMIT` pushed into
-/// the scan ahead of the filter; `WHERE a OR b AND position >= ?` without
-/// parentheses; a paging window anchored on a `max(position)` that is `NULL` on
+/// when interning misses); a query's items interned by their type list, so a
+/// second item with the same types is dropped; the tag side table joined with
+/// `INNER JOIN` and again without `DISTINCT`; a multi-item query unioned per item
+/// and never merge-sorted; ordering by a covering index; `from` read as an
+/// `OFFSET`; `backwards` lost between two structs; an upper bound ignored, read
+/// as exclusive, and never swapped under `backwards`; a budget of zero read as no
+/// budget, a budget written per query item and never re-applied to the union,
+/// `LIMIT n + 1`, and `LIMIT` pushed into the scan ahead of the filter;
+/// `WHERE a OR b AND position >= ?` without parentheses; a paging window anchored on a `max(position)` that is `NULL` on
 /// an empty store; one position bound for a whole batch; `RETURNING` read from
 /// the wrong end and read without checking there is a row; probe-then-insert
 /// outside a transaction; an empty batch treated as a no-op, and an empty batch
@@ -224,8 +227,17 @@ struct Declared {
 /// uncorrelated predicates, a probe that compares tags for equality, a probe
 /// that drops the tag join entirely, an aggregate probe that reads SQL's
 /// three-valued `NULL` as a rejection, and a violation surfaced as a driver
-/// error. On the fixture side: a stale per-handle head, a write acknowledged
-/// before it is durable, and two fixture instances that are one store. On an
+/// error. Three ways a `head` is wrong: a `NULL` aggregate spent on a
+/// position that is not one, a head scoped to the read path's own tag join,
+/// and a head cached per handle. Three more value edges: a normalising
+/// collation, a tag index shaped as a key-to-value map, and an identifier
+/// trimmed on the way in. Seven store-assigned facts got wrong: an identity
+/// synthesised from a row's ordinal, one derived from the payload, one
+/// minted per event, one bound once per statement, one materialised as a
+/// queryable tag, a time read from the connection's clock, and a membership
+/// test that drops the incarnation from its `WHERE` clause. On the fixture side: a stale per-handle head, a write acknowledged
+/// before it is durable, and two fixture instances that are one store. On the
+/// isolation axis, a read that takes a fresh sample per page. On an
 /// axis of its own, a position allocated *before* the transaction that publishes
 /// the row commits. And, on re-entrancy, a `read` stream that keeps a borrow of
 /// the store alive and an `append` that holds an exclusive one across an
@@ -264,6 +276,17 @@ struct Declared {
 ///   justification is that a mutant needs somewhere to live is the tail wagging
 ///   the dog — ADR-0010 says so in as many words. It lands when a clause asks
 ///   for it.
+/// * **A read that tears between two *statements* of one query rather than
+///   between two pages.** `RefetchingPagedStore` re-samples per page, which is
+///   what rejects both ES-11's and ES-12's rules; the per-`QueryItem` shape
+///   ES-12's `Rejects:` names — one SQL statement per item, unioned
+///   client-side — is the same defect at a different granularity and is not
+///   separately registered. It would need a stream whose poll schedule is one
+///   statement per item, and it would fail exactly the rules
+///   `RefetchingPagedStore` already fails, so it would buy a shape in the
+///   catalogue and no coverage. ADR-0011 §3's finding is that ES-12 is
+///   discharged by ES-11's ceiling rather than by a second mechanism, and this
+///   table is the same finding seen from the instrument side.
 /// * **A defect that is a deadlock rather than a panic.** `BorrowHoldingStore`
 ///   and `AwaitAcrossBorrowStore` are registered now, and both are `RefCell`
 ///   stores that answer a conflicting borrow immediately. The adapters they
@@ -344,6 +367,11 @@ const REGISTRY: &[Declared] = &[
             "read_limit_applies_after_filtering",
             "read_backwards_limit_applies_after_filtering",
             "read_from_composes_with_multi_item_query",
+            // Slice F: this store drops every untagged event from every read,
+            // and that rule seeds an untagged event on purpose — so it fails at
+            // the anchor rather than at the head relation. Inflation, on the same
+            // reading the table doc comment already gives for this store.
+            "head_is_the_highest_visible_position",
             "positions_are_strictly_monotonic",
             "append_returns_last_written_position",
             "append_is_atomic",
@@ -384,7 +412,14 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "ExactTagMatchReadStore",
         kind: Kind::Mutant,
-        fails: &["query_item_tags_match_supersets"],
+        fails: &[
+            "query_item_tags_match_supersets",
+            // Slice F: VT-17's rule writes three tags on one event and queries
+            // with one of them, which is a superset probe wearing a different
+            // clause's name. Inflation — the defect is the one above, met by an
+            // arrangement written for something else.
+            "tags_may_repeat_a_key",
+        ],
         provenance: "tags serialised to one canonical column and compared with `=`, which \
              is what an adapter does to avoid a side table and a join. Every \
              exact-match rule still passes, which is what makes it survivable.",
@@ -413,6 +448,13 @@ const REGISTRY: &[Declared] = &[
             // multi-item rule in the suite catches this store, and a rule that
             // did not would be one whose items all match.
             "store_evaluates_a_query_at_the_guaranteed_minimum_item_count",
+            // The three multi-item rules slice F added, and the same reading:
+            // each fails at its arrangement anchor, because no event matches
+            // both items under an AND. Inflation rather than coverage — no rule
+            // among them is covered by this store alone.
+            "limit_applies_across_items_not_per_item",
+            "query_union_is_item_concatenation",
+            "query_items_share_one_snapshot",
         ],
         provenance: "the same joiner bug one level up: the item list assembled with the \
              separator that belongs inside an item.",
@@ -449,6 +491,12 @@ const REGISTRY: &[Declared] = &[
             // declared; this is the one whose failure is the loudest and whose
             // provenance names the same schema.
             "store_accepts_the_guaranteed_minimum_tag_count",
+            // And unavoidable for the same reason one clause over: VT-17's rule
+            // is about two values under one key, so its event carries three tags
+            // by construction and this store returns three copies of it. There is
+            // no seeding that both exercises a repeated key and gives this store
+            // one tag to fan out on.
+            "tags_may_repeat_a_key",
         ],
         provenance: "`InnerJoinTagStore`'s sibling in the same two-table schema \
              (`crates/happenstance-sqlite/src/event_store.rs`): the join that reaches the \
@@ -478,9 +526,30 @@ const REGISTRY: &[Declared] = &[
              the natural one for an adapter with no server-side cursor. Note what it is not: \
              ES-15's own `Rejects:` names an adapter that sorts and deduplicates a query's \
              *items*, and no order-invariance rule can catch that, because sorting them is \
-             precisely what makes their order stop mattering.",
+             precisely what makes their order stop mattering. `ItemDedupByTypeStore` below \
+             is that adapter, and `query_union_is_item_concatenation` is the match-set rule \
+             that finally sees it.",
         mode: FailureMode::Assertion,
         expect: &[],
+    },
+    Declared {
+        name: "ItemDedupByTypeStore",
+        kind: Kind::Mutant,
+        fails: &["query_union_is_item_concatenation"],
+        provenance: "the optimisation ES-15's `Rejects:` names and that nothing caught until \
+             VT-31's rule landed. `QueryItem::new` already sorts and deduplicates \
+             *types*, so grouping the items by their type set and emitting one \
+             `type_id IN (...)` clause per distinct set looks like the same move — \
+             and the tag half of every swallowed item goes with it, so the query \
+             selects a SMALLER set than the caller asked for. \
+             `query_item_order_does_not_change_the_result_set` cannot see it: \
+             deduplicating the items is precisely what makes their order stop \
+             mattering.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "query_union_is_item_concatenation",
+            "must be the union of their match sets",
+        )],
     },
     // --- Read options ---------------------------------------------------
     Declared {
@@ -509,6 +578,12 @@ const REGISTRY: &[Declared] = &[
             "read_from_is_inclusive",
             "read_backwards_from_with_limit",
             "read_from_composes_with_multi_item_query",
+            // Skipping by a COUNT slides the closed window down by the lower
+            // bound's numeric value, and answers a `from` above the head by
+            // skipping past every row rather than by yielding what is below it.
+            // The two `to`-only rules leave `from` unset, so it passes those.
+            "read_from_and_to_bound_a_closed_window",
+            "read_from_a_gap_position",
         ],
         provenance: "a position anchor read as an index. `OFFSET` is the parameter already \
              in the paging query, and a `u64` position slots into it without \
@@ -524,6 +599,16 @@ const REGISTRY: &[Declared] = &[
             "read_backwards_from_with_limit",
             "read_backwards_limit_applies_after_filtering",
             "read_from_composes_with_multi_item_query",
+            // Every rule that reads backwards and asserts on the result. Forced
+            // forwards, the `to` rule returns the three oldest rather than the
+            // three newest, the budget rule's mirror the first four rather than
+            // the last four, and the gap rule's backwards read turns
+            // `from(beyond)` into a floor and comes back empty.
+            // `read_limit_zero_yields_nothing`'s backwards read is expected
+            // empty either way, so it passes that one.
+            "read_to_under_backwards_bounds_the_older_end",
+            "limit_applies_across_items_not_per_item",
+            "read_from_a_gap_position",
         ],
         provenance: "the direction is a `bool` in one struct and a hard-coded `ASC` in the \
              string another struct builds, so it reaches the query builder and \
@@ -540,12 +625,85 @@ const REGISTRY: &[Declared] = &[
             "read_limit_applies_after_filtering",
             "read_backwards_limit_applies_after_filtering",
             "read_from_composes_with_multi_item_query",
+            // `LIMIT n + 1` with n = 0 returns one event where none was asked
+            // for, and with n = 4 returns five. The zero rule is worth two
+            // rejecters: reading zero as unlimited and being off by one are
+            // different defects, and only this one shows the budget is present
+            // but wrong.
+            "read_limit_zero_yields_nothing",
+            "limit_applies_across_items_not_per_item",
         ],
         provenance: "ubiquitous: every cursor-paging implementation fetches `LIMIT n + 1` to \
              answer \"is there more\", and most of them trim. This one forgot, \
              which is a one-line omission in the mapping rather than in the query.",
         mode: FailureMode::Assertion,
         expect: &[],
+    },
+    Declared {
+        name: "ToBoundIgnoredStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "read_to_is_inclusive",
+            "read_from_and_to_bound_a_closed_window",
+            "read_to_under_backwards_bounds_the_older_end",
+        ],
+        provenance: "the shape every `#[non_exhaustive]` options struct invites, and the one \
+             ES-16's `Rejects:` names first: an adapter written before `to` existed \
+             copies the fields it recognises into its own query-builder struct, \
+             compiles unchanged when a field is added because `ReadOptions` is \
+             passed by value, and silently returns everything above the bound. A \
+             backfill worker given [1, H] reads to the end of the log and the tail \
+             worker beside it processes the overlap twice, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "ToIsExclusiveStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "read_to_is_inclusive",
+            "read_from_and_to_bound_a_closed_window",
+            "read_to_under_backwards_bounds_the_older_end",
+        ],
+        provenance: "the other half of ES-16's `Rejects:`. `WHERE position < ?` is the \
+             defensible reading of an upper bound in half the APIs anyone has used, \
+             and it costs one event per chunk boundary — invisible until the chunks \
+             are reassembled, and then a projection missing one event per page for \
+             the whole backfill.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "BackwardsToIsAnUpperBoundStore",
+        kind: Kind::Mutant,
+        fails: &["read_to_under_backwards_bounds_the_older_end"],
+        provenance: "`WHERE position <= ?` copied verbatim into the backwards branch — the \
+             same mistake ES-8's `Rejects:` already describes for `from`, one bound \
+             over. It is CORRECT reading forwards, which is what makes it \
+             survivable: every forward `to` rule passes and a backwards read comes \
+             back with the oldest events instead of the newest.",
+        mode: FailureMode::Assertion,
+        // The one row in the table that pins its rule alone, and it is why that
+        // rule exists rather than being a third assertion in
+        // `read_to_is_inclusive`.
+        expect: &[(
+            "read_to_under_backwards_bounds_the_older_end",
+            "`to` is the STOPPING bound",
+        )],
+    },
+    Declared {
+        name: "LimitZeroIsUnlimitedStore",
+        kind: Kind::Mutant,
+        fails: &["read_limit_zero_yields_nothing"],
+        provenance: "the DCB reference implementation's `if (limit)` guard, which is a \
+             coherent reading of `0` in a language where `0` is falsy. Ported to a \
+             language where it is not, it is `NonZeroUsize::new(limit)` — which is \
+             what `happenstance-core` itself stored until phase 4, so this is the \
+             crate's own former behaviour rather than an invented one. The caller \
+             it breaks is the one who computed the zero: `.limit(budget - fetched)` \
+             at parity reads the entire log.",
+        mode: FailureMode::Assertion,
+        expect: &[("read_limit_zero_yields_nothing", "must yield nothing")],
     },
     Declared {
         name: "LimitBeforeFilterStore",
@@ -563,6 +721,30 @@ const REGISTRY: &[Declared] = &[
              *n* matches, sometimes none, while a caller reading \"no more events\" stops.",
         mode: FailureMode::Assertion,
         expect: &[],
+    },
+    Declared {
+        name: "LimitPerItemStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "limit_applies_across_items_not_per_item",
+            // Not inflation: that rule's third read is `backwards().limit(2)`
+            // over a two-item query, which is this defect exactly. It fails
+            // there at the `limit` assertion rather than at the precedence one,
+            // which is what `UnparenthesisedPredicateStore`'s row protects.
+            "read_from_composes_with_multi_item_query",
+        ],
+        provenance: "an adapter that cannot express a disjunction in one statement emits one \
+             per `QueryItem`, and the row budget goes onto each of them because \
+             that is where the paging clause is written. The union is then \
+             merge-sorted correctly, so every ordering rule passes, and a caller \
+             who asked for four events gets `n x items`. ES-14's `Rejects:` names \
+             it, and it is the same adapter shape ES-12 rejects failing for an \
+             independent reason.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "limit_applies_across_items_not_per_item",
+            "not four per item",
+        )],
     },
     Declared {
         name: "UnparenthesisedPredicateStore",
@@ -620,12 +802,36 @@ const REGISTRY: &[Declared] = &[
             "read_defaults_to_ascending_order",
             "positions_are_unique",
             "positions_are_strictly_monotonic",
+            "event_ids_are_unique_within_a_store",
+            "appending_equal_events_yields_two_events",
+            // The same defect seen as ordering rather than as duplication: one
+            // position bound for every row of a multi-row insert is not
+            // *ascending*, and "strictly" is the word in ES-19 that rejects it.
+            "batch_positions_follow_slice_order",
         ],
         provenance: "`INSERT … VALUES (?1,…), (?1,…)` — correct when `?1` is `nextval()` and \
              wrong the moment the value is precomputed in Rust and bound once. \
-             The single-event appends every other rule makes cannot see it.",
+             The single-event appends every other rule makes cannot see it. One \
+             position per statement is also one *identity* per statement, since a \
+             correct store mints `(own StoreId, the position it assigned)`.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The two identity rules are inflation rather than coverage and the pins
+        // say so: this store fails `appending_equal_events_yields_two_events` at
+        // the *positions* assertion, one line above the identity one the rule is
+        // named for, and it reaches `event_ids_are_unique_within_a_store`'s
+        // conclusion only because a shared position is a shared identity.
+        // `SharedBatchIdentityStore` is the entry that covers the identity column
+        // with the positions left correct.
+        expect: &[
+            (
+                "appending_equal_events_yields_two_events",
+                "they must occupy two distinct positions",
+            ),
+            (
+                "event_ids_are_unique_within_a_store",
+                "a store holds at most one event per `EventId`",
+            ),
+        ],
     },
     Declared {
         name: "ReturnsFirstOfBatchStore",
@@ -638,9 +844,63 @@ const REGISTRY: &[Declared] = &[
         expect: &[],
     },
     Declared {
+        name: "ReverseOrderBatchStore",
+        kind: Kind::Mutant,
+        fails: &[
+            // Found by running. That rule seeds `[event("A"), event("B")]` as one
+            // batch and anchors on reading back `["A", "B"]`, so a store that
+            // writes a batch backwards fails at the anchor rather than at the
+            // property. Inflation rather than coverage — the defect is
+            // `batch_positions_follow_slice_order`'s, met by an arrangement
+            // written for something else.
+            "condition_rejection_leaves_store_unchanged",
+            // The rule this store is for: ES-19's slice-order sentence, which
+            // `append_returns_last_written_position` structurally cannot see.
+            "batch_positions_follow_slice_order",
+            // Inflation, and intrinsic rather than sloppy: a batch written
+            // backwards is a batch read back backwards, so every rule that
+            // appends more than one event in one call and cares which one is
+            // where fails too. Eight of them do. The registry's own caution about
+            // reading this table as a map applies here more than anywhere except
+            // `InnerJoinTagStore`: these eight evidence the reordering, and the
+            // first entry is the only one that evidences the *clause*.
+            "query_all_matches_every_event",
+            "query_item_types_are_or",
+            "query_item_combines_types_and_tags_with_and",
+            "query_items_are_or",
+            "read_backwards_reverses_order",
+            "read_limit_truncates",
+            "read_backwards_from_with_limit",
+            "store_accepts_the_guaranteed_minimum_batch_size",
+        ],
+        provenance: "a multi-row `INSERT` assembled by pushing rows onto a stack and draining \
+             it, or one that groups the batch by event type to bind one interned type id per \
+             group rather than one per row — the first optimisation anybody makes to a bulk \
+             insert, and one where grouping is also reordering. It returns the MAXIMUM \
+             position, which is what makes it survivable: on a quiescent store that is the \
+             last row in the log whatever order the rows went in, so \
+             `append_returns_last_written_position` is satisfied. ES-19's own `Rejects:` \
+             names the shape as \"an adapter whose bulk insert returns generated keys in \
+             unspecified order\".",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "batch_positions_follow_slice_order",
+            "MUST be assigned in SLICE order",
+        )],
+    },
+    Declared {
         name: "WriteThenCheckStore",
         kind: Kind::Mutant,
         fails: &[
+            // Both follow from the one defect below. Writing before deciding puts
+            // the batch into the set its own probe reads, so a condition matching
+            // the batch's own events self-rejects (ES-21) — and the reissue
+            // guarantee's FIRST attempt is refused rather than its second, which
+            // is where ADR-0012 §6 predicted the failure. The prediction was made
+            // by reading the store rather than by running it; ES-18's own history
+            // is the warning about exactly that.
+            "batch_is_not_evaluated_against_its_own_condition",
+            "reissued_conditional_batch_lands_once",
             "append_is_atomic",
             "condition_rejection_leaves_store_unchanged",
             "racing_conditional_appends_elect_one_winner",
@@ -788,7 +1048,15 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "UncorrelatedProbeStore",
         kind: Kind::Mutant,
-        fails: &["condition_after_beyond_the_last_matching_position_admits_the_append"],
+        fails: &[
+            "condition_after_beyond_the_last_matching_position_admits_the_append",
+            // Slice F: the defect this row already states, met in two new
+            // places. In the reissue rule the first attempt's own row sits above
+            // the boundary and refuses the second; in the guards rule the busy
+            // fragment's event sits above the quiet guard's boundary.
+            "reissued_batch_conditioned_on_other_events_lands_twice",
+            "condition_guards_carry_independent_boundaries",
+        ],
         provenance: "the probe written as two subqueries — *does any event match the query* \
              and *is the head above `after`* — ANDed together, which is the obvious \
              decomposition because each half is a statement someone can read. It is correct \
@@ -830,6 +1098,19 @@ const REGISTRY: &[Declared] = &[
             "condition_after_ignores_non_matching_events",
             "condition_with_an_unheld_tag_does_not_reject",
             "condition_after_beyond_the_last_matching_position_admits_the_append",
+            // Slice F: the defect this row already states, met in two new
+            // places. In the reissue rule the first attempt's own row sits above
+            // the boundary and refuses the second; in the guards rule the busy
+            // fragment's event sits above the quiet guard's boundary.
+            "reissued_batch_conditioned_on_other_events_lands_twice",
+            "condition_guards_carry_independent_boundaries",
+            // And a third: that rule seeds a row above the boundary and then
+            // conditions on the batch's own events, so a probe that asks only
+            // "does anything exist above `after`" refuses the FIRST attempt.
+            // Same defect, and the same reading ADR-0012 §6 got wrong about
+            // `WriteThenCheckStore` — the refusal lands on the first attempt
+            // rather than on the reissue.
+            "reissued_conditional_batch_lands_once",
         ],
         provenance: "`SELECT EXISTS(SELECT 1 FROM events WHERE position > ?)` — the fast \
              path someone adds when the join is the expensive half, and it is \
@@ -884,19 +1165,347 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "LastWrittenHeadStore",
+        kind: Kind::Mutant,
+        fails: &["head_advances_across_two_handles"],
+        provenance: "a handle that answers `head()` from the position its own last `append` \
+             returned — a field, a session variable, or Postgres' own `currval()`, which \
+             is documented to be session-scoped and is therefore the version of this \
+             defect the database hands you ready-made. ES-30's first rejected \
+             implementation in terms: `a cached last-written position, which is stale \
+             the moment a second handle writes`. It is correct against a single handle, \
+             which is every test anybody writes before they have a pool, and it is the \
+             second of the two ways one cached head is spent — `CachedHeadFixture` \
+             spends it on the condition probe and answers `head` from the log, which is \
+             why these are two rows and not one widened one.",
+        mode: FailureMode::Assertion,
+        // The head relation rather than the ES-33/ES-34 anchor: this store's reads
+        // are `correct::select` verbatim, so the observer does see both of the
+        // writer's appends. A failure at the anchor would mean the row had stopped
+        // evidencing ES-30 and started evidencing ES-34, which `CachedHeadFixture`
+        // already owns.
+        expect: &[(
+            "head_advances_across_two_handles",
+            "must be the highest position currently visible",
+        )],
+    },
+    Declared {
         name: "LosingFixture",
         kind: Kind::Mutant,
-        fails: &["acknowledged_writes_survive_a_reopen"],
+        fails: &[
+            "acknowledged_writes_survive_a_reopen",
+            "recorded_time_survives_a_reopen",
+            "reopened_store_does_not_reissue_an_event_id",
+        ],
         provenance: "an append acknowledged before its COMMIT returns: a pooled store \
              answering on a `spawn_blocking` join, a Durable Object relying on \
              output-gate semantics it does not have, any connection setup \
-             carrying `PRAGMA synchronous = OFF`.",
+             carrying `PRAGMA synchronous = OFF`. Read from the identity side it \
+             is also the restored-backup shape VT-6 names: the incarnation \
+             survives the reopen and the position counter does not, so the next \
+             append reissues a pair.",
         mode: FailureMode::Assertion,
-        // The first of the rule's two assertions: the events themselves are gone,
-        // not merely their positions.
+        // Three rules, one defect, three different assertions — which is why each
+        // is pinned. The first two fail at a *survival* anchor: the events are
+        // gone, not merely their positions or their stamps. The third is the
+        // interesting one and is not an anchor at all: this store reaches the end
+        // of the rule and mints, for a genuinely new event, an identity it has
+        // already issued to a different one. That is what a restored backup looks
+        // like from the inside, and it is the harm VT-6 spends a clause on.
+        expect: &[
+            (
+                "acknowledged_writes_survive_a_reopen",
+                "every event of an acknowledged append must survive a reopen",
+            ),
+            (
+                "recorded_time_survives_a_reopen",
+                "the acknowledged event must have survived the reopen at all",
+            ),
+            (
+                "reopened_store_does_not_reissue_an_event_id",
+                "must never issue an `(StoreId, SequencePosition)` pair it",
+            ),
+        ],
+    },
+    // --- Head -------------------------------------------------------------
+    Declared {
+        name: "EmptyHeadIsFirstStore",
+        kind: Kind::Mutant,
+        fails: &["head_of_an_empty_store_is_none"],
+        provenance: "`SELECT IFNULL(MAX(position), 0)`, because `MAX` over no rows is `NULL` and \
+             the driver's scalar decode wants a column type that can hold what comes \
+             back — then `SequencePosition::new(value).unwrap_or(SequencePosition::FIRST)`, \
+             because the newtype forbids zero and this workspace's own house rule \
+             forbids `unwrap` in library code. Two reasonable local decisions produce a \
+             store that reports a position no event occupies on the one state every \
+             adapter is in on its first run. ES-11 prescribes anchoring a paginating \
+             read on `head()` at the first poll and ES-31 makes `caught up?` a \
+             comparison against it, so the first event ever appended is the one a fresh \
+             runner skips.",
+        mode: FailureMode::Assertion,
+        // The empty-store assertion rather than the rule's anchor. This store's
+        // non-empty answer is `correct::head_of` verbatim, so a future edit that
+        // tripped the anchor instead would be a different defect wearing this row.
         expect: &[(
-            "acknowledged_writes_survive_a_reopen",
-            "every event of an acknowledged append must survive a reopen",
+            "head_of_an_empty_store_is_none",
+            "has no highest visible position",
+        )],
+    },
+    Declared {
+        name: "DefaultQueryHeadStore",
+        kind: Kind::Mutant,
+        fails: &["head_is_the_highest_visible_position"],
+        provenance: "`SELECT max(e.position) FROM event e JOIN tag t ON t.event_id = e.id` — the \
+             head statement written against the same joined view the read path is built \
+             around, in the same two-table schema `InnerJoinTagStore` and \
+             `TagJoinFanOutStore` model from the read side. There is one view in the \
+             adapter and reusing it is the obvious move; an untagged row has nothing on \
+             the other side of the join, so the store's head stops at the highest \
+             *tagged* position. It is ES-30's second rejected implementation — a head \
+             reporting the highest position matching some default query rather than the \
+             store's head — and it is invisible to any rule that appends one uniform \
+             batch, which is why the rule seeds an event the narrower query cannot match.",
+        mode: FailureMode::Assertion,
+        // The head relation rather than the anchor: this store's *reads* are
+        // `correct::select` verbatim, so the untagged event does come back and the
+        // anchor holds. Tripping the anchor would mean the store had acquired a
+        // read-side defect it does not declare.
+        expect: &[(
+            "head_is_the_highest_visible_position",
+            "must be the highest position currently visible",
+        )],
+    },
+    // --- Identity, recorded time and membership -------------------------
+    Declared {
+        name: "NormalisingTagStore",
+        kind: Kind::Mutant,
+        fails: &["tags_differing_only_by_unicode_normalisation_are_distinct"],
+        provenance: "`CREATE COLLATION … (provider = icu, deterministic = false)` on the tag \
+             column — one line, and exactly what an author reaches for when a search \
+             stops matching an accented word — or a normaliser called in the row mapper \
+             because `tags should be canonical`. Either rewrites a caller's identifier \
+             on the way in, so the tag read back is not the tag written, ADR-0003's \
+             byte-for-byte forwarding promise is broken, and the store's index disagrees \
+             with every external system holding the original string. A macOS client \
+             writes `café` in NFD and a Linux client writes it in NFC; under this store \
+             they stop being two consistency boundaries with no visible cue anywhere. \
+             VT-15's own `Rejects:` names it.",
+        mode: FailureMode::Assertion,
+        // The selective read, not the round trip: both rows survive a normalising
+        // column, and what is lost is that they are distinguishable. A pin on the
+        // round trip would belong to `TrimmingIdentifierStore`.
+        expect: &[(
+            "tags_differing_only_by_unicode_normalisation_are_distinct",
+            "must select the event written with it and no other",
+        )],
+    },
+    Declared {
+        name: "KeyedTagMapStore",
+        kind: Kind::Mutant,
+        fails: &["tags_may_repeat_a_key"],
+        provenance: "tags stored as a map: a `JSONB` object, a `HashMap<String, String>` column, \
+             or a side table under `UNIQUE (event_id, key)` written with `ON CONFLICT \
+             (event_id, key) DO UPDATE`. All three are natural schemas for something \
+             the contract itself invites you to read as a pair — `Tag::key` and \
+             `Tag::value` are public — and all three keep one value per key. \
+             `Tags::from_pairs([(\"tenant\", \"a\"), (\"tenant\", \"b\")])` is a *two*-element \
+             set, because deduplication is on the whole `key:value` string \
+             (`tag.rs:258-265`). VT-17's own `Rejects:` names it, and on Wattline's \
+             4,200-tenant shared log it is a cross-tenant correctness failure produced \
+             entirely by an indexing choice.",
+        mode: FailureMode::Assertion,
+        // The round trip, which is where the dropped tag first becomes visible;
+        // the two queries below it would fail too, one rule-iteration later.
+        expect: &[("tags_may_repeat_a_key", "must round-trip with both of them")],
+    },
+    Declared {
+        name: "TrimmingIdentifierStore",
+        kind: Kind::Mutant,
+        fails: &["append_preserves_event_type_and_tags_byte_for_byte"],
+        provenance: "`TRIM()` in the insert statement, or `value.trim()` in the row mapper, \
+             because a trailing space in an identifier `must be a typo`. It is \
+             `NarrowIdentifierColumnStore`'s and `Latin1IdentifierStore`'s third sibling \
+             — one column, three ways for it to rewrite what it was given — and the one \
+             with the worst consequence, because it moves the decision about what an \
+             identifier *is* from the application into the store. Kestrel Rotor \
+             replicated `turbine:HW2-A14 ` with a trailing space; `Tag::new` accepts it, \
+             `contains_all` is a strict merge-scan on equality (`tag.rs:231-245`) that \
+             does not match the unpadded tag, and a lot-recall query silently missed a \
+             turbine. VT-15 makes that the application's bug to prevent; an adapter that \
+             `fixes` it produces a different wrong answer and hides the first one.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_preserves_event_type_and_tags_byte_for_byte",
+            "stores a value that is not the one the caller wrote",
+        )],
+    },
+    Declared {
+        name: "RowOrdinalIdentityStore",
+        kind: Kind::Mutant,
+        fails: &["append_stamps_identity_and_time"],
+        provenance: "an adapter with no identity column, synthesising an `EventId` in its \
+             row mapper from the row's ordinal in the result set — an \
+             `.enumerate()` inside `rows.map(…)`, which is what is written when \
+             `EventId` arrives on `SequencedEvent` after the table exists and \
+             nobody wants a migration. Under `Query::all()` on a dense store the \
+             synthesised value is right, so every rule that reads the whole log \
+             back agrees with it.",
+        mode: FailureMode::Assertion,
+        // The rule's third assertion, not either anchor: this store returns
+        // every event and returns them correctly, and is wrong only about what
+        // one of them is *called* when reached by a narrow query.
+        expect: &[(
+            "append_stamps_identity_and_time",
+            "reaching one event two ways must produce one value",
+        )],
+    },
+    Declared {
+        name: "ReadTimeClockStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "append_stamps_identity_and_time",
+            "append_stamps_a_recorded_time",
+            // Inflation rather than coverage, and worth stating because it was
+            // found by running rather than by reading. That rule compares two
+            // whole `SequencedEvent` lists for equality — ES-18's word is
+            // "byte-identical" — rather than going through `snapshot_of`, so a
+            // store whose reads are not repeatable fails it whatever the append
+            // did. `append_stamps_a_recorded_time` is the rule that owns this
+            // defect; the rejection here is a consequence of the rule being
+            // stronger than its name, not a second defect.
+            //
+            // `snapshot_of`'s own doc comment anticipated the opposite outcome:
+            // it excludes `recorded_at` on the grounds that the field "would make
+            // two reads of an unchanged store differ". For a *conformant* store
+            // it does not — the value is persisted — so the stricter comparison
+            // is sound, and this row is the evidence.
+            "condition_rejection_leaves_store_unchanged",
+        ],
+        provenance: "an adapter with no `recorded_at` column, filling the field in its row \
+             mapper from the connection's clock. `RecordedAt` arrives on the port \
+             after the schema is written, the field has to be given something, \
+             and `now()` is the value already in scope. Correct in every other \
+             respect and invisible to any rule that reads once.",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "append_stamps_a_recorded_time",
+                "fixed at append and reported unchanged afterwards",
+            ),
+            (
+                "append_stamps_identity_and_time",
+                "reaching one event two ways must produce one value",
+            ),
+            (
+                "condition_rejection_leaves_store_unchanged",
+                "must leave the store byte-identical",
+            ),
+        ],
+    },
+    Declared {
+        name: "ContentHashIdentityStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "appending_equal_events_yields_two_events",
+            "append_stamps_a_local_event_id",
+        ],
+        provenance: "content-addressed identity, which is what anyone reaching for idempotent \
+             ingest proposes first and is exactly what VT-8 forbids by making \
+             uniqueness the store's obligation rather than the caller's. Its \
+             identities are unique across distinct events, stable across a \
+             reopen and never reissued, so nothing but a repeated payload sees \
+             it.",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "appending_equal_events_yields_two_events",
+                "carry two distinct identities",
+            ),
+            (
+                "append_stamps_a_local_event_id",
+                "`id.position()` and `position` are the same number here",
+            ),
+        ],
+    },
+    Declared {
+        name: "PerEventStoreIdStore",
+        kind: Kind::Mutant,
+        fails: &["append_stamps_a_local_event_id"],
+        provenance: "an adapter reading VT-6 as \"mint often, never reissue\" and minting a \
+             fresh incarnation per *append* rather than per open. It satisfies \
+             the clause's literal MUST — no pair is ever issued twice — and is \
+             the defect the replaced `store_id_is_stable_across_reopen` used to \
+             catch as a side effect of demanding stability.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_stamps_a_local_event_id",
+            "every event a store accepts in one open carries that store's own",
+        )],
+    },
+    Declared {
+        name: "SharedBatchIdentityStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "event_ids_are_unique_within_a_store",
+            "append_stamps_a_local_event_id",
+            "appending_equal_events_yields_two_events",
+        ],
+        provenance: "`INSERT … RETURNING event_id` read once and applied to every row — the \
+             off-by-a-loop `SharedBatchPositionStore` models on the position \
+             column, arriving on the identity column where no rule about \
+             positions can see it. The positions are all correct here, so both \
+             position rules pass and the store holds two events it cannot tell \
+             apart.",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "event_ids_are_unique_within_a_store",
+                "a store holds at most one event per `EventId`",
+            ),
+            (
+                "append_stamps_a_local_event_id",
+                "`id.position()` and `position` are the same number here",
+            ),
+            (
+                "appending_equal_events_yields_two_events",
+                "carry two distinct identities",
+            ),
+        ],
+    },
+    Declared {
+        name: "IdentityMatchableAsTagStore",
+        kind: Kind::Mutant,
+        fails: &["event_id_is_not_matchable_by_query"],
+        provenance: "the tag-materialised identity VT-7 rejects by name, written the way an \
+             adapter would actually write it: the extra tag row is the \
+             *adapter's*, not the caller's, so `Event::tags()` round-trips \
+             untouched and every payload-fidelity rule still passes. It is what \
+             an adapter reaches for to answer `contains_event_id` out of the tag \
+             index it already has.",
+        mode: FailureMode::Assertion,
+        // The probe loop, not the tags assertion: this store's whole premise is
+        // that the event's own tags are unchanged.
+        expect: &[(
+            "event_id_is_not_matchable_by_query",
+            "Identity is answered by a dedicated port operation",
+        )],
+    },
+    Declared {
+        name: "PositionOnlyMembershipStore",
+        kind: Kind::Mutant,
+        fails: &["contains_event_id_reports_membership"],
+        provenance: "`SELECT 1 FROM events WHERE position = ?` — the natural query for an \
+             adapter whose events table has a position column and no origin \
+             columns yet, which is every adapter before it implements ingest. It \
+             passes every single-store rule in the suite, because a store that \
+             has ingested nothing only ever holds its own incarnation.",
+        mode: FailureMode::Assertion,
+        // The second loop. The first — that it reports what it does hold — is a
+        // question this store answers correctly, which is what makes it
+        // survivable.
+        expect: &[(
+            "contains_event_id_reports_membership",
+            "which names another incarnation at a position this store happens to have",
         )],
     },
     // --- Position visibility --------------------------------------------
@@ -953,7 +1562,14 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "BorrowHoldingStore",
         kind: Kind::Mutant,
-        fails: &["a_live_read_stream_does_not_block_an_append"],
+        fails: &[
+            "a_live_read_stream_does_not_block_an_append",
+            // The same defect reached by two more rules rather than three
+            // defects: both isolation rules hold a live read stream across an
+            // `append`, which is precisely what this store's stream forbids.
+            "read_result_is_stable_under_concurrent_append",
+            "query_items_share_one_snapshot",
+        ],
         provenance: "a stream that yields rows from a live cursor rather than from a \
              snapshot: rusqlite streaming from an open statement, an `Rc`-shared cursor, a \
              pooled adapter that checks a connection out in `read` and returns it in `Drop`. \
@@ -964,6 +1580,30 @@ const REGISTRY: &[Declared] = &[
              names no rule at all, which is why the instrument is a `RefCell`.",
         mode: FailureMode::StorePanic("already borrowed"),
         expect: &[],
+    },
+    Declared {
+        name: "RefetchingPagedStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "read_result_is_stable_under_concurrent_append",
+            "query_items_share_one_snapshot",
+        ],
+        provenance: "`happenstance-neon` reaches Postgres over one-shot HTTP: one buffered \
+             JSON document per round trip under a 64 MiB cap, no cursor, and no way \
+             to hold a statement open across polls. Above the cap the only way to \
+             answer at all is an independent \
+             `WHERE position > $last ORDER BY position LIMIT n` per chunk, and each \
+             of those is a fresh snapshot. ES-11's prescribed fix is a position \
+             ceiling captured no later than the first poll; this is that adapter \
+             with the ceiling missing, which is one line rather than a redesign. \
+             The page is modelled at one event because a page size is a deployment \
+             constant and only the number of events needed to OBSERVE the defect \
+             depends on it.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "query_items_share_one_snapshot",
+            "must be evaluated against the same sample",
+        )],
     },
     Declared {
         name: "AwaitAcrossBorrowStore",
@@ -999,6 +1639,125 @@ const REGISTRY: &[Declared] = &[
         ],
     },
     Declared {
+        name: "PerRowConditionStore",
+        kind: Kind::Mutant,
+        fails: &["batch_is_not_evaluated_against_its_own_condition"],
+        provenance: "the per-row conditional `INSERT … SELECT … WHERE NOT EXISTS`, which the \
+             decision ledger carries as a live candidate for the append-condition SQL \
+             strategy (`RUNBOOK.md:64`) and which is the only shape `happenstance-neon` can \
+             express at all, having no interactive transaction. Carried per row the guard \
+             travels with every statement, so the second row is checked against a store that \
+             already holds the first — and on the canonical DCB uniqueness shape, where the \
+             condition names the very type being written, it self-rejects. It ROLLS BACK, \
+             which is the point of the shape rather than a detail: a store that self-rejected \
+             and kept its rows would fail `append_is_atomic` instead, and the registry could \
+             not then say which of the two defects that rule catches.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "batch_is_not_evaluated_against_its_own_condition",
+            "a batch can never conflict with itself",
+        )],
+    },
+    Declared {
+        name: "PayloadDedupStore",
+        kind: Kind::Mutant,
+        fails: &[
+            // The two rules this store is for: ES-24's stated limits, both of
+            // which it strengthens.
+            "reissued_unconditional_batch_lands_twice",
+            "reissued_batch_conditioned_on_other_events_lands_twice",
+            // Inflation, and intrinsic: the suite appends byte-identical events
+            // in five places for reasons that have nothing to do with reissue —
+            // `seed_hits_between_misses`' three `event("Hit")`s, two
+            // `event("Blocker")`s, two `event("Alpha")`s — and a
+            // content-addressed store collapses every one of them. That is what a
+            // content-addressed store IS; there is no narrower version of this
+            // defect.
+            "read_limit_applies_after_filtering",
+            "read_backwards_limit_applies_after_filtering",
+            "read_from_composes_with_multi_item_query",
+            "condition_after_beyond_head_admits_the_append",
+            "condition_after_beyond_the_last_matching_position_admits_the_append",
+        ],
+        provenance: "`INSERT … ON CONFLICT (content_hash) DO NOTHING` against a unique index \
+             on a hash of `(event_type, tags, data)` — what an adapter built to be safe under \
+             at-least-once ingest reaches for, and what a content-addressed store gets for \
+             free. It would ship as a feature. Nothing about it looks wrong: no data is lost, \
+             no error is hidden, and ES-24's DOCUMENTED at-most-once guarantee still holds. \
+             What it does is strengthen the two shapes the clause explicitly disclaims, which \
+             is worse than not providing the guarantee at all — callers write retry loops \
+             against the adapter they tested on, and the same loop double-charges against the \
+             next one.",
+        mode: FailureMode::Assertion,
+        // Pinned to the two rules the provenance claims it demonstrates, so that
+        // the five incidental failures cannot quietly become the whole of what
+        // this row evidences.
+        expect: &[
+            (
+                "reissued_unconditional_batch_lands_twice",
+                "MUST append a second copy",
+            ),
+            (
+                "reissued_batch_conditioned_on_other_events_lands_twice",
+                // The count, not the acceptance sentence above it. This store
+                // ACCEPTS the reissue — dedup happens inside the write, not at
+                // the condition — so the first assertion passes and the row
+                // count is where the collapse becomes visible. Pinned to what
+                // actually fires rather than to what reads best.
+                "and both copies must be in the store",
+            ),
+        ],
+    },
+    Declared {
+        name: "MinCollapseStore",
+        kind: Kind::Mutant,
+        fails: &["condition_guards_carry_independent_boundaries"],
+        provenance: "the application-side workaround E2E-05 names, promoted into an adapter: \
+             four reads produce four boundaries, one `WHERE position > ?` takes one number, \
+             and the safe-looking choice is the smallest. It is SOUND — it never admits an \
+             append it should have refused — and it is a liveness failure, which is the \
+             harder defect to see: the quiet fragment's stale boundary governs the busy one, \
+             so a consistency boundary that never conflicted starts refusing and the \
+             deployment reads the rejection rate as physics. It passes the ENTIRE existing \
+             `condition_after_*` family, because every rule in it carries a single guard and \
+             the minimum over one boundary is that boundary.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "condition_guards_carry_independent_boundaries",
+            "evaluated against its OWN boundary",
+        )],
+    },
+    Declared {
+        name: "SingleGuardFastPathStore",
+        kind: Kind::Mutant,
+        fails: &[
+            "condition_with_one_guard_behaves_as_today",
+            // Intrinsic, and the reason `notes.md` records this rule as adding no
+            // UNIQUE coverage: every existing append-condition rule carries one
+            // guard, so a store wrong on the one-guard path is wrong in all of
+            // them. What none of them can see, and what its own rule is for, is
+            // that the OTHER path is right — which is the difference between this
+            // store and `ExistenceProbeStore`.
+            "condition_after_ignores_events_at_the_boundary",
+            "condition_after_beyond_head_admits_the_append",
+            "condition_after_beyond_the_last_matching_position_admits_the_append",
+            "reissued_batch_conditioned_on_other_events_lands_twice",
+        ],
+        provenance: "`MinCollapseStore`'s mirror image, and the regression VT-30's refactor \
+             actually invites. An adapter generalising to N guards keeps a `guards.len() == 1` \
+             fast path, because one guard is the overwhelmingly common case and a `UNION` per \
+             guard is pure overhead there — and the fast path is the OLD statement, the \
+             uniqueness probe written before `after` existed, kept because it was already \
+             working. The general path is new and was reviewed; the fast path is old and was \
+             not. The result is a store with two answers to one question, and which answer a \
+             caller gets depends on how many fragments its decision model happened to read.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "condition_with_one_guard_behaves_as_today",
+            "boundary ABOVE every matching event",
+        )],
+    },
+    Declared {
         name: "NoTransactionStore",
         kind: Kind::Mutant,
         fails: &["append_is_atomic_under_a_mid_batch_fault"],
@@ -1011,6 +1770,45 @@ const REGISTRY: &[Declared] = &[
              arms nothing, which is exactly why ES-18 needs both rules.",
         mode: FailureMode::Assertion,
         expect: &[("append_is_atomic_under_a_mid_batch_fault", "byte-identical")],
+    },
+    Declared {
+        name: "YieldingRowAtATimeStore",
+        kind: Kind::Mutant,
+        fails: &["dropped_append_future_leaves_no_partial_batch"],
+        provenance: "`for event in batch { conn.execute(INSERT, …).await? }` — one statement \
+             per row, awaited, with the `BEGIN` forgotten. It is `NoTransactionStore` on the \
+             other axis and `racers::RowAtATimeStore` on a third, and the three must not be \
+             merged: that one needs a fault ARMED and answers `Err` over a partial log, the \
+             racer's rows all land in the end and what is wrong is the window a reader sees \
+             through, and this one needs no fault at all — the caller simply stops polling. At \
+             the edge that is the NORMAL termination path: a client disconnect, a CPU limit, a \
+             Durable Object eviction, a pod eviction. The future is destroyed at whatever \
+             suspension point it had reached, the rows already written stay written, and there \
+             is no `Result` anywhere for anybody to read.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "dropped_append_future_leaves_no_partial_batch",
+            "fully applied or unchanged",
+        )],
+    },
+    Declared {
+        name: "NoopFaultFixture",
+        kind: Kind::Mutant,
+        fails: &["arming_a_mid_batch_fault_makes_the_append_fail"],
+        provenance: "a fixture that declares `MID_BATCH_FAULT` supported and overrides \
+             `arm_mid_batch_fault` with an EMPTY BODY, over a completely correct store. Not a \
+             forgotten override — that reaches the trait's provided body, which panics and \
+             names this exact mistake, and is a different outcome. The author who writes this \
+             one is the author of a real adapter who intends to wire a trigger up later, \
+             declares the capability while stubbing the method, and gets a green suite in \
+             which `append_is_atomic_under_a_mid_batch_fault` appears to have been exercised. \
+             Nothing in the build tells them otherwise until CF-39: no fault, `Ok`, every row \
+             present, all-or-nothing satisfied.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "arming_a_mid_batch_fault_makes_the_append_fail",
+            "cause the write of the k-th event to fail",
+        )],
     },
     // --- Value edges ---------------------------------------------------
     //
@@ -1098,6 +1896,12 @@ const REGISTRY: &[Declared] = &[
             // non-ASCII codepoint fails both rules, for the same reason and at
             // two different edges.
             "store_accepts_a_max_length_identifier",
+            // A third edge of the same column, and unavoidable: VT-15's
+            // normalisation rule is about two Unicode normal forms, so both of
+            // its tags are non-ASCII by construction and a latin-1 column cannot
+            // hold either. `NormalisingTagStore` is the entry that covers that
+            // rule for the reason it is named for.
+            "tags_differing_only_by_unicode_normalisation_are_distinct",
         ],
         provenance: "`VARCHAR(255) CHARACTER SET latin1`, SQL Server's non-`N` `VARCHAR`, or a \
              `CHECK` written against an `[[:ascii:]]` class. The first two do not \
@@ -1115,7 +1919,13 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "PayloadCeilingStore",
         kind: Kind::Mutant,
-        fails: &["store_accepts_the_guaranteed_minimum_payload"],
+        fails: &[
+            "store_accepts_the_guaranteed_minimum_payload",
+            // CF-40 gave this store a stated ceiling, so VT-25's rule can reach it:
+            // it refuses, but through `AppendError::Store` — the channel VT-25
+            // replaced.
+            "append_reports_exceeded_store_limits",
+        ],
         provenance: "an undocumented row-size ceiling: a payload held inline in a fixed-width \
              column, or a KV backend with a per-value cap the adapter never states. \
              VT-21 permits a store to accept less than it would like — what it \
@@ -1130,7 +1940,13 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "TruncatingPayloadStore",
         kind: Kind::Mutant,
-        fails: &["store_accepts_the_guaranteed_minimum_payload"],
+        fails: &[
+            "store_accepts_the_guaranteed_minimum_payload",
+            // CF-40, and the other half of VT-25's MUST: it does not refuse at all.
+            // Same column and same number as `PayloadCeilingStore`, so both
+            // halves are checked at one boundary.
+            "append_reports_exceeded_store_limits",
+        ],
         provenance: "the same column as `PayloadCeilingStore` with `MySQL`'s `sql_mode` left \
              non-strict: over-length data is stored clipped and a warning is \
              raised into a log nobody reads. It is the pairing \
@@ -1186,7 +2002,12 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "BatchParameterCeilingStore",
         kind: Kind::Mutant,
-        fails: &["store_accepts_the_guaranteed_minimum_batch_size"],
+        fails: &[
+            "store_accepts_the_guaranteed_minimum_batch_size",
+            // CF-40: the driver's parameter ceiling, stated as the batch ceiling it
+            // actually is, and still refused through `AppendError::Store`.
+            "append_reports_exceeded_store_limits",
+        ],
         provenance: "a multi-row `INSERT` binding one parameter set per event and per tag, \
              meeting its driver's ceiling at write time — after the caller has made \
              its decision and taken its side effects. A hundred events is inside \
@@ -1201,7 +2022,12 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "ChunkLosingBatchStore",
         kind: Kind::Mutant,
-        fails: &["store_accepts_the_guaranteed_minimum_batch_size"],
+        fails: &[
+            "store_accepts_the_guaranteed_minimum_batch_size",
+            // CF-40. `BatchParameterCeilingStore` with the fix applied wrongly: it
+            // clamps rather than refusing, so nothing is reported at all.
+            "append_reports_exceeded_store_limits",
+        ],
         provenance: "the fix applied after meeting `BatchParameterCeilingStore` in production, \
              applied wrongly: `&events[..CEILING]` where `events.chunks(CEILING)` \
              was meant. Clamping is one character from chunking and needs no loop, \
@@ -1245,10 +2071,19 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::FromIsAnOffsetStore>,
             crate::mutants::MutantFixture<crate::mutants::BackwardsIgnoredStore>,
             crate::mutants::MutantFixture<crate::mutants::FetchOneExtraStore>,
+            crate::mutants::MutantFixture<crate::mutants::EmptyHeadIsFirstStore>,
+            crate::mutants::MutantFixture<crate::mutants::DefaultQueryHeadStore>,
+            crate::mutants::MutantFixture<crate::mutants::ToBoundIgnoredStore>,
+            crate::mutants::MutantFixture<crate::mutants::ToIsExclusiveStore>,
+            crate::mutants::MutantFixture<crate::mutants::BackwardsToIsAnUpperBoundStore>,
+            crate::mutants::MutantFixture<crate::mutants::LimitZeroIsUnlimitedStore>,
 
             crate::mutants::MutantFixture<crate::mutants::SharedBatchPositionStore>,
             crate::mutants::MutantFixture<crate::mutants::ReturnsFirstOfBatchStore>,
+            crate::mutants::MutantFixture<crate::mutants::ReverseOrderBatchStore>,
             crate::mutants::MutantFixture<crate::mutants::WriteThenCheckStore>,
+            crate::mutants::MutantFixture<crate::mutants::PerRowConditionStore>,
+            crate::mutants::MutantFixture<crate::mutants::PayloadDedupStore>,
             crate::mutants::MutantFixture<crate::mutants::EmptyBatchIsANoOpStore>,
             crate::mutants::MutantFixture<crate::mutants::EmptyBatchPanicsStore>,
             crate::mutants::MutantFixture<crate::mutants::DropsMetadataStore>,
@@ -1262,6 +2097,8 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::TagJoinFanOutStore>,
             crate::mutants::MutantFixture<crate::mutants::ItemOrderedUnionStore>,
             crate::mutants::MutantFixture<crate::mutants::LimitBeforeFilterStore>,
+            crate::mutants::MutantFixture<crate::mutants::LimitPerItemStore>,
+            crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
@@ -1270,8 +2107,12 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::TagBlindConditionStore>,
             crate::mutants::MutantFixture<crate::mutants::NullAggregateProbeStore>,
             crate::mutants::MutantFixture<crate::mutants::UncorrelatedProbeStore>,
+            crate::mutants::MutantFixture<crate::mutants::MinCollapseStore>,
+            crate::mutants::MutantFixture<crate::mutants::SingleGuardFastPathStore>,
 
             crate::mutants::NoTransactionFixture,
+            crate::mutants::YieldingRowAtATimeFixture,
+            crate::mutants::NoopFaultFixture,
 
             crate::mutants::MutantFixture<crate::mutants::EmptyPayloadIsNullStore>,
             crate::mutants::MutantFixture<crate::mutants::MetadataConflatingStore>,
@@ -1283,12 +2124,25 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ChunkedQueryStore>,
             crate::mutants::MutantFixture<crate::mutants::BatchParameterCeilingStore>,
             crate::mutants::MutantFixture<crate::mutants::ChunkLosingBatchStore>,
+            crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
+            crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
+            crate::mutants::MutantFixture<crate::mutants::TrimmingIdentifierStore>,
+
+            crate::mutants::MutantFixture<crate::mutants::RowOrdinalIdentityStore>,
+            crate::mutants::MutantFixture<crate::mutants::ReadTimeClockStore>,
+            crate::mutants::MutantFixture<crate::mutants::ContentHashIdentityStore>,
+            crate::mutants::MutantFixture<crate::mutants::PerEventStoreIdStore>,
+            crate::mutants::MutantFixture<crate::mutants::SharedBatchIdentityStore>,
+            crate::mutants::MutantFixture<crate::mutants::IdentityMatchableAsTagStore>,
+            crate::mutants::MutantFixture<crate::mutants::PositionOnlyMembershipStore>,
 
             crate::mutants::CachedHeadFixture,
+            crate::mutants::LastWrittenHeadFixture,
             crate::mutants::LosingFixture,
             crate::mutants::SharedBackingFixture,
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
+            crate::mutants::RefetchingPagedFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
         }
     };
@@ -1491,10 +2345,25 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("FromIsAnOffsetStore", ModelOutcome::Rejected),
     ("BackwardsIgnoredStore", ModelOutcome::Rejected),
     ("FetchOneExtraStore", ModelOutcome::Rejected),
+    // The head. `Op` generates reads and appends; nothing in the model calls
+    // `head()` at all, so a defect that is only visible through it cannot be
+    // reached however many cases run. That is the same boundary the ten value
+    // edges sit on, one method over.
+    ("EmptyHeadIsFirstStore", ModelOutcome::Agreed),
+    ("DefaultQueryHeadStore", ModelOutcome::Agreed),
+    ("ToBoundIgnoredStore", ModelOutcome::Agreed),
+    ("ToIsExclusiveStore", ModelOutcome::Agreed),
+    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Agreed),
+    ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
+    ("LimitPerItemStore", ModelOutcome::Rejected),
+    ("ItemDedupByTypeStore", ModelOutcome::Rejected),
     // Append.
     ("SharedBatchPositionStore", ModelOutcome::Rejected),
     ("ReturnsFirstOfBatchStore", ModelOutcome::Rejected),
     ("WriteThenCheckStore", ModelOutcome::Rejected),
+    ("ReverseOrderBatchStore", ModelOutcome::Rejected),
+    ("PerRowConditionStore", ModelOutcome::Rejected),
+    ("PayloadDedupStore", ModelOutcome::Rejected),
     ("EmptyBatchIsANoOpStore", ModelOutcome::Agreed),
     ("EmptyBatchPanicsStore", ModelOutcome::Agreed),
     ("DropsMetadataStore", ModelOutcome::Rejected),
@@ -1516,10 +2385,14 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("TagBlindConditionStore", ModelOutcome::Rejected),
     ("NullAggregateProbeStore", ModelOutcome::Rejected),
     ("UncorrelatedProbeStore", ModelOutcome::Rejected),
+    ("MinCollapseStore", ModelOutcome::Agreed),
+    ("SingleGuardFastPathStore", ModelOutcome::Rejected),
     // The fixture-armed fault, and the ten value edges. Both arguments live in
     // this table's doc comment rather than here, so that the count and the reason
     // cannot drift apart the way they did between stage 5 and stage 6.
     ("NoTransactionStore", ModelOutcome::Agreed),
+    ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
+    ("NoopFaultFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -1530,12 +2403,34 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ChunkedQueryStore", ModelOutcome::Agreed),
     ("BatchParameterCeilingStore", ModelOutcome::Agreed),
     ("ChunkLosingBatchStore", ModelOutcome::Agreed),
+    ("NormalisingTagStore", ModelOutcome::Agreed),
+    ("KeyedTagMapStore", ModelOutcome::Agreed),
+    ("TrimmingIdentifierStore", ModelOutcome::Agreed),
+    // Identity, recorded time and membership, and the split here was found by
+    // running rather than by reading. `Journal::reconcile` does only compare
+    // `seen.event` and the positions — so a defect visible only at append is
+    // invisible to it — but `Op::Read` compares two whole `SequencedEvent` lists,
+    // the observed one against `known`, which is the *store's own* answer to the
+    // last `Query::all()`. So the model catches exactly the identity and time
+    // defects that make two differently-shaped reads disagree, and nothing else:
+    // a defect that is stable across reads (a content hash, a per-event
+    // incarnation, one identity per batch) is consistent with itself and
+    // survives, and no generated `Op` calls `contains_event_id` at all.
+    ("RowOrdinalIdentityStore", ModelOutcome::Rejected),
+    ("ReadTimeClockStore", ModelOutcome::Rejected),
+    ("ContentHashIdentityStore", ModelOutcome::Agreed),
+    ("PerEventStoreIdStore", ModelOutcome::Agreed),
+    ("SharedBatchIdentityStore", ModelOutcome::Agreed),
+    ("IdentityMatchableAsTagStore", ModelOutcome::Agreed),
+    ("PositionOnlyMembershipStore", ModelOutcome::Agreed),
     // The fixture-level and window-shaped defects.
     ("CachedHeadFixture", ModelOutcome::Agreed),
+    ("LastWrittenHeadStore", ModelOutcome::Agreed),
     ("LosingFixture", ModelOutcome::Agreed),
     ("SharedBackingFixture", ModelOutcome::Agreed),
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
+    ("RefetchingPagedStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),
 ];
 
@@ -2225,6 +3120,49 @@ mod mutation_coverage {
         }
     }
 
+    /// The rules that must *reject* a fixture declining a capability rather than
+    /// skip it, which is what makes the MUST enforced rather than merely stated.
+    ///
+    /// A slice rather than a constant, and the change was forced by a rule rather
+    /// than chosen: slice F's `head_advances_across_two_handles` is the second
+    /// rule to spell `must!(F: SECOND_HANDLE)`, and a singleton here made the
+    /// second one read as "a rule that ignored its `require!` gate". Every entry
+    /// is a rule using `must!` rather than `require!`; a rule that gains a `must!`
+    /// and is not added here fails `capability_skips_are_reported` with a message
+    /// pointing at the rule, which is the right way round.
+    ///
+    /// At module scope rather than inside the test for a reason that is only
+    /// arithmetic: with [`MUST_SKIP`] beside it the body crossed
+    /// `clippy::too_many_lines`. Nothing else moved with them — in particular they
+    /// are still not declared beside their use, which is what
+    /// `clippy::items_after_statements` was asking for.
+    const MUST_REJECT: &[&str] = &[
+        "two_handles_observe_each_others_appends",
+        "head_advances_across_two_handles",
+    ];
+
+    /// [`MUST_REJECT`]'s mirror: every rule that *is* gated on a capability a
+    /// fixture may honestly decline, and therefore must report a skip rather than
+    /// pass.
+    ///
+    /// A slice for the same reason, and it was a singleton — naming
+    /// `acknowledged_writes_survive_a_reopen` as "the suite's one genuinely
+    /// optional rule" — until phase 4 landed four more. Two rules on `REOPEN` and
+    /// two on `MID_BATCH_FAULT` were then reaching this test as rules nothing
+    /// checked had run at all, which is the hole CF-18 exists to close: a rule
+    /// whose `require!` gate was deleted passes here in silence.
+    /// `append_reports_exceeded_store_limits` is on the list too, and its gate is
+    /// CF-40's three `Option<usize>` ceilings rather than a `Capability` — the
+    /// reporting obligation is identical either way.
+    const MUST_SKIP: &[&str] = &[
+        "acknowledged_writes_survive_a_reopen",
+        "reopened_store_does_not_reissue_an_event_id",
+        "recorded_time_survives_a_reopen",
+        "append_is_atomic_under_a_mid_batch_fault",
+        "arming_a_mid_batch_fault_makes_the_append_fail",
+        "append_reports_exceeded_store_limits",
+    ];
+
     /// CF-18. A capability-gated rule is still emitted, still answered, and
     /// reports the fixture's own reason.
     ///
@@ -2244,13 +3182,6 @@ mod mutation_coverage {
     /// `#[test]`.
     #[test]
     fn capability_skips_are_reported() {
-        // The one rule that must *reject* a fixture declining a capability
-        // rather than skip it, which is what makes the MUST enforced rather
-        // than merely stated. Declared here rather than beside its use because
-        // `clippy::items_after_statements` is on, and it is right to be: an
-        // item declared mid-function is in scope from the top regardless.
-        const MUST_REJECT: &str = "two_handles_observe_each_others_appends";
-
         let rules = all_rules();
 
         // ---- The MUST, and where it is really enforced ----------------------
@@ -2308,14 +3239,19 @@ mod mutation_coverage {
                 Verdict::Skipped { reason, .. } => assert!(
                     *reason == DecliningFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningFixture::REOPEN_REASON
-                        || *reason == DecliningFixture::MID_BATCH_FAULT_REASON,
+                        || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
+                        // CF-40: a fixture with no ceiling reports the testkit's
+                        // reason rather than its own, because the sentence is the
+                        // same for every store that has none. See
+                        // `contract::NO_CEILING_REASON`.
+                        || *reason == happenstance_testkit::NO_CEILING_REASON,
                     "`{rule}` skipped with a reason the fixture never gave: \
                      {reason:?}. The reason is the only record of the trade, so \
                      it has to be the adapter's own words"
                 ),
                 Verdict::Panicked { message, .. } => {
-                    assert_eq!(
-                        *rule, MUST_REJECT,
+                    assert!(
+                        MUST_REJECT.contains(rule),
                         "`{rule}` panicked against a fixture that is correct in \
                          every respect except its declared capabilities. If it \
                          opened a second handle, it ignored its `require!` gate. \
@@ -2323,7 +3259,7 @@ mod mutation_coverage {
                     );
                     assert!(
                         message.contains(DecliningFixture::SECOND_HANDLE_REASON),
-                        "`{MUST_REJECT}` must reject a fixture declining the \
+                        "`{rule}` must reject a fixture declining the \
                          `SECOND_HANDLE` MUST *and carry the fixture's own stated \
                          reason*, so the failing build says why. Message: \
                          {message}"
@@ -2334,32 +3270,39 @@ mod mutation_coverage {
 
         // The demonstrated half: `DecliningFixture` is the wrong implementation
         // that `must!` rejects, so the MUST is not an assertion nothing can fire.
-        assert!(
-            matches!(
-                declining.verdict(MUST_REJECT),
-                Some(Verdict::Panicked { .. })
-            ),
-            "`{MUST_REJECT}` must *fail* a fixture that declines `SECOND_HANDLE`, \
-             not skip it. A skip there is the outcome `contract.rs` names as the \
-             thing to prevent: a green suite plus one SKIP line for an adapter \
-             nothing reached through two connections. Saw: {:?}",
-            declining.verdict(MUST_REJECT)
-        );
+        // Every rule in the list, not just the first: a second `must!` that
+        // quietly skipped would be a MUST enforced on one rule and stated on the
+        // other.
+        for rule in MUST_REJECT {
+            assert!(
+                matches!(declining.verdict(rule), Some(Verdict::Panicked { .. })),
+                "`{rule}` must *fail* a fixture that declines `SECOND_HANDLE`, \
+                 not skip it. A skip there is the outcome `contract.rs` names as \
+                 the thing to prevent: a green suite plus one SKIP line for an \
+                 adapter nothing reached through two connections. Saw: {:?}",
+                declining.verdict(rule)
+            );
+        }
 
         let skipped = declining.skipped();
-        assert!(
-            skipped.contains(&"acknowledged_writes_survive_a_reopen"),
-            "`acknowledged_writes_survive_a_reopen` is the suite's one genuinely \
-             optional rule — `REOPEN` is a SHOULD — so it must report a skip \
-             against a fixture that declines everything. Without it the skip \
-             machinery is untested and CF-18 is a claim about code nothing \
-             executes; saw {skipped:?}"
-        );
-        assert!(
-            !skipped.contains(&MUST_REJECT),
-            "`{MUST_REJECT}` reported a skip, so `must!` has been downgraded back \
-             to `require!` and the MUST is unenforced again"
-        );
+        for rule in MUST_SKIP {
+            assert!(
+                skipped.contains(rule),
+                "`{rule}` is gated on a capability this fixture declines, so it \
+                 must report a skip rather than pass. Without at least one such \
+                 rule the skip machinery is untested and CF-18 is a claim about \
+                 code nothing executes — and a rule that lost its gate passes \
+                 here silently, which is the same vacuity one level up. Saw \
+                 {skipped:?}"
+            );
+        }
+        for rule in MUST_REJECT {
+            assert!(
+                !skipped.contains(rule),
+                "`{rule}` reported a skip, so `must!` has been downgraded back \
+                 to `require!` and the MUST is unenforced again"
+            );
+        }
 
         // ---- And a fully capable fixture skips nothing ---------------------
         let capable = run_subject::<GappedPositionFixture>();
