@@ -26,9 +26,19 @@ pub enum InvalidTag {
         /// The rejected length, in bytes.
         len: usize,
     },
-    /// The tag contained an ASCII control character.
+    /// The tag contained a control character (Unicode `Cc`).
     #[error("a tag must not contain control characters")]
     ControlCharacter,
+    /// The tag contained one of the seven explicit bidirectional formatting
+    /// controls: U+202A–U+202E or U+2066–U+2069.
+    ///
+    /// Separate from [`ControlCharacter`](Self::ControlCharacter) because the
+    /// two refusals have different remedies. A control character in an
+    /// identifier is almost always an encoding bug; a bidirectional override is
+    /// almost always an attack — a tag that renders as one thing in every
+    /// console and matches another in every query.
+    #[error("a tag must not contain bidirectional formatting controls")]
+    BidirectionalControl,
     /// The key half of a `key:value` pair itself contained a colon, which would
     /// make [`Tag::key`](crate::Tag::key) ambiguous.
     #[error("the key of a `key:value` tag must not contain a colon")]
@@ -50,9 +60,30 @@ pub enum InvalidEventType {
         /// The rejected length, in bytes.
         len: usize,
     },
-    /// The event type contained an ASCII control character.
+    /// The event type contained a control character (Unicode `Cc`).
     #[error("an event type must not contain control characters")]
     ControlCharacter,
+    /// The event type contained one of the seven explicit bidirectional
+    /// formatting controls: U+202A–U+202E or U+2066–U+2069.
+    ///
+    /// Separate from [`ControlCharacter`](Self::ControlCharacter) for the reason
+    /// [`InvalidTag::BidirectionalControl`] gives.
+    #[error("an event type must not contain bidirectional formatting controls")]
+    BidirectionalControl,
+}
+
+impl From<core::convert::Infallible> for InvalidEventType {
+    /// Lets [`Event::new`](crate::Event::new) accept both `&str`, which
+    /// converts fallibly, and an already-built [`EventType`](crate::EventType),
+    /// whose conversion cannot fail.
+    ///
+    /// The match has no arms because [`Infallible`](core::convert::Infallible)
+    /// has no values, and the compiler accepts an empty match on an uninhabited
+    /// type as exhaustive. That is what lets an infallible conversion satisfy a
+    /// fallible bound.
+    fn from(never: core::convert::Infallible) -> Self {
+        match never {}
+    }
 }
 
 /// A [`Query`](crate::Query) or [`QueryItem`](crate::QueryItem) failed
@@ -72,6 +103,15 @@ pub enum InvalidQuery {
     /// One of the item's event types was itself invalid.
     #[error(transparent)]
     EventType(#[from] InvalidEventType),
+    /// One of the item's tags was itself invalid.
+    ///
+    /// This is what lets a command handler in a library crate build tags, items
+    /// and a query, propagate all three with `?`, and still have one error type
+    /// — without a bespoke enum and without reaching for `anyhow`, which the
+    /// house style forbids in library code. The conversion direction is
+    /// unambiguous: a query can contain tags, and a tag cannot contain a query.
+    #[error(transparent)]
+    Tag(#[from] InvalidTag),
 }
 
 impl From<core::convert::Infallible> for InvalidQuery {
@@ -90,21 +130,26 @@ impl From<core::convert::Infallible> for InvalidQuery {
 /// This is the DCB concurrency signal. Callers respond by rebuilding their
 /// decision model from the current state and retrying — it is an expected,
 /// routine outcome under contention, not a fault.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("append condition violated: the store already contains a matching event")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ConditionViolated {
     /// The position of a conflicting event, when the adapter can identify one
     /// cheaply.
     ///
-    /// Purely informational: adapters that detect the conflict without learning
-    /// which event caused it (a conditional `INSERT ... WHERE NOT EXISTS`, for
-    /// instance) report `None`, and callers must not depend on this being set.
+    /// **A hint, not a promise, and a caller must be written for `None`.** An
+    /// adapter that detects the conflict without learning which event caused it
+    /// reports `None`, and that is not a deficient adapter: a store reached over
+    /// one-shot HTTP has no interactive transaction, so the only shape it can
+    /// express is a conditional `INSERT … SELECT … WHERE NOT EXISTS`, which
+    /// yields a boolean and no row. A retry loop that branches on this field
+    /// being `Some` works against an in-process store and stops working against
+    /// a remote one.
     pub conflicting_position: Option<SequencePosition>,
 }
 
 impl ConditionViolated {
     /// A violation with no identified conflicting event.
+    #[must_use]
     pub const fn unspecified() -> Self {
         Self {
             conflicting_position: None,
@@ -112,12 +157,31 @@ impl ConditionViolated {
     }
 
     /// A violation naming the event that caused it.
+    #[must_use]
     pub const fn at(position: SequencePosition) -> Self {
         Self {
             conflicting_position: Some(position),
         }
     }
 }
+
+impl core::fmt::Display for ConditionViolated {
+    /// Renders the conflicting position when the adapter supplied one.
+    ///
+    /// Hand-written rather than a `thiserror` attribute because the message has
+    /// two shapes, and the field the store already populates was previously
+    /// carried and never shown — an operator reading a log got "the store
+    /// already contains a matching event" and no way to find which.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("append condition violated: the store already contains a matching event")?;
+        if let Some(position) = self.conflicting_position {
+            write!(f, " at position {position}")?;
+        }
+        f.write_str("; rebuild the decision model and retry")
+    }
+}
+
+impl core::error::Error for ConditionViolated {}
 
 /// Why an append failed.
 ///
@@ -160,6 +224,25 @@ pub enum AppendError<E> {
     #[error("an append must contain at least one event")]
     NoEvents,
 
+    /// The batch exceeded a capacity the store documents.
+    ///
+    /// Distinct from [`Store`](Self::Store) on purpose, and the distinction is
+    /// the whole reason the variant exists: a caller that cannot tell "this will
+    /// never fit here, park it and tell a human" from "the disk is full, retry"
+    /// has to guess, and a sync runner that guesses wrong drops an event
+    /// permanently.
+    ///
+    /// A store MUST report a capacity refusal through this variant rather than
+    /// through [`Store`](Self::Store), and MUST NOT truncate instead.
+    #[error("append exceeds the store's {limit} limit: {len}")]
+    ExceedsStoreLimit {
+        /// Which limit was exceeded.
+        limit: crate::limits::StoreLimit,
+        /// The value that exceeded it — a byte count, a tag count or an event
+        /// count, according to `limit`.
+        len: usize,
+    },
+
     /// The adapter failed for its own reasons.
     #[error(transparent)]
     Store(E),
@@ -182,6 +265,7 @@ impl<E> AppendError<E> {
         match self {
             Self::ConditionViolated(violation) => AppendError::ConditionViolated(violation),
             Self::NoEvents => AppendError::NoEvents,
+            Self::ExceedsStoreLimit { limit, len } => AppendError::ExceedsStoreLimit { limit, len },
             Self::Store(err) => AppendError::Store(f(err)),
         }
     }

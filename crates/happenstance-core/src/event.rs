@@ -1,6 +1,6 @@
 //! Events, their types, and their positions in the store's total order.
 
-use alloc::boxed::Box;
+use alloc::borrow::Cow;
 use alloc::string::String;
 use core::fmt;
 use core::num::NonZeroU64;
@@ -8,13 +8,21 @@ use core::num::NonZeroU64;
 use bytes::Bytes;
 
 use crate::error::InvalidEventType;
+use crate::identity::{EventId, RecordedAt};
 use crate::tag::Tags;
+use crate::validate;
 
 /// Longest permitted event type, in bytes.
 pub const MAX_EVENT_TYPE_LEN: usize = 255;
 
 /// The identifier a store filters on: `CourseDefined`, `StudentSubscribed`, and
 /// so on.
+///
+/// Backed by `Cow<'static, str>` so that one type expresses both identifiers
+/// written in the source and baked into the binary, and identifiers that
+/// arrived from a peer at run time and had to be allocated. Ingest needs the
+/// second; a codec registry wants the first; a newtype over `&'static str`
+/// alone could only express the first, which is why it lost.
 ///
 /// # Examples
 ///
@@ -25,8 +33,18 @@ pub const MAX_EVENT_TYPE_LEN: usize = 255;
 /// assert_eq!(ty.as_str(), "StudentSubscribed");
 /// # Ok::<(), happenstance_core::InvalidEventType>(())
 /// ```
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EventType(Box<str>);
+///
+/// Constructed in a `const`, it is validated by the compiler and allocates
+/// nothing:
+///
+/// ```
+/// use happenstance_core::EventType;
+///
+/// const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+/// assert_eq!(COURSE_DEFINED.as_str(), "CourseDefined");
+/// ```
+#[derive(Clone)]
+pub struct EventType(Cow<'static, str>);
 
 impl EventType {
     /// Creates an event type.
@@ -34,42 +52,137 @@ impl EventType {
     /// # Errors
     ///
     /// Returns [`InvalidEventType`] if the value is empty, longer than
-    /// [`MAX_EVENT_TYPE_LEN`] bytes, or contains ASCII control characters.
+    /// [`MAX_EVENT_TYPE_LEN`] bytes, contains a character in Unicode general
+    /// category `Cc`, or contains one of the seven explicit bidirectional
+    /// formatting controls.
     pub fn new(value: impl Into<String>) -> Result<Self, InvalidEventType> {
         let value = value.into();
-        if value.is_empty() {
-            return Err(InvalidEventType::Empty);
+        match validate::check(&value, MAX_EVENT_TYPE_LEN) {
+            validate::Refusal::Accepted => Ok(Self(Cow::Owned(value))),
+            validate::Refusal::Empty => Err(InvalidEventType::Empty),
+            validate::Refusal::TooLong => Err(InvalidEventType::TooLong { len: value.len() }),
+            validate::Refusal::ControlCharacter => Err(InvalidEventType::ControlCharacter),
+            validate::Refusal::BidirectionalControl => Err(InvalidEventType::BidirectionalControl),
         }
-        if value.len() > MAX_EVENT_TYPE_LEN {
-            return Err(InvalidEventType::TooLong { len: value.len() });
+    }
+
+    /// Creates an event type from a string literal, validating at compile time.
+    ///
+    /// Enforces exactly the rules [`new`](Self::new) enforces — one function
+    /// checks both — so an `EventType` is always a validated value, with some of
+    /// that validation having happened before the program ran.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value would be rejected by [`new`](Self::new). **Where
+    /// that panic surfaces depends on the call site, and the difference is
+    /// sharp enough to be worth stating:**
+    ///
+    /// | Call site | When the invalid value is caught |
+    /// |---|---|
+    /// | a free `const` | `cargo check`, as `error[E0080]` |
+    /// | an associated `const` that is read somewhere | `cargo build` |
+    /// | an associated `const` that is never read | **never** |
+    /// | a `let` binding | at run time, as a panic |
+    ///
+    /// The third row is the one to design around: an associated const is
+    /// evaluated lazily, so an invalid one that nothing reads survives `check`,
+    /// `clippy`, `build` and `test`. Prefer a free `const` for anything whose
+    /// validity you want the compiler to guarantee.
+    ///
+    /// An invalid value at a free `const` site is a compile error:
+    ///
+    /// ```compile_fail
+    /// use happenstance_core::EventType;
+    ///
+    /// const EMPTY: EventType = EventType::from_static("");
+    /// # let _ = EMPTY;
+    /// ```
+    ///
+    /// Spelled bare `compile_fail` rather than `compile_fail,E0080`: rustdoc on
+    /// 1.97.1 silently ignores an error-code annotation it cannot match, so the
+    /// stricter-looking spelling is the weaker check. It is also deliberately
+    /// weaker than a `trybuild` snapshot — it does not pin the diagnostic — and
+    /// ADR-0015 records that phase 6 owns the `trybuild` dependency decision.
+    #[must_use]
+    pub const fn from_static(value: &'static str) -> Self {
+        match validate::check(value, MAX_EVENT_TYPE_LEN) {
+            validate::Refusal::Accepted => Self(Cow::Borrowed(value)),
+            validate::Refusal::Empty => panic!("an event type must not be empty"),
+            validate::Refusal::TooLong => {
+                panic!("an event type must be at most MAX_EVENT_TYPE_LEN bytes")
+            }
+            validate::Refusal::ControlCharacter => {
+                panic!("an event type must not contain control characters")
+            }
+            validate::Refusal::BidirectionalControl => {
+                panic!("an event type must not contain bidirectional formatting controls")
+            }
         }
-        if value.chars().any(char::is_control) {
-            return Err(InvalidEventType::ControlCharacter);
-        }
-        Ok(Self(value.into_boxed_str()))
     }
 
     /// The event type as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+// `Eq`, `Ord` and `Hash` are written out rather than derived. A derive on a
+// single-field tuple struct produces exactly these bodies today and would
+// silently produce different ones the moment a second field lands — and this
+// phase is adding fields to neighbouring types for that very reason. Writing
+// them here also puts the `Borrow<str>` obligation at the place it is
+// discharged: `Borrow` promises the borrowed form hashes and compares
+// *identically* to the owner, and a `HashMap` whose key breaks that promise
+// loses entries with no diagnostic anywhere.
+impl PartialEq for EventType {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for EventType {}
+
+impl PartialOrd for EventType {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for EventType {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl core::hash::Hash for EventType {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl core::borrow::Borrow<str> for EventType {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl fmt::Debug for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EventType({:?})", &*self.0)
+        write!(f, "EventType({:?})", self.as_str())
     }
 }
 
 impl fmt::Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.as_str())
     }
 }
 
 impl AsRef<str> for EventType {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
@@ -85,6 +198,14 @@ impl TryFrom<String> for EventType {
     type Error = InvalidEventType;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl core::str::FromStr for EventType {
+    type Err = InvalidEventType;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::new(value)
     }
 }
@@ -137,10 +258,27 @@ impl SequencePosition {
 
     /// The next position, or `None` on overflow.
     ///
-    /// Only meaningful for adapters that allocate positions densely; the
-    /// specification does not require the next append to land here.
+    /// **This is the resume idiom.** A consumer that has processed up to
+    /// `checkpoint` resumes with `ReadOptions::from(checkpoint.next()?)`, and
+    /// that is sound on a store with gaps: `from` is a threshold rather than a
+    /// seek, so if nothing occupies `checkpoint + 1` the read yields the next
+    /// event above it. This is not the caller doing arithmetic on an opaque
+    /// ordering key — it is the one method on this type whose whole purpose is
+    /// to advance past a position without the caller knowing what positions
+    /// mean.
+    ///
+    /// Do not read `Some` as a promise that an event exists there, or that the
+    /// next append will land there. The specification permits gaps everywhere.
     pub const fn next(self) -> Option<Self> {
-        Self::new(self.0.get().saturating_add(1))
+        // `checked_add`, not `saturating_add`. Saturating made the one method
+        // whose documented purpose is signalling overflow incapable of it:
+        // at `u64::MAX` it returned `Some(u64::MAX)`, so a consumer resuming
+        // from the last representable position would re-read it forever instead
+        // of being told it had run out of key space.
+        match self.0.get().checked_add(1) {
+            Some(next) => Self::new(next),
+            None => None,
+        }
     }
 }
 
@@ -194,10 +332,33 @@ impl Event {
     ///
     /// Returns [`InvalidEventType`] if `event_type` fails
     /// [`EventType::new`]'s validation.
-    pub fn new(
-        event_type: impl TryInto<EventType, Error = InvalidEventType>,
-        data: impl Into<Bytes>,
-    ) -> Result<Self, InvalidEventType> {
+    ///
+    /// # Examples
+    ///
+    /// The bound accepts a `&str`, which is validated here, and an
+    /// already-built [`EventType`], which is not validated twice:
+    ///
+    /// ```
+    /// use happenstance_core::{Event, EventType};
+    ///
+    /// const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+    ///
+    /// let from_str = Event::new("CourseDefined", &b"{}"[..])?;
+    /// let from_const = Event::new(COURSE_DEFINED, &b"{}"[..])?;
+    /// assert_eq!(from_str.event_type(), from_const.event_type());
+    /// # Ok::<(), happenstance_core::InvalidEventType>(())
+    /// ```
+    pub fn new<T>(event_type: T, data: impl Into<Bytes>) -> Result<Self, InvalidEventType>
+    where
+        // Deliberately not `TryInto<EventType, Error = InvalidEventType>`. That
+        // equality constraint excludes the *infallible* identity conversion, so
+        // an already-built `EventType` — the thing a codec registry interns once
+        // per domain event — could not be passed at all (`error[E0271]`). The
+        // looser pair below accepts both, and is the shape `QueryItem::new`
+        // already uses one file over.
+        T: TryInto<EventType>,
+        InvalidEventType: From<T::Error>,
+    {
         Ok(Self {
             event_type: event_type.try_into()?,
             data: data.into(),
@@ -241,9 +402,37 @@ impl Event {
     }
 
     /// Decomposes the event, avoiding a clone in adapter write paths.
-    pub fn into_parts(self) -> (EventType, Bytes, Tags, Option<Bytes>) {
-        (self.event_type, self.data, self.tags, self.metadata)
+    ///
+    /// Returns a struct rather than a tuple so that the *number* of an event's
+    /// parts is not public API. Every `let (ty, data, tags, meta) = …` would
+    /// break the day a fifth part existed; reading fields by name, or
+    /// destructuring with `..`, survives it.
+    #[must_use]
+    pub fn into_parts(self) -> EventParts {
+        EventParts {
+            event_type: self.event_type,
+            data: self.data,
+            tags: self.tags,
+            metadata: self.metadata,
+        }
     }
+}
+
+/// The owned pieces of an [`Event`], from [`Event::into_parts`].
+///
+/// `#[non_exhaustive]`, so a later part is additive: downstream destructures
+/// with `..` or reads fields by name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EventParts {
+    /// The event's type.
+    pub event_type: EventType,
+    /// The opaque payload.
+    pub data: Bytes,
+    /// The tags the writer attached.
+    pub tags: Tags,
+    /// The opaque client metadata, if any.
+    pub metadata: Option<Bytes>,
 }
 
 impl fmt::Debug for Event {
@@ -271,20 +460,67 @@ impl fmt::Debug for Event {
     }
 }
 
-/// An [`Event`] that has been assigned a position by the store.
+/// An [`Event`] together with the three facts its store assigned it.
+///
+/// # Why `position` and `id.position()` are both here
+///
+/// They are the same number for a locally appended event, and different numbers
+/// for one that arrived through replication. `position` is **arrival order in
+/// this store**; `id.position()` is **authorship order in the store that first
+/// accepted it**. Keeping only one of them would be correct for local appends
+/// and would lose either the local ordering or the origin identity for
+/// replicated ones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SequencedEvent {
-    /// Where the event sits in the store's total order.
+    /// Where the event sits in **this** store's total order.
     pub position: SequencePosition,
+    /// Which store first accepted the event, and where it sat there.
+    ///
+    /// Minted by the store at `append` for a local write, and preserved
+    /// unchanged for an event accepted through ingest.
+    pub id: EventId,
+    /// When the store accepted it. Not an ordering key — see [`RecordedAt`].
+    pub recorded_at: RecordedAt,
     /// The event itself.
     pub event: Event,
 }
 
 impl SequencedEvent {
-    /// Pairs an event with its assigned position.
-    pub const fn new(position: SequencePosition, event: Event) -> Self {
-        Self { position, event }
+    /// Pairs an event with the facts its store assigned it.
+    ///
+    /// This constructor went from two arguments to four in one commit, with no
+    /// deprecated two-argument arm. That is deliberate: a compatibility shim
+    /// would have to invent a [`StoreId`](crate::StoreId) and a time, which is precisely the
+    /// wrong implementation the specification rejects by name — an adapter that
+    /// makes identity up rather than persisting it.
+    ///
+    /// A *defaultable* field added later needs no change here; it lands as a
+    /// `with_*` builder, in the shape [`with_recorded_at`](Self::with_recorded_at)
+    /// establishes. A further **required** store-assigned fact would supersede
+    /// this constructor again, and there is no signature that avoids that.
+    pub const fn new(
+        position: SequencePosition,
+        id: EventId,
+        recorded_at: RecordedAt,
+        event: Event,
+    ) -> Self {
+        Self {
+            position,
+            id,
+            recorded_at,
+            event,
+        }
+    }
+
+    /// Replaces the recorded time.
+    ///
+    /// For adapters reconstructing a stored event, and for tests that need a
+    /// fixed clock. It is the shape a later *defaultable* field follows.
+    #[must_use]
+    pub const fn with_recorded_at(mut self, recorded_at: RecordedAt) -> Self {
+        self.recorded_at = recorded_at;
+        self
     }
 
     /// The event's type. Shorthand for `self.event.event_type()`.
@@ -377,6 +613,8 @@ mod serde_impls {
     #[serde(rename = "SequencedEvent")]
     struct SequencedEventWire {
         position: SequencePosition,
+        id: crate::identity::EventId,
+        recorded_at: crate::identity::RecordedAt,
         event: Event,
     }
 
@@ -384,6 +622,8 @@ mod serde_impls {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             SequencedEventWire {
                 position: self.position,
+                id: self.id,
+                recorded_at: self.recorded_at,
                 event: self.event.clone(),
             }
             .serialize(serializer)
@@ -393,7 +633,12 @@ mod serde_impls {
     impl<'de> Deserialize<'de> for SequencedEvent {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             let wire = SequencedEventWire::deserialize(deserializer)?;
-            Ok(Self::new(wire.position, wire.event))
+            Ok(Self::new(
+                wire.position,
+                wire.id,
+                wire.recorded_at,
+                wire.event,
+            ))
         }
     }
 }
@@ -403,6 +648,125 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    /// `next()` returns `None` at the top of the key space rather than
+    /// repeating itself.
+    ///
+    /// VT-13. `saturating_add` clamped, `u64::MAX` is non-zero, and `new`
+    /// wrapped it back in `Some` — so the one method whose documented purpose is
+    /// signalling overflow was incapable of it, and the resume idiom
+    /// `checkpoint.next()` re-read the same event forever at exactly the
+    /// position nobody tests. `NonZeroU64::checked_add` is `const`, so the
+    /// repair costs neither the `const` nor a byte: the newtype's forbidden zero
+    /// is the niche `Option` spends on `None`.
+    #[test]
+    fn position_next_signals_overflow() {
+        // Declared first, not beside the assertion that reads it, because
+        // `clippy::items_after_statements` is on and is right to be: an item
+        // declared mid-function is in scope from the top of the function
+        // regardless of where it is written.
+        //
+        // It is evaluated by the compiler rather than at run time, which is what
+        // makes it the `const`-ness assertion. `const` is load bearing on
+        // `next`: it is what lets a checkpoint advance in a `const` initialiser,
+        // and it is the reason the body is a `match` rather than `?` or `map` —
+        // neither is available to a `const fn` on this toolchain.
+        const OVERFLOW: Option<SequencePosition> = match SequencePosition::new(u64::MAX) {
+            Some(last) => last.next(),
+            None => None,
+        };
+
+        let last = SequencePosition::new(u64::MAX).unwrap();
+        assert_eq!(
+            last.next(),
+            None,
+            "there is no position above the last representable one, and the \
+             signature has a way to say so"
+        );
+
+        // The step below it still advances, which is what keeps the assertion
+        // above from being satisfied by a `next` that returns `None` always.
+        let second = SequencePosition::FIRST.next().unwrap();
+        assert!(second > SequencePosition::FIRST);
+
+        assert!(OVERFLOW.is_none());
+    }
+
+    /// `from_static` and `new` accept exactly the same values.
+    ///
+    /// VT-32's MUST, and the divergence a byte walk appears to force and does
+    /// not: there is one validator, `validate::check`, and both constructors
+    /// call it. This asserts the agreement rather than describing it, because
+    /// the day a second `const`-only path is added is the day the two stop
+    /// agreeing and nothing else notices.
+    #[test]
+    fn from_static_and_new_agree() {
+        // One value from each boundary `validate::check` decides: ordinary, the
+        // format characters scripts need, the invisible one VT-14 keeps legal,
+        // and the four neighbours of the two closed bidirectional runs.
+        for value in [
+            "CourseDefined",
+            "a\u{200C}b",
+            "a\u{200D}b",
+            "a\u{200B}b",
+            "a\u{2029}b",
+            "a\u{202F}b",
+            "a\u{2065}b",
+            "a\u{206A}b",
+        ] {
+            let runtime = EventType::new(value).unwrap();
+            assert_eq!(EventType::from_static(value).as_str(), runtime.as_str());
+        }
+    }
+
+    /// `from_static` refuses everything `new` refuses — by panicking, which is a
+    /// compile error at a free `const` site.
+    ///
+    /// One `#[should_panic]` per refusal class, because a panic is the only
+    /// channel a `const fn` has. The bidirectional class is the one VT-14 added
+    /// at phase 4 and is therefore the one most likely to be dropped from a
+    /// future edit of the validator.
+    #[test]
+    #[should_panic(expected = "bidirectional formatting controls")]
+    fn from_static_rejects_a_bidirectional_control() {
+        let _ = EventType::from_static("Order\u{202E}Placed");
+    }
+
+    #[test]
+    #[should_panic(expected = "control characters")]
+    fn from_static_rejects_a_c1_control() {
+        // U+0085 NEL is `Cc` and is not ASCII — the case four doc comments used
+        // to claim was out of scope.
+        let _ = EventType::from_static("Order\u{85}Placed");
+    }
+
+    /// `Borrow<str>` hashes and compares as the owner does, so a map keyed by
+    /// `EventType` can be probed with a `&str`.
+    ///
+    /// VT-33 requires this asserted rather than claimed. `Borrow` carries a
+    /// documented extra obligation — the borrowed form must hash and compare
+    /// exactly as the owner — and `Eq`/`Hash` are hand-written here (a derive
+    /// would be correct today and quietly wrong the moment a second field
+    /// lands). A violation loses `HashMap` entries with no diagnostic anywhere,
+    /// which is why the assertion is a real map lookup rather than a comparison
+    /// of two hashes.
+    ///
+    /// Gated on `std` rather than written against a hand-rolled `Hasher`:
+    /// `happenstance-core` is `#![cfg_attr(not(feature = "std"), no_std)]` and
+    /// `HashMap` is `std`'s, so an ungated test would break the
+    /// `--no-default-features` arm the gate builds. The claim is about a
+    /// `HashMap`, so the test may honestly need one.
+    #[cfg(feature = "std")]
+    #[test]
+    fn a_map_keyed_by_event_type_is_probed_by_str() {
+        let mut registry = std::collections::HashMap::new();
+        registry.insert(EventType::from_static("CourseDefined"), "decode");
+        // The probe that does not allocate and does not re-validate, which is
+        // the whole reason the impl exists.
+        assert_eq!(registry.get("CourseDefined"), Some(&"decode"));
+        // And an owned key inserted the other way is the same key.
+        assert!(registry.contains_key(&EventType::new("CourseDefined").unwrap()));
+    }
 
     #[test]
     fn rejects_invalid_event_types() {

@@ -60,8 +60,8 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_testkit::Capability;
 
@@ -87,6 +87,18 @@ use happenstance_testkit::Capability;
 struct LocalMemoryEventStore {
     events: Rc<RefCell<Vec<SequencedEvent>>>,
 }
+
+/// This store's incarnation.
+///
+/// A constant rather than a per-instance value, and the reason is the `Clone`
+/// above: two handles onto one backing log must agree about the identities that
+/// log holds, and a field would be copied by `Clone` rather than shared. A
+/// durable adapter mints one per database; this one has no database.
+const LOCAL_STORE: StoreId = StoreId::from_bytes([0x1C; 16]);
+
+/// A fixed recorded time, for `no_clock`'s reason: a rule must not depend on
+/// wall time, and nothing here asserts the value.
+const LOCAL_RECORDED_AT: RecordedAt = RecordedAt::from_millis(1_700_000_000_000);
 
 impl LocalMemoryEventStore {
     /// Creates an empty store.
@@ -115,21 +127,26 @@ impl LocalMemoryEventStore {
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // `from` is the starting bound and `to` the stopping one, so reading
+        // backwards swaps which side of the position order each sits on. Both
+        // are inclusive in both directions (ES-16).
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
+                .filter(|event| options.to.is_none_or(|to| event.position >= to))
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
+                .filter(|event| options.to.is_none_or(|to| event.position <= to))
                 .cloned()
                 .collect()
         };
 
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get());
+            selected.truncate(limit);
         }
 
         drop(borrowed);
@@ -237,10 +254,45 @@ impl EventStore for LocalMemoryEventStore {
 
         let first_index = stored.len();
         stored.extend(events.iter().enumerate().map(|(offset, event)| {
-            SequencedEvent::new(position_at(first_index + offset), event.clone())
+            let position = position_at(first_index + offset);
+            SequencedEvent::new(
+                position,
+                EventId::new(LOCAL_STORE, position),
+                LOCAL_RECORDED_AT,
+                event.clone(),
+            )
         }));
 
         Ok(position_at(first_index + events.len() - 1))
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // `MemoryEventStore::head`'s body, through this store's borrow
+        // discipline: `try_borrow` so that a conflicting borrow is reported in
+        // `Self::Error` rather than panicking, and the `Ref` released before the
+        // value leaves the function — the same rule `select` states, and for the
+        // same reason. There is no `.await` here to hold it across.
+        let borrowed = self
+            .events
+            .try_borrow()
+            .map_err(|_| LocalStoreError::AlreadyBorrowed)?;
+
+        let head = borrowed.last().map(|event| event.position);
+        drop(borrowed);
+        Ok(head)
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        // A scan, like the reference store: this log has no index, and the point
+        // of both is to be obviously correct rather than fast.
+        let borrowed = self
+            .events
+            .try_borrow()
+            .map_err(|_| LocalStoreError::AlreadyBorrowed)?;
+
+        let found = borrowed.iter().any(|event| event.id == id);
+        drop(borrowed);
+        Ok(found)
     }
 }
 

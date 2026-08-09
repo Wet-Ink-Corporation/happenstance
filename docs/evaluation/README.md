@@ -5,6 +5,38 @@ was derived from. They are kept as **evidence, not instructions**: each records 
 was found, when, and against which commit, so a decision the runbook now states in
 one line can be traced back to the measurement that forced it.
 
+## Two kinds of document live here, and they have opposite lifecycles
+
+Everything described below this section — the original fourteen — is **immutable
+evidence**. It is dated, pinned to a commit, cited by `file:line` from the runbook,
+and must be superseded rather than edited.
+
+Four documents added in August 2026 are the opposite. They are **mutable
+speculation**, they are pinned to nothing, nothing cites them, and they have already
+been revised several times in place. They explore an *application framework* built
+above this library — not the library's contract — and they exist to be argued with
+and rewritten. Read in order.
+
+| Document | Explores |
+|---|---|
+| [`research-crux-integration.md`](research-crux-integration.md) | How happenstance and a [Crux](https://github.com/redbadger/crux) core meet: where the store sits, what an `AppendCondition` means across a peer set, what convergence asks of a projection |
+| [`research-crux-composition.md`](research-crux-composition.md) | How an application composes without collapsing: vertical slices, the log as the mediator between them, what five other Elm-shaped ecosystems already paid for |
+| [`research-crux-stack.md`](research-crux-stack.md) | What the thing is made of, whether Crux should be under it, and the supporting toolchain |
+| [`research-crux-layer4-shape.md`](research-crux-layer4-shape.md) | What the framework would feel like to build against, worked against one small application |
+
+Three rules for this second set, and the first one is the load-bearing one:
+
+1. **Nothing in them is an ADR, and nothing in them should become one yet.** No
+   decision has been taken. Where they carry a recommendation, it is a recommendation
+   with revisit triggers attached, not a settled position.
+2. They may be edited freely, unlike the fourteen. Each carries its own revision
+   record where an earlier draft was wrong in a way worth remembering — see
+   `research-crux-integration.md` §1, which records two corrections and why each
+   error was the kind a reader would otherwise repeat.
+3. They constrain nothing in `happenstance-core`. Where they identify a gap in the
+   contract, the gap is stated as a question for the specification to answer, not as
+   a requirement the framework imposes.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
@@ -41,3 +73,9 @@ because it changes no claim, only whether a reader can follow one.
 true now, clause by clause; [`docs/RUNBOOK.md`](../RUNBOOK.md) says what happens next
 and who settles it. Where either disagrees with a document here, the document here is
 the older observation and loses.
+
+The three exploration documents lose to both for a different reason: they are not
+observations at all. They describe something that does not exist, built on a
+dependency that has not been accepted, to serve an architecture that has not been
+spiked. Their value is the questions they sharpen and the mistakes they have already
+made in private — not the answers they reach.

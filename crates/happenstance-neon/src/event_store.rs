@@ -59,8 +59,8 @@ use core::task::{Context, Poll};
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    ReadOptions, SequencePosition, SequencedEvent,
 };
 
 use crate::config::NeonConfig;
@@ -203,6 +203,29 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
             )),
             Err(err) => Err(AppendError::Store(err)),
         }
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // `SELECT max(position) FROM event`, one statement and therefore exactly
+        // one round trip — this endpoint has no cursor and no interactive
+        // transaction, so every operation here costs one and only one.
+        //
+        // The answer is *not* trustworthy on the schema at the top of this
+        // module: `bigserial` allocates outside the transaction, so `max` can
+        // name a position whose predecessors have not committed yet. Phase 10
+        // writes this body against whatever `happenstance-postgres` measures its
+        // way to, not before.
+        todo!("neon: SELECT max(position), once the visibility question is settled")
+    }
+
+    async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
+        // `SELECT EXISTS (SELECT 1 FROM event WHERE origin_store = $1 AND
+        // origin_position = $2)` — again one statement, one round trip.
+        //
+        // The intended schema above carries no origin columns at all, so this is
+        // the method that adds them plus their unique index; an ingest path that
+        // cannot ask this question cannot be idempotent.
+        todo!("neon: EXISTS on (origin_store, origin_position), which the schema still lacks")
     }
 }
 
@@ -453,6 +476,17 @@ impl<T: SqlTransport> EventStore for ProbeThenWriteStore<T> {
             .map_err(|err| AppendError::Store(NeonError::Transport(err)))?;
 
         decode_last_position::<T::Error>(&response).map_err(AppendError::Store)
+    }
+
+    // Forwarded, like `read`: this type's declared defect is the two-statement
+    // append and nothing else, and both of these are single-statement questions
+    // that the two-round-trip shape has no way to get wrong.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        self.inner.head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        self.inner.contains_event_id(id).await
     }
 }
 

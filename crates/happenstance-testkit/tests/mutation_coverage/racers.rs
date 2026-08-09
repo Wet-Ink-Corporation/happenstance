@@ -50,8 +50,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, Query, ReadOptions, SendEventStore,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, Query, ReadOptions,
+    SendEventStore, SequencePosition, SequencedEvent,
 };
 use happenstance_testkit::{Capability, Fixture};
 
@@ -114,8 +114,22 @@ impl Shared {
     }
 
     /// The highest position currently committed.
+    ///
+    /// Every store below answers `EventStore::head` from here, and it delegates
+    /// to the correct core for the reason `correct.rs` exists: each store in
+    /// this file is wrong in exactly one *concurrent* way, and a second,
+    /// undeclared defect in `head` would leave
+    /// `the_concurrency_rules_reject_exactly_what_they_claim` catching the
+    /// instrument rather than the implementation. `GlobalHeadStore`'s defect is
+    /// not that this answer is wrong — it is that this is not the answer its
+    /// `append` was asked for.
     fn committed_head(&self) -> Option<SequencePosition> {
-        self.log().last().map(|event| event.position)
+        correct::head_of(&self.log())
+    }
+
+    /// Whether the committed log holds an event with this identity.
+    fn holds(&self, id: EventId) -> bool {
+        correct::contains(&self.log(), id)
     }
 
     /// Announces this append's arrival at a window, then waits — bounded — until
@@ -319,6 +333,14 @@ impl SendEventStore for LockedStore {
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         correct::commit(&mut self.0.log(), events, condition, dense)
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
+    }
 }
 
 racing_fixture!(LockedFixture, LockedStore, "LockedStore");
@@ -394,6 +416,14 @@ impl SendEventStore for RacingProbeStore {
             .ok_or(AppendError::NoEvents)?;
         log.extend(written);
         Ok(last)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
     }
 }
 
@@ -485,6 +515,14 @@ impl SendEventStore for GlobalVersionStore {
         log.extend(written);
         Ok(last)
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
+    }
 }
 
 racing_fixture!(
@@ -561,6 +599,19 @@ impl SendEventStore for RacingSequenceStore {
         self.0.head.store(last.get(), Ordering::Release);
         Ok(last)
     }
+
+    // Answered from the log rather than from `Shared::head`, which is the only
+    // store here where the two can disagree. The atomic *is* this store's
+    // declared defect — a counter read outside the serialising lock — and
+    // reporting it as the head would be that defect leaking into a second
+    // operation nobody declared it in.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
+    }
 }
 
 racing_fixture!(
@@ -616,6 +667,17 @@ impl SendEventStore for GlobalHeadStore {
         // THE DEFECT: `max(position)` over the whole table, which is whoever
         // committed last rather than whoever is asking.
         Ok(self.0.committed_head().unwrap_or(mine))
+    }
+
+    // Correct, and identical to every other store's — which is the point. This
+    // store's defect is that its *`append`* returns the store's head; `head`
+    // itself returning the store's head is what `head` is for.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
     }
 }
 
@@ -692,6 +754,14 @@ impl SendEventStore for RowAtATimeStore {
         }
 
         Ok(last)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
     }
 }
 

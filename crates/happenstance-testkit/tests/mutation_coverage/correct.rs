@@ -41,8 +41,8 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Guard, Query,
+    ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 
 // =====================================================================
@@ -199,11 +199,15 @@ pub(crate) fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&
         .collect()
 }
 
-/// Step 2 — apply the direction and the **inclusive** `from` bound.
+/// Step 2 — apply the direction and the **inclusive** `from` and `to` bounds.
 ///
 /// `from` is inclusive in both directions and bounds opposite ends: forwards it
 /// is a floor, backwards a ceiling. Getting that backwards is the whole of
 /// `read_backwards_from_with_limit`'s subject matter.
+///
+/// `to` is the *stopping* bound and sits on the other side of the position order
+/// from `from` in whichever direction the read runs — so backwards it is a floor
+/// where `from` is a ceiling. Both are inclusive in both directions (ES-16).
 // The lifetime is elided rather than named: `matched` is the only input carrying
 // one, so elision ties the output to it and `clippy::needless_lifetimes` denies
 // spelling it out. [`matching`] above keeps its `'a` for the opposite reason —
@@ -218,11 +222,13 @@ pub(crate) fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Ve
             .into_iter()
             .rev()
             .filter(|event| options.from.is_none_or(|from| event.position <= from))
+            .filter(|event| options.to.is_none_or(|to| event.position >= to))
             .collect()
     } else {
         matched
             .into_iter()
             .filter(|event| options.from.is_none_or(|from| event.position >= from))
+            .filter(|event| options.to.is_none_or(|to| event.position <= to))
             .collect()
     }
 }
@@ -238,7 +244,7 @@ pub(crate) fn truncated(
     options: ReadOptions,
 ) -> Vec<&SequencedEvent> {
     if let Some(limit) = options.limit {
-        selected.truncate(limit.get());
+        selected.truncate(limit);
     }
     selected
 }
@@ -293,9 +299,62 @@ pub(crate) fn sequence(
     for event in events {
         let position = allocate(previous);
         previous = Some(position);
-        sequenced.push(SequencedEvent::new(position, event.clone()));
+        sequenced.push(stamp(position, event.clone()));
     }
     sequenced
+}
+
+/// Finds the first event that any guard rejects, given a per-guard predicate.
+///
+/// Every condition mutant in this binary models a defect in how **one** guard is
+/// evaluated, and each one uses this so the defect is applied to *every* guard.
+/// Reaching for `condition.guards()[0]` instead would be shorter and would give
+/// each mutant a second, undeclared defect — ignoring guards 2..n — so
+/// `mutants_fail_exactly_their_declared_rules` would start catching the
+/// instrument rather than the implementation. That is the failure this whole
+/// file exists to prevent, arriving through the newest field.
+pub(crate) fn first_violation(
+    events: &[SequencedEvent],
+    condition: &AppendCondition,
+    violated: impl Fn(&Guard, &SequencedEvent) -> bool,
+) -> Option<SequencePosition> {
+    events
+        .iter()
+        .find(|event| {
+            condition
+                .guards()
+                .iter()
+                .any(|guard| violated(guard, event))
+        })
+        .map(|event| event.position)
+}
+
+/// The incarnation every store in this binary mints identities under.
+///
+/// One constant rather than one per store, deliberately. Identity is not what
+/// these mutants are instruments for, and giving each store its own would make
+/// every mutant's output vary between runs for a reason unrelated to its defect
+/// — which is exactly the confound `correct.rs` exists to remove. A mutant that
+/// needs a *different* incarnation to express its defect overrides `stamp`, and
+/// that override is then the only difference, which is the property the registry
+/// checks.
+pub(crate) const TEST_STORE: StoreId = StoreId::from_bytes([0xA1; 16]);
+
+/// A fixed recorded time.
+///
+/// Fixed rather than read from a clock because `no_clock` (CF-33) forbids a rule
+/// depending on wall time, and a store whose output moves between runs cannot be
+/// compared against a snapshot. The value is arbitrary and nothing asserts it.
+pub(crate) const TEST_RECORDED_AT: RecordedAt = RecordedAt::from_millis(1_700_000_000_000);
+
+/// Pairs a position with the identity and time a correct store would assign.
+pub(crate) fn stamp(position: SequencePosition, event: Event) -> SequencedEvent {
+    SequencedEvent::new(
+        position,
+        EventId::new(TEST_STORE, position),
+        TEST_RECORDED_AT,
+        event,
+    )
 }
 
 /// The condition probe, as a value.
@@ -526,4 +585,41 @@ impl EventStore for LogStore {
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let log = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(head_of(&log.events))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let log = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(contains(&log.events, id))
+    }
+}
+
+/// The highest position in a log.
+///
+/// A free function so that a mutant of `head` is one step from correct, in the
+/// same way `select` and `commit` make a mutant of the read and write paths one
+/// step from correct.
+///
+/// # Precondition, and the one store that breaks it
+///
+/// Returns the **last** element, which is the highest only where the slice is in
+/// ascending position order. That holds for every store here whose rows are
+/// appended in the order they are allocated — which is all of them but one.
+///
+/// `PreCommitPositionStore` publishes rows in *commit* order, and rows arriving
+/// out of position order is its whole declared defect, so it computes a `max`
+/// instead and says so at its own `head`. Anything else would give it a second
+/// defect — `head` lagging a row a reader can already see — and the meta-test
+/// that checks mutants fail exactly their declared rules would then be reporting
+/// this file rather than the store.
+pub(crate) fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
+    events.last().map(|event| event.position)
+}
+
+/// Whether a log holds an event with this identity.
+pub(crate) fn contains(events: &[SequencedEvent], id: EventId) -> bool {
+    events.iter().any(|event| event.id == id)
 }

@@ -96,9 +96,15 @@ pub mod rules {
     use core::pin::{Pin, pin};
     use core::task::Poll;
 
+    // The two read-isolation rules poll a stream by hand rather than through
+    // `collect`, so they name the trait. `futures_core` is already this crate's
+    // dependency — `fixtures.rs` imports `Stream` from it — so this costs no
+    // manifest change.
+    use futures_core::Stream;
+
     use happenstance_core::{
-        AppendError, Event, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN, Query, ReadOptions,
-        SequencePosition, SequencedEvent, collect,
+        AppendError, Event, EventId, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN, Query,
+        ReadOptions, SequencePosition, SequencedEvent, StoreId, StoreLimit, collect,
     };
 
     use crate::fixtures::{
@@ -106,40 +112,21 @@ pub mod rules {
         item_of_types, item_tagged, query_of, query_of_items, query_of_types, query_tagged,
         tagged_event, tags,
     };
-    use crate::{Fixture, RuleOutcome};
+    use crate::{Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
 
     // ---------------------------------------------------------------------
-    // The four guaranteed minima
+    // The four guaranteed minima (VT-21 – VT-24)
     //
-    // Written out here rather than read from `happenstance-core`, because the
-    // constants VT-21 – VT-24 mandate — `MIN_SUPPORTED_EVENT_DATA_LEN` and its
-    // three siblings — **do not exist yet**. They are phase 4's, along with the
-    // `AppendError::ExceedsStoreLimit` variant a store refuses beyond them with
-    // (VT-25). The clause is the source here and the code is not, which is the
-    // right way round for a rule written before the thing it protects: a rule
-    // that read the constant would assert whatever the constant happened to say,
-    // including nothing.
-    //
-    // All four clauses are `[PROVISIONAL]`, and phase 4 freezes them. When it
-    // does, these four lines become `use happenstance_core::{…}` and any number
-    // that moved takes its rule with it. `docs/RUNBOOK.md`'s phase-3 session log
-    // lists what that re-check owes.
-    //
-    // Note the discrepancy the runbook's own prose carries: its value-edge item
-    // says "a 1 MiB payload" and VT-21 says 65,536 bytes. The clause wins.
+    // Imported rather than written out. Phase 3 spelled the numbers here because
+    // the constants did not exist and a rule that read a missing constant would
+    // have asserted whatever it happened to say, including nothing; phase 4
+    // created them, so the clause and the code now agree by construction and
+    // raising a floor takes its rules with it.
     // ---------------------------------------------------------------------
-
-    /// VT-21 — every store MUST accept a payload of at least this many bytes.
-    const MIN_SUPPORTED_EVENT_DATA_LEN: usize = 65_536;
-
-    /// VT-22 — every store MUST accept an event carrying at least this many tags.
-    const MIN_SUPPORTED_TAGS_PER_EVENT: usize = 64;
-
-    /// VT-23 — every store MUST evaluate a query of at least this many items.
-    const MIN_SUPPORTED_QUERY_ITEMS: usize = 128;
-
-    /// VT-24 — every store MUST accept an append of at least this many events.
-    const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
+    use happenstance_core::{
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
+        MIN_SUPPORTED_TAGS_PER_EVENT,
+    };
 
     // ---------------------------------------------------------------------
     // Helpers
@@ -195,6 +182,14 @@ pub mod rules {
             .iter()
             .map(|event| (event.position.get(), &event.event))
             .collect()
+    }
+
+    /// Reads the head and unwraps, failing the test with context on error.
+    async fn head_ok<S: EventStore>(store: &S) -> Option<SequencePosition> {
+        match store.head().await {
+            Ok(head) => head,
+            Err(err) => panic!("head should succeed, got {err:?}"),
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -745,6 +740,92 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    // ---------------------------------------------------------------------
+    // Query algebra — the union law (VT-31, ES-15)
+    // ---------------------------------------------------------------------
+
+    /// The match set of concatenated items is the union of their match sets.
+    ///
+    /// VT-31, and the rule ES-15's `Rejects:` names as still owed: *an adapter
+    /// that sorts and deduplicates a query's items as an optimisation.*
+    /// `query_item_order_does_not_change_the_result_set` cannot catch that —
+    /// sorting the items is precisely what makes their order stop mattering, so
+    /// an adapter that sorts them passes an order-invariance rule by
+    /// construction. What catches it is a **match-set** claim over an item whose
+    /// presence changes the set.
+    ///
+    /// The two items constrain **tags alone**, so both carry the same (empty)
+    /// type list — which is the key a deduplicating adapter interns them under.
+    /// `QueryItem::new` already sorts and deduplicates *types*, so interning
+    /// items by their type list to emit one `type_id IN (…)` clause per distinct
+    /// set is the natural next step, and it silently drops the tag half of every
+    /// item it swallows. `ItemDedupByTypeStore` is that adapter.
+    ///
+    /// A shared *non-empty* type list would demonstrate the same collapse, and
+    /// was rejected for a reason worth recording: an item carrying both a type
+    /// and a tag is `ClauseJoinerStore`'s blind spot, so that mutant would fail
+    /// this rule at its anchor for a reason
+    /// `query_item_combines_types_and_tags_with_and` already owns.
+    ///
+    /// The two single-item reads are the non-vacuity anchor, and they carry more
+    /// weight here than usual: without them a store returning *both* events for
+    /// *every* query would satisfy the union assertion, and so would one
+    /// returning neither for any.
+    ///
+    /// **What this rule cannot state**, recorded so nobody looks for it. VT-31's
+    /// second sentence — any query unioned with `Query::All` matches everything —
+    /// is not expressible through the constructors. A `Query` is `All` *or*
+    /// `Items`, `Query::All` is not a `QueryItem`, and there is no union
+    /// operator, so the concatenation this rule performs cannot include it.
+    pub async fn query_union_is_item_concatenation<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let one = append_ok(&store, &[tagged_event("Enrolled", &[("course", "c1")])]).await;
+        let two = append_ok(&store, &[tagged_event("Enrolled", &[("course", "c2")])]).await;
+
+        // Tag-only items, so both intern under the same empty type list. An
+        // adapter deduplicating by that key keeps whichever it sees first and
+        // drops the other's tag constraint with it.
+        let course_one = item_tagged(&[("course", "c1")]);
+        let course_two = item_tagged(&[("course", "c2")]);
+
+        let left = query_of_items([course_one.clone()]);
+        let right = query_of_items([course_two.clone()]);
+        let concatenated = query_of_items([course_one, course_two]);
+
+        let left_set = read_ok(&store, &left, ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&left_set),
+            [one.get()],
+            "the first query alone must select exactly its own event — otherwise \
+             the union assertion below holds for the wrong reason"
+        );
+
+        let right_set = read_ok(&store, &right, ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&right_set),
+            [two.get()],
+            "and the second query alone must select exactly its own"
+        );
+
+        let union = read_ok(&store, &concatenated, ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&union),
+            [one.get(), two.get()],
+            "the match set of a query whose items are the CONCATENATION of two \
+             queries' items must be the union of their match sets. An adapter \
+             that interns items by their type list collapses these two into one, \
+             passes every order-invariance rule by construction, and breaks the \
+             fan-out projection runner — one read of the union query, then a \
+             local re-filter per projection through `Query::matches`"
+        );
+
+        RuleOutcome::Ran
+    }
+
     /// A query that matches nothing yields an empty stream rather than an error.
     pub async fn query_matching_nothing_yields_empty<F: Fixture>(
         open: impl AsyncFn() -> F,
@@ -1081,6 +1162,402 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    // ---------------------------------------------------------------------
+    // Read options — the upper bound (ES-16, VT-29)
+    // ---------------------------------------------------------------------
+
+    /// `ReadOptions::to` includes the event at that position.
+    ///
+    /// ES-16 and VT-29. The upper bound is **inclusive**, and both wrong
+    /// implementations ES-16's `Rejects:` names are here: an adapter that accepts
+    /// `ReadOptions` by value, matches the fields it knows and ignores the rest —
+    /// `ToBoundIgnoredStore`, which returns the whole log and turns a bounded
+    /// backfill into an unbounded one with no error anywhere — and an adapter
+    /// that reads `to` as exclusive — `ToIsExclusiveStore`, which yields a window
+    /// one event short at every chunk boundary and is invisible until the chunks
+    /// are reassembled.
+    ///
+    /// The events are **tagged** and their types **ascend**, and neither is
+    /// decoration. Untagged events would let `InnerJoinTagStore` fail this rule
+    /// for a reason `untagged_events_match_query_all` already owns; descending
+    /// types would let `SortByEventTypeStore` fail it for a reason
+    /// `read_defaults_to_ascending_order` already owns. Neither would be
+    /// coverage; both would be inflation.
+    ///
+    /// The assertion names two specific events the store assigned, so a store
+    /// returning nothing fails it. That is the non-vacuity anchor, and it is why
+    /// there is no separate one.
+    pub async fn read_to_is_inclusive<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let first = append_ok(&store, &[tagged_event("Ay", &[("window", "closed")])]).await;
+        let second = append_ok(&store, &[tagged_event("Bee", &[("window", "closed")])]).await;
+        append_ok(&store, &[tagged_event("Cee", &[("window", "closed")])]).await;
+
+        let bounded = read_ok(&store, &Query::all(), ReadOptions::new().to(second)).await;
+        assert_eq!(
+            positions_of(&bounded),
+            [first.get(), second.get()],
+            "`to` is an INCLUSIVE upper bound: the event at that position must be \
+             the last one returned, and nothing above it may be"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// `from` and `to` together name a closed window, and nothing outside it is
+    /// yielded.
+    ///
+    /// ES-16 and VT-29's headline capability: a backfill worker owning `[1, H]`
+    /// while a tail worker owns everything above it. Neither bound alone can
+    /// express that, which is why this is its own rule rather than a second
+    /// assertion in `read_to_is_inclusive`.
+    ///
+    /// It rejects three stores, and the third is why the window has a *lower*
+    /// bound at all. `ToBoundIgnoredStore` returns everything from the lower
+    /// bound to the end; `ToIsExclusiveStore` drops the window's top event; and
+    /// `FromIsAnOffsetStore` — `from` bound to the `OFFSET` already in the paging
+    /// query — slides the window by the lower bound's numeric *value*, which is a
+    /// different window entirely on any store whose positions do not start at
+    /// one.
+    ///
+    /// The window is the middle three of five, so a store that got either end
+    /// wrong returns a different set rather than merely a longer one.
+    pub async fn read_from_and_to_bound_a_closed_window<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        append_ok(&store, &[tagged_event("Ay", &[("window", "closed")])]).await;
+        let lower = append_ok(&store, &[tagged_event("Bee", &[("window", "closed")])]).await;
+        let middle = append_ok(&store, &[tagged_event("Cee", &[("window", "closed")])]).await;
+        let upper = append_ok(&store, &[tagged_event("Dee", &[("window", "closed")])]).await;
+        append_ok(&store, &[tagged_event("Ee", &[("window", "closed")])]).await;
+
+        let window = read_ok(
+            &store,
+            &Query::all(),
+            ReadOptions::new().from(lower).to(upper),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&window),
+            [lower.get(), middle.get(), upper.get()],
+            "`from` and `to` are both inclusive and both bound the same read: a \
+             closed window must yield exactly the events between them, ends \
+             included, and nothing on either side"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// Under `backwards`, `to` bounds the **older** end.
+    ///
+    /// ES-16 and VT-29: `from` remains the starting (higher) bound and `to` the
+    /// stopping (lower) one — the two swap roles in position order, not in
+    /// meaning. `from` is deliberately left unset so that this rule turns on the
+    /// swap alone; `read_backwards_from_with_limit` already owns the other half.
+    ///
+    /// It rejects `BackwardsToIsAnUpperBoundStore`, which is `WHERE position <= ?`
+    /// copied verbatim into the backwards branch. ES-8's `Rejects:` describes
+    /// exactly that shape for `from`; this is the same mistake one bound over.
+    /// That store is **correct reading forwards**, so it passes both rules above
+    /// and this is the only thing in the suite that sees it —
+    /// which is what earns this rule its place beside them.
+    /// `ToBoundIgnoredStore`, `ToIsExclusiveStore` and `BackwardsIgnoredStore`
+    /// fail it too, from three other directions.
+    pub async fn read_to_under_backwards_bounds_the_older_end<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        append_ok(&store, &[tagged_event("Ay", &[("window", "closed")])]).await;
+        append_ok(&store, &[tagged_event("Bee", &[("window", "closed")])]).await;
+        let stop = append_ok(&store, &[tagged_event("Cee", &[("window", "closed")])]).await;
+        let middle = append_ok(&store, &[tagged_event("Dee", &[("window", "closed")])]).await;
+        let newest = append_ok(&store, &[tagged_event("Ee", &[("window", "closed")])]).await;
+
+        let found = read_ok(
+            &store,
+            &Query::all(),
+            ReadOptions::new().to(stop).backwards(),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&found),
+            [newest.get(), middle.get(), stop.get()],
+            "under `backwards`, `to` is the STOPPING bound and therefore the \
+             older end: the read starts at the newest event and stops at the one \
+             `to` names, inclusive. An adapter that reads `to` as an upper bound \
+             in position order irrespective of direction returns the wrong end of \
+             the log entirely — and it is correct reading forwards, so nothing \
+             else in the suite sees it"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Read options — the budget (VT-28, ES-14)
+    // ---------------------------------------------------------------------
+
+    /// `limit(0)` yields nothing.
+    ///
+    /// VT-28, and **phase 4 is the phase that can express it**: until `limit`
+    /// became `Option<usize>` the builder stored `NonZeroUsize::new(limit)`, so
+    /// zero became `None` — unlimited — before any adapter saw it, and the input
+    /// this rule needs was not representable through the API.
+    ///
+    /// The caller it protects is the one writing `.limit(budget - fetched)`. Under
+    /// the wrong implementation a paging loop that reaches parity does not read
+    /// zero events; it reads **the entire log, unbounded, silently** — no error,
+    /// no rejection, and a memory ceiling that stops being a ceiling.
+    ///
+    /// It rejects `LimitZeroIsUnlimitedStore`, which is the DCB reference
+    /// implementation's `if (limit)` falsiness ported to a language where `0` is
+    /// not falsy, and `FetchOneExtraStore`, whose `LIMIT n + 1` cursor probe
+    /// hands back one event when it was asked for none.
+    ///
+    /// The `limit(1)` read at the end is the non-vacuity anchor, and this rule
+    /// cannot do without it: every assertion above it is `is_empty()`, which a
+    /// store returning nothing at all satisfies for free.
+    pub async fn read_limit_zero_yields_nothing<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // One distinct tag each, for the reason
+        // `limit_applies_across_items_not_per_item` states in full: untagged
+        // events, two-tag events and byte-identical events each break a different
+        // registered mutant for a reason that is not this rule's.
+        let first = append_ok(&store, &[tagged_event("Budget", &[("run", "z1")])]).await;
+        append_ok(&store, &[tagged_event("Budget", &[("run", "z2")])]).await;
+        append_ok(&store, &[tagged_event("Budget", &[("run", "z3")])]).await;
+
+        let none = read_ok(&store, &Query::all(), ReadOptions::new().limit(0)).await;
+        assert!(
+            none.is_empty(),
+            "`limit(0)` must yield nothing. A budget of zero read as \"unlimited\" \
+             turns a paging loop that has spent its budget into a full scan of the \
+             log, silently; got {:?}",
+            positions_of(&none)
+        );
+
+        // The same question through the filtering, backwards path, because that
+        // is the path a paging loop actually takes and a store may spend its
+        // budget somewhere else there.
+        let none_backwards = read_ok(
+            &store,
+            &query_of_types(&["Budget"]),
+            ReadOptions::new().backwards().limit(0),
+        )
+        .await;
+        assert!(
+            none_backwards.is_empty(),
+            "and it must yield nothing reading backwards through a filtering \
+             query too; got {:?}",
+            positions_of(&none_backwards)
+        );
+
+        // The anchor. A store returning nothing whatever it was asked for passes
+        // both assertions above and is not conformant.
+        let one = read_ok(&store, &Query::all(), ReadOptions::new().limit(1)).await;
+        assert_eq!(
+            positions_of(&one),
+            [first.get()],
+            "and `limit(1)` must still yield exactly the first event — otherwise a \
+             store that answered every read with nothing would pass a rule about \
+             a budget of zero"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// `limit` is a budget for the whole result, not one per query item.
+    ///
+    /// ES-14: `limit(n)` MUST yield the first *n* events of the ordered result
+    /// set, not *n* per query item. The two items match three events each and the
+    /// budget is four, so a store applying it per item returns six.
+    ///
+    /// `LimitPerItemStore` is that store — one statement per `QueryItem`, each
+    /// carrying `LIMIT n`, unioned client-side with the budget never re-applied
+    /// to the merged result. It is the same adapter shape ES-12 rejects, failing
+    /// here for an independent reason, which is why both rules are worth having.
+    ///
+    /// **The two items' matches are contiguous blocks rather than interleaved,
+    /// and that is deliberate.** Interleaving would make item order and position
+    /// order disagree, so `ItemOrderedUnionStore` and `SortByEventTypeStore`
+    /// would both fail this rule for reasons
+    /// `query_item_order_does_not_change_the_result_set` and
+    /// `read_defaults_to_ascending_order` already own. Blocks keep this rule
+    /// about the budget.
+    ///
+    /// The backwards mirror is here for `read_limit_applies_after_filtering`'s
+    /// reason: a store truncates at whichever end it scans from, and a per-item
+    /// budget is written into the same clause either way.
+    pub async fn limit_applies_across_items_not_per_item<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Exactly one tag per event, and every tag distinct. Both halves are
+        // load bearing and they pull against each other. Untagged events are
+        // invisible to `InnerJoinTagStore`; **two** tags on one event make
+        // `TagJoinFanOutStore` return it twice; and three byte-identical events
+        // are one event to `PayloadDedupStore`. One distinct tag each is the only
+        // seeding that avoids all three, and it costs nothing here because the
+        // query below selects on **type**.
+        let left_low = append_ok(&store, &[tagged_event("Left", &[("half", "l1")])]).await;
+        let left_mid = append_ok(&store, &[tagged_event("Left", &[("half", "l2")])]).await;
+        let left_high = append_ok(&store, &[tagged_event("Left", &[("half", "l3")])]).await;
+        let right_low = append_ok(&store, &[tagged_event("Right", &[("half", "r1")])]).await;
+        let right_mid = append_ok(&store, &[tagged_event("Right", &[("half", "r2")])]).await;
+        let right_high = append_ok(&store, &[tagged_event("Right", &[("half", "r3")])]).await;
+
+        let query = query_of_items([item_of_types(&["Left"]), item_of_types(&["Right"])]);
+
+        let budgeted = read_ok(&store, &query, ReadOptions::new().limit(4)).await;
+        assert_eq!(
+            positions_of(&budgeted),
+            [
+                left_low.get(),
+                left_mid.get(),
+                left_high.get(),
+                right_low.get()
+            ],
+            "`limit(4)` over a two-item query must yield the first four events of \
+             the MERGED result, not four per item. A store that writes the budget \
+             into one statement per item hands a caller who asked for four a page \
+             it did not size — and the caller's own paging arithmetic is built on \
+             the number it asked for"
+        );
+
+        let newest = read_ok(&store, &query, ReadOptions::new().backwards().limit(4)).await;
+        assert_eq!(
+            positions_of(&newest),
+            [
+                right_high.get(),
+                right_mid.get(),
+                right_low.get(),
+                left_high.get()
+            ],
+            "and the same reading backwards, because a store truncates at \
+             whichever end it scans from"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Read options — `from` over a gap (ES-9)
+    // ---------------------------------------------------------------------
+
+    /// `from` is a range predicate over assigned positions, not a seek.
+    ///
+    /// ES-9. Reading from a position **nothing occupies** must yield the next
+    /// matching event above it, or below it reading backwards, and must neither
+    /// error nor come back empty on that ground alone.
+    ///
+    /// # Where the gap comes from, and why it is the one above the head
+    ///
+    /// The port has no delete, and a store allocating densely leaves no interior
+    /// gap for a rule to aim at — so a rule that needed one could only run
+    /// against an adapter that is already sparse, which is not the adapter under
+    /// test. The position **immediately above the head** is unoccupied on *every*
+    /// store, whatever it allocates and wherever it starts, because nothing has
+    /// been appended since. Reading backwards from it is therefore the portable
+    /// half of ES-9, and it is the half no existing rule reaches:
+    /// `read_from_is_inclusive` and `read_backwards_from_with_limit` are the only
+    /// two rules that pass `from` at all, and both hand it a position the store
+    /// actually assigned.
+    ///
+    /// The interior half runs only where the fixture's own allocator left a hole
+    /// — `GappedPositionStore`, and any adapter allocating from a sequence with
+    /// `CACHE 7`, from a transaction id, or with a shard id in the low bits. On a
+    /// dense store the branch is skipped rather than faked, which is the honest
+    /// answer: the assertion above it is what every store owes.
+    ///
+    /// It rejects `FromIsAnOffsetStore` — `from` bound to the `OFFSET` already in
+    /// the paging query, which skips by a *count* and so yields nothing at all
+    /// from a position above the head — and `BackwardsIgnoredStore`, whose
+    /// backwards branch never reaches the SQL, so the same predicate becomes a
+    /// floor and the read comes back empty.
+    pub async fn read_from_a_gap_position<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let first = append_ok(&store, &[tagged_event("Ay", &[("run", "gap")])]).await;
+        let second = append_ok(&store, &[tagged_event("Bee", &[("run", "gap")])]).await;
+        let third = append_ok(&store, &[tagged_event("Cee", &[("run", "gap")])]).await;
+
+        // The one unoccupied position every store has. `next()` is fallible
+        // because it signals key-space exhaustion (VT-13) and a rule may not
+        // unwrap — but a fixture whose head is the last representable position is
+        // not reachable through the port, so this is a fixture fault and says so.
+        let Some(beyond) = third.next() else {
+            panic!(
+                "this fixture's head is the last representable position, so there \
+                 is no unoccupied position above it for this rule to read from"
+            );
+        };
+
+        let above = read_ok(&store, &Query::all(), ReadOptions::new().from(beyond)).await;
+        assert!(
+            above.is_empty(),
+            "reading forwards from a position above the head must yield nothing, \
+             and must not error; got {:?}",
+            positions_of(&above)
+        );
+
+        let below = read_ok(
+            &store,
+            &Query::all(),
+            ReadOptions::new().from(beyond).backwards(),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&below),
+            [third.get(), second.get(), first.get()],
+            "`from` names a position, not an index: reading backwards from a \
+             position NOTHING OCCUPIES must yield the next matching event below \
+             it. An equality seek or a `rowid` offset returns empty here, and a \
+             projection resuming across a gap then stalls forever with no error \
+             anywhere"
+        );
+
+        // The interior half, where the fixture's own allocator supplies the hole.
+        // Skipped rather than faked on a dense store: the port has no way to make
+        // one, and pretending otherwise would be a rule that tested nothing.
+        if let Some(interior) = first.next().filter(|candidate| *candidate < second) {
+            let higher = read_ok(&store, &Query::all(), ReadOptions::new().from(interior)).await;
+            assert_eq!(
+                positions_of(&higher),
+                [second.get(), third.get()],
+                "forwards from a position inside a gap must yield the next \
+                 matching event ABOVE it"
+            );
+
+            let lower = read_ok(
+                &store,
+                &Query::all(),
+                ReadOptions::new().from(interior).backwards(),
+            )
+            .await;
+            assert_eq!(
+                positions_of(&lower),
+                [first.get()],
+                "and backwards from the same position must yield the one below it"
+            );
+        }
+
+        RuleOutcome::Ran
+    }
+
     /// `Miss, Hit, Hit, Hit, Miss`, returning the three hits' positions.
     ///
     /// Shared by the two `limit`-after-filtering rules so that the layout — a
@@ -1153,6 +1630,980 @@ pub mod rules {
             positions.windows(2).all(|pair| pair[0] < pair[1]),
             "sequence positions must increase monotonically (gaps are fine), got {positions:?}"
         );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Head (ES-30)
+    //
+    // Its one helper is below the section heading rather than with the others at
+    // the top of the module, because what it encodes is a *decision* — ADR-0013 §4
+    // on what `head()` may be asserted to equal — and that decision reads better
+    // beside the three rules that rest on it.
+    // ---------------------------------------------------------------------
+
+    /// ES-30's portable relation: `head()` is not below the highest position a
+    /// read of the whole store through the same handle just yielded.
+    ///
+    /// # Why this is a bound and not an equality against what `append` returned
+    ///
+    /// ADR-0013 §4 decides it, and the reason is that the equality form rejects
+    /// a *conformant* adapter. An adapter buying ES-10's visibility invariant
+    /// with `xid8` + `pg_snapshot_xmin` — the only arm phase 2 measured that
+    /// both holds the invariant and leaves writers unserialised — makes
+    /// visibility a **predicate** rather than an identity: a row is visible when
+    /// its writing transaction's `xid8` is below `pg_snapshot_xmin`, however low
+    /// its *position* is. `head()` on such a store reports that **frontier**, so
+    /// `append` returning `Ok(P)` does not promise the next `head()` is at or
+    /// above `P`. Read-your-own-writes does not hold, staleness is bounded by
+    /// the longest open write transaction anywhere in the cluster — 0.688 ms
+    /// unloaded and 4010.719 ms behind an unrelated five-second write in an
+    /// unrelated database, both measured — and CF-33 forbids this rule from
+    /// waiting for it to pass.
+    ///
+    /// The frontier is not a softening of ES-30's MUST. "The highest position
+    /// currently **visible**" is the clause's own wording, and where visibility
+    /// is a predicate the frontier is what those words denote. A `head()`
+    /// answering `max(position)` there names a position no read will yield,
+    /// which is the pagination failure ES-11 describes.
+    ///
+    /// # The order of the two calls is load bearing
+    ///
+    /// The read runs **first** and the head **second**. Visibility only grows,
+    /// so a head sampled after a read cannot legitimately be below what that
+    /// read saw; sampling the head first and reading afterwards would make a
+    /// conformant store fail whenever anything became visible in between.
+    ///
+    /// # It cannot anchor itself
+    ///
+    /// A store whose reads yield nothing satisfies the relation for free, so the
+    /// `None` arm below asserts nothing at all. That is deliberate: the caller
+    /// gets the read back and anchors on it in the terms of its own arrangement,
+    /// which is what makes each of the three rules' failure messages name the
+    /// thing that rule set up.
+    async fn head_not_below_the_visible_log<S: EventStore>(store: &S) -> Vec<SequencedEvent> {
+        let visible = read_ok(store, &Query::all(), ReadOptions::new()).await;
+        let highest = visible.iter().map(|event| event.position).max();
+        let head = head_ok(store).await;
+
+        if let Some(highest) = highest {
+            assert!(
+                head.is_some_and(|head| head >= highest),
+                "ES-30: `head()` must be the highest position currently visible, \
+                 and a read of the whole store through this handle had just \
+                 yielded {highest} — so a head of {head:?} names a store that \
+                 has already shown a caller more than it admits to holding. A \
+                 consumer comparing its checkpoint against this head is told it \
+                 is ahead of the log it is reading, and stops."
+            );
+        }
+
+        visible
+    }
+
+    /// A store holding nothing reports no head.
+    ///
+    /// ES-30. `head()` returns `Option<SequencePosition>` precisely so that the
+    /// empty store has an answer that is not a position, and this is the rule
+    /// that makes the `None` mean what the signature says.
+    ///
+    /// # What it rejects
+    ///
+    /// `EmptyHeadIsFirstStore`: `SELECT IFNULL(MAX(position), 0)` decoded into a
+    /// non-nullable integer, then turned back into a `SequencePosition` with
+    /// `SequencePosition::new(value).unwrap_or(SequencePosition::FIRST)` —
+    /// because `MAX` over no rows is `NULL`, because the driver's scalar decode
+    /// wants a non-nullable column type, and because this workspace's own house
+    /// rule forbids `unwrap` in library code and `unwrap_or` is the shortest
+    /// thing that satisfies it. A `NonZero` newtype makes the fallback look
+    /// forced. The store then reports a position no event occupies on the one
+    /// state every adapter is in on its first run, and the paginating adapter
+    /// ES-11 prescribes bounds its first window by it.
+    ///
+    /// # The anchor, and why it is not `head() == append`
+    ///
+    /// Without the second half, a store whose `head` is `Ok(None)`
+    /// unconditionally passes this rule forever — and that store also passes
+    /// ES-31's "am I caught up?" comparison by never being caught up. The anchor
+    /// is the portable relation rather than an equality against what `append`
+    /// returned, for the reason `head_not_below_the_visible_log` documents.
+    pub async fn head_of_an_empty_store_is_none<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let empty = head_ok(&store).await;
+        assert!(
+            empty.is_none(),
+            "a store holding no events has no highest visible position, so \
+             `head()` must be `None` rather than a position no event occupies: \
+             got {empty:?}"
+        );
+
+        // The event is tagged for the reason every value-edge rule's is: a store
+        // whose reads drop untagged events (`InnerJoinTagStore`) would otherwise
+        // fail the anchor rather than the property, and a *head* scoped to a tag
+        // join (`DefaultQueryHeadStore`) would fail this rule instead of the one
+        // written for it.
+        let written = append_ok(&store, &[tagged_event("Seeded", &[("edge", "head")])]).await;
+
+        let visible = head_not_below_the_visible_log(&store).await;
+        assert!(
+            visible.iter().any(|event| event.position == written),
+            "the anchor: once an event has been appended the read above must \
+             yield it, or `head()` is being judged against an empty log and a \
+             store that answers `None` to everything passes this rule forever. \
+             Positions visible: {:?}",
+            positions_of(&visible)
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// `head()` covers the whole store, not the part some default query matches.
+    ///
+    /// ES-30, in the portable form ADR-0013 §4 amends the clause to: append a
+    /// batch holding at least one event a narrower default query would not
+    /// match, read the whole store with `Query::all()`, and assert `head()` is
+    /// not below the highest position that read yielded. It deliberately does
+    /// **not** assert read-your-own-writes;
+    /// `head_not_below_the_visible_log` carries the whole argument for why.
+    ///
+    /// # The seeding is the rule
+    ///
+    /// A rule that appended one uniform batch could not fail: whatever query a
+    /// scoped `head` is written against, one batch of identical events either
+    /// matches it entirely or not at all, and in both cases the scoped answer
+    /// and the true answer agree. So the **highest** event here is untagged and
+    /// carries a second type, and that is what a scoped head has to miss.
+    ///
+    /// # What it rejects
+    ///
+    /// `DefaultQueryHeadStore`: `SELECT max(e.position) FROM event e JOIN tag t
+    /// ON t.event_id = e.id` — the head statement written against the same
+    /// joined view the read path is built around, because there is one view and
+    /// reusing it is the obvious move. An untagged event at the top of the log
+    /// is invisible to it, so the store under-reports its head to every
+    /// projection runner and every paginating caller, and the events past the
+    /// under-reported head are exactly the ones nothing else in the deployment
+    /// tags.
+    ///
+    /// ES-30's other two rejected implementations are not this rule's and were
+    /// never going to be. A cached last-written position returns the right
+    /// answer against a single handle and is `head_advances_across_two_handles`'
+    /// to reject; the `backwards().limit(1)` workaround as a universal answer is
+    /// hung on E2E-13 by ES-30's own text.
+    pub async fn head_is_the_highest_visible_position<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        append_ok(&store, &[tagged_event("Tagged", &[("edge", "head")])]).await;
+        // Untagged, of a second type, and appended last — the three things that
+        // give a query-scoped head something to miss.
+        let untagged = append_ok(&store, &[event("Untagged")]).await;
+
+        let visible = head_not_below_the_visible_log(&store).await;
+        assert!(
+            visible.iter().any(|event| event.position == untagged),
+            "the anchor: `Query::all()` matches untagged events (ES-13), so the \
+             read this rule judges `head()` against must have yielded the \
+             untagged one — otherwise a scoped `head` is being compared with an \
+             equally scoped read and the two agree for the wrong reason. \
+             Positions visible: {:?}",
+            positions_of(&visible)
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A head read through one handle covers what another handle wrote.
+    ///
+    /// ES-30's third rule, and the one that needs ES-33's fixture. It is
+    /// `two_handles_observe_each_others_appends` asked of the *head* rather than
+    /// of the read and the condition probe: the same shared consistency
+    /// boundary, reached through the one method whose answer an adapter is most
+    /// tempted to keep in a field.
+    ///
+    /// # What it rejects
+    ///
+    /// `LastWrittenHeadStore`: a handle that remembers the position its own last
+    /// `append` returned and answers `head()` from it. It is the "cached
+    /// last-written position" ES-30's `Rejects:` names, and it is the rule's
+    /// alone — against a single handle that cache is exactly right, so it passes
+    /// both of the other head rules and every other rule in this suite. Whether
+    /// the cache is a field, a session variable or a `currval()` is an
+    /// implementation detail; what makes it wrong is that a store is not a
+    /// connection, and every deployment with a pool reaches one store two ways.
+    ///
+    /// # Two details that would make it pass for the wrong reason
+    ///
+    /// The observer connects **before** the write, because a handle that samples
+    /// the head when it opens would sample the right answer afterwards. And the
+    /// assertion is the portable relation rather than an equality against the
+    /// position `append` returned, for
+    /// `head_not_below_the_visible_log`'s reason: this rule is about a stale
+    /// handle, not about how fresh a frontier is.
+    ///
+    /// The anchor rests on ES-33 and ES-34, both `[FROZEN]`: two handles are two
+    /// handles onto **one** backing store, and an append through one is visible
+    /// through the other. If the read below comes back short, the finding is
+    /// there and not here.
+    pub async fn head_advances_across_two_handles<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!`, not `require!`: CF-16 makes a second handle an obligation on
+        // every fixture rather than a trade the suite may record as a skip.
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let observer = fixture.connect().await;
+
+        // The types **ascend**, and it is not decoration. `SortByEventTypeStore`
+        // orders by `(type, position)`, so a descending pair would make it fail
+        // this rule at the anchor for a reason `read_defaults_to_ascending_order`
+        // already owns — inflation rather than coverage. Every event is tagged
+        // for `InnerJoinTagStore`'s sake, one rule over.
+        let low = append_ok(&writer, &[tagged_event("CaseOpened", &[("case", "head")])]).await;
+        let high = append_ok(&writer, &[tagged_event("CaseSettled", &[("case", "head")])]).await;
+
+        let visible = head_not_below_the_visible_log(&observer).await;
+        assert_eq!(
+            positions_of(&visible),
+            [low.get(), high.get()],
+            "the anchor: ES-33 makes the second handle a handle onto the *same* \
+             backing store and ES-34 makes the writer's committed appends \
+             visible through it, so both must come back here before anything \
+             this rule says about `head()` is a statement about a shared log"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Identity, recorded time and membership
+    //
+    // Every fact this group is about is assigned by the **store**; the caller
+    // supplies none of them. That makes the group structurally different from
+    // everything above it: there is no input to compare an output against, so
+    // each assertion below is either a relationship between two store-assigned
+    // facts, or a claim that one of them is *stable*.
+    //
+    // Two prohibitions bound what may be written here, and both are easy to
+    // violate by writing the obvious stronger rule.
+    //
+    // **VT-9's third MUST** forbids the *contract* from stating any relationship
+    // between `RecordedAt` order and `SequencePosition` order. The conformance
+    // suite is the contract's executable form — an adapter author reads a
+    // failing rule as a requirement — so a rule that asserts an order states
+    // one. No rule below compares two events' recorded times in either
+    // direction, or compares one against a position. A store on a machine whose
+    // clock steps backwards under an NTP correction is conformant, and
+    // `RUNBOOK.md`'s "a rule that it is non-decreasing with position" was struck
+    // by ADR-0014 for exactly that reason.
+    //
+    // **CF-33** forbids reading a clock, so no rule below checks a recorded time
+    // for plausibility against the harness's own either.
+    //
+    // One thing the group cannot do, stated once here rather than in six doc
+    // comments: it can never name a `StoreId` *value*. `EventStore` has no
+    // `store_id()` accessor and ES-19's prose says why one was refused, so the
+    // only incarnation a rule may speak of is the one it read back off an event.
+    // ---------------------------------------------------------------------
+
+    /// VT-4 — the four facts on a `SequencedEvent` are **persisted**, not
+    /// produced by the read that returned them.
+    ///
+    /// VT-4's `Rejects:` line names the adapter that makes identity or time up
+    /// at read time, and observes that it "passes every rule that reads back
+    /// what it just wrote inside one process". That is true of a rule that reads
+    /// *once*, and it stops being true the moment one event is reached two
+    /// different ways: an identity derived from the row's ordinal in the result
+    /// set, or a time taken from the connection's clock in the row mapper, both
+    /// answer differently when the result set is a different shape — while
+    /// agreeing with themselves perfectly under any single query.
+    ///
+    /// So this reads one event through `Query::all()` and again through a query
+    /// that selects it alone, and compares the whole `SequencedEvent`.
+    /// `RowOrdinalIdentityStore` and `ReadTimeClockStore` in
+    /// `tests/mutation_coverage/mutants.rs` are the two compiled versions, and
+    /// the first of them is *right* under `Query::all()` on a densely-allocated
+    /// store, which is what makes it survivable and what makes the second read
+    /// the whole rule.
+    ///
+    /// **The middle event, not the first**, so that neither an ordinal-derived
+    /// identity nor a first-row special case can coincide with the right answer.
+    /// The types ascend on purpose: `SortByEventTypeStore` orders by `(type,
+    /// position)` and would otherwise reorder the batch, which is
+    /// `read_defaults_to_ascending_order`'s subject and not this one's.
+    ///
+    /// The *local shape* of the identity — that `id.position()` is the position
+    /// this store assigned — belongs to `append_stamps_a_local_event_id`, and
+    /// the time's own claim to `append_stamps_a_recorded_time`. Asserting either
+    /// here as well would be one rule wearing three names.
+    pub async fn append_stamps_identity_and_time<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(
+            &store,
+            &[
+                tagged_event("Ay", &[("seat", "s1")]),
+                tagged_event("Bee", &[("seat", "s2")]),
+                tagged_event("Cee", &[("seat", "s3")]),
+            ],
+        )
+        .await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            3,
+            "the anchor: all three events must come back before \"the same event \
+             reached two ways\" means anything, got {:?}",
+            types_of(&all)
+        );
+        let through_all = all[1].clone();
+
+        let narrowed = read_ok(
+            &store,
+            &query_of(&["Bee"], &[("seat", "s2")]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert_eq!(
+            narrowed.len(),
+            1,
+            "the second anchor: the narrow query must select exactly the event it \
+             was written for, or the comparison below holds because there is \
+             nothing to compare. Got {:?}",
+            types_of(&narrowed)
+        );
+
+        assert_eq!(
+            narrowed[0], through_all,
+            "every field of a `SequencedEvent` is a fact the store assigned at \
+             append and persisted, so reaching one event two ways must produce \
+             one value. An identity synthesised from the row's ordinal in the \
+             result set, or a time read from the connection's clock in the row \
+             mapper, agrees with itself under any single query and differs here"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-5 — a locally appended event's `EventId` is **this** store's
+    /// incarnation paired with the position **this** store just assigned.
+    ///
+    /// Two assertions, rejecting two different stores.
+    ///
+    /// That `id.position()` equals `position` rejects any identity computed from
+    /// something other than the assigned position: a content hash
+    /// (`ContentHashIdentityStore`), or a batch-wide `RETURNING` value read once
+    /// and applied to every row (`SharedBatchIdentityStore`). It is sound here
+    /// and only here because every event this rule writes is a **local** append
+    /// — for an event that arrived through ingest the two numbers are
+    /// deliberately different, which is what `SequencedEvent`'s own
+    /// documentation explains and why the field is not redundant.
+    ///
+    /// That every event of one open shares one `id.store()` rejects
+    /// `PerEventStoreIdStore`, which mints a fresh incarnation per event. That
+    /// store satisfies VT-6's literal MUST — no pair is ever reissued — while
+    /// destroying everything the type is for: every event becomes its own
+    /// origin, a peer's `Watermark` grows one row per event rather than one per
+    /// incarnation, and VT-5's peer-independent sort degenerates to comparing
+    /// 128 opaque bits.
+    ///
+    /// Two appends rather than one batch, because the incarnation is a property
+    /// of the store and not of the call.
+    pub async fn append_stamps_a_local_event_id<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Ay", &[("seat", "s1")])]).await;
+        append_ok(
+            &store,
+            &[
+                tagged_event("Bee", &[("seat", "s2")]),
+                tagged_event("Cee", &[("seat", "s3")]),
+            ],
+        )
+        .await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            3,
+            "the anchor: both appends must have landed before anything is said \
+             about what they were stamped with, got {:?}",
+            types_of(&all)
+        );
+
+        for event in &all {
+            assert_eq!(
+                event.id.position(),
+                event.position,
+                "a locally appended event's identity is (this store's \
+                 incarnation, the position this store assigned it), so \
+                 `id.position()` and `position` are the same number here. They \
+                 part company only for an event that arrived through ingest, \
+                 which no rule in this suite can produce. Event at {} carries {}",
+                event.position,
+                event.id
+            );
+        }
+
+        let incarnations: Vec<_> = all.iter().map(|event| event.id.store()).collect();
+        assert!(
+            incarnations.windows(2).all(|pair| pair[0] == pair[1]),
+            "every event a store accepts in one open carries that store's own \
+             incarnation. Minting a fresh `StoreId` per *event* never reissues a \
+             pair and so satisfies VT-6's letter, and it makes every event its \
+             own origin — a peer's watermark then grows one row per event and \
+             VT-5's peer-independent sort has nothing left to sort by. Got \
+             {incarnations:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-5 and VT-8 — a store holds at most one event per `EventId`, and it is
+    /// the store's job to make that true rather than the caller's.
+    ///
+    /// The arrangement is a one-event append followed by a two-event one, which
+    /// is the shape that separates the two ways this goes wrong. A store that
+    /// binds one identity for a whole multi-row `INSERT` is wrong only *within*
+    /// a batch (`SharedBatchIdentityStore`, and `SharedBatchPositionStore`
+    /// arriving at the same place through the position column); a store that
+    /// resets something between calls is wrong only *across* batches. One
+    /// single-event append and one multi-event append reach both, and a single
+    /// batch of three would reach only the first.
+    ///
+    /// Uniqueness is checked by sorting and deduplicating rather than by
+    /// pairwise comparison because `EventId` is `Ord` — deliberately, so that
+    /// the convergent fold VT-5 argues for can sort merged events without a
+    /// hash — and using that order here is free.
+    pub async fn event_ids_are_unique_within_a_store<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Ay", &[("seat", "s1")])]).await;
+        append_ok(
+            &store,
+            &[
+                tagged_event("Bee", &[("seat", "s2")]),
+                tagged_event("Cee", &[("seat", "s3")]),
+            ],
+        )
+        .await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            3,
+            "the anchor: three events were appended and three must come back, or \
+             \"their identities are distinct\" is a statement about a shorter \
+             list. Got {:?}",
+            types_of(&all)
+        );
+
+        let observed: Vec<_> = all.iter().map(|event| event.id).collect();
+        let mut distinct = observed.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(
+            distinct.len(),
+            observed.len(),
+            "a store holds at most one event per `EventId`, and enforcing that is \
+             the store's obligation rather than the caller's — an ingest path \
+             that establishes idempotence by reading first and appending second \
+             has an unclosed race between two concurrent ingests. Got \
+             {observed:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-2 — structural equality is not identity.
+    ///
+    /// Rejects a content-hash identity scheme, and any store that deduplicates
+    /// on payload equality: a refrigeration engineer consuming two of the same
+    /// part on one work order writes two byte-identical `VanStockConsumed`
+    /// events, a content hash collapses them into one, and the van's stock
+    /// balance is permanently one unit high with nothing reporting it.
+    ///
+    /// **One batch rather than two appends**, which is deliberate on two counts.
+    /// It is the arrangement a content-addressed scheme collapses — an
+    /// `INSERT … ON CONFLICT (content_hash) DO NOTHING` inside one statement —
+    /// and it exercises ES-19's slice-order assignment on the identity path at
+    /// the same time.
+    ///
+    /// `ContentHashIdentityStore` in `tests/mutation_coverage/mutants.rs` is the
+    /// compiled version, and it is a real adapter shape rather than a saboteur:
+    /// content-addressed identity is what anyone reaching for idempotent ingest
+    /// proposes first, and it is exactly what VT-8 forbids by making uniqueness
+    /// the store's obligation. Its identities are unique across *distinct*
+    /// events, stable across a reopen and never reissued, so it survives every
+    /// other identity rule here.
+    pub async fn appending_equal_events_yields_two_events<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let consumed = tagged_event("VanStockConsumed", &[("part", "p1")]);
+        let again = consumed.clone();
+        assert_eq!(
+            consumed, again,
+            "the anchor, and it is the whole premise of the rule: `Event` \
+             compares structurally, so these two are equal by every measure a \
+             store can take of them without consulting what it assigned"
+        );
+
+        append_ok(&store, &[consumed, again]).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            2,
+            "two structurally equal events are two events. A store that \
+             deduplicates on payload equality returns one here, and the fact it \
+             dropped is one nothing will ever report missing. Got {:?}",
+            types_of(&all)
+        );
+        assert_ne!(
+            all[0].position, all[1].position,
+            "and they must occupy two distinct positions"
+        );
+        assert_ne!(
+            all[0].id, all[1].id,
+            "and carry two distinct identities. This is the conjunct that could \
+             not be written before `SequencedEvent` carried an `EventId`: two \
+             equal events already got two positions, so a rule written earlier \
+             would have asserted two thirds of the clause and silently skipped \
+             the third"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-7 — an `EventId` is outside the query language, and in particular it
+    /// is not a `Tag`.
+    ///
+    /// Two halves, and the second is the one that bites. The first is that the
+    /// event's own tags come back as the caller wrote them, with nothing added.
+    /// The second is that the identity is not *matchable* — because the
+    /// dangerous implementation does not put the tag on the event at all. It
+    /// writes an extra row into the tag side table so that a membership question
+    /// can be answered by the index the adapter already has, leaving
+    /// `Event::tags()` round-tripping untouched and every payload-fidelity rule
+    /// in the suite still passing. `IdentityMatchableAsTagStore` in
+    /// `tests/mutation_coverage/mutants.rs` is that store.
+    ///
+    /// What it costs is structural rather than merely expensive. `Query`'s
+    /// algebra is types-OR within an item, tags-AND with superset matching,
+    /// items-OR across the query, and VT-31 freezes it because E2E-32's fan-out
+    /// runner is correct only if `Items(a) ∪ Items(b) == Items(a ++ b)`. An
+    /// identity axis is not a set-superset predicate; it is a point lookup on a
+    /// unique key, and grafting it onto `QueryItem::matches` gives the item a
+    /// third semantic with different composition rules.
+    ///
+    /// The probes cover the four keys an adapter would actually choose and both
+    /// renderings — the whole `store:position` identity and the incarnation
+    /// alone — because an adapter indexing only the origin store is the same
+    /// mistake at lower cardinality.
+    pub async fn event_id_is_not_matchable_by_query<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            1,
+            "the anchor: the event must be in the store before anything is said \
+             about what does not match it, got {:?}",
+            types_of(&all)
+        );
+        let stored = &all[0];
+
+        assert_eq!(
+            stored.tags(),
+            &tags(&[("unit", "u1")]),
+            "an event's tags are the caller's, and a store adds none of its own: \
+             a materialised identity tag makes identity writer-forgeable and \
+             enters every `contains_all` merge-scan on every query in the system"
+        );
+
+        // The anchor for the probes: a tag query this store *does* answer, so
+        // that "nothing matched" below cannot be a store that matches nothing.
+        let matched = read_ok(&store, &query_tagged(&[("unit", "u1")]), ReadOptions::new()).await;
+        assert_eq!(
+            matched.len(),
+            1,
+            "the second anchor: a tag query the store answers, without which \
+             every assertion below holds for a store whose reads return nothing"
+        );
+
+        let identity = stored.id.to_string();
+        let incarnation = stored.id.store().to_string();
+        for key in ["event_id", "id", "_id", "origin"] {
+            for value in [identity.as_str(), incarnation.as_str()] {
+                let found =
+                    read_ok(&store, &query_tagged(&[(key, value)]), ReadOptions::new()).await;
+                assert!(
+                    found.is_empty(),
+                    "`{key}:{value}` matched {} event(s). Identity is answered by \
+                     a dedicated port operation — `contains_event_id` — and not \
+                     by the query language: a store that also indexes it as a tag \
+                     puts a maximally high-cardinality entry in the one column \
+                     adapters are told to index, and gives `QueryItem` a point \
+                     lookup where its algebra has a set-superset predicate",
+                    found.len()
+                );
+            }
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-6 — reopening a store does not reissue an `EventId`.
+    ///
+    /// This rule **replaces** VT-6's originally named
+    /// `store_id_is_stable_across_reopen`, which was invalid: it would fail every
+    /// adapter that takes the second of the two mechanisms the clause permits —
+    /// mint a fresh incarnation on every open — and a rule that forbids a
+    /// permitted implementation is worse than a decorative one. What is asserted
+    /// instead is the invariant *both* mechanisms satisfy.
+    ///
+    /// **The first assertion is not padding.** Replacing a rule loses whatever
+    /// the replaced rule caught by accident, and `store_id_is_stable_across_reopen`
+    /// rejected mint-per-*append* as a side effect of demanding stability. The
+    /// reissue assertion alone does not, because per-append minting produces
+    /// `EventId`s that all differ. "Two events in one open share a `StoreId`" is
+    /// the weakest assertion that rejects it, it is true under both permitted
+    /// mechanisms, and it costs one extra append.
+    ///
+    /// The wrong implementation the second assertion rejects is sharp, and it is
+    /// the restore failure in miniature: **a store that keeps its `StoreId`
+    /// across a reopen and restarts its position counter at 1.** That is what a
+    /// restored backup looks like from the inside, and `LosingFixture` in
+    /// `tests/mutation_coverage/mutants.rs` is it — a store with nothing durable
+    /// behind it, so a reopen finds an empty medium and the next append mints an
+    /// identity the store has already issued to a different event.
+    ///
+    /// What this rule cannot reach is **detection**: nothing in the tree can
+    /// present an adapter with a restore it must notice, and `DurableFixture`
+    /// reopens by instruction rather than by fault. The harm VT-6 names is
+    /// reissue, and reissue is observable by instruction; detection stays
+    /// phase 13's, in `happenstance-sync-testkit`'s
+    /// `restored_peer_does_not_reissue_identities`.
+    pub async fn reopened_store_does_not_reissue_an_event_id<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REOPEN);
+
+        let fixture = open().await;
+
+        // The handle is dropped with the block, before the reopen: a handle that
+        // carried state across would make the rule pass for the wrong reason.
+        let before = {
+            let store = fixture.connect().await;
+            append_ok(
+                &store,
+                &[
+                    tagged_event("Ay", &[("seat", "s1")]),
+                    tagged_event("Bee", &[("seat", "s2")]),
+                ],
+            )
+            .await;
+
+            let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+            assert_eq!(
+                all.len(),
+                2,
+                "the anchor: both events must be in the store before the reopen, \
+                 or there is no identity for a later one to collide with. Got \
+                 {:?}",
+                types_of(&all)
+            );
+            all.iter().map(|event| event.id).collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            before[0].store(),
+            before[1].store(),
+            "two events appended in one open share one incarnation. A store that \
+             mints a fresh `StoreId` per append never reissues a pair — so it \
+             passes the assertion below — and makes every event its own origin, \
+             which is what the rule this one replaces used to catch by accident. \
+             Got {before:?}"
+        );
+
+        fixture.reopen().await;
+
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Cee", &[("seat", "s3")])]).await;
+
+        let after = read_ok(&store, &query_of_types(&["Cee"]), ReadOptions::new()).await;
+        assert_eq!(
+            after.len(),
+            1,
+            "the second anchor: the post-reopen append must be readable, or the \
+             collision check below has nothing to check. Got {:?}",
+            types_of(&after)
+        );
+        let minted = after[0].id;
+
+        assert!(
+            !before.contains(&minted),
+            "a store must never issue an `(StoreId, SequencePosition)` pair it \
+             has already issued for a different event. A store that keeps its \
+             incarnation across a reopen and restarts its position counter is \
+             what a restored backup looks like from the inside: every peer's \
+             deduplication then treats genuinely new events as already-seen and \
+             **real facts are silently dropped** — the one failure mode in the \
+             replication design with no error path and no observable symptom. \
+             Minted {minted} again, having already issued {before:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-9 — the store stamps a time at append, and reports that same value on
+    /// every read of that event.
+    ///
+    /// **Read the prohibitions before strengthening this rule.** VT-9's third
+    /// MUST forbids the contract from stating any relationship between
+    /// `RecordedAt` order and `SequencePosition` order, and the conformance suite
+    /// is the contract's executable form: an adapter author reads a failing rule
+    /// as a requirement, so a rule that asserts an order states one. Therefore no
+    /// comparison of two events' recorded times in either direction, no
+    /// comparison of a recorded time against a position, and no plausibility
+    /// check against the harness's own clock — which CF-33 forbids independently.
+    /// `RUNBOOK.md`'s "a rule that it is non-decreasing with position" was struck
+    /// by ADR-0014 for precisely this reason, and a store on a machine whose
+    /// clock steps backwards under an NTP correction is conformant.
+    ///
+    /// What is left is that the value is a **fact about the append** rather than
+    /// about the read, and that is not nothing. `ReadTimeClockStore` in
+    /// `tests/mutation_coverage/mutants.rs` fills the field from the
+    /// connection's clock in its row mapper, which is what an adapter does when
+    /// `recorded_at` arrives on the port after its schema was written and the
+    /// field has to be given *something*. That store is correct in every other
+    /// respect and invisible to any rule that reads once.
+    pub async fn append_stamps_a_recorded_time<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
+
+        let first = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            first.len(),
+            1,
+            "the anchor: the event must come back at all, got {:?}",
+            types_of(&first)
+        );
+
+        let second = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            second.len(),
+            1,
+            "the second anchor: and it must come back again, unchanged in \
+             number, got {:?}",
+            types_of(&second)
+        );
+        assert_eq!(
+            first[0].position, second[0].position,
+            "and it must be the same event both times, or the comparison below \
+             is between two different rows"
+        );
+
+        assert_eq!(
+            first[0].recorded_at, second[0].recorded_at,
+            "a `RecordedAt` records when the store accepted the event, so it is \
+             fixed at append and reported unchanged afterwards. A row mapper that \
+             fills the field from the connection's clock answers a different \
+             question every time it is asked, and the audit answer the field \
+             exists to give — which side of midnight did this land — becomes a \
+             reading of when somebody last looked"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// VT-9 — a reopen does not restamp an event's recorded time.
+    ///
+    /// The durability half of VT-9, and the half that catches the adapter VT-4's
+    /// `Rejects:` line describes: one that makes the value up rather than
+    /// persisting it "passes every rule that reads back what it just wrote
+    /// inside one process and fails the first reopen".
+    ///
+    /// It asserts only that **the same event's** value is unchanged. It may not
+    /// assert anything else: comparing it against another event's, against a
+    /// position, or against the harness's own clock are all forbidden — see
+    /// `append_stamps_a_recorded_time` for which prohibition forbids which.
+    ///
+    /// `LosingFixture` in `tests/mutation_coverage/mutants.rs` is the registered
+    /// mutant, and it fails at the *survival* anchor rather than at the closing
+    /// comparison: nothing was written to a durable medium, so the reopen finds
+    /// an empty one. Nothing in this workspace can yet fail the closing
+    /// comparison alone — that needs a durable medium that keeps an event and
+    /// loses its stamp, which is a *real* store rather than a fixture, and phase
+    /// 8 is where the first one arrives.
+    ///
+    /// # An instrument obligation this rule carries
+    ///
+    /// A `REOPEN` fixture passes it only if its reopen restores the event's
+    /// stamps and not merely its payload. `DurableFixture` in
+    /// `tests/fixture_instruments.rs` must carry `SequencedEvent` values on its
+    /// durable side for that to be true; a durable side of `Event` cannot, and
+    /// the replay restamps.
+    pub async fn recorded_time_survives_a_reopen<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REOPEN);
+
+        let fixture = open().await;
+
+        // The handle is dropped with the block, so nothing carries the value
+        // across the reopen in memory.
+        let (position, recorded_at) = {
+            let store = fixture.connect().await;
+            append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
+
+            let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+            assert_eq!(
+                all.len(),
+                1,
+                "the anchor: the event must be readable before the reopen, got \
+                 {:?}",
+                types_of(&all)
+            );
+            (all[0].position, all[0].recorded_at)
+        };
+
+        fixture.reopen().await;
+
+        let store = fixture.connect().await;
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            1,
+            "the second anchor: the acknowledged event must have survived the \
+             reopen at all, or \"its time is unchanged\" is a claim about \
+             nothing. Got {:?}",
+            types_of(&all)
+        );
+        assert_eq!(
+            all[0].position, position,
+            "and it must be the same event, at the position the store assigned it \
+             before the reopen"
+        );
+
+        assert_eq!(
+            all[0].recorded_at, recorded_at,
+            "a `RecordedAt` is persisted alongside the event, not recomputed when \
+             the store is opened. An adapter that restamps on replay hands every \
+             auditor the time of the last restart, and the one clock reading whose \
+             provenance the log itself attested is gone with no error and no \
+             symptom"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// ES-41 (VT-7) — `contains_event_id` answers about an **identity**, not
+    /// about a position.
+    ///
+    /// The membership operation VT-7 requires, and the whole reason it is a
+    /// dedicated port operation rather than a query: dedup is a membership test,
+    /// so it gets a membership test.
+    ///
+    /// The wrong implementation is the natural one — `SELECT 1 FROM events WHERE
+    /// position = ?`, which is what an adapter writes when its events table has a
+    /// position column and no origin columns yet, which is every adapter before
+    /// it implements ingest. It passes every single-store rule in the suite,
+    /// because a store that has ingested nothing only ever holds its own
+    /// incarnation, and it fails the first time a peer asks: a foreign event is
+    /// reported as already present whenever the local log happens to be at least
+    /// that long, and the batch carrying it is silently dropped.
+    /// `PositionOnlyMembershipStore` in `tests/mutation_coverage/mutants.rs` is
+    /// it.
+    ///
+    /// **The foreign incarnation is built by flipping every byte of the store's
+    /// own**, which is the only way a rule can name an incarnation this store
+    /// certainly does not have: `EventStore` has no `store_id()` accessor
+    /// (ES-19's prose says why one was refused), so the only `StoreId` a rule can
+    /// obtain is the one it read back, and `!b == b` holds for no byte. A
+    /// hard-coded sentinel would be a value some real adapter could one day mint.
+    pub async fn contains_event_id_reports_membership<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(
+            &store,
+            &[
+                tagged_event("Ay", &[("seat", "s1")]),
+                tagged_event("Bee", &[("seat", "s2")]),
+            ],
+        )
+        .await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            2,
+            "the anchor: both events must be in the store, or \"it reports what \
+             it holds\" is a claim about an empty log. Got {:?}",
+            types_of(&all)
+        );
+
+        for event in &all {
+            match store.contains_event_id(event.id).await {
+                Ok(true) => {}
+                other => panic!(
+                    "the store minted {} itself and must report holding it; got \
+                     {other:?}",
+                    event.id
+                ),
+            }
+        }
+
+        for event in &all {
+            // Every byte flipped, so this incarnation is certainly not the
+            // store's own — `!b == b` holds for no byte — while the position is
+            // one the store definitely assigned. That pair is exactly what a
+            // position-only lookup cannot tell apart from a local event.
+            let elsewhere = EventId::new(
+                StoreId::from_bytes(event.id.store().to_bytes().map(|byte| !byte)),
+                event.id.position(),
+            );
+            match store.contains_event_id(elsewhere).await {
+                Ok(false) => {}
+                other => panic!(
+                    "the store does not hold {elsewhere}, which names another \
+                     incarnation at a position this store happens to have \
+                     assigned. `SELECT 1 FROM events WHERE position = ?` is the \
+                     natural implementation and it passes every single-store rule \
+                     in this suite; against a peer it reports a foreign event as \
+                     already held whenever the local log is long enough, and the \
+                     ingest that trusted it drops a real fact. Got {other:?}"
+                ),
+            }
+        }
 
         RuleOutcome::Ran
     }
@@ -1299,6 +2750,93 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    // ---------------------------------------------------------------------
+    // 4. CF-39 — an armed mid-batch fault must actually fire
+    // ---------------------------------------------------------------------
+
+    /// A fixture that declares `MID_BATCH_FAULT` supported must arm a fault the
+    /// store **cannot absorb**, so the append returns `Err`.
+    ///
+    /// CF-39, and it exists to make `append_is_atomic_under_a_mid_batch_fault`
+    /// non-vacuous. That rule asserts the store holds all of a faulted batch or
+    /// none of it, *with which of the two decided by what `append` answered* — so
+    /// a fixture whose arm does nothing passes it for free: no fault, `Ok`, every
+    /// row present, all-or-nothing satisfied. A capability can then be declared
+    /// supported, contribute nothing, and produce a green atomicity result for a
+    /// store nothing has ever faulted. That is the failure CF-18 exists to
+    /// prevent one level up, where a rule `#[cfg]`-ed out of the binary is
+    /// indistinguishable from a rule that passed.
+    ///
+    /// # The wrong implementation is a *fixture*, and it is a precise one
+    ///
+    /// The trait's provided `arm_mid_batch_fault` **panics**, and its message
+    /// names this exact mistake — so a fixture that declares the capability and
+    /// simply forgets the override does not pass vacuously, it aborts loudly. The
+    /// vacuous pass needs a fixture that overrides `arm_mid_batch_fault` with an
+    /// *empty body*: honest-looking code, no panic, no fault, green.
+    /// `NoopFaultFixture` in `tests/mutation_coverage/mutants.rs` is that fixture,
+    /// over a completely correct store, and it fails this rule and nothing else.
+    ///
+    /// # What this costs, stated rather than discovered later
+    ///
+    /// ES-18 permits a **store** to swallow a fault and commit the batch anyway,
+    /// and that sentence is untouched. What CF-39 constrains is the **fixture**:
+    /// a store that can absorb every fault its fixture is able to arm MUST
+    /// decline the capability with that as its stated reason, rather than declare
+    /// it and contribute an `Ok`. The weaker alternative is not a weaker rule, it
+    /// is no rule at all — firing-and-being-absorbed and never-arming produce the
+    /// same `Ok` over the same full log, so an anti-vacuity clause that stops
+    /// short of demanding `Err` demands nothing a test can see.
+    ///
+    /// The control append is the anchor. Without it an `Err` here could be the
+    /// store refusing a three-event batch for reasons of its own, and the rule
+    /// would certify a fault that never fired.
+    pub async fn arming_a_mid_batch_fault_makes_the_append_fail<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: MID_BATCH_FAULT);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // The anchor: the same shape of batch, unarmed, must be accepted.
+        let control = [
+            tagged_event("Control", &[("row", "one")]),
+            tagged_event("Control", &[("row", "two")]),
+            tagged_event("Control", &[("row", "three")]),
+        ];
+        append_ok(&store, &control).await;
+
+        // Fail while writing the third event, so that two rows are already down
+        // when the fault arrives — the same arming
+        // `append_is_atomic_under_a_mid_batch_fault` uses, so that the two rules
+        // are talking about the same event.
+        fixture.arm_mid_batch_fault(2).await;
+        let batch = [
+            tagged_event("Armed", &[("row", "one")]),
+            tagged_event("Armed", &[("row", "two")]),
+            tagged_event("Armed", &[("row", "three")]),
+        ];
+        let outcome = store.append(&batch, None).await;
+
+        assert!(
+            outcome.is_err(),
+            "CF-39: a fixture declaring `MID_BATCH_FAULT` supported MUST, when \
+             armed at k < events.len(), cause the write of the k-th event to \
+             fail inside the store's own write path, by a mechanism the store \
+             cannot absorb, so that the append returns `Err`. This one armed a \
+             fault at row 2 of a three-event batch and the append succeeded — \
+             which is what a fixture whose `arm_mid_batch_fault` has an empty \
+             body does, and it turns \
+             `append_is_atomic_under_a_mid_batch_fault` into a green result \
+             about a store nothing has faulted. A fixture whose store can absorb \
+             every fault it is able to arm must DECLINE the capability with that \
+             as its stated reason. Got {outcome:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
     /// An empty batch is refused.
     pub async fn append_rejects_empty_batch<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
         let fixture = open().await;
@@ -1370,6 +2908,551 @@ pub mod rules {
         assert_eq!(
             all[0].event, original,
             "an event must round-trip byte-for-byte, including tags and metadata"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // 1. ES-19 — positions within one batch follow slice order
+    // ---------------------------------------------------------------------
+
+    /// Positions within one batch are assigned in **slice order**, strictly
+    /// ascending.
+    ///
+    /// ES-19's second sentence, which `append_returns_last_written_position`
+    /// structurally cannot see: that rule infers the batch's order from
+    /// `all.last()`, so it asks only *which* position came back and never *which
+    /// event* got it. On a quiescent store the highest position is the last row
+    /// however the rows were ordered, so a store that writes the batch backwards
+    /// and returns the maximum answers it correctly.
+    ///
+    /// `ReverseOrderBatchStore` is the compiled version — a multi-row `INSERT`
+    /// built from the batch reversed, which is what an adapter produces when it
+    /// pushes rows onto a stack, or when it sorts a batch to group rows by an
+    /// interned type id and forgets that grouping is also reordering. The
+    /// consequence is not cosmetic: a decision replays its own batch in the order
+    /// the store returns it, so `Held` then `Released` comes back as `Released`
+    /// then `Held` and the projection is wrong with no error anywhere.
+    /// `SharedBatchPositionStore` fails it too, one bind parameter over: one
+    /// position bound for every row of a multi-row insert is not *ascending*, and
+    /// "strictly" is the word that rejects it.
+    ///
+    /// # Two things it deliberately does not assert
+    ///
+    /// It does not re-assert the returned position.
+    /// `append_returns_last_written_position` owns ES-19's first sentence and
+    /// `ReturnsFirstOfBatchStore` is its mutant; making the claim here would buy
+    /// a second failure on that store and no new coverage.
+    ///
+    /// And it compares positions **found by type**, never the order the read
+    /// returned them in. Read ordering is `read_defaults_to_ascending_order`'s
+    /// and `SortByEventTypeStore` is its mutant, so an order comparison here
+    /// would fail every store whose defect is the read path — which is what keeps
+    /// a mutant a scalpel rather than a shotgun.
+    pub async fn batch_positions_follow_slice_order<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let batch = [
+            tagged_event("Aleph", &[("row", "first")]),
+            tagged_event("Beth", &[("row", "second")]),
+            tagged_event("Gimel", &[("row", "third")]),
+        ];
+        append_ok(&store, &batch).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            3,
+            "all three events of the batch must be readable back before their \
+             positions mean anything, got {:?}",
+            types_of(&all)
+        );
+
+        let position_of = |wanted: &str| {
+            all.iter()
+                .find(|event| event.event_type().as_str() == wanted)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "the store must hold the `{wanted}` event it was handed, \
+                         got {:?}",
+                        types_of(&all)
+                    )
+                })
+                .position
+        };
+        let first = position_of("Aleph");
+        let second = position_of("Beth");
+        let third = position_of("Gimel");
+
+        assert!(
+            first < second && second < third,
+            "ES-19: positions within one batch MUST be assigned in SLICE order \
+             and MUST strictly ascend. The batch was Aleph, Beth, Gimel and the \
+             store assigned {first:?}, {second:?}, {third:?}. A store that writes \
+             the batch backwards, or that binds one position for every row of a \
+             multi-row insert, still returns the highest position from a \
+             quiescent store and passes `append_returns_last_written_position`"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // 2. ES-21 — a batch is not evaluated against its own condition
+    // ---------------------------------------------------------------------
+
+    /// A condition is evaluated only against events the store **already held**.
+    ///
+    /// ES-21 `[FROZEN]`. A batch can never conflict with itself, and the sentence
+    /// has to be written down because the reference store answers it correctly
+    /// only by accident of ordering — `MemoryEventStore` checks `stored` before
+    /// it extends, and nothing said it had to.
+    ///
+    /// What it rejects is the per-row conditional
+    /// `INSERT … SELECT … WHERE NOT EXISTS`, which the decision ledger carries as
+    /// a live candidate for the append-condition SQL strategy. Carried per row,
+    /// the guard travels with every statement, so the second row of a batch is
+    /// checked against a store that already holds the first — and on the
+    /// canonical DCB uniqueness shape, where the condition names the very type
+    /// being written, it self-rejects. An adapter built that way refuses **every**
+    /// conditional append of more than one matching event and passes every other
+    /// rule in this suite. `PerRowConditionStore` is the compiled version, and it
+    /// rolls back on rejection precisely so that it fails *this* rule and not
+    /// `append_is_atomic`. `WriteThenCheckStore` fails it from the other side:
+    /// writing before deciding puts the batch into the set its own probe reads.
+    ///
+    /// # The reissue at the end is the anchor, and it is doing real work
+    ///
+    /// Without it the rule's whole content is `is_ok()`, which a store whose
+    /// probe answers `None` to everything satisfies for free — and an inert probe
+    /// is exactly what this suite exists to catch. The identical batch under the
+    /// identical condition must now be refused, which is evidence that the
+    /// condition's query really does match these events and that the admission
+    /// above was a verdict rather than an absence.
+    ///
+    /// `is_err`, deliberately, and not `ConditionViolated`: which error a
+    /// rejection is reported as is ES-25's MUST and
+    /// `condition_rejection_is_reported_as_condition_violated` owns it.
+    pub async fn batch_is_not_evaluated_against_its_own_condition<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Seeded so that the store is non-empty — `condition_against_an_empty_store_admits_the_append`
+        // owns the degenerate case and `NullAggregateProbeStore` is its mutant —
+        // and so that the boundary below is a position the store assigned. The
+        // seed matches nothing the condition asks about.
+        let boundary = append_ok(&store, &[tagged_event("Seen", &[("course", "c1")])]).await;
+
+        // Both events of the batch are matched by the condition's own query, and
+        // the boundary sits past everything the store holds — so the only events
+        // that could violate it are the two being appended.
+        //
+        // They carry **one** tag each and are told apart by their payloads rather
+        // than by a second tag. Both are forced: the condition's query names
+        // `course:c1`, so both events must carry it, and two tags on one event
+        // makes `TagJoinFanOutStore` return it twice while two byte-identical
+        // events are one event to `PayloadDedupStore`. Distinct payloads under a
+        // shared tag is the only seeding that is neither.
+        let batch = [
+            event_with_payload("Enrolled", &b"{\"student\":\"s1\"}"[..])
+                .with_tags(tags(&[("course", "c1")])),
+            event_with_payload("Enrolled", &b"{\"student\":\"s2\"}"[..])
+                .with_tags(tags(&[("course", "c1")])),
+        ];
+        let guard = condition_after(query_of(&["Enrolled"], &[("course", "c1")]), boundary.get());
+
+        let landed = store.append(&batch, Some(&guard)).await;
+        assert!(
+            landed.is_ok(),
+            "ES-21: a condition is evaluated only against events the store \
+             already held, so a batch can never conflict with itself. Both of \
+             these events match the condition's query and would sit above its \
+             boundary, and the append MUST still be admitted — a per-row \
+             `INSERT … SELECT … WHERE NOT EXISTS` checks the second row against a \
+             store that already holds the first and refuses it. Got {landed:?}"
+        );
+
+        let stored = read_ok(&store, &query_of_types(&["Enrolled"]), ReadOptions::new()).await;
+        assert_eq!(
+            stored.len(),
+            2,
+            "and both events of the batch must have landed: a store that \
+             self-rejects and rolls back answers `Err`, and one that keeps the \
+             row it managed to write answers `Ok` with half a batch. Got {:?}",
+            positions_of(&stored)
+        );
+
+        // The anchor.
+        let again = store.append(&batch, Some(&guard)).await;
+        assert!(
+            again.is_err(),
+            "and the admission above must be a verdict rather than an absence: \
+             the identical batch under the identical condition must be refused \
+             now that the store really does hold matching events above the \
+             boundary. Got {again:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // 3. ES-22 — a dropped append future leaves no partial batch
+    // ---------------------------------------------------------------------
+
+    /// Dropping an `append` future leaves the store fully applied or unchanged,
+    /// never partially applied.
+    ///
+    /// ES-22 `[FROZEN]`. In Rust, cancellation *is* dropping the future: there is
+    /// no cancel token, the caller simply stops polling and the state machine is
+    /// destroyed at whatever suspension point it had reached. Nothing runs
+    /// afterwards except `Drop` impls, and the call produces no `Result` at all —
+    /// which is why ES-23's *outcome* is unspecified while ES-22's *shape* is
+    /// not. The store may have committed, and may commit afterwards; what it may
+    /// never do is hold two rows of a three-row batch.
+    ///
+    /// What it rejects is an adapter that executes a batch as several statements
+    /// with a suspension point between them and relies on running to completion.
+    /// `YieldingRowAtATimeStore` is the compiled version: one row per statement,
+    /// awaiting between rows, so a drop after the first poll leaves exactly one
+    /// row down. **It is not a rename of `RowAtATimeStore`**, which
+    /// `a_concurrent_reader_never_sees_a_partial_batch` owns — that one tests the
+    /// *visibility* of rows that all land in the end, this one tests rows that
+    /// never land at all. Neither substitutes for the other.
+    ///
+    /// `MemoryEventStore` passes trivially, because its `append` body contains no
+    /// `.await` at all and the first poll runs it to completion — which is
+    /// precisely why the reference store cannot answer this question and a real
+    /// adapter must.
+    ///
+    /// # Why the future is polled once rather than not at all
+    ///
+    /// An `async fn` body runs nothing until its first `poll`, so a future that
+    /// is built and dropped has provably done nothing and this rule would be
+    /// asserting over an untouched store. One poll is what puts the append in
+    /// flight. `poll_once` answers `None` when the store suspended and `Some`
+    /// when it finished, and ES-22 permits both.
+    pub async fn dropped_append_future_leaves_no_partial_batch<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(&store, &[tagged_event("Existing", &[("row", "seed")])]).await;
+
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            types_of(&before),
+            ["Existing"],
+            "the anchor: without a row already in the store, \"unchanged\" and \
+             \"empty\" are the same observation and a store that lost everything \
+             would pass"
+        );
+
+        let batch = [
+            tagged_event("Ex", &[("row", "one")]),
+            tagged_event("Why", &[("row", "two")]),
+            tagged_event("Zed", &[("row", "three")]),
+        ];
+
+        // The future is created, entered once, and dropped at the end of this
+        // block. Nothing polls it again, which is the whole of what cancellation
+        // means here.
+        {
+            let mut appending = pin!(store.append(&batch, None));
+            let mut finished = false;
+            let outcome = poll_once(appending.as_mut(), &mut finished).await;
+            // A store with no suspension point in its `append` finishes on the
+            // first poll; ES-22 permits "fully applied", so that is not a
+            // failure. What it may not do is fail.
+            assert_appended(outcome);
+        }
+
+        let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        let landed = after.len().saturating_sub(before.len());
+        assert!(
+            landed == 0 || landed == batch.len(),
+            "ES-22: dropping an `append` future must leave the store fully \
+             applied or unchanged — never partially applied. {} of {} events \
+             survived the drop, which is a batch the caller was never told about \
+             and can never resolve. Got {:?}",
+            landed,
+            batch.len(),
+            types_of(&after)
+        );
+
+        if landed == 0 {
+            assert_eq!(
+                snapshot_of(&after),
+                snapshot_of(&before),
+                "and \"unchanged\" means byte-identical, not merely the same \
+                 number of rows"
+            );
+        } else {
+            // Membership rather than order. Slice order within a batch is
+            // ES-19's and `batch_positions_follow_slice_order` owns it, so an
+            // order comparison here would fail `ReverseOrderBatchStore` for a
+            // reason that is not this rule's.
+            let landed_types = types_of(&after);
+            for event in &batch {
+                assert!(
+                    landed_types.contains(&event.event_type().as_str()),
+                    "and \"fully applied\" means every event of the batch: `{}` \
+                     is missing from {landed_types:?}",
+                    event.event_type().as_str()
+                );
+            }
+        }
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // 5-7. ES-24 — reissue: one guarantee and two limits
+    // ---------------------------------------------------------------------
+
+    /// A conditional append whose condition matches its **own** events is
+    /// at-most-once under verbatim reissue.
+    ///
+    /// ES-24 `[FROZEN]`, and the guarantee costs nothing to provide because it
+    /// falls out of the condition the caller already wrote. After a dropped
+    /// future (ES-22, ES-23) the caller does not know whether its append landed.
+    /// Reissuing the identical batch resolves it: a refusal means the first
+    /// attempt landed, `Ok` means it had not and now has. Either way the store
+    /// holds exactly one copy, and the caller needs no identity, no idempotency
+    /// key and no new API — which is what makes this clause severable from
+    /// `EventId`.
+    ///
+    /// What it rejects is a store that writes before it decides.
+    /// `WriteThenCheckStore` — autocommit plus a separate probe — extends its log
+    /// and *then* evaluates the condition, so the batch's own events are in the
+    /// set the probe reads and the **first** attempt is refused while its rows
+    /// stay down. A caller following the documented resolution procedure reads
+    /// that refusal as "my write already landed", stops, and has written nothing
+    /// at all on the one path where the answer matters.
+    ///
+    /// # Two deliberate choices in the arrangement
+    ///
+    /// The store is **seeded first**, so that no assertion here runs against an
+    /// empty store: `condition_against_an_empty_store_admits_the_append` owns
+    /// that degenerate case and `NullAggregateProbeStore` is its mutant, and a
+    /// rule that started empty would fail it for a reason that is not this
+    /// rule's.
+    ///
+    /// The second attempt is asserted with `is_err`, not with a match on
+    /// `ConditionViolated`. Which error a rejection is reported as is ES-25's
+    /// MUST and `condition_rejection_is_reported_as_condition_violated` owns it;
+    /// demanding the discriminant here would make `ViolationAsStoreErrorStore`
+    /// fail a rule about reissue for a reason that has nothing to do with
+    /// reissue.
+    pub async fn reissued_conditional_batch_lands_once<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        append_ok(
+            &store,
+            &[tagged_event("CourseDefined", &[("course", "c1")])],
+        )
+        .await;
+
+        // The canonical shape: the condition's query matches the very event being
+        // appended, which is what buys the guarantee.
+        // One tag, not two: `TagJoinFanOutStore` returns an event once per tag
+        // it carries, so a two-tag event would make the closing "exactly one
+        // copy" assertion fail against a store whose defect is the read join.
+        let subscribe = tagged_event("StudentSubscribed", &[("enrolment", "c1-s1")]);
+        let query = query_of(&["StudentSubscribed"], &[("enrolment", "c1-s1")]);
+        let guard = condition(query.clone());
+
+        let first = store
+            .append(core::slice::from_ref(&subscribe), Some(&guard))
+            .await;
+        assert!(
+            first.is_ok(),
+            "a conditional append whose condition matches its own events must \
+             still be admitted the first time — a store that writes the batch \
+             and probes afterwards finds its own rows and refuses. Got {first:?}"
+        );
+
+        // The verbatim reissue: the identical batch under the identical
+        // condition, which is what a caller does when a dropped future left the
+        // outcome unknown.
+        let second = store
+            .append(core::slice::from_ref(&subscribe), Some(&guard))
+            .await;
+        assert!(
+            second.is_err(),
+            "ES-24: reissuing the identical batch must be refused once the first \
+             attempt has landed, because the condition matches the events it \
+             wrote. That refusal is how a caller learns its append already \
+             happened, and it is the whole recovery mechanism for an unknown \
+             outcome. Got {second:?}"
+        );
+
+        let all = read_ok(&store, &query, ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            1,
+            "and the store must hold exactly one copy: at-most-once is the \
+             property, and a second copy makes the refusal above a lie about \
+             what is in the log. Got {:?}",
+            positions_of(&all)
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// An **unconditional** append has no at-most-once property: a reissue
+    /// appends a second copy.
+    ///
+    /// ES-24's first stated limit, and this rule pins a *non*-guarantee. That is
+    /// unusual enough to say why: a guarantee whose limits are unstated is read
+    /// as universal, and callers write retry loops against the adapter they
+    /// happened to test on. If one adapter deduplicates and another does not, the
+    /// same retry loop double-charges on one and not on the other, and nothing in
+    /// either adapter's CI says so. So duplicate-landing is a **MUST** here, and
+    /// a store with natural payload dedup is non-conformant. That is deliberate:
+    /// a contract whose idempotency varies silently by adapter is worse than one
+    /// with none.
+    ///
+    /// What it rejects is `PayloadDedupStore` — a store that hashes
+    /// `(event_type, tags, data)` and refuses a duplicate. Not a strawman: a
+    /// content-addressed store, or one built to be safe under at-least-once
+    /// ingest, gets that behaviour for free and would ship it as a feature.
+    ///
+    /// The two events are asserted **equal** as well as counted, which is the
+    /// non-vacuity anchor: without it a store could satisfy the count by mangling
+    /// one of them, and the rule would have proved that two rows exist rather
+    /// than that the same event landed twice.
+    pub async fn reissued_unconditional_batch_lands_twice<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let noted = tagged_event("Noted", &[("ledger", "l1")]);
+        append_ok(&store, core::slice::from_ref(&noted)).await;
+        append_ok(&store, core::slice::from_ref(&noted)).await;
+
+        let all = read_ok(&store, &query_of_types(&["Noted"]), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            2,
+            "ES-24: an unconditional append has no at-most-once property, and \
+             nothing in the port can give it one. Reissuing a byte-identical \
+             batch MUST append a second copy — a store that hashes the event and \
+             quietly refuses the duplicate strengthens a guarantee the contract \
+             disclaims, and callers then depend on behaviour the next adapter \
+             does not have. Got {:?}",
+            positions_of(&all)
+        );
+        assert_eq!(
+            all[0].event, all[1].event,
+            "the anchor: both copies must be the same event twice — otherwise \
+             this rule has counted two rows rather than observed one event \
+             landing twice"
+        );
+        assert_eq!(
+            all[0].event, noted,
+            "and that event must be the one the caller wrote"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A **conditional** append whose condition does not match its own events has
+    /// no at-most-once property either.
+    ///
+    /// ES-24's second stated limit — the one the clause states in prose and gives
+    /// no rule. It is the *common* shape rather than an exotic corner: a decision
+    /// that reads one thing and writes another, conditioning on
+    /// `CourseCapacityChanged` while appending `StudentSubscribed`, leaves the
+    /// retry indistinguishable from a first attempt, because nothing the retry
+    /// wrote is in the set its own condition looks at.
+    ///
+    /// This is the rule that stops a caller reading
+    /// `reissued_conditional_batch_lands_once` as "conditional appends are
+    /// idempotent". They are not; *conditions that match their own events* are,
+    /// and the difference is one line in the caller's decision model. Callers
+    /// needing at-most-once here must supply their own dedup in the domain — a
+    /// natural key in the **tags**, which is queryable, and not in `metadata`,
+    /// which is structurally not.
+    ///
+    /// `PayloadDedupStore` is the compiled version, and it passes
+    /// `reissued_conditional_batch_lands_once` while failing this rule and its
+    /// sibling — which is exactly the shape of the mistake: an adapter that gets
+    /// the *documented* guarantee right and silently extends it.
+    ///
+    /// The condition's boundary sits above the matching event on purpose. With
+    /// `after` at the match this rule would also reject a probe reading `after`
+    /// as inclusive, which `condition_after_ignores_events_at_the_boundary` owns.
+    pub async fn reissued_batch_conditioned_on_other_events_lands_twice<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        append_ok(
+            &store,
+            &[tagged_event("CourseCapacityChanged", &[("course", "c1")])],
+        )
+        .await;
+        // A non-matching marker, so the boundary is a position the store assigned
+        // and sits strictly above every event the condition can match.
+        let boundary = append_ok(&store, &[tagged_event("Marker", &[("course", "c1")])]).await;
+
+        let subscribe = tagged_event("StudentSubscribed", &[("course", "c1")]);
+        // The condition reads capacity and the batch writes a subscription: the
+        // events being appended are matched by nothing the condition asks about.
+        let guard = condition_after(
+            query_of(&["CourseCapacityChanged"], &[("course", "c1")]),
+            boundary.get(),
+        );
+
+        let first = store
+            .append(core::slice::from_ref(&subscribe), Some(&guard))
+            .await;
+        assert!(
+            first.is_ok(),
+            "nothing has changed the capacity since the caller read it, so the \
+             append must be admitted. Got {first:?}"
+        );
+
+        let second = store
+            .append(core::slice::from_ref(&subscribe), Some(&guard))
+            .await;
+        assert!(
+            second.is_ok(),
+            "ES-24: a conditional append whose query does not match its own \
+             events has no at-most-once property. The reissue is \
+             indistinguishable from a first attempt — nothing the first attempt \
+             wrote is in the set this condition looks at — so it MUST be \
+             admitted. Got {second:?}"
+        );
+
+        let all = read_ok(
+            &store,
+            &query_of_types(&["StudentSubscribed"]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert_eq!(
+            all.len(),
+            2,
+            "and both copies must be in the store: this is the limit the clause \
+             states, and a store that deduplicates it away leaves callers \
+             depending on an idempotency the contract disclaims. Got {:?}",
+            positions_of(&all)
+        );
+        assert_eq!(
+            all[0].event, all[1].event,
+            "the anchor: the two copies must be the same event, or this rule has \
+             counted rows rather than observed a reissue"
         );
 
         RuleOutcome::Ran
@@ -1899,6 +3982,500 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    /// Two tags that differ only by Unicode normal form are two tags.
+    ///
+    /// VT-15 `[FROZEN]`: equality is byte equality over the UTF-8 encoding, and
+    /// the contract — and every adapter — applies no normalisation, no case
+    /// folding and no trimming. `"café"` in NFC is five bytes ending U+00E9;
+    /// in NFD it is six, ending `e` + U+0301. They render identically in every
+    /// console, every editor and every log.
+    ///
+    /// # What it rejects
+    ///
+    /// `NormalisingTagStore`: a tag column under a **nondeterministic** ICU
+    /// collation — `CREATE COLLATION … (provider = icu, deterministic = false)`
+    /// is one line and is exactly what somebody reaches for when a search
+    /// stops matching — or an adapter calling a normaliser on the way in
+    /// because "tags should be canonical". Both rewrite a caller's identifier,
+    /// so the tag read back is not the tag written, byte-faithful replication
+    /// stops being byte-faithful, and two consistency boundaries silently
+    /// become one. A macOS client writes NFD, a Linux client writes NFC, and
+    /// the two stop conflicting where the application intended them to.
+    ///
+    /// # Why the failure is a *query* assertion rather than a round trip
+    ///
+    /// Both rows survive a normalising column; what is lost is that they are
+    /// distinguishable. So the round trip is the anchor and the two selective
+    /// reads are the rule: under a merging collation the query built from
+    /// either form returns both events, and a caller that thought it was
+    /// looking at one tenant, one turbine or one shop is looking at two.
+    /// `append_preserves_event_type_and_tags_byte_for_byte` owns the byte
+    /// fidelity of the stored value; this rule owns the index's opinion of it.
+    pub async fn tags_differing_only_by_unicode_normalisation_are_distinct<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let composed = "caf\u{e9}";
+        let decomposed = "cafe\u{301}";
+        assert_ne!(
+            composed, decomposed,
+            "the anchor: these must be two different byte strings, or this rule \
+             is one tag written twice and nothing can fail it"
+        );
+
+        let first = append_ok(&store, &[tagged_event("Ordered", &[("shop", composed)])]).await;
+        let second = append_ok(&store, &[tagged_event("Ordered", &[("shop", decomposed)])]).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&all),
+            [first.get(), second.get()],
+            "both events must be in the store before their tags can be compared"
+        );
+
+        let by_composed = read_ok(
+            &store,
+            &query_tagged(&[("shop", composed)]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&by_composed),
+            [first.get()],
+            "a query built from the composed tag must select the event written \
+             with it and no other: VT-15 makes equality byte equality, and a \
+             normalising column merges two consistency boundaries with no error \
+             and no visible cue anywhere"
+        );
+
+        let by_decomposed = read_ok(
+            &store,
+            &query_tagged(&[("shop", decomposed)]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&by_decomposed),
+            [second.get()],
+            "and the decomposed tag must select the other one, for the same \
+             reason read from the other end"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// One key, two values, two tags — and both are queryable.
+    ///
+    /// VT-17 `[FROZEN]`: `key:value` is a convention the contract does not
+    /// enforce. `Tags` deduplicates on the **whole** tag string, so
+    /// `Tags::from_pairs([("tenant", "a"), ("tenant", "b")])` is a two-element
+    /// set and both elements are the caller's data.
+    ///
+    /// # What it rejects
+    ///
+    /// `KeyedTagMapStore`: tags stored as a map — a `JSONB` object, a
+    /// `HashMap<String, String>` column, or a side table under
+    /// `UNIQUE (event_id, key)` with `ON CONFLICT (event_id, key) DO UPDATE`.
+    /// Every one of those is a natural schema for something the contract itself
+    /// invites you to read as a pair (`Tag::key`, `Tag::value`), and every one
+    /// keeps exactly one value per key. The event stays in the store and stops
+    /// matching one of the two queries that should select it. On Wattline's
+    /// 4,200-tenant shared log that is a cross-tenant correctness failure
+    /// produced entirely by an indexing choice, and the tenant whose tag was
+    /// dropped simply stops seeing its own events.
+    ///
+    /// # The anchor is on the type, not on the store
+    ///
+    /// If `Tags` ever collapsed the pair at construction, this rule would be
+    /// asserting a store's behaviour over an input it never received — passing
+    /// while VT-17's actual subject went unchecked. The length check is what
+    /// keeps the rule on the value it claims to be about.
+    pub async fn tags_may_repeat_a_key<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let shared = tagged_event(
+            "MeterRead",
+            &[("tenant", "a"), ("tenant", "b"), ("meter", "m1")],
+        );
+        assert_eq!(
+            shared.tags().len(),
+            3,
+            "the anchor: `Tags` deduplicates on the whole `key:value` string, so \
+             two values under one key are two tags. If this is ever 2, the rule \
+             has stopped being about VT-17 and nothing says so"
+        );
+
+        let written = append_ok(&store, core::slice::from_ref(&shared)).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(all.len(), 1, "the store must hold the event it accepted");
+        assert_eq!(
+            all[0].event, shared,
+            "an event carrying two values under one key must round-trip with \
+             both of them: a tag index shaped as a key-to-value map keeps one \
+             and reports nothing"
+        );
+
+        for tenant in ["a", "b"] {
+            let found = read_ok(
+                &store,
+                &query_tagged(&[("tenant", tenant)]),
+                ReadOptions::new(),
+            )
+            .await;
+            assert_eq!(
+                positions_of(&found),
+                [written.get()],
+                "and the event must be selected by a query on *either* value — \
+                 the tag that a map-shaped index dropped is the one whose owner \
+                 stops seeing its own events"
+            );
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// An event type and a tag survive the round trip byte for byte, whitespace
+    /// included.
+    ///
+    /// VT-1 and VT-15. `append_preserves_event_payload` already compares a whole
+    /// `Event` after a round trip and cannot reach this: the identifiers it
+    /// writes are `"A"` and `"course:c1"`, which are fixed points of every
+    /// transformation an adapter might apply. What this rule writes is an
+    /// identifier at the one edge a store is tempted to tidy.
+    ///
+    /// # What it rejects
+    ///
+    /// `TrimmingIdentifierStore`: `TRIM()` in the insert statement, or
+    /// `value.trim()` in the row mapper, because a trailing space in an
+    /// identifier "must be a typo". Kestrel Rotor replicated a
+    /// `SerialisedUnitConsumed` carrying `turbine:HW2-A14 `; `Tag::new` accepts
+    /// it, `Tags` sorts it adjacent to the unpadded tag, and `contains_all` is a
+    /// strict merge-scan on equality that does not match it. A lot-recall query
+    /// silently missed a turbine. An adapter that trims makes the *store* the
+    /// place that decides, which is worse than the application's bug it was
+    /// trying to fix: the value the caller wrote is no longer in the log, so
+    /// nothing downstream can even detect what happened.
+    ///
+    /// # Both directions are asserted, and they fail differently
+    ///
+    /// The padded value must still match a query built from the same bytes — a
+    /// rewritten index entry matches nothing, including itself — and the trimmed
+    /// value must match **nothing**, because whitespace is significant and the
+    /// two strings are two consistency boundaries. A store that trims on the way
+    /// in fails the first; a store that trims only in its query builder fails
+    /// the second.
+    pub async fn append_preserves_event_type_and_tags_byte_for_byte<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let padded_type = "SerialisedUnitConsumed ";
+        let padded_value = "HW2-A14 ";
+        let trimmed_value = "HW2-A14";
+        assert_ne!(
+            padded_value, trimmed_value,
+            "the anchor: the padded and the trimmed value must differ, or the \
+             closing assertion cannot tell a trimming adapter from a faithful one"
+        );
+
+        let original = tagged_event(padded_type, &[("turbine", padded_value)]);
+        let written = append_ok(&store, core::slice::from_ref(&original)).await;
+
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(all.len(), 1, "the store must hold the event it accepted");
+        assert_eq!(
+            all[0].event, original,
+            "VT-15 makes equality byte equality and the contract normalises \
+             nothing: an adapter that trims, folds case or normalises an \
+             identifier stores a value that is not the one the caller wrote, \
+             with no error anywhere"
+        );
+
+        let by_type = read_ok(&store, &query_of_types(&[padded_type]), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&by_type),
+            [written.get()],
+            "and the event must still match a query built from the same bytes — \
+             a rewritten index entry matches nothing, including itself"
+        );
+
+        let trimmed = read_ok(
+            &store,
+            &query_tagged(&[("turbine", trimmed_value)]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            trimmed.is_empty(),
+            "while the trimmed tag must match nothing: whitespace is \
+             significant everywhere, so `turbine:HW2-A14 ` and \
+             `turbine:HW2-A14` are two consistency boundaries and a store that \
+             conflates them answers a lot-recall query with somebody else's \
+             turbine. Got {:?}",
+            positions_of(&trimmed)
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // 8. VT-25 / CF-40 — a capacity refusal is distinguishable
+    // ---------------------------------------------------------------------
+
+    /// A store that refuses an over-capacity append reports it as
+    /// `AppendError::ExceedsStoreLimit`, and never by truncating.
+    ///
+    /// VT-25 `[FROZEN]`, and the refusal half of the four floors this section's
+    /// other rules cover. VT-21 – VT-24 say what every store MUST accept; this
+    /// says what a store MUST do about anything larger. The distinction the
+    /// variant exists for is a sync runner's: "this event will never fit here,
+    /// park it and tell a human" against "the disk is full, retry". A runner that
+    /// cannot tell them apart guesses, and a runner that guesses wrong drops an
+    /// event permanently (E2E-42).
+    ///
+    /// # Why the ceilings come from the fixture (CF-40)
+    ///
+    /// There is no `MAX_EVENT_DATA_LEN` constant and there must not be one — a
+    /// single number is a straitjacket on Postgres and a lie on a KV-backed peer.
+    /// So the ceiling is a **fact about this store**, and the fixture states it:
+    /// [`MAX_EVENT_DATA_LEN`](crate::Fixture::MAX_EVENT_DATA_LEN),
+    /// [`MAX_TAGS_PER_EVENT`](crate::Fixture::MAX_TAGS_PER_EVENT) and
+    /// [`MAX_EVENTS_PER_BATCH`](crate::Fixture::MAX_EVENTS_PER_BATCH), each
+    /// defaulting to `None`.
+    ///
+    /// They are `Option<usize>` and **not** [`Capability`](crate::Capability),
+    /// and the difference is not cosmetic. A declined `Capability` is a *trade*:
+    /// the fixture could have co-operated and chose not to, and the reason it
+    /// gives is the record of that choice. `None` here is a store reporting a
+    /// fact about itself — that it has no ceiling — and there is nothing to trade
+    /// away. It routes through the same skipped-with-a-reason path because the
+    /// reporting obligation is identical: a rule that cannot run must say so, or
+    /// a green suite is indistinguishable from a green suite minus one rule.
+    ///
+    /// # What it rejects
+    ///
+    /// Four compiled stores, in two pairs, and each pair is one column with the
+    /// engine configured two ways. `PayloadCeilingStore` and
+    /// `BatchParameterCeilingStore` refuse through `AppendError::Store` — which
+    /// is what every adapter does today, because until this variant existed there
+    /// was nowhere else to put it. `TruncatingPayloadStore` and
+    /// `ChunkLosingBatchStore` do not refuse at all: they store what fits, answer
+    /// `Ok` with a real position, and the caller is told the whole write landed.
+    /// The second pair is why each limit is checked twice — once for the answer,
+    /// once for what is in the store afterwards.
+    ///
+    /// # The at-the-ceiling append is the anchor
+    ///
+    /// Without it a store that refused *everything* would satisfy every assertion
+    /// below, and the rule would certify a ceiling nobody had located. A value at
+    /// exactly the stated limit must be accepted; a value one larger must be
+    /// refused. Nothing here asserts what the limit *is* — that is the store's to
+    /// document — only that it is where the fixture says it is. Nor does anything
+    /// assert the `len` field's value: VT-25 says it carries "the value that
+    /// exceeded" the limit, and an adapter that reports its own ceiling instead
+    /// is answering a caller's question about magnitude either way.
+    pub async fn append_reports_exceeded_store_limits<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // CF-40's gate. Written out rather than behind `require!` because the
+        // three constants are `Option<usize>` rather than `Capability`: a store
+        // with no ceiling has nothing to refuse and no trade to record.
+        if F::MAX_EVENT_DATA_LEN.is_none()
+            && F::MAX_TAGS_PER_EVENT.is_none()
+            && F::MAX_EVENTS_PER_BATCH.is_none()
+        {
+            return RuleOutcome::Skipped {
+                capability: NO_STORE_LIMITS,
+                reason: NO_CEILING_REASON,
+            };
+        }
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        if let Some(ceiling) = F::MAX_EVENT_DATA_LEN {
+            payload_ceiling_is_honoured(&store, ceiling).await;
+        }
+        if let Some(ceiling) = F::MAX_TAGS_PER_EVENT {
+            tag_ceiling_is_honoured(&store, ceiling).await;
+        }
+        if let Some(ceiling) = F::MAX_EVENTS_PER_BATCH {
+            batch_ceiling_is_honoured(&store, ceiling).await;
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// One ceiling of `append_reports_exceeded_store_limits`, checked at both
+    /// ends: exactly the stated limit is accepted, one more is refused as
+    /// `ExceedsStoreLimit`, and nothing of the refused value survives.
+    ///
+    /// Three helpers rather than one rule body, and the reason is a lint that is
+    /// right: `clippy::too_many_lines` fires at a hundred, and one rule over
+    /// three limits is a hundred and forty-seven. Splitting on the limit rather
+    /// than on the assertion keeps each half readable on its own — the failure
+    /// message a reader lands on names one ceiling, and the helper it is in
+    /// contains only that ceiling's arrangement.
+    ///
+    /// It is one *rule* over three limits for the reason
+    /// `append_reports_exceeded_store_limits`'s own documentation gives: three
+    /// rules would cost three registry entries, three changelog entries and three
+    /// clause `Rule:` lines for three failures that can only arrive together in
+    /// an adapter that got its capacity reporting wrong once.
+    async fn payload_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+        // A repeating non-zero pattern rather than zeroes: a column that
+        // stores the length and nothing else, or a driver that treats a run
+        // of NULs as a terminator, both survive an all-zero payload.
+        let filler = |len: usize| -> Vec<u8> {
+            (0..len)
+                .map(|byte| u8::try_from(byte % 251).unwrap_or(0))
+                .collect()
+        };
+
+        let at = event_with_owned_payload("AtTheCeiling", filler(ceiling))
+            .with_tags(tags(&[("edge", "data-at")]));
+        append_ok(store, core::slice::from_ref(&at)).await;
+
+        let over = event_with_owned_payload("OverTheCeiling", filler(ceiling + 1))
+            .with_tags(tags(&[("edge", "data-over")]));
+        let refused = store.append(core::slice::from_ref(&over), None).await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::EventDataLen,
+                    ..
+                })
+            ),
+            "VT-25: this fixture states a payload ceiling of {ceiling} bytes, \
+             so a payload of {} must be refused as \
+             `AppendError::ExceedsStoreLimit {{ limit: EventDataLen, .. }}` — \
+             not as `AppendError::Store`, which a caller cannot tell from a \
+             transient failure, and not by succeeding. Got {refused:?}",
+            ceiling + 1
+        );
+
+        let leftovers = read_ok(
+            store,
+            &query_tagged(&[("edge", "data-over")]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            leftovers.is_empty(),
+            "and a store MUST NOT truncate instead: the refused event must \
+             not be in the log in any form. Got {:?}",
+            positions_of(&leftovers)
+        );
+    }
+
+    /// The tag-count ceiling. See [`payload_ceiling_is_honoured`].
+    async fn tag_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+        let owned: Vec<(String, String)> = (0..=ceiling)
+            .map(|n| (format!("k{n:05}"), format!("v{n:05}")))
+            .collect();
+        let pairs: Vec<(&str, &str)> = owned
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
+
+        let at = tagged_event("TagsAtTheCeiling", &pairs[..ceiling]);
+        assert_eq!(
+            at.tags().len(),
+            ceiling,
+            "the anchor: `Tags` deduplicates, so a generator that collided \
+             would leave this rule testing a smaller number than the fixture \
+             claims"
+        );
+        append_ok(store, core::slice::from_ref(&at)).await;
+
+        let over = tagged_event("TagsOverTheCeiling", &pairs);
+        assert_eq!(
+            over.tags().len(),
+            ceiling + 1,
+            "and the over-limit event must really carry one tag more than the \
+             ceiling"
+        );
+        let refused = store.append(core::slice::from_ref(&over), None).await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::TagsPerEvent,
+                    ..
+                })
+            ),
+            "VT-25: this fixture states a ceiling of {ceiling} tags per \
+             event, so {} tags must be refused as \
+             `AppendError::ExceedsStoreLimit {{ limit: TagsPerEvent, .. }}` \
+             rather than by packing what fits into one column and dropping \
+             the rest. Got {refused:?}",
+            ceiling + 1
+        );
+
+        let leftovers = read_ok(
+            store,
+            &query_of_types(&["TagsOverTheCeiling"]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            leftovers.is_empty(),
+            "and it MUST NOT store the event with the overflow dropped: a \
+             tag that fell off the end is an event a query on that tag will \
+             never find, with no error anywhere. Got {} event(s)",
+            leftovers.len()
+        );
+    }
+
+    /// The batch-size ceiling. See [`payload_ceiling_is_honoured`].
+    async fn batch_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+        let at: Vec<Event> = (0..ceiling)
+            .map(|n| tagged_event("BatchAtTheCeiling", &[("n", format!("{n:05}").as_str())]))
+            .collect();
+        append_ok(store, &at).await;
+
+        let over: Vec<Event> = (0..=ceiling)
+            .map(|n| tagged_event("BatchOverTheCeiling", &[("n", format!("{n:05}").as_str())]))
+            .collect();
+        let refused = store.append(&over, None).await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::EventsPerBatch,
+                    ..
+                })
+            ),
+            "VT-25: this fixture states a ceiling of {ceiling} events per \
+             append, so a batch of {} must be refused as \
+             `AppendError::ExceedsStoreLimit {{ limit: EventsPerBatch, .. }}` \
+             — a refusal arriving as an adapter error leaves a sync runner \
+             nothing to switch on. Got {refused:?}",
+            ceiling + 1
+        );
+
+        let leftovers = read_ok(
+            store,
+            &query_of_types(&["BatchOverTheCeiling"]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            leftovers.is_empty(),
+            "and it MUST NOT clamp the batch to what one statement can \
+             carry: `&events[..ceiling]` where `events.chunks(ceiling)` was \
+             meant answers `Ok` with a real position and never writes the \
+             tail. Got {} event(s) of a refused batch in the store",
+            leftovers.len()
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Append conditions
     // ---------------------------------------------------------------------
@@ -2398,6 +4975,290 @@ pub mod rules {
     }
 
     // ---------------------------------------------------------------------
+    // 9-10. VT-30 — guards carry independent boundaries
+    // ---------------------------------------------------------------------
+
+    /// Each guard of an `AppendCondition` is evaluated against **its own**
+    /// boundary.
+    ///
+    /// VT-30. A decision model assembled from fragments read separately produces
+    /// one boundary per fragment, and there is no single boundary that is correct
+    /// for all of them. VT-27 is `[FROZEN]` and refuses per-item bounds inside a
+    /// `Query`, telling such an application to issue one read per fragment — and
+    /// that refusal is only *sound* if the resulting boundaries can be carried
+    /// into one condition. Without guards the prescribed workaround is the
+    /// `min(p₁…p₄)` collapse, and a collapse is a liveness failure: the quiet
+    /// fragment's stale boundary governs the busy one, so appends that never
+    /// conflicted are refused and the deployment reads the rejection rate as
+    /// contention.
+    ///
+    /// `MinCollapseStore` is that workaround promoted into an adapter, and it is
+    /// the compiled version. It passes the **entire** existing `condition_after_*`
+    /// family, because every rule in it carries a single guard and the minimum
+    /// over one boundary is that boundary — which is exactly why this rule has to
+    /// exist rather than be inferred.
+    ///
+    /// # The arrangement, and why the boundaries sit where they do
+    ///
+    /// The store holds a quiet event, a marker, a busy event and a second marker,
+    /// in that order. The quiet guard's boundary is the **first** marker — above
+    /// its own last match and *below* the busy event — and the busy guard's is
+    /// the second. Under correct per-guard evaluation neither guard has a match
+    /// above its own boundary and the append is admitted; under a collapse to the
+    /// minimum, the busy event sits above it and the append is refused.
+    ///
+    /// Each boundary is strictly above its own guard's last match rather than at
+    /// it, so that this rule does not also reject a probe reading `after` as
+    /// inclusive — `condition_after_ignores_events_at_the_boundary` owns that and
+    /// `AfterIsInclusiveStore` is its mutant.
+    ///
+    /// The mirror re-runs the same shape with the busy guard **unbounded**, which
+    /// must be refused. It is the non-vacuity anchor: without it a store whose
+    /// probe never fires satisfies the admission above for free, and the rule
+    /// would certify an inert condition.
+    ///
+    /// Nothing here reads the store back, and that is deliberate: every position
+    /// comes from the `append` that assigned it, so a store whose *read* path is
+    /// wrong fails the rules that own the read path and not this one.
+    pub async fn condition_guards_carry_independent_boundaries<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let quiet_query = query_of(&["TariffPublished"], &[("tariff", "t1")]);
+        let busy_query = query_of(&["MeterReadingTaken"], &[("meter", "m1")]);
+
+        append_ok(
+            &store,
+            &[tagged_event("TariffPublished", &[("tariff", "t1")])],
+        )
+        .await;
+        // The markers match neither guard, and are distinguishable from each
+        // other so that a content-addressed store has nothing to deduplicate.
+        let quiet_boundary = append_ok(&store, &[tagged_event("Marker", &[("n", "1")])]).await;
+        append_ok(
+            &store,
+            &[tagged_event("MeterReadingTaken", &[("meter", "m1")])],
+        )
+        .await;
+        let busy_boundary = append_ok(&store, &[tagged_event("Marker", &[("n", "2")])]).await;
+
+        // The caller read the quiet fragment to its own boundary and the busy one
+        // to its own, and carries both into one condition. The event it writes
+        // matches neither guard.
+        let settled = [tagged_event("SettlementRun", &[("meter", "m1")])];
+        let per_guard = condition_after(quiet_query.clone(), quiet_boundary.get())
+            .and_guard(busy_query.clone(), Some(busy_boundary));
+
+        let admitted = store.append(&settled, Some(&per_guard)).await;
+        assert!(
+            admitted.is_ok(),
+            "VT-30: each guard MUST be evaluated against its OWN boundary. \
+             Neither fragment has moved since the caller read it — no \
+             `TariffPublished` above {quiet_boundary:?}, no `MeterReadingTaken` \
+             above {busy_boundary:?} — so the append MUST be admitted. A store \
+             that collapses the guards to `min(after)` re-admits every event \
+             above that minimum for EVERY guard, so the quiet fragment's stale \
+             boundary governs the busy one and a consistency boundary that never \
+             conflicted starts refusing. Got {admitted:?}"
+        );
+
+        // The anchor: the same two fragments with the busy guard unbounded must
+        // be refused, so the admission above is a verdict rather than a probe
+        // that never fired.
+        let unbounded =
+            condition_after(quiet_query, quiet_boundary.get()).and_guard(busy_query, None);
+        let refused = store.append(&settled, Some(&unbounded)).await;
+        assert!(
+            refused.is_err(),
+            "and the admission above must be the guards' verdict rather than \
+             their absence: with the busy guard unbounded, the \
+             `MeterReadingTaken` the store already holds violates it and the \
+             append MUST be refused. Got {refused:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A one-guard condition is evaluated by the same rules as any other guard.
+    ///
+    /// VT-30's compatibility half: `AppendCondition::new(query)` produces a single
+    /// unbounded guard, `after`/`after_opt` apply to every guard, and every
+    /// existing call site keeps its meaning as the single-guard case. What that
+    /// obliges of a *store* is one sentence — **the one-guard path is not exempt
+    /// from the boundary semantics** — and it is the sentence a store can get
+    /// wrong on its own.
+    ///
+    /// # What this rule adds that the `condition_after_*` family does not
+    ///
+    /// Every other append-condition rule in this suite builds a condition with
+    /// exactly one guard, so all of them already exercise the single-guard path,
+    /// and any store *uniformly* wrong about `after` is caught by one of them.
+    /// What none of them can see is a store wrong about `after` on **one path
+    /// only**, because none of them ever builds the other path.
+    ///
+    /// That is the regression VT-30's refactor invites, and it is what this rule
+    /// owns. An adapter generalising to N guards keeps a `guards.len() == 1` fast
+    /// path — the overwhelmingly common case, and the one where a `UNION` per
+    /// guard is pure overhead — and that fast path is the *old* statement,
+    /// written before boundaries existed and never re-reviewed, while the general
+    /// path is new and was. `SingleGuardFastPathStore` is the compiled version:
+    /// correct for two guards, and for one guard it asks only whether any event
+    /// matches the query at all. `MinCollapseStore` is its mirror image — right
+    /// on one guard, wrong on N — and
+    /// `condition_guards_carry_independent_boundaries` catches that one.
+    ///
+    /// # Why two fixture instances
+    ///
+    /// The two spellings must be compared against stores in the **same state**,
+    /// and an admitted append is a write: measuring both on one store would let
+    /// the second spelling see an event the first one added, so a store whose
+    /// probe is sensitive to unrelated events — `ExistenceProbeStore`,
+    /// `UncorrelatedProbeStore` — would fail this rule for a reason that has
+    /// nothing to do with guard arity. Each instance is driven to completion
+    /// before the next is opened, so a fixture that failed to isolate them fails
+    /// `two_fixture_instances_observe_none_of_each_others_appends`, which owns
+    /// that, rather than this.
+    pub async fn condition_with_one_guard_behaves_as_today<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let first = open().await;
+        let one_guard = probe_one_and_two_guard_spellings(&first.connect().await, 1).await;
+
+        let second = open().await;
+        let two_guards = probe_one_and_two_guard_spellings(&second.connect().await, 2).await;
+
+        assert_eq!(
+            one_guard.stale_admitted,
+            two_guards.stale_admitted,
+            "VT-30: a one-guard condition is evaluated by the same rules as any \
+             other guard. With a boundary BELOW a matching event, the one-guard \
+             spelling {} the append and the identical condition written twice {} \
+             it — a store with a `guards.len() == 1` fast path that predates the \
+             boundary semantics has two answers to one question, and the answer \
+             a caller gets depends on how many fragments its decision model \
+             happened to read",
+            if one_guard.stale_admitted {
+                "admitted"
+            } else {
+                "refused"
+            },
+            if two_guards.stale_admitted {
+                "admitted"
+            } else {
+                "refused"
+            }
+        );
+        assert_eq!(
+            one_guard.current_admitted,
+            two_guards.current_admitted,
+            "and with a boundary ABOVE every matching event: one guard {} the \
+             append, two identical guards {} it",
+            if one_guard.current_admitted {
+                "admitted"
+            } else {
+                "refused"
+            },
+            if two_guards.current_admitted {
+                "admitted"
+            } else {
+                "refused"
+            }
+        );
+
+        // The anchor. Two spellings agree trivially against a store that answers
+        // the same thing to everything, so the boundary has to make a difference
+        // for the agreement to mean anything.
+        assert!(
+            !one_guard.stale_admitted && one_guard.current_admitted,
+            "the anchor: the two boundaries must be told apart at all. A matching \
+             event above the boundary MUST refuse the append and a boundary above \
+             every match MUST admit it — otherwise the agreement asserted above \
+             is agreement about nothing. Stale boundary admitted: {}; current \
+             boundary admitted: {}",
+            one_guard.stale_admitted,
+            one_guard.current_admitted
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// What one spelling of a condition answered at each of two boundaries.
+    ///
+    /// Booleans rather than the `Result`s themselves, because the two spellings
+    /// are measured against two different stores and the claim is only that the
+    /// **verdicts** agree; carrying `AppendError<S::Error>` out of the helper
+    /// would put the fixture's error type into this rule's signature for a value
+    /// it never inspects.
+    struct GuardSpellingVerdicts {
+        /// Whether the append was admitted with the boundary below a matching
+        /// event.
+        stale_admitted: bool,
+        /// Whether it was admitted with the boundary above every matching event.
+        current_admitted: bool,
+    }
+
+    /// Seeds a store, then asks the boundary question twice with a condition
+    /// written as `guards` copies of one clause.
+    ///
+    /// One copy is the spelling every caller uses; two is the same condition said
+    /// twice, which is semantically identical because a conjunction of a clause
+    /// with itself is that clause. A store that answers them differently has two
+    /// code paths that disagree.
+    ///
+    /// The refusing case is asked **first**, because a refusal writes nothing and
+    /// leaves the store in exactly the state the seeding produced — which is the
+    /// state the admitting case below has to be measured against.
+    async fn probe_one_and_two_guard_spellings<S: EventStore>(
+        store: &S,
+        guards: usize,
+    ) -> GuardSpellingVerdicts {
+        let query = query_of_types(&["Blocker"]);
+        // Two matching events distinguishable by tag, so that a content-addressed
+        // store has nothing to deduplicate, and a non-matching filler whose
+        // position is a boundary strictly above every match.
+        let stale = append_ok(store, &[tagged_event("Blocker", &[("n", "1")])]).await;
+        append_ok(store, &[tagged_event("Blocker", &[("n", "2")])]).await;
+        let current = append_ok(store, &[tagged_event("Filler", &[("n", "3")])]).await;
+
+        let build = |boundary: SequencePosition| {
+            let mut built = condition_after(query.clone(), boundary.get());
+            for _ in 1..guards {
+                built = built.and_guard(query.clone(), Some(boundary));
+            }
+            built
+        };
+
+        // Both conditions are bound to locals rather than passed as temporaries:
+        // `append` borrows them across an await, and a temporary living only to
+        // the end of the statement is the shape that reads as fine and is one
+        // refactor from `error[E0716]`.
+        let stale_condition = build(stale);
+        let stale_admitted = store
+            .append(
+                &[tagged_event("Attempt", &[("n", "stale")])],
+                Some(&stale_condition),
+            )
+            .await
+            .is_ok();
+
+        let current_condition = build(current);
+        let current_admitted = store
+            .append(
+                &[tagged_event("Attempt", &[("n", "current")])],
+                Some(&current_condition),
+            )
+            .await
+            .is_ok();
+
+        GuardSpellingVerdicts {
+            stale_admitted,
+            current_admitted,
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Concurrency
     // ---------------------------------------------------------------------
 
@@ -2673,6 +5534,273 @@ pub mod rules {
         );
 
         RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Read isolation (ES-11, ES-12)
+    //
+    // Both rules poll the stream **once before they append**, and the two
+    // helpers below are what let them. `poll_once`, beside the visibility rule,
+    // does the same for two `append` futures; the pause point has to be one the
+    // rule controls, or it has to come from a fixture nothing in the tree can
+    // build.
+    // ---------------------------------------------------------------------
+
+    /// One `read` is one sample: an append made after the stream has been polled
+    /// does not appear in it.
+    ///
+    /// ES-11. The store is read once to fix the expected answer, a stream is
+    /// opened over the same query, **polled once**, an event is appended, and the
+    /// stream is then drained. What comes out must be exactly what was visible
+    /// before the append.
+    ///
+    /// # The leading poll is the whole reason this rule is portable
+    ///
+    /// It reads as an incidental detail and it is not. The contract fixes the
+    /// sample **no later than the first poll**, and deliberately does not say
+    /// whether it is taken at call time or deferred: `MemoryEventStore` filters,
+    /// orders and truncates under the read lock when `read` is called, and
+    /// `happenstance-sqlite` cannot — `spawn_blocking` panics with no runtime in
+    /// scope and `read` is not `async`, so its work has to move into `poll_next`.
+    /// Both are conformant. A rule that appended **before** the first poll would
+    /// therefore fail the deferring adapter at random while passing the buffering
+    /// one, and the failure would read as a flake rather than as a rule asking
+    /// the wrong question. One poll first, and both shapes answer the same.
+    ///
+    /// A stream that answers `Poll::Pending` on that first poll has still been
+    /// polled, and nothing in the specification says a read stream is ready
+    /// immediately — `PagedStreamStore` is the conformant control for exactly
+    /// that. So the leading poll's *result* is kept where there is one and
+    /// ignored where there is not.
+    ///
+    /// # What it rejects
+    ///
+    /// `RefetchingPagedStore`: a store with no cursor issuing an independent
+    /// statement per page against whatever it holds *now*. That is the natural
+    /// shape for a one-shot-HTTP adapter, and it is what ES-11's ceiling — capture
+    /// a position ceiling *H* no later than the first poll and bound every later
+    /// statement by `position <= H` — exists to require. It also rejects
+    /// `BorrowHoldingStore`, whose stream holds the store open so the append in
+    /// the middle of this rule cannot happen at all.
+    ///
+    /// # What it deliberately does not assert
+    ///
+    /// Nothing about *laziness*. Whether the adapter did its work at call time or
+    /// at the first poll is unobservable through the port and is the adapter's
+    /// business; a MUST no rule can check is the decorative-rule failure with the
+    /// arrow reversed.
+    pub async fn read_result_is_stable_under_concurrent_append<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // One distinct tag each, for the reason
+        // `limit_applies_across_items_not_per_item` states in full.
+        let one = append_ok(&store, &[tagged_event("Seeded", &[("writer", "b1")])]).await;
+        let two = append_ok(&store, &[tagged_event("Seeded", &[("writer", "b2")])]).await;
+        let three = append_ok(&store, &[tagged_event("Seeded", &[("writer", "b3")])]).await;
+
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&before),
+            [one.get(), two.get(), three.get()],
+            "all three seeded events must be readable back before a claim about \
+             what a later read may not add means anything"
+        );
+
+        // ES-13: the returned stream captures the query's lifetime, so whatever
+        // owns the stream must own the query. Inside one function that is a named
+        // local; a stream that escaped this function would need a parameter,
+        // because a local does not outlive the function that declared it.
+        let query = Query::all();
+        let mut stream = pin!(store.read(&query, ReadOptions::new()));
+
+        let mut drained: Vec<SequencedEvent> = Vec::new();
+        match poll_stream_once(stream.as_mut()).await {
+            Poll::Ready(Some(Ok(event))) => drained.push(event),
+            Poll::Ready(Some(Err(err))) => {
+                panic!("the first poll of a read stream must not fail, got {err:?}")
+            }
+            // Neither is a violation: a stream may legally not be ready on its
+            // first poll, and one that ends there is caught by the comparison
+            // below rather than here.
+            Poll::Ready(None) | Poll::Pending => {}
+        }
+
+        let later = append_ok(&store, &[tagged_event("Later", &[("writer", "after")])]).await;
+
+        drained.extend(drain_rest(stream.as_mut()).await);
+
+        assert_eq!(
+            snapshot_of(&drained),
+            snapshot_of(&before),
+            "one `read` is evaluated against ONE state of the store, fixed no \
+             later than the first poll of its stream. A store taking a fresh \
+             sample per page grows under the caller's feet — and the caller then \
+             derives its append condition's boundary from a maximum position \
+             sitting above an event it never saw, so the condition tells the store \
+             to ignore exactly what it missed and a write that should have been \
+             rejected is accepted"
+        );
+        assert!(
+            !drained.iter().any(|event| event.position == later),
+            "and the event appended after the first poll must not be among them"
+        );
+
+        // The anchor for the append itself: without it a store whose `append`
+        // silently did nothing would satisfy every assertion above.
+        let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert!(
+            after.iter().any(|event| event.position == later),
+            "the appended event must really have landed — a read issued after the \
+             stream was drained must see it"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// Every item of one `Query` is evaluated against the same sample.
+    ///
+    /// ES-12, and it is strictly harder than ES-11: an adapter issuing one
+    /// statement per `QueryItem` satisfies ES-11 *per item* and still fails this.
+    ///
+    /// The shape is `read_result_is_stable_under_concurrent_append`'s with two
+    /// changes, and both of them are the rule: the query has **two items**, and
+    /// the event appended after the leading poll matches the **later** one. A
+    /// store evaluating item 1's statement at the first poll and item 2's at some
+    /// later poll picks the new event up in the second statement.
+    ///
+    /// # Why the failure is quieter than a tear looks
+    ///
+    /// The missed event's position sits *below* the maximum the read observed.
+    /// `read_decision_model` hands that maximum to `AppendCondition::after_opt`,
+    /// and the condition then says "reject if anything matched after *P*" —
+    /// which is precisely the instruction to ignore the event that was missed. A
+    /// torn read does not become a rejected append; it becomes an **accepted**
+    /// one.
+    ///
+    /// # The two items carry distinct type lists on purpose
+    ///
+    /// `ItemDedupByTypeStore` collapses items sharing a type list, so two
+    /// tag-only items would make it fail this rule at its anchor for a reason
+    /// `query_union_is_item_concatenation` already owns. "Alpha" before "Omega"
+    /// for the matching reason: item order and position order agree, so no
+    /// ordering mutant is caught here either.
+    ///
+    /// It rejects `RefetchingPagedStore`, the same store ES-11's rule rejects —
+    /// re-sampling per page is re-sampling per item at a different granularity,
+    /// which is ADR-0011's finding that **ES-12 is discharged by ES-11's ceiling
+    /// rather than by a second mechanism**. `BorrowHoldingStore` fails it too,
+    /// for its own reason.
+    pub async fn query_items_share_one_snapshot<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let alpha = append_ok(&store, &[tagged_event("Alpha", &[("item", "first")])]).await;
+        let omega = append_ok(&store, &[tagged_event("Omega", &[("item", "last")])]).await;
+
+        // Two disjoint items, and the second is what the late append will match.
+        let query = query_of_items([item_of_types(&["Alpha"]), item_of_types(&["Omega"])]);
+
+        let before = read_ok(&store, &query, ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&before),
+            [alpha.get(), omega.get()],
+            "both items must select their own event before a claim about the \
+             sample they share means anything"
+        );
+
+        let mut stream = pin!(store.read(&query, ReadOptions::new()));
+
+        let mut drained: Vec<SequencedEvent> = Vec::new();
+        match poll_stream_once(stream.as_mut()).await {
+            Poll::Ready(Some(Ok(event))) => drained.push(event),
+            Poll::Ready(Some(Err(err))) => {
+                panic!("the first poll of a read stream must not fail, got {err:?}")
+            }
+            Poll::Ready(None) | Poll::Pending => {}
+        }
+
+        // Matches the LAST item of the query. A store emitting one statement per
+        // item has not reached that item yet.
+        // A distinct tag, so this is a *different* event from the seeded Omega
+        // while still matching the query's last item by type. Repeating the seed
+        // byte for byte would make `PayloadDedupStore` collapse the two, and this
+        // rule would then fail it for a reason
+        // `reissued_unconditional_batch_lands_twice` already owns.
+        let late = append_ok(&store, &[tagged_event("Omega", &[("item", "late")])]).await;
+
+        drained.extend(drain_rest(stream.as_mut()).await);
+
+        assert_eq!(
+            snapshot_of(&drained),
+            snapshot_of(&before),
+            "every item of one `Query` must be evaluated against the same sample \
+             as every other item of that same `read`. An adapter emitting one \
+             statement per `QueryItem` picks the late event up in a later \
+             statement, and the caller's condition boundary — derived from the \
+             maximum position this read observed — then tells the store to ignore \
+             exactly what was missed"
+        );
+        assert!(
+            !drained.iter().any(|event| event.position == late),
+            "and the event matching the query's last item must not be among them"
+        );
+
+        let after = read_ok(&store, &query, ReadOptions::new()).await;
+        assert!(
+            after.iter().any(|event| event.position == late),
+            "the appended event must really have landed and really have matched \
+             the query — otherwise this rule tested nothing"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// Polls a stream exactly once, whatever it answers.
+    ///
+    /// `poll_fn`'s own future is `Ready` whatever the inner one said, which is
+    /// what makes this *poll once* rather than *await* — and what keeps
+    /// `block_on` from parking here, so a store that answers `Pending` cannot
+    /// hang the caller at this line. It is the stream-shaped sibling of
+    /// [`poll_once`], and the two isolation rules need it for the reason the
+    /// visibility rule needs that one: the pause point has to be one the rule
+    /// controls.
+    async fn poll_stream_once<S: Stream>(mut stream: Pin<&mut S>) -> Poll<Option<S::Item>> {
+        core::future::poll_fn(|cx| Poll::Ready(stream.as_mut().poll_next(cx))).await
+    }
+
+    /// Drains what is left of a stream that has already been polled.
+    ///
+    /// `collect` cannot serve here and the reason is its signature rather than
+    /// its body: it takes the stream **by value** and pins it itself, and these
+    /// two rules hold their stream across an append, so what they have is a
+    /// `Pin<&mut _>` they must keep. The loop is `collect`'s, with the error arm
+    /// turned into the panic a rule wants rather than a `Result` every call site
+    /// would have to unwrap.
+    async fn drain_rest<S, E>(mut stream: Pin<&mut S>) -> Vec<SequencedEvent>
+    where
+        S: Stream<Item = Result<SequencedEvent, E>>,
+        E: core::fmt::Debug,
+    {
+        let mut rest = Vec::new();
+        core::future::poll_fn(|cx| {
+            loop {
+                match stream.as_mut().poll_next(cx) {
+                    Poll::Ready(Some(Ok(event))) => rest.push(event),
+                    Poll::Ready(Some(Err(err))) => {
+                        panic!("the stream must still drain after the append, got {err:?}")
+                    }
+                    Poll::Ready(None) => return Poll::Ready(()),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+        })
+        .await;
+        rest
     }
 
     // ---------------------------------------------------------------------

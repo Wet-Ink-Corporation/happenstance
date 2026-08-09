@@ -118,6 +118,7 @@ macro_rules! for_each_event_store_rule {
             duplicate_items_do_not_duplicate_events,
             query_item_order_does_not_change_the_result_set,
             query_matching_nothing_yields_empty,
+            query_union_is_item_concatenation,
 
             // --- Read options ----------------------------------------------
             read_from_is_inclusive,
@@ -129,18 +130,47 @@ macro_rules! for_each_event_store_rule {
             read_limit_applies_after_filtering,
             read_backwards_limit_applies_after_filtering,
             read_from_composes_with_multi_item_query,
+            read_to_is_inclusive,
+            read_from_and_to_bound_a_closed_window,
+            read_to_under_backwards_bounds_the_older_end,
+            read_limit_zero_yields_nothing,
+            limit_applies_across_items_not_per_item,
+            read_from_a_gap_position,
 
             // --- Sequence positions ----------------------------------------
             positions_are_unique,
             positions_are_strictly_monotonic,
 
+            // --- Head -----------------------------------------------------
+            head_of_an_empty_store_is_none,
+            head_is_the_highest_visible_position,
+            head_advances_across_two_handles,
+
+            // --- Identity, recorded time and membership --------------------
+            append_stamps_identity_and_time,
+            append_stamps_a_local_event_id,
+            event_ids_are_unique_within_a_store,
+            appending_equal_events_yields_two_events,
+            event_id_is_not_matchable_by_query,
+            reopened_store_does_not_reissue_an_event_id,
+            append_stamps_a_recorded_time,
+            recorded_time_survives_a_reopen,
+            contains_event_id_reports_membership,
+
             // --- Append ----------------------------------------------------
             append_returns_last_written_position,
             append_is_atomic,
             append_is_atomic_under_a_mid_batch_fault,
+            arming_a_mid_batch_fault_makes_the_append_fail,
             append_rejects_empty_batch,
             empty_batch_is_refused_before_the_condition_is_evaluated,
             append_preserves_event_payload,
+            batch_positions_follow_slice_order,
+            batch_is_not_evaluated_against_its_own_condition,
+            dropped_append_future_leaves_no_partial_batch,
+            reissued_conditional_batch_lands_once,
+            reissued_unconditional_batch_lands_twice,
+            reissued_batch_conditioned_on_other_events_lands_twice,
 
             // --- Value edges -----------------------------------------------
             append_preserves_an_empty_payload,
@@ -151,6 +181,10 @@ macro_rules! for_each_event_store_rule {
             store_accepts_the_guaranteed_minimum_tag_count,
             store_evaluates_a_query_at_the_guaranteed_minimum_item_count,
             store_accepts_the_guaranteed_minimum_batch_size,
+            tags_differing_only_by_unicode_normalisation_are_distinct,
+            tags_may_repeat_a_key,
+            append_preserves_event_type_and_tags_byte_for_byte,
+            append_reports_exceeded_store_limits,
 
             // --- Append conditions -----------------------------------------
             condition_without_after_rejects_any_match,
@@ -165,6 +199,8 @@ macro_rules! for_each_event_store_rule {
             condition_after_beyond_the_last_matching_position_admits_the_append,
             condition_rejection_leaves_store_unchanged,
             condition_rejection_is_reported_as_condition_violated,
+            condition_guards_carry_independent_boundaries,
+            condition_with_one_guard_behaves_as_today,
 
             // --- Concurrency -----------------------------------------------
             racing_conditional_appends_elect_one_winner,
@@ -172,6 +208,10 @@ macro_rules! for_each_event_store_rule {
             // --- Re-entrancy -----------------------------------------------
             interleaved_appends_on_one_handle_elect_one_winner,
             a_live_read_stream_does_not_block_an_append,
+
+            // --- Read isolation ---------------------------------------------
+            read_result_is_stable_under_concurrent_append,
+            query_items_share_one_snapshot,
 
             // --- Position visibility ---------------------------------------
             nothing_below_an_observed_position_appears_later,

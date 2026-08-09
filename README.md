@@ -81,7 +81,7 @@ cargo run -p course-subscriptions
 | Crate | Role | Status |
 |---|---|---|
 | [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 55 rules + property tests |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 89 rules + property tests |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
 | `happenstance-postgres` | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 planned |

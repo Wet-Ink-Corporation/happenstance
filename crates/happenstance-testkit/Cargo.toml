@@ -6,7 +6,12 @@ description = "DCB conformance suite for happenstance event store adapters."
 # number has to move on its own schedule — and a version inherited from the
 # workspace cannot be separated later without a release that lies about what
 # changed in it.
-version = "0.1.0"
+#
+# Moved to 0.2.0 by the phase-4 freeze on exactly the reasoning above: that
+# change added thirty-four rules, and thirty-four new ways for a previously
+# passing adapter to go red is the event this crate's independent number exists
+# to signal.
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

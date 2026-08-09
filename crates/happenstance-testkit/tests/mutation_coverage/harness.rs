@@ -541,12 +541,26 @@ fn declines<S: Subject>() -> Vec<(&'static str, &'static str)> {
         capability.reason().map(|reason| (name, reason))
     }
 
-    [
+    let mut declined_items: Vec<(&'static str, &'static str)> = [
         declined("SECOND_HANDLE", S::SECOND_HANDLE),
         declined("REOPEN", S::REOPEN),
         declined("MID_BATCH_FAULT", S::MID_BATCH_FAULT),
     ]
     .into_iter()
     .flatten()
-    .collect()
+    .collect();
+
+    // CF-40's limits are facts rather than trades, so they are not `Capability`
+    // and cannot go through `declined`. They still produce a reported skip, and a
+    // skip nothing here accounts for is a rule that stopped running.
+    if S::MAX_EVENT_DATA_LEN.is_none()
+        && S::MAX_TAGS_PER_EVENT.is_none()
+        && S::MAX_EVENTS_PER_BATCH.is_none()
+    {
+        declined_items.push((
+            happenstance_testkit::NO_STORE_LIMITS,
+            happenstance_testkit::NO_CEILING_REASON,
+        ));
+    }
+    declined_items
 }

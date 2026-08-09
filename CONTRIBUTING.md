@@ -218,8 +218,8 @@ adapter author to rerun CI until it is green.
 `for_each_concurrency_rule!`, its wrong stores live in
 `tests/mutation_coverage/racers.rs`, and its table is `RACERS` — a separate one
 rather than more `REGISTRY` rows, because every store in it fails **none** of the
-fifty-five named rules and `mutant_registry_is_exhaustive` rejects a row with an
-empty `fails` list.
+event-store family's named rules and `mutant_registry_is_exhaustive` rejects a
+row with an empty `fails` list.
 
 **There is no `no_orphan_rules` on this side either**, for the same reason the
 model family has none: that check `include_str!`s `suite.rs` and nothing else, so

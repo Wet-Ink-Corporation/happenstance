@@ -87,7 +87,7 @@ async fn define_course(store: &MemoryEventStore, course: &str, capacity: u32) ->
     let query = Query::from_item(QueryItem::new(
         [COURSE_DEFINED],
         Tags::from_pairs([("course", course)])?,
-    )?)?;
+    )?);
 
     let (existing, last_seen) = read_decision_model(store, &query).await?;
     if !existing.is_empty() {
@@ -178,7 +178,7 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
     let query = Query::from_item(QueryItem::new(
         [STUDENT_SUBSCRIBED, STUDENT_UNSUBSCRIBED],
         Tags::from_pairs([("course", course), ("student", student)])?,
-    )?)?;
+    )?);
 
     let (events, last_seen) = read_decision_model(store, &query).await?;
 

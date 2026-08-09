@@ -18,21 +18,28 @@
 //! `mutants_fail_exactly_their_declared_rules` exists to catch — and it would
 //! then be catching it in the *instrument*.
 //!
-//! [`Defect::select`] is the seventh step and the newest, and it is the one to
-//! read before adding an eighth: it exists because two real defects couple a
-//! *filter* to a *read option*, and `matching` is handed no options while
-//! `ordered` is handed no query. Its documentation says which two and why the
-//! seam is not the default place to put a defect.
+//! [`Defect::select`] is the seventh step, [`Defect::head_of`] the eighth and
+//! [`Defect::contains`] the ninth. Read `select`'s documentation before adding a
+//! tenth: it exists because two real defects couple a *filter* to a *read
+//! option*, and `matching` is handed no options while `ordered` is handed no
+//! query — its seam is the expensive one. The other two are the cheap kind, a
+//! port operation with a body of its own that no other step can reach, and both
+//! became steps only once a rule read the answer.
 //!
-//! Six stores cannot be expressed that way and are written out longhand, each
-//! for a stated reason: [`CachedHeadFixture`] because its defect is per *handle*
-//! rather than per store, [`LosingFixture`] because its defect is what a reopen
+//! Eight stores cannot be expressed that way and are written out longhand, each
+//! for a stated reason: [`CachedHeadFixture`] and [`LastWrittenHeadFixture`]
+//! because each carries its defect per *handle* rather than per store — the
+//! first in what its condition probe can see, the second in what its `head`
+//! reports — [`LosingFixture`] because its defect is what a reopen
 //! finds, [`SharedBackingFixture`] because its defect is that two fixture
 //! instances are one, [`PreCommitPositionStore`] and [`AwaitAcrossBorrowStore`]
 //! because each defect is a *window* — a suspension between two halves of an
 //! append — and [`Defect::commit`] is a synchronous function with nowhere to put
-//! one, and [`BorrowHoldingStore`] because its defect is the *lifetime* of the
-//! value `read` returns rather than anything a step computes.
+//! one, [`BorrowHoldingStore`] because its defect is the *lifetime* of the
+//! value `read` returns rather than anything a step computes, and
+//! [`RefetchingPagedStore`] because its defect is the *poll schedule* of that
+//! same value — the sign of `BorrowHoldingStore`'s reversed, a stream that holds
+//! too little rather than too much.
 //!
 //! # Fixture-level mutants share the registry with store-level ones
 //!
@@ -72,8 +79,8 @@ use std::rc::{Rc, Weak};
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, EventType, Query,
-    QueryItem, ReadOptions, SequencePosition, SequencedEvent, Tag, Tags,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
+    QueryItem, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
 use happenstance_testkit::{Capability, Fixture};
 
@@ -106,6 +113,19 @@ pub(crate) trait Defect: 'static {
 
     /// How positions are handed out. Dense from 1, like `MemoryEventStore`.
     const ALLOCATE: Allocate = dense;
+
+    /// CF-40's ceilings, defaulted to "this store has none".
+    ///
+    /// Four defects override one of these, and every other mutant inherits `None`
+    /// and reports a skip for `append_reports_exceeded_store_limits`. They are on
+    /// `Defect` rather than on [`MutantFixture`] because the ceiling belongs to
+    /// the store — `PayloadCeilingStore::CEILING` is the number, and stating it
+    /// twice is the drift `correct.rs` exists to avoid.
+    const MAX_EVENT_DATA_LEN: Option<usize> = None;
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN).
+    const MAX_TAGS_PER_EVENT: Option<usize> = None;
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN).
+    const MAX_EVENTS_PER_BATCH: Option<usize> = None;
 
     /// Step 1 — the events matching `query`.
     fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&'a SequencedEvent> {
@@ -187,6 +207,34 @@ pub(crate) trait Defect: 'static {
         allocate: Allocate,
     ) -> Vec<SequencedEvent> {
         correct::sequence(events, head, allocate)
+    }
+
+    /// The store's head: the highest position currently visible.
+    ///
+    /// The eighth step. Until phase 4 `head` was deliberately *not* one, and the
+    /// reason it becomes one is that ES-30 acquired three rules: a defect in
+    /// `head` is now a defect a rule can see, so it is a defect a mutant has to
+    /// be able to express. Anything else would mean two more longhand stores for
+    /// a difference of one function.
+    ///
+    /// `correct::head_of` was already a free function against exactly this
+    /// possibility — its own doc comment says so — so a mutant of `head` is one
+    /// step from correct in the same way `select` and `commit` make a mutant of
+    /// the read and write paths one step from correct.
+    fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
+        correct::head_of(events)
+    }
+
+    /// The membership answer behind `contains_event_id`.
+    ///
+    /// The ninth step, and the only one on neither the read nor the write path:
+    /// `contains_event_id` is a port operation of its own, so a store that
+    /// answers it wrongly is wrong nowhere else and there is nothing else to
+    /// override. It became a step for `head_of`'s reason, one clause over —
+    /// ES-41 acquired `contains_event_id_reports_membership`, so a defect here is
+    /// one a rule can see.
+    fn contains(events: &[SequencedEvent], id: EventId) -> bool {
+        correct::contains(events, id)
     }
 
     /// The write itself: probe, emptiness, allocate, extend.
@@ -273,6 +321,31 @@ impl<D: Defect> EventStore for MutantStore<D> {
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         D::commit(&mut stored, events, condition)
     }
+
+    // Both of these were `crate::correct`'s for every `D` until phase 4, and the
+    // comment here said so: no rule of the event-store family read either
+    // answer, so a step would have been somewhere to put a defect nothing could
+    // catch — a second, undeclared defect in every store that inherited it, and
+    // `mutants_fail_exactly_their_declared_rules` would then be catching the
+    // instrument rather than the implementation. Slice F gave `head` three rules
+    // (ES-30) and `contains_event_id` one (ES-41), so both are now steps: a
+    // defect in either is one a rule can see, and therefore one a mutant must be
+    // able to declare.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(D::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(D::contains(&stored, id))
+    }
 }
 
 /// One backing log for a [`MutantStore`], and any number of handles onto it.
@@ -294,6 +367,12 @@ impl<D: Defect> Fixture for MutantFixture<D> {
         "a mutant of the read or write path is a Vec behind an Rc, with no \
          durable medium to reopen over",
     );
+
+    // Forwarded from the defect, because the ceiling is the store's fact and
+    // `MutantFixture` is one type over forty of them.
+    const MAX_EVENT_DATA_LEN: Option<usize> = D::MAX_EVENT_DATA_LEN;
+    const MAX_TAGS_PER_EVENT: Option<usize> = D::MAX_TAGS_PER_EVENT;
+    const MAX_EVENTS_PER_BATCH: Option<usize> = D::MAX_EVENTS_PER_BATCH;
 
     async fn connect(&self) -> Self::Store {
         self.0.clone()
@@ -510,13 +589,10 @@ impl Defect for UninternedTypeStore {
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
         let known = Self::interned(events);
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && Self::query_matches(&condition.fail_if_events_match, &known, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && Self::query_matches(&guard.query, &known, event)
+        })
     }
 }
 
@@ -590,6 +666,58 @@ impl Defect for ItemOrderedUnionStore {
     }
 }
 
+/// A query's items are interned by their **type list**, and a second item with
+/// the same types is dropped.
+///
+/// The optimisation ES-15's `Rejects:` names and that no rule caught until
+/// `query_union_is_item_concatenation` landed. `QueryItem::new` already sorts
+/// and deduplicates *types* (`query.rs:62-67`), so extending the idea one level
+/// up — group the items by their type set, emit one `type_id IN (…)` clause per
+/// distinct set — looks like the same move. It is not: the tag half of every
+/// swallowed item goes with it, so the query silently selects a **smaller** set
+/// than the caller asked for.
+///
+/// `query_item_order_does_not_change_the_result_set` cannot see it, and that is
+/// the point rather than an aside: deduplicating the items is precisely what
+/// makes their order stop mattering, so this store passes an order-invariance
+/// rule by construction. Only a match-*set* claim over an item whose presence
+/// changes the set rejects it.
+///
+/// The defect is on the read path alone. An adapter would build both statements
+/// from one query builder and get it wrong on the condition probe too, but
+/// modelling that here would give the store a second declared failure across the
+/// whole `condition_*` family for one bug — and `UninternedTypeStore` is already
+/// the registered store that carries a query-builder defect onto both sides.
+pub(crate) struct ItemDedupByTypeStore;
+
+impl Defect for ItemDedupByTypeStore {
+    const NAME: &'static str = "ItemDedupByTypeStore";
+
+    fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&'a SequencedEvent> {
+        let Some(items) = query.items() else {
+            return correct::matching(events, query);
+        };
+
+        // THE DEFECT: the intern key is the type list, so two items differing
+        // only in their tags collapse into whichever arrived first.
+        let mut interned: Vec<&QueryItem> = Vec::new();
+        for item in items {
+            if !interned.iter().any(|seen| seen.types() == item.types()) {
+                interned.push(item);
+            }
+        }
+
+        events
+            .iter()
+            .filter(|event| {
+                interned
+                    .iter()
+                    .any(|item| item.matches(event.event_type(), event.tags()))
+            })
+            .collect()
+    }
+}
+
 // =====================================================================
 // Read options — order, anchor, truncation
 // =====================================================================
@@ -614,8 +742,10 @@ impl Defect for SortByEventTypeStore {
         if options.backwards {
             sorted.reverse();
             sorted.retain(|event| options.from.is_none_or(|from| event.position <= from));
+            sorted.retain(|event| options.to.is_none_or(|to| event.position >= to));
         } else {
             sorted.retain(|event| options.from.is_none_or(|from| event.position >= from));
+            sorted.retain(|event| options.to.is_none_or(|to| event.position <= to));
         }
         sorted
     }
@@ -629,11 +759,28 @@ impl Defect for FromIsAnOffsetStore {
     const NAME: &'static str = "FromIsAnOffsetStore";
 
     fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // The upper bound is honoured, and correctly — this store's declared
+        // defect is the anchor alone. It is applied *before* the skip because
+        // that is where a real adapter's `WHERE` clause sits relative to its
+        // `OFFSET`.
+        let bounded: Vec<&SequencedEvent> = matched
+            .into_iter()
+            .filter(|event| {
+                options.to.is_none_or(|to| {
+                    if options.backwards {
+                        event.position >= to
+                    } else {
+                        event.position <= to
+                    }
+                })
+            })
+            .collect();
         let directed: Vec<&SequencedEvent> = if options.backwards {
-            matched.into_iter().rev().collect()
+            bounded.into_iter().rev().collect()
         } else {
-            matched
+            bounded
         };
+        // THE DEFECT: the anchor is spent as a zero-based OFFSET.
         let offset = options
             .from
             .map_or(0, |from| usize::try_from(from.get()).unwrap_or(usize::MAX));
@@ -657,6 +804,91 @@ impl Defect for BackwardsIgnoredStore {
     }
 }
 
+/// `ReadOptions` is destructured for the fields the adapter knows about, and
+/// `to` is not one of them.
+///
+/// The shape every `#[non_exhaustive]` options struct invites, and the one
+/// ES-16's `Rejects:` names first: the adapter was written before the field
+/// existed, it compiles unchanged afterwards because the struct is passed by
+/// value, and a bounded backfill silently becomes an unbounded one. There is no
+/// error anywhere — the worker reads to the end of the log and the tail worker
+/// beside it processes everything twice.
+pub(crate) struct ToBoundIgnoredStore;
+
+impl Defect for ToBoundIgnoredStore {
+    const NAME: &'static str = "ToBoundIgnoredStore";
+
+    fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // `ReadOptions` is `Copy`, so this edits a local rather than the
+        // caller's — which is exactly what an adapter that copies the fields it
+        // recognises into its own query-builder struct does.
+        let mut known = options;
+        known.to = None;
+        correct::ordered(matched, known)
+    }
+}
+
+/// `to` is honoured, as `WHERE position < ?`.
+///
+/// The other half of ES-16's `Rejects:`. Exclusive is the defensible reading of
+/// an upper bound in half the APIs anyone has used, and it is wrong here: the
+/// window comes back one event short at every chunk boundary, which is invisible
+/// until the chunks are reassembled and then presents as a projection missing
+/// one event per page for the whole backfill.
+pub(crate) struct ToIsExclusiveStore;
+
+impl Defect for ToIsExclusiveStore {
+    const NAME: &'static str = "ToIsExclusiveStore";
+
+    fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        let mut open = options;
+        open.to = None;
+        correct::ordered(matched, open)
+            .into_iter()
+            // THE DEFECT: `<` where `<=` was meant, on whichever end `to` bounds.
+            .filter(|event| {
+                options.to.is_none_or(|to| {
+                    if options.backwards {
+                        event.position > to
+                    } else {
+                        event.position < to
+                    }
+                })
+            })
+            .collect()
+    }
+}
+
+/// `WHERE position <= ?` for `to`, copied verbatim into the backwards branch.
+///
+/// ES-8's `Rejects:` describes this shape for `from` — "a lower bound
+/// irrespective of direction, the natural reading of `WHERE position >= ?`
+/// copied into the backwards branch" — and `to` is the same mistake one bound
+/// over. It is **correct reading forwards**, which is what makes it survivable:
+/// every forward `to` rule passes, and a backwards read comes back with the
+/// oldest events instead of the newest.
+///
+/// It is the only store in this binary that fails
+/// `read_to_under_backwards_bounds_the_older_end` and nothing else, which is
+/// what earns that rule its place beside the other two.
+pub(crate) struct BackwardsToIsAnUpperBoundStore;
+
+impl Defect for BackwardsToIsAnUpperBoundStore {
+    const NAME: &'static str = "BackwardsToIsAnUpperBoundStore";
+
+    fn ordered(matched: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        let mut unswapped = options;
+        unswapped.to = None;
+        correct::ordered(matched, unswapped)
+            .into_iter()
+            // THE DEFECT: `to` never swaps ends. Under `backwards` it bounds the
+            // newer end, so the read starts at the newest event and stops
+            // nowhere.
+            .filter(|event| options.to.is_none_or(|to| event.position <= to))
+            .collect()
+    }
+}
+
 /// `LIMIT n + 1` — the extra row that answers "is there more", never trimmed.
 pub(crate) struct FetchOneExtraStore;
 
@@ -666,7 +898,37 @@ impl Defect for FetchOneExtraStore {
     fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
         let mut selected = selected;
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get().saturating_add(1));
+            selected.truncate(limit.saturating_add(1));
+        }
+        selected
+    }
+}
+
+/// A limit of zero is read as no limit at all.
+///
+/// The DCB reference implementation's `if (limit)` guard, which is a coherent
+/// reading of `0` in a language where `0` is falsy. Ported to a language where
+/// it is not, it is `NonZeroUsize::new(limit)` — which is what
+/// `happenstance-core` itself stored until phase 4, so this is the crate's own
+/// former behaviour rather than an invented one.
+///
+/// The caller it breaks is the one who computed the zero: `.limit(budget -
+/// fetched)` at parity does not read nothing, it reads the entire log, and the
+/// paging loop that was protecting a memory ceiling stops protecting it with no
+/// error and no failing test.
+pub(crate) struct LimitZeroIsUnlimitedStore;
+
+impl Defect for LimitZeroIsUnlimitedStore {
+    const NAME: &'static str = "LimitZeroIsUnlimitedStore";
+
+    fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        let mut selected = selected;
+        // THE DEFECT: the zero is spent on the falsiness test rather than on the
+        // truncation.
+        if let Some(limit) = options.limit
+            && limit > 0
+        {
+            selected.truncate(limit);
         }
         selected
     }
@@ -710,6 +972,68 @@ impl Defect for LimitBeforeFilterStore {
     }
 }
 
+/// One statement per `QueryItem`, each carrying `LIMIT n`, and the budget is
+/// never applied to the union.
+///
+/// ES-14's `Rejects:` names it, and it is the same adapter shape ES-12 rejects
+/// failing for an independent reason: a store that cannot express a disjunction
+/// in one statement emits one per item, and the row budget goes onto each of
+/// them because that is where the paging clause is written. The union is then
+/// merge-sorted correctly — so every ordering rule passes — and a caller who
+/// asked for four events gets `n × items`.
+///
+/// It cannot be a one-step defect: `truncated` is handed no query and `matching`
+/// is handed no options, and this defect is a `LIMIT` applied per *item*.
+/// [`Defect::select`] is the seam that lets both be in view, which is the same
+/// reason `LimitBeforeFilterStore` lives there.
+///
+/// **It delegates whenever there is no budget**, and that is what keeps it a
+/// single defect rather than a second ordering bug: with `limit` unset, per-item
+/// evaluation and one-statement evaluation select the same set, and this store's
+/// answer is the correct one.
+pub(crate) struct LimitPerItemStore;
+
+impl Defect for LimitPerItemStore {
+    const NAME: &'static str = "LimitPerItemStore";
+
+    fn select(
+        events: &[SequencedEvent],
+        query: &Query,
+        options: ReadOptions,
+    ) -> Result<Vec<SequencedEvent>, LogError> {
+        let Some(items) = query.items() else {
+            return Ok(correct::select(events, query, options));
+        };
+        if options.limit.is_none() {
+            return Ok(correct::select(events, query, options));
+        }
+
+        // THE DEFECT: the row budget is a clause on each per-item statement, and
+        // nothing re-applies it to the merged result.
+        let mut merged: Vec<&SequencedEvent> = Vec::new();
+        for item in items {
+            let single = Query::from_item(item.clone());
+            let page = correct::truncated(
+                correct::ordered(correct::matching(events, &single), options),
+                options,
+            );
+            for event in page {
+                if !merged.iter().any(|seen| seen.position == event.position) {
+                    merged.push(event);
+                }
+            }
+        }
+
+        // The merge itself is correct — this store sorts and deduplicates the
+        // union properly, so `ItemOrderedUnionStore`'s defect is not also here.
+        merged.sort_by_key(|event| event.position);
+        if options.backwards {
+            merged.reverse();
+        }
+        Ok(merged.into_iter().cloned().collect())
+    }
+}
+
 /// `WHERE a OR b AND position >= ?`, without the parentheses.
 ///
 /// The textbook operator-precedence bug, and the reason CF-12 exists: `AND`
@@ -746,6 +1070,12 @@ impl Defect for UnparenthesisedPredicateStore {
                         event.position <= from
                     } else {
                         event.position >= from
+                    }
+                }) && options.to.is_none_or(|to| {
+                    if options.backwards {
+                        event.position >= to
+                    } else {
+                        event.position <= to
                     }
                 });
                 let matched_early = rest
@@ -816,6 +1146,75 @@ impl Defect for NullHeadPagingStore {
 }
 
 // =====================================================================
+// Head (ES-30)
+//
+// Two one-step defects in `Defect::head_of`, the step ES-30's three rules made
+// worth having. Both are correct on every other path, which is what makes them
+// survivable: until phase 4 nothing in the suite called `head()` at all.
+// =====================================================================
+
+/// `IFNULL(MAX(position), 0)`, and a fallback that is a position.
+///
+/// `MAX(position)` over an empty table is `NULL`, and a driver's scalar decode
+/// wants a column type that can hold what comes back. `IFNULL(…, 0)` is the
+/// one-token fix, and then the adapter has a `u64` that has to become a
+/// `SequencePosition` — which is a `NonZero` newtype, so `SequencePosition::new`
+/// returns an `Option` and this workspace's own house rule forbids `unwrap` in
+/// library code. `unwrap_or(SequencePosition::FIRST)` is the shortest spelling
+/// that satisfies both, and it reports a position no event occupies on the one
+/// state every adapter is in on its first run.
+///
+/// The cost is not cosmetic. ES-11 *prescribes* anchoring a paginating read on
+/// `head()` at the first poll, and ES-31 makes "am I caught up?" a comparison
+/// against it: a runner starting against a new store is told the log already
+/// holds position 1, checkpoints there, and the first event ever appended is the
+/// one it skips.
+pub(crate) struct EmptyHeadIsFirstStore;
+
+impl Defect for EmptyHeadIsFirstStore {
+    const NAME: &'static str = "EmptyHeadIsFirstStore";
+
+    fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
+        // THE DEFECT: `NULL` is spent on a value of the wrong kind. Note that
+        // the non-empty answer is untouched, which is what makes this store
+        // correct everywhere except on the state nobody seeds.
+        Some(correct::head_of(events).unwrap_or(SequencePosition::FIRST))
+    }
+}
+
+/// `SELECT max(e.position) FROM event e JOIN tag t ON t.event_id = e.id`.
+///
+/// The head statement written against the same joined view the read path is
+/// built around, because there is one view in the adapter and reusing it is the
+/// obvious move — the same two-table schema `InnerJoinTagStore` and
+/// `TagJoinFanOutStore` model from the read side, met a third way. An event
+/// carrying no tags has no row on the other side of the join, so the store's
+/// head stops at the highest *tagged* position.
+///
+/// It is ES-30's second rejected implementation — "a `head` that reports the
+/// highest position matching some default query rather than the store's head" —
+/// and it is invisible to any rule that appends one uniform batch, which is why
+/// `head_is_the_highest_visible_position` has to seed an event the narrower
+/// query cannot match. Reads are delegated in full and are correct: an adapter
+/// whose reads were also tag-scoped would fail its rule's anchor rather than the
+/// property, pinning the failure to the wrong half.
+pub(crate) struct DefaultQueryHeadStore;
+
+impl Defect for DefaultQueryHeadStore {
+    const NAME: &'static str = "DefaultQueryHeadStore";
+
+    fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
+        // THE DEFECT: the `INNER JOIN` is in the `FROM` clause, so an untagged
+        // row is not merely unmatched — it is not there to be aggregated over.
+        events
+            .iter()
+            .filter(|event| !event.tags().is_empty())
+            .map(|event| event.position)
+            .max()
+    }
+}
+
+// =====================================================================
 // Append — allocation, return value, transaction
 // =====================================================================
 
@@ -834,7 +1233,7 @@ impl Defect for SharedBatchPositionStore {
         let position = allocate(head);
         events
             .iter()
-            .map(|event| SequencedEvent::new(position, event.clone()))
+            .map(|event| correct::stamp(position, event.clone()))
             .collect()
     }
 }
@@ -1046,8 +1445,11 @@ impl Defect for AfterValidatedAgainstHeadStore {
     ) -> Result<SequencePosition, AppendError<LogError>> {
         // THE DEFECT: input validation on an opaque ordering key.
         if let Some(condition) = condition
-            && let Some(after) = condition.after
-            && stored.last().is_none_or(|event| event.position < after)
+            && condition
+                .guards()
+                .iter()
+                .filter_map(|guard| guard.after)
+                .any(|after| stored.last().is_none_or(|event| event.position < after))
         {
             return Err(AppendError::Store(LogError::UnknownPosition));
         }
@@ -1080,7 +1482,8 @@ impl Defect for DropsMetadataStore {
 
 /// `event` with its metadata column dropped.
 fn without_metadata(event: &Event) -> Event {
-    let (event_type, data, tags, _metadata) = event.clone().into_parts();
+    let parts = event.clone().into_parts();
+    let (event_type, data, tags) = (parts.event_type, parts.data, parts.tags);
     match Event::new(event_type.as_str(), data) {
         Ok(stripped) => stripped.with_tags(tags),
         // The type round-trips through the validator that produced it, so this
@@ -1121,10 +1524,254 @@ impl Defect for ViolationAsStoreErrorStore {
 }
 
 // =====================================================================
+// ES-19 — the batch written the wrong way round
+// =====================================================================
+
+/// The multi-row `INSERT` is built from the batch **reversed**, so the first
+/// event of the slice is written last and takes the highest position.
+///
+/// Two real routes to it, and neither is a slip in the SQL. An adapter that
+/// accumulates rows by pushing onto a stack and then drains it emits them
+/// backwards; an adapter that groups a batch by event type — to bind one interned
+/// type id per group rather than one per row, which is the first optimisation
+/// anybody makes to a multi-row insert — reorders the batch and does not notice
+/// that grouping is reordering.
+///
+/// It returns the **maximum** position, which is what makes it survivable: on a
+/// quiescent store the highest position is the last row in the log whatever order
+/// the rows went in, so `append_returns_last_written_position` is satisfied and
+/// the store looks correct from the one place anybody checks.
+pub(crate) struct ReverseOrderBatchStore;
+
+impl Defect for ReverseOrderBatchStore {
+    const NAME: &'static str = "ReverseOrderBatchStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        // THE DEFECT: one `rev()`. Positions are still dense, still unique and
+        // still strictly ascending down the log — they are simply attached to the
+        // wrong events, and `commit_with` then returns the last of them, which is
+        // the *first* event of the caller's slice.
+        let reversed: Vec<Event> = events.iter().rev().cloned().collect();
+        correct::sequence(&reversed, head, allocate)
+    }
+}
+
+// =====================================================================
+// ES-21 — the guard carried per row
+// =====================================================================
+
+/// The append condition travels with **every row** of the batch, so the second
+/// row is checked against a store that already holds the first.
+///
+/// The per-row conditional `INSERT … SELECT … WHERE NOT EXISTS`, which the
+/// decision ledger carries as a live candidate for the append-condition SQL
+/// strategy (`RUNBOOK.md:64`) and which ES-21 names. It is attractive precisely
+/// because it needs no interactive transaction: the guard and the write are one
+/// statement, which is the only shape `happenstance-neon` can express at all.
+/// Carried per row it self-rejects on the canonical DCB uniqueness shape, where
+/// the condition names the very type being written.
+///
+/// It **rolls back**, and that is the whole point of the shape rather than a
+/// detail: a store that self-rejected and kept the rows it had written would fail
+/// `append_is_atomic`, and the registry would then be unable to say which of the
+/// two defects that rule catches. This one is atomic and wrong about *what the
+/// condition is evaluated against*, which is the one thing ES-21 says.
+pub(crate) struct PerRowConditionStore;
+
+impl Defect for PerRowConditionStore {
+    const NAME: &'static str = "PerRowConditionStore";
+
+    fn commit(
+        stored: &mut Vec<SequencedEvent>,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        if events.is_empty() {
+            return Err(AppendError::NoEvents);
+        }
+
+        // The transaction. Cheap here and honest: a real adapter has `ROLLBACK`.
+        let before = stored.clone();
+        let mut last = None;
+
+        for event in events {
+            // THE DEFECT: `condition` is passed again for every row, so from the
+            // second row onwards the probe reads a store that includes the rows
+            // this same batch has just written.
+            match correct::commit_with(
+                stored,
+                core::slice::from_ref(event),
+                condition,
+                Self::ALLOCATE,
+                Self::violation,
+                Self::sequence,
+            ) {
+                Ok(position) => last = Some(position),
+                Err(err) => {
+                    *stored = before;
+                    return Err(err);
+                }
+            }
+        }
+
+        last.ok_or(AppendError::NoEvents)
+    }
+}
+
+// =====================================================================
+// ES-22 — a suspension point between two rows
+// =====================================================================
+
+/// One `INSERT` per row, with an `.await` between rows and no transaction around
+/// them.
+///
+/// `NoTransactionStore`'s sibling on the other axis, and the two must not be
+/// merged. That one needs a fault *armed* to show its defect and answers `Err`
+/// over a partial log; this one needs no fault at all — the caller simply stops
+/// polling, which at the edge is the *normal* termination path: a client
+/// disconnect, a CPU limit, a Durable Object eviction, a pod eviction. The future
+/// is destroyed at whatever suspension point it had reached and the rows already
+/// written stay written, with no `Result` anywhere for anybody to read.
+///
+/// It also is not `RowAtATimeStore`, in `racers.rs`, which
+/// `a_concurrent_reader_never_sees_a_partial_batch` owns: there every row lands
+/// in the end and what is wrong is the window a *reader* can see through. Here a
+/// row never lands.
+///
+/// # Why this cannot be a [`Defect`]
+///
+/// [`Defect::commit`] is a synchronous function and the defect **is** the
+/// suspension point, so there is nowhere in that trait to put one — the same
+/// reason `PreCommitPositionStore` and `AwaitAcrossBorrowStore` are written
+/// longhand. Everything else is delegated to `crate::correct`, including the
+/// condition probe, so the only difference from a correct store is where the
+/// awaits are.
+///
+/// The condition is evaluated **once**, with the first row, against the store as
+/// it stood before the batch — which is correct (ES-21) and deliberate. A store
+/// that also got the condition wrong would fail two rules and the registry could
+/// not say which defect either of them caught.
+#[derive(Debug, Clone)]
+pub(crate) struct YieldingRowAtATimeStore(Rc<RefCell<Log>>);
+
+/// Suspends once: `Pending` on the first poll, `Ready` on the second.
+///
+/// Written out rather than reached for from a runtime, because this binary has
+/// none: it drives everything through `happenstance_testkit::block_on`. The waker
+/// is signalled *before* returning `Pending`, which is what makes this a store
+/// that is slow rather than one that is hung — `PagedStream` in `variants.rs`
+/// carries the same note and the same hazard.
+async fn yield_once() {
+    let mut yielded = false;
+    core::future::poll_fn(move |cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await;
+}
+
+impl EventStore for YieldingRowAtATimeStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        Snapshot::new(
+            self.0
+                .try_borrow()
+                .map_err(|_| LogError::AlreadyBorrowed)
+                .map(|log| log.select(query, options)),
+        )
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        if events.is_empty() {
+            return Err(AppendError::NoEvents);
+        }
+
+        let mut last = None;
+        for (row, event) in events.iter().enumerate() {
+            {
+                let mut log = self
+                    .0
+                    .try_borrow_mut()
+                    .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+                // The condition rides with the first row only, so it is evaluated
+                // against the store as it stood before this batch — which is what
+                // ES-21 requires and is not this store's defect.
+                let carried = if row == 0 { condition } else { None };
+                last = Some(log.append(core::slice::from_ref(event), carried)?);
+            }
+            // THE DEFECT: the borrow is released and the future suspends between
+            // two rows of one batch, with nothing holding them together. A caller
+            // that stops polling here has left `row + 1` rows in a log it was
+            // never told about.
+            yield_once().await;
+        }
+
+        last.ok_or(AppendError::NoEvents)
+    }
+
+    // Delegated to a correct store over the same log rather than answered here,
+    // for `NoTransactionStore`'s reason: a `Log`'s events are private to
+    // `crate::correct`, and a second implementation of either would be a second
+    // difference on a store that is allowed exactly one.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        LogStore::over(&self.0).head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        LogStore::over(&self.0).contains_event_id(id).await
+    }
+}
+
+/// One log, and any number of row-at-a-time handles onto it.
+#[derive(Debug)]
+pub(crate) struct YieldingRowAtATimeFixture(Rc<RefCell<Log>>);
+
+impl Fixture for YieldingRowAtATimeFixture {
+    type Store = YieldingRowAtATimeStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a dropped future leaves behind, not \
+         durability",
+    );
+
+    async fn connect(&self) -> Self::Store {
+        YieldingRowAtATimeStore(Rc::clone(&self.0))
+    }
+}
+
+impl Subject for YieldingRowAtATimeFixture {
+    const NAME: &'static str = "YieldingRowAtATimeStore";
+
+    fn open() -> Self {
+        Self(Rc::new(RefCell::new(Log::new(dense))))
+    }
+}
+
+// =====================================================================
 // Append conditions — the probe
 // =====================================================================
 
-/// `condition.after.unwrap_or(FIRST)`, so an event at the first position never
+/// `guard.after.unwrap_or(FIRST)`, so an event at the first position never
 /// violates.
 pub(crate) struct AfterDefaultsToFirstStore;
 
@@ -1136,16 +1783,10 @@ impl Defect for AfterDefaultsToFirstStore {
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
         // The `Option` collapsed at the boundary because the SQL wanted a value.
-        let after = condition.after.unwrap_or(SequencePosition::FIRST);
-        events
-            .iter()
-            .find(|event| {
-                event.position > after
-                    && condition
-                        .fail_if_events_match
-                        .matches(event.event_type(), event.tags())
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            let after = guard.after.unwrap_or(SequencePosition::FIRST);
+            event.position > after && guard.query.matches(event.event_type(), event.tags())
+        })
     }
 }
 
@@ -1162,10 +1803,9 @@ impl Defect for ExistenceProbeStore {
     ) -> Option<SequencePosition> {
         // `SELECT EXISTS(SELECT 1 FROM events WHERE position > ?)` — the fast
         // path someone adds when the join is the expensive half.
-        events
-            .iter()
-            .find(|event| condition.after.is_none_or(|after| event.position > after))
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+        })
     }
 }
 
@@ -1181,15 +1821,10 @@ impl Defect for AfterIsInclusiveStore {
     ) -> Option<SequencePosition> {
         // `after` is exclusive and `from` is inclusive; one comparison served
         // both in the first draft.
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position >= after)
-                    && condition
-                        .fail_if_events_match
-                        .matches(event.event_type(), event.tags())
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position >= after)
+                && guard.query.matches(event.event_type(), event.tags())
+        })
     }
 }
 
@@ -1203,18 +1838,18 @@ impl Defect for AfterIsAnOffsetStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        let skip = condition.after.map_or(0, |after| {
-            usize::try_from(after.get()).unwrap_or(usize::MAX)
-        });
-        events
-            .iter()
-            .filter(|event| {
-                condition
-                    .fail_if_events_match
-                    .matches(event.event_type(), event.tags())
-            })
-            .nth(skip)
-            .map(|event| event.position)
+        // Applied per guard, like every other condition mutant here, so that
+        // the offset reading is the only difference from `correct::violation`.
+        condition.guards().iter().find_map(|guard| {
+            let skip = guard.after.map_or(0, |after| {
+                usize::try_from(after.get()).unwrap_or(usize::MAX)
+            });
+            events
+                .iter()
+                .filter(|event| guard.query.matches(event.event_type(), event.tags()))
+                .nth(skip)
+                .map(|event| event.position)
+        })
     }
 }
 
@@ -1236,13 +1871,10 @@ impl Defect for ExactTagMatchConditionStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && exact_tag_match(&condition.fail_if_events_match, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && exact_tag_match(&guard.query, event)
+        })
     }
 }
 
@@ -1266,13 +1898,10 @@ impl Defect for TagBlindConditionStore {
         events: &[SequencedEvent],
         condition: &AppendCondition,
     ) -> Option<SequencePosition> {
-        events
-            .iter()
-            .find(|event| {
-                condition.after.is_none_or(|after| event.position > after)
-                    && type_only_match(&condition.fail_if_events_match, event)
-            })
-            .map(|event| event.position)
+        correct::first_violation(events, condition, |guard, event| {
+            guard.after.is_none_or(|after| event.position > after)
+                && type_only_match(&guard.query, event)
+        })
     }
 }
 
@@ -1331,13 +1960,17 @@ impl Defect for UncorrelatedProbeStore {
     ) -> Option<SequencePosition> {
         let matched = events.iter().find(|event| {
             condition
-                .fail_if_events_match
-                .matches(event.event_type(), event.tags())
+                .guards()
+                .iter()
+                .any(|guard| guard.query.matches(event.event_type(), event.tags()))
         })?;
         let head = events.last().map(|event| event.position)?;
         // THE DEFECT: the two questions are asked of the whole store rather than
         // of one event.
-        let moved_on = condition.after.is_none_or(|after| head > after);
+        let moved_on = condition
+            .guards()
+            .iter()
+            .any(|guard| guard.after.is_none_or(|after| head > after));
         moved_on.then_some(matched.position)
     }
 }
@@ -1365,6 +1998,102 @@ fn type_only_match(query: &Query, event: &SequencedEvent) -> bool {
         Some(items) => items
             .iter()
             .any(|item| type_matches(item, event.event_type())),
+    }
+}
+
+// =====================================================================
+// VT-30 — the two ways a guard fold goes wrong
+// =====================================================================
+
+/// Every guard is evaluated against `min(after)` across the guards.
+///
+/// The application-side workaround E2E-05 names, promoted into an adapter: four
+/// reads produce four boundaries, one `WHERE position > ?` takes one number, and
+/// the safe-looking choice is the smallest. It is sound — it never admits an
+/// append it should have refused — and it is a liveness failure, which is the
+/// harder defect to see: the quiet fragment's stale boundary governs the busy
+/// one, so a consistency boundary that never conflicted starts refusing and the
+/// deployment reads the rejection rate as contention rather than as a bug.
+///
+/// It passes the **entire** existing `condition_after_*` family, because every
+/// rule in it carries a single guard and the minimum over one boundary is that
+/// boundary. `condition_guards_carry_independent_boundaries` is the only thing
+/// that can see it, which is what makes that rule non-decorative rather than a
+/// restatement.
+///
+/// `None` is treated as the minimum, and that is the faithful reading rather than
+/// a convenience: an unbounded guard checks the whole log, so a collapse that
+/// took the smallest *stated* number would be strictly weaker than the condition
+/// the caller wrote, and no adapter would ship that direction.
+pub(crate) struct MinCollapseStore;
+
+impl Defect for MinCollapseStore {
+    const NAME: &'static str = "MinCollapseStore";
+
+    fn violation(
+        events: &[SequencedEvent],
+        condition: &AppendCondition,
+    ) -> Option<SequencePosition> {
+        let collapsed = if condition.guards().iter().any(|guard| guard.after.is_none()) {
+            None
+        } else {
+            condition
+                .guards()
+                .iter()
+                .filter_map(|guard| guard.after)
+                .min()
+        };
+
+        // THE DEFECT: one boundary for every guard. The per-guard *query* is
+        // still applied, so this differs from `correct::violation` in exactly one
+        // comparison.
+        correct::first_violation(events, condition, |guard, event| {
+            collapsed.is_none_or(|after| event.position > after)
+                && guard.query.matches(event.event_type(), event.tags())
+        })
+    }
+}
+
+/// The `guards.len() == 1` fast path is the statement that predates boundaries.
+///
+/// [`MinCollapseStore`]'s mirror image, and the regression VT-30's refactor
+/// actually invites. An adapter generalising to N guards keeps a fast path for
+/// one, because one guard is the overwhelmingly common case and a `UNION` per
+/// guard is pure overhead there — and the fast path is the *old* statement, the
+/// uniqueness probe written before `after` existed, kept because it was already
+/// working. The general path is new and was reviewed; the fast path is old and
+/// was not.
+///
+/// The result is a store with two answers to one question: a caller whose
+/// decision model read one fragment gets a boundary that is ignored, and the same
+/// caller with two fragments gets one that is honoured. Nothing in an adapter's
+/// own tests distinguishes those two callers.
+///
+/// It fails three of the existing `condition_after_*` rules as well as
+/// `condition_with_one_guard_behaves_as_today`, and that overlap is intrinsic
+/// rather than sloppy: every rule in that family carries one guard, so a store
+/// wrong on the one-guard path is wrong in all of them. What none of them can see
+/// — and what its own rule is for — is that the *other* path is right, which is
+/// the difference between this store and `ExistenceProbeStore`.
+pub(crate) struct SingleGuardFastPathStore;
+
+impl Defect for SingleGuardFastPathStore {
+    const NAME: &'static str = "SingleGuardFastPathStore";
+
+    fn violation(
+        events: &[SequencedEvent],
+        condition: &AppendCondition,
+    ) -> Option<SequencePosition> {
+        if condition.guards().len() == 1 {
+            // THE DEFECT: `SELECT EXISTS(SELECT 1 FROM events WHERE <query>)`,
+            // with no position predicate at all — which is exactly right for a
+            // uniqueness guard, where `after` is `None` anyway, and silently
+            // wrong for every caller that supplies one.
+            return correct::first_violation(events, condition, |guard, event| {
+                guard.query.matches(event.event_type(), event.tags())
+            });
+        }
+        correct::violation(events, condition)
     }
 }
 
@@ -1436,6 +2165,20 @@ impl EventStore for NoTransactionStore {
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
     }
+
+    // Delegated to a correct store over the same log rather than answered here.
+    // A `Log`'s events are private to `crate::correct`, and the alternative —
+    // reaching them through `select` with a contrived `ReadOptions` — would be a
+    // second implementation of `head` in the one file whose whole premise is that
+    // there is only ever one. This store's declared defect is the missing
+    // `BEGIN`, and nothing else may differ.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        LogStore::over(&self.log).head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        LogStore::over(&self.log).contains_event_id(id).await
+    }
 }
 
 /// One log, one arming slot, and any number of transaction-less handles.
@@ -1503,7 +2246,13 @@ impl Subject for NoTransactionFixture {
 /// rule with a runtime panic, which `FailureMode::Assertion` would then reject as
 /// the wrong reason.
 fn with_identifiers_mapped(event: &Event, map: impl Fn(&str) -> String) -> Event {
-    let (event_type, data, tags, metadata) = event.clone().into_parts();
+    let happenstance_core::EventParts {
+        event_type,
+        data,
+        tags,
+        metadata,
+        ..
+    } = event.clone().into_parts();
 
     let mapped: Option<Vec<Tag>> = tags
         .iter()
@@ -1691,6 +2440,12 @@ impl PayloadCeilingStore {
 impl Defect for PayloadCeilingStore {
     const NAME: &'static str = "PayloadCeilingStore";
 
+    // CF-40: the ceiling this adapter never wrote down, written down. VT-21
+    // requires a store to document its actual limit; stating it here is what
+    // lets `append_reports_exceeded_store_limits` find out that the refusal
+    // arrives as `AppendError::Store` rather than as `ExceedsStoreLimit`.
+    const MAX_EVENT_DATA_LEN: Option<usize> = Some(Self::CEILING);
+
     fn commit(
         stored: &mut Vec<SequencedEvent>,
         events: &[Event],
@@ -1733,6 +2488,12 @@ pub(crate) struct TruncatingPayloadStore;
 impl Defect for TruncatingPayloadStore {
     const NAME: &'static str = "TruncatingPayloadStore";
 
+    // CF-40. The same column and the same number as `PayloadCeilingStore` —
+    // one adapter, one column, two deployments — so that the two halves of
+    // VT-25's MUST are checked at the same boundary: refuse through the wrong
+    // variant, and do not refuse at all.
+    const MAX_EVENT_DATA_LEN: Option<usize> = Some(PayloadCeilingStore::CEILING);
+
     fn sequence(
         events: &[Event],
         head: Option<SequencePosition>,
@@ -1746,7 +2507,13 @@ impl Defect for TruncatingPayloadStore {
                 }
                 // THE DEFECT: what fits is stored, and the caller is told the
                 // whole write landed.
-                let (event_type, data, tags, metadata) = event.clone().into_parts();
+                let happenstance_core::EventParts {
+                    event_type,
+                    data,
+                    tags,
+                    metadata,
+                    ..
+                } = event.clone().into_parts();
                 let clipped = data.slice(..PayloadCeilingStore::CEILING);
                 // `event_type` came off a valid `Event`, so reconstruction cannot
                 // fail; returning the original rather than panicking is the same
@@ -1874,6 +2641,10 @@ impl BatchParameterCeilingStore {
 impl Defect for BatchParameterCeilingStore {
     const NAME: &'static str = "BatchParameterCeilingStore";
 
+    // CF-40: the driver's parameter ceiling, stated as the batch ceiling it
+    // actually is.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(Self::CEILING);
+
     fn commit(
         stored: &mut Vec<SequencedEvent>,
         events: &[Event],
@@ -1914,6 +2685,11 @@ pub(crate) struct ChunkLosingBatchStore;
 impl Defect for ChunkLosingBatchStore {
     const NAME: &'static str = "ChunkLosingBatchStore";
 
+    // CF-40. `BatchParameterCeilingStore`'s number, because this is that store
+    // with the fix applied wrongly: the ceiling did not move, only what the
+    // adapter does when it meets it.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(BatchParameterCeilingStore::CEILING);
+
     fn commit(
         stored: &mut Vec<SequencedEvent>,
         events: &[Event],
@@ -1935,8 +2711,650 @@ impl Defect for ChunkLosingBatchStore {
     }
 }
 
+/// The tag column carries a normalising collation, so two normal forms become
+/// one value.
+///
+/// `CREATE COLLATION … (provider = icu, deterministic = false)` is one line and
+/// is exactly what an author reaches for when a search stops matching an
+/// accented word; a normaliser called in the row mapper "because tags should be
+/// canonical" is the same defect written by hand. Either way a caller's
+/// identifier is rewritten on the way in, so the tag read back is not the tag
+/// written, ADR-0003's
+/// byte-for-byte forwarding promise is broken, and the store's index disagrees
+/// with every external system holding the original string.
+///
+/// A macOS client writes `"café"` in NFD and a Linux client writes it in NFC.
+/// They render identically everywhere, and under this store they stop being two
+/// consistency boundaries with no visible cue at all.
+///
+/// # It composes one sequence, and that is stated rather than hidden
+///
+/// A faithful NFC needs Unicode tables, which is the dependency VT-14 already
+/// declines for the contract crate and which this test binary has no more claim
+/// on. What is modelled is the composition of `e` + U+0301, which is the
+/// sequence the rule writes and the only one this store is ever handed. A real
+/// collation composes everything; the *observable* behaviour on this input is
+/// the same, and the rule is what is being instrumented.
+pub(crate) struct NormalisingTagStore;
+
+impl NormalisingTagStore {
+    // `&str` rather than `&'static str`: the lifetime is implied on a `const`
+    // and `clippy::redundant_static_lifetimes` is a warn-by-default style lint
+    // under a `-D warnings` gate. `Defect::NAME` spells it out because the trait
+    // declaration does.
+
+    /// `e` followed by U+0301 COMBINING ACUTE ACCENT.
+    const DECOMPOSED: &str = "e\u{301}";
+    /// U+00E9 LATIN SMALL LETTER E WITH ACUTE.
+    const COMPOSED: &str = "\u{e9}";
+}
+
+impl Defect for NormalisingTagStore {
+    const NAME: &'static str = "NormalisingTagStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        let normalised: Vec<Event> = events
+            .iter()
+            .map(|event| {
+                // THE DEFECT: the value stored is not the value written.
+                with_identifiers_mapped(event, |value| {
+                    value.replace(Self::DECOMPOSED, Self::COMPOSED)
+                })
+            })
+            .collect();
+        correct::sequence(&normalised, head, allocate)
+    }
+}
+
+/// Tags are a map from key to value, so a repeated key keeps one value.
+///
+/// A `JSONB` object, a `HashMap<String, String>` column, or a side table under
+/// `UNIQUE (event_id, key)` written with `ON CONFLICT (event_id, key) DO UPDATE`.
+/// All three are natural schemas for something the contract itself invites you
+/// to read as a pair — `Tag::key` and `Tag::value` are public — and all three
+/// keep exactly one value per key.
+///
+/// `Tags::from_pairs([("tenant", "a"), ("tenant", "b")])` succeeds and yields a
+/// **two**-element set, because deduplication is on the whole `key:value` string.
+/// The event stays in the store and stops matching one of the two queries that
+/// should select it. On Wattline's 4,200-tenant shared log that is a
+/// cross-tenant correctness failure produced entirely by an indexing choice: the
+/// tenant whose tag was dropped stops seeing its own events, and nothing
+/// anywhere reports a fault.
+///
+/// A tag with no colon has no key and is kept, which is not a courtesy — it is
+/// what the modelled schema does, since there is nothing to conflict on. It is
+/// also what keeps this store invisible to the model family, whose generated
+/// tags are single letters.
+pub(crate) struct KeyedTagMapStore;
+
+impl Defect for KeyedTagMapStore {
+    const NAME: &'static str = "KeyedTagMapStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        let mapped: Vec<Event> = events
+            .iter()
+            .map(|event| {
+                let mut kept: Vec<Tag> = Vec::new();
+                for tag in event.tags() {
+                    // The search is `position` over an immutable borrow rather
+                    // than `find` over a mutable one, so that the borrow is over
+                    // before the `else` arm pushes. `find(..)` reads better and
+                    // is `error[E0499]`: the scrutinee's `&mut kept` is still
+                    // live in the arm that grows the vector.
+                    let occupied = tag
+                        .key()
+                        .and_then(|key| kept.iter().position(|held| held.key() == Some(key)));
+                    // THE DEFECT: `DO UPDATE`. The last value under a key wins,
+                    // and `Tags` is sorted, so which one survives is stable and
+                    // arbitrary. A tag with no key has nothing to conflict on
+                    // and is kept, which is what the modelled schema does.
+                    if let Some(at) = occupied {
+                        kept[at] = tag.clone();
+                    } else {
+                        kept.push(tag.clone());
+                    }
+                }
+                event.clone().with_tags(kept.into_iter().collect::<Tags>())
+            })
+            .collect();
+        correct::sequence(&mapped, head, allocate)
+    }
+}
+
+/// Identifiers are trimmed on the way in, because a trailing space "must be a
+/// typo".
+///
+/// `TRIM()` in the insert statement, or `value.trim()` in the row mapper. It is
+/// the most defensible-looking of the value-edge defects and the one with the
+/// worst consequence, because it moves the decision about what an identifier
+/// *is* from the application into the store: the value the caller wrote is no
+/// longer in the log, so nothing downstream can detect what happened.
+///
+/// Kestrel Rotor replicated a `SerialisedUnitConsumed` carrying
+/// `turbine:HW2-A14 `. `Tag::new` accepts it, `Tags` sorts it adjacent to the
+/// unpadded tag, `contains_all` is a strict merge-scan on equality
+/// (`tag.rs:231-245`) and does not match it, and a lot-recall query silently
+/// missed a turbine. VT-15 makes that the application's bug to prevent and the
+/// contract's job to state; an adapter that "fixes" it produces a different
+/// wrong answer and hides the first one.
+///
+/// It is [`NarrowIdentifierColumnStore`]'s and [`Latin1IdentifierStore`]'s third
+/// sibling — one column, three ways for it to rewrite what it was given — and
+/// like both of them it is correct for every identifier the rest of this binary
+/// writes.
+pub(crate) struct TrimmingIdentifierStore;
+
+impl Defect for TrimmingIdentifierStore {
+    const NAME: &'static str = "TrimmingIdentifierStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        let trimmed: Vec<Event> = events
+            .iter()
+            // THE DEFECT: whitespace is significant everywhere (VT-15), and this
+            // store is the one place in the deployment that disagrees.
+            .map(|event| with_identifiers_mapped(event, |value| value.trim().to_owned()))
+            .collect();
+        correct::sequence(&trimmed, head, allocate)
+    }
+}
+
 // =====================================================================
-// The six that cannot be one step
+// Identity, recorded time and membership
+//
+// Every store here is correct on the read path and on the write path. What each
+// one is wrong about is a *store-assigned fact* — an identity, an incarnation,
+// a time, or the answer to a membership question — which is why none of them
+// fails a rule that landed before phase 4. That is the point rather than a
+// coincidence: `SequencedEvent` grew two fields, and a field nothing can be
+// wrong about is a field no rule needs.
+// =====================================================================
+
+/// The `SELECT` has no identity column, so the row mapper synthesises one from
+/// the row's ordinal in the result set.
+///
+/// The shape is an `.enumerate()` inside `rows.map(…)`, and it is what an
+/// adapter reaches for when `EventId` arrives on `SequencedEvent` after the
+/// schema is written and nobody wants a migration this week. Under
+/// `Query::all()` on a densely-allocated store the synthesised value is
+/// **right**, which is exactly what makes it survivable: it is wrong only when
+/// the result set is a different shape from the log, which is every filtered
+/// read — and every rule in the suite that reads the whole log back agrees with
+/// it.
+pub(crate) struct RowOrdinalIdentityStore;
+
+impl Defect for RowOrdinalIdentityStore {
+    const NAME: &'static str = "RowOrdinalIdentityStore";
+
+    fn select(
+        events: &[SequencedEvent],
+        query: &Query,
+        options: ReadOptions,
+    ) -> Result<Vec<SequencedEvent>, LogError> {
+        Ok(correct::select(events, query, options)
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, event)| {
+                // THE DEFECT: the identity comes from where the row landed in
+                // *this* answer, not from what the store assigned the event.
+                let ordinal = u64::try_from(ordinal).unwrap_or(0).saturating_add(1);
+                let synthesised = SequencePosition::new(ordinal).unwrap_or(SequencePosition::FIRST);
+                SequencedEvent::new(
+                    event.position,
+                    EventId::new(correct::TEST_STORE, synthesised),
+                    event.recorded_at,
+                    event.event,
+                )
+            })
+            .collect())
+    }
+}
+
+/// There is no `recorded_at` column, so the row mapper fills the field from the
+/// connection's clock.
+///
+/// `RecordedAt` arrives on `SequencedEvent` after the table exists; the field
+/// has to be given *something*, and the connection's `now()` is the value
+/// already in scope. The store is correct in every other respect, and the
+/// fabrication is invisible to any rule that reads once — which, before phase 4,
+/// was every rule.
+///
+/// The counter stands in for the clock, and the substitution is not a
+/// simplification. A mutant that read a real clock would be non-deterministic,
+/// and `correct.rs` fixes its time for the same reason; what is being modelled
+/// is that the value moves between reads, not what it moves to.
+pub(crate) struct ReadTimeClockStore;
+
+thread_local! {
+    /// Ticks once per read, standing in for a wall clock that has moved.
+    ///
+    /// Thread-local rather than a field, because a [`Defect`] is a type and
+    /// never a value — the same reason every step is an associated function.
+    static READ_TIME: Cell<i64> = const { Cell::new(0) };
+}
+
+impl Defect for ReadTimeClockStore {
+    const NAME: &'static str = "ReadTimeClockStore";
+
+    fn select(
+        events: &[SequencedEvent],
+        query: &Query,
+        options: ReadOptions,
+    ) -> Result<Vec<SequencedEvent>, LogError> {
+        let read_at = READ_TIME.with(|tick| {
+            let next = tick.get().saturating_add(1);
+            tick.set(next);
+            RecordedAt::from_millis(next)
+        });
+        Ok(correct::select(events, query, options)
+            .into_iter()
+            // THE DEFECT: the time is a property of the read, not of the append.
+            .map(|event| event.with_recorded_at(read_at))
+            .collect())
+    }
+}
+
+/// The `EventId` is derived from the event's bytes rather than from the position
+/// the store assigned.
+///
+/// Content-addressed identity is what anyone reaching for idempotent ingest
+/// proposes first, and it is exactly what VT-8 forbids by making uniqueness the
+/// store's obligation rather than the caller's. Its identities are unique across
+/// *distinct* events, stable across a reopen and never reissued, so it survives
+/// every rule about identity except the two that notice where the identity came
+/// from: `appending_equal_events_yields_two_events`, which is VT-2's and is the
+/// clause this store exists for, and `append_stamps_a_local_event_id`, whose
+/// first assertion is that a local append's `id.position()` is the position the
+/// store assigned.
+///
+/// **ADR-0014 §9 says it "fails this one alone"**, which was written before
+/// VT-5's rule existed; `notes.md` records the disagreement rather than papering
+/// over it.
+pub(crate) struct ContentHashIdentityStore;
+
+impl ContentHashIdentityStore {
+    /// The FNV-1a offset basis.
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    /// The FNV-1a prime.
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    /// One FNV-1a round over `bytes`.
+    ///
+    /// A free-standing fold rather than a closure capturing the accumulator:
+    /// the closure form borrows the accumulator mutably for its whole scope, and
+    /// spelling the state as an argument keeps the borrow checker out of a
+    /// function whose only job is to be boring.
+    fn fold(hash: u64, bytes: &[u8]) -> u64 {
+        let mut hash = hash;
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(Self::PRIME);
+        }
+        hash
+    }
+
+    /// FNV-1a over exactly the parts `Event`'s `PartialEq` compares, folded into
+    /// a non-zero position.
+    ///
+    /// Hand-written because the testkit depends on no hasher and
+    /// `DefaultHasher` is `std`-only *and* documented as not stable across
+    /// releases — a mutant whose identity changed with the toolchain would be a
+    /// flake in the one file that exists to be deterministic.
+    fn digest(event: &Event) -> SequencePosition {
+        let mut hash = Self::fold(Self::OFFSET, event.event_type().as_str().as_bytes());
+        hash = Self::fold(hash, &event.data()[..]);
+        for tag in event.tags() {
+            hash = Self::fold(hash, tag.as_str().as_bytes());
+        }
+        if let Some(metadata) = event.metadata() {
+            hash = Self::fold(hash, &metadata[..]);
+        }
+
+        // `| 1` rather than a fallback branch: `SequencePosition` is non-zero,
+        // and forcing the low bit costs one collision class out of 2^64 while
+        // removing the only failure mode of the conversion.
+        SequencePosition::new(hash | 1).unwrap_or(SequencePosition::FIRST)
+    }
+}
+
+impl Defect for ContentHashIdentityStore {
+    const NAME: &'static str = "ContentHashIdentityStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        correct::sequence(events, head, allocate)
+            .into_iter()
+            .map(|event| {
+                // THE DEFECT: identity is a function of the payload, so two
+                // structurally equal events are one event.
+                let digest = Self::digest(&event.event);
+                SequencedEvent::new(
+                    event.position,
+                    EventId::new(correct::TEST_STORE, digest),
+                    event.recorded_at,
+                    event.event,
+                )
+            })
+            .collect()
+    }
+}
+
+/// A fresh incarnation minted per **event** rather than per store.
+///
+/// VT-6 permits an adapter to mint a fresh `StoreId` on every open, and an
+/// adapter that reads "mint often, never reissue" as the whole of the clause
+/// arrives here. Minting per append satisfies the literal MUST — no
+/// `(StoreId, SequencePosition)` pair is ever issued twice — and destroys
+/// everything the type is for: every event becomes its own origin, a peer's
+/// `Watermark` grows one row per event rather than one per incarnation, and
+/// VT-5's peer-independent sort degenerates to comparing 128 opaque bits.
+///
+/// This is the defect `store_id_is_stable_across_reopen` caught by accident, and
+/// the reason `reopened_store_does_not_reissue_an_event_id` carries a first
+/// assertion that looks like padding and is not. It is registered against
+/// `append_stamps_a_local_event_id` rather than against that rule because
+/// `MutantFixture` declines `REOPEN`, so the reopen-gated rule would report a
+/// skip here — which is why VT-5's rule carries the incarnation assertion as
+/// well.
+///
+/// The incarnation is derived from the position rather than sampled, because a
+/// mutant that needed entropy would be a mutant whose output moved between runs.
+pub(crate) struct PerEventStoreIdStore;
+
+impl Defect for PerEventStoreIdStore {
+    const NAME: &'static str = "PerEventStoreIdStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        correct::sequence(events, head, allocate)
+            .into_iter()
+            .map(|event| {
+                // THE DEFECT: a new incarnation per row.
+                let mut bytes = correct::TEST_STORE.to_bytes();
+                bytes[..8].copy_from_slice(&event.position.get().to_be_bytes());
+                SequencedEvent::new(
+                    event.position,
+                    EventId::new(StoreId::from_bytes(bytes), event.position),
+                    event.recorded_at,
+                    event.event,
+                )
+            })
+            .collect()
+    }
+}
+
+/// `INSERT … RETURNING event_id` read once and applied to every row of the
+/// batch.
+///
+/// The off-by-a-loop `SharedBatchPositionStore` models on the position column,
+/// arriving on the identity column where no rule about positions can see it: the
+/// positions are all correct here, so `positions_are_unique` and
+/// `positions_are_strictly_monotonic` both pass and the store holds two events
+/// it cannot tell apart. It is the shape an adapter takes when identity is added
+/// to a write path that already returns one value per statement rather than one
+/// per row.
+pub(crate) struct SharedBatchIdentityStore;
+
+impl Defect for SharedBatchIdentityStore {
+    const NAME: &'static str = "SharedBatchIdentityStore";
+
+    fn sequence(
+        events: &[Event],
+        head: Option<SequencePosition>,
+        allocate: Allocate,
+    ) -> Vec<SequencedEvent> {
+        let sequenced = correct::sequence(events, head, allocate);
+        // An empty batch never reaches here — `commit_with` refuses it above —
+        // but the `else` keeps this function total rather than indexing.
+        let Some(shared) = sequenced.first().map(|event| event.id) else {
+            return sequenced;
+        };
+        sequenced
+            .into_iter()
+            // THE DEFECT: one identity for the whole statement.
+            .map(|event| {
+                SequencedEvent::new(event.position, shared, event.recorded_at, event.event)
+            })
+            .collect()
+    }
+}
+
+/// The `EventId` is materialised as a row in the tag side table, so that a
+/// membership question can be answered by the index the adapter already has.
+///
+/// VT-7's named wrong implementation, and the tempting part is that the tag is
+/// **not on the event**: the adapter writes the extra row itself, so
+/// `Event::tags()` round-trips untouched and every payload-fidelity rule in the
+/// suite still passes. What changes is that identity has entered the matching
+/// algebra — a point lookup on a unique key grafted onto a set-superset
+/// predicate — so `Items(a) ∪ Items(b) == Items(a ++ b)`, which VT-31 freezes
+/// and E2E-32's fan-out runner depends on, stops being a statement about the
+/// domain's vocabulary alone.
+///
+/// It is behaviourally identical to a correct store for every query whose items
+/// do not name an `event_id` tag, which is every other rule in the suite: adding
+/// a tag to the set an item is tested against can only ever make *more* things
+/// match, and only for an item carrying that exact tag.
+pub(crate) struct IdentityMatchableAsTagStore;
+
+impl Defect for IdentityMatchableAsTagStore {
+    const NAME: &'static str = "IdentityMatchableAsTagStore";
+
+    fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&'a SequencedEvent> {
+        events
+            .iter()
+            .filter(|event| match query.items() {
+                None => true,
+                Some(items) => {
+                    // THE DEFECT: the tag set the index answers from is the
+                    // event's, plus a row the adapter wrote itself.
+                    let mut indexed: Vec<Tag> = event.tags().iter().cloned().collect();
+                    if let Ok(identity) = Tag::key_value("event_id", &event.id.to_string()) {
+                        indexed.push(identity);
+                    }
+                    let indexed: Tags = indexed.into_iter().collect();
+                    items.iter().any(|item| {
+                        type_matches(item, event.event_type()) && indexed.contains_all(item.tags())
+                    })
+                }
+            })
+            .collect()
+    }
+}
+
+/// `SELECT 1 FROM events WHERE position = ?`, with the `StoreId` half of the
+/// identity dropped from the `WHERE` clause.
+///
+/// ES-41's named wrong implementation, and the natural query for an adapter
+/// whose events table has one position column and no origin columns yet — which
+/// is every adapter before it implements ingest. It passes every single-store
+/// rule in the suite, because a store that has ingested nothing only ever holds
+/// its own incarnation, and it fails the first time a peer asks: a foreign event
+/// is reported as already present whenever the local log happens to be at least
+/// that long, the ingest that trusted the answer skips it, and a real fact is
+/// dropped with no error and no symptom. That is the same failure mode VT-6
+/// spends a clause preventing, arriving by a different door.
+pub(crate) struct PositionOnlyMembershipStore;
+
+impl Defect for PositionOnlyMembershipStore {
+    const NAME: &'static str = "PositionOnlyMembershipStore";
+
+    fn contains(events: &[SequencedEvent], id: EventId) -> bool {
+        // THE DEFECT: the incarnation is not in the predicate.
+        events
+            .iter()
+            .any(|event| event.id.position() == id.position())
+    }
+}
+
+// =====================================================================
+// ES-24 — the store that deduplicates for you
+// =====================================================================
+
+/// Rows are content-addressed on `(event_type, tags, data)`, so a byte-identical
+/// event is written once however many times it is appended.
+///
+/// `INSERT … ON CONFLICT DO NOTHING` against a unique index on a content hash,
+/// which is what an adapter built to be safe under at-least-once ingest reaches
+/// for and would ship as a feature. It is correct-looking from every angle a
+/// reviewer checks: no data is lost, no error is hidden, and the *documented*
+/// at-most-once guarantee (ES-24's first shape, a condition matching its own
+/// events) still holds.
+///
+/// What it does is strengthen the two shapes the contract explicitly disclaims,
+/// and that is worse than not providing the guarantee at all: callers write retry
+/// loops against the adapter they happened to test on, and the same loop
+/// double-charges against the next one. ES-24 therefore makes duplicate-landing a
+/// MUST, and this store is what that MUST rejects.
+///
+/// The dedup runs **after** the condition probe, which is where a unique index
+/// lives — the constraint is met at write time, not at plan time — and it matters
+/// here: probing first is what keeps `racing_conditional_appends_elect_one_winner`
+/// and `interleaved_appends_on_one_handle_elect_one_winner` green, so that this
+/// store's declared failures are about reissue and not about concurrency.
+pub(crate) struct PayloadDedupStore;
+
+impl Defect for PayloadDedupStore {
+    const NAME: &'static str = "PayloadDedupStore";
+
+    fn commit(
+        stored: &mut Vec<SequencedEvent>,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        if events.is_empty() {
+            return Err(AppendError::NoEvents);
+        }
+        if let Some(condition) = condition
+            && let Some(conflict) = Self::violation(stored, condition)
+        {
+            return Err(AppendError::ConditionViolated(ConditionViolated::at(
+                conflict,
+            )));
+        }
+
+        // THE DEFECT: the unique index on the content hash. Whatever is already
+        // there is not written again, and the caller is told the append
+        // succeeded.
+        let fresh: Vec<Event> = events
+            .iter()
+            .filter(|event| !stored.iter().any(|held| held.event == **event))
+            .cloned()
+            .collect();
+
+        if fresh.is_empty() {
+            // Every row was already present, so `ON CONFLICT DO NOTHING` wrote
+            // nothing and the position reported is the one the existing copy of
+            // the batch's last event already had.
+            return stored
+                .iter()
+                .rev()
+                .find(|held| events.last().is_some_and(|last| &held.event == last))
+                .map(|held| held.position)
+                .ok_or(AppendError::NoEvents);
+        }
+
+        correct::commit_with(
+            stored,
+            &fresh,
+            None,
+            Self::ALLOCATE,
+            Self::violation,
+            Self::sequence,
+        )
+    }
+}
+
+// =====================================================================
+// CF-39 — the fixture whose fault does nothing
+// =====================================================================
+
+/// A fixture that declares `MID_BATCH_FAULT` supported and arms **nothing**.
+///
+/// The store under it is `LogStore`, which is completely correct, and that is the
+/// point: the defect is not in the store at all. It is a fixture claiming a
+/// capability it does not supply, and the cost is that
+/// `append_is_atomic_under_a_mid_batch_fault` reports a green atomicity result
+/// for a store nothing has ever faulted — a rule that ran, asserted, and observed
+/// nothing.
+///
+/// # The empty body is load-bearing, and a forgotten override is not the same
+/// mistake
+///
+/// `Fixture::arm_mid_batch_fault`'s provided body **panics**, and its message
+/// names this exact hazard, so a fixture that declares the capability and simply
+/// forgets to override it aborts loudly — which is the outcome that method was
+/// written for. The vacuous pass needs an override that is present, honest-looking
+/// and empty. That is what is written below, and writing it any other way would
+/// make this store demonstrate the panic rather than the hole.
+///
+/// # Why it is plausible
+///
+/// Every fixture in this workspace whose store has no injectable fault declines
+/// the capability, and the trait defaults to declining precisely so that
+/// answering takes deliberate effort. The author who writes this one is the
+/// author of a *real* adapter who intends to wire a trigger up later, declares
+/// the capability while stubbing the method, and gets a green suite with the
+/// atomicity rule apparently exercised. There is nothing in the build to tell
+/// them otherwise until CF-39.
+#[derive(Debug)]
+pub(crate) struct NoopFaultFixture(LogStore);
+
+impl Fixture for NoopFaultFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a declared fault capability actually does",
+    );
+    // THE DEFECT, first half: the claim.
+    const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+
+    // THE DEFECT, second half: an override with an empty body. Not a forgotten
+    // override — that reaches the trait's panic, which is a different outcome and
+    // a different mistake.
+    async fn arm_mid_batch_fault(&self, after: usize) {
+        // `let _` rather than an unused parameter: the gate denies warnings, and
+        // an underscore-prefixed name would read as "this argument is not
+        // interesting" when what is being modelled is a body that forgot to use
+        // it.
+        let _ = after;
+    }
+}
+
+impl Subject for NoopFaultFixture {
+    const NAME: &'static str = "NoopFaultFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+// =====================================================================
+// The eight that cannot be one step
 // =====================================================================
 
 /// A handle whose append-condition probe runs against a **cached** head.
@@ -2013,6 +3431,27 @@ impl EventStore for CachedHeadStore {
         self.head.set(Some(position));
         Ok(position)
     }
+
+    // Answered from the log, **not** from `self.head`, for the reason `read` is
+    // delegated in full: this store's declared defect is the staleness of the
+    // *condition probe*, and a handle that also reported its cache as the store's
+    // head would fail rules it does not declare. The realistic shape is the one
+    // modelled — the cache exists because the probe is the expensive half.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
 }
 
 /// One log, and handles that each cache its head when they open.
@@ -2039,6 +3478,121 @@ impl Fixture for CachedHeadFixture {
 
 impl Subject for CachedHeadFixture {
     const NAME: &'static str = "CachedHeadFixture";
+
+    fn open() -> Self {
+        Self(Rc::new(RefCell::new(Vec::new())))
+    }
+}
+
+/// A handle that answers `head()` from the position its own last `append`
+/// returned.
+///
+/// ES-30's first rejected implementation: "a cached last-written position, which
+/// is stale the moment a second handle writes". Whether the cache is a field, a
+/// session variable or Postgres' own `currval()` is an implementation detail;
+/// what makes it wrong is that a store is not a connection, and every deployment
+/// with a pool reaches one store two ways.
+///
+/// # Why it is not a [`Defect`], and why it is not [`CachedHeadStore`] widened
+///
+/// The same reason as [`CachedHeadStore`]: the defect is not a property of the
+/// store's steps but state acquired when a *handle* opens and refreshed only by
+/// that handle's own writes. `Defect::head_of` is handed the log and nothing
+/// else, which is exactly right for a head that is wrong about the log and
+/// leaves nowhere for a head that is wrong about *which* log it last looked at.
+///
+/// And it is a second store rather than a second defect on the first.
+/// `CachedHeadStore`'s declared defect is scoped to its **condition probe**, and
+/// its `head` answers from the log on purpose — a handle that also reported its
+/// cache as the store's head would fail rules it does not declare, which is the
+/// failure `mutants_fail_exactly_their_declared_rules` exists to catch. Two
+/// plausible adapters share one cache and spend it in two places; they are two
+/// rows.
+///
+/// Reads, appends and the condition probe are delegated in full and are correct.
+/// That is the realistic shape *and* the one that pins the failure: a handle
+/// whose reads were also stale would fail
+/// `head_advances_across_two_handles` at its anchor rather than at its head
+/// assertion, and the row would evidence ES-34 instead of ES-30.
+#[derive(Debug)]
+pub(crate) struct LastWrittenHeadStore {
+    events: Rc<RefCell<Vec<SequencedEvent>>>,
+    /// THE DEFECT: the highest position this handle has *written*, sampled when
+    /// the handle opened and advanced by nothing else.
+    written: Cell<Option<SequencePosition>>,
+}
+
+impl EventStore for LastWrittenHeadStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        Snapshot::new(
+            self.events
+                .try_borrow()
+                .map_err(|_| LogError::AlreadyBorrowed)
+                .map(|stored| correct::select(&stored, query, options)),
+        )
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let mut stored = self
+            .events
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        let position = correct::commit(&mut stored, events, condition, dense)?;
+        self.written.set(Some(position));
+        Ok(position)
+    }
+
+    // THE DEFECT, spent: the log is right there and is not consulted.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.written.get())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .events
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
+}
+
+/// One log, and handles that each sample its head when they open.
+#[derive(Debug)]
+pub(crate) struct LastWrittenHeadFixture(Rc<RefCell<Vec<SequencedEvent>>>);
+
+impl Fixture for LastWrittenHeadFixture {
+    type Store = LastWrittenHeadStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability =
+        Capability::declined("this instrument exists for the handle-multiplicity axis only");
+
+    async fn connect(&self) -> Self::Store {
+        // Sampled once, here — a session that reads `max(position)` when it is
+        // checked out of the pool. Without this a handle that has written
+        // nothing would report `None` even on a store it *did* connect to
+        // full, which is a cruder defect than the one being modelled and would
+        // fail `head_of_an_empty_store_is_none`'s anchor for a different reason.
+        let written = self.0.borrow().last().map(|event| event.position);
+        LastWrittenHeadStore {
+            events: Rc::clone(&self.0),
+            written: Cell::new(written),
+        }
+    }
+}
+
+impl Subject for LastWrittenHeadFixture {
+    const NAME: &'static str = "LastWrittenHeadStore";
 
     fn open() -> Self {
         Self(Rc::new(RefCell::new(Vec::new())))
@@ -2276,6 +3830,38 @@ impl EventStore for PreCommitPositionStore {
 
         Ok(last)
     }
+
+    // Over the committed rows, not over `self.sequence`. The sequence holds a
+    // number that has been *allocated*, which is precisely the value no reader is
+    // entitled to see yet; answering with it would make the visibility window
+    // observable through a second door and give the store a defect it does not
+    // declare. Postgres' own `currval()` is the same distinction.
+    //
+    // And `max`, not `correct::head_of`, which is this store's one departure from
+    // the shared core and needs its reason on the page. `head_of` returns the
+    // *last* element, which is the highest only where positions ascend — and
+    // rows arriving out of position order is this store's entire declared defect.
+    // Every committed row here is visible (there is no frontier predicate, so
+    // committed and visible are the same set), so "the highest position currently
+    // visible" is the maximum. Answering `last()` would make `head` lag a row a
+    // reader can already see, which is a *second* defect on top of the declared
+    // one — and `mutants_fail_exactly_their_declared_rules` would then be
+    // reporting the instrument rather than the implementation.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .committed
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(stored.iter().map(|event| event.position).max())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .committed
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
 }
 
 /// One sequence and one set of committed rows, shared by every handle.
@@ -2394,6 +3980,18 @@ impl EventStore for BorrowHoldingStore {
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         correct::commit(&mut self.0.borrow_mut(), events, condition, dense)
     }
+
+    // `borrow`, like the two methods above, and the borrow is released before
+    // either returns — this store's declared defect is the lifetime of what
+    // `read` hands back, so a shared borrow taken and dropped here is
+    // indistinguishable from a conformant store's.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(correct::head_of(&self.0.borrow()))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(correct::contains(&self.0.borrow(), id))
+    }
 }
 
 /// One log, and handles that hand out borrow-holding streams.
@@ -2471,6 +4069,18 @@ impl EventStore for AwaitAcrossBorrowStore {
         YieldOnce(false).await;
         correct::commit(&mut stored, events, condition, dense)
     }
+
+    // No suspension point, so no borrow is held across one. The defect this store
+    // exists for is `append`'s alone; a second `.await` under a live borrow here
+    // would make it fail the re-entrancy rules twice over and pin neither failure
+    // to the declared half.
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(correct::head_of(&self.0.borrow()))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(correct::contains(&self.0.borrow(), id))
+    }
 }
 
 /// One log, and handles whose appends suspend while holding it.
@@ -2491,6 +4101,156 @@ impl Fixture for AwaitAcrossBorrowFixture {
 
 impl Subject for AwaitAcrossBorrowFixture {
     const NAME: &'static str = "AwaitAcrossBorrowStore";
+
+    fn open() -> Self {
+        Self(Rc::new(RefCell::new(Vec::new())))
+    }
+}
+/// A `read` that takes a **new sample per page**.
+///
+/// The self-paginating adapter ES-11's `Rejects:` names, and the natural shape
+/// for a transport with no cursor: `happenstance-neon` reaches Postgres over
+/// one-shot HTTP, gets one buffered JSON document per round trip under a 64 MiB
+/// cap, and has no way to hold a statement open across polls. Above the cap the
+/// only way to answer at all is an independent
+/// `WHERE position > $last ORDER BY position LIMIT n` per chunk — and each of
+/// those is a fresh snapshot. The result grows under the caller's feet.
+///
+/// ES-11's prescribed fix is a **position ceiling**: capture *H* no later than
+/// the first poll and bound every later statement by `position <= H`. This store
+/// is that adapter with the ceiling missing, which is one line rather than a
+/// redesign, and is why the clause makes the ceiling a MUST rather than advice.
+///
+/// # Why the page is one event
+///
+/// A page size is a deployment constant; the defect is independent of it, and
+/// only the *number of events* needed to observe it depends on it. Modelling a
+/// 5,000-row page would mean seeding 5,001 events into every rule that had to
+/// catch this store — which would make the rules slow and would make the
+/// arrangement, rather than the defect, the thing a reader has to understand. A
+/// page of one puts the tear at every item.
+///
+/// # Why it is not a [`Defect`]
+///
+/// Every step it uses is `crate::correct`'s, and it uses them correctly. What is
+/// wrong is *when* it uses them: [`Defect`] composes functions over a slice that
+/// `MutantStore::read` samples once, and there is nowhere in it to say "and this
+/// is evaluated again on the next poll". It is `BorrowHoldingStore`'s reason
+/// with the sign reversed — that store's stream holds too much, this one holds
+/// too little.
+///
+/// # What it is *not*
+///
+/// It is not a re-entrancy defect. The stream owns a refcount rather than a
+/// borrow, so an append while it is alive is answered rather than refused, and
+/// `a_live_read_stream_does_not_block_an_append` passes. The only thing it gets
+/// wrong is the sample.
+#[derive(Debug)]
+pub(crate) struct RefetchingPagedStore(Rc<RefCell<Vec<SequencedEvent>>>);
+
+/// The stream [`RefetchingPagedStore`] returns: a query, a cursor, and no
+/// snapshot.
+///
+/// It borrows the query and not the store — `read`'s RPITIT captures the query's
+/// lifetime, which is ES-13's whole subject, and this is what an adapter that
+/// keeps the caller's `&Query` to rebuild its next statement from looks like.
+#[derive(Debug)]
+pub(crate) struct RefetchingStream<'a> {
+    log: Rc<RefCell<Vec<SequencedEvent>>>,
+    query: &'a Query,
+    options: ReadOptions,
+    /// How many events this stream has already yielded — the cursor the next
+    /// statement resumes from.
+    yielded: usize,
+}
+
+impl Stream for RefetchingStream<'_> {
+    type Item = Result<SequencedEvent, LogError>;
+
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+
+        // THE DEFECT: an independent statement per page, against whatever the
+        // store holds *now*. Every step of the selection is `correct`'s; what is
+        // wrong is that it is taken again.
+        let page = {
+            let Ok(stored) = this.log.try_borrow() else {
+                return Poll::Ready(Some(Err(LogError::AlreadyBorrowed)));
+            };
+            correct::select(&stored, this.query, this.options)
+        };
+
+        match page.get(this.yielded) {
+            Some(event) => {
+                let event = event.clone();
+                this.yielded += 1;
+                Poll::Ready(Some(Ok(event)))
+            }
+            None => Poll::Ready(None),
+        }
+    }
+}
+
+impl EventStore for RefetchingPagedStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        // A refcount, not a borrow: this store's declared defect is the sample,
+        // and holding the log open would give it `BorrowHoldingStore`'s defect
+        // as well.
+        RefetchingStream {
+            log: Rc::clone(&self.0),
+            query,
+            options,
+            yielded: 0,
+        }
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let mut stored = self
+            .0
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        correct::commit(&mut stored, events, condition, dense)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self.0.try_borrow().map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
+}
+
+/// One log, and handles whose read streams re-sample it on every poll.
+#[derive(Debug)]
+pub(crate) struct RefetchingPagedFixture(Rc<RefCell<Vec<SequencedEvent>>>);
+
+impl Fixture for RefetchingPagedFixture {
+    type Store = RefetchingPagedStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability =
+        Capability::declined("this instrument exists for the read-isolation axis only");
+
+    async fn connect(&self) -> Self::Store {
+        RefetchingPagedStore(Rc::clone(&self.0))
+    }
+}
+
+impl Subject for RefetchingPagedFixture {
+    const NAME: &'static str = "RefetchingPagedStore";
 
     fn open() -> Self {
         Self(Rc::new(RefCell::new(Vec::new())))

@@ -20,10 +20,10 @@ claim about `trait_variant` was compiled and refuted.
 
 The larger change is that the design questions this file used to *schedule* are
 now *answered*. [`docs/architecture/SPECIFICATION.md`](architecture/SPECIFICATION.md)
-carries 193 numbered clauses across three ports — 135 `[FROZEN]`, 46
+carries 200 numbered clauses across three ports — 139 `[FROZEN]`, 49
 `[PROVISIONAL]`, 10 `[DEFERRED]`, two `[NON-NORMATIVE]`. This file no longer
 decides what a port promises. It executes those clauses, discharges the
-provisional and deferred ones against named experiments, and makes the 56 cases
+provisional and deferred ones against named experiments, and makes the 57 cases
 in [`E2E-CASES.md`](scenarios/E2E-CASES.md) writable in an order that puts the
 highest blast radius first.
 
@@ -147,16 +147,16 @@ turned out to be one DCB already provides.
 | 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
 | 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
-| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | not started | a generic consumer doing the four things today's signatures forbid, compiled against the frozen ones — plus a `SequencedEvent` that carries identity and time and would take a third field without breaking `new` |
+| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
 | 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | not started | `wire.rs` — every envelope shape round-tripping in JSON *and* postcard, sparse shapes included. **Floats: anywhere between phase 4 and phase 12** |
 | 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
 | 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
-| — | **`0.1.0-alpha.1`** | 7 | — | — |
+| — | **`0.2.0-alpha.1`** | 7 | — | — |
 | 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.1.0`**](#phase-12--publish-010) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
@@ -170,7 +170,7 @@ phase 3 into phase 6 while the table above makes phase 4 depend on it, and nobod
 noticed for a whole document revision.
 
 ```
-0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.1.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
+0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
 
 one branch that rejoins the trunk:
     1 ─▶ 3 ─▶ 4          phase 4 is frozen against the instrument phase 3 builds
@@ -206,7 +206,7 @@ Treat it as the buffer, because it is the only one this plan has.
 | 7 | Typed layer | 8 | 44 |
 | — | **alpha** | — | **≈ 9 weeks** |
 | 8 | SQLite | 10 | 54 |
-| 12 | Publish 0.1.0 | 2 | 56 |
+| 12 | Publish 0.2.0 | 2 | 56 |
 
 Phase 0 gained a day for `cargo xtask spec-trace`, which nothing was building and
 two later phases were already citing as a gate.
@@ -283,11 +283,11 @@ scheduling defect.
 | ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
 | **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
 | ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](adr/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
-| **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13) |
-| **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24) |
-| **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38) |
-| **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10) |
-| **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25) |
+| **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13; **written**, and it also discharges ES-8, ES-9, ES-14 – ES-16 and VT-26 – VT-31's read half, which the scope below did not name) |
+| **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24; **written**, and it also discharges ES-25 – ES-29, ES-37 and VT-30) |
+| **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38; **written**, and it also discharges ES-30 – ES-32's head/count questions, ES-35 and ES-40) |
+| **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10; **written**, and it also adds ES-41 and adopts **VT-2**, which this queue assigned to nobody) |
+| **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25; **written**) |
 | **0016** | 5 | What is the wire format, and whose format is it? (WF-1 – WF-12) |
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
@@ -301,6 +301,35 @@ scheduling defect.
 | **0026** | 13 | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18) |
 | **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31) |
 | **0028** | 14 | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32) |
+
+**The parenthesised clause ranges are a scope statement, and phase 4 proved they
+are not a coverage guarantee.** Phase 4's body says it discharges ES-8 – ES-40
+and VT-1 – VT-31 — 64 clause IDs — while its five queue rows named 35. The
+missing 29 were found by a coverage audit at the end of the ADR pass, not by any
+gate: `spec-trace` cannot see this, because every one of those clauses already
+exists, already carries a marker and already names a rule, so nothing is
+dangling. A clause owned by no ADR is invisible in exactly the way a clause that
+is already finished is invisible.
+
+Audited clause by clause against the five written ADRs, most of the 29 turned out
+to be covered anyway — the rows above were stale rather than the ADRs short, and
+they now say what each ADR actually discharges. Four IDs were mentioned by no ADR
+at all, and they split two ways:
+
+- **ES-33, ES-34 and ES-36 need nothing.** All three are `[FROZEN]` and all three
+  already have passing rules from phase 3 —
+  `two_handles_observe_each_others_appends`,
+  `interleaved_appends_on_one_handle_elect_one_winner` and
+  `a_live_read_stream_does_not_block_an_append`. The phase-4 work item that asks
+  for ES-34 to "become a clause with a rule" is describing work that is done.
+- **VT-2 was a genuine hole**, and the most expensive kind: `[FROZEN]`, with a
+  rule (`appending_equal_events_yields_two_events`) that does not exist, and
+  unwritable before this phase because its third conjunct is about `EventId`.
+  Adopted by **ADR-0014 §9**, with the mutant that fails it.
+
+**The rule this leaves behind, for every later phase:** a phase's clause range and
+the union of its ADRs' clause ranges are two numbers, and nothing checks that they
+are equal. Compute both at the phase's exit.
 
 **Amendments to accepted ADRs, scheduled.**
 
@@ -2850,9 +2879,18 @@ limits). Discharges ES-8 – ES-40, VT-1 – VT-31.
       implementability review rejected for SQLite because it yields a boolean — is
       the only shape it can express. A caller writing a retry loop against the
       field needs to know before it freezes, not after.
-- [ ] **Two handles share one consistency boundary** (ES-34) and **acknowledged
+- [x] ~~**Two handles share one consistency boundary** (ES-34) and **acknowledged
       writes survive a reopen** (ES-35) become clauses with rules, gated on the
-      phase-3 fixture.
+      phase-3 fixture.~~ **Done at phase 3, and this item was stale when phase 4
+      opened.** Both are clauses with rules —
+      `two_handles_observe_each_others_appends` (ES-34, `must!`-gated on
+      `SECOND_HANDLE` per CF-16) and `acknowledged_writes_survive_a_reopen`
+      (ES-35, `require!`-gated on `REOPEN` per CF-17). What is left of ES-35 is
+      not a rule but an *adapter* at the durability axis's far end, which CF-26
+      says no fixture can supply and phase 8 owns. Kept struck rather than
+      deleted because the coverage audit reached this item from the other
+      direction — ES-33, ES-34 and ES-36 are named by no phase-4 ADR, and the
+      reason is that there is nothing left for one to decide.
 - [ ] **Decide whether `Fixture::MID_BATCH_FAULT` earns a `CF` clause of its
       own.** Phase 3 added the capability and the rule it gates
       (`append_is_atomic_under_a_mid_batch_fault`) and left the capability
@@ -3017,45 +3055,146 @@ signatures may differ, and phase 6 owes the same distinction for the same reason
 
 **Exit criteria**
 
-- [ ] ADR-0011, 0012, 0013 written and merged before the code they constrain.
-- [ ] Every semantic sentence has a rule that fails without it.
-- [ ] `frozen_signatures.rs` exists, is in the gate, and each of its four cases is
-      demonstrated to fail against the pre-freeze signatures.
-- [ ] The six skeletons compile, **with no change to any associated type** —
-      `Error`, `Batch` and the stream type are byte-identical to
-      `docs/adapter-shapes.md`. "Compiles" alone is satisfied by `todo!()`.
-- [ ] `conflicting_position` is documented as a promise or as a hint, and
-      `happenstance-neon` is cited for why the question was asked.
-- [ ] **The CF-25 exposure is discharged three ways, not asserted once.**
-      ES-10, ES-11, ES-12, ES-35 and ES-40 are already `[PROVISIONAL]` with their
-      axis named, so they are not part of this freeze and need no acceptance.
-      ADR-0013 accepts the remaining **six** axes explicitly, naming each. And
-      ES-10 is lifted to `[FROZEN]` here **if and only if** phase 2's probe found
-      at least one affordable Postgres mechanism; if it found none, ES-10 stays
-      provisional and ES-25 and ES-26 — which are sound only where it holds —
-      reopen with it, which is a contract change and not a scheduling one.
-      A freeze that does not name its exposure is a freeze pretending to evidence
-      it does not have.
+- [x] ADR-0011, 0012, 0013 written and merged before the code they constrain.
+      **All five** — 0011 through 0015 — landed at `00795d0`, adversarially
+      reviewed, and were signed off at `2506912` before slice A cut any code.
+- [x] ~~Every semantic sentence has a rule that fails without it.~~ **Rewritten,
+      and met in the rewritten form.** As stated it is unsatisfiable, because
+      three `[FROZEN]` clauses have `Rule:` lines that deliberately read *none* —
+      ES-23 (an adapter MAY commit a dropped append; the caller-facing half is
+      not observable), ES-32 and ES-37 (the absence of a method is not
+      checkable). The honest form: **every semantic sentence either has a rule
+      that fails without it, or says in its own clause why it cannot have one.**
+      89 rules, and `spec-trace` check 6 holds the two sets equal in both
+      directions.
+- [x] ~~`frozen_signatures.rs` exists, is in the gate, and each of its four cases
+      is demonstrated to fail against the pre-freeze signatures.~~ **The file
+      exists and is in the gate; the second half is rewritten, because two of the
+      four cases do not fail against the pre-freeze signatures and never did.**
+      Case 3 was already green before this phase, as `memory.rs`'s
+      `spawns_from_generic`; `frozen_signatures.rs` re-makes it for a *generic*
+      consumer, which is the half that was missing. Case 4 — append a
+      `Vec<Event>`, then `into_parts` an event you still own — **compiles and
+      runs against the pre-freeze signature**, because `append` borrows and the
+      caller never gives the `Vec` away; it was verified by running it. What
+      `&[Event]` costs is inside the adapter, which is ES-17's measurement and
+      phase 8's. Cases 1 and 2 are real and are discharged by owning the query in
+      a **parameter** rather than by taking `Query` by value, which ES-13
+      `[FROZEN]` forbids — the file's `compile_fail` doctest pins the four
+      diagnostics the local-variable arrangement produces.
+- [x] ~~The six skeletons compile, **with no change to any associated type** —
+      byte-identical to `docs/adapter-shapes.md`.~~ **Rewritten: the criterion
+      had no referent and the stronger half is now false by design.**
+      `adapter-shapes.md:41-47` is a prose table of type *names*, so
+      "byte-identical" was never checkable against it. And ES-30 and ES-41 make
+      `head` and `contains_event_id` required, so all six skeletons necessarily
+      changed. The surviving claim, which is the one that was worth having:
+      **no skeleton changed its `Error`, its `Batch` or its stream type**, and
+      each new body is `todo!()` rather than an invented implementation.
+- [x] `conflicting_position` is documented as a promise or as a **hint**, and
+      `happenstance-neon` is cited for why the question was asked: it has no
+      interactive transaction, so the only shape it can express yields a boolean
+      and no row. Its `Display` now renders the position when there is one.
+- [x] **The CF-25 exposure is discharged three ways, not asserted once**, with
+      one correction: the axis count is **four accepted and three carried**, not
+      six. "Six" appears in this file and in `SPECIFICATION.md:260`, and because
+      the two documents *agree*, rule 5 gave no arbitration — both were wrong in
+      the same way. Six is seven axes minus the one *measured*; the exit
+      criterion's own wording is exclusive ("they are not part of this freeze and
+      need no acceptance"), under which an axis is either carried by a live
+      `[PROVISIONAL]` clause naming it or accepted by name, never both and never
+      neither. ADR-0013 states the partition. **ES-10 lifted to `[FROZEN]`** on
+      arm C's measurement, so ES-25 and ES-26 do not reopen — with the caveat
+      ADR-0013 §4 records, that `head()` on such an adapter is the visibility
+      frontier and not `max(position)`.
 
-- [ ] `EventType::from_static("")` is a compile error, demonstrated by a
-      `trybuild` case.
-- [ ] A stated position on Unicode normalisation exists in `Tag`'s docs.
-- [ ] `SequencedEvent` carries `id` and `recorded_at`, and adding a *third* field
-      would not break `new`.
-- [ ] **`EventStore::append`'s signature is unchanged by identity**, and VT-10 is
+- [x] ~~`EventType::from_static("")` is a compile error, demonstrated by a
+      `trybuild` case.~~ **It is a compile error, demonstrated by a
+      `compile_fail` doctest, and the substitution is a finding rather than a
+      shortcut.** Compiled: rustdoc on 1.97.1 *silently ignores* an error-code
+      annotation it cannot match, so `compile_fail,E0080` is not a stronger check
+      than bare `compile_fail` — it is the same check wearing a claim. A
+      `trybuild` snapshot would pin the diagnostic, and pulling that dependency
+      in is a decision **phase 6** owns; ADR-0015 records it rather than
+      pre-empting it here. Note also that the guarantee is weaker than the
+      criterion implies and `from_static`'s own docs now say so: an *associated*
+      const that nothing reads carries an invalid value through `check`,
+      `clippy`, `build` and `test`.
+- [x] A stated position on Unicode normalisation exists in `Tag`'s docs, with
+      both worked failures — NFC/NFD `café` as two consistency boundaries, and a
+      trailing space that sorts adjacent and never matches.
+- [x] ~~`SequencedEvent` carries `id` and `recorded_at`, and adding a *third*
+      field would not break `new`.~~ **First half met; second half rewritten,
+      because it is false for the fields this phase added and true only for a
+      different kind of field.** A *required* store-assigned fact has no
+      non-breaking constructor shape at all — adding one to a positional
+      constructor is `error[E0061]`, and `#[non_exhaustive]` is exactly what
+      makes the constructor the only surface. So `new` went from two arguments to
+      four in one commit with no deprecated arm, because a shim would have to
+      invent a `StoreId` and a time, which is the wrong implementation VT-4
+      rejects by name. The honest form: **`new` is superseded rather than
+      widened, and the `with_*` shape is in place so a *defaultable* field lands
+      without touching it again** — `with_recorded_at` is the worked example.
+- [x] **`EventStore::append`'s signature is unchanged by identity**, and VT-10 is
       cited as the reason — a foreign identity arrives through `IngestStore` in the
       sync crate. If it did change, the signature half of this phase is reopened by
       its value half, and that is worth saying out loud rather than discovering in
       a diff.
-- [ ] **Phase 3's value-edge rules are reconciled against the minima frozen here.**
-      They were written before VT-21 – VT-24 fixed the numbers, so they currently
-      assert placeholders. A rule asserting a minimum the specification does not
-      state is a rule enforcing an accident.
-- [ ] **VT-17's missing E2E case is written.** `SPECIFICATION.md` §7.5 records it
+- [x] **Phase 3's value-edge rules are reconciled against the minima frozen here.**
+      `suite.rs`'s four private constants became `use happenstance_core::{…}`, so
+      the clause and the code now agree by construction and raising a floor takes
+      its rules with it. The stale comment claiming the runbook still said "1 MiB"
+      went with them — it had been correct about which document wins and wrong
+      about the state of the other one, which is the failure mode it was written
+      to prevent.
+- [x] **VT-17's missing E2E case is written.** `SPECIFICATION.md` §7.5 records it
       as naming no case at all and calls it a genuine hole: construct a `Tag` with
       no colon and one with two, assert both are accepted and neither acquires
       structure. `key:value` is convention, the clause says so, and a store that
       started enforcing it would be wrong with nothing to catch it.
+
+**2026-08-08 — the code. Phase 4 is done.** Seven slices, each ending with a
+green `cargo xtask ci` and its own commit, so a regression is bisectable to the
+change that caused it rather than to a three-thousand-line freeze.
+
+`73bd647` value types · `634f635` read options and `Query` · `b327e48` identity
+and recorded time · `1b2a565` append-condition guards · `d2b55d7` the two
+required port methods · `d480446` the rules, mutants and clauses · this commit,
+the proof artefact and these criteria.
+
+**The suite went from 55 rules to 89 and the mutant registry from 52 rows to
+80.** The specification went from 193 clauses to 200: ES-41 (membership), CF-39
+(a fixture's injected fault must not be absorbable), CF-40 (a fixture declares
+its numeric limits), VT-32 (const-constructible identifiers) and VT-33 (the
+standard-library trait surface), with ES-10 lifted to `[FROZEN]`.
+
+**Five of the twelve exit criteria were rewritten rather than ticked**, and each
+says why above. The pattern in four of the five is the same and is worth naming
+once: the criterion asserted that something would *fail* before the freeze, and
+it did not. Case 3 of the proof artefact was already green as phase 1's
+`spawns_from_generic`; case 4 compiles and runs against the pre-freeze signature,
+because `append` borrows and the caller never surrenders its `Vec`. A criterion
+that cannot fail is the same defect as a rule that cannot fail, one level up, and
+this plan's own adversarial pass found four of those in the previous revision
+without noticing that the replacement had the same shape.
+
+**What phase 4 did not settle, recorded so the next phase does not inherit it as
+a surprise.** ES-11 and ES-12 stay `[PROVISIONAL]` on the transport axis: a rule
+that distinguishes a snapshot read from a self-paginating one needs a fixture
+that can pause between round trips, and no such fixture exists — writing one that
+passes both would have been worse than writing none.
+`recorded_time_survives_a_reopen` has no mutant reaching its headline assertion,
+only its setup anchor, so the sentence it exists for has no negative control
+until a durable adapter exists at phase 8. VT-22 and half of VT-23 carry
+falsifiers no scheduled phase can reach — they are adoption-gated, which is
+honest labelling rather than a resolution, and phase 12 decides whether 0.1 ships
+with them.
+
+**One thing to carry forward.** The `[FROZEN]` markers on `EventStore` now rest
+on 89 rules and 80 mutants, and on **no adapter at all**. CF-26 draws the line
+this phase spent seven slices respecting: a fixture instrument proves a rule can
+fail; only an adapter instrument proves a real implementation can pass. Phase 8
+is the first time anything in this repository will have done the second.
 
 **Cases this makes writable.** E2E-02, E2E-03, E2E-04, E2E-05, E2E-07, E2E-11,
 E2E-12, E2E-13, E2E-14, E2E-43, E2E-51, E2E-54.
@@ -3063,6 +3202,119 @@ E2E-12, E2E-13, E2E-14, E2E-43, E2E-51, E2E-54.
 **Estimate.** 10 days — 7 for the signatures, 3 for the values that were phase 5.
 
 **Session log**
+
+**2026-08-08 — the ADR pass. Decisions written, no code.** State stays
+`not started`, because a phase is done when its proof artefact exists and phase
+4's does not. What exists is
+[`docs/evaluation/phase-4-reconciliation.md`](evaluation/phase-4-reconciliation.md)
+and ADR-0011 – ADR-0015, all five adversarially reviewed and repaired, awaiting
+sign-off. Baseline and close both green (`cargo xtask ci`, exit 0).
+
+The pass was organised the way step 4 of the session protocol asks — ADRs before
+the code they constrain — and the first thing it found is that **this phase body
+disagrees with the specification in two places**, so rule 5 applies:
+
+- *"`read` takes its query by value"* (`:2768-2774`) contradicts **ES-13**
+  `[FROZEN]`, whose `Rejects:` line names that exact fix verbatim. ADR-0011
+  keeps `&Query`. It does not pay ES-13's stated price either: the escaping
+  cases are discharged by owning the query in a **parameter** rather than a
+  local, which keeps all four proof cases instead of costing two. Precise
+  capturing (`+ use<'a, Self>`) was compiled to work on a plain trait and
+  compiled to be unavailable under `#[trait_variant::make]` (E0799), so the
+  option exists but costs ADR-0001's and ADR-0008's derivation mechanism.
+- *"`append` takes its events by value"* (`:2759-2767`) contradicts **ES-17**,
+  whose falsifier is a measurement phase 8 owns. ADR-0012 keeps `&[Event]` and
+  leaves the marker provisional. Both alternatives this body offers are
+  independently dead: VT-24 forbids an `EventBatch` type in terms, and
+  `impl IntoIterator<Item = Event>` was compiled to be unerasable by `dynosaur`
+  (E0191) — which is `RUNBOOK.md:563`'s own falsifier for ES-17 *firing*.
+
+**The proof artefact is partly invalid as written, and two of its four cases were
+executed rather than argued about.** Case 3 is already green as
+`spawns_from_generic`. Case 4 — append a `Vec<Event>`, then `into_parts` an event
+you still own — **compiles and runs today** against unmodified
+`happenstance-core` (`test tests::runs ... ok`), because the caller never gave
+the Vec away; the real cost `&[Event]` imposes is inside the adapter, which is
+ES-17's measurement and not this phase's. Exit criteria 2, 3, 4, 6 and 7 collide
+with something and are enumerated in the dossier.
+
+**Two findings nobody was looking for.** The ADR queue (`:284-288`) scopes the
+five ADRs to 35 clause IDs while `:2755` says this phase discharges 64 — **29
+clauses, including everything governing `head()`, all of `ReadOptions` and
+`Query`, and all of the condition semantics, are claimed by no ADR in the
+queue.** And `:2866`'s *"No phase owns freezing CF-16 – CF-21"* is stale: five of
+the six are `[FROZEN]` and CF-17 is phase 8's. Its poll-count half is live,
+unclaused, and verbatim true.
+
+**What the body still owes.** Every edit rule 5 requires here is enumerated,
+current-text-to-required-text, in the five ADRs' closing sections. They are
+applied with the code rather than now, because the decisions that motivate them
+are not signed off yet, and a body edited ahead of its decision is a body that
+records an intention.
+
+**2026-08-08, later — the coverage gap is closed.** The 29 unclaimed clause IDs
+were audited one at a time against the five written ADRs rather than against the
+queue's stated scopes. Most were already covered and the queue rows were stale;
+they now say what each ADR discharges. Four IDs were named by no ADR: ES-33,
+ES-34 and ES-36 need nothing, because phase 3 already gave all three passing
+rules, and the ES-34 work item above is struck as stale. **VT-2 was the real
+hole** — `[FROZEN]`, its rule `appending_equal_events_yields_two_events` absent
+from `suite.rs`, and unwritable before this phase because the clause's third
+conjunct is about `EventId`. ADR-0014 §9 adopts it, specifies the rule and names
+`ContentHashIdentityStore` as the mutant that fails it and nothing else. The
+standing lesson is recorded at the ADR queue: **a phase's clause range and the
+union of its ADRs' clause ranges are two numbers, and nothing checks that they
+agree.**
+
+**2026-08-08, sign-off. All five ADRs are accepted.** The five questions the pass
+refused to answer on its own were taken by a human, and each went the cheaper way
+on the same principle: *where the evidence is not in yet, prefer the marker that
+lifts over the marker that must be superseded.*
+
+1. **ES-41 (`contains_event_id`) ships `[PROVISIONAL]`,** not frozen. The marker
+   does not gate the method — a provisional clause is normative, so the required
+   method ships in 0.1 either way — and VT-7's dangling forward reference is
+   discharged by the clause existing rather than by its maturity. Lifts at
+   phase 8 or 9, whichever adapter implements it first. **This dissolves the
+   ordering constraint ADR-0014 had on ADR-0013**, which existed only to inherit
+   a CF-25 risk acceptance a frozen clause would have needed.
+2. **The fixture's numeric-limit declaration lands in ADR-0015, as CF-40.**
+   Ownership follows the obligation: the rule it unblocks
+   (`append_reports_exceeded_store_limits`) checks VT-25 and VT-19, both
+   ADR-0015's, and both mutants owed with it are value-type mutants. Without it a
+   `[FROZEN]` clause would have shipped implemented and checked by nothing.
+3. **CF-25's partition is the exclusive one: four axes accepted by name, three
+   carried by live `[PROVISIONAL]` clauses.** It is the only reading that is a
+   partition, and it is auditable at phase 12. The number is bookkeeping; the
+   load-bearing part is ADR-0013's caveat that batch shape is a `ProjectionStore`
+   axis whose acceptance here is pro forma and **non-transferable** — phase 6 may
+   not treat that row as discharged. `:3032` and `SPECIFICATION.md:260` both say
+   "six" and both need correcting.
+4. **Both of ADR-0012's proposed lines are accepted**, which moves it from
+   `proposed` to `accepted`. `AppendCondition::guards` becomes private with an
+   accessor, because `#[non_exhaustive]` seals the struct *expression* and not the
+   struct, so `c.guards = Box::new([])` compiles downstream today and yields a
+   conditional append that is silently unconditional. And CF-39 requires an armed
+   fixture to produce `Err`, narrowing `[FROZEN]` ES-18 — bounded by CF-39 itself
+   being `[PROVISIONAL]`, so a driver that absorbs every injectable fault reverses
+   it by a marker edit rather than by a superseding ADR.
+5. **`read`'s return type takes no `Unpin` bound,** and the question is scheduled
+   rather than closed: a new `[PROVISIONAL]` clause whose owner is a **deadline,
+   not a phase** — re-evaluate before phase 12, because after first publish the
+   bound cannot be added at all. ADR-0001:110-112 and `E2E-CASES.md:1432` both
+   assert a `dynosaur` erasure that does not work as written and are amended with
+   it.
+
+**What this does not settle.** The three questions the reviews raised and nobody
+has taken: VT-31's owner, and with it `query_union_is_item_concatenation` — the
+only rule that would catch an adapter reordering query *items*, which ES-15's own
+`Rejects:` names; `read_from_a_gap_position`, declined in writing by both
+ADR-0011 and ADR-0013; and the five VT-4 – VT-9 rules with no named wrong
+implementation, which the code run must either supply mutants for or argue cannot
+have one. All three are rule-ownership questions rather than contract questions,
+so they are the code run's to close — but they are closed by decision, not by
+writing code, and a run that discovers them at the end will be tempted to skip
+them.
 
 ---
 
@@ -3424,9 +3676,32 @@ phase.
 
 ---
 
-## Release: `0.1.0-alpha.1`, here
+## Why the first release is `0.2.0` and not `0.1.0`
 
-**Publish `0.1.0-alpha.1` immediately after phase 7, and not before.**
+The plan said `0.1.0` until phase 4 landed. It moved because **phase 4 is a
+breaking change to a version that had not moved**, and `cargo-semver-checks`
+said so on the pull request: seven major lints against `happenstance-core`,
+every one of them a decision an ADR had already taken — `Query::Items` gaining
+`#[non_exhaustive]` (VT-26), `AppendCondition`'s public fields becoming a private
+guard sequence (VT-30), `SequencedEvent::new` going from two arguments to four
+(VT-4), `Event::new`'s widened bound (VT-18), `head` and `contains_event_id`
+arriving on the trait (ES-30, ES-41), and `AppendCondition`'s constructors
+ceasing to be `const` because a boxed slice allocates.
+
+Nothing is published, so nothing downstream broke. The number still has to move,
+for the reason this repository applies to every other gate: **the finding was
+true, and a true finding is not silenced.** In `0.x`, the breaking position is
+the minor, so `0.1.0` becomes `0.2.0` and the planned alpha becomes
+`0.2.0-alpha.1`.
+
+`happenstance-testkit` moves with it, on its own reasoning rather than by
+inheritance — CF-32 gives it an independent number precisely because adding a
+conformance rule can turn a passing adapter's CI red, and phase 4 added
+thirty-four.
+
+## Release: `0.2.0-alpha.1`, here
+
+**Publish `0.2.0-alpha.1` immediately after phase 7, and not before.**
 
 Name reservation and feedback have different deadlines and different instruments.
 Reservation is urgent and phase 0 handles it. Feedback is only worth having about
@@ -3741,7 +4016,7 @@ have been three.
 
 ---
 
-## Phase 12 — Publish `0.1.0`
+## Phase 12 — Publish `0.2.0`
 
 **Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit` and
 `happenstance-sqlite` on crates.io, rendering on docs.rs.
@@ -3759,7 +4034,7 @@ Publishing starts the feedback loop; it does not create the obligation.
 Most of the old phase-7 list moved to phase 0, where it was cheaper. What remains
 is the release.
 
-- [ ] `CHANGELOG.md` finalised for 0.1.0 — it has been accumulating since phase 0.
+- [ ] `CHANGELOG.md` finalised for 0.2.0 — it has been accumulating since phase 0.
 - [ ] `cargo publish --dry-run` per crate; verify each `.crate` against phase 0's
       `--list` assertion.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventType, MemoryEventStore, Query, QueryItem,
+    AppendCondition, AppendError, Event, EventId, EventType, MemoryEventStore, Query, QueryItem,
     ReadOptions, SendEventStore, SequencePosition, SequencedEvent, Tags,
 };
 
@@ -90,7 +90,6 @@ pub fn event_type(value: &str) -> EventType {
 #[must_use]
 pub fn query_of_types(types: &[&str]) -> Query {
     Query::from_item(QueryItem::of_types(types.iter().copied()).expect("valid types"))
-        .expect("non-empty query")
 }
 
 /// Builds a single-item query constrained by tags.
@@ -101,7 +100,6 @@ pub fn query_of_types(types: &[&str]) -> Query {
 #[must_use]
 pub fn query_tagged(pairs: &[(&str, &str)]) -> Query {
     Query::from_item(QueryItem::tagged(tags(pairs)).expect("non-empty tags"))
-        .expect("non-empty query")
 }
 
 /// Builds a single-item query constrained by both type and tags.
@@ -112,7 +110,6 @@ pub fn query_tagged(pairs: &[(&str, &str)]) -> Query {
 #[must_use]
 pub fn query_of(types: &[&str], pairs: &[(&str, &str)]) -> Query {
     Query::from_item(QueryItem::new(types.iter().copied(), tags(pairs)).expect("valid query item"))
-        .expect("non-empty query")
 }
 
 /// Builds a query item constrained by type alone.
@@ -209,6 +206,14 @@ impl SendEventStore for MemoryHandle {
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         self.0.append(events, condition).await
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        self.0.head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        self.0.contains_event_id(id).await
+    }
 }
 
 /// The reference [`Fixture`]: one [`MemoryEventStore`], any number of handles.
@@ -226,6 +231,14 @@ impl SendEventStore for MemoryHandle {
 ///   workspace's first fixture to decline anything, which is what makes the skip
 ///   machinery non-vacuous — until something declines a capability, "a skip is
 ///   reported" is a claim about code no fixture executes.
+///
+/// It also states no CF-40 store limit, inheriting `None` three times, so
+/// `append_reports_exceeded_store_limits` reports a skip against it. That is the
+/// honest answer — `MemoryEventStore` has no ceiling on a payload, a tag count or
+/// a batch size — and it is the first rule in the suite the *reference* fixture
+/// cannot run. `GappedPositionFixture` in the testkit's own
+/// `tests/mutation_coverage/variants.rs` is the conformant variant that states
+/// all three and enforces them, which is what keeps the rule non-vacuous.
 #[derive(Debug, Default)]
 pub struct MemoryFixture(Arc<MemoryEventStore>);
 

@@ -1,13 +1,15 @@
 //! An in-memory reference event store.
 
 use alloc::vec::Vec;
-use std::sync::{PoisonError, RwLock};
+use core::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{OnceLock, PoisonError, RwLock};
 
 use futures_core::Stream;
 
 use crate::append::AppendCondition;
 use crate::error::{AppendError, ConditionViolated};
 use crate::event::{Event, SequencePosition, SequencedEvent};
+use crate::identity::{EventId, RecordedAt, StoreId};
 use crate::query::{Query, ReadOptions};
 use crate::store::SendEventStore;
 
@@ -49,7 +51,7 @@ use crate::store::SendEventStore;
 /// let query = Query::from_item(QueryItem::new(
 ///     ["CourseDefined"],
 ///     Tags::from_pairs([("course", "c1")])?,
-/// )?)?;
+/// )?);
 ///
 /// let (events, last_seen) = read_decision_model(&store, &query).await?;
 /// assert!(events.is_empty());
@@ -67,15 +69,42 @@ use crate::store::SendEventStore;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemoryEventStore {
     events: RwLock<Vec<SequencedEvent>>,
+    store_id: StoreId,
+}
+
+impl Default for MemoryEventStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryEventStore {
-    /// Creates an empty store.
+    /// Creates an empty store with a fresh incarnation identifier.
+    #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::with_store_id(next_store_id())
+    }
+
+    /// Creates an empty store with a caller-chosen incarnation.
+    ///
+    /// Exists for the rule that a reopened store must not reissue an identity:
+    /// "reopening" an in-memory store is constructing a new one, and the rule
+    /// needs to distinguish "the same store again" from "a different store".
+    #[must_use]
+    pub fn with_store_id(store_id: StoreId) -> Self {
+        Self {
+            events: RwLock::new(Vec::new()),
+            store_id,
+        }
+    }
+
+    /// The incarnation this store mints identities under.
+    #[must_use]
+    pub const fn store_id(&self) -> StoreId {
+        self.store_id
     }
 
     /// Creates a store pre-loaded with `events`, assigned dense positions from
@@ -84,14 +113,57 @@ impl MemoryEventStore {
     /// Useful for arranging test fixtures without going through
     /// [`append`](crate::EventStore::append).
     pub fn with_events(events: impl IntoIterator<Item = Event>) -> Self {
+        let store = Self::new();
+        let recorded_at = now();
         let sequenced = events
             .into_iter()
             .enumerate()
-            .map(|(index, event)| SequencedEvent::new(position_at(index), event))
+            .map(|(index, event)| {
+                let position = position_at(index);
+                SequencedEvent::new(
+                    position,
+                    EventId::new(store.store_id, position),
+                    recorded_at,
+                    event,
+                )
+            })
             .collect();
 
         Self {
             events: RwLock::new(sequenced),
+            store_id: store.store_id,
+        }
+    }
+
+    /// Reconstructs a store from a snapshot of what a durable medium held.
+    ///
+    /// The counterpart of [`snapshot`](Self::snapshot), and deliberately not
+    /// [`with_events`](Self::with_events): that one *arranges* a store, assigning
+    /// fresh positions, identities and a time, which is what a caller wants when
+    /// seeding a fixture. This one *reopens* one, preserving every store-assigned
+    /// fact on every event — which is what a real adapter's open does, because it
+    /// reads rows it wrote rather than re-accepting events. A store whose reopen
+    /// restamps hands every auditor the time of the last restart.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use happenstance_core::{Event, EventStore, MemoryEventStore};
+    /// # async fn demo() -> Result<(), Box<dyn core::error::Error>> {
+    /// let store = MemoryEventStore::new();
+    /// store.append(&[Event::new("Issued", &b"{}"[..])?], None).await?;
+    ///
+    /// // What a durable medium would have kept, and what reopening finds.
+    /// let reopened = MemoryEventStore::restore(store.store_id(), store.snapshot());
+    /// assert_eq!(reopened.snapshot(), store.snapshot());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn restore(store_id: StoreId, events: impl IntoIterator<Item = SequencedEvent>) -> Self {
+        Self {
+            events: RwLock::new(events.into_iter().collect()),
+            store_id,
         }
     }
 
@@ -127,6 +199,80 @@ impl MemoryEventStore {
     }
 }
 
+/// A fresh incarnation identifier.
+///
+/// Process-local and monotonic, which is enough here and would not be enough
+/// anywhere else: nothing an in-memory store holds outlives the process, so
+/// there is no persistent state a second incarnation could be confused with. A
+/// durable adapter has the harder job — mint at database creation, and re-mint
+/// when that state is restored or cloned.
+///
+/// The salt keeps two runs from minting the same identifier, so a test that
+/// writes one down cannot accidentally pass by matching a later process's.
+fn next_store_id() -> StoreId {
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    static SALT: OnceLock<u64> = OnceLock::new();
+
+    // `unsigned_abs` rather than a cast, and `0` where there is no clock: the
+    // salt only has to separate two *runs*, and the counter below is what
+    // separates two stores within one.
+    let salt = *SALT.get_or_init(|| wall_clock_millis().unwrap_or(0).unsigned_abs());
+
+    let ordinal = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&salt.to_be_bytes());
+    bytes[8..].copy_from_slice(&ordinal.to_be_bytes());
+    StoreId::from_bytes(bytes)
+}
+
+/// The host clock, as milliseconds since the Unix epoch.
+///
+/// A clock that is behind the epoch, or a target that has none at all, yields
+/// zero rather than failing: `append` has no error variant for "the clock is
+/// broken", and inventing one would put a store failure in the caller's path
+/// for a value the caller cannot act on.
+fn now() -> RecordedAt {
+    RecordedAt::from_millis(wall_clock_millis().unwrap_or(0))
+}
+
+/// Milliseconds since the Unix epoch, or `None` on a target with no clock.
+///
+/// **`SystemTime::now()` panics on `wasm32-unknown-unknown`.** It does not
+/// return an error — there is no clock behind it, and the call aborts. That
+/// target is the entire reason the bare `EventStore` flavour exists, so a
+/// reference store that cannot even be *constructed* there is one nobody can
+/// develop against the platform the contract was shaped for. This function is
+/// the seam that keeps `MemoryEventStore::new()` total on every target.
+///
+/// The workspace gate compiles for `wasm32` but does not run there; CI does,
+/// which is how this was found. A `cfg` is the only available answer: `std`
+/// exposes no fallible clock, and reaching for a JavaScript one would put a
+/// `wasm-bindgen` dependency in the contract crate to serve a store that exists
+/// for tests and examples.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn wall_clock_millis() -> Option<i64> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// No clock on this target; see the sibling above.
+///
+/// Every event a store on this target accepts is therefore stamped
+/// `RecordedAt::from_millis(0)`. That is honest rather than convenient: VT-9's
+/// own falsifier names "a target that cannot supply a wall clock at append
+/// time", and this is one. It costs the rules nothing — they assert that a
+/// recorded time is *stable*, never that it is recent — and an adapter for this
+/// platform that has a real clock (a Durable Object does) supplies its own.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn wall_clock_millis() -> Option<i64> {
+    None
+}
+
 /// The dense position for a zero-based index.
 fn position_at(index: usize) -> SequencePosition {
     let raw = u64::try_from(index)
@@ -160,21 +306,29 @@ impl SendEventStore for MemoryEventStore {
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // `from` is the starting bound and `to` the stopping one, so reading
+        // backwards swaps which side of the position order each sits on. Both
+        // are inclusive in both directions.
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
+                .filter(|event| options.to.is_none_or(|to| event.position >= to))
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
+                .filter(|event| options.to.is_none_or(|to| event.position <= to))
                 .cloned()
                 .collect()
         };
 
+        // After filtering and ordering, never before: `limit` truncates the
+        // result set the caller would otherwise have seen. A limit of zero
+        // truncates to nothing, which is the point of it being `Option<usize>`.
         if let Some(limit) = options.limit {
-            selected.truncate(limit.get());
+            selected.truncate(limit);
         }
 
         drop(guard);
@@ -230,11 +384,38 @@ impl SendEventStore for MemoryEventStore {
         }
 
         let first_index = stored.len();
+        let recorded_at = now();
         stored.extend(events.iter().enumerate().map(|(offset, event)| {
-            SequencedEvent::new(position_at(first_index + offset), event.clone())
+            let position = position_at(first_index + offset);
+            // A locally appended event's identity is this store's incarnation
+            // paired with the position just assigned, so `id.position()` and
+            // `position` agree here. They part company only for an event that
+            // arrived through ingest, which this store has no way to accept.
+            SequencedEvent::new(
+                position,
+                EventId::new(self.store_id, position),
+                recorded_at,
+                event.clone(),
+            )
         }));
 
         Ok(position_at(first_index + events.len() - 1))
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // The whole log is behind one lock, so the highest visible position is
+        // the last element. An adapter over SQL answers with
+        // `SELECT max(position)`; what neither may do is cache it outside the
+        // transaction that assigns it, which is what makes a second handle
+        // observe a stale head.
+        Ok(self.read_guard().last().map(|event| event.position))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        // A scan, because this store has no index and never will — it exists to
+        // be correct and readable, not fast. The shape an adapter uses is
+        // `WHERE origin_store = ? AND origin_position = ?`.
+        Ok(self.read_guard().iter().any(|event| event.id == id))
     }
 }
 
@@ -294,8 +475,7 @@ mod tests {
         store.append(&[event("A")], None).await.unwrap();
         let before = store.snapshot();
 
-        let condition =
-            AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()).unwrap());
+        let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()));
         let err = store
             .append(&[event("B"), event("C")], Some(&condition))
             .await
@@ -321,9 +501,8 @@ mod tests {
         let store = MemoryEventStore::new();
         store.append(&[event("Blocker")], None).await.unwrap();
 
-        let condition = AppendCondition::new(
-            Query::from_item(QueryItem::of_types(["Blocker"]).unwrap()).unwrap(),
-        );
+        let condition =
+            AppendCondition::new(Query::from_item(QueryItem::of_types(["Blocker"]).unwrap()));
         let err = store.append(&[], Some(&condition)).await.unwrap_err();
 
         assert!(
@@ -342,7 +521,77 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(seeded.snapshot(), appended.snapshot());
+        let seeded_snapshot = seeded.snapshot();
+        let appended_snapshot = appended.snapshot();
+
+        // Two stores cannot agree on identity or recorded time — those are facts
+        // about *which* store accepted the event and *when*, and the whole point
+        // of `StoreId` is that two incarnations differ. What `with_events`
+        // claims is parity of position and payload, so that is what is compared.
+        let shape = |events: &[crate::SequencedEvent]| {
+            events
+                .iter()
+                .map(|event| (event.position, event.event.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(shape(&seeded_snapshot), shape(&appended_snapshot));
+
+        // And each store stamps its own incarnation, which is the property that
+        // makes the comparison above the right one.
+        assert!(
+            seeded_snapshot
+                .iter()
+                .all(|event| event.id.store() == seeded.store_id())
+        );
+        assert!(
+            appended_snapshot
+                .iter()
+                .all(|event| event.id.store() == appended.store_id())
+        );
+        assert_ne!(
+            seeded.store_id(),
+            appended.store_id(),
+            "two stores are two incarnations"
+        );
+    }
+
+    #[tokio::test]
+    async fn append_stamps_identity_from_its_own_incarnation() {
+        let store = MemoryEventStore::new();
+        store.append(&[event("A"), event("B")], None).await.unwrap();
+
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.len(), 2);
+
+        for sequenced in &snapshot {
+            assert_eq!(sequenced.id.store(), store.store_id());
+            // For a locally appended event the two positions agree; they part
+            // company only for an event accepted through ingest, which this
+            // store cannot do.
+            assert_eq!(sequenced.id.position(), sequenced.position);
+        }
+
+        assert_ne!(
+            snapshot[0].id, snapshot[1].id,
+            "two events, two identities, even with equal payloads"
+        );
+    }
+
+    #[tokio::test]
+    async fn structurally_equal_events_get_distinct_identities() {
+        // Structural equality is not identity: appending the same event twice
+        // must produce two events, not one, and a content hash would collapse
+        // them.
+        let store = MemoryEventStore::new();
+        let twice = [event("A"), event("A")];
+        assert_eq!(twice[0], twice[1], "the two events are structurally equal");
+
+        store.append(&twice, None).await.unwrap();
+
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.len(), 2);
+        assert_ne!(snapshot[0].position, snapshot[1].position);
+        assert_ne!(snapshot[0].id, snapshot[1].id);
     }
 
     #[tokio::test]
@@ -471,8 +720,7 @@ mod tests {
         let query = Query::from_item(
             QueryItem::tagged(Tags::from_pairs([("course", "c1"), ("student", "s1")]).unwrap())
                 .unwrap(),
-        )
-        .unwrap();
+        );
 
         let matched = collect(store.read(&query, ReadOptions::new()))
             .await

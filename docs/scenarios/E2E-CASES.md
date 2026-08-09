@@ -42,7 +42,7 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 | [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32 |
 | [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
 | [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51 |
-| [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-56 |
+| [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-57 |
 | [What cannot be written yet](#what-cannot-be-written-yet) | — |
 
 ---
@@ -1498,6 +1498,33 @@ in the crate (`read_decision_model`, `store.rs:198-208`) exists to produce the
 *position-relative* form and has no counterpart for the replicable one. If the sync design
 lands on "conditions must be position-free to replicate", that helper is pointing the
 wrong way, and it belongs in the ADR rather than being inverted silently.
+
+### E2E-57 — A tag is a string, and a repeated key is two tags
+
+- **From:** Wattline (D3), and it serves **VT-17**, whose `Cases:` line read "none" until phase 4
+- **Level:** contract
+- **Spans:** `happenstance-core`
+
+**GIVEN** a `Tag` with no colon and a `Tag` with two.
+**WHEN** each is inspected through `Tag::key` and `Tag::value`, and a `Tags` set is
+built from two pairs sharing one key.
+**THEN** both tags are accepted and neither acquires structure: `key()` is `None` for
+the first, and `Some` of the text before the *first* colon for the second, with the
+remainder — colon included — as the value. The two-pair set has **two** elements, and
+an event carrying it is selected by a query on either value.
+
+**Falsifies:** that `key:value` is a shape the contract enforces. It is a convention,
+deduplication is on the whole tag string (`tag.rs:258-265`), and `Tags::values_of`
+exists precisely because a key may name more than one value.
+
+**Rejects:** an adapter that indexes tags as a key-to-value map — a `JSONB` object, a
+`HashMap<String, String>` column, or a side table under `UNIQUE (event_id, key)` with
+`ON CONFLICT DO UPDATE`. Each keeps one value per key, so the event stays in the store
+and stops matching one of the two queries that should select it. On a 4,200-tenant
+shared log that is a cross-tenant correctness failure produced entirely by an indexing
+choice, and the tenant whose tag was dropped stops seeing its own events with no error
+anywhere. `tags_may_repeat_a_key` is the rule and `KeyedTagMapStore` is the registered
+implementation that fails it.
 
 ---
 

@@ -37,13 +37,12 @@
 //! workspace gets, and it is the reason this skeleton is a poor instrument for
 //! the position-allocation axis and a good one for the flavour axis.
 
-use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventStore, InvalidEventType, Query, ReadOptions,
+    AppendCondition, AppendError, Event, EventId, EventStore, InvalidEventType, Query, ReadOptions,
     SequencePosition, SequencedEvent,
 };
 
@@ -176,6 +175,24 @@ impl EventStore for CloudflareEventStore {
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         todo!("phase 9: evaluate the condition and INSERT ... RETURNING position")
     }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // One row out of `SqlStorage::exec`, and no `await` on the way: the
+        // Workers SQL API is synchronous, so this adapter never holds the
+        // storage handle across a suspension point and never needs the `Sync`
+        // bound the provided body would have wanted.
+        todo!("phase 9: SELECT max(position) FROM event, decoded like any other position column")
+    }
+
+    async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
+        // `SELECT 1 FROM event WHERE origin_store = ? AND origin_position = ?
+        // LIMIT 1` — two columns the intended schema above does not have yet,
+        // because it predates ingest. Phase 9 adds them alongside this body;
+        // until then the whole object is one incarnation, so the store half of
+        // the identifier is the only thing that could make the answer `false`
+        // for a position that exists.
+        todo!("phase 9: SELECT 1 FROM event WHERE origin_store = ? AND origin_position = ?")
+    }
 }
 
 /// The stream [`CloudflareEventStore::read`] returns.
@@ -233,7 +250,7 @@ impl Stream for SqlRowStream {
                         Ok(cursor) => {
                             this.state = StreamState::Draining {
                                 cursor,
-                                remaining: options.limit.map(NonZeroUsize::get),
+                                remaining: options.limit,
                             };
                         }
                         Err(err) => return Poll::Ready(Some(Err(err.into()))),

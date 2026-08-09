@@ -124,11 +124,16 @@ fn naive_is_violated_by(
     event_type: &EventType,
     tags: &Tags,
 ) -> bool {
-    let after_the_boundary = match condition.after {
-        None => true,
-        Some(boundary) => position > boundary,
-    };
-    after_the_boundary && naive_query_matches(&condition.fail_if_events_match, event_type, tags)
+    // Violated if *any* guard is violated. Written as an explicit loop rather
+    // than reusing `AppendCondition::is_violated_by`, because a property test
+    // whose oracle is the implementation it is testing asserts nothing.
+    condition.guards().iter().any(|guard| {
+        let after_the_boundary = match guard.after {
+            None => true,
+            Some(boundary) => position > boundary,
+        };
+        after_the_boundary && naive_query_matches(&guard.query, event_type, tags)
+    })
 }
 
 /// Positions from a **four-value** range, for the same reason `any_tag`'s

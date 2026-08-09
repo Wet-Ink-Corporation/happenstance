@@ -78,8 +78,8 @@
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, Query, ReadOptions, SendEventStore, SequencePosition,
-    SequencedEvent,
+    AppendCondition, AppendError, Event, EventId, Query, ReadOptions, SendEventStore,
+    SequencePosition, SequencedEvent,
 };
 use sqlx::PgPool;
 
@@ -141,6 +141,36 @@ impl SendEventStore for PostgresEventStore {
         // Blocked on the ES-10 decision above, which is what decides whether
         // this is one statement or three.
         todo!("postgres event store: append")
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        // `todo!()` rather than `SELECT max(position) FROM event`, and the
+        // difference is the whole reason this crate is in the tree. On every
+        // other adapter the maximum position *is* the head, because allocation
+        // happens under the lock that commit releases. Here `nextval()`
+        // allocates outside the transaction, so `max(position)` can name a row
+        // whose predecessors are still in flight — and a head is a promise that
+        // nothing at or below it will appear later (ES-10). What this must
+        // return is the **visibility frontier**, which the three candidate
+        // mechanisms spell differently: under either lock it collapses back to
+        // `max(position)`, and under `xid8` it is `max(position) WHERE xid <
+        // pg_snapshot_xmin(pg_current_snapshot())`, which trails the maximum.
+        // So this body is blocked on the same open decision `append` is, and
+        // writing the cheap version now would encode the answer by accident.
+        todo!("postgres event store: head")
+    }
+
+    async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
+        // `SELECT 1 FROM event WHERE origin_store = $1 AND origin_position = $2`
+        // — two columns the intended schema above does not have yet, because
+        // nothing writes an origin until `append` exists. It inherits `head`'s
+        // question rather than only its blockage: under the `xid8` mechanism a
+        // committed row above the frontier is invisible to `read`, so answering
+        // `true` for it would make this method disagree with the stream, and
+        // answering `false` would make ingest re-accept an event the store
+        // already holds. Which of those is right is a replication question, not
+        // a SQL one.
+        todo!("postgres event store: contains_event_id")
     }
 }
 
