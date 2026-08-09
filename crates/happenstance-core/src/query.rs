@@ -350,9 +350,7 @@ mod serde_impls {
     //! nothing on the write side and only widens what the decoder accepts,
     //! which is a second undocumented format nothing describes.
     //!
-    //! The exception is `ReadOptionsWire`'s whole-struct `default`, which stays
-    //! only because a later slice of ADR-0016 removes the struct outright.
-    use super::{Query, QueryItem, ReadOptions};
+    use super::{Query, QueryItem};
     use crate::event::EventType;
     use crate::tag::Tags;
     use alloc::boxed::Box;
@@ -431,38 +429,13 @@ mod serde_impls {
         }
     }
 
-    #[derive(Default, Serialize, Deserialize)]
-    #[serde(rename = "ReadOptions", default)]
-    struct ReadOptionsWire {
-        from: Option<crate::event::SequencePosition>,
-        to: Option<crate::event::SequencePosition>,
-        backwards: bool,
-        limit: Option<usize>,
-    }
-
-    impl Serialize for ReadOptions {
-        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            ReadOptionsWire {
-                from: self.from,
-                to: self.to,
-                backwards: self.backwards,
-                limit: self.limit,
-            }
-            .serialize(serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ReadOptions {
-        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            let wire = ReadOptionsWire::deserialize(deserializer)?;
-            Ok(Self {
-                from: wire.from,
-                to: wire.to,
-                backwards: wire.backwards,
-                limit: wire.limit,
-            })
-        }
-    }
+    // WF-12 (ADR-0016 §13): `ReadOptions` is not on the wire, and no wire
+    // mirror lives here for it. `from`/`to` are a store-local position with no
+    // meaning at another store, and `backwards`/`limit` are traversal choices
+    // a reader makes for itself, not a value any message carries. It appears
+    // in no envelope this crate defines; giving it `Serialize`/`Deserialize`
+    // anyway would make a decoder's willingness to accept it a promise this
+    // crate never intended to keep.
 }
 
 #[cfg(test)]

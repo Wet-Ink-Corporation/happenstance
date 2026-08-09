@@ -75,15 +75,25 @@
 //! this crate depends on `happenstance-core/serde` explicitly: the envelope is
 //! serialised, the payload is passed through.
 //!
-//! **The envelope types carry no `Serialize`/`Deserialize` yet, deliberately.**
-//! They did briefly, and the derives were withdrawn: a `#[derive]` on a public
-//! struct with no version field *is* a wire format, WF-8 puts a version first,
-//! and the format is phase 5's to settle against `happenstance-core`'s own
-//! private-mirror pattern (`event.rs`'s `EventWire`, `append.rs`'s `Wire`) rather
-//! than this crate's to assert in passing. Nothing here serialises anything, so
-//! the derives bought the sketch nothing and committed it to a shape nobody had
-//! authorised. `happenstance-core/serde` stays on because the argument above is
-//! still the reason this crate exists.
+//! **What is serialisable here is the envelope, and only the envelope.**
+//! [`wire::Envelope`] carries a `Serialize` derive and a **hand-written**
+//! `Deserialize` that reads the format version and refuses before the message is
+//! touched — ADR-0016 §11, WF-8. The derive is not an option for the decoding
+//! half: it decodes every field before anything can examine the version, which is
+//! the partial decode WF-8's MUST NOT forbids. [`wire`] says so at the impl,
+//! because that is where someone will try to simplify it.
+//!
+//! [`PushBatch`], [`EventGroup`] and [`ReplicatedEvent`] still
+//! carry **no** derives. They did briefly, the derives were withdrawn, and phase
+//! 5 has not restored them: a `#[derive]` on a public message type *is* a wire
+//! format, and **what travels is phase 13's** — the message set, version
+//! negotiation, and whether ingest re-checks append conditions. This ADR lands
+//! the envelope and nothing else. In particular [`SyncError`] is not extended
+//! (SY-30 is untouched): a version refusal is a decoding failure with its own
+//! error, [`wire::WireError`], and folding it into the runner's enum would take a
+//! phase-13 design decision inside an encoding change.
+//! `happenstance-core/serde` stays on because the argument above is still the
+//! reason this crate exists.
 //!
 //! # The hard part, stated honestly
 //!
@@ -134,6 +144,7 @@ pub mod identity;
 pub mod ingest;
 pub mod memory;
 pub mod peer;
+pub mod wire;
 
 // `EventId`, `StoreId` and `RecordedAt` are deliberately absent from this list.
 // They are phase 4's types (VT-4 – VT-10, ADR-0014), placeheld here only because
@@ -147,3 +158,8 @@ pub use peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,
     SyncPeer,
 };
+
+// `wire`'s items are deliberately left module-qualified. `wire::FORMAT_VERSION`
+// says at the call site *which* version it is, and phase 13 will plausibly add a
+// negotiated protocol version that is not this one; a bare `FORMAT_VERSION` at
+// the crate root would make the two indistinguishable in an import list.
