@@ -202,6 +202,17 @@ impl WireError {
     /// is this text, and it is public precisely so that "refused, park this"
     /// stays distinguishable from "malformed, drop this" without callers
     /// matching on a message they had to copy out of the source.
+    ///
+    /// # It crosses `serde_json`, and it does not cross `postcard`
+    ///
+    /// Measured by `wire::rejects_an_unknown_format_version`, which pins both
+    /// halves. `postcard::Error` is a fieldless enum, so its `Error::custom`
+    /// discards the `Display` it is given and every refusal arrives as
+    /// `SerdeDeCustom` — the text is dropped by the format, not by this module,
+    /// and no wording here could survive it. A postcard receiver gets its typed
+    /// answer the other way round: read the version off the front of the buffer
+    /// with `postcard::take_from_bytes::<u16>` and hand it to
+    /// [`check_format_version`], which is the reason that function is public.
     pub const UNSUPPORTED_FORMAT_VERSION: &'static str = "unsupported wire format version";
 }
 

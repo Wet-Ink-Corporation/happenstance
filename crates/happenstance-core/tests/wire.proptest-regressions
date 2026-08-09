@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bfa31137a73fe42b71de8ab1b1295c690900556da9cb4cba2b81c35ed7353e40 # shrinks to shapes = Shapes { event: Event { event_type: EventType("A"), data: <0 bytes>, tags: {}, metadata: None }, sequenced: SequencedEvent { position: SequencePosition(1), id: EventId { store: StoreId([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), position: SequencePosition(1) }, recorded_at: RecordedAt(0), event: Event { event_type: EventType("A"), data: <0 bytes>, tags: {}, metadata: None } }, query: All, item: QueryItem { types: [], tags: {"course:c1"} }, tags: {}, condition: AppendCondition { guards: [Guard { query: All, after: None }] }, store: StoreId([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), id: EventId { store: StoreId([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), position: SequencePosition(1) } }

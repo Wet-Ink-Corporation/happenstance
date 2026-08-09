@@ -13,7 +13,8 @@
 //! port flavour honest; the documentation, both with every feature and with
 //! none, because a broken intra-doc link is a hard rustdoc error and the
 //! `no_std` configuration had three of them; `cargo xtask proof-artefact`, which
-//! holds the conformance suite to its own proof that it discriminates;
+//! holds the conformance suite to its own proof that it discriminates and the
+//! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; five
 //! file-reading lints described below; and `cargo xtask package-check`, which
@@ -150,12 +151,14 @@ const REQUIRED: &[Step] = &[
     },
     Step {
         // Redundant against the step above on a green tree, and that is not what
-        // it is for. The suite's own proof artefact (CF-1 – CF-6, ADR-0010) is a
-        // single test target, and **nothing else in the gate would notice if it
-        // ceased to exist**: `cargo xtask spec-trace` reads only `suite.rs`, so
-        // it neither resolves the meta-tests' names nor reports them as orphans,
-        // and `cargo test --workspace` passes just as happily with one fewer
-        // target as with one more.
+        // it is for. Each phase's proof artefact — the suite's own
+        // `mutation_coverage` (CF-1 – CF-6, ADR-0010), and the two `wire` targets
+        // the wire format was frozen against (ADR-0016) — is a single test
+        // target, and **nothing else in the gate would notice if one ceased to
+        // exist**: `cargo xtask spec-trace` reads only `suite.rs`, so it neither
+        // resolves the meta-tests' names nor reports them as orphans, and
+        // `cargo test --workspace` passes just as happily with one fewer target
+        // as with one more.
         //
         // Naming the target is what closes that. Deleting
         // `tests/mutation_coverage.rs` fails with `no test target named
@@ -166,9 +169,9 @@ const REQUIRED: &[Step] = &[
         // Naming the target is not sufficient, though, which is why this runs
         // `cargo xtask proof-artefact` rather than `cargo test` directly:
         // `cargo test` exits 0 on `running 0 tests`, so an emptied file passes a
-        // step that a deleted one fails. `proof.rs` asserts the meta-tests
+        // step that a deleted one fails. `proof.rs` asserts the named tests
         // out of `--list` first, and states the rest of the argument.
-        name: "the suite's own proof artefact",
+        name: "each phase's proof artefacts",
         program: "cargo",
         args: &[
             "run",
@@ -645,12 +648,16 @@ fn print_help() {
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
     println!("  proof-artefact");
-    println!("         Assert that the testkit's mutation_coverage target still holds its");
+    println!("         Assert that each phase's proof artefact still holds the tests its");
     println!(
-        "         {} meta-tests, then run them. `cargo test` exits 0 on an empty target, so",
-        proof::META_TESTS.len()
+        "         clauses name — {} across {} targets — then run them. `cargo test` exits 0",
+        proof::ARTEFACTS
+            .iter()
+            .map(|a| a.tests.len())
+            .sum::<usize>(),
+        proof::ARTEFACTS.len()
     );
-    println!("         the names are checked out of `--list` before the tests run.");
+    println!("         on an empty target, so the names are checked out of `--list` first.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");
