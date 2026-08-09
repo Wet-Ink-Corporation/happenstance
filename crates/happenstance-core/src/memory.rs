@@ -3,7 +3,6 @@
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{OnceLock, PoisonError, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_core::Stream;
 
@@ -214,13 +213,10 @@ fn next_store_id() -> StoreId {
     static COUNTER: AtomicU64 = AtomicU64::new(1);
     static SALT: OnceLock<u64> = OnceLock::new();
 
-    let salt = *SALT.get_or_init(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |since| {
-                since.as_secs().wrapping_shl(32) | u64::from(since.subsec_nanos())
-            })
-    });
+    // `unsigned_abs` rather than a cast, and `0` where there is no clock: the
+    // salt only has to separate two *runs*, and the counter below is what
+    // separates two stores within one.
+    let salt = *SALT.get_or_init(|| wall_clock_millis().unwrap_or(0).unsigned_abs());
 
     let ordinal = COUNTER.fetch_add(1, Ordering::Relaxed);
 
@@ -232,17 +228,49 @@ fn next_store_id() -> StoreId {
 
 /// The host clock, as milliseconds since the Unix epoch.
 ///
-/// A clock that is behind the epoch, or a system that cannot answer, yields
+/// A clock that is behind the epoch, or a target that has none at all, yields
 /// zero rather than failing: `append` has no error variant for "the clock is
 /// broken", and inventing one would put a store failure in the caller's path
 /// for a value the caller cannot act on.
 fn now() -> RecordedAt {
-    let millis = SystemTime::now()
+    RecordedAt::from_millis(wall_clock_millis().unwrap_or(0))
+}
+
+/// Milliseconds since the Unix epoch, or `None` on a target with no clock.
+///
+/// **`SystemTime::now()` panics on `wasm32-unknown-unknown`.** It does not
+/// return an error — there is no clock behind it, and the call aborts. That
+/// target is the entire reason the bare `EventStore` flavour exists, so a
+/// reference store that cannot even be *constructed* there is one nobody can
+/// develop against the platform the contract was shaped for. This function is
+/// the seam that keeps `MemoryEventStore::new()` total on every target.
+///
+/// The workspace gate compiles for `wasm32` but does not run there; CI does,
+/// which is how this was found. A `cfg` is the only available answer: `std`
+/// exposes no fallible clock, and reaching for a JavaScript one would put a
+/// `wasm-bindgen` dependency in the contract crate to serve a store that exists
+/// for tests and examples.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn wall_clock_millis() -> Option<i64> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        });
-    RecordedAt::from_millis(millis)
+        .ok()
+        .map(|since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// No clock on this target; see the sibling above.
+///
+/// Every event a store on this target accepts is therefore stamped
+/// `RecordedAt::from_millis(0)`. That is honest rather than convenient: VT-9's
+/// own falsifier names "a target that cannot supply a wall clock at append
+/// time", and this is one. It costs the rules nothing — they assert that a
+/// recorded time is *stable*, never that it is recent — and an adapter for this
+/// platform that has a real clock (a Durable Object does) supplies its own.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn wall_clock_millis() -> Option<i64> {
+    None
 }
 
 /// The dense position for a zero-based index.
