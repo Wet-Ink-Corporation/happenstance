@@ -536,6 +536,28 @@ impl SequencedEvent {
 
 #[cfg(feature = "serde")]
 mod serde_impls {
+    //! Wire mirrors. **Every field is written on every serialisation** — no
+    //! `skip_serializing_if`, no `#[serde(default)]` — and neither attribute may
+    //! come back (WF-2; ADR-0016 §3 and §4 hold the measurements).
+    //!
+    //! Skipping a field makes the encoding *positional* in a format that is not
+    //! self-describing. In postcard the decoder resynchronises against the wrong
+    //! field: three of `Event`'s four shapes then error loudly and the fourth
+    //! decodes a neighbour's bytes silently. What that bought was one byte per
+    //! absent field; in JSON, restoring both skipped fields costs 26.
+    //!
+    //! `#[serde(default)]` goes for a different reason. It is inert on the write
+    //! side — postcard output is byte-identical with and without it — so its only
+    //! effect is to widen what the *decoder* accepts, giving a second and
+    //! undocumented format: one shape written, a strictly larger set accepted,
+    //! nothing describing the difference, and a peer's bug surviving the round
+    //! trip as a plausible default value.
+    //!
+    //! The obligation binds the **encoder** only (ADR-0016 §5). serde's derive
+    //! still routes an absent `Option` field through `missing_field`, which
+    //! yields `None` with no attribute at all; that asymmetry is accepted rather
+    //! than closed with a hand-written visitor, because `None` fails closed
+    //! everywhere this crate reads it.
     use super::{Event, EventType, SequencePosition, SequencedEvent};
     use alloc::string::String;
     use bytes::Bytes;
@@ -575,9 +597,12 @@ mod serde_impls {
     struct EventWire {
         event_type: EventType,
         data: Bytes,
-        #[serde(default, skip_serializing_if = "crate::Tags::is_empty")]
         tags: crate::Tags,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        /// `Some(Bytes::new())` and `None` must stay distinguishable on the wire
+        /// — ADR-0003 promises byte-for-byte forwarding of an opaque payload, and
+        /// "the peer sent an empty metadata blob" is not "the peer sent none".
+        /// Writing the field unconditionally is what keeps them apart: `null`
+        /// against `""` in JSON, `[00]` against `[01 00]` in postcard.
         metadata: Option<Bytes>,
     }
 
@@ -609,6 +634,17 @@ mod serde_impls {
         }
     }
 
+    /// Field-for-field mirror of [`SequencedEvent`].
+    ///
+    /// All four fields are unconditional, and WF-5 is why they must stay that
+    /// way. `id` is the one under pressure: it looks derivable from `position`,
+    /// and it is not. An event replicated A→B→C keeps the identity **A**
+    /// assigned it, while B and C assign it their own positions — so a mirror
+    /// that drops `id`, or skips it when it happens to match the local store,
+    /// forges a fresh identity at every hop.
+    ///
+    /// ADR-0014 landed this shape already; it is documented rather than changed
+    /// so that the next reader does not re-derive it as a saving.
     #[derive(Serialize, Deserialize)]
     #[serde(rename = "SequencedEvent")]
     struct SequencedEventWire {

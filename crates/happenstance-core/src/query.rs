@@ -339,6 +339,19 @@ impl ReadOptions {
 
 #[cfg(feature = "serde")]
 mod serde_impls {
+    //! Wire mirrors. **Every field is written on every serialisation** — no
+    //! `skip_serializing_if`, no `#[serde(default)]` — and neither attribute may
+    //! come back (WF-2; ADR-0016 §3 and §4).
+    //!
+    //! Skipping makes the encoding positional in a format that is not
+    //! self-describing: postcard has no field names to resynchronise against, so
+    //! an absent `types` is read as whatever the next field's bytes happen to
+    //! be. The saving was one byte per absent field. `#[serde(default)]` costs
+    //! nothing on the write side and only widens what the decoder accepts,
+    //! which is a second undocumented format nothing describes.
+    //!
+    //! The exception is `ReadOptionsWire`'s whole-struct `default`, which stays
+    //! only because a later slice of ADR-0016 removes the struct outright.
     use super::{Query, QueryItem, ReadOptions};
     use crate::event::EventType;
     use crate::tag::Tags;
@@ -349,9 +362,7 @@ mod serde_impls {
     #[derive(Serialize, Deserialize)]
     #[serde(rename = "QueryItem")]
     struct QueryItemWire {
-        #[serde(default, skip_serializing_if = "<[EventType]>::is_empty")]
         types: Box<[EventType]>,
-        #[serde(default, skip_serializing_if = "Tags::is_empty")]
         tags: Tags,
     }
 
@@ -372,21 +383,50 @@ mod serde_impls {
         }
     }
 
+    /// Mirror of [`Query`], carrying the tag that `Option` could not.
+    ///
+    /// The previous encoding wrote `All` as `serialize_none` and `Items` as
+    /// `serialize_some`, which loses in a way that is easy to miss coming from
+    /// C#. `Nullable<T>` is a distinct runtime type carrying its own `bool`, so
+    /// `T?` and `T` are never the same value; in serde's data model `Option` is
+    /// **transparent** — `serialize_some(v)` emits exactly the bytes `v` emits.
+    /// So `Some(Query::Items(..))` was byte-identical to `Query::Items(..)`,
+    /// `Some(Query::All)` and `None::<Query>` were both `null`, and `All`
+    /// occupied the format's null: the value every buggy peer emits by accident.
+    ///
+    /// Externally tagged rather than internally tagged because an internal tag
+    /// requires a self-describing format and postcard is not one. The tag costs
+    /// one byte there (`All` is `[00]`) and buys `null != "All"` in JSON.
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename = "Query")]
+    enum QueryWire {
+        All,
+        Items(Vec<QueryItem>),
+    }
+
     impl Serialize for Query {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            // `None` is the match-all query; `Some(items)` is a filtered one.
             match self {
-                Self::All => serializer.serialize_none(),
-                Self::Items(items) => serializer.serialize_some(items),
+                Self::All => QueryWire::All,
+                Self::Items(items) => QueryWire::Items(items.to_vec()),
             }
+            .serialize(serializer)
         }
     }
 
     impl<'de> Deserialize<'de> for Query {
+        /// Rejects a zero-item `Items`.
+        ///
+        /// Deserialisation is the other door into a private invariant, and
+        /// `Query::from_items` is the only thing that enforces it. An empty
+        /// item list is not "match nothing" — it is a query no event can
+        /// satisfy arriving where the caller asked for a filter.
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            match Option::<Vec<QueryItem>>::deserialize(deserializer)? {
-                None => Ok(Self::All),
-                Some(items) => Self::from_items(items).map_err(serde::de::Error::custom),
+            match QueryWire::deserialize(deserializer)? {
+                QueryWire::All => Ok(Self::All),
+                QueryWire::Items(items) => {
+                    Self::from_items(items).map_err(serde::de::Error::custom)
+                }
             }
         }
     }
