@@ -1,4 +1,5 @@
-//! The gate's four grep-shaped lints (CF-6, CF-29, CF-32, CF-33).
+//! The gate's five grep-shaped lints (CF-6, CF-29, CF-32, CF-33, and D12, which
+//! is the one with no clause — ADR-0016 §14 gives it a lint rather than a WF-13).
 //!
 //! # Why a grep is in the gate at all
 //!

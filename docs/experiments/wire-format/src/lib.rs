@@ -99,6 +99,39 @@ impl<T: serde::Serialize> Detect<T> {
     pub const IS_SERIALIZE: bool = true;
 }
 
+/// Blanket default: not `DeserializeOwned`, unless the inherent impl below
+/// applies.
+///
+/// **This half is not a transcription of the `Serialize` half above it**, and
+/// the difference is the whole reason it is written out here rather than left
+/// to inference. `Deserialize<'de>` is generic over the lifetime of the data it
+/// borrows *from*, so `impl<T: serde::Deserialize> Detect<T>` is
+/// `error[E0106]: missing lifetime specifier`. What is wanted is a
+/// higher-ranked bound — `for<'de> Deserialize<'de>`, read as "for *every*
+/// lifetime `'de`" — and the compiler's own suggestion of `impl<'a, T:
+/// Deserialize<'a>>` is the wrong repair, because that makes the impl generic
+/// over one caller-chosen lifetime instead of requiring the bound for all of
+/// them. `serde::de::DeserializeOwned` is shorthand for exactly that HRTB, and
+/// is the spelling to use (ADR-0016 §13).
+///
+/// One honest limit, measured: a *borrowing* `Deserialize` — a type holding a
+/// `&'a str` — does not fall back to `false` here; it is a hard "implementation
+/// of `Deserialize` is not general enough". So this answers "does `T`
+/// deserialise from owned data", not "does `T` implement `Deserialize` at all".
+/// That does not bite for `ReadOptions`, which owns every field.
+pub trait NotDeserialize {
+    /// `false` unless `T: DeserializeOwned`, in which case the inherent impl's
+    /// `true` shadows this one.
+    const IS_DESERIALIZE: bool = false;
+}
+impl<T> NotDeserialize for Detect<T> {}
+
+impl<T: serde::de::DeserializeOwned> Detect<T> {
+    /// Present only when `T: DeserializeOwned`; shadows the trait default above.
+    #[allow(dead_code)]
+    pub const IS_DESERIALIZE: bool = true;
+}
+
 /// A type with no `Serialize` impl at all, for contrast.
 pub struct NoImpls;
 
@@ -144,13 +177,54 @@ mod tests {
         println!("reason. A typo in the type name (`ReadOptionz`) is E0425, a build failure,");
         println!("not a green test — measured separately, see README.md's table.");
 
+        // The reading this experiment was written to take was
+        // `Detect::<ReadOptions>::IS_SERIALIZE == true`, on 2026-08-09 against
+        // pre-removal HEAD; that is the measurement §13 rests on and it is
+        // recorded above rather than asserted, because WF-12's whole point was
+        // to make it false. The assertion moved with the tree instead of being
+        // left to panic: an experiment is a record of a measurement, but a
+        // record that aborts is not a record of anything.
         assert!(
-            Detect::<ReadOptions>::IS_SERIALIZE,
-            "measured claim: ReadOptions is Serialize at HEAD"
+            !Detect::<ReadOptions>::IS_SERIALIZE,
+            "WF-12 landed: ReadOptions lost Serialize at ADR-0016 §13, and the \
+             true reading above is the dated one this experiment took"
         );
         assert!(
             !Detect::<NoImpls>::IS_SERIALIZE,
             "control: a type with no impl must read false"
+        );
+        assert!(
+            Detect::<Event>::IS_SERIALIZE,
+            "positive control: a negated assertion is otherwise satisfied by a \
+             detector whose inherent impl never applies, and that fails silently"
+        );
+
+        // The `Deserialize` half, which ADR-0016 §13 owes this crate so that the
+        // HRTB finding stops resting on a throwaway one. It is the same three
+        // readings, and it is not a transcription: the bound is
+        // `DeserializeOwned`, because `serde::Deserialize` cannot be named
+        // without a lifetime.
+        println!();
+        println!(
+            "Detect::<ReadOptions>::IS_DESERIALIZE = {}  (deleted with Serialize at ADR-0016 §13)",
+            Detect::<ReadOptions>::IS_DESERIALIZE
+        );
+        println!(
+            "Detect::<NoImpls>::IS_DESERIALIZE     = {}  (no impl)",
+            Detect::<NoImpls>::IS_DESERIALIZE
+        );
+        println!(
+            "Detect::<Event>::IS_DESERIALIZE       = {}  (derived; contrast type)",
+            Detect::<Event>::IS_DESERIALIZE
+        );
+        assert!(
+            !Detect::<ReadOptions>::IS_DESERIALIZE,
+            "WF-12's other half: ReadOptions must not deserialise either"
+        );
+        assert!(!Detect::<NoImpls>::IS_DESERIALIZE, "control");
+        assert!(
+            Detect::<Event>::IS_DESERIALIZE,
+            "positive control, for the same reason as the Serialize one"
         );
     }
 }

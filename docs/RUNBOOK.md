@@ -3682,22 +3682,85 @@ checker`, and `cargo xtask ci` prints `all checks passed`. The census is
 **unchanged** from before the phase, which is the intended outcome: ADR-0016 §14
 gives D12 a manifest lint rather than a WF-13 precisely so that §1.3 does not move.
 
+**2026-08-09 — the completeness critic ran, and the citations were the story.**
+It was recorded here as never having run, with three questions attached; this is
+the answer to all three, taken by seven parallel auditors — one per "Owed to"
+bucket of ADR-0016's amendment ledger, plus one for the census and one for the
+citations — each of whose findings was then handed to an independent verifier
+prompted to *refute* rather than to confirm. 300 items checked, 16 findings
+confirmed and one refuted — 14 distinct, two of them reported independently by
+two auditors each, which is the only cross-check a fan-out of this shape gets for
+free. A seventeenth was found not by reading but by *running*, and it is the one
+below that matters most. The refuted one is worth naming because it is the shape
+the verifier exists to catch: an auditor read WF-12's "fifth hazard" paragraph,
+saw a citation to impls the phase had deleted, and reported the paragraph as
+unamended — when the paragraph *is* the amendment, and only its anchor was stale.
+
+**Question two first, because its answer is the boring one and it is supposed to
+be.** §1.3's census survives a hand count: 200 clause IDs, 139 `[FROZEN]`, 49
+`[PROVISIONAL]`, 10 `[DEFERRED]`, two `[NON-NORMATIVE]`, agreeing with §7.1's
+totals row and with what `spec-trace` computes. ADR-0016 §14 predicted exactly
+that and gave D12 a manifest lint rather than a WF-13 in order to get it. A
+prediction that survives a count is worth more than the same prediction trusted.
+
+**Question three is where the damage was: eight of §2.7's twenty-seven source
+citations were green and wrong.** Not stale by a few lines — pointing at the
+wrong item entirely. `query.rs:380`, cited for `Query::Items` going through
+`serialize_some`, is now the line that routes `QueryItem` through its
+constructor; `query.rs:394-425`, cited for the `ReadOptions` impls, is now
+`Query`'s own wire mirror; three of WF-10's four "the current impls already do
+this correctly" anchors landed on a *serialiser* while claiming to name a
+deserialiser. **Every one of them passes `check_citations`**, because that check
+proves a file exists and a line is in range and nothing else — which is what the
+question was written to expose, and it was right to suspect it.
+
+The mechanism is worth stating, because it will recur in every phase that
+amends the specification and the code together. ADR-0016's amendment texts were
+written **before** the code moved, against anchors that were correct the day the
+ADR was written. The phase then applied the amendments *and* moved the code, and
+the amendments carried their own anchors in verbatim. So the defect is not
+carelessness; it is that an ADR which specifies replacement prose containing line
+numbers is specifying something guaranteed to be stale by the time it lands. The
+repair applied here is to anchor on the **item** — `EventWire`, `GuardWire`,
+`QueryItemWire` — and give its current range, rather than on the line an
+attribute used to sit on. A closed defect names its commit; a live citation
+should name a thing that can still be found by looking.
+
+**Question one found one genuine gap and one hole nothing else could have
+found.** The gap: ADR-0016's "Owed to the code" asks for the `Deserialize` half
+of `Detect<T>` in `docs/experiments/wire-format/src/lib.rs`, "so §13's HRTB
+finding stops resting on a throwaway crate", and it was never added — the half
+landed only in the real target. The hole is worse and no document audit could
+have reached it: **that crate's own test was failing.**
+`decorative_readoptions_const_assert` asserts `Detect::<ReadOptions>::IS_SERIALIZE`
+is `true` — "measured claim: `ReadOptions` is `Serialize` at HEAD" — and WF-12
+deleted that impl in this very phase, so the assertion panicked. It is outside
+the workspace and outside the gate, exactly as `docs/experiments/` is meant to
+be, so nothing observed it. **The lesson is not that experiments belong in the
+gate**; it is that "a record of a measurement taken on a date" and "an `assert!`
+that runs" are different artefacts, and this file was both. The assertion now
+moves with the tree and the dated reading is recorded in prose beside it, with a
+positive control added on the same argument the wire tests already make: a
+negated assertion is otherwise satisfied by a detector whose inherent impl never
+applies, and that failure is silent.
+
+**And WF-12's `Cases:` line never gained E2E-58**, while §7.5 said "WF-12 closed
+at phase 5 with E2E-58" and §7.6 said "all 58 cases are claimed by at least one
+clause". The case existed, the two summaries claiming it existed had both been
+written, and the one line that would have made either true had not — so §7.6's
+stated method, parsing every clause's `Cases:` line, could not have produced its
+own stated result. Its method paragraph was stale in three places at once
+(`E2E-01`…`E2E-57`, "its 57 headings", and an index citation off by one at both
+ends), which is the same class as question three and the reason to fix both in
+one pass. One thing learned while fixing it: a `Cases:` line is parsed for
+**every** `E2E-nn` it contains, so a comparison drawn in prose there — "as VT-17's
+did with E2E-57" — is read as a claim. The line now says so.
+
 **State at hand-off.** Phase 5's work is complete and committed on
 `phase-5-freeze-the-wire-format`; what is left is a pull request and a merge,
-matching how phase 4 landed (`19f0901`). Two things are recorded here rather than
-done, because neither is this phase's:
+matching how phase 4 landed (`19f0901`). One thing is recorded here rather than
+done, because it is not this phase's:
 
-- **The completeness critic never ran.** The phase's own adversarial passes did —
-  three lenses over ADR-0016, a closure audit, an executability trace of §15
-  against `spec_trace.rs`, and a per-slice verification of the code — but the
-  final "what did we miss" sweep over the *documents* was cut short. The specific
-  questions it was to answer, for whoever picks this up: is every entry in
-  ADR-0016's amendment section actually applied and applied where the ADR says;
-  does §1.3's census survive a hand count of the markers rather than a trust of
-  the heading; and are §2.7's `file.rs:NNN` citations still saying what the
-  surrounding prose claims, given `check_citations` only validates that a file
-  exists and that a range's first number is inside it, so a citation can be green
-  and wrong.
 - **`wire::bare_event_postcard_encoding_is_pinned` is named by no clause.** It is
   the golden vector for a bare `Event`'s postcard bytes, and it is deliberately
   uncited: after §15, resolution is one-way — clauses may name wire tests, wire

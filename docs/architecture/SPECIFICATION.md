@@ -1882,9 +1882,11 @@ patch rather than as a design decision, and it reintroduces WF-2's positional
 desynchronisation and WF-3's match-everything-by-accident in one commit.
 
 Two divergences from the reference are known and are not defects under this
-clause. Both halves of them were recorded backwards. **happenstance** emits a
-bare sequence — `Query::Items` goes through `serialize_some` (`query.rs:380`) —
-while **the reference** is the `{items: […]}` side: its `Query` is `{ items:
+clause. Both halves of them were recorded backwards. **happenstance** emitted a
+bare sequence — `Query::Items` went through `serialize_some` until ADR-0016 §7,
+and now goes through `QueryWire::Items` (`query.rs:405-413`), the mirror whose
+own doc comment records the encoding it replaced (`query.rs:386-393`) — while
+**the reference** is the `{items: […]}` side: its `Query` is `{ items:
 QueryItem[]; matchesEvent(…); merge(…) }` and `queryAll()` returns `{items: []}`.
 happenstance did not fail to *parse* `[]` before ADR-0016 §7 either: it parsed to
 an empty item list and rejected it semantically through `Query::from_items`.
@@ -1920,13 +1922,17 @@ a mirror struct carrying `#[serde(skip_serializing_if = "…")]`, asserted to fa
 the same round trip — and that control is the whole of its discriminating power
 below maximum size: deleting it is deleting the rule.
 `Cases:` E2E-33, E2E-35, E2E-42
-`Rejects:` the five `skip_serializing_if` attributes at `event.rs:578`,
-`event.rs:580`, `query.rs:352`, `query.rs:354` and `append.rs:248`. The attribute
-shortens the field count passed to `serialize_struct`; a non-self-describing
-format feeds the deserializer exactly `FIELDS.len()` values positionally, so a
-skipped field desynchronises the stream. Serialisation *succeeds* and produces
-plausible-looking bytes. `Event::new("A", data)` with no tags — what every
-doctest builds — is a failing input, as are `QueryItem::of_types([…])`,
+`Rejects:` the five `skip_serializing_if` attributes ADR-0016 §3 deleted — two on
+`EventWire`'s `tags` and `metadata` (`event.rs:730-742`), two on `QueryItemWire`'s
+`types` and `tags` (`query.rs:360-365`) and one on `GuardWire`'s `after`
+(`append.rs:266-271`), each anchored on the struct that carried it rather than on
+the line it sat on, because a line number for deleted code can only ever be
+wrong. The attribute shortens the field count passed to `serialize_struct`; a
+non-self-describing format feeds the deserializer exactly `FIELDS.len()` values
+positionally, so a skipped field desynchronises the stream. Serialisation
+*succeeds* and produces plausible-looking bytes. `Event::new("A", data)` with no
+tags — what every doctest builds — is a failing input, as are
+`QueryItem::of_types([…])`,
 `QueryItem::tagged(…)` and `AppendCondition::new(q)`. Measured: a **lone**
 `Event` fails to round-trip in postcard for three of its four shapes, erroring
 with `Hit the end of buffer` at 7, 18 and 11 bytes; only the all-fields-present
@@ -1953,21 +1959,25 @@ absent field, or as an empty sequence. `Option<Query>` MUST round-trip, with
 `[FROZEN]`
 `Rule:` `wire::query_all_is_unambiguous`, `wire::option_query_round_trips`
 `Cases:` E2E-40
-`Rejects:` the current implementation. `Serialize` maps `All` to
-`serialize_none` and `Items` to `serialize_some` (`query.rs:375-392`), so
-`Query::All` becomes JSON `null`, `Some(Query::All)` and `None` are
+`Rejects:` the implementation this clause replaced. `Serialize` mapped `All` to
+`serialize_none` and `Items` to `serialize_some` — the encoding the mirror that
+took its place now records as the one that lost (`query.rs:386-393`) — so
+`Query::All` became JSON `null`, `Some(Query::All)` and `None` were
 indistinguishable, and serde's `missing_field` succeeds for `Option`-shaped
-types — which means a *missing* field decodes to the broadest condition in the
-protocol. A peer that emits `null` by accident gets match-everything. Inside an
+types — which meant a *missing* field decoded to the broadest condition in the
+protocol. A peer that emitted `null` by accident got match-everything. Inside an
 `AppendCondition` that fails closed, which is a spurious rejection; inside an
 ingest policy that is E2E-40's unbounded scan inside a single-threaded actor
-with a fixed CPU ceiling.
+with a fixed CPU ceiling. The tense is past because the encoding is gone; the
+clause stays because restoring it is a small commit.
 
-This reverses a documented decision, not an oversight: `query.rs:377` states the
-intent — "`None` is the match-all query; `Some(items)` is a filtered one" — and
-the ADR that lands it must say it is reversing a choice. The `Option`-shaped
-encoding was chosen for compactness in JSON and it is exactly the compactness
-that makes the two values indistinguishable.
+This reverses a documented decision, not an oversight: the comment ADR-0016 §7
+deleted stated the intent — "`None` is the match-all query; `Some(items)` is a
+filtered one" — and the ADR that lands a reversal must say it is reversing a
+choice. That is why the mirror which replaced it spends ten lines on the
+encoding it beat (`query.rs:386-393`) rather than simply describing itself. The
+`Option`-shaped encoding was chosen for compactness in JSON and it is exactly
+the compactness that makes the two values indistinguishable.
 
 An externally tagged enum is chosen over an internally tagged one because
 internally tagged representations require a self-describing format and postcard
@@ -1997,15 +2007,19 @@ is E2E-37's and independent of the guard count.**
 `Rule:` `wire::empty_object_is_not_a_condition`,
 `wire::condition_after_is_visible_to_an_ingest_policy`
 `Cases:` E2E-35, E2E-37, E2E-40
-`Rejects:` the input that still decodes to match-everything after ADR-0012's
-guard sequence landed. Measured at HEAD, `"{}"`, `"[]"` and `{"guards":[]}` all
-already error. What is **not** closed is `{"guards":[{}]}`, which returns
-`Ok(AppendCondition { guards: [Guard { query: All, after: None }] })`, as does
-`{"guards":[{"query":null}]}` — and `AppendCondition::new(Query::all())`
-serialises today as exactly that (`append.rs:246-250`). It succeeds only because
-`Query`'s `Deserialize` is `Option`-shaped; once WF-3 makes `Query` explicitly
-tagged it becomes a hard error (measured: ``missing field `query` `` and
-`expected value`), and the two changes must land in one commit.
+`Rejects:` the input that still decoded to match-everything after ADR-0012's
+guard sequence landed. Measured before ADR-0016, `"{}"`, `"[]"` and
+`{"guards":[]}` all already errored. What was **not** closed is `{"guards":[{}]}`,
+which returned `Ok(AppendCondition { guards: [Guard { query: All, after: None }]
+})`, as did `{"guards":[{"query":null}]}` — and
+`AppendCondition::new(Query::all())` serialised as exactly that. It succeeded
+only because `Query`'s `Deserialize` was
+`Option`-shaped; WF-3 gave `Query` an explicit tag and both are now hard errors
+(measured: ``missing field `query` `` and `expected value`), which is why the two
+changes landed in one commit. `GuardWire` (`append.rs:266-271`) carries the
+standing prohibition on `#[serde(default)]` in its own doc comment
+(`append.rs:244-262`), because "add a default so `{}` parses" is the patch that
+restores this and it will look like a kindness.
 
 `after` is always present because E2E-37's ingest rule depends on seeing it. A
 store-local position on the wire has no referent at the receiver —
@@ -2044,10 +2058,11 @@ human-readable formats and as sixteen raw bytes otherwise, selected with
 MUST encode as a struct of **`store`** and `position`. **The field is `store`
 because that is `EventId`'s own field and accessor (`identity.rs:97-100`,
 `:110-113`), named as such by VT-5's body at `:770-772`.** The binary half is
-already satisfied at HEAD: `StoreId` serialises as `[u8; 16]`
-(`identity.rs:194-198`) and postcard renders sixteen raw bytes with no length
-prefix. **The wrong implementation both rules exist to reject is an inverted
-`is_human_readable` branch, invisible to every round-trip rule** — measured, an
+already satisfied at HEAD: `StoreId` serialises as `[u8; 16]` in the
+non-human-readable arm (`identity.rs:252-263`) and postcard renders sixteen raw
+bytes with no length prefix. **The wrong implementation both rules exist to
+reject is an inverted `is_human_readable` branch, invisible to every round-trip
+rule** — measured, an
 inverted branch round-trips cleanly in both formats — so
 `wire::store_id_encodes_as_hex_in_json` asserts the JSON value is the
 32-character string and `wire::store_id_encodes_as_bytes_in_postcard` asserts
@@ -2209,9 +2224,9 @@ limit.
 obvious implementation and which would let a peer construct every value the
 constructors exist to prevent — an unsorted `Tags`, an unconstrained `QueryItem`,
 a zero-item `Query` — directly in the receiver's memory. The current impls
-already do this correctly (`tag.rs:497-504` re-canonicalises, `query.rs:368-373`
-re-validates through `QueryItem::new`, `query.rs:385-392` routes `Query` through
-`from_items`, and `append.rs:274-289` rejects an empty guard sequence) and E2E-40
+already do this correctly (`tag.rs:497-504` re-canonicalises, `query.rs:377-382`
+re-validates through `QueryItem::new`, `query.rs:415-430` routes `Query` through
+`from_items`, and `append.rs:295-323` rejects an empty guard sequence) and E2E-40
 credits them: "the envelope defends its own invariants; only cost is unguarded".
 This clause is what stops that being an accident.
 
@@ -2277,7 +2292,7 @@ and a `const _` is not a `#[test]` any rule resolver could find. A `compile_fail
 doctest passes whenever the snippet fails to compile for any reason: measured, of
 four spellings only the honest one detected that `ReadOptions` is serialisable at
 HEAD, while a type-name typo, a misspelt trait and a wrong crate path all
-reported green — and `RUNBOOK.md:3112-3117` already recorded that
+reported green — and `RUNBOOK.md:3126-3137` already recorded that
 `compile_fail,E0080` is "the same check wearing a claim". The assertion is
 `const _: () = assert!(!Detect::<ReadOptions>::IS_SERIALIZE, …)`, where an
 inherent `impl<T: Serialize> Detect<T> { const IS_SERIALIZE: bool = true; }`
@@ -2288,8 +2303,12 @@ rather than a green test. The `Deserialize` half needs
 serde::Deserialize>` — the latter is `error[E0106]`, since `Deserialize<'de>` is
 lifetime-parameterised. What enforces the whole is that the test target must
 build, which `xtask/src/proof.rs` already does in order to list it.
-`Cases:` none directly; this removes a surface rather than adding one, and it is
-a clause because the impls exist today and something must say to delete them.
+`Cases:` E2E-58, written at phase 5 to close this clause's own hole — §7.5
+carried it as the section's one genuine defect until then. The clause removes a
+surface rather than adding one, and it stays a clause because the impls existed
+when it was written and something had to say to delete them. No other case is
+named here on purpose: a `Cases:` line is parsed for every `E2E-nn` it contains,
+so a comparison drawn in it would be read as a claim.
 `Rejects:` a replication protocol that ships a `ReadOptions` as its "send me
 more" request. That is the obvious use and it is wrong twice over: `from` is a
 store-local position with no meaning at the sender, and `backwards`/`limit` are
@@ -2297,9 +2316,12 @@ traversal options for a local reader that a peer has no business setting. A sync
 request message carries its own fields, defined in `happenstance-sync`, whose
 meaning is negotiated between the two peers.
 
-The impls at `query.rs:394-425` are on no wire path that exists and are
-maintenance the crate does not owe. **The claim that their whole-struct
-`#[serde(default)]` is a fifth hazard of WF-2's class is withdrawn**, measured:
+The impls this clause deleted were on no wire path that existed and were
+maintenance the crate does not owe. What stands in their place is a comment
+saying so where the next author will look for them (`query.rs:432-438`), because
+a deletion nothing explains is a deletion somebody undoes. **The claim that their
+whole-struct `#[serde(default)]` was a fifth hazard of WF-2's class is
+withdrawn**, measured:
 it is byte-for-byte inert in postcard on both encode and decode, because postcard
 treats running out of bytes as a hard parse error rather than an end-of-sequence
 signal, so the derive's default-fallback path never executes. Its only observable
@@ -8371,7 +8393,7 @@ between them because its *shape* does not wait on a transport but its
 | WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-42 |
 | WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_rejects_an_uncon… | E2E-40 |
 | WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard` | E2E-33 |
-| WF-12 | FROZEN | `read_options_is_not_serialisable`, a **const-evaluation assertion in `crates/… | *(none — see clause)* |
+| WF-12 | FROZEN | `read_options_is_not_serialisable`, a **const-evaluation assertion in `crates/… | E2E-58 |
 
 #### `ES` — the `EventStore` port (§3)
 
@@ -8810,9 +8832,9 @@ That result is suspicious enough to state how it was reached, because "the defec
 list is empty" is the shape of a list that was never computed.
 
 The `Cases:` line of all 200 clauses was parsed, every `E2E-nn` reference
-extracted, and the union compared against `E2E-01`…`E2E-57` as enumerated in
-[`E2E-CASES.md`](../scenarios/E2E-CASES.md)'s index (`:38-45`) and confirmed
-against its 57 `### E2E-nn` headings. The comparison was then run a second time
+extracted, and the union compared against `E2E-01`…`E2E-58` as enumerated in
+[`E2E-CASES.md`](../scenarios/E2E-CASES.md)'s index (`:39-46`) and confirmed
+against its 58 `### E2E-nn` headings. The comparison was then run a second time
 with a stricter rule — discarding any `Cases:` line beginning with the word
 "none", so that the two clauses which say "none directly" and then cite a range in
 prose contributed nothing. The orphan set was empty under both readings.

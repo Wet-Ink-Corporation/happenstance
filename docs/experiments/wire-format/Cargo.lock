@@ -69,6 +69,7 @@ checksum = "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7"
 name = "happenstance-core"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "bytes",
  "futures-core",
  "serde",
