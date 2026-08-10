@@ -157,13 +157,18 @@ jobs:
           # 2. No process drift. This repository customises TEMPLATES and never
           #    `processes/*.yaml`; a pack edit is either a mistake or a decision
           #    that needs its own review, and neither should arrive silently.
-          # 3. Template drift is EXACTLY the four files that were customised
-          #    deliberately. Not "no drift" — that would fail forever, and a
-          #    warning nobody can clear teaches its reader the channel is noise.
-          #    Not "some drift" either: a fifth entry is a template someone
-          #    changed without deciding to, and a MISSING entry means a
+          # 3. Template drift is EXACTLY the set listed below — the templates
+          #    customised deliberately. Not "no drift" — that would fail forever,
+          #    and a warning nobody can clear teaches its reader the channel is
+          #    noise. Not "some drift" either: an EXTRA entry is a template
+          #    someone changed without deciding to, and a MISSING entry means a
           #    customisation was reverted, which is what `adopt --templates`
           #    does to a repo that runs it from a feature worktree.
+          #
+          #    The comment deliberately does not state a COUNT. It said "the four
+          #    files" while the list held six, having been written when it held
+          #    four — a number in prose beside the list it describes is a second
+          #    copy of that list, and it drifts the first time the list moves.
           #
           # Every other warning kind is ignored on purpose. `harvest-unrecorded`
           # and friends fire in normal operation, and a `warnings.length > 0`
