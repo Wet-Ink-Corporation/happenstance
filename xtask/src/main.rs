@@ -61,6 +61,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, bail};
 
+mod affected;
 mod lints;
 mod package;
 mod proof;
@@ -606,8 +607,33 @@ fn main() -> ExitCode {
     let task = std::env::args().nth(1);
 
     let result = match task.as_deref() {
-        Some("ci") => run_ci(),
+        Some("ci") => match std::env::args().nth(2).as_deref() {
+            None => run_ci(),
+            Some("--fast") => run_fast(),
+            Some(flag) => {
+                eprintln!("unknown flag for ci: {flag}");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+        },
         Some("wasm") => run_steps(wasm_steps()),
+        Some("affected") => match (
+            std::env::args().nth(2).as_deref(),
+            std::env::args().nth(3).as_deref(),
+        ) {
+            (None, _) => affected::run(None),
+            (Some("--base"), Some(base)) => affected::run(Some(base)),
+            (Some("--base"), None) => {
+                eprintln!("--base needs a ref");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+            (Some(flag), _) => {
+                eprintln!("unknown flag for affected: {flag}");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+        },
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
             None => spec_trace::run(spec_trace::Mode::Check),
@@ -651,10 +677,19 @@ fn print_help() {
     println!("cargo xtask <task>");
     println!();
     println!("Tasks:");
-    println!("  ci     Run the full gate: fmt, clippy, tests, wasm32, docs with and");
+    println!("  ci [--fast]");
+    println!("         Run the full gate: fmt, clippy, tests, wasm32, docs with and");
     println!("         without default features, spec-trace, package-check — then, when");
     println!("         the tool is installed, the workspace and wasm32 feature powersets,");
-    println!("         cargo-deny, and a nightly `--cfg docsrs` rustdoc build.");
+    println!("         cargo-deny, and a nightly `--cfg docsrs` rustdoc build. --fast runs");
+    println!("         the mandatory steps only, dropping that last group; it is the bar a");
+    println!("         non-terminal project's integration gate runs, never the release bar.");
+    println!("  affected [--base <ref>]");
+    println!("         The story-grain gate: the five file-reading lints and spec-trace,");
+    println!("         then fmt, clippy and tests for the packages this diff could have");
+    println!("         broken and everything depending on them. Base defaults to `main`.");
+    println!("         Errs toward more packages — see the module docs for the two ways it");
+    println!("         can be wrong and why only one of them is allowed to happen.");
     println!("  wasm   Check that happenstance-core, the conformance harnesses and the");
     println!("         two wasm32 adapters (cloudflare, neon) build for");
     println!("         wasm32-unknown-unknown.");
@@ -751,6 +786,33 @@ fn run_ci() -> Result<()> {
     run_steps(REQUIRED)?;
     run_steps(OPTIONAL)?;
     println!("\nall checks passed");
+    Ok(())
+}
+
+/// `REQUIRED` without `OPTIONAL` — the project-scoped bar, not the release bar.
+///
+/// It exists for one caller: `verify.integration_scoped` in
+/// `.redkiln/config.yaml`, which a **non-terminal** project's integration gate
+/// runs. That gate fires on both sides of its stage, so the full gate would run
+/// the feature powerset and `cargo deny` twice per project against a tree that
+/// has not changed, and the phases those projects carry are gated on the release
+/// bar anyway — `verify.e2e` on the terminal project runs [`run_ci`] whole.
+///
+/// What it drops is exactly `OPTIONAL`: the two feature powersets, `cargo deny`
+/// and the nightly `--cfg docsrs` rustdoc build. What it keeps is everything a
+/// missing tool could never have skipped — including the four `wasm32` steps,
+/// which are the standing guard on ADR-0001 and are not something a *scope* is
+/// allowed to narrow.
+///
+/// # Errors
+///
+/// When any mandatory step fails.
+fn run_fast() -> Result<()> {
+    run_steps(REQUIRED)?;
+    println!(
+        "\nall required checks passed (--fast: {} optional step(s) not run)",
+        OPTIONAL.len()
+    );
     Ok(())
 }
 
