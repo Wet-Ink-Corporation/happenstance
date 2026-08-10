@@ -241,11 +241,32 @@ mod serde_impls {
     use alloc::vec::Vec;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+    /// Field-for-field mirror of [`Guard`]. Both fields are written on every
+    /// serialisation and neither may stop being (WF-2; ADR-0016 §3).
+    ///
+    /// WF-4 as amended by ADR-0016 §2: the MUST is about the **presence** of the
+    /// two fields, not their spelling. VT-30 moved the query boundary into
+    /// `Guard`, so the wire field is `query`, and the clause's older name for it
+    /// no longer exists to be checked.
+    ///
+    /// **Neither `query` here nor `guards` on `Wire` may take
+    /// `#[serde(default)]`.** Their absence is the whole mechanism: now that
+    /// `Query` is externally tagged, `{"guards":[{}]}` fails with ``missing
+    /// field `query` `` and `{"guards":[{"query":null}]}` with `expected value`.
+    /// Before, both decoded to a guard that matches everything since the
+    /// beginning of the log — the one append condition that can never fail, and
+    /// therefore a silent lost update. "Add a default so `{}` parses" is exactly
+    /// the patch that restores it, and it will look like a kindness.
+    ///
+    /// `after` is different and is left as it is: serde routes an absent
+    /// `Option` through `missing_field` with no attribute at all, so
+    /// `{"guards":[{"query":"All"}]}` still decodes to `after: None`. ADR-0016
+    /// §5 accepts that, because `None` checks the *whole* log and so fails
+    /// closed — a spurious rejection, never a spurious acceptance.
     #[derive(Serialize, Deserialize)]
     #[serde(rename = "Guard")]
     struct GuardWire {
         query: Query,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         after: Option<SequencePosition>,
     }
 

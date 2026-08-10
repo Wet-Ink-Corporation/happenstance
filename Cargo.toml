@@ -26,6 +26,17 @@ happenstance = { version = "0.2.0", path = "crates/happenstance", default-featur
 happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit" }
 
 # --- external ---
+# WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`
+# on a measurement rather than on taste: `sqlx` already pulls `base64 0.22.1`
+# into this graph, and `base64` has no transitive dependencies of its own. At
+# `"0.22"` the addition is a new *edge* to an existing *node* — zero new crates
+# for the workspace, exactly one leaf crate for a consumer taking
+# `happenstance-core/serde` without sqlx. Asking for `"0.23"` would put two
+# majors in the graph, which `deny.toml`'s `multiple-versions = "warn"` reports
+# rather than fails — a warning nobody reads, which is worse than a failure.
+# `default-features = false` because the contract crate is `no_std`; it names
+# `base64/alloc` in its own `serde` feature (ADR-0016 §10).
+base64 = { version = "0.22", default-features = false }
 bytes = { version = "1.10", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
@@ -68,6 +79,18 @@ trait-variant = "0.1.3"
 
 # --- dev / tooling only ---
 anyhow = "1"
+# The non-self-describing half of WF-7's two-format matrix, and the reason the
+# matrix is two formats: a `skip_serializing_if` attribute round-trips cleanly in
+# `serde_json` and desynchronises the stream here. `use-std` because it is only
+# ever a dev-dependency — nothing published links it.
+#
+# `default-features = false` is load-bearing and was measured, not guessed. The
+# default turns on `heapless-cas`, which reaches `heapless 0.7` and then
+# `atomic-polyfill 1.0.3` — unmaintained, RUSTSEC-2023-0089, "no safe upgrade is
+# available", and `cargo deny check advisories` fails the gate on it. Nothing
+# here wants a fixed-capacity `Vec`; the flavour that serialises into `std`'s is
+# the whole of what the wire tests use.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 proptest = "1"
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published

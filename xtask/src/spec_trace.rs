@@ -88,6 +88,22 @@ pub(crate) const RULE_FILES: [&str; 3] = [
     "crates/happenstance-testkit/src/concurrency.rs",
 ];
 
+/// Every file a `wire::`-qualified name a clause cites may be defined in.
+///
+/// Deliberately **not** part of [`RULE_FILES`], and the distinction is the whole
+/// of ADR-0016 §15's third change. [`RULE_FILES`] is the set check 6 sweeps —
+/// every rule in it must be claimed by a clause or retired by one — because a
+/// conformance rule is something an *adapter* must pass. A round trip of this
+/// crate's own encoding is not an adapter obligation, so folding these two files
+/// into that set would demand a clause for every helper `#[test]` in `wire.rs`.
+///
+/// Resolution is therefore **one-way**: a clause may name a wire test, and a wire
+/// test need not be named by a clause.
+const WIRE_TESTS: [&str; 2] = [
+    "crates/happenstance-core/tests/wire.rs",
+    "crates/happenstance-sync/tests/wire.rs",
+];
+
 /// A section of the specification, in the order §7.1 and §7.2 present them.
 ///
 /// This is the single place the six clause families are enumerated: the parser
@@ -483,6 +499,15 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     let known_cases = collect_cases(&cases_doc);
     let known_rules = collect_rules(&suite);
 
+    // Two sets, not one, and which check gets which is load-bearing (ADR-0016
+    // §15). `known_rules` is the suite's own — check 6 sweeps it, so nothing may
+    // enter it that a clause is not obliged to claim. `resolvable` is that set
+    // plus the `wire::`-qualified tests, and it answers the *other* question:
+    // does a name a clause cites exist anywhere. Check 4 and `rule_cell` ask
+    // that one. Wiring only check 4 would leave every written wire test
+    // rendering `†` in §7.2 under a legend that defines `†` as "must be written".
+    let resolvable: BTreeSet<String> = known_rules.union(&wire_rules(&root)?).cloned().collect();
+
     let mut problems: Vec<String> = Vec::new();
 
     // 1. Every clause carries a maturity marker.
@@ -524,15 +549,25 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     //    crate has been written — checking those names against the event-store
     //    suite is a category error that reports every one of them as missing,
     //    which is noise indistinguishable from a real typo.
+    //
+    //    Resolved against `resolvable`, so a `wire::`-qualified name is looked
+    //    for in the wire test files rather than in a suite that could never
+    //    define it. The prefix is what routes it, which is why
+    //    `backticked_idents` keeps the whole qualified string.
     for c in &clauses {
         if c.schedules_new || !has_suite(&c.id) {
             continue;
         }
         for rule in &c.rules {
-            if !known_rules.contains(rule) {
+            if !resolvable.contains(rule) {
+                let looked_in = if rule.starts_with("wire::") {
+                    WIRE_TESTS.join(" or ")
+                } else {
+                    SUITE.to_owned()
+                };
                 problems.push(format!(
                     "{}:{} — {} names rule `{}`, which is not in {} and the clause does not declare it new",
-                    SPEC, c.line, c.id, rule, SUITE
+                    SPEC, c.line, c.id, rule, looked_in
                 ));
             }
         }
@@ -551,6 +586,9 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     }
 
     // 6. Every rule in the suite is claimed by a clause, or disposed of by one.
+    //
+    //    `known_rules`, deliberately, and never `resolvable`: see [`WIRE_TESTS`].
+    //    This is the direction of resolution that stays one-way.
     let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
     let retired: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.retires).collect();
     for rule in &known_rules {
@@ -572,7 +610,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     check_stated_census(&spec, &census, &mut problems);
 
     // 9. §7.1 and §7.2 say what this run just computed.
-    let generated = generated_region(&census, &clauses, &known_rules);
+    let generated = generated_region(&census, &clauses, &resolvable);
     let stale = sync_region(&root, &spec, &generated, mode)?;
 
     report(
@@ -808,7 +846,11 @@ fn report(
 }
 
 /// Renders §7.1 and §7.2, markers included, with no trailing newline.
-fn generated_region(census: &Census, clauses: &[Clause], known_rules: &BTreeSet<String>) -> String {
+///
+/// `resolvable` is the suite's rules *plus* the wire tests, not the suite's alone
+/// — [`rule_cell`]'s `†` means "looked for and not found", and it may only be
+/// rendered against the set the checker actually searched.
+fn generated_region(census: &Census, clauses: &[Clause], resolvable: &BTreeSet<String>) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{BEGIN_MARKER}");
     let _ = writeln!(out);
@@ -874,7 +916,7 @@ fn generated_region(census: &Census, clauses: &[Clause], known_rules: &BTreeSet<
                 "| {} | {} | {} | {} |",
                 c.id,
                 c.maturity.as_deref().unwrap_or("*(no marker)*"),
-                rule_cell(c, known_rules),
+                rule_cell(c, resolvable),
                 cases_cell(c)
             );
         }
@@ -894,7 +936,11 @@ fn generated_region(census: &Census, clauses: &[Clause], known_rules: &BTreeSet<
 /// constrains, or it names no rule at all and describes an obligation in prose —
 /// the cell is the clause's own words, because a `†` there would assert something
 /// nothing checked.
-fn rule_cell(c: &Clause, known_rules: &BTreeSet<String>) -> String {
+///
+/// `resolvable` must be the same set check 4 validated against — the suite's
+/// rules union the wire tests — or the two disagree and `†` starts meaning
+/// "exists, but this function was handed the wrong set".
+fn rule_cell(c: &Clause, resolvable: &BTreeSet<String>) -> String {
     let Some(text) = &c.rule_text else {
         return NONE_CELL.to_owned();
     };
@@ -904,11 +950,25 @@ fn rule_cell(c: &Clause, known_rules: &BTreeSet<String>) -> String {
     if c.rules.is_empty() || c.rule_elsewhere {
         return cell(text);
     }
+    // A qualified name the checker has no source for was never looked for, so
+    // daggering it would assert something nothing checked — the same false
+    // statement ADR-0016 §15 refuses to make about the wire tests, one family
+    // over. `wire::` has [`WIRE_TESTS`]; `mutation_coverage::` and `registry::`,
+    // which the `CF` clauses cite, have nothing. Before §15 taught
+    // [`backticked_idents`] to keep `::`, those names were dropped and the clause
+    // fell through to its own prose above; this keeps that outcome for exactly
+    // the names the fix did not make resolvable, and no others.
+    if c.rules
+        .iter()
+        .any(|r| r.contains("::") && !r.starts_with("wire::"))
+    {
+        return cell(text);
+    }
     let names: Vec<String> = c
         .rules
         .iter()
         .map(|r| {
-            if known_rules.contains(r) {
+            if resolvable.contains(r) {
                 format!("`{r}`")
             } else {
                 format!("`{r}` †")
@@ -1302,6 +1362,23 @@ fn field_head(line: &str) -> Option<String> {
 /// Returning early on the first new-marker made a clause like that claim
 /// *nothing*, which reported eighteen live rules as owned by no clause. A checker
 /// whose false positives look exactly like its true ones is not usable.
+///
+/// # A `Rule:` field may backtick rule names and nothing else
+///
+/// This hands the **whole** field to [`backticked_idents`], continuation lines
+/// included, so any backticked all-lowercase token containing an underscore
+/// becomes a name the checker will demand — and since ADR-0016 §15 taught the
+/// parser to keep `::` it demands harder, not less. This is the same convention
+/// [`retires_of`] documents one field over; the difference was only that
+/// `Retires:` said so and `Rule:` did not.
+///
+/// The evidence it is worth the space: ADR-0016's own amendments broke it three
+/// times before landing. `skip_serializing_if`, `serde_json` and
+/// `version_is_the_first_field` were all backticked inside draft `Rule:` fields,
+/// where each would have produced a "names rule X, which is not in …" problem
+/// that no test could ever clear. Write the attribute out in full — the spelling
+/// `#[serde(skip_serializing_if = "…")]` is safe, because `#` is not a path
+/// character in any version of the parser — and unbacktick the rest.
 fn rules_of(body: &str) -> Rules {
     let Some(text) = field_line(body, "Rule") else {
         return Rules::default();
@@ -1326,6 +1403,20 @@ fn rules_of(body: &str) -> Rules {
     // that *looked* checked. Marking it `elsewhere` makes both that and
     // `schedules_new` true, which is exactly right: nothing here looked, and the
     // table now says so in the clause's own words.
+    //
+    // Two things about this list are not free to change.
+    //
+    // `wire::` is deliberately *not* a trigger. ADR-0016 §15's whole point is that
+    // `wire::` names became resolvable against [`WIRE_TESTS`], so an unwritten one
+    // must render `†` rather than the clause's own prose.
+    //
+    // "compile test" is what keeps WF-12 here, and it survives in that clause's
+    // `Rule:` line only as a *negation* — "a const-evaluation assertion … **not**
+    // a compile test". The outcome is right and the mechanism is an accident, so:
+    // `read_options_is_not_serialisable` is a `const _` and not a `#[test]`, which
+    // means no resolution source can ever find it and WF-12 must stay `elsewhere`
+    // permanently. Tidying those two words out of the clause, or out of this list,
+    // turns WF-12 into a `†` no test can ever clear.
     let elsewhere =
         text.contains("unit test") || text.contains("compile test") || text.contains("meta-test");
     let schedules_new = text.contains("(new)")
@@ -1376,6 +1467,21 @@ fn retires_of(body: &str) -> Vec<String> {
 }
 
 /// Snake-case identifiers inside backticks — the shape every rule name has.
+///
+/// `:` is a path character, and the **whole qualified string** survives:
+/// `wire::query_all_is_unambiguous`, never its last segment. Until ADR-0016 §15
+/// it did not, and every `::`-qualified name a clause cited was silently dropped
+/// — ten of the twelve `WF` clauses parsed to an empty rule list and rendered
+/// their own prose in §7.2, claiming nothing, while `WF-9` and `VT-19` mixed a
+/// plain name with `wire::` ones and rendered as fully checked.
+///
+/// Keeping the prefix is load-bearing twice over. It routes the name to the right
+/// resolution source in [`run`]'s check 4 — [`SUITE`] or [`WIRE_TESTS`] — and a
+/// bare last segment would collide silently with a suite rule of the same name,
+/// because [`collect_rules`] yields unqualified names.
+///
+/// `.` and `/` stay excluded, which is what keeps a `path/to/file.rs:12` citation
+/// out of the rule list now that `:` is allowed through.
 fn backticked_idents(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for chunk in text.split('`').skip(1).step_by(2) {
@@ -1383,7 +1489,7 @@ fn backticked_idents(text: &str) -> Vec<String> {
         if !c.is_empty()
             && c.contains('_')
             && c.chars()
-                .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch.is_ascii_digit())
+                .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch == ':' || ch.is_ascii_digit())
         {
             out.push(c.to_owned());
         }
@@ -1455,6 +1561,174 @@ pub(crate) fn collect_rules(suite: &str) -> BTreeSet<String> {
             (!name.is_empty()).then_some(name)
         })
         .collect()
+}
+
+/// Every `wire::`-qualified test name a clause may resolve against.
+///
+/// # Errors
+///
+/// Returns an error if [`WIRE_PROBE`] stops parsing, if a file in [`WIRE_TESTS`]
+/// cannot be read, or if the two together define no tests at all — which would
+/// report every `wire::` name a clause cites as a specification defect, when the
+/// defect would be here.
+fn wire_rules(root: &Path) -> Result<BTreeSet<String>> {
+    check_wire_probe()?;
+    let mut out = BTreeSet::new();
+    for file in WIRE_TESTS {
+        out.extend(collect_wire_tests(&read(root, file)?));
+    }
+    if out.is_empty() {
+        bail!(
+            "parsed no `#[test]` names from {} — every `wire::` name a clause cites would report \
+             as missing, which is the checker being broken rather than the document",
+            WIRE_TESTS.join(", ")
+        );
+    }
+    Ok(out)
+}
+
+/// A fixture test file, held to the four names [`collect_wire_tests`] must find.
+///
+/// The real wire files cannot exercise the two cases that break the parser
+/// quietly, and a quiet break here is a `†` on a written test or — worse — a
+/// missing name that check 4 then reports as a specification defect. Line 4's
+/// `        }` sits inside a raw string at exactly a nested item's column, which
+/// is the forgery the indentation heuristic has to survive; `not_a_test` is the
+/// helper that must not be collected.
+const WIRE_PROBE: &str = r##"
+mod wire {
+    fn helper() {
+        let json = r#"{
+        }"#;
+    }
+
+    #[test]
+    fn at_the_top() {}
+
+    fn not_a_test() {}
+
+    mod inner {
+        #[test]
+        #[should_panic = "…"]
+        fn nested_under_two_attributes() {}
+    }
+
+    proptest! {
+        #[test]
+        fn in_a_macro_block(x in 0..1) {}
+    }
+
+    #[test]
+    fn after_the_block_closed() {}
+}
+"##;
+
+/// What [`WIRE_PROBE`] contains, in [`BTreeSet`] order.
+const WIRE_PROBE_NAMES: [&str; 4] = [
+    "wire::after_the_block_closed",
+    "wire::at_the_top",
+    "wire::in_a_macro_block",
+    "wire::inner::nested_under_two_attributes",
+];
+
+/// Parses [`WIRE_PROBE`] and fails if it does not yield [`WIRE_PROBE_NAMES`].
+///
+/// # Errors
+///
+/// Returns an error if the probe stops parsing as it is known to parse.
+fn check_wire_probe() -> Result<()> {
+    let parsed: Vec<String> = collect_wire_tests(WIRE_PROBE).into_iter().collect();
+    if parsed != WIRE_PROBE_NAMES {
+        bail!(
+            "the wire-test probe parsed as {parsed:?}, not {WIRE_PROBE_NAMES:?}. `collect_wire_tests` \
+             qualifies the names §7.2 renders and check 4 resolves, so a parser that has started \
+             missing one reports a written test as a specification defect, and one that has started \
+             inventing one hides an unwritten test behind a name nothing runs."
+        );
+    }
+    Ok(())
+}
+
+/// Every `#[test]` an integration test file defines, qualified by its modules.
+///
+/// The second resolution source ADR-0016 §15 adds, and the reason clauses may
+/// cite `wire::query_all_is_unambiguous` at all: neither wire test file is in
+/// [`RULE_FILES`], nor could be — see [`WIRE_TESTS`] for why check 6 must not
+/// sweep them. The qualification is not cosmetic. `mod wire { … }` inside the
+/// file is the trick `tests/mutation_coverage.rs` already uses so that `cargo
+/// test --list` prints the qualified name the clauses cite, and this must produce
+/// exactly that name or the two disagree about what is written.
+///
+/// # Why it tracks indentation rather than counting braces
+///
+/// `wire.rs` is ninety kilobytes of JSON string literals, and a `{` inside one is
+/// indistinguishable from a block opening it if you count characters. `cargo fmt`
+/// is a gate step, so an item's closing brace sits at exactly the column its
+/// `mod` keyword did — which is a signal a string literal cannot forge nearly as
+/// easily, and it needs no lexer.
+fn collect_wire_tests(src: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    // (module name, the column its `mod` keyword sat at).
+    let mut path: Vec<(String, usize)> = Vec::new();
+    let mut pending_test = false;
+
+    for line in src.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let indent = line.len() - trimmed.len();
+
+        if trimmed == "}" {
+            if path.last().is_some_and(|(_, col)| *col == indent) {
+                path.pop();
+            }
+            continue;
+        }
+        if let Some(name) = opened_mod(trimmed) {
+            path.push((name, indent));
+            continue;
+        }
+        if trimmed.starts_with("#[test]") {
+            pending_test = true;
+            continue;
+        }
+        if pending_test && let Some(rest) = trimmed.strip_prefix("fn ") {
+            pending_test = false;
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                let mut qualified = String::new();
+                for (m, _) in &path {
+                    qualified.push_str(m);
+                    qualified.push_str("::");
+                }
+                qualified.push_str(&name);
+                out.insert(qualified);
+            }
+        }
+    }
+    out
+}
+
+/// The module a line opens, as in `mod wire {` or `pub(crate) mod strategies {`.
+fn opened_mod(trimmed: &str) -> Option<String> {
+    if !trimmed.ends_with('{') {
+        return None;
+    }
+    let rest = trimmed
+        .strip_prefix("pub ")
+        .or_else(|| trimmed.strip_prefix("pub(crate) "))
+        .or_else(|| trimmed.strip_prefix("pub(super) "))
+        .unwrap_or(trimmed)
+        .strip_prefix("mod ")?;
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
 }
 
 /// Every case the e2e document defines, from its `### E2E-nn` headings.

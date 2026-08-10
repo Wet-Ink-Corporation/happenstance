@@ -1,4 +1,5 @@
-//! The gate's four grep-shaped lints (CF-6, CF-29, CF-32, CF-33).
+//! The gate's five grep-shaped lints (CF-6, CF-29, CF-32, CF-33, and D12, which
+//! is the one with no clause — ADR-0016 §14 gives it a lint rather than a WF-13).
 //!
 //! # Why a grep is in the gate at all
 //!
@@ -45,6 +46,9 @@ const TESTKIT_MANIFEST: &str = "crates/happenstance-testkit/Cargo.toml";
 
 /// The changelog CF-29 reads.
 const CHANGELOG: &str = "CHANGELOG.md";
+
+/// `happenstance-core`'s manifest, for the D12 lint.
+const CORE_MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
 
 /// Every line of a Rust source file with comments removed and string-literal
 /// contents blanked, one output line per input line.
@@ -335,6 +339,77 @@ pub(crate) fn testkit_version() -> Result<()> {
         ),
         Some(value) => {
             println!("CF-32: {TESTKIT_MANIFEST} carries its own `version{value}`");
+            Ok(())
+        }
+    }
+}
+
+/// D12: `happenstance-core`'s `serde` feature names `serde/alloc` and
+/// `base64/alloc` explicitly.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, if `[features]` declares
+/// no `serde` line, or if the line it declares omits either `serde/alloc` or
+/// `base64/alloc`.
+pub(crate) fn core_alloc_features() -> Result<()> {
+    let root = workspace_root()?;
+    let manifest = fs::read_to_string(root.join(CORE_MANIFEST))
+        .with_context(|| format!("reading {CORE_MANIFEST}"))?;
+
+    // A three-line hand parse rather than a TOML dependency, for the same
+    // reason `testkit_version` above is one: the question is narrow — one
+    // key, in one table, in one file — and adding a parser to the gate to
+    // answer it would be the larger claim. What it costs: this reads the
+    // *first* `[features]` table and the *first* line beginning `serde =`,
+    // neither of which any manifest in this workspace does more than once.
+    let mut in_features = false;
+    let mut declared: Option<&str> = None;
+    for line in manifest.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_features = t == "[features]";
+            continue;
+        }
+        if in_features && t.starts_with("serde =") {
+            declared = Some(t);
+            break;
+        }
+    }
+
+    match declared {
+        None => bail!(
+            "{CORE_MANIFEST}'s `[features]` declares no `serde = [...]` line. D12 (closed at \
+             phase 0, commit 927d291) requires one that names `serde/alloc` and \
+             `base64/alloc` explicitly: this crate is `no_std`, its derives need `alloc`, and \
+             today that arrives only because `bytes` 1.12.1 happens to enable it for its own \
+             optional `serde` dependency — a transitive default one dependency's PATCH release \
+             could change, landing the breakage in a downstream crate that changed nothing. \
+             This check asserts a manifest fact that no test and no compile can currently see: \
+             D12 cannot be made to fail today, which is exactly why a conformance rule for it \
+             would be decorative by construction (ADR-0016 §14). There is deliberately no \
+             WF-13; this is a gate step instead."
+        ),
+        Some(line) if !line.contains("serde/alloc") || !line.contains("base64/alloc") => bail!(
+            "{CORE_MANIFEST}'s `serde` feature line omits {}. D12 (closed at phase 0, commit \
+             927d291) requires both `serde/alloc` and `base64/alloc` named explicitly: this \
+             crate is `no_std` and its derives need `alloc`, and today that arrives only \
+             because `bytes` 1.12.1 happens to enable it for its own optional `serde` \
+             dependency — a transitive default one dependency's PATCH release could change, \
+             landing the breakage in a downstream crate that changed nothing. This check \
+             asserts a manifest fact that no test and no compile can currently see: D12 cannot \
+             be made to fail today, which is exactly why a conformance rule for it would be \
+             decorative by construction (ADR-0016 §14). There is deliberately no WF-13; this \
+             is a gate step instead.\n  found: `{line}`",
+            match (line.contains("serde/alloc"), line.contains("base64/alloc")) {
+                (false, false) => "both `serde/alloc` and `base64/alloc`",
+                (false, true) => "`serde/alloc`",
+                (true, false) => "`base64/alloc`",
+                (true, true) => unreachable!("outer guard requires at least one to be missing"),
+            }
+        ),
+        Some(line) => {
+            println!("D12: {CORE_MANIFEST}'s `{line}` names both `serde/alloc` and `base64/alloc`");
             Ok(())
         }
     }

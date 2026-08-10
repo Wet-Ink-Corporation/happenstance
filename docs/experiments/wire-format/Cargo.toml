@@ -1,0 +1,31 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to `D:/repos/happenstance/Cargo.toml` and adopting this crate
+# as a member — the same trick `docs/experiments/*` uses wherever it needs a
+# crate at all (see the sibling directories' notes). No entry in the root
+# `members` list changes, and this never runs under `cargo xtask ci`.
+[workspace]
+
+[package]
+name = "wire-format-probes"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+happenstance-core = { path = "../../../crates/happenstance-core", features = ["std", "serde", "memory"] }
+# Needed by `src/lib.rs`'s `Detect<T>` mechanism (`T: serde::Serialize`), not
+# just by the tests — hence a normal dependency, with `derive` pulled in by the
+# dev-dependency below for the test-only mirror structs.
+serde = "1"
+
+[dev-dependencies]
+postcard = { version = "1", features = ["use-std"] }
+serde_json = "1"
+# Pinned to 0.22, not `*` or `0.23`: sqlx already carries 0.22.1 in this
+# workspace's own graph (M2, `phase5-my-measurements.md`), and requesting 0.23
+# here would put two major versions of `base64` in the lockfile for no reason —
+# harmless to this throwaway crate specifically, but the point of the probe is
+# to report what ADR-0016 should ask the real manifest to pin, and the real
+# manifest has exactly this reason to give.
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }

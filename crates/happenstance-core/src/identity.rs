@@ -180,29 +180,131 @@ impl fmt::Display for RecordedAt {
 #[cfg(feature = "serde")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 mod serde_impls {
-    //! The derives ship here; the *encoding* is phase 5's.
+    //! A `StoreId` has two encodings and the *format* chooses between them
+    //! (WF-6, ADR-0016 §9): thirty-two lowercase hex digits where a human will
+    //! read them, sixteen raw bytes where nobody will. So human-readability is
+    //! part of this format's identity — the same value is not the same bytes in
+    //! JSON and in postcard.
     //!
-    //! Whether a `StoreId` crosses the wire as hex text or as a byte array, and
-    //! a `RecordedAt` as a number or a string, is the wire format's question.
-    //! Shipping the derives now means that phase changes an encoding rather than
-    //! a type.
+    //! # The wrong implementation this exists to reject
+    //!
+    //! An **inverted** `is_human_readable` branch: hex in the binary arm, raw
+    //! bytes in the human-readable one. Each arm is internally consistent, so
+    //! encode-then-decode agrees with itself whichever one ran and a round-trip
+    //! test passes in **both** formats — measured, on a deliberately inverted
+    //! newtype, in `docs/experiments/wire-format/tests/decorative_inverted_branch.rs`.
+    //! That is why WF-6 names two rules asserting the bytes actually on the wire
+    //! (`wire::store_id_encodes_as_hex_in_json` and
+    //! `wire::store_id_encodes_as_bytes_in_postcard`) rather than one asserting
+    //! a round trip.
+    //!
+    //! ```
+    //! use happenstance_core::StoreId;
+    //!
+    //! let store = StoreId::from_bytes([
+    //!     0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78,
+    //!     0x87, 0x96, 0xa5, 0xb4, 0xc3, 0xd2, 0xe1, 0xf0,
+    //! ]);
+    //!
+    //! // JSON is human-readable: the `Display` rendering, quoted.
+    //! let json = serde_json::to_string(&store)?;
+    //! assert_eq!(json, "\"0f1e2d3c4b5a69788796a5b4c3d2e1f0\"");
+    //! assert_eq!(serde_json::from_str::<StoreId>(&json)?, store);
+    //!
+    //! // postcard is not: sixteen raw bytes, and no length prefix.
+    //! let binary = postcard::to_stdvec(&store)?;
+    //! assert_eq!(binary, store.to_bytes());
+    //!
+    //! // Uppercase hex is refused rather than accepted quietly, so that one
+    //! // value has exactly one human-readable spelling.
+    //! assert!(serde_json::from_str::<StoreId>("\"0F1E2D3C4B5A69788796A5B4C3D2E1F0\"").is_err());
+    //! // And a UUID rendering of the same bytes is not a `StoreId`.
+    //! assert!(serde_json::from_str::<StoreId>("\"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\"").is_err());
+    //! # Ok::<(), Box<dyn core::error::Error>>(())
+    //! ```
 
     use super::{EventId, RecordedAt, StoreId};
     use crate::event::SequencePosition;
+    use alloc::string::String;
+    use serde::de::{Error as _, Unexpected};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    /// Thirty-two hex digits, which is `size_of::<StoreId>() * 2`.
+    const HEX_LEN: usize = 32;
+
+    /// One **lowercase** hex digit's value, or `None`.
+    ///
+    /// Uppercase is a rejection rather than an oversight. `u8::from_str_radix`
+    /// and every hex helper in the ecosystem accept `A`–`F` silently, so a peer
+    /// emitting `0F1E…` would round-trip perfectly and no round-trip test could
+    /// see it — while two spellings of one `StoreId` reached the log, where
+    /// anything comparing identities as text would call them different stores.
+    /// One value, one rendering; the encoder only ever emits lowercase, so the
+    /// decoder only ever accepts it.
+    const fn nibble(digit: u8) -> Option<u8> {
+        match digit {
+            b'0'..=b'9' => Some(digit - b'0'),
+            b'a'..=b'f' => Some(digit - b'a' + 10),
+            _ => None,
+        }
+    }
 
     impl Serialize for StoreId {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            self.0.serialize(serializer)
+            if serializer.is_human_readable() {
+                // `collect_str` over the `Display` impl, which already renders
+                // exactly the thirty-two lowercase digits — one definition of
+                // the rendering, and no `String` allocated to reach it.
+                serializer.collect_str(self)
+            } else {
+                self.0.serialize(serializer)
+            }
         }
     }
 
     impl<'de> Deserialize<'de> for StoreId {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            <[u8; 16]>::deserialize(deserializer).map(Self)
+            if !deserializer.is_human_readable() {
+                return <[u8; 16]>::deserialize(deserializer).map(Self);
+            }
+
+            let text = String::deserialize(deserializer)?;
+            // The length check is also what refuses a UUID rendering: separators
+            // make it thirty-six characters, and a `StoreId` has no version
+            // nibble or variant bits to justify them.
+            if text.len() != HEX_LEN {
+                return Err(D::Error::invalid_length(text.len(), &"32 hex digits"));
+            }
+
+            let mut bytes = [0u8; 16];
+            let mut digits = text.bytes();
+            for slot in &mut bytes {
+                // Both `next()` calls are `Some` because the length is checked
+                // above; `nibble` is what rejects a separator or an uppercase
+                // digit that slipped in at the right length.
+                let high = digits.next().and_then(nibble);
+                let low = digits.next().and_then(nibble);
+                match (high, low) {
+                    (Some(high), Some(low)) => *slot = (high << 4) | low,
+                    _ => {
+                        return Err(D::Error::invalid_value(
+                            Unexpected::Str(&text),
+                            &"32 lowercase hex digits, with no separators",
+                        ));
+                    }
+                }
+            }
+            Ok(Self(bytes))
         }
     }
 
+    /// The field is `store`, not WF-6's `origin`.
+    ///
+    /// [`EventId`]'s own field and its [`store`](EventId::store) accessor already
+    /// agree on the word, and ADR-0014 froze that type; a third name for one
+    /// value, on the wire, would be the only place in the crate using it. The
+    /// frozen clause is amended to match rather than the type renamed
+    /// (ADR-0016 §9).
     #[derive(Serialize, Deserialize)]
     #[serde(rename = "EventId")]
     struct EventIdWire {
