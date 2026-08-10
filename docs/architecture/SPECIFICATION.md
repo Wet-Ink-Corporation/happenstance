@@ -4286,7 +4286,7 @@ spent its whole design defending is being provided by adapter-private code that 
 rule observes. Naming that consequence is the price of the refusal, and it is the
 strongest argument on record for revisiting it in 0.2 as a **redaction** seam
 rather than a delete seam: shredding covers `data`, and it cannot cover `tags`,
-which is the half the port has made indexable and queryable (`event.rs:209-221`
+which is the half the port has made indexable and queryable (`event.rs:437-447`
 constructs a new value and there is no store-side update path).
 
 - **Rule:** none — the absence of a method is not checkable. Recorded as a
@@ -8406,7 +8406,7 @@ this section's terms: three of the six projection rules the roadmap specifies �
 rollback leaves both unchanged, a dropped batch leaves both unchanged, a failed
 commit leaves the store unchanged — cannot observe the read model at all, because
 generic suite code holding a `P::Batch<'_>` can only pass it to `commit` or
-`rollback` (`projection.rs:97-99`). By CF-1 those three are decorative until
+`rollback` (`projection.rs:126-138`). By CF-1 those three are decorative until
 something can write a row. That is not an argument about ergonomics; it is the
 reason a suite that can test only the checkpoint half of a two-write invariant
 cannot reject an adapter that commits the checkpoint and silently drops the

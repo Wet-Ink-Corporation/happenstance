@@ -299,9 +299,11 @@ fn check_citations(
     spec: &str,
     index: &BTreeMap<String, Vec<String>>,
     problems: &mut Vec<String>,
-) -> (usize, usize) {
+) -> (usize, usize, usize) {
     let mut checked = 0usize;
     let mut external = 0usize;
+    let mut anchored = 0usize;
+    let historical = historical_span(spec);
     for c in citations(spec, index) {
         let (line_no, text) = (c.spec_line, &c.text);
         match c.target {
@@ -323,19 +325,102 @@ fn check_citations(
                 )),
                 Ok(body) => {
                     checked += 1;
-                    let len = body.lines().count();
-                    if c.line > len {
+                    let lines: Vec<&str> = body.lines().collect();
+                    if c.line > lines.len() {
                         problems.push(format!(
                             "{SPEC}:{line_no} — citation `{text}` points past the end of {} \
-                             ({len} lines)",
-                            path.display()
+                             ({} lines)",
+                            path.display(),
+                            lines.len()
                         ));
+                    } else if let Some(subject) = &c.subject
+                        && !historical.contains(&line_no)
+                        && !UNANCHORED_CITATIONS.iter().any(|(t, _)| t == text)
+                    {
+                        // If the subject appears nowhere in the cited file, the
+                        // derivation picked the wrong word — not the citation the
+                        // wrong line. "`limit` cannot stand in for it because
+                        // `event.rs:215-217` forbids…" derives `limit`, which is
+                        // a `query.rs` name and has no business being looked for
+                        // here. Declining is the difference between a check that
+                        // reports drift and one that reports its own guesses:
+                        // the subject being *elsewhere in the same file* is the
+                        // signal worth having, and that is what survives.
+                        let present = lines.iter().any(|l| l.contains(subject.as_str()));
+                        if !present {
+                            continue;
+                        }
+                        anchored += 1;
+                        let lo = c.line.saturating_sub(ANCHOR_SLACK + 1);
+                        let hi = (c.line_end + ANCHOR_SLACK).min(lines.len());
+                        if !lines[lo..hi].iter().any(|l| l.contains(subject.as_str())) {
+                            problems.push(format!(
+                                "{SPEC}:{line_no} — citation `{text}` is evidence for `{subject}`, \
+                                 and `{subject}` is not within {ANCHOR_SLACK} lines of {}:{}. The \
+                                 citation points at the wrong place, or the sentence attributes it \
+                                 to the wrong thing.",
+                                path.display(),
+                                c.line
+                            ));
+                        }
                     }
                 }
             },
         }
     }
-    (checked, external)
+    (checked, external, anchored)
+}
+
+/// How far from the cited line the subject may sit before the citation is wrong.
+///
+/// The same twelve `docs/rust`'s own citation lint uses, and for the same
+/// reason: an anchor is a claim about *what* is at a location, and a doc comment
+/// growing above an item must not red the gate. This is the property that makes
+/// the check survivable — a content hash would fail on every ordinary edit and
+/// the refresh command would become a reflex nobody reads.
+const ANCHOR_SLACK: usize = 12;
+
+/// Citations that are deliberately not about the thing beside them.
+///
+/// One entry. §2.7 quotes a claim **in order to call it false** — "the second leg
+/// this bullet used to offer is false: it said `memory.rs:154` and …" — so the
+/// number is part of the quotation. Repairing it, or anchoring it, would falsify
+/// the record of what was once claimed.
+const UNANCHORED_CITATIONS: [(&str, &str); 1] = [(
+    "memory.rs:154",
+    "quoted inside a sentence that calls the claim it quotes false (§2.7)",
+)];
+
+/// The lines of §6.1 and §6.2, whose citations are a measurement of `b4b593d`.
+///
+/// Found by content rather than by line number, because line numbers in this
+/// document move on every pass and a hard-coded span would come to cover the
+/// wrong section silently — which is the failure this whole check exists to
+/// prevent, one level up.
+///
+/// The declaration is §6's own: the measurement is of *that* tree, "line numbers
+/// included — which is why those numbers do not resolve against the working copy
+/// and are not meant to. That covers the rest of this paragraph as well as §6.1
+/// and §6.2 below." So the span runs from that sentence to the start of §6.3,
+/// which is where the document says the present tense resumes.
+fn historical_span(spec: &str) -> BTreeSet<usize> {
+    let lines: Vec<&str> = spec.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.contains("line numbers included"))
+        .map(|i| i + 1);
+    let end = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("### 6.3"))
+        .map(|i| i + 1);
+    match (start, end) {
+        (Some(s), Some(e)) if s < e => (s..=e).collect(),
+        // Neither anchor found means the document has been restructured. Return
+        // nothing rather than guess: the check then reports the region's
+        // citations, which is loud and correct, instead of exempting a span that
+        // may no longer be the historical one.
+        _ => BTreeSet::new(),
+    }
 }
 
 /// The census §1.3 states in prose, and the line it states it on.
@@ -875,7 +960,7 @@ fn report(
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
-    citations: (usize, usize),
+    citations: (usize, usize, usize),
     unclaimed_pending: &[String],
     problems: &[String],
     stale: Option<&str>,
@@ -901,11 +986,15 @@ fn report(
     // failure this step spent a phase inside was not a wrong check, it was a
     // check whose scope nobody could see. A reader who is told "338 citations"
     // can notice that the document has more.
-    let (checked, external) = citations;
-    let _ = write!(summary, ", {checked} citations checked");
+    let (checked, external, anchored) = citations;
+    let _ = write!(
+        summary,
+        ", {checked} citations checked ({anchored} anchored to their subject"
+    );
     if external > 0 {
-        let _ = write!(summary, " ({external} external)");
+        let _ = write!(summary, ", {external} external");
     }
+    let _ = write!(summary, ")");
     println!("{summary}");
 
     // Printed on a green run, on purpose. An open question that only shows up
@@ -1979,6 +2068,79 @@ struct Citation {
     target: Target,
     /// The line it names.
     line: usize,
+    /// The end of the range it names, when it names one — `404-427` ends at 427.
+    line_end: usize,
+    /// The identifier the sentence attributes to that location, if it names one.
+    ///
+    /// `None` for a `.md` target. A citation into Markdown is evidence for a
+    /// *passage* — an argument, a scenario, a measurement — and the backticked
+    /// word beside it is whatever the sentence happened to be discussing, not a
+    /// definition that lives at that line. Anchoring them produced a third of
+    /// this check's first run as false reports.
+    subject: Option<String>,
+}
+
+/// The nearest backticked identifier before a citation — what the sentence says
+/// is at the place it cites.
+///
+/// The document has one citation idiom and it is remarkably consistent: a
+/// backticked identifier, then the citation, usually parenthesised.
+///
+/// ```text
+/// `is_violated_by` compares raw values (`append.rs:239-253`)
+/// ```
+///
+/// So the anchor need not be written into the citation the way `docs/rust`
+/// writes it — it is already in the prose, and deriving it costs no change at
+/// 358 sites. The search runs backwards across line breaks, because the
+/// document wraps at 80 columns and a subject is frequently on the line above
+/// its citation.
+///
+/// Returns `None` when the nearest span is not an identifier — a quoted phrase,
+/// a type with generics, another citation — rather than guessing. A citation
+/// with no derivable subject is counted and not anchored, which is the honest
+/// outcome: this check tightens the ones it can read and never invents a claim
+/// to check.
+fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
+    let (cite_line, _) = spans.get(i)?;
+    let (subj_line, s) = spans.get(i.checked_sub(1)?)?;
+
+    // Only the span *immediately* before, and only on the citation's own line or
+    // the one above it. The first version of this walked back up to four spans
+    // and reported seventy failures out of two hundred and sixty-two, nearly all
+    // of them the same shape: a sentence with no backticked subject at all —
+    // "the prohibition on arithmetic is already documented at `event.rs:215-217`"
+    // — where reaching back far enough always finds *some* identifier, and it
+    // belongs to the previous sentence. A derived anchor is only worth having
+    // where the derivation is certain, so this declines rather than guesses.
+    if cite_line.saturating_sub(*subj_line) > 1 {
+        return None;
+    }
+
+    // An identifier may carry `::` qualifiers and a trailing `()`. Anything else
+    // — spaces, attributes like `#[non_exhaustive]`, generics, another citation —
+    // means the span is not a name and the anchor is not derivable.
+    let core = s.trim().trim_end_matches("()");
+    if core.is_empty()
+        || !core
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+    {
+        return None;
+    }
+    // `Type::method` anchors on the last segment: the definition site spells
+    // `fn method`, not `Type::method`.
+    let last = core.rsplit("::").next().unwrap_or(core);
+
+    // A type name is a poor anchor even when it is the grammatical subject:
+    // "`MemoryEventStore` already behaves that way by accident of ordering
+    // (`memory.rs:372-388`)" cites the *behaviour*, and the type is declared four
+    // hundred lines away. Names that start lower-case are functions, methods,
+    // fields and rules, and those are cited at their definitions.
+    if last.len() < 4 || last.starts_with(|c: char| c.is_uppercase()) {
+        return None;
+    }
+    Some(last.to_owned())
 }
 
 /// Every file in the workspace that a citation could name, by base name.
@@ -2035,9 +2197,25 @@ fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
 /// that were "green and wrong" and repaired them by hand; the ones this widening
 /// exposes are the same defect in the part of the corpus nobody could see.
 fn citations(spec: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<Citation> {
+    // Every backticked span in the document, in order, with the line it sits on.
+    // Collected up front rather than per line because a subject and its citation
+    // are often on different lines — the document wraps at 80 columns and does
+    // not treat the pair as unbreakable.
+    let spans: Vec<(usize, String)> = spec
+        .lines()
+        .enumerate()
+        .flat_map(|(n, line)| {
+            line.split('`')
+                .skip(1)
+                .step_by(2)
+                .map(move |c| (n + 1, c.to_owned()))
+        })
+        .collect();
+
     let mut out = Vec::new();
-    for (n, line) in spec.lines().enumerate() {
-        for chunk in line.split('`').skip(1).step_by(2) {
+    for (i, (n, chunk)) in spans.iter().enumerate() {
+        {
+            let chunk = chunk.as_str();
             let Some((path, tail)) = chunk.rsplit_once(':') else {
                 continue;
             };
@@ -2065,6 +2243,17 @@ fn citations(spec: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<Citation>
             let Ok(num) = first.parse::<usize>() else {
                 continue;
             };
+            // `404-427` names a span, and the subject may be anywhere in it. The
+            // first run of the anchor check searched only around the start line
+            // and reported `into_parts` missing from `event.rs:404-427` because
+            // the doc comment occupies the first fourteen lines of its own
+            // citation.
+            let end: String = tail
+                .strip_prefix(&first)
+                .and_then(|r| r.strip_prefix('-'))
+                .map(|r| r.chars().take_while(char::is_ascii_digit).collect())
+                .unwrap_or_default();
+            let num_end = end.parse::<usize>().unwrap_or(num).max(num);
 
             let base = path.rsplit('/').next().unwrap_or(path);
             let target = if path.contains('/') {
@@ -2081,11 +2270,18 @@ fn citations(spec: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<Citation>
                 }
             };
 
+            let markdown = has_ext(".md");
             out.push(Citation {
-                spec_line: n + 1,
+                spec_line: *n,
                 text: chunk.to_owned(),
                 target,
                 line: num,
+                line_end: num_end,
+                subject: if markdown {
+                    None
+                } else {
+                    subject_before(&spans, i)
+                },
             });
         }
     }
