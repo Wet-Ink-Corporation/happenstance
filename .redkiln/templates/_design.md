@@ -109,7 +109,7 @@ missing enum variant during implementation.
 ## Anti-patterns
 
 Concrete forbidden moves for this surface, each stated so it can be checked against a diff. Draw from
-the binding constraints in `CLAUDE.md` and `.kb/governance/`, and add the ones specific to this project.
+the binding constraints in `CLAUDE.md`, and add the ones specific to this project.
 
 Standing, and never re-litigated here: no `#[async_trait]`; no `serde` in `happenstance-core`'s
 defaults; `read` returns the stream at the top level; generic code binds `EventStore`, not

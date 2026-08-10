@@ -78,7 +78,7 @@ re-decide it:
 - **Visibility is as signed off** — `pub` / `pub(crate)` / `#[non_exhaustive]` / feature gate exactly as
   `## Visibility and stability` states. An item that became `pub` during implementation is a semver
   promise nobody made.
-- **Anti-patterns** — none of the forbidden moves named in `_design.md` or `.kb/governance/` appear.
+- **Anti-patterns** — none of the forbidden moves named in `_design.md` or in `CLAUDE.md`'s binding constraints appear.
 
 **Suite invariants** — apply to any story that touches `happenstance-testkit`. Each is a rule this
 repository has already been burned by:
