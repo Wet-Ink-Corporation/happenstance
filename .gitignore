@@ -38,6 +38,12 @@ target
 # no config, because a dead MCP server looks like a missing feature.
 .mcp.json
 
+# The redkiln CLI, checked out here by the `backlog` CI job because redkiln is a
+# private sibling repository rather than an npm package. It never exists in a
+# normal working tree; it is ignored so that a contributor who clones it here to
+# debug the job cannot stage a second repository by reflex.
+.redkiln-cli/
+
 # Agent scratch: settings, and `worktrees/` — full checkouts of this repository,
 # each with its own `target/`, created when work is fanned out across isolated
 # probes. Phases 1 and 2 both used that method and both left six behind.

@@ -1,0 +1,82 @@
+version: 1
+prefix: HS
+default_automation: HITL
+active_branch_window_days: 30
+support_initiative: support
+visualization:
+  default: html
+  html_out: .redkiln/index/board.html
+processes_dir: .redkiln/processes
+telemetry_dir: .redkiln/telemetry/events
+index_path: .redkiln/index/redkiln.db
+auto_stage_telemetry: true
+
+# ---------------------------------------------------------------------------
+# Deterministic gate commands, and design capture. BOTH OPTIONAL, both commented
+# out — redkiln will not invent claims about a repo it has never run.
+#
+# An UNDECLARED command is a trivial pass: the gate reports green having run
+# nothing, and looks identical to a gate that ran and passed. That is deliberate
+# (a repo with no app must not be blocked by a gate it cannot satisfy) and it is
+# why these keys are shown here rather than left to be discovered. `redkiln
+# doctor` warns when a pinned pack declares a gate nothing here wires.
+#
+# Command strings may contain {{base}} (the diff base ref) and {{changed}} (the
+# newline-joined changed-file list); redkiln substitutes both.
+# ---------------------------------------------------------------------------
+
+verify:
+  # Story grain. `cargo` has no `--changed`, so the package selection is
+  # computed by `xtask` itself: it maps the diff to workspace packages, adds
+  # their dependents, and runs fmt, clippy `-D warnings` and the tests for that
+  # set. `{{base}}` rather than `{{changed}}` because the command re-derives the
+  # file list from git — including staged, unstaged and untracked files, which a
+  # base-to-HEAD diff cannot see and a story mid-implementation always has.
+  #
+  # It also runs the five file-reading lints and `spec-trace` unconditionally.
+  # That is not padding: a story whose whole deliverable is an edit to
+  # SPECIFICATION.md maps to no package, and a purely package-shaped gate would
+  # compile nothing, read nothing, and call it green.
+  affected_gate: "cargo xtask affected --base {{base}}"
+
+  # Integration grain, the cheap tripwire. Redkiln's version of this check exists
+  # because the most common way for a feature to be "done" and still not exist is
+  # that nothing imports it. The library analogue is already this repository's
+  # rule, in CLAUDE.md: an adapter that compiles but has not run the conformance
+  # suite is not an adapter, and a clause citing a rule that no longer exists is
+  # decoration. Both are file reads — no compiler runs here.
+  reachability_static: "cargo xtask lints && cargo xtask spec-trace"
+
+  # Integration grain, NON-TERMINAL projects. `REQUIRED` without `OPTIONAL`:
+  # drops the two feature powersets, `cargo deny` and the nightly `--cfg docsrs`
+  # build, keeps everything else including all four wasm32 steps. A command gate
+  # fires on both sides of its stage, so the release bar would otherwise run
+  # twice per project against an unchanged tree.
+  integration_scoped: "cargo xtask ci --fast"
+
+  # Integration grain, the TERMINAL project: the whole gate, which is this
+  # repository's Definition of Done and the thing a phase's exit criteria are
+  # read against.
+  e2e: "cargo xtask ci"
+
+  # A story whose spec declares AC-### must carry a _ledger.md with real cited
+  # evidence per criterion. This is the mechanism the runbook's "a phase is done
+  # when its proof artefact exists, not when the gate is green" needs and has
+  # never had: a green suite proves something works, never that the criteria the
+  # story was written to satisfy are the things that work.
+  require_ledger: true
+
+  # A story that changed files inside its own declared PR boundary must record a
+  # work commit via `redkiln record-links --sha`. Safe to turn on here and
+  # nowhere else: nothing is mid-flight, so no story is being taken from "in
+  # progress" to "cannot advance" by it.
+  require_commit_provenance: true
+
+# `design:` is deliberately absent, and the design STAGE is deliberately kept.
+#
+# Undeclared `capture` makes the perceptual review a skip rather than a silent
+# pass, which is correct — there is no app to screenshot. But the stage exists
+# because presentation was a quantity no gate could perceive, and a library has
+# one of those too: the signatures, names and doctest ergonomics a `cargo add`
+# user meets. `.redkiln/templates/_design.md` is rewritten to ask for that, and
+# it keeps its human review gate.

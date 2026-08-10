@@ -1,0 +1,86 @@
+name: project
+applies_to: [project]
+id_prefix: P
+lifecycle: [pending, planning, ready, implementing, in-review, done, blocked]
+stages:
+  - id: intake
+    status_on_enter: pending
+    produces: [_intake-brief.md]
+    template: _intake-brief
+    automation: HITL
+    gate: { kind: checklist, ref: gates/intake }
+  - id: storymap
+    status_on_enter: planning
+    produces: [_storymap.md]
+    template: _storymap
+  - id: briefs
+    status_on_enter: ready
+    # Both planning artifacts are DECLARED so the engine renders them, `validate`
+    # covers them, and a planning workflow that silently fails to author one is
+    # caught here rather than a full stage later when an implementer opens the
+    # project and finds the grounding it was told to read does not exist.
+    # `_decomposition.md` is the primary (template `_decomposition`); each further
+    # artifact renders from the template matching its own basename.
+    produces: [_decomposition.md, _grounding.md]
+    template: _decomposition
+  - id: design
+    status_on_enter: ready
+    # The resolved interaction design + the human sign-off on it, BEFORE any story
+    # spec is written. Declared so the engine renders it, `validate` covers it, and
+    # a project cannot leave `design` while the artifact is still the unauthored
+    # template — the same stub guard the other planning artifacts get.
+    #
+    # This stage exists because nothing upstream was permitted to decide what a
+    # screen looks like: discovery is problem-space-only, the UX brief is held to
+    # "contract grain, not pixel implementation", and the spec's interaction
+    # invariants cover state preservation, not composition. Layout was therefore
+    # whatever fell out of the implementer's first guess, and no downstream gate
+    # could perceive the result.
+    #
+    # It runs for EVERY project, not only the ones tagged `ux`. A project with no
+    # user-facing surface says so explicitly in the artifact and passes in one line.
+    # Silence is what let "is this control's persistence in the chrome correct?" be
+    # a question no project owned.
+    produces: [_design.md]
+    template: _design
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: implementation
+    status_on_enter: implementing
+    # `_slices.md` is the slice ledger: the review verdict of every vertical slice,
+    # sealed as it closed. A slice's stories commit BEFORE its adversarial review
+    # runs, so commit history alone cannot tell a finished slice from a rejected
+    # one — which is how a `changes-requested` slice became unreachable on
+    # re-launch (its stories were committed, so resume skipped it). Declaring the
+    # ledger here means the engine renders it, `validate` covers it, and a project
+    # cannot LEAVE implementation while it is still the unauthored template.
+    produces: [_slices.md]
+    template: _slices
+  - id: integration
+    status_on_enter: implementing
+    produces: [_integration.md]
+    template: _integration
+    # Deterministic whole-feature gate (RFC §6.3/D2/D3). A command gate runs on
+    # BOTH sides of its stage, so this one guards implementation -> integration
+    # AND integration -> review: it runs the initiative's Definition-of-Done E2E
+    # for real (plus a static reachability tripwire). A non-zero exit blocks the
+    # transition (EC-003). No `verify` config commands declared => trivial pass.
+    # `advance --to review` cannot route around it: `--to` walks every
+    # intermediate stage and runs each one's gate.
+    gate:
+      { kind: command, run: "{{redkiln}} verify --item {{id}} --grain integration", blocking: true }
+  - id: review
+    status_on_enter: in-review
+    produces: [_review.md]
+    template: _review
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: closeout
+    status_on_enter: done
+    produces: [closure.md]
+    template: closure
+    harvest_kb: true
+transitions:
+  - on: changes-requested
+    from: review
+    to: implementation
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]

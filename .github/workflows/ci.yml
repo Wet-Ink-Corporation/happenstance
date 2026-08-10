@@ -87,6 +87,98 @@ jobs:
       - name: Run the gate
         run: cargo xtask ci
 
+  # The backlog and the knowledge base, checked by the tool that owns them.
+  #
+  # Deliberately NOT a step of `cargo xtask ci`. The gate is one command defined
+  # once in Rust, and folding a Node CLI into it would make every contributor's
+  # `cargo xtask ci` depend on a JavaScript toolchain to check files rustc never
+  # opens. The two are separate jobs because they are separate claims.
+  #
+  # What it catches that nothing else does: a `.kb` atom whose frontmatter stops
+  # validating, an accepted decision edited instead of superseded, an item whose
+  # system frontmatter was hand-edited with the `PreToolUse` hook disabled, and a
+  # `.redkiln/templates/` customisation silently reverted by `adopt --templates`.
+  # Every one of those merges green today.
+  backlog:
+    name: backlog and knowledge base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # redkiln is a Claude Code plugin in this organisation's private redkiln
+      # repository — it is not on npm, and a workflow's built-in `GITHUB_TOKEN`
+      # is scoped to its own repository and cannot read a sibling even inside one
+      # org. So this needs a real credential: an organisation secret named
+      # `REDKILN_TOKEN`, a fine-grained token with read-only Contents on
+      # `Wet-Ink-Corporation/redkiln`. Set it once at the org and every repo that
+      # adopts redkiln inherits it.
+      #
+      # Absent, this job is RED rather than skipped. That is the point: a backlog
+      # check that quietly stops running is worth less than no backlog check,
+      # because the green tick keeps arriving.
+      #
+      # `ref` is pinned to a tag, and pinning is load-bearing rather than
+      # cautious. `doctor` reports template and process drift by comparing this
+      # repository's pinned `.redkiln/` against the BUNDLED files of whichever
+      # CLI runs — so an unpinned checkout would change the expected drift set
+      # under the assertion below whenever redkiln released. Raise this in the
+      # same commit that upgrades the local plugin, never separately.
+      - name: Check out the redkiln CLI
+        uses: actions/checkout@v4
+        with:
+          repository: Wet-Ink-Corporation/redkiln
+          ref: v0.18.0
+          token: ${{ secrets.REDKILN_TOKEN }}
+          path: .redkiln-cli
+
+      # >= 22.5 is redkiln's floor (it uses `node:sqlite` and
+      # `node:util.parseArgs`). 24 rather than 22 so CI runs what this repository
+      # is developed on; the committed `dist/` bundle is self-contained, so there
+      # is nothing to install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Backlog health
+        run: |
+          node .redkiln-cli/bin/redkiln.mjs validate
+          node .redkiln-cli/bin/redkiln.mjs validate --kb
+
+          # `doctor` exits non-zero on a problem and zero on a warning, so its
+          # exit code is captured rather than trusted — the assertions below are
+          # the check, and they need the report even when it is red.
+          node .redkiln-cli/bin/redkiln.mjs doctor --json > doctor.json || true
+          cat doctor.json
+
+          # Three claims, and the third is the one worth explaining.
+          #
+          # 1. No problems. Same condition as doctor's own exit code, asserted
+          #    here so a single failure message names all three claims at once.
+          # 2. No process drift. This repository customises TEMPLATES and never
+          #    `processes/*.yaml`; a pack edit is either a mistake or a decision
+          #    that needs its own review, and neither should arrive silently.
+          # 3. Template drift is EXACTLY the four files that were customised
+          #    deliberately. Not "no drift" — that would fail forever, and a
+          #    warning nobody can clear teaches its reader the channel is noise.
+          #    Not "some drift" either: a fifth entry is a template someone
+          #    changed without deciding to, and a MISSING entry means a
+          #    customisation was reverted, which is what `adopt --templates`
+          #    does to a repo that runs it from a feature worktree.
+          #
+          # Every other warning kind is ignored on purpose. `harvest-unrecorded`
+          # and friends fire in normal operation, and a `warnings.length > 0`
+          # guard would red this branch the day it landed.
+          jq -e '
+            (.problems | length) == 0
+            and ([.warnings[] | select(.kind == "process-drift")] | length) == 0
+            and ([.warnings[] | select(.kind == "template-drift") | .file] | sort) == [
+              ".redkiln/templates/_design.md",
+              ".redkiln/templates/gates/discover.md",
+              ".redkiln/templates/gates/intake.md",
+              ".redkiln/templates/spec.md"
+            ]
+          ' doctor.json
+
   # The conformance suite, executed on `wasm32-unknown-unknown` against the
   # `!Send` reference store. This is the job that turns ADR-0001 from a design
   # argument into precedent: until it existed, the entire evidence base for the

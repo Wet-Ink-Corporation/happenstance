@@ -1,0 +1,47 @@
+name: initiative
+applies_to: [initiative]
+id_prefix: I
+lifecycle: [exploring, planning, implementing, closeout, archived, blocked]
+stages:
+  - id: intake
+    status_on_enter: exploring
+    produces: [_intake-brief.md]
+    template: _intake-brief
+    automation: HITL
+    gate: { kind: checklist, ref: gates/intake }
+  - id: distillation
+    status_on_enter: exploring
+    produces: [_intake-brief.md]
+    template: _intake-brief
+  - id: decomposition
+    status_on_enter: planning
+    produces: [_decomposition.md]
+    template: _decomposition
+  - id: storymap
+    status_on_enter: planning
+    produces: [_storymap.md]
+    template: _storymap
+  - id: implementation
+    status_on_enter: implementing
+    produces: []
+  - id: review
+    status_on_enter: implementing
+    produces: [_review.md]
+    template: _review
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: closure
+    status_on_enter: closeout
+    produces: [closure.md]
+    template: closure
+    harvest_kb: true
+  - id: retrospective
+    status_on_enter: archived
+    produces: [_retrospective.md]
+    template: _retrospective
+    harvest_kb: true
+transitions:
+  - on: changes-requested
+    from: review
+    to: implementation
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]
