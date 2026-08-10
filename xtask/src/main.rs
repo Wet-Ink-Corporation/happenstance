@@ -62,6 +62,7 @@ use std::process::{Command, ExitCode, Stdio};
 use anyhow::{Context, Result, bail};
 
 mod affected;
+mod lint_constitution;
 mod lints;
 mod package;
 mod proof;
@@ -459,6 +460,38 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The Rust constitution claims its examples compile and its citations
+        // resolve. This step discharges the citations and the corpus's own
+        // shape; the step below it discharges the examples.
+        name: "the Rust constitution is internally consistent",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-constitution",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // Its own step rather than a line in `tests`, for the reason
+        // `proof-artefact` has one: the workspace test step passes just as
+        // happily with one fewer doctest as with one more, so an atom whose
+        // examples quietly stopped being compiled would not show up there. And
+        // `RUSTDOCFLAGS` is the only way `-D warnings` reaches rustdoc — clippy
+        // does not lint doctests at all, so this is the whole of what the
+        // constitution's examples are held to.
+        name: "the constitution's examples compile",
+        program: "cargo",
+        args: &["test", "--locked", "-p", "xtask", "--doc"],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // The step above passes with every feature on, which is the one
         // configuration where every intra-doc link resolves. Three links to
         // `MemoryEventStore` were broken without `memory` for as long as this
@@ -653,6 +686,15 @@ fn main() -> ExitCode {
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
+            None => lint_constitution::run(lint_constitution::Mode::Check),
+            Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
+            Some(flag) => {
+                eprintln!("unknown flag for lint-constitution: {flag}");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+        },
         Some(other) => {
             eprintln!("unknown task: {other}");
             print_help();
@@ -761,6 +803,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
         "the testkit carries its own version",
+        "the Rust constitution is internally consistent",
     ])
 }
 

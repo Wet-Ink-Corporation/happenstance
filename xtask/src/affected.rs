@@ -211,7 +211,13 @@ pub(crate) fn affected_packages(
                 // `xtask`, whose lib target compiles it as doctests; the rest —
                 // `docs/`, `.github/`, `.bklg/`, `.kb/` — reaches no package.
                 // Anything unrecognised widens rather than narrows.
-                if path == "README.md" {
+                if path == "README.md" || path.starts_with("docs/rust/") {
+                    // Both are real dependencies of `xtask`, whose lib target
+                    // compiles them as doctests. `docs/rust/` is the Rust
+                    // constitution: its examples are only ever compiled through
+                    // that crate, so without this arm a docs-only change selects
+                    // nothing and the atoms are never built on the pull request
+                    // that breaks them.
                     direct.insert("xtask".to_owned());
                 } else if !is_inert(path) {
                     return members.iter().map(|member| member.name.clone()).collect();
@@ -640,6 +646,27 @@ mod tests {
     fn the_readme_selects_xtask() {
         let affected = affected_packages(&changed(&["README.md"]), &members());
         assert_eq!(affected, changed(&["xtask"]));
+    }
+
+    /// The Rust constitution's atoms are compiled the same way, and `docs/` is
+    /// otherwise inert — so without the arm this covers, editing an atom selects
+    /// no package and its examples are never built on the change that breaks
+    /// them. That is the whole of what makes the corpus's claim checkable.
+    #[test]
+    fn a_constitution_atom_selects_xtask() {
+        let affected = affected_packages(
+            &changed(&["docs/rust/21-send-is-not-inherited.md"]),
+            &members(),
+        );
+        assert_eq!(affected, changed(&["xtask"]));
+    }
+
+    /// And the neighbouring prose stays inert, so the arm above is a rule about
+    /// one directory rather than about `docs/`.
+    #[test]
+    fn the_constitution_arm_does_not_widen_to_all_of_docs() {
+        let affected = affected_packages(&changed(&["docs/adapter-shapes.md"]), &members());
+        assert!(affected.is_empty());
     }
 
     #[test]
