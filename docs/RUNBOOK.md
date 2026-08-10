@@ -65,8 +65,12 @@ Four things are kept from the revised runway, because they are the good part:
 4. Write the phase's ADRs first. Then the code they constrain.
 5. Build the phase's proof artefact. If you cannot, the phase is not done —
    say so in the session log rather than ticking the box.
-6. Re-run the gate. Tick the exit criteria. Add a dated session-log line.
-7. Commit the code and this file together.
+6. Reconcile the specification against the code the phase just wrote. Not the
+   MUSTs — the prose and citations underneath them. See
+   [Between 5 and 6](#between-5-and-6--the-reconciliation-nothing-owned) for
+   what skipping it cost.
+7. Re-run the gate. Tick the exit criteria. Add a dated session-log line.
+8. Commit the code and this file together.
 ```
 
 ## What the adversarial pass changed
@@ -3767,6 +3771,75 @@ done, because it is not this phase's:
   tests need not be named by clauses — and check 6 sweeps only the suite's own
   rules. If a later phase wants the encoding itself frozen rather than merely
   pinned, that is the clause to write and this is the test it would name.
+
+---
+
+## Between 5 and 6 — the reconciliation nothing owned
+
+Not a phase. A pass that had to happen and that this plan had not scheduled,
+recorded here so the next one is scheduled rather than noticed.
+
+**What it was.** Six commits on `redkiln-adoption`, `3c704d3` through `84dcc67`,
+reconciling [`SPECIFICATION.md`](architecture/SPECIFICATION.md) with the tree
+phases 4 and 5 produced. Sixteen clauses stated things about the code that were
+false — `AppendCondition` described as having public fields after VT-30 made
+`guards` private, `ReadOptions` described as having no upper bound beside a `to`
+that shipped, `SequencePosition::next` described as `saturating_add` after it
+became `checked_add`. Nine documentation MUSTs that `[FROZEN]` clauses impose on
+`happenstance-core`'s own doc comments had never been discharged; five tests that
+clauses name did not exist. The evidence is
+[`docs/evaluation/phase-4-5-reconciliation.md`](evaluation/phase-4-5-reconciliation.md).
+
+**Why nothing caught it.** `check_citations` required a citation to be
+path-qualified *and* name Rust or a manifest. Of 338 citations, 84 satisfied both.
+The other 254 — 200 bare file names, 56 into Markdown — were never parsed, so the
+step reported "no problems found" over a quarter of the corpus. It now reads 358
+and states its coverage in the summary line, which is the half of that change
+worth keeping: **a check that does not say what fraction it sees cannot be
+distinguished from one that sees all of it.**
+
+**Why this file did not schedule it.** The last reconciliation was phase 3's —
+ADR-0008's four amendments and phase 2's fourteen falsified claims, pooled there
+because that phase was already opening §6 and §7. Phases 4 and 5 were the two
+largest changes to the contract in the plan and neither carried an equivalent
+item. The rule that would have caught it is already written down, at the end of
+[the ADR queue](#the-adr-queue): *a phase's clause range and the union of its
+ADRs' clause ranges are two numbers, and nothing checks that they are equal.*
+Nothing implements it either.
+
+**So it becomes a standing exit criterion.** Every phase from 6 onward, before
+its box is ticked:
+
+- [ ] Every clause the phase's ADRs discharge has been read against the code as
+      it now stands, not as it stood when the clause was written. A clause whose
+      supporting prose describes a superseded implementation is a defect even
+      when its MUST is untouched.
+- [ ] The phase's clause range and the union of its ADRs' clause ranges are
+      computed and compared.
+- [ ] `cargo xtask spec-trace`'s citation count has not fallen, and any clause the
+      phase froze names a rule that exists or is marked `†`.
+
+**What it deliberately did not do.** It wrote no ADR. Seven findings needed one
+and are recorded rather than decided — the sharpest being that
+`k_disjoint_boundaries_admit_exactly_k_commits` enforces the central DCB
+independence proposition and no clause states it; the word "disjoint" does not
+occur in the specification. Two are held in `UNCLAIMED_PENDING_ADR` in
+`xtask/src/spec_trace.rs`, which prints them on every green run. The rest are in
+[`.kb/_intake/gaps-owed-a-decision.md`](../.kb/_intake/gaps-owed-a-decision.md)
+for the next ADR pass.
+
+**Session log**
+
+- **2026-08-10.** Audited all 338 citations across two parallel passes and an
+  adversarial refutation; 128 pointed at a different item than the sentence citing
+  them claimed. Repaired ~130, discharged nine documentation MUSTs, wrote the five
+  missing tests, widened check 6 to all three rule files, and landed a content
+  anchor that immediately found two more the sweep had just repaired into the
+  wrong place. Independently corroborated by
+  [`review-citation-drift.md`](evaluation/review-citation-drift.md), written the
+  same day from the `docs/rust/` work, which found six of the same citations and
+  recommended the same remedy. Two passes converging on one root cause is the
+  argument that it is structural.
 
 ---
 

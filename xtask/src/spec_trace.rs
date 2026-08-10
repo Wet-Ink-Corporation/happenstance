@@ -373,11 +373,21 @@ fn check_citations(
 
 /// How far from the cited line the subject may sit before the citation is wrong.
 ///
-/// The same twelve `docs/rust`'s own citation lint uses, and for the same
-/// reason: an anchor is a claim about *what* is at a location, and a doc comment
-/// growing above an item must not red the gate. This is the property that makes
-/// the check survivable — a content hash would fail on every ordinary edit and
-/// the refresh command would become a reflex nobody reads.
+/// Twelve, where `docs/rust`'s own citation lint uses ten
+/// (`lint_constitution.rs:111`) — wider because a derived anchor has further to
+/// travel than a written one. There the anchor is quoted beside the line and
+/// names the exact text; here it is the identifier the prose happened to use,
+/// which may sit a few lines from the item's `fn` line.
+///
+/// The reason for a window at all is the same in both: an anchor is a claim
+/// about *what* is at a location, and a doc comment growing above an item must
+/// not red the gate. That is the property that makes the check survivable — a
+/// content hash fails on every ordinary edit, and its refresh command becomes a
+/// reflex nobody reads.
+///
+/// (This comment claimed the two constants were equal until it was checked. A
+/// citation-drift defect inside the citation-drift check is worth leaving a note
+/// about rather than quietly correcting.)
 const ANCHOR_SLACK: usize = 12;
 
 /// Citations that are deliberately not about the thing beside them.
@@ -2106,9 +2116,15 @@ fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
     let (subj_line, s) = spans.get(i.checked_sub(1)?)?;
 
     // Only the span *immediately* before, and only on the citation's own line or
-    // the one above it. The first version of this walked back up to four spans
-    // and reported seventy failures out of two hundred and sixty-two, nearly all
-    // of them the same shape: a sentence with no backticked subject at all —
+    // the one above it. Four attempts got here, and the numbers are the argument
+    // for how narrow it ended up: walking back up to four spans reported **118
+    // of 316 anchored**; excluding `.md` targets and searching the whole cited
+    // range rather than its first line took it to **70 of 262**; this
+    // restriction took it to 10; declining when the subject appears nowhere in
+    // the cited file took it to 2, and both of those were real defects.
+    //
+    // Nearly every false report was one shape: a sentence with no backticked
+    // subject at all —
     // "the prohibition on arithmetic is already documented at `event.rs:215-217`"
     // — where reaching back far enough always finds *some* identifier, and it
     // belongs to the previous sentence. A derived anchor is only worth having

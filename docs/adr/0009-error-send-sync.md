@@ -12,7 +12,7 @@
 Both ports declare the same thing, one line apart in two files:
 
 ```rust
-type Error: core::error::Error + 'static;   // store.rs:100, projection.rs:73
+type Error: core::error::Error + 'static;   // store.rs:101, projection.rs:90
 ```
 
 No `Send`, no `Sync`. ES-6 asks whether that should change, and it is the highest
@@ -25,16 +25,16 @@ from the same file. This ADR decides it by compiling four things, because the
 question turned out to have a shape neither of them had noticed.
 
 **Why it could not be settled before now.** The two in-tree "confirmations" were
-free by construction: `MemoryStoreError` is uninhabited (`memory.rs:143-145`) and
-`SqliteEventStoreError` was a single placeholder variant. Neither could fail the
-bound if the bound were wrong. Phase 2 built the instrument that can —
-`happenstance-cloudflare`, whose error holds an `Rc<str>` and is genuinely
-`!Send`.
+free by construction: `MemoryStoreError` is uninhabited
+(`memory.rs:291 (pub enum MemoryStoreError)`) and `SqliteEventStoreError` was a
+single placeholder variant. Neither could fail the bound if the bound were
+wrong. Phase 2 built the instrument that can — `happenstance-cloudflare`, whose
+error holds an `Rc<str>` and is genuinely `!Send`.
 
 ### Four things that were compiled
 
 **1. The bound is nearly free, and the exception is the whole point.** Adding
-`+ Send + Sync` to `store.rs:100` and running
+`+ Send + Sync` to `store.rs:101 (type Error)` and running
 `cargo check --workspace --all-features`: **every crate compiles except
 `happenstance-cloudflare`**, which fails with four `error[E0277]`.
 
