@@ -231,7 +231,7 @@ bare `eventum` name on crates.io belongs to an unrelated crate, dormant since
 2020, which forced an awkward layout — prefixed crates only, and a `-core` suffix
 that existed for no reason but the collision. `happenstance` is free, so the
 contract crate simply takes the name. Nothing had been published, so no release
-is affected; see [ADR-0005](.kb/decision/0005-rename-to-happenstance.md).
+is affected; see [ADR-0005](docs/adr/0005-rename-to-happenstance.md).
 
 ## Licence
 

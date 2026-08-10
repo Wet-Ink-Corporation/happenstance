@@ -1,7 +1,5 @@
-//! The gate's grep-shaped lints (CF-6, CF-29, CF-32, CF-33; D12, which has no
-//! clause — ADR-0016 §14 gives it a lint rather than a WF-13; and the ADR-path
-//! check, which has no clause either and belongs to the repository's layout
-//! rather than to its contract).
+//! The gate's five grep-shaped lints (CF-6, CF-29, CF-32, CF-33, and D12, which
+//! is the one with no clause — ADR-0016 §14 gives it a lint rather than a WF-13).
 //!
 //! # Why a grep is in the gate at all
 //!
@@ -14,12 +12,7 @@
 //! *not* verify, because a check whose limits are undocumented is read as a
 //! guarantee.
 //!
-//! # The one thing most of them share
-//!
-//! The ADR-path check is the exception and reads raw bytes on purpose: prose
-//! naming the old directory is as wrong as a link to it, since both tell a reader
-//! to look somewhere that does not exist. Everything below it matches on Rust
-//! source, where the opposite holds.
+//! # The one thing they all share
 //!
 //! Three of the four match on Rust source, and prose about a construct reads
 //! exactly like the construct. `concurrency.rs` explains at length why CF-33
@@ -657,159 +650,6 @@ pub(crate) fn no_position_literals() -> Result<()> {
         "CF-6: no position-shaped literals in {} rule file(s)",
         RULE_FILES.len()
     );
-    Ok(())
-}
-
-/// The path the ADRs used to live at, and must never be referenced by again.
-const OLD_ADR_DIR: &str = "docs/adr/"; // superseded by .kb/decision/
-
-/// Where they live now, named here so the failure message can say it.
-const NEW_ADR_DIR: &str = ".kb/decision/";
-
-/// Directories this lint does not walk.
-///
-/// `target/` and `.git/` for cost; `.bklg/` because a backlog item may quote a
-/// historical path while describing the migration itself, and `CHANGELOG.md` for
-/// the same reason one level up — a changelog entry describing the move has to be
-/// able to say what moved.
-const ADR_PATH_SKIP: &[&str] = &[
-    "target",
-    ".git",
-    ".bklg",
-    ".redkiln",
-    ".idea",
-    ".claude",
-    "node_modules",
-];
-
-/// No file references the ADRs at their old `docs/adr/` path, now `.kb/decision/`.
-///
-/// # Why this is a gate step and not a one-time edit
-///
-/// The ADRs moved into `.kb/decision/` when redkiln was adopted, and 75 references
-/// across 29 files moved with them — in `SPECIFICATION.md`, in `CLAUDE.md`, in
-/// three crate READMEs, and as rustdoc link definitions in four crate sources and
-/// two `xtask` modules. Nothing else in the gate would notice a new one: a
-/// markdown link to a path that does not exist renders as a link and resolves to a
-/// 404, and rustdoc's `-D warnings` covers *intra-doc* links, not raw relative
-/// paths. So the failure mode is silent, gradual, and only visible to a reader who
-/// clicks.
-///
-/// It is a whole-repository scan rather than a list of the 29 files, because the
-/// files that will get this wrong are the ones nobody has written yet.
-///
-/// # What it does not verify
-///
-/// That the new paths *resolve*. A reference to `.kb/decision/0099-invented.md`
-/// passes this check happily. It also reads raw bytes rather than code, so a
-/// sentence about the old layout inside a comment fires exactly like a live link
-/// would — deliberately, since the remedy in both cases is to say `.kb/decision/`.
-/// The trees where a historical path is legitimately quoted are skipped wholesale;
-/// see [`ADR_PATH_SKIP`].
-///
-/// The exemption below is per **line**, which has a cost worth stating because it
-/// is met immediately: a wrapped sentence naming the old path on one line and the
-/// new one on the next still fires. Prose that discusses the move has to keep both
-/// names on a single line. Widening the window to neighbouring lines would make the
-/// check fuzzy in exchange for prettier paragraphs, which is the wrong trade for a
-/// gate step.
-///
-/// # Errors
-///
-/// Returns an error if the workspace cannot be walked, or if any file outside the
-/// skipped trees still names the old directory.
-pub(crate) fn no_old_adr_paths() -> Result<()> {
-    let root = workspace_root()?;
-    let mut problems = Vec::new();
-    let mut scanned = 0usize;
-
-    scan_tree_for_old_adr_paths(&root, &root, &mut scanned, &mut problems)?;
-
-    if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
-        bail!(
-            "{} reference(s) to `{OLD_ADR_DIR}`, which no longer exists — the ADRs are KB \
-             decision atoms at `{NEW_ADR_DIR}`. Rewrite each one: the two directories have the \
-             same number of path segments, so a `../../` prefix stays exactly as it is.",
-            problems.len()
-        );
-    }
-
-    println!("no reference to `{OLD_ADR_DIR}` in {scanned} scanned file(s)");
-    Ok(())
-}
-
-/// Walk `dir`, recording every line naming [`OLD_ADR_DIR`].
-///
-/// # Errors
-///
-/// Returns an error if a directory cannot be read. An unreadable *file* is
-/// skipped rather than fatal: the walk reaches binaries and whatever an editor
-/// has left half-written, and neither is this lint's business.
-fn scan_tree_for_old_adr_paths(
-    root: &Path,
-    dir: &Path,
-    scanned: &mut usize,
-    problems: &mut Vec<String>,
-) -> Result<()> {
-    let entries =
-        fs::read_dir(dir).with_context(|| format!("reading directory {}", dir.display()))?;
-
-    for entry in entries {
-        let entry = entry.with_context(|| format!("walking {}", dir.display()))?;
-        let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-
-        if path.is_dir() {
-            if !ADR_PATH_SKIP.contains(&name.as_ref()) {
-                scan_tree_for_old_adr_paths(root, &path, scanned, problems)?;
-            }
-            continue;
-        }
-
-        // Extension-filtered rather than content-sniffed: the references live in
-        // prose, in Rust doc comments and in manifests, and every other file type
-        // in this tree is either generated or binary.
-        let interesting = matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("rs" | "md" | "toml" | "yml" | "yaml")
-        );
-        if !interesting || name == "CHANGELOG.md" {
-            continue;
-        }
-
-        let Ok(body) = fs::read_to_string(&path) else {
-            continue;
-        };
-        *scanned += 1;
-
-        let shown = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .display()
-            .to_string();
-        for (number, line) in body.lines().enumerate() {
-            // A line naming BOTH paths is a line *about* the move — this lint's own
-            // documentation, its failure message, a migration note. A stale
-            // reference names only the old one, and that is the whole difference.
-            //
-            // This is the exemption rather than a list of skipped files, and the
-            // choice is the one `code_lines` above is about. The failure mode of a
-            // raw-byte lint is that it fires on the sentence explaining why it
-            // exists, and the two tempting remedies are to delete the sentence or to
-            // exclude the file. Excluding `lints.rs` and `main.rs` would have blinded
-            // this check to the two modules that carried rustdoc link definitions to
-            // the old path in the first place — the exact files it most needs to
-            // watch.
-            if line.contains(OLD_ADR_DIR) && !line.contains(NEW_ADR_DIR) {
-                problems.push(format!("{}:{}: {}", shown, number + 1, line.trim()));
-            }
-        }
-    }
-
     Ok(())
 }
 

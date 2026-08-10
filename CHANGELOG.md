@@ -32,7 +32,7 @@ not the same as what a user needed to be told.
   `publish = false`, so nothing here changes what a consumer sees — but the ports
   have now been disagreed with by five storage shapes instead of one, and
   [`docs/adapter-shapes.md`](docs/adapter-shapes.md) records what each one said.
-- [ADR-0009](.kb/decision/0009-error-send-sync.md), settling ES-6 — the highest
+- [ADR-0009](docs/adr/0009-error-send-sync.md), settling ES-6 — the highest
   blast-radius open question in the workspace, and the last one that was
   semver-visible. **`Error` keeps its bound**; the stronger property becomes a
   marker trait that generic code opts into, and which turns out not to need the
@@ -66,7 +66,7 @@ not the same as what a user needed to be told.
   `wasm32-unknown-unknown`, and a gate step that type-checks the harnesses for
   that target on every run. The two are different claims: `#[tokio::test]`
   type-checks for wasm32 and then cannot run there.
-- [ADR-0008](.kb/decision/0008-one-derivation-for-both-ports.md), which puts
+- [ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md), which puts
   `ProjectionStore` under the same derivation scheme as `EventStore` — it had
   carried the identical construction since it was written and appeared in no ADR
   at all — and states what a provided body owes both flavours.
@@ -334,7 +334,7 @@ not the same as what a user needed to be told.
     that, renaming the field would leave the check printing green for ever.
 
 - **A mutant registry, and the suite's proof that it discriminates**
-  ([ADR-0010](.kb/decision/0010-the-suite-must-prove-itself.md)). Fifty-two stores
+  ([ADR-0010](docs/adr/0010-the-suite-must-prove-itself.md)). Fifty-two stores
   in `crates/happenstance-testkit/tests/mutation_coverage/`: fifty wrong
   implementations, each naming the real adapter shape that makes it plausible,
   and two *conformant variants* that must pass everything. Each is declared as
@@ -555,7 +555,7 @@ not the same as what a user needed to be told.
   saw it; and two needed nothing but the observation that a rule can supply its
   own pause point by polling a stream once, which is what ADR-0011 corrected. Each
   ships with the wrong implementation it rejects, and
-  [ADR-0011](.kb/decision/0011-read-laziness-and-isolation.md) is the decision behind
+  [ADR-0011](docs/adr/0011-read-laziness-and-isolation.md) is the decision behind
   all nine.
 
   - **`read_to_is_inclusive`** — an adapter that accepts `ReadOptions` by value,
@@ -965,7 +965,7 @@ not the same as what a user needed to be told.
   `crates/happenstance-testkit/tests/local_conformance.rs`, and the contract is
   written out at the top of `crates/happenstance-testkit/src/registry.rs`.
 - **The contract crate is now `happenstance-core`; `happenstance` is the typed
-  layer** ([ADR-0006](.kb/decision/0006-bare-name-to-the-typed-layer.md)). Today
+  layer** ([ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)). Today
   `happenstance` re-exports the contract unchanged, so it is published from the
   start and `cargo add happenstance` is true throughout. Adapter authors should
   depend on `happenstance-core`.
@@ -991,7 +991,7 @@ not the same as what a user needed to be told.
   graph at all, and nothing was checking that the guard held.
 
 - **The wire format changed, and anything written under `serde` before this
-  release is a different document now** ([ADR-0016](.kb/decision/0016-the-wire-format.md)).
+  release is a different document now** ([ADR-0016](docs/adr/0016-the-wire-format.md)).
   There is no compatibility arm and none is offered: nothing publishable has
   shipped and no peer is deployed, so this is the last release in which that
   is true. Concretely — `Event`, `QueryItem` and `Guard` previously omitted a
@@ -1015,7 +1015,7 @@ not the same as what a user needed to be told.
 
 - **`happenstance` and `happenstance-core`'s READMEs promised "MSRV 1.85,
   checked in CI".** Phase 2 raised the floor to 1.97.1
-  ([ADR-0029](.kb/decision/0029-msrv-raised-to-1-97-1.md)) and neither README moved
+  ([ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md)) and neither README moved
   with it, so the one artefact `cargo package` ships to a reader who has not
   cloned the repository carried a compatibility promise twelve minor versions
   below the manifest's own `rust-version`. Nothing checks a README's prose

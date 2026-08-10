@@ -1,7 +1,7 @@
 # Review: crate layout, features, semver surface, supply chain, ADR-0006
 
 **Lens:** packaging / features / semver / supply chain / CI gate / release readiness
-**Date:** 2026-08-05 · **Tree:** `main` @ `9fd2337` (dirty: modified docs, untracked `.idea/`, `.mcp.json`, `docs/RUNBOOK.md`, `.kb/decision/0006-*`)
+**Date:** 2026-08-05 · **Tree:** `main` @ `9fd2337` (dirty: modified docs, untracked `.idea/`, `.mcp.json`, `docs/RUNBOOK.md`, `docs/adr/0006-*`)
 
 Everything below was executed against the tree, not inferred. Commands run: `cargo xtask ci`
 (green, 12s warm), `cargo hack check --workspace --feature-powerset --no-dev-deps` (22 combos,

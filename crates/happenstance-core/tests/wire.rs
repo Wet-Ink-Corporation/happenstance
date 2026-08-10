@@ -35,7 +35,7 @@
 //!    mirror carrying D1's attributes and asserts it still decodes a neighbour's
 //!    bytes into its own `metadata` field, silently.
 //!
-//! [ADR-0016](../../../.kb/decision/0016-the-wire-format.md) is the decision;
+//! [ADR-0016](../../../docs/adr/0016-the-wire-format.md) is the decision;
 //! `SPECIFICATION.md` §7's WF-2, WF-5, WF-7, WF-9, WF-10 and WF-12 are the
 //! clauses.
 

@@ -112,7 +112,7 @@ what is forbidden and what would prove it wrong. Nothing here is aspirational:
 each clause either constrains an implementation that can fail it, or is marked
 `[NON-NORMATIVE]` and demoted to prose.
 
-**Its relationship to `.kb/decision/`.** An ADR records *why* a decision was taken
+**Its relationship to `docs/adr/`.** An ADR records *why* a decision was taken
 and *when*. This document records *what is true now*. The two are different
 tenses of the same design, and they drift, because a decision is recorded at the
 moment it is taken and executed at some later moment or not at all.
@@ -130,7 +130,7 @@ reads the git history in three years. What an ADR may not do is silently continu
 to describe the world after this document has recorded a different one.
 
 The drift is not hypothetical, and the worked example is this document's own crate
-names. [ADR-0006](../../.kb/decision/0006-bare-name-to-the-typed-layer.md) decided that
+names. [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md) decided that
 `happenstance-runtime` ceases to exist, that the bare name goes to the typed layer
 and that the contract crate becomes `happenstance-core` — and for the length of a
 phase none of that was true on disk. `ls crates/` returned `happenstance-runtime`,
@@ -146,9 +146,9 @@ machine-checked rather than proof-read.
 
 Three of the seven ADRs are marked *"accepted — provisional"* in their own front
 matter for exactly this reason —
-[0001:5-12](../../.kb/decision/0001-async-port-flavours.md),
-[0003:5-12](../../.kb/decision/0003-opaque-payloads.md) and
-[0004:5-12](../../.kb/decision/0004-edition-and-msrv.md) each say they were authored before
+[0001:5-12](../adr/0001-async-port-flavours.md),
+[0003:5-12](../adr/0003-opaque-payloads.md) and
+[0004:5-12](../adr/0004-edition-and-msrv.md) each say they were authored before
 any of the code they constrain existed. Their provisionality is discharged here,
 clause by clause, against code that now exists and scenarios that have been walked
 against it.
@@ -481,7 +481,7 @@ walked line by line against the contract on disk. Its closing section, *"What th
 six agree on"* (`:1873-1912`), is the convergence signal — nine holes found
 independently by dissimilar deployments, and one thing the design got right.
 
-**`.kb/decision/0001` through `0007`** are the decisions on record, with the tense
+**`docs/adr/0001` through `0007`** are the decisions on record, with the tense
 rule of §1.1 applied.
 
 **Superseded, kept for the record only.**
@@ -2619,10 +2619,10 @@ mimicking the `unsafe impl`. Nor is that hatch available here: the workspace set
 Compiled against that instrument, `+ Send + Sync` costs exactly one crate — the
 `wasm32` target the two-trait design exists to serve — and ES-5 leaves no
 mechanism to scope it to the native flavour.
-[ADR-0009](../../.kb/decision/0009-error-send-sync.md) therefore settles the clause the other
+[ADR-0009](../adr/0009-error-send-sync.md) therefore settles the clause the other
 way: **`Error` keeps `core::error::Error + 'static` on both ports and both
 flavours, and the stronger property becomes a marker trait that generic code asks
-for** (`.kb/decision/0009-error-send-sync.md:117-126`). Nothing is left to time
+for** (`docs/adr/0009-error-send-sync.md:117-126`). Nothing is left to time
 against publication. The bound would have been semver-visible and one-way; a
 marker declared downstream is additive, and needs nothing from the contract
 crate.
@@ -2634,7 +2634,7 @@ crate.
   property of what it holds across a suspension point, so a future with no
   suspension point is `Send` whatever it returns, and a rule that spawns `append`
   and reports "it compiled" passes against an error that can never cross a
-  `JoinHandle` (`.kb/decision/0009-error-send-sync.md:98-115`).
+  `JoinHandle` (`docs/adr/0009-error-send-sync.md:98-115`).
 - **Cases:** E2E-53, E2E-52.
 - **Rejects:** deciding it by argument. Both prior documents did, in opposite
   directions, from the same file. The implementation the rule rejects is already
@@ -2664,7 +2664,7 @@ blanket impl without `error[E0119]` and passing every rule natively and on
 (`crates/happenstance-cloudflare/src/event_store.rs:146`) and
 `happenstance-neon`'s two (`event_store.rs:168`, `:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
-lifted on that basis at phase 1 (`.kb/decision/0001-async-port-flavours.md:5-6`);
+lifted on that basis at phase 1 (`docs/adr/0001-async-port-flavours.md:5-6`);
 what remains open, and is phase 9's, is whether a real platform SDK fits.
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
@@ -5440,7 +5440,7 @@ the identical construction to `store.rs:92`. ADR-0001 argued the scheme for
 `EventStore` alone and never mentioned this port, so until phase 2 the attribute
 appeared in no ADR at all: two ports with one construction between them and one
 ADR covering half of it. That gap is what this subsection was written to close,
-and [ADR-0008](../../.kb/decision/0008-one-derivation-for-both-ports.md) closed it by taking
+and [ADR-0008](../adr/0008-one-derivation-for-both-ports.md) closed it by taking
 both ports together. What the subsection holds open now is the *joint*-ness, not
 the omission. The *value* of the bound is section 3's and is not re-decided here.
 
@@ -5452,10 +5452,10 @@ The experiment this clause was held open for — one skeleton per adapter shape,
 declaring its real future and stream types with `todo!()` bodies, which is the
 only way to learn whether any real adapter produces a `!Sync` future — ran at
 phase 2, and both halves of the demand are now discharged in documents that hold
-both ports at once. [ADR-0008](../../.kb/decision/0008-one-derivation-for-both-ports.md)
+both ports at once. [ADR-0008](../adr/0008-one-derivation-for-both-ports.md)
 takes the derivation scheme for `EventStore` and `ProjectionStore` together and
 records where their consequences diverge;
-[ADR-0009](../../.kb/decision/0009-error-send-sync.md) does the same for the `Error` bound
+[ADR-0009](../adr/0009-error-send-sync.md) does the same for the `Error` bound
 (ES-6), and there the consequences do not diverge at all.
 **Rule:** none at adapter level; the ADR is the artefact.
 **Cases:** E2E-30, E2E-52, E2E-53.
@@ -5771,7 +5771,7 @@ port method `fn compensate(&self, losing: &Event) -> Event` forces the port to
 name — and therefore to know — a domain vocabulary, which is ADR-0003's whole
 prohibition arriving through a different door. The seam is a caller-supplied
 closure for the same reason ADR-0007's `pump` takes one
-(`.kb/decision/0007-projection-runner-decodes.md:62-67`): the caller knows the
+(`docs/adr/0007-projection-runner-decodes.md:62-67`): the caller knows the
 concrete domain and the port does not, and a higher-ranked `FnMut` lets the
 caller keep that knowledge without the port ever naming it.
 
@@ -5933,7 +5933,7 @@ Both make every adapter author — including the one writing a 200-line HTTP
 client — inherit the merge problem, and both make the conformance suite a test of
 a policy rather than of a transport. It is the same division of labour ADR-0007
 draws for the projection runner
-(`.kb/decision/0007-projection-runner-decodes.md:44-50`), and for the same reason:
+(`docs/adr/0007-projection-runner-decodes.md:44-50`), and for the same reason:
 "add a second peer" should be a runner configuration, not a breaking change to a
 published trait.
 
@@ -6019,7 +6019,7 @@ to carry is structurally unreachable from anything the port exposes. A peer
 that must parse opaque bytes to dedupe has broken ADR-0003 at the exact point
 ADR-0003 claims to win — and ADR-0003's own lift condition is
 *"`happenstance-sync` round-trips an event between two stores without
-deserialising its payload"* (`.kb/decision/0003-opaque-payloads.md:14-15`). A
+deserialising its payload"* (`docs/adr/0003-opaque-payloads.md:14-15`). A
 metadata-borne identity fails the ADR's own test.
 
 The exemplar was the sync crate's own proposal and it was withdrawn: the crate
@@ -6325,7 +6325,7 @@ Cases: E2E-41.
 
 *Rejects:* ADR-0007's `apply` signature as it currently stands, which hands the
 projection `Sequenced<Self::Event>`
-(`.kb/decision/0007-projection-runner-decodes.md:76-81`) — a value carrying exactly
+(`docs/adr/0007-projection-runner-decodes.md:76-81`) — a value carrying exactly
 the field a convergent fold must not touch. Handing a projection the one value
 that breaks it and documenting that it should not look is not a design; it is a
 comment. Removing the field from the convergent path makes the wrong program not
@@ -6708,7 +6708,7 @@ compensation without ever parsing a payload** — because every fact the decisio
 needed was in the `EventType`, the `Tags` and the condition `Query` that
 travelled with the batch. That is ADR-0003 surviving at the exact point most
 likely to break it, and ADR-0003 is explicitly provisional pending exactly this
-demonstration (`.kb/decision/0003-opaque-payloads.md:6-15`).
+demonstration (`docs/adr/0003-opaque-payloads.md:6-15`).
 
 It survives only because the vocabulary was built for it. So the property is not
 a consequence of the design; it is an **obligation on the domain**, and this
@@ -6859,7 +6859,7 @@ Recorded so that silence is never mistaken for agreement.
   through anything section 5 decided. It was ranked first by blast radius in
   `PRESSURE-TEST.md:481-492` and held open on evidence until phase 2 built an
   instrument that could fail the bound; ES-6 is now `[FROZEN]` and
-  [ADR-0009](../../.kb/decision/0009-error-send-sync.md) keeps
+  [ADR-0009](../adr/0009-error-send-sync.md) keeps
   `core::error::Error + 'static` on both ports and both flavours, putting the
   stronger property in a marker trait that generic code asks for. That answer was
   taken for the whole workspace at once, `SyncPeer` included, which is why this
@@ -6867,7 +6867,7 @@ Recorded so that silence is never mistaken for agreement.
   narrower and is not section 5's: whether `happenstance-core` ships the marker
   itself, and under what name — a surface question deferred to phase 4 with the
   capability question already answered
-  (`.kb/decision/0009-error-send-sync.md:210-213`).
+  (`docs/adr/0009-error-send-sync.md:210-213`).
 
 ---
 
@@ -7897,12 +7897,12 @@ the default multi-threaded `#[tokio::test]`, because the attribute expands to
 Cases: E2E-52, E2E-09, E2E-30.
 Rejects: ADR-0001's own provisional status, which this store is what retired. The
 ADR stated plainly that **no `!Send` implementation of these ports exists
-anywhere, not even a reference one** (`.kb/decision/0001-async-port-flavours.md:8-16`)
+anywhere, not even a reference one** (`docs/adr/0001-async-port-flavours.md:8-16`)
 and named this exact store as the cheapest proof that lifts it; until it existed,
 the two-flavour design's entire evidence base was a `cargo check` for `wasm32` — a
 compile of the trait, not of an implementation. `LocalMemoryEventStore` landed at
 phase 1 and the marker was lifted on 2026-08-06
-(`.kb/decision/0001-async-port-flavours.md:5-6`). What the clause forbids from here is
+(`docs/adr/0001-async-port-flavours.md:5-6`). What the clause forbids from here is
 deleting the store, or weakening it to a shape that would compile without the
 `Rc` — which is the same reversal arriving as a tidy-up. The store also carries
 E2E-09's re-entrancy question, which `MemoryEventStore` cannot:

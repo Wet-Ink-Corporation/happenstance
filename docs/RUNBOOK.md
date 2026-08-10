@@ -59,25 +59,15 @@ Four things are kept from the revised runway, because they are the good part:
 ## Session protocol
 
 ```
-1. `redkiln status` and `redkiln next`, then `git log --oneline -10`.
+1. Read the status table, then `git log --oneline -10`.
 2. Run `cargo xtask ci`. Establish the baseline is green before touching anything.
-3. Take the phase `redkiln next` reports as ready. It computes what step 3 used
-   to ask you to work out: an item is ready when nothing in its `blocked_by`
-   is outstanding.
-4. Write the phase's ADRs first — as `.kb/decision/` atoms. Then the code they
-   constrain.
+3. Pick the first phase that is not `done` and whose dependencies are `done`.
+4. Write the phase's ADRs first. Then the code they constrain.
 5. Build the phase's proof artefact. If you cannot, the phase is not done —
    say so in the session log rather than ticking the box.
 6. Re-run the gate. Tick the exit criteria. Add a dated session-log line.
-7. `redkiln record-links <id> --sha <checkpoint>` before the advance, then
-   `redkiln advance`. Commit the code and this file together.
+7. Commit the code and this file together.
 ```
-
-Step 7's order is not arbitrary. The sha of a commit containing the item file
-cannot be inside that item file, so `links.commits` records the *work* commit,
-which exists before the advance that files it. `verify.require_commit_provenance`
-is on, so a story that changed files inside its own declared boundary and recorded
-no sha does not advance.
 
 ## What the adversarial pass changed
 
@@ -151,56 +141,27 @@ turned out to be one DCB already provides.
 
 ## Status
 
-**State is no longer written here.** It lives in `.bklg/`, and `redkiln status`
-reports it. This table's `State` column was hand-edited prose that claimed to be
-current and could only be as current as the last person to remember it; the
-`Item` column below is the join to the thing that is.
-
-```console
-redkiln status          # the roll-up
-redkiln next            # what is actionable now, and why
-redkiln board           # the tree
-```
-
-The split, stated once because two documents describing one plan is how drift
-starts:
-
-- **This file owns the phase body** — the goal, the work items, the exit criteria,
-  the cases each phase makes writable, and the session log. That content is not
-  duplicated into the backlog; a project's intake brief summarises it and links
-  back here.
-- **The backlog owns the state** — which stage an item is at, what gate it is
-  waiting on, what blocks it, and what evidence has been recorded. None of that is
-  written here.
-
-Phases 0–5 have no item. They were done before redkiln was adopted, and
-back-filling them would fabricate a stage history that never happened; what they
-produced is in `.kb/` as decision, playbook and reference atoms.
-
-| # | Phase | Depends on | Item | Proof artefact |
+| # | Phase | Depends on | State | Proof artefact |
 |---|---|---|---|---|
-| 0 | [Ground clear](#phase-0--ground-clear) | — | — | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
-| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | — | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
-| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | — | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
-| 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | — | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
-| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | — | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
-| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | — | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
-| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | HS-P0001 | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
-| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | HS-P0002 | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
+| 0 | [Ground clear](#phase-0--ground-clear) | — | done | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
+| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
+| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
+| 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
+| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
+| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | **done** | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
+| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
+| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
-| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | HS-P0003 | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
-| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | HS-P0005 | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
-| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | HS-P0006 | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
-| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | HS-P0007 | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | HS-P0004 | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
-| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | HS-P0008 | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
-| 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | HS-P0009 | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
+| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
+| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
+| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
+| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
+| 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
-Phases 0–5 carry `—` in both the `Item` and the old state position: they are done,
-and they predate the backlog. Everything from 6 on carries the project id whose
-stage *is* the state — do not write a state word next to it, and do not hand-edit
-anything under `.bklg/`. The CLI is the only writer of an item's system
-frontmatter; `redkiln advance` is how a phase moves.
+State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
+place.
 
 ### The critical path
 
@@ -297,12 +258,12 @@ the session protocol reads out of the table.
 ## The ADR queue
 
 In the order they must be written, numbered **from 0008** —
-`.kb/decision/0007-projection-runner-decodes.md` is accepted on disk and dated
+`docs/adr/0007-projection-runner-decodes.md` is accepted on disk and dated
 2026-08-06, and both prior planning documents allocated 0007 a second time
 (`PRESSURE-TEST.md:254-262`). Each line is the single question that ADR answers;
 an ADR that cannot be stated as one question is two ADRs.
 
-Checked against `.kb/decision/` at this revision: 0001–0007 exist, 0008–0028 are free,
+Checked against `docs/adr/` at this revision: 0001–0007 exist, 0008–0028 are free,
 and no queued number collides with one on disk. ADR-0002 and ADR-0005 need no
 entry here despite phase 0 executing a rename that invalidates their content —
 both already carry a superseded status (`0002:3`, `0005:3`), which is what makes
@@ -318,16 +279,16 @@ scheduling defect.
 
 | ADR | Phase | The question it answers |
 |---|---|---|
-| ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](../.kb/decision/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
-| ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](../.kb/decision/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
-| **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](../.kb/decision/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
-| ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](../.kb/decision/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
+| ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](adr/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
+| ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
+| **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
+| ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](adr/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
 | **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13; **written**, and it also discharges ES-8, ES-9, ES-14 – ES-16 and VT-26 – VT-31's read half, which the scope below did not name) |
 | **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24; **written**, and it also discharges ES-25 – ES-29, ES-37 and VT-30) |
 | **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38; **written**, and it also discharges ES-30 – ES-32's head/count questions, ES-35 and ES-40) |
 | **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10; **written**, and it also adds ES-41 and adopts **VT-2**, which this queue assigned to nobody) |
 | **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25; **written**) |
-| ~~**0016**~~ | 5 | ~~What is the wire format, and whose format is it? (WF-1 – WF-12)~~ **Written**, as [ADR-0016](../.kb/decision/0016-the-wire-format.md), and accepted. The format is **private to happenstance**, which is what makes every reversal in it free rather than breaking. WF-1's interoperability half stays `[DEFERRED]` on a *stronger* reason than the one its marker gave. The ADR adds no clause, removes none and moves no marker — D12's fix gets an xtask manifest lint rather than a WF-13 (§14), so §1.3's census is unchanged |
+| ~~**0016**~~ | 5 | ~~What is the wire format, and whose format is it? (WF-1 – WF-12)~~ **Written**, as [ADR-0016](adr/0016-the-wire-format.md), and accepted. The format is **private to happenstance**, which is what makes every reversal in it free rather than breaking. WF-1's interoperability half stays `[DEFERRED]` on a *stronger* reason than the one its marker gave. The ADR adds no clause, removes none and moves no marker — D12's fix gets an xtask manifest lint rather than a WF-13 (§14), so §1.3's census is unchanged |
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
 | **0019** | 6 | What happens when `apply` fails? (PS-26 – PS-30) |
@@ -1338,7 +1299,7 @@ take.
 
 - [x] ADR-0008 written, quoting the compiled evidence for the derived-versus-hand-written
       choice, and covering both ports in one decision (PS-35).
-      [ADR-0008](../.kb/decision/0008-one-derivation-for-both-ports.md). See the caveat above
+      [ADR-0008](adr/0008-one-derivation-for-both-ports.md). See the caveat above
       on what "the choice" turned out to be.
 - [x] ADR-0001's `provisional` marker removed, or ADR-0001 superseded. Its full
       proof is cited forward to phase 9. Removed, with the banner rewritten to
@@ -1595,7 +1556,7 @@ ES-10 is frozen at phase 4 and an invariant nothing can afford is not an invaria
       any of them. `trybuild` is the only mechanism, and it stays phase 6's
       decision.
 - [x] ADR-0009 written, or ES-6 restated as deferred with the compiled reason.
-      [ADR-0009](../.kb/decision/0009-error-send-sync.md) — **written, and it settles rather
+      [ADR-0009](adr/0009-error-send-sync.md) — **written, and it settles rather
       than renews.** `Error` keeps its bound; the strength moves into a marker
       trait. Note what decided it, because it was not the question the phase body
       asked: the *derived* flavour does not imply a `Send` error either, so ES-6's
@@ -1732,7 +1693,7 @@ evidence half of E2E-24 (a `Batch` need not be a live transaction).
   remembers is one phase 6 will have to re-derive.
 
   *The MSRV moved, and the way it broke is the lesson.*
-  [ADR-0029](../.kb/decision/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.
+  [ADR-0029](adr/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.
   `libsqlite3-sys` uses `cfg_select!` in a **build script** and declares no
   `rust-version` — and neither do `rusqlite`, `sqlx`, `sqlx-core` or
   `sqlx-postgres`. Five of five. So `cargo hack --rust-version` cannot protect a
@@ -2186,7 +2147,7 @@ testkit's `proptest` feature, which is why the gate's invocation carries
 **Exit criteria**
 
 - [x] ADR-0010 written before the code it constrains.
-      [ADR-0010](../.kb/decision/0010-the-suite-must-prove-itself.md). Two corrections it
+      [ADR-0010](adr/0010-the-suite-must-prove-itself.md). Two corrections it
       makes to clauses this phase will re-spell: CF-23's parameterised wrapper is
       justified by **`wasm32` portability, not `Send`-ness** — `#[tokio::test]`
       drives a `!Send` store perfectly well, because `Runtime::block_on` is not
@@ -4648,27 +4609,27 @@ Names are the post-phase-0 ones.
 1. **Never introduce `#[async_trait]`.** It injects `+ Send`, which makes the
    `wasm32` / Workers target impossible. Ports are defined once without a `Send`
    bound and `trait_variant` derives the `Send` flavour.
-   ([ADR-0001](../.kb/decision/0001-async-port-flavours.md), ADR-0008)
+   ([ADR-0001](adr/0001-async-port-flavours.md), ADR-0008)
 2. **Never put `serde` in `happenstance-core`'s default features.** Payloads are
    opaque `Bytes`; the `serde` feature covers envelope types only.
    **This attaches to the ports crate, not to the string on the front of it** —
    after the rename, `happenstance` is the crate whose job *is* encoding and it
    depends on `serde` by design.
-   ([ADR-0003](../.kb/decision/0003-opaque-payloads.md), [ADR-0006](../.kb/decision/0006-bare-name-to-the-typed-layer.md))
+   ([ADR-0003](adr/0003-opaque-payloads.md), [ADR-0006](adr/0006-bare-name-to-the-typed-layer.md))
 3. **`EventStore::read` returns the stream at the top level and is not `async`.**
    Nesting it inside a future silently drops `+ Send` from the stream on the `Send`
    flavour, defeating the entire two-trait design. The unit test that asserts this
    is currently vacuous — it asserts on a concrete type, where auto-trait leakage
    makes it pass regardless — and **phase 1 replaces it with a generic one**. Until
    then this constraint protects a test that cannot fail.
-   ([ADR-0001](../.kb/decision/0001-async-port-flavours.md))
+   ([ADR-0001](adr/0001-async-port-flavours.md))
 4. **Bind `EventStore`, not `SendEventStore`, in generic code.** It is the weaker
    requirement and accepts both flavours. Import only one of the two names per
    module — having both in scope makes method calls ambiguous. Prefer
    `happenstance_core::prelude` once phase 4 ships it.
 5. **No let-chains.** Stable only from 1.88; the MSRV is 1.85 — but until first
    publish the MSRV is a *preference*, not a promise. Weigh it; do not obey it.
-   ([ADR-0004](../.kb/decision/0004-edition-and-msrv.md))
+   ([ADR-0004](adr/0004-edition-and-msrv.md))
 
 And the rules that outrank the rest, with the two amendments this plan adds:
 

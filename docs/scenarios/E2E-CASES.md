@@ -28,7 +28,7 @@ named in `crates/happenstance-sync/src/lib.rs:9-11` and does not exist. Those ar
 marked **⚠ crate does not exist**.
 
 **⚠ `happenstance`** means something narrower, because that crate *does* exist.
-After [ADR-0006](../../.kb/decision/0006-bare-name-to-the-typed-layer.md) the bare name
+After [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md) the bare name
 belongs to the **typed** layer, which is a facade over `happenstance-core` today:
 the crate is on disk, the surface these cases need is not. The contract — ports,
 types, errors, in-memory store — is `happenstance-core`, and that is what a

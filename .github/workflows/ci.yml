@@ -173,8 +173,6 @@ jobs:
             and ([.warnings[] | select(.kind == "process-drift")] | length) == 0
             and ([.warnings[] | select(.kind == "template-drift") | .file] | sort) == [
               ".redkiln/templates/_design.md",
-              ".redkiln/templates/_intake-brief.md",
-              ".redkiln/templates/discover.md",
               ".redkiln/templates/gates/discover.md",
               ".redkiln/templates/gates/intake.md",
               ".redkiln/templates/spec.md"

@@ -4,7 +4,7 @@
 //! design. `wasm32-unknown-unknown` is single-threaded: its futures are
 //! `!Send`, so a suite that had quietly settled on `#[tokio::test]` would be
 //! untestable there — which is the same failure mode
-//! [ADR-0001](../../../.kb/decision/0001-async-port-flavours.md) exists to prevent
+//! [ADR-0001](../../../docs/adr/0001-async-port-flavours.md) exists to prevent
 //! at the port level, reappearing one layer up in the test harness.
 //!
 //! It is also CF-20's guard. [`Fixture`](happenstance_testkit::Fixture) carries

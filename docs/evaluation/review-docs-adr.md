@@ -31,7 +31,7 @@ else registering `happenstance` on crates.io — and puts it in no phase at all.
 | "the manifest currently carries a comment saying this is missing" (per-crate README) | `RUNBOOK.md:435-437`, `ADR-0005:81-85` | **True.** `crates/happenstance/Cargo.toml` lines 11-13. |
 | Status table, 6 crates and their states | `README.md:63-70` | **True**, including "stub, open questions written down" — the stubs really do carry design notes. |
 | CLAUDE.md repository map vs the tree | `CLAUDE.md:26-36` | **True today**, false after the rename (see §1.1). |
-| Every `.kb/decision/NNNN` link and every RUNBOOK anchor | all | **All resolve.** `#phase-7--publish-01`, `#standing-constraints`, `#release-hazard`, `#decision-ledger` all match their headings. |
+| Every `docs/adr/NNNN` link and every RUNBOOK anchor | all | **All resolve.** `#phase-7--publish-01`, `#standing-constraints`, `#release-hazard`, `#decision-ledger` all match their headings. |
 | Phase 0 state ("`.idea/` and `.mcp.json` undecided", "gate green at `9fd2337`") | `RUNBOOK.md:92,106` | **True.** Both are still untracked; `9fd2337` is HEAD. |
 
 ### 1.1 — CLAUDE.md names the wrong crate everywhere, and one constraint inverts
