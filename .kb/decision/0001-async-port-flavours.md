@@ -1,3 +1,26 @@
+---
+id: adr-0001-async-port-flavours
+title: "ADR-0001: Async ports in two flavours, `Send` and `!Send`"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  Ports are defined once with no `Send` bound and the `Send` flavour is derived by
+  `trait_variant`. `#[async_trait]` is never introduced, because it injects `+ Send`
+  and makes the wasm32 / Cloudflare Workers target impossible.
+depends_on: []
+related:
+  - adr-0008-one-derivation-for-both-ports
+  - governance-never-async-trait
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-core/src/store.rs
+last_reviewed: 2026-08-09
+adr_id: ADR-0001
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0001: Async ports in two flavours, `Send` and `!Send`
 
 - **Status:** accepted

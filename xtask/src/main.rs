@@ -18,7 +18,10 @@
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; five
 //! file-reading lints described below; a sixth manifest lint for D12, kept out
-//! of that group of five because it names no clause (ADR-0016 §14); and
+//! of that group of five because it names no clause (ADR-0016 §14); a seventh
+//! that fails on any reference to `docs/adr/`, the ADRs' home before `.kb/decision/`,
+//! and which names no clause either because it is about this repository's
+//! layout rather than about the contract; and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
@@ -53,7 +56,7 @@
 //! that silently updates `Cargo.lock` is a gate that tested a dependency graph
 //! nobody committed.
 //!
-//! [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
+//! [ADR-0001]: ../../.kb/decision/0001-async-port-flavours.md
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -391,6 +394,27 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The ADRs are KB decision atoms at `.kb/decision/` since redkiln was
+        // adopted, and 75 references across 29 files moved with them. Nothing
+        // else here would notice a new one: a markdown link to a missing path
+        // still renders as a link, and rustdoc's `-D warnings` covers intra-doc
+        // links rather than raw relative paths. The failure is silent and only a
+        // reader who clicks ever finds it.
+        name: "no reference to the old docs/adr path",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-adr-paths",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // CF-29's changelog half. Its first run found twenty-five of fifty-five
         // rules with no entry — including every one of the founding rules, which
         // had never been named anywhere a consumer reads.
@@ -652,6 +676,7 @@ fn main() -> ExitCode {
         Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
+        Some("lint-adr-paths") => lints::no_old_adr_paths(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
         Some(other) => {
             eprintln!("unknown task: {other}");
@@ -699,12 +724,14 @@ fn print_help() {
     println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
     println!("         what the checker computes, and fails when they differ. --write");
     println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the five file-reading checks four clauses name as gate");
+    println!("  lints  Run just the six file-reading checks four clauses name as gate");
     println!("         steps: CF-33 (no clock in the suite), CF-6 (no literal position");
     println!("         values), CF-29 (a changelog entry per rule), CF-32 (the testkit's");
-    println!("         own version key), and §7.4's disposed-rule check. Each is also");
-    println!("         available on its own as lint-clock, lint-position-literals,");
-    println!("         lint-changelog, lint-testkit-version and lint-retired-rules.");
+    println!("         own version key), §7.4's disposed-rule check, and the ADR-path check");
+    println!("         (no file names docs/adr/, the ADRs' home before .kb/decision/). Each is");
+    println!("         also available on its own as lint-clock, lint-position-literals,");
+    println!("         lint-changelog, lint-testkit-version, lint-retired-rules and");
+    println!("         lint-adr-paths.");
     println!("  package-check");
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
@@ -738,7 +765,7 @@ fn print_help() {
 /// wasm32 and then cannot run there, which is a failure no `cargo check` of
 /// `happenstance-core` can see.
 ///
-/// [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
+/// [ADR-0001]: ../../.kb/decision/0001-async-port-flavours.md
 fn wasm_steps() -> Vec<&'static Step> {
     steps_named(&[
         "wasm32 build of the contract crate",
@@ -761,6 +788,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
         "the testkit carries its own version",
+        "no reference to the old docs/adr path",
     ])
 }
 

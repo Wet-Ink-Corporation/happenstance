@@ -1,3 +1,27 @@
+---
+id: adr-0012-append-shape-and-preconditions
+title: "ADR-0012: `append` keeps its borrowed batch, and phase 4 declines the one question it cannot measure"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The shape of `append` and its preconditions — who owns the batch, what an empty batch
+  is, whether a batch may violate its own condition, and what a dropped future may have
+  done. Accepted with one part left provisional. Discharges ES-18 through ES-29, ES-37
+  and VT-30.
+depends_on:
+  - adr-0001-async-port-flavours
+related:
+  - adr-0016-the-wire-format
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0012
+phase: 4
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0012: `append` keeps its borrowed batch, and phase 4 declines the one question it cannot measure
 
 - **Status:** accepted — with **one** part left provisional. ES-17 (batch

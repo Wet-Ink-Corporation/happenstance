@@ -1,3 +1,24 @@
+---
+id: adr-0015-validated-identifiers-and-store-limits
+title: "ADR-0015: Validated identifiers, byte equality, and the two kinds of bound"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  How a validated identifier is constructed, that `Tag` equality is byte equality, and
+  the difference between a bound the contract sets and a limit a store happens to have.
+  Discharges VT-14 through VT-25.
+depends_on: []
+related: []
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0015
+phase: 4
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0015: Validated identifiers, byte equality, and the two kinds of bound
 
 - **Status:** accepted

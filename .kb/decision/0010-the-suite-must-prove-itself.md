@@ -1,3 +1,27 @@
+---
+id: adr-0010-the-suite-must-prove-itself
+title: "ADR-0010: The conformance suite's own proof obligation"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  Every conformance rule must be demonstrated to fail against a named wrong
+  implementation, the fixture takes a stated shape, and rules are emitted through a
+  registry so non-tokio runtimes inherit them. This is the decision behind the standing
+  rule that a rule no adapter can fail is decorative.
+depends_on: []
+related:
+  - playbook-adding-a-conformance-rule
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-testkit/tests/mutation_coverage.rs
+last_reviewed: 2026-08-09
+adr_id: ADR-0010
+phase: 3
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0010: The conformance suite's own proof obligation
 
 - **Status:** accepted

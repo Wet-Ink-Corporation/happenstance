@@ -184,7 +184,7 @@ exist is the expensive order to do this in.
 
 ## Gap: snapshotting (decision-model state) is absent and also untracked
 
-Not a single line in `docs/adr/`, `docs/RUNBOOK.md`, or any crate's module
+Not a single line in `.kb/decision/`, `docs/RUNBOOK.md`, or any crate's module
 docs mentions snapshotting a decision model's folded state to skip replay.
 Compare:
 

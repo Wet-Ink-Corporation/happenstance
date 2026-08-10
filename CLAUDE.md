@@ -10,7 +10,7 @@ sourcing library. `happenstance-core` defines the contract; adapter crates
 implement it; `happenstance-testkit` decides whether they did. `happenstance`
 itself is the typed layer an application reaches for — today a five-line facade
 over the contract, holding the bare name because that is the crate most people
-will `cargo add` ([ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)).
+will `cargo add` ([ADR-0006](.kb/decision/0006-bare-name-to-the-typed-layer.md)).
 
 ## Who you are working with
 
@@ -38,7 +38,7 @@ crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. hos
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
-docs/adr/                        the decisions this design rests on.
+.kb/decision/                        the decisions this design rests on.
 docs/architecture/               SPECIFICATION.md — every clause that is true now.
 docs/adapter-shapes.md           what the six skeletons told the type checker.
 docs/experiments/                measurements. reproducible, and not in the gate.
@@ -62,7 +62,7 @@ never waits on replication.
 
 ## Binding constraints
 
-These come from `docs/adr/`. Changing one means writing a new ADR, not editing
+These come from `.kb/decision/`. Changing one means writing a new ADR, not editing
 code around it.
 
 1. **Never introduce `#[async_trait]`.** It injects `+ Send`, which makes the
@@ -96,7 +96,7 @@ code around it.
    weaker requirement and accepts both flavours. Import only one of the two
    names per module — having both in scope makes method calls ambiguous.
 5. ~~**No let-chains.**~~ **The MSRV is 1.97.1**, raised from 1.85 at phase 2
-   ([ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004).
+   ([ADR-0029](.kb/decision/0029-msrv-raised-to-1-97-1.md), amending ADR-0004).
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
@@ -245,8 +245,8 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   table each cost something real, and the choice is owed a measurement rather
   than a preference.
 - ~~**Whether `happenstance-runtime` is the right name and the right seam.**~~
-  Settled and executed: [ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)
+  Settled and executed: [ADR-0006](.kb/decision/0006-bare-name-to-the-typed-layer.md)
   gave the bare name to the typed layer and renamed the contract to
-  `happenstance-core`; [ADR-0007](docs/adr/0007-projection-runner-decodes.md)
+  `happenstance-core`; [ADR-0007](.kb/decision/0007-projection-runner-decodes.md)
   corrected where the projection runner lives. Kept here struck through rather
   than deleted, because the crate names in older commits only make sense with it.

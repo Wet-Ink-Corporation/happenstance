@@ -1,3 +1,25 @@
+---
+id: adr-0004-edition-and-msrv
+title: "ADR-0004: Rust 2024 edition, MSRV 1.85"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  Rust 2024 edition, with a provisional MSRV floor. The floor it names was raised to
+  1.97.1 by ADR-0029; the provisional marker stays until phase 12, when first publish
+  turns the MSRV into a promise to somebody other than this repository.
+depends_on: []
+related:
+  - adr-0029-msrv-raised-to-1-97-1
+source_paths:
+  - Cargo.toml
+  - rust-toolchain.toml
+last_reviewed: 2026-08-09
+adr_id: ADR-0004
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0004: Rust 2024 edition, MSRV 1.85
 
 - **Status:** accepted — **provisional**

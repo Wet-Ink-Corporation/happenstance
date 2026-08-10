@@ -1,3 +1,26 @@
+---
+id: adr-0005-rename-to-happenstance
+title: "ADR-0005: Rename the project to `happenstance`, and make it the contract crate"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The project is renamed to `happenstance`, which is free on crates.io. PARTLY
+  superseded by ADR-0006: the rename stands, the second half — that the bare name
+  goes to the contract crate — does not. Status stays `accepted` rather than
+  `superseded` because half of it is still binding.
+depends_on: []
+related:
+  - adr-0006-bare-name-to-the-typed-layer
+source_paths:
+  - Cargo.toml
+last_reviewed: 2026-08-09
+adr_id: ADR-0005
+supersedes:
+  - adr-0002-crate-naming
+superseded_by: null
+---
+
 # ADR-0005: Rename the project to `happenstance`, and make it the contract crate
 
 - **Status:** partly superseded by [ADR-0006](0006-bare-name-to-the-typed-layer.md)

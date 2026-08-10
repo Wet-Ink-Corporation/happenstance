@@ -1,3 +1,25 @@
+---
+id: adr-0014-event-identity-and-recorded-time
+title: "ADR-0014: The store mints identity, records a time, and the caller supplies neither"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  What an event carries beyond type, data and tags — identity, store incarnation,
+  recorded time — and that the store assigns each rather than the caller. Accepted,
+  provisional in four named parts. `EventId` and `recorded_at` are columns in migration
+  1 of every store, which is why this had to land before any adapter.
+depends_on: []
+related: []
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0014
+phase: 4
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0014: The store mints identity, records a time, and the caller supplies neither
 
 - **Status:** accepted — **provisional in four named parts**: VT-6 (which

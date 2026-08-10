@@ -1,3 +1,23 @@
+---
+id: adr-0002-crate-naming
+title: "ADR-0002: Prefixed crate names, with a parallel claim on `eventum`"
+kind: decision
+status: superseded
+authority_tier: decision
+summary: >-
+  Prefixed crate names under `eventum-`, because the bare name was taken on crates.io
+  by an unrelated dormant crate. Wholly superseded by the rename to `happenstance`,
+  which was free; kept unaltered as the record of why the original naming was chosen.
+depends_on: []
+related: []
+source_paths:
+  - Cargo.toml
+last_reviewed: 2026-08-09
+adr_id: ADR-0002
+supersedes: []
+superseded_by: adr-0005-rename-to-happenstance
+---
+
 # ADR-0002: Prefixed crate names, with a parallel claim on `eventum`
 
 - **Status:** superseded by [ADR-0005](0005-rename-to-happenstance.md)

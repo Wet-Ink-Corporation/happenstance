@@ -1,3 +1,28 @@
+---
+id: adr-0013-position-assignment-and-visibility
+title: "ADR-0013: Positions are assigned once, become visible in order, and the freeze names what it is accepting"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  A store assigns each position once, never reuses one, MAY leave gaps, and makes
+  positions visible in assignment order — the invariant that makes AppendCondition's
+  `after` sound. Because gaps are permitted, no conformance rule may assert a literal
+  position value (CF-6); that prohibition exists to protect a MAY.
+depends_on: []
+related:
+  - reference-experiment-position-visibility
+  - question-postgres-position-visibility
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - docs/experiments/position-visibility/README.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0013
+phase: 4
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0013: Positions are assigned once, become visible in order, and the freeze names what it is accepting
 
 - **Status:** accepted

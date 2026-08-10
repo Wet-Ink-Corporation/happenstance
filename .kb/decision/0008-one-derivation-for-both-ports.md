@@ -1,3 +1,27 @@
+---
+id: adr-0008-one-derivation-for-both-ports
+title: "ADR-0008: One derivation scheme, both ports, and what a provided body owes"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  One derivation scheme covers `EventStore` and `ProjectionStore` in a single decision
+  (PS-35), and a provided body must type-check under both flavours' bounds at once
+  because `trait_variant` clones it into the variant. The scheme is shared; the
+  provided-method budget is not.
+depends_on:
+  - adr-0001-async-port-flavours
+related: []
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-core/src/store.rs
+last_reviewed: 2026-08-09
+adr_id: ADR-0008
+phase: 1
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0008: One derivation scheme, both ports, and what a provided body owes
 
 - **Status:** accepted

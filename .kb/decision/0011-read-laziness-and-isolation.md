@@ -1,3 +1,26 @@
+---
+id: adr-0011-read-laziness-and-isolation
+title: "ADR-0011: A read is one sample with a ceiling, and `&Query` stays"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  What `read` promises about laziness and isolation — when the store's state is sampled,
+  and that the items of one `Query` share one sample. Two clauses in scope stay
+  provisional. Discharges ES-8, ES-9, ES-11 through ES-16, and VT-26 through VT-31's
+  read half.
+depends_on:
+  - adr-0001-async-port-flavours
+related: []
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0011
+phase: 4
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0011: A read is one sample with a ceiling, and `&Query` stays
 
 - **Status:** accepted. Two clauses in scope stay `[PROVISIONAL]` and **two** new

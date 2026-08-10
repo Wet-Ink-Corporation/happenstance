@@ -1,3 +1,26 @@
+---
+id: adr-0009-error-send-sync
+title: "ADR-0009: `Error` stays unbounded, and the strength goes in a marker"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The store's `Error` associated type carries no `Send + Sync + 'static` bound, and the
+  two flavours may not differ in it — not as policy but because there is no mechanism,
+  which one edit to one declaration demonstrated. The strength moves to a marker trait
+  that works from downstream, so the contract crate need not change.
+depends_on:
+  - adr-0001-async-port-flavours
+related: []
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0009
+phase: 2
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0009: `Error` stays unbounded, and the strength goes in a marker
 
 - **Status:** accepted

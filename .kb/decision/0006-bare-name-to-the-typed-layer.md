@@ -1,3 +1,26 @@
+---
+id: adr-0006-bare-name-to-the-typed-layer
+title: "ADR-0006: The bare name goes to the typed layer; the contract becomes `happenstance-core`"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  `happenstance` is the typed layer an application reaches for; the contract crate is
+  `happenstance-core` and `happenstance-runtime` ceases to exist. PARTLY superseded by
+  ADR-0007, which corrects where the projection runner lives.
+depends_on: []
+related:
+  - adr-0005-rename-to-happenstance
+  - adr-0007-projection-runner-decodes
+source_paths:
+  - Cargo.toml
+  - CLAUDE.md
+last_reviewed: 2026-08-09
+adr_id: ADR-0006
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0006: The bare name goes to the typed layer; the contract becomes `happenstance-core`
 
 - **Status:** partly superseded by [ADR-0007](0007-projection-runner-decodes.md)

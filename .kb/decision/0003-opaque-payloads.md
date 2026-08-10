@@ -1,3 +1,27 @@
+---
+id: adr-0003-opaque-payloads
+title: "ADR-0003: Opaque payloads in the contract crate"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  Payloads crossing the contract are opaque `Bytes`, and `serde` is never in
+  `happenstance-core`'s default features — the `serde` feature covers envelope types
+  only, for replication. Still marked provisional in its own text; it loses that at
+  phase 13, when a payload round-trips between two stores.
+depends_on: []
+related:
+  - adr-0016-the-wire-format
+  - governance-no-serde-in-the-contract-crate
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-core/Cargo.toml
+last_reviewed: 2026-08-09
+adr_id: ADR-0003
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0003: Opaque payloads in the contract crate
 
 - **Status:** accepted — **provisional**

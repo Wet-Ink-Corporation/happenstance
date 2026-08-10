@@ -40,7 +40,7 @@ Three rules for this second set, and the first one is the load-bearing one:
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
-executed the rename [ADR-0006](../adr/0006-bare-name-to-the-typed-layer.md) decided.
+executed the rename [ADR-0006](../../.kb/decision/0006-bare-name-to-the-typed-layer.md) decided.
 Read them with the substitution applied: **`happenstance`** means the contract crate,
 now `happenstance-core`, and **`happenstance-runtime`** means the typed layer, now
 `happenstance`. Six of them — `ARCHITECTURAL-EVALUATION.md`, `PRESSURE-TEST.md`,

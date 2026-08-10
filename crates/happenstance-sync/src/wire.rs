@@ -2,7 +2,7 @@
 //!
 //! # What is here, and what is deliberately not
 //!
-//! Exactly four things, per [ADR-0016](../../../../docs/adr/0016-the-wire-format.md)
+//! Exactly four things, per [ADR-0016](../../../../.kb/decision/0016-the-wire-format.md)
 //! §11: [`FORMAT_VERSION`], [`Envelope`], its hand-written [`Deserialize`] impl,
 //! and [`WireError`].
 //!

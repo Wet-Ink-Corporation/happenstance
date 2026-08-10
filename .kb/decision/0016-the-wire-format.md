@@ -1,3 +1,31 @@
+---
+id: adr-0016-the-wire-format
+title: "ADR-0016: The format is happenstance's own, and an unknown version is refused before the message is read"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The wire format is PRIVATE to happenstance, which is what makes every reversal in it
+  free rather than breaking, and an unknown envelope version is refused before the
+  message is read. Two frozen clauses had frozen vocabulary the code already moved past;
+  several others are discharged by amending the clause rather than by satisfying its
+  letter.
+depends_on:
+  - adr-0003-opaque-payloads
+related:
+  - adr-0012-append-shape-and-preconditions
+  - reference-experiment-wire-format
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-core/tests/wire.rs
+  - crates/happenstance-sync/src/wire.rs
+last_reviewed: 2026-08-09
+adr_id: ADR-0016
+phase: 5
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0016: The format is happenstance's own, two frozen clauses froze vocabulary the code had already moved past, and an unknown version is refused before the message is read
 
 - **Status:** accepted. Every clause in §2.7 is discharged, but several are

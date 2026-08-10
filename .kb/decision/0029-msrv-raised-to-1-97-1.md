@@ -1,3 +1,29 @@
+---
+id: adr-0029-msrv-raised-to-1-97-1
+title: "ADR-0029: The MSRV is 1.97.1"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The MSRV is raised from 1.85 to 1.97.1, amending ADR-0004. The floor moved because of a
+  DEPENDENCY's build script, not this workspace's code: five of the five database crates
+  here declare no `rust-version` at all, so neither `cargo hack --rust-version` nor
+  `resolver = "3"` can protect a floor against them — only running the compiler finds it.
+  Let-chains become available as a consequence, not as a motive.
+depends_on:
+  - adr-0004-edition-and-msrv
+related: []
+source_paths:
+  - Cargo.toml
+  - rust-toolchain.toml
+  - .github/workflows/ci.yml
+last_reviewed: 2026-08-09
+adr_id: ADR-0029
+phase: 2
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0029: The MSRV is 1.97.1
 
 - **Status:** accepted

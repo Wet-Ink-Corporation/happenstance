@@ -1,3 +1,26 @@
+---
+id: adr-0007-projection-runner-decodes
+title: "ADR-0007: The projection runner decodes, and therefore splits across the seam"
+kind: decision
+status: accepted
+authority_tier: decision
+summary: >-
+  The projection runner decodes payloads, so it cannot live wholly in the contract
+  crate and splits across the typed-layer seam. Its Context is corrected at phase 6
+  (PS-32): a runner that itself writes into the batch cannot be written today; a
+  callback-driven one can, and was compiled.
+depends_on: []
+related:
+  - adr-0006-bare-name-to-the-typed-layer
+source_paths:
+  - docs/architecture/SPECIFICATION.md
+  - crates/happenstance-core/src/projection.rs
+last_reviewed: 2026-08-09
+adr_id: ADR-0007
+supersedes: []
+superseded_by: null
+---
+
 # ADR-0007: The projection runner decodes, and therefore splits across the seam
 
 - **Status:** accepted
