@@ -37,6 +37,23 @@ Three rules for this second set, and the first one is the load-bearing one:
    contract, the gap is stated as a question for the specification to answer, not as
    a requirement the framework imposes.
 
+## Later additions, which are neither
+
+[`review-citation-drift.md`](review-citation-drift.md) (2026-08-10, pinned to
+`3712c9b`) belongs to the first lifecycle — dated, pinned, immutable, supersede
+rather than edit — but it is **not one of the fourteen**, and the runbook was not
+derived from it and does not cite it. It is a byproduct: defects surfaced while
+building [`docs/rust/`](../rust/README.md), each re-verified directly afterwards,
+recorded because the alternative was losing them. It needs no rename
+substitution; it was written after `7d6c1b0` and uses today's crate names.
+
+Its §1 is the one worth knowing about from here, because it is about this
+directory's own failure mode: six `file:line` citations in `SPECIFICATION.md` and
+`docs/adr/0009` resolve, pass `spec-trace`, and point at the wrong line.
+[`RUNBOOK.md:1713-1716`](../RUNBOOK.md) predicted exactly that gap; the document
+records that it has already recurred since phase 2 closed it, and names the
+forty-line check that now catches the same class in `docs/rust/`.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
