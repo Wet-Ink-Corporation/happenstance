@@ -125,14 +125,78 @@ pub trait EventStore {
     /// Atomically appends `events`, rejecting the write if `condition` matches.
     ///
     /// Returns the position assigned to the **last** appended event. The
-    /// specification does not require this, but every caller that checkpoints a
-    /// projection or builds a follow-up append condition needs it, and only the
-    /// store knows it.
+    /// specification does not require this, but it is what checkpointing and
+    /// reporting need, and only the store knows it.
+    ///
+    /// **It is not a sound `after` for a follow-up condition** unless the
+    /// caller has already read up to it. Positions may have gaps and another
+    /// writer may hold one *below* this value that this caller never saw, so a
+    /// condition anchored here silently excludes exactly the events a condition
+    /// exists to catch. The sound `after` comes from a read:
+    /// [`read_decision_model`] returns the last position actually observed,
+    /// which is what
+    /// [`AppendCondition::after_opt`](crate::AppendCondition::after_opt)
+    /// expects.
     ///
     /// # Atomicity
     ///
     /// Either every event lands or none does. A rejected append must leave the
     /// store byte-identical.
+    ///
+    /// # Cancellation
+    ///
+    /// **Dropping this future does not cancel the append.** An adapter MAY
+    /// commit a batch whose future was dropped, and a caller MUST NOT read a
+    /// dropped future as evidence that nothing landed. There is deliberately no
+    /// error value for it — a dropped future produces no `Result` at all, so
+    /// the outcome has nowhere to go, and the contract states the absence of a
+    /// promise rather than inventing a variant that could never be delivered.
+    ///
+    /// What *is* promised is `# Atomicity`, which bounds what the silence can
+    /// cost: whichever the adapter does, the batch is applied in full or not at
+    /// all and never in part. Each adapter MUST state which of the two it does.
+    ///
+    /// At the edge this is the ordinary termination path rather than an exotic
+    /// one — a client disconnect, a CPU limit, a Durable Object or pod
+    /// eviction. The shape that looks cancellation-safe and is not: a pooled
+    /// `rusqlite` adapter doing its work in `spawn_blocking`. Dropping the
+    /// `JoinHandle` does not cancel the closure, the `COMMIT` runs, the caller
+    /// is told nothing, and an operator retries a payment that already went
+    /// out.
+    ///
+    /// # Resolving an unknown outcome
+    ///
+    /// **A conditional append is at-most-once under verbatim reissue.** Where
+    /// the events being appended are themselves matched by the condition's
+    /// query, reissuing the identical batch resolves what a dropped future left
+    /// unknown: [`AppendError::ConditionViolated`] means the first attempt
+    /// landed, `Ok` means it had not and now has. Either way the store holds
+    /// exactly one copy. No identity, no idempotency key and no extra operation
+    /// — the guarantee falls out of the condition the caller already wrote.
+    ///
+    /// It has three limits, stated here because a guarantee whose limits are
+    /// unstated gets read as universal:
+    ///
+    /// * An **unconditional** append has no such property. Reissuing it appends
+    ///   a second copy, and nothing in this port can prevent that.
+    /// * A **conditional** append whose query does not match its own events has
+    ///   none either: conditioning on `CourseCapacityChanged` while appending
+    ///   `StudentSubscribed` leaves the reissue indistinguishable from a first
+    ///   attempt. That is the *common* shape, not a corner — it is what a
+    ///   decision that reads one thing and writes another looks like.
+    /// * The reissue must be **verbatim**. This is not the
+    ///   [`ConditionViolated`](AppendError::ConditionViolated) re-decide path,
+    ///   where the correct response is to re-read, rebuild the decision model
+    ///   and produce *different* events. The two arrive as the same error value
+    ///   and mean opposite things — one says "your write already happened", the
+    ///   other says "the world moved, decide again" — and collapsing them is
+    ///   the mistake this section exists to prevent.
+    ///
+    /// A caller needing at-most-once for the second and third shapes supplies
+    /// its own dedup in the domain. A natural key in the tags is the mechanism,
+    /// and it is queryable; an identity buried in
+    /// [`Event::metadata`](crate::Event::metadata) is not, because a query
+    /// matches on type and tags only.
     ///
     /// # Errors
     ///

@@ -26,6 +26,26 @@ use crate::query::Query;
 /// produce four boundaries, and there is no single boundary that is correct for
 /// all four.
 ///
+/// # A claim about one store's log, not about the world
+///
+/// A condition is evaluated against the events the evaluating store still
+/// holds, and against nothing else. A conditional append is therefore sound
+/// only where that store holds **every** event the condition's query ranges
+/// over, and the contract promises nothing beyond that.
+///
+/// Where matching history has been removed — pruned, archived, truncated, or
+/// never replicated here in the first place — the store MAY admit an append it
+/// would otherwise have rejected. The condition does not fail and does not
+/// report uncertainty: it passes **vacuously**, because the information is
+/// missing from the store rather than merely from the API. A pruned store and a
+/// young store are the same value at every seam this port exposes, so nothing
+/// here can tell a caller which of the two it is holding.
+///
+/// The sharp consequence is for replication. Re-evaluating an origin's
+/// condition against a partial local log answers "nothing matched" for history
+/// that exists elsewhere, so a decision taken on the strength of that answer is
+/// taken over a log that may be missing the very events the condition names.
+///
 /// # The usual shape
 ///
 /// A command handler reads with some query, notes the last position it saw, and

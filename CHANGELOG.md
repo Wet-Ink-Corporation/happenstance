@@ -949,6 +949,21 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`EventStore::append`'s documentation no longer offers the returned position
+  as a follow-up `AppendCondition::after`.** It never was one: positions may be
+  gapped, and a second writer may hold a position below the one you were handed
+  and never showed you, so a condition built from it asserts something the caller
+  has not read. The sound `after` comes from a read — `read_decision_model`, or
+  `AppendCondition::after_opt` over what that read returned. ES-19 has forbidden
+  this since it was frozen; the doc comment was recommending it anyway. If you
+  followed the old sentence, the condition it produced was weaker than it looked.
+- **`Event::into_parts` is documented as what it is.** Its summary claimed it
+  avoided "a clone in adapter write paths", which no adapter can do: `append`
+  takes `&[Event]`, so no store implementation ever owns an `Event` and none can
+  reach the method. It is for callers and for the typed layer's wire encoders,
+  and an owning adapter clones — cheaply, since the payload is a `Bytes` refcount
+  bump.
+
 - **`event_store_conformance!` takes `fixture =`, not `factory =`, and the
   expression must now build a `Fixture` rather than a store.** There is no
   deprecated arm: nothing in this workspace is published yet, and this is the

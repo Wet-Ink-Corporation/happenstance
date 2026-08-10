@@ -36,18 +36,49 @@
 //!   `impl<S: EventStore> IngestStore for S` waiting to make this free.
 //!
 //! And one thing it did **not** prove, which is the finding rather than the
-//! reassurance: the impl below cannot be written *truthfully*.
-//! [`SequencedEvent`](happenstance_core::SequencedEvent) carries a position and
-//! an event and nothing else, so `MemoryEventStore` has nowhere to put an
-//! [`EventId`] once it has accepted one, and nowhere to read one back from to
-//! answer [`holds`](IngestStore::holds). The body is `todo!()` and would still
-//! be `todo!()` with unlimited time.
+//! reassurance: the impl below still cannot be written *truthfully* — though no
+//! longer for the reason first recorded here, and the move is worth following.
 //!
-//! So the trait seam is genuinely discharged and the **value type** seam is not.
-//! `EventStore::append` does not need to change; `SequencedEvent` does. That is
-//! a smaller leak than the warning claimed and a real one, and it is a claim
-//! about a struct's fields rather than about a port's signature — which is the
-//! cheaper of the two to land.
+//! The original obstruction was the **value type**.
+//! [`SequencedEvent`](happenstance_core::SequencedEvent) carried a position and
+//! an event and nothing else, so there was nowhere to put an identity a peer had
+//! minted. Phase 4 closed that: it now carries `position`, `id`, `recorded_at`
+//! and `event`, where `id` is a `happenstance_core::EventId` — the same
+//! `(store, position)` pair this crate's placeholder [`EventId`] sketches, in a
+//! different crate.
+//!
+//! What remains is the **write path**, one layer in. The only `&self` operation
+//! that adds to a store is
+//! [`EventStore::append`](happenstance_core::EventStore::append), and
+//! `MemoryEventStore` mints `EventId::new(self.store_id, position)` for every
+//! event it writes. That is not an oversight to route around: `happenstance-core`
+//! states that no store-assigned value is ever supplied by a caller through
+//! `append`, which is exactly the property that keeps the contract's write path
+//! from having to distinguish "I decided this" from "somebody else did and I am
+//! copying it". `MemoryEventStore::restore` does preserve a foreign identity, and
+//! it is no help here: it builds a **new** store out of an owned snapshot, while
+//! [`ingest`](IngestStore::ingest) holds `&self` on an existing one. So a foreign
+//! identity has a place to sit and no door to come in through, and the bodies
+//! below would still be `todo!()` with unlimited time.
+//!
+//! So the trait seam is genuinely discharged and the **write path** seam is not.
+//! `EventStore::append` still does not need to change — that is the whole result
+//! — but the store's own crate has to offer *some* operation that accepts an
+//! identity it did not mint, because coherence lets this crate add a trait to a
+//! foreign type and never lets it reach inside one. That is a smaller leak than
+//! the warning claimed and a real one, and it has shrunk twice: first from a
+//! port signature to a struct's fields, and now from a struct's fields to one
+//! missing store operation.
+//!
+//! [`holds`](IngestStore::holds) is the one method the write path does not
+//! block, and naming it is what keeps the finding honest rather than sweeping.
+//! `EventStore::contains_event_id` landed alongside the identity fields and
+//! would answer it exactly; the only obstruction there is that this crate's
+//! placeholder [`EventId`] is a *different type* from the contract's, which
+//! [`crate::identity`] already records as phase 4's to remove. It is left
+//! `todo!()` with the others because an [`IngestStore`] whose
+//! [`ingest`](IngestStore::ingest) cannot run has nothing for `holds` to be
+//! true about.
 
 use happenstance_core::SequencePosition;
 
@@ -167,9 +198,11 @@ pub struct Ingested {
 /// without `happenstance-core` changing a line.
 ///
 /// The bodies are `todo!()` and they are not merely unfinished. See this
-/// module's documentation: `SequencedEvent` has no field an `EventId` fits in,
-/// so no honest body exists until the contract crate grows one. That is the
-/// residue of the leak, and it is a struct field rather than a port signature.
+/// module's documentation: `SequencedEvent` does now have a field an identity
+/// fits in, and `MemoryEventStore` still has no operation that puts a *foreign*
+/// one there — `append` mints its own for every event it writes, and `restore`
+/// builds a whole new store. That is the residue of the leak, and it is a
+/// missing write path rather than a port signature.
 #[cfg(feature = "memory")]
 mod memory_store_ingest {
     use happenstance_core::MemoryEventStore;
@@ -180,19 +213,19 @@ mod memory_store_ingest {
         type Error = happenstance_core::MemoryStoreError;
 
         fn store_id(&self) -> StoreId {
-            todo!("MemoryEventStore has no incarnation identifier to report")
+            todo!("MemoryEventStore::store_id() answers this, as a happenstance_core::StoreId")
         }
 
         async fn ingest(&self, _events: &[ReplicatedEvent]) -> Result<Ingested, Self::Error> {
-            todo!("SequencedEvent carries no EventId, so identity cannot be preserved")
+            todo!("append mints an EventId per event, so no foreign identity can be preserved")
         }
 
         async fn holds(&self, _id: &EventId) -> Result<bool, Self::Error> {
-            todo!("SequencedEvent carries no EventId, so there is nothing to match on")
+            todo!("contains_event_id would answer this, once the placeholder EventId is unified")
         }
 
         async fn watermark(&self) -> Result<Watermark, Self::Error> {
-            todo!("SequencedEvent carries no EventId, so no origin can be attributed")
+            todo!("a watermark is derived from ingested events, and nothing can be ingested")
         }
     }
 }

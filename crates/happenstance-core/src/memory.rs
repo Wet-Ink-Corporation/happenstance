@@ -674,11 +674,19 @@ mod tests {
                 let stream = crate::SendEventStore::read(&*store, &query, ReadOptions::new());
 
                 // `map_or` rather than `?` or a binding, deliberately.
-                // `S::Error` carries no `Send` bound (ES-6 is deferred), so a
-                // `Result<_, S::Error>` held across the *next* await would make
-                // this future `!Send`. Collapsing to a `usize` first is what
-                // lets this test exist before ES-6 is settled; when ES-6 lands,
-                // this is the line that relaxes.
+                // `S::Error` carries no `Send` bound, so a `Result<_, S::Error>`
+                // held across the *next* await would make this future `!Send`.
+                // Collapsing to a `usize` first is what lets both awaits sit in
+                // one spawned task.
+                //
+                // And this line does not relax later. ES-6 is `[FROZEN]`, and
+                // ADR-0009 settled it the other way round from what an earlier
+                // version of this comment expected: `Error` keeps
+                // `core::error::Error + 'static` on both ports and both
+                // flavours, and the stronger property is a marker trait that
+                // generic code asks for. A caller who needs the error itself
+                // across an await adds that bound to its own signature and pays
+                // for it there; the port never grows one.
                 let seen = collect(stream).await.map_or(0, |events| events.len());
 
                 // Read-then-append: a second await against the same borrow, so

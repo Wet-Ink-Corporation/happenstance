@@ -401,7 +401,16 @@ impl Event {
         self.metadata.as_ref()
     }
 
-    /// Decomposes the event, avoiding a clone in adapter write paths.
+    /// Decomposes the event into its owned parts.
+    ///
+    /// **Not a clone-avoidance route for adapters**, which is what this line
+    /// used to claim. [`EventStore::append`](crate::EventStore::append) takes
+    /// `&[Event]`, so no store implementation ever owns an `Event` and none can
+    /// reach this method at all; an owning adapter clones instead, and that
+    /// clone is cheap — the expensive fields are [`Bytes`], so it bumps a
+    /// refcount rather than copying the payload, leaving one `Box<str>` and one
+    /// boxed tag slice. This exists for the code that genuinely does own an
+    /// event: callers, and the wire encoders in the typed layer.
     ///
     /// Returns a struct rather than a tuple so that the *number* of an event's
     /// parts is not public API. Every `let (ty, data, tags, meta) = …` would
