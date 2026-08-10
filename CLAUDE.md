@@ -159,17 +159,20 @@ for. They are instruments first and targets second.
 
 ## House style
 
-- No `unwrap`/`expect` in library code. Tests and fixtures may, with
-  `#![allow(clippy::unwrap_used)]` scoped to the test module.
-- No `anyhow` in library crates. `xtask` and examples may use it.
-- Every public item documented; `missing_docs` is a warning and CI denies
-  warnings. Every fallible public function needs an `# Errors` section.
-- `#[non_exhaustive]` on public structs and enums that will grow.
-- Comments explain *why*, not *what*. Prefer one comment that names the
-  constraint over three that narrate the code.
-- Doctests are documentation that cannot rot — prefer a runnable example to a
-  described one. Feature-gated examples belong in the feature-gated module, so
-  they are only compiled when the feature is on.
+**It lives in [`docs/rust/`](docs/rust/README.md) — the Rust constitution.**
+Twenty-seven atoms, each carrying rules with a compiled example and a named
+wrong implementation. Read the router first and pull the one to three atoms your
+task needs; do not load the corpus.
+
+The four bullets that used to sit here are [`70-rustdoc-obligations.md`](docs/rust/70-rustdoc-obligations.md)
+and [`00-prime-directives.md`](docs/rust/00-prime-directives.md), in full and with
+the mechanism attached. They are not repeated here because this file loads on
+*every* task, including the ones that will never write a doctest — and because
+two copies of a style guide is two things to update and one that goes stale.
+
+Start with the trigger table in the router. `cargo xtask lint-constitution`
+checks the corpus's citations and shape; `cargo test -p xtask --doc` compiles
+every example in it.
 
 ## Commands
 
