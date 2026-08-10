@@ -59,15 +59,25 @@ Four things are kept from the revised runway, because they are the good part:
 ## Session protocol
 
 ```
-1. Read the status table, then `git log --oneline -10`.
+1. `redkiln status` and `redkiln next`, then `git log --oneline -10`.
 2. Run `cargo xtask ci`. Establish the baseline is green before touching anything.
-3. Pick the first phase that is not `done` and whose dependencies are `done`.
-4. Write the phase's ADRs first. Then the code they constrain.
+3. Take the phase `redkiln next` reports as ready. It computes what step 3 used
+   to ask you to work out: an item is ready when nothing in its `blocked_by`
+   is outstanding.
+4. Write the phase's ADRs first — as `.kb/decision/` atoms. Then the code they
+   constrain.
 5. Build the phase's proof artefact. If you cannot, the phase is not done —
    say so in the session log rather than ticking the box.
 6. Re-run the gate. Tick the exit criteria. Add a dated session-log line.
-7. Commit the code and this file together.
+7. `redkiln record-links <id> --sha <checkpoint>` before the advance, then
+   `redkiln advance`. Commit the code and this file together.
 ```
+
+Step 7's order is not arbitrary. The sha of a commit containing the item file
+cannot be inside that item file, so `links.commits` records the *work* commit,
+which exists before the advance that files it. `verify.require_commit_provenance`
+is on, so a story that changed files inside its own declared boundary and recorded
+no sha does not advance.
 
 ## What the adversarial pass changed
 
@@ -141,27 +151,56 @@ turned out to be one DCB already provides.
 
 ## Status
 
-| # | Phase | Depends on | State | Proof artefact |
-|---|---|---|---|---|
-| 0 | [Ground clear](#phase-0--ground-clear) | — | done | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
-| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
-| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
-| 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
-| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
-| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | **done** | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
-| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
-| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
-| — | **`0.2.0-alpha.1`** | 7 | — | — |
-| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
-| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
-| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
-| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
-| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
-| 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
+**State is no longer written here.** It lives in `.bklg/`, and `redkiln status`
+reports it. This table's `State` column was hand-edited prose that claimed to be
+current and could only be as current as the last person to remember it; the
+`Item` column below is the join to the thing that is.
 
-State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
-place.
+```console
+redkiln status          # the roll-up
+redkiln next            # what is actionable now, and why
+redkiln board           # the tree
+```
+
+The split, stated once because two documents describing one plan is how drift
+starts:
+
+- **This file owns the phase body** — the goal, the work items, the exit criteria,
+  the cases each phase makes writable, and the session log. That content is not
+  duplicated into the backlog; a project's intake brief summarises it and links
+  back here.
+- **The backlog owns the state** — which stage an item is at, what gate it is
+  waiting on, what blocks it, and what evidence has been recorded. None of that is
+  written here.
+
+Phases 0–5 have no item. They were done before redkiln was adopted, and
+back-filling them would fabricate a stage history that never happened; what they
+produced is in `.kb/` as decision, playbook and reference atoms.
+
+| # | Phase | Depends on | Item | Proof artefact |
+|---|---|---|---|---|
+| 0 | [Ground clear](#phase-0--ground-clear) | — | — | a `.crate` that contains its licences and README, a README compiled by CI, three owned names, and `cargo xtask spec-trace` failing on a deliberately broken clause |
+| 1 | [The `!Send` proof](#phase-1--the-send-proof-and-the-derivation-decision) | 0 | — | one provided body that type-checks under both flavours at once, two error shapes that disagree, and every rule green against a `!Send` store on `wasm32` |
+| 2 | [The instrument portfolio](#phase-2--the-instrument-portfolio) | 1 | — | six crates compiling on their real targets with real associated types — no `Error = ()`, no stubbed stream — and three named signature attempts, each with its compiler error or its compiling call site |
+| 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | — | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
+| 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | — | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
+| 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | — | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
+| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | HS-P0001 | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
+| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | HS-P0002 | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
+| — | **`0.2.0-alpha.1`** | 7 | — | — |
+| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | HS-P0003 | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
+| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | HS-P0005 | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
+| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | HS-P0006 | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
+| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | HS-P0007 | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | HS-P0004 | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | HS-P0008 | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
+| 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | HS-P0009 | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
+
+Phases 0–5 carry `—` in both the `Item` and the old state position: they are done,
+and they predate the backlog. Everything from 6 on carries the project id whose
+stage *is* the state — do not write a state word next to it, and do not hand-edit
+anything under `.bklg/`. The CLI is the only writer of an item's system
+frontmatter; `redkiln advance` is how a phase moves.
 
 ### The critical path
 

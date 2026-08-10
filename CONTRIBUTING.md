@@ -2,7 +2,27 @@
 
 ## Before you start
 
-Read [`.kb/decision/`](.kb/decision/). A handful of decisions shape everything else: the
+Read [`.kb/decision/`](.kb/decision/) — the ADRs, which moved there from
+`docs/adr` when this repository adopted [Redkiln](https://github.com/Wet-Ink-Corporation/redkiln)
+for its backlog and knowledge base. Filenames are unchanged, so `git log --follow`
+resolves across the move, and `cargo xtask lint-adr-paths` fails the gate on any
+reference to the old location.
+
+Two consequences for a contributor:
+
+- **An accepted decision is immutable.** `redkiln validate --kb` checks each one
+  against `HEAD`. Correcting one means writing a new atom that supersedes it,
+  never editing the body — which is what the paragraphs below already asked for
+  and nothing previously enforced.
+- **Never hand-edit anything under `.bklg/`.** The CLI owns every item's system
+  frontmatter; the prose body is yours. A `PreToolUse` hook denies the edit.
+
+`redkiln status` says where each remaining phase is. `.kb/governance/` holds the
+binding constraints one atom each, and `.kb/playbook/` holds the procedures this
+file describes at length — adding a conformance rule, freezing a port, running a
+phase.
+
+A handful of decisions shape everything else: the
 two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
 naming. Changing one is fine — but it means writing a new ADR that supersedes
 the old one, not working around it in code. ADR-0002/ADR-0005 and
@@ -38,6 +58,30 @@ publishable crate ships both licences and a README, and, when the tools are
 installed, `cargo hack` feature-powerset and `cargo deny`. It is defined once in
 `xtask/src/main.rs`, and CI runs exactly the same command. If it passes locally,
 it passes on CI.
+
+Two narrower entry points exist for the same gate, and neither weakens a check:
+
+```console
+cargo xtask affected --base main   # only the packages this diff could have broken
+cargo xtask ci --fast              # REQUIRED without OPTIONAL
+```
+
+They exist because Redkiln's deterministic gate runs at every stage transition,
+twice per stage, and paying the feature powerset and `cargo deny` per story is how
+a blocking gate teaches people to route around it. `--fast` drops exactly the four
+optional steps and keeps all four `wasm32` ones, because those are the standing
+guard on ADR-0001 and not something a *scope* may narrow.
+
+`affected` computes the package set itself, since cargo has no `--changed`. It can
+be wrong in two directions and only one is permitted to happen: naming too many
+packages costs time, naming too few reports green over an untested regression. So
+its dependency scan invents edges rather than missing them, a path it cannot
+attribute widens to the whole workspace, and the file-reading lints and
+`spec-trace` run every time regardless of the diff — a change whose whole
+deliverable is an edit to `SPECIFICATION.md` maps to no package at all.
+
+A separate `backlog` CI job runs `redkiln validate`, `validate --kb` and `doctor`.
+It is separate on purpose: `cargo xtask ci` stays Node-free.
 
 Three of those need a word on why they exist, because each was added after
 something passed that should not have. The docs build runs twice because a broken

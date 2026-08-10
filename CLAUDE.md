@@ -38,10 +38,18 @@ crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. hos
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
-.kb/decision/                        the decisions this design rests on.
 docs/architecture/               SPECIFICATION.md — every clause that is true now.
 docs/adapter-shapes.md           what the six skeletons told the type checker.
 docs/experiments/                measurements. reproducible, and not in the gate.
+
+.kb/                             the knowledge base — what is settled.
+  decision/                        the ADRs. accepted ones are immutable; supersede.
+  governance/                      the binding constraints, one atom each.
+  playbook/                        how to add a rule, freeze a port, run a phase.
+  concept/ map/ reference/         explanations, orientation, measurements.
+  open-questions/                  what is deliberately not settled.
+.bklg/                           the backlog — work in motion. `redkiln status`.
+.redkiln/                        config, the pinned process pack, templates, telemetry.
 ```
 
 **🔩 skeleton** means real associated types and `todo!()` bodies, `publish =
@@ -60,10 +68,46 @@ conformance suite will live in `happenstance-sync-testkit`, which does not exist
 yet. It stays out of the contract crate so that publishing `happenstance-core`
 never waits on replication.
 
+## Where the work lives
+
+This repository is Redkiln-managed. Three trees, and they answer different
+questions — putting something in the wrong one is how it stops being findable.
+
+- **`.kb/` — what is settled.** The ADRs live at `.kb/decision/`, one atom each,
+  and `.kb/governance/` holds the binding constraints below as individual atoms.
+  An **accepted decision is immutable**: `redkiln validate --kb` checks each one
+  against `HEAD`, so correcting one means writing a new atom that supersedes it,
+  never editing the body. That is the discipline these documents were always
+  written under and nothing previously enforced.
+- **`.bklg/` — work in motion.** One project per remaining runbook phase, under a
+  release-milestone initiative. `redkiln status`, `redkiln next`, `redkiln board`.
+- **`.redkiln/` — the engine.** Config, the process pack and templates (both
+  pinned at `init`), and committed telemetry.
+
+**The CLI is the only writer of an item's system frontmatter.** Never hand-edit
+`id`, `stage`, `status`, `updated` or `links`; drive every state change through
+`redkiln <command>`. A `PreToolUse` hook denies the edit, and the prose body of an
+artifact is yours to write freely.
+
+Six templates under `.redkiln/templates/` are deliberately customised — `spec.md`,
+`_design.md`, `_intake-brief.md`, `discover.md` and the two gate checklists — so
+`redkiln doctor` reports six `template-drift` advisories forever. That is expected,
+and the `backlog` CI job asserts the set is **exactly** those six: a seventh is a
+template someone changed without deciding to, and a missing one is a customisation
+reverted by `adopt --templates`. Do not run `redkiln adopt --templates` from a
+feature worktree.
+
+`_design.md` is the bundled design stage repurposed. Redkiln ships it because
+nothing else in its pipeline could perceive what a screen looks like; a library has
+the same hole in another medium, so here it asks for the **public API surface** —
+signatures, visibility decisions, what the shape costs a caller, and a doctest in
+place of a mock. Every other check in this repository is satisfied by an API that
+is correct and unusable.
+
 ## Binding constraints
 
-These come from `.kb/decision/`. Changing one means writing a new ADR, not editing
-code around it.
+These come from `.kb/decision/`, and each has a `.kb/governance/` atom stating it
+on its own. Changing one means writing a new ADR, not editing code around it.
 
 1. **Never introduce `#[async_trait]`.** It injects `+ Send`, which makes the
    `wasm32` / Cloudflare Workers target impossible. Ports are defined once
@@ -175,11 +219,25 @@ for. They are instruments first and targets second.
 
 ```console
 cargo xtask ci                          # the whole gate — run this before saying "done"
+cargo xtask ci --fast                   # REQUIRED only; the bar a non-terminal project meets
+cargo xtask affected --base main        # the story grain: only what this diff could break
 cargo test --workspace --all-features
 cargo run -p course-subscriptions        # the worked example
 cargo xtask wasm                        # just the wasm32 check
 cargo xtask spec-trace                  # just the specification's cross-references
+
+redkiln status                          # where every phase actually is
+redkiln next                            # what is ready, and why
+redkiln validate --kb && redkiln doctor  # the backlog's own health
 ```
+
+The first three are the same three the deterministic gate runs at a redkiln
+advance seam — `verify.affected_gate`, `verify.integration_scoped` and
+`verify.e2e` in `.redkiln/config.yaml` — so a gate failure is reproducible by
+typing the command it names. `cargo xtask affected` exists because cargo has no
+`--changed`; it maps the diff to packages, adds their dependents, and errs toward
+running *more* than necessary, because naming too few packages is the error that
+reports green over an untested regression.
 
 `cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, four wasm32 steps —
 the build of `happenstance-core`, which is the standing guard on constraint 1 and
@@ -211,7 +269,12 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 ## Open questions, deliberately unresolved
 
 Do not settle these silently in passing; they need their own pass and probably
-their own ADR. Two files carry the answers, and they answer different questions.
+their own ADR. Each now also has an atom in [`.kb/open-questions/`](.kb/open-questions/)
+stating what is true today, what is not decided, and what would force the choice —
+written so the next reader can act on it rather than re-deriving the state first.
+The summaries below are orientation; the atoms are the record.
+
+Two files carry the answers, and they answer different questions.
 [`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) says
 what is **true now** — 200 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
