@@ -709,6 +709,118 @@ mod tests {
         assert_eq!(store.len(), 2);
     }
 
+    /// The port a provided method would be added to, in miniature.
+    ///
+    /// [`EventStore`](crate::EventStore) has no provided method today, so ES-3
+    /// and ES-4's rule has nothing on the real port to assert against — and a
+    /// rule that can assert nothing is decorative. This trait is the smallest
+    /// thing carrying the two properties the clauses are about: it goes through
+    /// the same `trait_variant::make` the port does, and its provided body
+    /// holds `&self` across an `await`. What is under test is the *derivation*,
+    /// not this trait.
+    ///
+    /// A free generic helper — [`read_decision_model`](crate::read_decision_model)
+    /// is the obvious candidate — cannot stand in, and the reason is worth
+    /// recording because it looks like it should. A helper bound
+    /// `S: EventStore` calls the **bare** flavour's `read`, whose opaque stream
+    /// carries no `Send` inside generic code, so asserting `Send` on that
+    /// helper's future would be false rather than merely weak. Only a
+    /// `trait_variant`-derived twin has a `Send` flavour of the same body.
+    #[trait_variant::make(SendProbe: Send)]
+    trait Probe {
+        /// The required half, standing in for `EventStore::head`.
+        async fn value(&self) -> u64;
+
+        /// The provided half, in ES-4's hand-desugared spelling.
+        ///
+        /// **Not `async fn`.** `trait_variant` clones the `default` block into
+        /// the variant with `asyncness: None` and does not rewrite the body, so
+        /// an `async fn` provided method becomes a non-`async` function
+        /// containing `.await`: `error[E0728]`. That is ES-4's whole content.
+        ///
+        /// **`where Self: Sync`, at the point of use and nowhere else.** The
+        /// `async move` block captures `&self`, and `&Self: Send` holds exactly
+        /// when `Self: Sync`. Taken here, only callers of this method pay for
+        /// it; moved onto the trait or into the `trait_variant` attribute,
+        /// every adapter pays — including the `!Send` edge store the bare
+        /// flavour exists for, which is not `Sync` and could not implement the
+        /// trait at all (ES-3).
+        ///
+        /// Strike the clause and rustc's own `help:` proposes
+        /// `#[trait_variant::make(SendProbe: Send where Self: Sync)]` — the
+        /// attribute-level fix ES-3 names as the wrong one. The suggestion is
+        /// the reason this is worth a compiled test rather than a note: it is
+        /// one keystroke, it is offered by the compiler, and it silently moves
+        /// the obligation onto every implementer.
+        fn doubled(&self) -> impl Future<Output = u64>
+        where
+            Self: Sync,
+        {
+            // `self.value()` is awaited while `&self` is live, which is what
+            // makes this an ES-3 body rather than a decorative one.
+            async move { self.value().await * 2 }
+        }
+    }
+
+    /// Something to instantiate the assertion at. `MemoryEventStore` is not
+    /// used: the claim is about `trait_variant`'s derivation, and borrowing the
+    /// store would only suggest it was about the store.
+    struct Doubler(u64);
+
+    impl SendProbe for Doubler {
+        async fn value(&self) -> u64 {
+            self.0
+        }
+    }
+
+    #[test]
+    fn provided_method_future_is_send_in_generic_code() {
+        // ES-3 and ES-4. The bound is written at the *definition*, so inside
+        // this function the compiler knows nothing about `S` beyond what
+        // `SendProbe + Sync` promises and the obligation is discharged before
+        // monomorphisation. Asserting against a concrete store instead is the
+        // defect that retired `read_stream_is_send`: an auto-trait leaks out of
+        // the hidden type and satisfies the assertion whatever the trait says.
+        //
+        // Two independent things have to hold for this to compile, and they
+        // fail in different places. The *variant's* copy of the provided body
+        // must prove `Send` at its own definition — strike `where Self: Sync`
+        // and the trait above stops compiling, which is ES-3's rejection. And
+        // `trait_variant` must actually have appended `Send` to the cloned
+        // return type — if it stopped doing so, the trait would still compile
+        // and this line is what would notice.
+        fn assert_provided_future_is_send<S: SendProbe + Sync>(probe: &S) {
+            fn is_send<T: Send>(_: &T) {}
+            // Fully qualified, so the assertion names *which* flavour's body
+            // it is about. Method syntax does resolve here — `S`'s only
+            // declared bound is `SendProbe`, so the blanket `Probe` impl
+            // `trait_variant` emits is not a candidate — but it would be
+            // `error[E0034]` the moment this were written against a concrete
+            // store, which satisfies both. That is the module documentation's
+            // warning, and it is also why the qualification is not merely
+            // decoration: it is the spelling that survives the rewrite.
+            is_send(&SendProbe::doubled(probe));
+        }
+
+        // ES-4's "under both flavours **simultaneously**". One body, and it has
+        // to type-check on the bare flavour as well — which is the flavour a
+        // `wasm32` adapter implements and where nothing is `Send`. The bound is
+        // again at the definition, so this says something about the trait
+        // rather than about `Doubler`.
+        fn bare_flavour_offers_the_same_body<S: Probe + Sync>(
+            probe: &S,
+        ) -> impl Future<Output = u64> {
+            Probe::doubled(probe)
+        }
+
+        assert_provided_future_is_send(&Doubler(21));
+
+        // Naming it is what instantiates it, in the shape `store.rs`'s ES-5
+        // assertion uses: the claim is in the signature, so there is nothing to
+        // run and awaiting the future would only exercise `Doubler`.
+        let _ = bare_flavour_offers_the_same_body::<Doubler>;
+    }
+
     #[tokio::test]
     async fn tags_filter_with_and_semantics() {
         let store = MemoryEventStore::new();
