@@ -516,7 +516,6 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     let root = workspace_root()?;
     let spec = read(&root, SPEC)?;
     let cases_doc = read(&root, CASES)?;
-    let suite = read(&root, SUITE)?;
 
     let clauses = parse_clauses(&spec);
     if clauses.is_empty() {
@@ -526,15 +525,29 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     }
 
     let known_cases = collect_cases(&cases_doc);
-    let known_rules = collect_rules(&suite);
+    // All three rule files, not just `suite.rs`. [`RULE_FILES`]'s own docs used
+    // to say "[`run`]'s clause checks stay scoped to [`SUITE`] on purpose — only
+    // that family's rules are claimed by clauses today", and that reason is
+    // circular: they were not claimed *because* nothing required them to be.
+    // Six rules — five in `concurrency.rs` and one in `model.rs` — had never
+    // been named by any clause, and check 6 was structurally unable to notice,
+    // including the one that pins the central DCB proposition. Four were
+    // attribution errors and are claimed as of this commit, by ES-18, ES-19,
+    // ES-25 and VT-11. The other two are in [`UNCLAIMED_PENDING_ADR`].
+    let known_rules = all_rules(&root)?;
 
     // Two sets, not one, and which check gets which is load-bearing (ADR-0016
-    // §15). `known_rules` is the suite's own — check 6 sweeps it, so nothing may
-    // enter it that a clause is not obliged to claim. `resolvable` is that set
-    // plus the `wire::`-qualified tests, and it answers the *other* question:
-    // does a name a clause cites exist anywhere. Check 4 and `rule_cell` ask
-    // that one. Wiring only check 4 would leave every written wire test
-    // rendering `†` in §7.2 under a legend that defines `†` as "must be written".
+    // §15). `known_rules` is every conformance rule — check 6 sweeps it, so
+    // nothing may enter it that a clause is not obliged to claim. `resolvable`
+    // is that set plus the `wire::`-qualified tests, and it answers the *other*
+    // question: does a name a clause cites exist anywhere. Check 4 and
+    // `rule_cell` ask that one. Wiring only check 4 would leave every written
+    // wire test rendering `†` in §7.2 under a legend that defines `†` as "must
+    // be written".
+    //
+    // The two move together by construction, which is what makes the widening
+    // above safe: claiming a `concurrency.rs` rule in a clause would fail check
+    // 4 if `resolvable` had stayed scoped to `suite.rs`.
     let resolvable: BTreeSet<String> = known_rules.union(&wire_rules(&root)?).cloned().collect();
 
     let mut problems: Vec<String> = Vec::new();
@@ -614,20 +627,9 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
-    // 6. Every rule in the suite is claimed by a clause, or disposed of by one.
-    //
-    //    `known_rules`, deliberately, and never `resolvable`: see [`WIRE_TESTS`].
-    //    This is the direction of resolution that stays one-way.
-    let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
-    let retired: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.retires).collect();
-    for rule in &known_rules {
-        if !claimed.contains(rule) && !retired.contains(rule) {
-            problems.push(format!(
-                "{SUITE} — rule `{rule}` is named by no clause and disposed of by none. Either a \
-                 clause claims it, or one retires it with `Retires: {rule} — <reason>`."
-            ));
-        }
-    }
+    // 6. Every conformance rule is claimed by a clause, or disposed of by one,
+    //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
+    let unclaimed_pending = check_rule_ownership(&clauses, &known_rules, &mut problems);
 
     // 7. Every `file:line` citation resolves to a file that exists and is long
     //    enough — bare names and `.md` targets included, which is three quarters
@@ -650,9 +652,56 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &known_rules,
         &known_cases,
         citation_coverage,
+        &unclaimed_pending,
         &problems,
         stale.as_deref(),
     )
+}
+
+/// Check 6 — every conformance rule is owned by a clause, retired by one, or on
+/// record as owing a decision. Returns the third group, for the summary.
+///
+/// `known_rules`, deliberately, and never `resolvable`: see [`WIRE_TESTS`]. This
+/// is the direction of resolution that stays one-way.
+///
+/// Extracted from [`run`] when the widening to [`RULE_FILES`] pushed that
+/// function past clippy's line limit — the arm that records a pending decision
+/// is the whole of the growth, and it reads better beside the array it consults.
+fn check_rule_ownership(
+    clauses: &[Clause],
+    known_rules: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) -> Vec<String> {
+    let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
+    let retired: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.retires).collect();
+    let mut pending = Vec::new();
+
+    for rule in known_rules {
+        if claimed.contains(rule) || retired.contains(rule) {
+            // A rule cannot be both claimed and owed a decision. If it is, the
+            // exemption has been discharged and must go, or it sits there
+            // asserting an open question that is closed. This is the half that
+            // makes the array a ratchet rather than an allowlist.
+            if UNCLAIMED_PENDING_ADR.iter().any(|(r, _)| r == rule) {
+                problems.push(format!(
+                    "`{rule}` is claimed by a clause *and* listed in `UNCLAIMED_PENDING_ADR`. \
+                     The exemption is discharged — delete its entry."
+                ));
+            }
+            continue;
+        }
+        if let Some((_, owed)) = UNCLAIMED_PENDING_ADR.iter().find(|(r, _)| r == rule) {
+            pending.push(format!("{rule} — {owed}"));
+            continue;
+        }
+        problems.push(format!(
+            "a conformance rule in {} — `{rule}` is named by no clause and disposed of by none. \
+             Either a clause claims it, or one retires it with `Retires: {rule} — <reason>`, or \
+             it goes in `UNCLAIMED_PENDING_ADR` with the decision it is waiting on.",
+            RULE_FILES.join(", ")
+        ));
+    }
+    pending
 }
 
 /// Checks that no rule a clause disposes of is still live (§7.4).
@@ -827,6 +876,7 @@ fn report(
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
     citations: (usize, usize),
+    unclaimed_pending: &[String],
     problems: &[String],
     stale: Option<&str>,
 ) -> Result<()> {
@@ -843,7 +893,7 @@ fn report(
     let _ = write!(summary, "{}), ", parts.join(", "));
     let _ = write!(
         summary,
-        "{} suite rules, {} e2e cases",
+        "{} conformance rules, {} e2e cases",
         rules.len(),
         cases.len()
     );
@@ -857,6 +907,18 @@ fn report(
         let _ = write!(summary, " ({external} external)");
     }
     println!("{summary}");
+
+    // Printed on a green run, on purpose. An open question that only shows up
+    // when something else is already broken is an open question nobody reads.
+    if !unclaimed_pending.is_empty() {
+        println!(
+            "{} rule(s) claimed by no clause and owing a decision:",
+            unclaimed_pending.len()
+        );
+        for r in unclaimed_pending {
+            println!("  {r}");
+        }
+    }
 
     if problems.is_empty() && stale.is_none() {
         println!("traceability: no problems found; §7.1–§7.2 matches the checker");
@@ -1788,6 +1850,62 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
         })
         .collect()
 }
+
+/// Rules that exist, pass, and are claimed by no clause because claiming them
+/// would take a decision this checker is not allowed to take.
+///
+/// Check 6's bar is that every conformance rule is claimed by a clause or
+/// retired by one. Widening it to all of [`RULE_FILES`] found six rules that
+/// were neither — five in `concurrency.rs`, one in `model.rs`. Four were
+/// attribution errors: the clause already stated the proposition and already
+/// named the wrong implementation, and only the rule's name was missing. The
+/// remaining two are not errors — they are holes in the specification, and the
+/// honest repair is an ADR rather than an edit.
+///
+/// The two differ in shape, which is why neither can be absorbed by a clause.
+/// One states a proposition no clause states. The other states *several*, and
+/// belongs to no single clause for that reason.
+///
+/// This list is the difference between a gap that is **recorded and counted**
+/// and one that is invisible, which is the only thing check 6 was ever for. It
+/// is not an allowlist in the usual sense, because it cannot be used to make a
+/// problem go away quietly: every entry is printed on every green run, and an
+/// entry whose rule *becomes* claimed is itself a failure, so the list can only
+/// shrink. Deleting the last entry deletes the mechanism.
+///
+/// Per the drift allowlist that came before it (`3712c9b`), the count is
+/// computed and printed rather than written here, so this comment cannot come to
+/// disagree with the array beneath it.
+const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
+    (
+        "k_disjoint_boundaries_admit_exactly_k_commits",
+        "the central DCB independence proposition — that commands sharing no \
+         consistency boundary do not conflict — is enforced by this rule and \
+         stated by no clause. The word \"disjoint\" does not appear in the \
+         specification. ES-25's *only if* half forbids the false-positive \
+         direction and does not say this, so claiming it there would assert \
+         that a FROZEN clause contains a proposition it does not. Owed: an ADR, \
+         either widening ES-25 or minting a clause",
+    ),
+    (
+        "ops_agree_with_the_model",
+        "the model family's single rule enforces no single clause's sentence. \
+         It replays a generated sequence of appends, conditional appends and \
+         reads against a model and compares every answer, so what it checks is \
+         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-18 and ES-25 \
+         over inputs no clause enumerates — which is the whole reason the \
+         family exists, since the named rules are worked examples and this is \
+         not. §6.4 names it, but only as CF-22's illustration of a per-family \
+         enumeration, and CF-22's MUST is where the rule list lives rather than \
+         what any rule asserts. Claiming it under any one of the clauses it \
+         exercises would say that clause is what it checks. Owed: an ADR, \
+         either minting the clause the model family has never had — a store \
+         agrees with the contract over arbitrary operation sequences, not only \
+         over the examples the suite enumerates — or deciding that check 6's \
+         bar is per-clause and a cross-clause rule is disposed of some other \
+         way",
+    ),
+];
 
 /// A citation whose file name is not a path in this repository.
 ///

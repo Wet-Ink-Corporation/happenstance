@@ -1024,7 +1024,14 @@ as a count, and the difference between two positions MUST NOT be treated as a
 number of events.
 
 `[FROZEN]`
-`Rule:` `positions_are_unique`, `positions_are_strictly_monotonic`
+`Rule:` `positions_are_unique`, `positions_are_strictly_monotonic`, plus the
+concurrency family's `positions_are_unique_under_concurrent_appends` — the
+uniqueness sentence asked of a store with several writers inside it at once.
+Sequentially the read of the counter and the write that consumes it are
+adjacent, so neither rule above can separate a store that allocates atomically
+from one that reads its head, suspends, and then allocates from the value it
+read; that is `RacingSequenceStore`, the in-process form of a
+`SELECT max(position)` taken outside the transaction that will use it.
 `Cases:` E2E-10, E2E-46
 `Rejects:` an adapter that reuses a position after a delete, and one that packs
 positions into a dense range on compaction. Both are natural first cuts on a
@@ -3286,6 +3293,13 @@ the store byte-identical.
   plus `append_is_atomic_under_a_mid_batch_fault` — failing the write of the
   *k*-th event of a batch, and asserting the store afterwards holds all of the
   batch or none of it, with which of the two decided by what `append` answered.
+  Plus the concurrency family's `a_concurrent_reader_never_sees_a_partial_batch`,
+  which is this clause's first sentence asked while the append is still running.
+  Sequentially it cannot be asked at all: by the time a reader looks the call has
+  returned, so every rule above sees only the final state and none of them can
+  separate a store that applies a batch as one unit from one that applies it row
+  by row and gets to the end. `RowAtATimeStore` is that store — every row lands,
+  it is correct at rest, and it is wrong for exactly as long as the loop runs.
 - **Cases:** E2E-39, E2E-48, E2E-07.
 - **Rejects:** a per-row conditional `INSERT ... SELECT ... WHERE NOT EXISTS`,
   which can write the first event of a batch and refuse the second; and
@@ -3389,7 +3403,13 @@ ascending.
   order the read returned them in, so that a store whose defect is the read path
   fails `read_defaults_to_ascending_order` and not this; and it does not
   re-assert the returned position, which is this clause's first sentence and
-  `append_returns_last_written_position`'s.
+  `append_returns_last_written_position`'s. Plus the concurrency family's
+  `append_returns_the_callers_own_last_position`, which is the only rule that
+  separates the two: sequentially a single writer's last event *is* the head, so
+  `INSERT …; SELECT max(position)` — what an adapter writes when its driver
+  cannot `RETURNING` on a multi-row insert — is indistinguishable from
+  `INSERT … RETURNING position` until a second writer exists. That is
+  the `Rejects:` shape below, named by the rule that catches it.
 - **Cases:** E2E-13, E2E-23.
 - **Rejects:** an adapter that returns the store head rather than its own batch's
   last position — identical on a quiescent store and wrong under a second writer
@@ -3651,7 +3671,13 @@ reported as `AppendError::ConditionViolated`, never as `AppendError::Store`. A
   the rejection is compulsory and exactly one batch may land. ES-27 disposed of
   it and the disposition is reversed there; it belongs here because what it pins
   is the *iff*, not the tag algebra. Two of the three mutants it rejects are the
-  shapes named below.
+  shapes named below. The concurrency family's
+  `exactly_one_of_n_contenders_commits` is the same question asked of a store
+  that is genuinely contended rather than called twice in a row, and it belongs
+  to this clause for the same reason: with one caller at a time the probe and the
+  insert are adjacent, so the sequential rule cannot separate an atomic
+  check-and-write from a probe followed by an insert. `RacingProbeStore` is the
+  store that passes every sequential rule and fails this one.
 - **Cases:** E2E-08, E2E-55, E2E-39.
 - **Rejects:** an adapter that folds the violation into its own error type, which
   destroys the caller's only means of telling "retry the decision" from "something
@@ -4651,7 +4677,22 @@ together or not at all.**
 `[FROZEN]`
 **Rule:** `commit_is_atomic_with_the_read_model` — write a probe row into a
 batch, commit at position *P*, then read the row and the checkpoint through
-fresh handles; both present or both absent, never one.
+fresh handles; both present or both absent, never one. §4.11 assigns this clause
+two more: `commit_advances_the_checkpoint`, the baseline the rest of that suite
+is differential against, and `failed_commit_leaves_both_unchanged`, which is the
+second conjunct on its own — a partial apply that reports failure.
+
+The second of those two follows from the sentence above and the first does not,
+which is recorded here rather than quietly inherited from the table. **This
+clause's MUST is a coupling, not a progress obligation.** A `commit` that returns
+`Ok` and makes *neither* the read-model row nor the checkpoint durable satisfies
+it through the "or not at all" arm, passes `commit_is_atomic_with_the_read_model`
+— both absent is one of the two states that rule permits — and fails
+`commit_advances_the_checkpoint`. That a successful commit *advances* anything is
+stated by no clause's MUST in this document; PS-22 presupposes it and §4.1a's
+prose asserts it non-normatively. Phase 6 owns the repair, which is either a
+sentence in this clause or a clause of its own, and it is an ADR's rather than an
+edit's because this clause is `[FROZEN]`.
 **Cases:** E2E-17, E2E-21, E2E-23.
 **Rejects:** an adapter that writes read-model rows on one connection and the
 checkpoint on another, which is the natural shape for any store whose read model
@@ -5113,7 +5154,22 @@ sync compensation.
 `[FROZEN]`
 **Rule:** `reset_is_not_commit_at_first` — perform both on two ids and assert
 the checkpoints differ; then drive a replay from each and assert the event at
-position 1 is applied in the first case and not in the second.
+position 1 is applied in the first case and not in the second. §4.11 assigns
+this clause `fresh_projection_has_no_checkpoint` as well, which is the same
+distinction before any `reset` has happened: a store reporting
+`Live { through: FIRST }` for an id it has never seen has already collapsed the
+two states this clause requires to be told apart.
+
+**That second rule reaches past this clause's MUST, and the gap is recorded
+rather than papered over.** The sentence above is scoped *after a successful
+`reset`*; the rule asks about an id that has never been seen. An adapter can
+satisfy the MUST verbatim and fail the rule, and the shape that does it is the
+natural one rather than a contrivance: `reset` writes an explicit `NeverRun`
+sentinel row, and `checkpoint(id)` resolves a missing row with
+`.unwrap_or(Checkpoint::Live { through: FIRST })`. Post-reset it answers
+`NeverRun` and is distinguishable from a commit at `FIRST`; for an id it has
+never seen it answers `Live`. No clause's MUST obliges an unseen id to read as
+`NeverRun`. Phase 6 owns whether this clause widens or a new one says it.
 **Cases:** E2E-15, E2E-16.
 **Rejects:** a runner that computes its resume point as
 `checkpoint.unwrap_or(FIRST)` and reads `ReadOptions::from` that value —
@@ -8355,7 +8411,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
 | VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `convergen… | E2E-41, E2E-43 |
 | VT-10 | PROVISIONAL | §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every `SY-… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
-| VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic` | E2E-10, E2E-46 |
+| VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
 | VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive`, `conditi… | E2E-10, E2E-16 |
 | VT-14 | PROVISIONAL | unit tests `rejects_invalid_event_types`, `rejects_invalid_tags`, and `validat… | E2E-40 |
@@ -8448,7 +8504,7 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| PS-1 | FROZEN | `commit_is_atomic_with_the_read_model` † | E2E-17, E2E-21, E2E-23 |
+| PS-1 | FROZEN | `commit_is_atomic_with_the_read_model` †, `commit_advances_the_checkpoint` †, … | E2E-17, E2E-21, E2E-23 |
 | PS-2 | FROZEN | `commit_is_atomic_with_the_read_model` † | E2E-17, E2E-24 |
 | PS-3 | PROVISIONAL | `cargo hack --feature-powerset` in `cargo xtask ci`, which already runs; the e… | *(none directly; cites E2E-15, E2E-25)* |
 | PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` † | E2E-24 |
@@ -8466,7 +8522,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` †, `probe_delete_all` † | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` † | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` † | E2E-18 |
-| PS-19 | FROZEN | `reset_is_not_commit_at_first` † | E2E-15, E2E-16 |
+| PS-19 | FROZEN | `reset_is_not_commit_at_first` †, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` † | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` † | E2E-23 |
 | PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` † | E2E-23, E2E-25 |
@@ -8773,11 +8829,27 @@ event-store family in `suite.rs`, the proptest family in `model.rs`, and the
 threaded family in `concurrency.rs`. A `Retires:` line naming a live model or
 concurrency rule passed, under a message asserting the thing the run had not
 checked; a rule of either family could land with no changelog entry at all while
-CF-29 reported every rule satisfied. Both now resolve over all three. Note what
-did *not* widen: check 6 — every rule is claimed by a clause — stays scoped to
-`suite.rs`, because only that family's rules are claimed by clauses today. The
-two questions differ, and conflating them would report every model and
-concurrency rule as unowned.
+CF-29 reported every rule satisfied. Both now resolve over all three, and so
+does check 6 — every rule is claimed by a clause — which was the last to widen
+and the only one whose narrow scope came with an argument. The argument was that
+only the event-store family's rules are claimed by clauses today. That is true,
+and it is the case for widening rather than against it: they were unclaimed
+*because* nothing required them to be. A check that looks only where ownership
+already exists cannot tell a rule nobody has claimed from a rule somebody
+decided to leave unclaimed, and telling those two apart is this section's whole
+subject. The prediction made in the narrow scope's defence was correct and was
+not a reason to keep it — widening did report every model and concurrency rule
+no clause named, and six of them were named by none. Four were attribution
+errors, where the clause already stated the proposition and already named the
+wrong implementation and only the rule's name was absent: ES-18, ES-19, ES-25
+and VT-11 claim them now. The other two are not errors. One states a proposition
+no clause states; the other states several at once and belongs to no single
+clause for that reason. Both are recorded in `UNCLAIMED_PENDING_ADR` in
+`xtask/src/spec_trace.rs`, which prints every entry on every green run and fails
+the day a clause claims one, so an unowned rule is now a standing report rather
+than a silence. This section opens by answering its own question with **None.**;
+that answer was written about the three suite-family rules below it, and is owed
+a restatement now the question is asked of all three families.
 
 **The changelog lint of CF-29 also matched rule names as bare substrings, and two
 rules were passing on a collision.** `append_is_atomic` is a prefix of
