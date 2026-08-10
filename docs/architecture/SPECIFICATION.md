@@ -2662,7 +2662,8 @@ rather than the breadth: `LocalMemoryEventStore`
 blanket impl without `error[E0119]` and passing every rule natively and on
 `wasm32`. `CloudflareEventStore`
 (`crates/happenstance-cloudflare/src/event_store.rs:146`) and
-`happenstance-neon`'s two (`event_store.rs:168`, `:405`) are skeletons and
+`happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
+`:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
 lifted on that basis at phase 1 (`docs/adr/0001-async-port-flavours.md:5-6`);
 what remains open, and is phase 9's, is whether a real platform SDK fits.
@@ -2827,7 +2828,8 @@ bracketing baseline of 0.987 / 0.993 / 1.015 / 1.026 at 1 / 8 / 32 / 64 clients.
 The one-client figure is `results/ratios-c1long.csv`'s separate 90-second pass;
 `ratios.csv` records 0.628 there against a baseline that drifted 3.70×, and
 reading that series alone reports arm C as 37% slower at one writer
-(`README.md:248-256` explains the substitution). Both declared positive controls
+(`docs/experiments/position-visibility/README.md:248-256` explains the
+substitution). Both declared positive controls
 fired, which is what makes the positive worth anything: the baseline reproduces
 the inversion, and arm A at 64 clients collapses to 0.062× of baseline with p99
 60× worse. **Three unaffordable answers would not have made the clause wrong;

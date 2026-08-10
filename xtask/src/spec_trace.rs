@@ -56,7 +56,7 @@
 //! §7.3 through §7.6 stay authored and are never touched: they carry the
 //! judgement about *why* a gap exists, which no parser can recover.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::ops::Range;
@@ -289,24 +289,53 @@ impl Census {
 }
 
 /// Checks that every `file:line` citation resolves.
-fn check_citations(root: &Path, spec: &str, problems: &mut Vec<String>) {
-    for (line_no, citation, path, line) in citations(spec) {
-        match fs::read_to_string(root.join(&path)) {
-            Err(_) => problems.push(format!(
-                "{SPEC}:{line_no} — citation `{citation}` names a file that does not exist"
+///
+/// Returns how many it looked at, because a check that does not state its own
+/// coverage is indistinguishable from one that sees everything — which is
+/// exactly how this step reported success while parsing a quarter of the
+/// corpus. The count goes in the summary line.
+fn check_citations(
+    root: &Path,
+    spec: &str,
+    index: &BTreeMap<String, Vec<String>>,
+    problems: &mut Vec<String>,
+) -> (usize, usize) {
+    let mut checked = 0usize;
+    let mut external = 0usize;
+    for c in citations(spec, index) {
+        let (line_no, text) = (c.spec_line, &c.text);
+        match c.target {
+            Target::External => external += 1,
+            Target::Unknown => problems.push(format!(
+                "{SPEC}:{line_no} — citation `{text}` names a file that is in neither the \
+                 workspace nor `EXTERNAL_CITATIONS`"
             )),
-            Ok(body) => {
-                let len = body.lines().count();
-                if line > len {
-                    problems.push(format!(
-                        "{SPEC}:{line_no} — citation `{citation}` points past the end of {} \
-                         ({len} lines)",
-                        path.display()
-                    ));
+            Target::Ambiguous(candidates) => problems.push(format!(
+                "{SPEC}:{line_no} — citation `{text}` is a bare name the workspace defines {} \
+                 times ({}). Qualify it with its path, or add it to `BARE_NAME_MAP` with the \
+                 evidence for which one is meant.",
+                candidates.len(),
+                candidates.join(", ")
+            )),
+            Target::Path(path) => match fs::read_to_string(root.join(&path)) {
+                Err(_) => problems.push(format!(
+                    "{SPEC}:{line_no} — citation `{text}` names a file that does not exist"
+                )),
+                Ok(body) => {
+                    checked += 1;
+                    let len = body.lines().count();
+                    if c.line > len {
+                        problems.push(format!(
+                            "{SPEC}:{line_no} — citation `{text}` points past the end of {} \
+                             ({len} lines)",
+                            path.display()
+                        ));
+                    }
                 }
-            }
+            },
         }
     }
+    (checked, external)
 }
 
 /// The census §1.3 states in prose, and the line it states it on.
@@ -600,8 +629,11 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
-    // 7. Every `file:line` citation resolves to a file that exists and is long enough.
-    check_citations(&root, &spec, &mut problems);
+    // 7. Every `file:line` citation resolves to a file that exists and is long
+    //    enough — bare names and `.md` targets included, which is three quarters
+    //    of them and was none of them until this widening.
+    let index = workspace_index(&root);
+    let citation_coverage = check_citations(&root, &spec, &index, &mut problems);
 
     let census = Census::of(&clauses);
 
@@ -617,6 +649,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &census,
         &known_rules,
         &known_cases,
+        citation_coverage,
         &problems,
         stale.as_deref(),
     )
@@ -793,6 +826,7 @@ fn report(
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
+    citations: (usize, usize),
     problems: &[String],
     stale: Option<&str>,
 ) -> Result<()> {
@@ -813,6 +847,15 @@ fn report(
         rules.len(),
         cases.len()
     );
+    // The coverage number is in the summary rather than in a comment because the
+    // failure this step spent a phase inside was not a wrong check, it was a
+    // check whose scope nobody could see. A reader who is told "338 citations"
+    // can notice that the document has more.
+    let (checked, external) = citations;
+    let _ = write!(summary, ", {checked} citations checked");
+    if external > 0 {
+        let _ = write!(summary, " ({external} external)");
+    }
     println!("{summary}");
 
     if problems.is_empty() && stale.is_none() {
@@ -1746,8 +1789,134 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// `path:line` citations in backticks, as `(spec line, citation, path, line)`.
-fn citations(spec: &str) -> Vec<(usize, String, PathBuf, usize)> {
+/// A citation whose file name is not a path in this repository.
+///
+/// One entry, and it earns the mechanism. §3.1 cites `trait_variant`'s own
+/// source twelve times, declaring once that `variant.rs` means the crate's
+/// `src/variant.rs` under `~/.cargo/registry`. That is a real citation and a
+/// useful one — it is the evidence for how the derive expands — but the file is
+/// not in the tree, so the moment [`citations`] learned to read bare names all
+/// twelve would have turned red.
+///
+/// The table is the difference between "not in this repository" and "does not
+/// exist", which are the same string to a checker and opposite facts to a
+/// reader. A bare name that is in neither the table nor the workspace is a
+/// failure, so this cannot become a place to hide a typo.
+const EXTERNAL_CITATIONS: [&str; 1] = [
+    // `trait-variant` 0.1.3's `src/variant.rs`, under `~/.cargo/registry`. §3.1
+    // declares the shorthand once and then uses it twelve times as the evidence
+    // for how the derive expands.
+    "variant.rs",
+];
+
+/// Bare file names the workspace defines more than once, and which one the
+/// specification means.
+///
+/// The document cites by bare name on purpose — `event.rs:215` reads better in
+/// a sentence than the path does, and most of the 200 bare citations resolve
+/// uniquely. Four do not, and **the obvious default is wrong for half of them**,
+/// which is why this is a table rather than a "prefer `happenstance-core`" rule:
+/// bare `lib.rs` means the *sync* crate at both of its sites (§1.6's port table
+/// and §5), and `happenstance-core` also has a `lib.rs`. A preference rule would
+/// have resolved both to the wrong file and passed.
+///
+/// Each entry is evidence, not preference — it records where the citations
+/// actually point, checked one by one. Two things keep it honest. A basename
+/// that is ambiguous and *absent* here is a hard failure naming the candidates,
+/// so a new collision cannot resolve silently. And the anchor check is the
+/// backstop for this table being wrong: if a citation mapped here to `core`
+/// really meant `sync`, the anchor it names will not be found in the file this
+/// sends it to.
+const BARE_NAME_MAP: [(&str, &str); 5] = [
+    ("memory.rs", "crates/happenstance-core/src/memory.rs"),
+    ("error.rs", "crates/happenstance-core/src/error.rs"),
+    ("identity.rs", "crates/happenstance-core/src/identity.rs"),
+    ("lib.rs", "crates/happenstance-sync/src/lib.rs"),
+    // Fourteen manifests carry this name and the root's own relative path *is*
+    // the bare name, so qualifying the two citations would not have changed the
+    // string they contain. Both mean the workspace root, and §8036 says so in
+    // the sentence around it: "inheriting `version` from the workspace root".
+    ("Cargo.toml", "Cargo.toml"),
+];
+
+/// What a citation's file name resolved to.
+enum Target {
+    /// A file in this repository.
+    Path(PathBuf),
+    /// Deliberately outside it — see [`EXTERNAL_CITATIONS`].
+    External,
+    /// Several files carry this name and no [`BARE_NAME_MAP`] entry picks one.
+    Ambiguous(Vec<String>),
+    /// No file in the workspace carries this name, and it is not external.
+    Unknown,
+}
+
+/// A parsed citation.
+struct Citation {
+    /// The line of `SPECIFICATION.md` it appears on.
+    spec_line: usize,
+    /// The citation verbatim, for the error message.
+    text: String,
+    /// Where its file name resolved to.
+    target: Target,
+    /// The line it names.
+    line: usize,
+}
+
+/// Every file in the workspace that a citation could name, by base name.
+///
+/// Built once per run by walking the tree. `target/` is skipped because it holds
+/// a copy of half the workspace under `package/`, and every one of those copies
+/// would register as a second definition of a name that is otherwise unique —
+/// turning the ambiguity check from a guard into noise. `.git` is skipped for
+/// size alone.
+fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
+    fn walk(dir: &Path, root: &Path, out: &mut BTreeMap<String, Vec<String>>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if name == "target" || name == ".git" || name == "node_modules" {
+                    continue;
+                }
+                walk(&path, root, out);
+            } else if [".rs", ".toml", ".md"].iter().any(|e| {
+                name.len() > e.len() && name[name.len() - e.len()..].eq_ignore_ascii_case(e)
+            }) && let Ok(rel) = path.strip_prefix(root)
+            {
+                out.entry(name)
+                    .or_default()
+                    .push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(root, root, &mut out);
+    for paths in out.values_mut() {
+        paths.sort();
+    }
+    out
+}
+
+/// `path:line` citations in backticks, as parsed [`Citation`]s.
+///
+/// # What this used to skip, and why that mattered
+///
+/// The filter was `!path.contains('/') || !(has_ext(".rs") || has_ext(".toml"))`
+/// — a citation had to be path-qualified *and* name Rust or a manifest. The
+/// document carries 338 citations and only 84 satisfy both: **200 are bare file
+/// names and 56 name a `.md`**, and neither form was ever parsed, so neither was
+/// ever checked. `check_citations` was not a weak check over the corpus; it was a
+/// correct check over a quarter of it, and three quarters of the document's
+/// evidence sat unverified behind a green step.
+///
+/// That is not a hypothetical exposure. Commit `2e4407b` found eight citations
+/// that were "green and wrong" and repaired them by hand; the ones this widening
+/// exposes are the same defect in the part of the corpus nobody could see.
+fn citations(spec: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<Citation> {
     let mut out = Vec::new();
     for (n, line) in spec.lines().enumerate() {
         for chunk in line.split('`').skip(1).step_by(2) {
@@ -1761,14 +1930,45 @@ fn citations(spec: &str) -> Vec<(usize, String, PathBuf, usize)> {
             let has_ext = |e: &str| {
                 path.len() > e.len() && path[path.len() - e.len()..].eq_ignore_ascii_case(e)
             };
-            if !path.contains('/') || !(has_ext(".rs") || has_ext(".toml")) {
+            if !(has_ext(".rs") || has_ext(".toml") || has_ext(".md")) {
+                continue;
+            }
+            // A path has no spaces. Dropping the `contains('/')` requirement let
+            // whole backticked *sentences* through: a span reading
+            // "[DEFERRED — settled by the experiment named in PRESSURE-TEST.md:688-693"
+            // ends in `.md:<digits>` and `rsplit_once(':')` happily calls the
+            // entire clause a path. The old filter excluded these by accident,
+            // because prose rarely contains a slash; this excludes them on
+            // purpose.
+            if path.chars().any(char::is_whitespace) {
                 continue;
             }
             let first: String = tail.chars().take_while(char::is_ascii_digit).collect();
             let Ok(num) = first.parse::<usize>() else {
                 continue;
             };
-            out.push((n + 1, chunk.to_owned(), PathBuf::from(path), num));
+
+            let base = path.rsplit('/').next().unwrap_or(path);
+            let target = if path.contains('/') {
+                Target::Path(PathBuf::from(path))
+            } else if EXTERNAL_CITATIONS.contains(&base) {
+                Target::External
+            } else if let Some((_, mapped)) = BARE_NAME_MAP.iter().find(|(n, _)| *n == base) {
+                Target::Path(PathBuf::from(*mapped))
+            } else {
+                match index.get(base).map(Vec::as_slice) {
+                    Some([only]) => Target::Path(PathBuf::from(only)),
+                    Some(many) if many.len() > 1 => Target::Ambiguous(many.to_vec()),
+                    _ => Target::Unknown,
+                }
+            };
+
+            out.push(Citation {
+                spec_line: n + 1,
+                text: chunk.to_owned(),
+                target,
+                line: num,
+            });
         }
     }
     out
