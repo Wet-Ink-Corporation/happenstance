@@ -35,7 +35,7 @@ that flip on both sides of every supersession row below.
 
 ## 2026-08-10 ADR import (ADR-0001–0016, ADR-0029)
 
-Seventeen decision atoms, phases 0–5, imported from `docs/adr/`. Three are partial
+Seventeen decision atoms, phases 0–5, imported from `.kb/decisions/`. Three are partial
 supersessions — a decision atom that keeps `status: accepted` because one half of its claim
 still binds, corrected in place by a later decision that displaces only the other half. See
 [`../governance/rewrite-the-referent-never-the-reasoning.md`](../governance/rewrite-the-referent-never-the-reasoning.md)

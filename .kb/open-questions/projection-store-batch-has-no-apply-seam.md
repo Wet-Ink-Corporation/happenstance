@@ -25,7 +25,7 @@ related:
   - kb-open-question-projection-id-unvalidated-001
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0007-projection-runner-decodes.md
+  - references/adr/0007-projection-runner-decodes.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -35,7 +35,7 @@ last_reviewed: 2026-08-10
 
 ## What is true today
 
-ADR-0007 (`docs/adr/0007-projection-runner-decodes.md`) records a "second discovery" made while
+ADR-0007 (`.kb/decisions/0007-projection-runner-decodes.md`) records a "second discovery" made while
 testing ADR-0006's claim that the projection runner belongs wholly in `happenstance-core`:
 `ProjectionStore::Batch` carries no trait bounds. Generic code can `begin` a batch and hand it
 straight to `commit`, and cannot write to it in between — there is no `apply`. The runner

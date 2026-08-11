@@ -23,7 +23,7 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - references/adr/0011-read-laziness-and-isolation.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
 last_reviewed: 2026-08-10
@@ -33,7 +33,7 @@ last_reviewed: 2026-08-10
 
 ## What is true today
 
-ADR-0011 (`docs/adr/0011-read-laziness-and-isolation.md`) is scoped to one question — what `read`
+ADR-0011 (`.kb/decisions/0011-read-laziness-and-isolation.md`) is scoped to one question — what `read`
 promises about laziness and isolation — but is instructed to claim or explicitly decline
 twenty-nine unclaimed clause IDs nearest it, per the ADR-0011 brief quoted in the ADR itself:
 "It must also claim, or explicitly decline, the twenty-nine unclaimed IDs nearest it." VT-31 is one

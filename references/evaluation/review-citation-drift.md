@@ -38,7 +38,7 @@ Where a finding names a line in `xtask/src/main.rs`, the number is the one in
 | `SPECIFICATION.md:4473` | `memory.rs:364-391`, same test | `memory.rs:614` |
 | `SPECIFICATION.md:2569` | `store.rs:100` — `type Error: core::error::Error + 'static` | `store.rs:101` |
 | `SPECIFICATION.md:2593` | `store.rs:100`, same item | `store.rs:101` |
-| `docs/adr/0009-error-send-sync.md:15` | `store.rs:100`, `projection.rs:73` | `store.rs:101`, `projection.rs:90` |
+| `references/adr/0009-error-send-sync.md:15` | `store.rs:100`, `projection.rs:73` | `store.rs:101`, `projection.rs:90` |
 
 `store.rs:100` is the last line of the doc comment above the item — off by one,
 harmless to follow. The `memory.rs` citations are the ones that mislead: `:364-391`
@@ -74,7 +74,7 @@ rows above. The code is `parse_citation` and `check_citations` in
 
 `SPECIFICATION.md:8407` marks ES-6 `FROZEN`, checked by
 `store_error_crosses_a_join_handle`. The rule is named in `SPECIFICATION.md`,
-`docs/adr/0008`, `docs/adr/0009` and `RUNBOOK.md`.
+`.kb/decisions/0008`, `.kb/decisions/0009` and `RUNBOOK.md`.
 
 Verified at `3712c9b`:
 
@@ -179,7 +179,7 @@ Both at `3712c9b`:
 
 - **`:578`** justifies the nightly docs.rs step with "1.85 stable and no
   contributor should need a second toolchain to run". The MSRV is 1.97.1 since
-  [ADR-0029](../../docs/adr/0029-msrv-raised-to-1-97-1.md).
+  [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md).
 - **`:825`** explains a suppression via "`clippy.toml`'s `msrv = 1.85`".
   `clippy.toml:1` reads `msrv = "1.97.1"`.
 

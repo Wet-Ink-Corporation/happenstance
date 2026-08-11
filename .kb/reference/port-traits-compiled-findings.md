@@ -31,11 +31,11 @@ source_paths:
   - .kb/_intake/0009-error-send-sync.md
   - .kb/_intake/0010-the-suite-must-prove-itself.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0001-async-port-flavours.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
-  - docs/adr/0009-error-send-sync.md
-  - docs/adr/0010-the-suite-must-prove-itself.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - references/adr/0001-async-port-flavours.md
+  - references/adr/0008-one-derivation-for-both-ports.md
+  - references/adr/0009-error-send-sync.md
+  - references/adr/0010-the-suite-must-prove-itself.md
+  - references/adr/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/projection.rs
   - crates/happenstance-testkit/src/fixtures.rs

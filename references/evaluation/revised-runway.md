@@ -216,7 +216,7 @@ accident because nothing recorded them.
 | ★ `bytes` / `futures-core` as permanent public dependencies; serde wire representation and supported formats | 4 | open | 0014 |
 | Does the `ProjectionStore` port survive contact with a real transaction API | 5 | **decided — amended.** The borrowed GAT does *not* survive on the `Send` flavour; the batch becomes owned | 0015 |
 | ★ Ship the projection port behind `unstable-projection` at 0.1, or freeze it | 5 | open | 0015 |
-| Is `happenstance-runtime` the right name and seam | 0 | **decided** — executed in phase 0 | [0006](../../docs/adr/0006-bare-name-to-the-typed-layer.md) |
+| Is `happenstance-runtime` the right name and seam | 0 | **decided** — executed in phase 0 | [0006](../../.kb/decisions/0006-bare-name-to-the-typed-layer.md) |
 | ★ How the decision model's query and fold are kept in agreement | 6 | **decided** — the fold takes a decoded domain enum; the query derives from the same declaration | 0016 |
 | ★ Is `happenstance-macros` in scope for 0.1 | 6 | open — criterion stated in phase 6 | 0016 |
 | ★ Payload schema evolution: version suffix, upcasting, read-path hook | 6 | open — contract-shaping, so it cannot wait | 0017 |

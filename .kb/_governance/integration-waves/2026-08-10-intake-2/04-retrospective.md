@@ -4,10 +4,10 @@
 
 This is the wave the previous one (`2026-08-10-intake`) named and deferred: *"Importing the ADR
 corpus is a separate wave with a human in it."* Its seventeen intake files are byte-identical
-copies of files still canonical in `docs/adr/` (`00-corpus-match.md`, provenance check), so the
+copies of files still canonical in `.kb/decisions/` (`00-corpus-match.md`, provenance check), so the
 wave's dominant shape is transcription, not discovery — 111 claims classified, 17 decision atoms
 authored, and **zero of those seventeen is a decision this wave took**. Each was written, argued
-and accepted before this wave existed; `docs/adr/` stays the canonical record and is untouched.
+and accepted before this wave existed; `.kb/decisions/` stays the canonical record and is untouched.
 
 `.kb/decisions/` was empty going in, so nothing merged into an existing decision — there was
 nothing accepted to amend or supersede against. The two `merge_existing` operations both landed on
@@ -106,7 +106,7 @@ deterministic and lands in the same wave before validation runs (`02`, Op 6).
 - **Citations inside `.kb/` atom bodies are still not checked by any instrument.**
   `redkiln validate --kb` checks frontmatter, ids and cross-atom links, not `file:line` citations
   embedded in prose — same gap the previous wave's retrospective noted, still open, now with
-  substantially more prose citing `docs/adr/`, `crates/`, `spec/` and `experiments/` paths to rot.
+  substantially more prose citing `.kb/decisions/`, `crates/`, `spec/` and `experiments/` paths to rot.
 
 ## Instruments run
 

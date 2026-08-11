@@ -64,7 +64,7 @@ succeeded on the next attempt.
 
 **Evidence.** `crates/happenstance-core/src/error.rs:188 (lifted out of the adapter's error type)` · `crates/happenstance-core/src/error.rs:253 (is_condition_violated)` · `crates/happenstance-core/src/error.rs:261 (pub fn map_store<F, T>)` · `crates/happenstance-sqlite/src/event_store.rs:147 (Append-condition violations are)` ·
 [SPECIFICATION ES-25](../../spec/SPECIFICATION.md) ·
-[ADR-0009](../../docs/adr/0009-error-send-sync.md)
+[ADR-0009](../../.kb/decisions/0009-error-send-sync.md)
 
 ---
 
@@ -351,4 +351,4 @@ around a parameter that has to come back out.
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:160 (Carried as a unit variant rather than wrapping)` ·
 `crates/happenstance-sqlite/src/event_store.rs:163 (it is neither)` ·
 `crates/happenstance-core/src/store.rs:101 (type Error: core::error::Error + 'static)` · `crates/happenstance-core/src/projection.rs:90 (type Error)` ·
-[ADR-0009](../../docs/adr/0009-error-send-sync.md)
+[ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

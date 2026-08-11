@@ -29,7 +29,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0010-the-suite-must-prove-itself.md
-  - docs/adr/0010-the-suite-must-prove-itself.md
+  - references/adr/0010-the-suite-must-prove-itself.md
   - crates/happenstance-testkit/src/fixtures.rs
   - crates/happenstance-testkit/src/registry.rs
   - crates/happenstance-testkit/src/suite.rs

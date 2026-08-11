@@ -15,7 +15,7 @@ related:
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0013-position-assignment-and-visibility.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
 last_reviewed: 2026-08-10

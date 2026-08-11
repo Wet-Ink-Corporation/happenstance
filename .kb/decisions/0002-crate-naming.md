@@ -25,7 +25,7 @@ related:
   - kb-governance-referent-not-reasoning-001
 source_paths:
   - .kb/_intake/0002-crate-naming.md
-  - docs/adr/0002-crate-naming.md
+  - references/adr/0002-crate-naming.md
   - CONTRIBUTING.md
 last_reviewed: 2026-08-10
 ---

@@ -24,7 +24,7 @@ related:
   - kb-open-question-poll-count-rule-strength-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0013-position-assignment-and-visibility.md
   - crates/happenstance-testkit/src/concurrency.rs
   - crates/happenstance-testkit/src/fixtures.rs
 last_reviewed: 2026-08-10

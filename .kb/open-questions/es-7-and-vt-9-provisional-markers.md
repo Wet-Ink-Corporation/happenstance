@@ -37,8 +37,8 @@ source_paths:
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/tests/local_conformance.rs
   - crates/happenstance-core/src/memory.rs
-  - docs/adr/0001-async-port-flavours.md
-  - docs/adr/0014-event-identity-and-recorded-time.md
+  - references/adr/0001-async-port-flavours.md
+  - references/adr/0014-event-identity-and-recorded-time.md
 last_reviewed: 2026-08-10
 ---
 

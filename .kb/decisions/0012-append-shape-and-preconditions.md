@@ -37,7 +37,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0012-append-shape-and-preconditions.md
-  - docs/adr/0012-append-shape-and-preconditions.md
+  - references/adr/0012-append-shape-and-preconditions.md
   - crates/happenstance-core/src/append.rs
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-testkit/src/fixtures.rs

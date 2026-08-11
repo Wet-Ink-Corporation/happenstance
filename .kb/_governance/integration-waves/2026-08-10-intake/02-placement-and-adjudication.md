@@ -467,7 +467,7 @@ source_paths:
 last_reviewed: 2026-08-10
 ```
 
-ADR-0009 is named as accepted **in `docs/adr/`, not in `.kb/decisions/`**. No decision atom is
+ADR-0009 is named as accepted **in `.kb/decisions/`, not in `.kb/decisions/`**. No decision atom is
 minted from it here and none is linked, because importing the ADR corpus is a separate wave; the
 body names it by id so the link can be wired when it lands.
 
@@ -575,7 +575,7 @@ process with a human sign-off that an ingest cannot supply. The `.kb/decisions/R
 requirements agree: an `adr_id`, and the alternatives that lost. Deferring is not the weak
 option; it is what the open-questions layer exists for.
 
-**`.kb/decisions/` stays empty this wave.** The real ADR corpus is `docs/adr/` and is unmirrored.
+**`.kb/decisions/` stays empty this wave.** The real ADR corpus is `.kb/decisions/` and is unmirrored.
 Gaps 5 and 11 name ADR-0009 and ADR-0001 as accepted; they are referenced by id in bodies and
 linked to nothing, so no dangling id enters the corpus and no ADR is half-imported.
 

@@ -45,7 +45,7 @@ async fn count_everything() -> Result<(), Box<dyn std::error::Error>> {
   cannot disagree about what `default-features = false` means.
 - MSRV 1.97.1, checked in CI. Raised from 1.85 at phase 2 by a *dependency's*
   build script rather than by this crate's own code —
-  [ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/adr/0029-msrv-raised-to-1-97-1.md)
+  [ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0029-msrv-raised-to-1-97-1.md)
   records the measurement and the trade.
 
 ## Design

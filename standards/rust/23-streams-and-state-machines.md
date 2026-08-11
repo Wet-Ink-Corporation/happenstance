@@ -190,7 +190,7 @@ ceiling no later than the first poll and bound every later statement by it.
 `crates/happenstance-postgres/src/read_stream.rs:284 (taking the cursor by value and handing it back)` ·
 `crates/happenstance-testkit/tests/mutation_coverage.rs:1585 (RefetchingPagedStore)` ·
 [ES-11](../../spec/SPECIFICATION.md) ·
-[ADR-0011](../../docs/adr/0011-read-laziness-and-isolation.md) ·
+[ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)
 
 ## RS-23-4. Give the stream a name; do not build it from `unfold` or an `async` block.

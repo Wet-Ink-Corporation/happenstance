@@ -468,7 +468,7 @@ thread-pinning ceiling at all.
 **But it is not a consistent snapshot.** A concurrent append landing between chunks becomes visible
 mid-stream. The `spawn_blocking` shape, holding one read transaction, *is* a snapshot.
 `MemoryEventStore` is a snapshot. Nothing in the contract, the ADRs, or the 27 rules mentions read
-isolation — I grepped `crates/happenstance/src`, `crates/happenstance-testkit/src` and `docs/adr`
+isolation — I grepped `crates/happenstance/src`, `crates/happenstance-testkit/src` and `references/adr`
 for `isolat|snapshot|consistent read|concurrent` and the only hits are `MemoryEventStore`'s own
 prose and the append-side comments.
 

@@ -26,7 +26,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0004-edition-and-msrv.md
-  - docs/adr/0004-edition-and-msrv.md
+  - references/adr/0004-edition-and-msrv.md
   - rust-toolchain.toml
   - Cargo.toml
   - CLAUDE.md

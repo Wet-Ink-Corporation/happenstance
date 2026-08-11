@@ -68,7 +68,7 @@ exactness claim quietly stops being true. It is found — if ever — when reord
 **Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:454 (catch_unwind(probe.run))` ·
 `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:330 (function pointers are unconditionally)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
-[ADR-0010](../../docs/adr/0010-the-suite-must-prove-itself.md)
+[ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
 ---
 
@@ -162,7 +162,7 @@ vacuous and reported as covered.
 `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:222 (A denylist can never be the primary check)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:296 (LAST_ORIGIN.with_borrow_mut)` ·
 [SPECIFICATION CF-2](../../spec/SPECIFICATION.md) ·
-[ADR-0010](../../docs/adr/0010-the-suite-must-prove-itself.md)
+[ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
 ---
 
@@ -269,7 +269,7 @@ which store is lying.
 `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:107 (Box<dyn Defect>)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:266 (defect: PhantomData)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
-[ADR-0010](../../docs/adr/0010-the-suite-must-prove-itself.md)
+[ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
 ---
 

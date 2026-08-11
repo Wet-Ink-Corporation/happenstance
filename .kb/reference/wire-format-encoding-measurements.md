@@ -23,7 +23,7 @@ related:
   - kb-open-question-human-readable-encoding-limits-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - references/adr/0016-the-wire-format.md
   - experiments/wire-format/
   - crates/happenstance-sync/src/wire.rs
 last_reviewed: 2026-08-10

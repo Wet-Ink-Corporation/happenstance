@@ -36,8 +36,8 @@ source_paths:
   - crates/happenstance-cloudflare/src/lib.rs
   - crates/happenstance-cloudflare/src/send_shape.rs
   - references/evaluation/review-citation-drift.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
-  - docs/adr/0009-error-send-sync.md
+  - references/adr/0008-one-derivation-for-both-ports.md
+  - references/adr/0009-error-send-sync.md
 last_reviewed: 2026-08-10
 ---
 
@@ -49,7 +49,7 @@ ES-6 (`spec/SPECIFICATION.md:2629`) is `[FROZEN]` and its `Rule:` field names
 `store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2670`). §7.2's generated
 table renders it with `†` (`SPECIFICATION.md:8588`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
-twice in `RUNBOOK.md`, once in `docs/adr/0008`, three times in `docs/adr/0009`, three times in
+twice in `RUNBOOK.md`, once in `.kb/decisions/0008`, three times in `.kb/decisions/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments
 (`crates/happenstance-cloudflare/src/lib.rs:92`) states the rule "is unwritable against today's
 port for *every* adapter, not merely for this one," and the probe backing that claim is
@@ -64,7 +64,7 @@ lines 1616-1620. This escape hatch is deliberate and correct in general — a cl
 schedule a rule the current phase has not written yet — but it has no expiry, so a rule scheduled
 forever prints identically to one scheduled for next week.
 
-A partial resolution already exists and has not been executed: ADR-0009 (accepted, in `docs/adr/`)
+A partial resolution already exists and has not been executed: ADR-0009 (accepted, in `.kb/decisions/`)
 settles the underlying question that `Error` keeps `core::error::Error + 'static` on both ports and
 both flavours, with the stronger property becoming a marker trait declared downstream. That makes
 the rule writable, and the wrong implementation it must reject already exists in the tree. So this

@@ -23,7 +23,7 @@ related:
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10
@@ -33,7 +33,7 @@ last_reviewed: 2026-08-10
 
 ## What is true today
 
-ADR-0013 (`docs/adr/0013-position-assignment-and-visibility.md`) lifts ES-10 from `[PROVISIONAL]`
+ADR-0013 (`.kb/decisions/0013-position-assignment-and-visibility.md`) lifts ES-10 from `[PROVISIONAL]`
 to `[FROZEN]`, and in doing so states the visibility invariant as a global property: "Once any
 reader has observed an event at position *P*, no subsequent read against that store may yield an
 event at a position ≤ *P* that was not already visible." Decision §3, "Caveat two," names the

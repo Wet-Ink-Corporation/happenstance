@@ -68,7 +68,7 @@ run time rather than `cargo check`.
 [SPECIFICATION PS-36](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION WF-12](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION VT-32](../../spec/SPECIFICATION.md) ·
-[ADR-0015 §trybuild](../../docs/adr/0015-validated-identifiers-and-store-limits.md)
+[ADR-0015 §trybuild](../../.kb/decisions/0015-validated-identifiers-and-store-limits.md)
 
 ---
 
@@ -182,7 +182,7 @@ cannot implement it.
 **Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:41 (Every rule passes against this store)` ·
 `crates/happenstance-testkit/tests/local_conformance.rs:476 (local_tokio_default)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) ·
-[ADR-0010](../../docs/adr/0010-the-suite-must-prove-itself.md)
+[ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
 ---
 

@@ -83,7 +83,7 @@ after the port was frozen against them.
 `crates/happenstance-sqlite/src/projection_store.rs:216 (rustc accepts it present or absent)` ·
 `references/adapter-shapes.md:11 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md)
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
 ---
 

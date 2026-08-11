@@ -13,7 +13,7 @@ related:
   - kb-open-question-sync-message-set-undesigned-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - references/adr/0016-the-wire-format.md
   - experiments/wire-format/
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10

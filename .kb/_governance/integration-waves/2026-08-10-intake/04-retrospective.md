@@ -49,7 +49,7 @@ future wave with more evidence may find this one under-called it.
 
 **Two ADRs are named but not imported.** ADR-0009 (gap-5, es-6) and ADR-0001 (gap 6a/6b,
 es-7-and-vt-9) are referenced by id in atom bodies with no corresponding `.kb/decisions/` atom and
-no link, so no dangling id entered the corpus. Importing the `docs/adr/` corpus into `.kb/` is out
+no link, so no dangling id entered the corpus. Importing the `.kb/decisions/` corpus into `.kb/` is out
 of scope for this wave and is its own future wave with a human in it.
 
 ## Follow-ups

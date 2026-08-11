@@ -142,7 +142,7 @@ concurrently, in a published crate whose only fix is a new impl on a new type.
 **Evidence.** `crates/happenstance-core/src/memory.rs:300 (impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send)` ·
 `crates/happenstance-testkit/src/fixtures.rs:186 (a handle that quietly weakened)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
 ---
 

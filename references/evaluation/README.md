@@ -49,7 +49,7 @@ substitution; it was written after `7d6c1b0` and uses today's crate names.
 
 Its §1 is the one worth knowing about from here, because it is about this
 directory's own failure mode: six `file:line` citations in `SPECIFICATION.md` and
-`docs/adr/0009` resolve, pass `spec-trace`, and point at the wrong line.
+`.kb/decisions/0009` resolve, pass `spec-trace`, and point at the wrong line.
 [`RUNBOOK.md:1713-1716`](../../RUNBOOK.md) predicted exactly that gap; the document
 records that it has already recurred since phase 2 closed it, and names the
 forty-line check that now catches the same class in `standards/rust/`.
@@ -57,7 +57,7 @@ forty-line check that now catches the same class in `standards/rust/`.
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
-executed the rename [ADR-0006](../../docs/adr/0006-bare-name-to-the-typed-layer.md) decided.
+executed the rename [ADR-0006](../../.kb/decisions/0006-bare-name-to-the-typed-layer.md) decided.
 Read them with the substitution applied: **`happenstance`** means the contract crate,
 now `happenstance-core`, and **`happenstance-runtime`** means the typed layer, now
 `happenstance`. Six of them — `ARCHITECTURAL-EVALUATION.md`, `PRESSURE-TEST.md`,

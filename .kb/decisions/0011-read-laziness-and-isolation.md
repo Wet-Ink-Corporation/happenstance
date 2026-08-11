@@ -31,7 +31,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - references/adr/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/query.rs
   - references/evaluation/phase-4-reconciliation.md

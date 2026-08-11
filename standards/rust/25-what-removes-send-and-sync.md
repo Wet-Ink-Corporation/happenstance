@@ -248,4 +248,4 @@ frozen.
 `crates/happenstance-cloudflare/src/js.rs:38 (anything. What it costs is stated rather than hidden — see the crate)` ·
 `crates/happenstance-cloudflare/src/lib.rs:60 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
-[ADR-0009](../../docs/adr/0009-error-send-sync.md)
+[ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

@@ -22,7 +22,7 @@ related:
   - kb-decision-0013
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - references/adr/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/append.rs
   - spec/SPECIFICATION.md

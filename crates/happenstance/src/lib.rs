@@ -17,7 +17,7 @@
 //! throughout — including before the typed layer exists — and so that the name
 //! never has to move once people depend on it.
 //!
-//! [ADR-0006](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/adr/0006-bare-name-to-the-typed-layer.md)
+//! [ADR-0006](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0006-bare-name-to-the-typed-layer.md)
 //! is why the bare name is here rather than on the contract: an application
 //! programs against typed events and decision models, and the crate an
 //! application reaches for first should be the one it uses. `happenstance-core`
@@ -48,7 +48,7 @@
 //!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
 //! * **The typed projection runner** — decoded events, over the checkpoint pump
 //!   that stays in the contract crate
-//!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/adr/0007-projection-runner-decodes.md)).
+//!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0007-projection-runner-decodes.md)).
 //!
 //! # Using it today
 //!

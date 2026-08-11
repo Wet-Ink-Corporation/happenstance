@@ -29,7 +29,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0009-error-send-sync.md
-  - docs/adr/0009-error-send-sync.md
+  - references/adr/0009-error-send-sync.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/error.rs
   - crates/happenstance-cloudflare/src/lib.rs

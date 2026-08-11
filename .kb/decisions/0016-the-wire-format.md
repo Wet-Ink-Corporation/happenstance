@@ -44,7 +44,7 @@ related:
   - kb-reference-wire-format-measurements-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - references/adr/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-core/src/event.rs
   - experiments/wire-format/

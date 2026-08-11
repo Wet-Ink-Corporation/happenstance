@@ -13,7 +13,7 @@ related:
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
+  - references/adr/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10

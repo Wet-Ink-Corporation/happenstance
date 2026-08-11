@@ -29,7 +29,7 @@ related:
   - kb-decision-0003
 source_paths:
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
-  - docs/adr/0006-bare-name-to-the-typed-layer.md
+  - references/adr/0006-bare-name-to-the-typed-layer.md
   - CLAUDE.md
   - RUNBOOK.md
 last_reviewed: 2026-08-10

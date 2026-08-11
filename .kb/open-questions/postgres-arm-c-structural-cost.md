@@ -22,7 +22,7 @@ related:
   - kb-reference-position-visibility-experiment-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - crates/happenstance-postgres/src/lib.rs
   - RUNBOOK.md

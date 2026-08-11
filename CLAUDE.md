@@ -10,7 +10,7 @@ sourcing library. `happenstance-core` defines the contract; adapter crates
 implement it; `happenstance-testkit` decides whether they did. `happenstance`
 itself is the typed layer an application reaches for — today a five-line facade
 over the contract, holding the bare name because that is the crate most people
-will `cargo add` ([ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)).
+will `cargo add` ([ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md)).
 
 ## Who you are working with
 
@@ -38,7 +38,6 @@ crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. hos
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
-docs/adr/                        the decisions this design rests on. moving to .kb/.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.
 standards/rust/                  the Rust constitution. router + 27 atoms.
@@ -47,15 +46,19 @@ references/                      evidence kept for citation, binding nothing.
   evaluation/                      the fourteen reviews, and the Crux explorations.
   scenarios/                       six deployments the contract was walked against.
   adapter-shapes.md                what the six skeletons told the type checker.
+  adr/                             the full decision records. cite these by line.
   seeds/                           raw material for `/redkiln:initiative`.
 docs/                            user documentation. nothing else.
 RUNBOOK.md                       the plan of record, and how far it has got.
 
 .kb/                             the knowledge base — what is settled.
-  _intake/                         staging. `/redkiln:kb-ingest` consumes and clears it.
-  product/ design/                 personas and journeys; signed-off design patterns.
+  decisions/                       the ADRs, one atom each. accepted ones are immutable.
+  concepts/ governance/            explanations; the binding constraints, one atom each.
   playbooks/ reference/            transferable practice; measurements and pointers.
   open-questions/                  what is deliberately not settled.
+  maps/                            the indexes: domain, decisions, open questions.
+  product/ design/                 personas and journeys; signed-off design patterns.
+  _intake/                         staging. `/redkiln:kb-ingest` consumes and clears it.
 .bklg/                           the backlog — work in motion. `redkiln status`.
 .redkiln/                        config, the pinned process pack, templates, telemetry.
 ```
@@ -85,7 +88,18 @@ questions — putting something in the wrong one is how it stops being findable.
   frontmatter that `redkiln validate --kb` checks. An **accepted decision atom is
   immutable** — validation checks each one against `HEAD`, so correcting one means
   writing a new atom that supersedes it, never editing the body. That is the
-  discipline `docs/adr/` was always written under and nothing previously enforced.
+  discipline the ADRs were always written under and nothing previously enforced.
+
+  **A decision lives in two places on purpose.** `.kb/decisions/` holds the
+  seventeen *atoms* — canonical, ~100 lines each, carrying the frontmatter, the
+  status and the supersession graph that `validate --kb` enforces.
+  `references/adr/` holds the full original records, up to 1,508 lines, carrying
+  the compiler transcripts, the rejected alternatives and the measurement tables
+  a summary cannot hold. Link the atom; cite the record by `file:line`. Deleting
+  the second because the first exists would discard about 78% of the corpus, and
+  `spec-trace` will catch you, because `spec/SPECIFICATION.md` cites line ranges
+  that only exist in the long form.
+
   Atoms are authored by `/redkiln:kb-ingest` from `.kb/_intake/`, not by hand:
   hand-writing them produces the directory layout of the process without the
   process, which is why the first attempt at this was reverted (`0269720`).
@@ -124,7 +138,7 @@ silent pass: there is no app to screenshot.
 
 ## Binding constraints
 
-These come from `docs/adr/`. Changing one means writing a new ADR, not editing
+These come from `.kb/decisions/`. Changing one means writing a new ADR, not editing
 code around it.
 
 1. **Never introduce `#[async_trait]`.** It injects `+ Send`, which makes the
@@ -158,7 +172,7 @@ code around it.
    weaker requirement and accepts both flavours. Import only one of the two
    names per module — having both in scope makes method calls ambiguous.
 5. ~~**No let-chains.**~~ **The MSRV is 1.97.1**, raised from 1.85 at phase 2
-   ([ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004).
+   ([ADR-0029](.kb/decisions/0029-msrv-raised-to-1-97-1.md), amending ADR-0004).
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
@@ -320,8 +334,8 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   table each cost something real, and the choice is owed a measurement rather
   than a preference.
 - ~~**Whether `happenstance-runtime` is the right name and the right seam.**~~
-  Settled and executed: [ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md)
+  Settled and executed: [ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md)
   gave the bare name to the typed layer and renamed the contract to
-  `happenstance-core`; [ADR-0007](docs/adr/0007-projection-runner-decodes.md)
+  `happenstance-core`; [ADR-0007](.kb/decisions/0007-projection-runner-decodes.md)
   corrected where the projection runner lives. Kept here struck through rather
   than deleted, because the crate names in older commits only make sense with it.

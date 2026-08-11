@@ -15,7 +15,7 @@
 //! certifies nothing, and is indistinguishable from a good rule until an adapter
 //! with the corresponding bug passes it. A reviewer measured four plausible wrong
 //! implementations passing the suite as it stood.
-//! [ADR-0010](../../../docs/adr/0010-the-suite-must-prove-itself.md) is the
+//! [ADR-0010](../../../.kb/decisions/0010-the-suite-must-prove-itself.md) is the
 //! decision; `SPECIFICATION.md` §6.1's CF-1 – CF-6 are the clauses.
 //!
 //! The eight tests live in a `mod mutation_coverage` inside this file so that the

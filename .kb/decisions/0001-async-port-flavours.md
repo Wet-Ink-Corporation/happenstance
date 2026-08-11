@@ -27,7 +27,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0001-async-port-flavours.md
-  - docs/adr/0001-async-port-flavours.md
+  - references/adr/0001-async-port-flavours.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/memory.rs
   - CLAUDE.md

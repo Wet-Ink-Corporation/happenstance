@@ -66,7 +66,7 @@ regression appears in review as a shorter signature.
 flavour transitively requires `Batch: Send`, and why no gate can pin it)* ·
 [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(why the bound cannot be
 put on one flavour instead)* ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md)
 
 ---
@@ -162,7 +162,7 @@ has to carry an adapter's error, in a crate that never touched this file.
 `crates/happenstance-cloudflare/src/send_shape.rs:123 (SendStoreWithLocalError)` ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the
 obligation, and why it is asserted on the `Output`)* ·
-[ADR-0009](../../docs/adr/0009-error-send-sync.md)
+[ADR-0009](../../.kb/decisions/0009-error-send-sync.md)
 
 ---
 
@@ -257,5 +257,5 @@ whoever next tries to build for Workers.
 identical on both flavours by construction)* ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the bound
 stays off, and the strength is a marker)* ·
-[ADR-0009](../../docs/adr/0009-error-send-sync.md) ·
+[ADR-0009](../../.kb/decisions/0009-error-send-sync.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)

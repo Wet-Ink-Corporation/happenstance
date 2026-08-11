@@ -43,7 +43,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
+  - references/adr/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/tag.rs
   - crates/happenstance-core/src/validate.rs
   - crates/happenstance-core/src/limits.rs

@@ -22,7 +22,7 @@ related:
   - kb-open-question-dcb-no-published-format-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - references/adr/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-sync/src/lib.rs
 last_reviewed: 2026-08-10

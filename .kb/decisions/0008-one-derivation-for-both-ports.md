@@ -29,7 +29,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0008-one-derivation-for-both-ports.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
+  - references/adr/0008-one-derivation-for-both-ports.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/projection.rs
   - spec/SPECIFICATION.md

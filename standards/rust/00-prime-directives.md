@@ -156,7 +156,7 @@ implementing.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:13 (from it. The two)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md#es-1--one-definition-two-flavours-and-generic-code-binds-the-weaker-one) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
 [trait-variant 0.1.3](https://docs.rs/trait-variant/0.1.3/) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-00-3. Return `read`'s stream at the top level, and never make `read` `async`.
@@ -214,8 +214,8 @@ was invented to buy — holding a read across an await inside `tokio::spawn`.
 `crates/happenstance-core/src/memory.rs:614 (send_flavour_stream_is_send_in_generic_code)` ·
 `crates/happenstance-core/src/memory.rs:643 (spawns_from_generic)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md#es-2--read-returns-the-stream-at-the-top-level-and-is-not-async) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
 ## RS-00-4. Bind `EventStore` in generic code, and import exactly one flavour per module.
 
@@ -255,7 +255,7 @@ the target the bare flavour was invented for.
 **Evidence.** `crates/happenstance-core/src/store.rs:37 (error[E0034])` ·
 `crates/happenstance-core/tests/frozen_signatures.rs:43 (multiple applicable items in scope)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md#es-1--one-definition-two-flavours-and-generic-code-binds-the-weaker-one) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
 ## RS-00-5. Use the language 1.97.1 gives you; move the floor only in an ADR.
 
@@ -307,5 +307,5 @@ who finds out is the first one who is not on the pinned toolchain.
 
 **Evidence.** `Cargo.toml:8 (rust-version = "1.97.1")` ·
 `crates/happenstance-testkit/tests/mutation_coverage/correct.rs:418 (stored, condition)` ·
-[ADR-0029](../../docs/adr/0029-msrv-raised-to-1-97-1.md) ·
-[ADR-0004](../../docs/adr/0004-edition-and-msrv.md)
+[ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
+[ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md)

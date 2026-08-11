@@ -19,11 +19,11 @@ usage is stated so a later wave reading this table is not misled.
 | `conflicts` | Contradicts something already accepted, or two incoming sources contradict each other and the wave declines to pick a winner. **Four occurrences**, all intra-wave, all routed per authority rule 4. |
 | `requires-new-decision` | Cannot be discharged by recording it: an ADR, or a human's sign-off, is needed. Routed to `open-questions/`. |
 
-**The `docs/adr/` corpus is now mirrored, and that is the change from last wave.** The previous
-wave read `docs/adr/` for context and treated it as non-authoritative for placement, because the
+**The `.kb/decisions/` corpus is now mirrored, and that is the change from last wave.** The previous
+wave read `.kb/decisions/` for context and treated it as non-authoritative for placement, because the
 authority rules govern `.kb/` atoms and importing the ADR corpus was "a separate wave with a
 human in it". This is that wave, and the human is upstream of it: every one of these seventeen
-documents was already accepted and signed off in `docs/adr/` — several with sign-off events named
+documents was already accepted and signed off in `.kb/decisions/` — several with sign-off events named
 in their own headers (ADR-0012's two lines, 2026-08-08; ADR-0015's CF-40 placement). **This wave
 authors no decision.** It transcribes seventeen that exist, and the ADR-authorship rule is
 honoured exactly as last wave honoured it: where a claim needs a *new* decision, it becomes an
@@ -230,7 +230,7 @@ open question.
 | `requires-new-decision` | 12 |
 | accepted decision atoms **edited** | **0** |
 | accepted decision atoms superseded (frontmatter flip) | **0** — the one fully-superseded ADR arrives already superseded and is authored that way (`02`) |
-| decision atoms authored | **17** — transcribed from `docs/adr/`, none newly decided |
+| decision atoms authored | **17** — transcribed from `.kb/decisions/`, none newly decided |
 | reference atoms | 3 |
 | concept atoms | 1 |
 | governance atoms | 1 |

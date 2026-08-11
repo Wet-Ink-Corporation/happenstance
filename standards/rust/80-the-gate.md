@@ -369,6 +369,6 @@ has stopped being a note and become a promise.
 
 **Evidence.** `Cargo.toml:8 (rust-version)` · `clippy.toml:1 (msrv = "1.97.1")` ·
 `xtask/src/main.rs:866 (A let-chain, and the first in the workspace)` ·
-[ADR-0029](../../docs/adr/0029-msrv-raised-to-1-97-1.md) ·
-[ADR-0004](../../docs/adr/0004-edition-and-msrv.md) ·
+[ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
+[ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md) ·
 [cargo rust-version resolution](https://doc.rust-lang.org/cargo/reference/resolver.html) *(checked 2026-08-09, rustc 1.97.1)*

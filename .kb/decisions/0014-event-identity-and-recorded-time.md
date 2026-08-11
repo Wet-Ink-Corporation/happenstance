@@ -45,7 +45,7 @@ related:
   - kb-decision-0013
 source_paths:
   - .kb/_intake/0014-event-identity-and-recorded-time.md
-  - docs/adr/0014-event-identity-and-recorded-time.md
+  - references/adr/0014-event-identity-and-recorded-time.md
   - crates/happenstance-core/src/identity.rs
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-sync/src/identity.rs

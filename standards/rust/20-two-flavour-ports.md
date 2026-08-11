@@ -77,8 +77,8 @@ implemented by every adapter in the workspace.
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(derived, not
 hand-written)* · [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(the
 forwarding, and why a bound cannot differ between flavours)* ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md) ·
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [trait-variant 0.1.3](https://docs.rs/trait-variant/0.1.3/) *(checked 2026-08-09, rustc 1.97.1)*
 
 ---
@@ -146,7 +146,7 @@ signature they cannot change without a breaking release.
 `crates/happenstance-core/src/memory.rs:601 (async fn count<S: EventStore>)` ·
 `crates/happenstance-ladybug/tests/port_shape.rs:23 (pub(crate) async fn advance<S: ProjectionStore>)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
 ---
 
@@ -196,7 +196,7 @@ changing, which is exactly the shape a reviewer scrolls past.
 `crates/happenstance-core/tests/frozen_signatures.rs:43 (multiple applicable items in scope)` ·
 `crates/happenstance-ladybug/tests/port_shape.rs:14 (makes every method call ambiguous)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(one name per module)* ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
 ---
 
@@ -269,7 +269,7 @@ existed to serve.
 [SPECIFICATION ES-7](../../spec/SPECIFICATION.md) *(the blanket impl a
 direct impl must not collide with)* ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
 ---
 
@@ -328,5 +328,5 @@ it is not a dependency of this workspace.
 **Evidence.** `crates/happenstance-neon/src/event_store.rs:303 (Pin<Box<dyn Future)` ·
 [SPECIFICATION ES-42](../../spec/SPECIFICATION.md) *(the hand-written
 `Pin<Box<dyn Stream + 'a>>` wrapper, and why it needs no `Unpin` bound)* ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
 [dynosaur 0.3.1](https://docs.rs/dynosaur/0.3.1/) *(checked 2026-08-09, rustc 1.97.1)*

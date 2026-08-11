@@ -85,7 +85,7 @@ The area concerned with `happenstance-core`'s async port design (`EventStore`,
 `ProjectionStore`), the conformance suite that proves an adapter against it, and the
 seventeen-ADR decision record — async port flavours through the wire format — that this
 project's early phases rest on. Established by the 2026-08-10 ADR import, which brought
-`docs/adr/0001` through `docs/adr/0016` and `docs/adr/0029` into `.kb/decisions/` as one wave.
+`.kb/decisions/0001` through `.kb/decisions/0016` and `.kb/decisions/0029` into `.kb/decisions/` as one wave.
 The full decision list, including status and supersession, is
 [`decision-map.md`](decision-map.md) rather than repeated here.
 

@@ -27,10 +27,10 @@ is the unit the atom must be.
 
 The word budget is met a different way: **the atom is a summary and a pointer, not the ADR.** The
 seventeen intake files run 302 to 15,305 words and are byte-identical to files that still exist in
-`docs/adr/` (`00`, provenance). `docs/adr/` is not consumed by this ingest and stays canonical. So
+`.kb/decisions/` (`00`, provenance). `.kb/decisions/` is not consumed by this ingest and stays canonical. So
 each decision atom carries, in 300–900 words: what was decided, the commitments in the imperative
 words the ADR used, what lost and why, the provisional or superseded status and its condition, and
-`docs/adr/NNNN-*.md` in `source_paths` as the full record. **No atom paraphrases an ADR's reasoning
+`.kb/decisions/NNNN-*.md` in `source_paths` as the full record. **No atom paraphrases an ADR's reasoning
 in place of citing it**, because a paraphrase of a decision is a second decision that nobody signed.
 
 The one split that *is* permitted is **by kind, never by section**: evidence leaves for a
@@ -85,7 +85,7 @@ what makes every reversal in it free rather than breaking"*, `RUNBOOK.md:295`).
 
 Every atom keeps its originating `.kb/_intake/…` path — the intake files are deleted by a
 successful ingest and the atom must still say where it came from — **plus** the surviving
-`docs/adr/NNNN-*.md`, plus the repo paths that ground it. All were verified to resolve in this
+`.kb/decisions/NNNN-*.md`, plus the repo paths that ground it. All were verified to resolve in this
 worktree (`00`, provenance).
 
 ### 5. Two new layers
@@ -163,8 +163,8 @@ source_paths:
   - .kb/_intake/0009-error-send-sync.md
   - .kb/_intake/0010-the-suite-must-prove-itself.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
-  - docs/adr/0009-error-send-sync.md
+  - .kb/decisions/0008-one-derivation-for-both-ports.md
+  - .kb/decisions/0009-error-send-sync.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/projection.rs
   - crates/happenstance-testkit/src/fixtures.rs
@@ -215,7 +215,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -263,7 +263,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - .kb/decisions/0016-the-wire-format.md
   - experiments/wire-format/
   - crates/happenstance-sync/src/wire.rs
 last_reviewed: 2026-08-10
@@ -311,7 +311,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - .kb/decisions/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/append.rs
   - spec/SPECIFICATION.md
@@ -332,7 +332,7 @@ Seventeen `create_new` operations, one per ADR, in ADR-number order so that a su
 is always created before the atom that names it. All seventeen share:
 `kind: decision`, `authority_tier: decision`, `mapsImpact: decisionMap + domainMap`,
 `sourceFiles: [the one intake file]`, and `source_paths` carrying the intake path, the surviving
-`docs/adr/` path, and the grounding code.
+`.kb/decisions/` path, and the grounding code.
 
 `classification: extends` on all seventeen — nothing in `.kb/` is contradicted, and the
 supersessions among them arrive already resolved by the documents themselves (`01`).
@@ -368,7 +368,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0001-async-port-flavours.md
-  - docs/adr/0001-async-port-flavours.md
+  - .kb/decisions/0001-async-port-flavours.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/memory.rs
   - CLAUDE.md
@@ -403,7 +403,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0002-crate-naming.md
-  - docs/adr/0002-crate-naming.md
+  - .kb/decisions/0002-crate-naming.md
   - CONTRIBUTING.md
 last_reviewed: 2026-08-10
 ```
@@ -446,7 +446,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
-  - docs/adr/0003-opaque-payloads.md
+  - .kb/decisions/0003-opaque-payloads.md
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-core/Cargo.toml
   - CLAUDE.md
@@ -483,7 +483,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0004-edition-and-msrv.md
-  - docs/adr/0004-edition-and-msrv.md
+  - .kb/decisions/0004-edition-and-msrv.md
   - rust-toolchain.toml
   - Cargo.toml
   - CLAUDE.md
@@ -522,7 +522,7 @@ related:
   - kb-decision-0002
 source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
-  - docs/adr/0005-rename-to-happenstance.md
+  - .kb/decisions/0005-rename-to-happenstance.md
   - CONTRIBUTING.md
   - CLAUDE.md
 last_reviewed: 2026-08-10
@@ -561,7 +561,7 @@ related:
   - kb-decision-0003
 source_paths:
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
-  - docs/adr/0006-bare-name-to-the-typed-layer.md
+  - .kb/decisions/0006-bare-name-to-the-typed-layer.md
   - CLAUDE.md
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -599,7 +599,7 @@ depends_on:
 related: []
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0007-projection-runner-decodes.md
+  - .kb/decisions/0007-projection-runner-decodes.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -638,7 +638,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0008-one-derivation-for-both-ports.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
+  - .kb/decisions/0008-one-derivation-for-both-ports.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/projection.rs
   - spec/SPECIFICATION.md
@@ -678,7 +678,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0009-error-send-sync.md
-  - docs/adr/0009-error-send-sync.md
+  - .kb/decisions/0009-error-send-sync.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/error.rs
   - crates/happenstance-cloudflare/src/lib.rs
@@ -719,7 +719,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0010-the-suite-must-prove-itself.md
-  - docs/adr/0010-the-suite-must-prove-itself.md
+  - .kb/decisions/0010-the-suite-must-prove-itself.md
   - crates/happenstance-testkit/src/fixtures.rs
   - crates/happenstance-testkit/src/registry.rs
   - crates/happenstance-testkit/src/suite.rs
@@ -763,7 +763,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - .kb/decisions/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/query.rs
   - references/evaluation/phase-4-reconciliation.md
@@ -806,7 +806,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0012-append-shape-and-preconditions.md
-  - docs/adr/0012-append-shape-and-preconditions.md
+  - .kb/decisions/0012-append-shape-and-preconditions.md
   - crates/happenstance-core/src/append.rs
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-testkit/src/fixtures.rs
@@ -850,7 +850,7 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-core/src/store.rs
   - experiments/position-visibility/
@@ -893,7 +893,7 @@ related:
   - kb-decision-0013
 source_paths:
   - .kb/_intake/0014-event-identity-and-recorded-time.md
-  - docs/adr/0014-event-identity-and-recorded-time.md
+  - .kb/decisions/0014-event-identity-and-recorded-time.md
   - crates/happenstance-core/src/identity.rs
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-sync/src/identity.rs
@@ -937,7 +937,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
+  - .kb/decisions/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/tag.rs
   - crates/happenstance-core/src/validate.rs
   - crates/happenstance-core/src/limits.rs
@@ -982,7 +982,7 @@ related:
   - kb-reference-wire-format-measurements-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - .kb/decisions/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-core/src/event.rs
   - experiments/wire-format/
@@ -1022,7 +1022,7 @@ depends_on:
 related: []
 source_paths:
   - .kb/_intake/0029-msrv-raised-to-1-97-1.md
-  - docs/adr/0029-msrv-raised-to-1-97-1.md
+  - .kb/decisions/0029-msrv-raised-to-1-97-1.md
   - rust-toolchain.toml
   - Cargo.toml
   - CLAUDE.md
@@ -1074,8 +1074,8 @@ source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0002-crate-naming.md
-  - docs/adr/0006-bare-name-to-the-typed-layer.md
+  - .kb/decisions/0002-crate-naming.md
+  - .kb/decisions/0006-bare-name-to-the-typed-layer.md
   - CONTRIBUTING.md
   - .kb/decisions/README.md
 last_reviewed: 2026-08-10
@@ -1132,7 +1132,7 @@ source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0007-projection-runner-decodes.md
+  - .kb/decisions/0007-projection-runner-decodes.md
 last_reviewed: 2026-08-10
 ```
 
@@ -1178,7 +1178,7 @@ related:
   - kb-reference-position-visibility-experiment-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - crates/happenstance-testkit/src/concurrency.rs
   - crates/happenstance-testkit/src/fixtures.rs
 last_reviewed: 2026-08-10
@@ -1245,8 +1245,8 @@ source_paths:
   - crates/happenstance-cloudflare/src/lib.rs
   - crates/happenstance-cloudflare/src/send_shape.rs
   - references/evaluation/review-citation-drift.md
-  - docs/adr/0008-one-derivation-for-both-ports.md
-  - docs/adr/0009-error-send-sync.md
+  - .kb/decisions/0008-one-derivation-for-both-ports.md
+  - .kb/decisions/0009-error-send-sync.md
 last_reviewed: 2026-08-10
 ```
 
@@ -1306,8 +1306,8 @@ source_paths:
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/tests/local_conformance.rs
   - crates/happenstance-core/src/memory.rs
-  - docs/adr/0001-async-port-flavours.md
-  - docs/adr/0014-event-identity-and-recorded-time.md
+  - .kb/decisions/0001-async-port-flavours.md
+  - .kb/decisions/0014-event-identity-and-recorded-time.md
 last_reviewed: 2026-08-10
 ```
 
@@ -1419,7 +1419,7 @@ related:
   - kb-open-question-ps-19-scope-narrower-001
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0007-projection-runner-decodes.md
+  - .kb/decisions/0007-projection-runner-decodes.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -1455,7 +1455,7 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0011-read-laziness-and-isolation.md
+  - .kb/decisions/0011-read-laziness-and-isolation.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
 last_reviewed: 2026-08-10
@@ -1491,7 +1491,7 @@ related:
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10
@@ -1526,7 +1526,7 @@ related:
   - kb-reference-position-visibility-experiment-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - crates/happenstance-postgres/src/lib.rs
   - RUNBOOK.md
@@ -1563,7 +1563,7 @@ related:
   - kb-decision-0010
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - crates/happenstance-testkit/src/concurrency.rs
   - crates/happenstance-testkit/src/fixtures.rs
 last_reviewed: 2026-08-10
@@ -1602,7 +1602,7 @@ related:
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - .kb/decisions/0013-position-assignment-and-visibility.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
 last_reviewed: 2026-08-10
@@ -1638,7 +1638,7 @@ related:
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
+  - .kb/decisions/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10
@@ -1677,8 +1677,8 @@ related:
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - .kb/_intake/0012-append-shape-and-preconditions.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0012-append-shape-and-preconditions.md
+  - .kb/decisions/0015-validated-identifiers-and-store-limits.md
+  - .kb/decisions/0012-append-shape-and-preconditions.md
   - crates/happenstance-testkit/src/fixtures.rs
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10
@@ -1717,7 +1717,7 @@ related:
   - kb-reference-wire-format-measurements-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - .kb/decisions/0016-the-wire-format.md
   - experiments/wire-format/
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10
@@ -1753,7 +1753,7 @@ related:
   - kb-reference-wire-format-measurements-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - .kb/decisions/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - experiments/wire-format/
 last_reviewed: 2026-08-10
@@ -1788,7 +1788,7 @@ related:
   - kb-open-question-dcb-no-published-format-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
-  - docs/adr/0016-the-wire-format.md
+  - .kb/decisions/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-sync/src/lib.rs
 last_reviewed: 2026-08-10

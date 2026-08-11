@@ -271,7 +271,7 @@ RUNBOOK to answer explicitly, not a flaw in what's built so far.
 - [get-eventually/eventually-rs — GitHub](https://github.com/get-eventually/eventually-rs)
 - [evento — crates.io](https://crates.io/crates/evento)
 - [lib.rs — event-sourcing keyword listing](https://lib.rs/keywords/event-sourcing)
-- Local: `README.md`, `CLAUDE.md`, `RUNBOOK.md`, `docs/adr/0006-bare-name-to-the-typed-layer.md`,
+- Local: `README.md`, `CLAUDE.md`, `RUNBOOK.md`, `.kb/decisions/0006-bare-name-to-the-typed-layer.md`,
   `crates/happenstance/src/{store.rs,event.rs,Cargo.toml}`,
   `crates/happenstance-runtime/{src/lib.rs,Cargo.toml}`,
   `crates/happenstance-testkit/src/lib.rs`,

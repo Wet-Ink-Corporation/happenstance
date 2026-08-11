@@ -19,7 +19,8 @@ serves neither reader.
 | The reviews and research the design rests on | [`references/evaluation/`](../references/evaluation/README.md) |
 | Six deployments the contract was walked against | [`references/scenarios/`](../references/scenarios/README.md) |
 | What the six skeletons told the type checker | [`references/adapter-shapes.md`](../references/adapter-shapes.md) |
-| The decisions, and why each was taken | [`adr/`](adr/) — migrating into `.kb/decisions/` |
+| The decisions, and why each was taken | [`.kb/decisions/`](../.kb/decisions/) — the full records are [`references/adr/`](../references/adr/) |
+| What is deliberately still unsettled | [`.kb/open-questions/`](../.kb/open-questions/) |
 
 Two of those are read by the gate rather than only by people: `cargo xtask
 spec-trace` parses `spec/SPECIFICATION.md` and `spec/E2E-CASES.md` by path, and

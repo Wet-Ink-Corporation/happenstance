@@ -16,7 +16,7 @@ thinking a decision was consulted:
 | `conflicts` | Contradicts an accepted decision atom. **Zero occurrences** — there is nothing to contradict. |
 | `requires-new-decision` | The claim cannot be discharged by recording it: an ADR is needed, and this wave is not authorised to write one. Routed to `open-questions/`. |
 
-The repository's real decision record lives in `docs/adr/` and is **not** mirrored into `.kb/`.
+The repository's real decision record lives in `.kb/decisions/` and is **not** mirrored into `.kb/`.
 It was read for context and treated as non-authoritative for placement, because the authority
 rules govern `.kb/` atoms. Where a claim names an ADR (gap 5 names ADR-0009 as accepted; the
 frozen-clause lesson names ADR-0029 as the standing example), the reference is preserved in the

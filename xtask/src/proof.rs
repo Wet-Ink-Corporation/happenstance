@@ -44,8 +44,8 @@
 //! silence. What differs is only *which* names earn a row, and that is argued at
 //! [`WIRE_NEGATIVE_CONTROLS`] and [`SYNC_WIRE_TESTS`].
 //!
-//! [ADR-0010]: ../../docs/adr/0010-the-suite-must-prove-itself.md
-//! [ADR-0016]: ../../docs/adr/0016-the-wire-format.md
+//! [ADR-0010]: ../../.kb/decisions/0010-the-suite-must-prove-itself.md
+//! [ADR-0016]: ../../.kb/decisions/0016-the-wire-format.md
 
 use std::fs;
 use std::process::Command;

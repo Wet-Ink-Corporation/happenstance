@@ -27,7 +27,7 @@ depends_on:
 related: []
 source_paths:
   - .kb/_intake/0029-msrv-raised-to-1-97-1.md
-  - docs/adr/0029-msrv-raised-to-1-97-1.md
+  - references/adr/0029-msrv-raised-to-1-97-1.md
   - rust-toolchain.toml
   - Cargo.toml
   - CLAUDE.md

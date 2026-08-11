@@ -174,7 +174,7 @@ away from underneath them.
 ## 5. A defect the ADR states, reproduced exactly — and one place it disagrees with itself
 
 Every number this experiment reproduces from the current text of
-`docs/adr/0016-the-wire-format.md` agrees with it. Two things are worth
+`.kb/decisions/0016-the-wire-format.md` agrees with it. Two things are worth
 calling out on purpose rather than leaving to a diff:
 
 **Confirmed, not just reproduced: postcard's truncated-buffer test.**

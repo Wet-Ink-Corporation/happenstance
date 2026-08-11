@@ -28,7 +28,7 @@ depends_on:
 related: []
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0007-projection-runner-decodes.md
+  - references/adr/0007-projection-runner-decodes.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
 last_reviewed: 2026-08-10

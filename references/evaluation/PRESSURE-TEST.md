@@ -252,7 +252,7 @@ document's defect list.
 
 ### 3.6 The ADR queue collides with an accepted ADR — in both documents
 
-`docs/adr/0007-projection-runner-decodes.md` exists, `Status: accepted`, dated
+`.kb/decisions/0007-projection-runner-decodes.md` exists, `Status: accepted`, dated
 2026-08-06, committed at HEAD as `2a65d76`. `ARCHITECTURAL-EVALUATION.md:115`,
 `:812`, `:927` and `:1019` allocate the number 0007 to the async-port decision;
 `revised-runway.md:162` and nine other places do the same, and the queue runs to

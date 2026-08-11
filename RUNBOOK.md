@@ -262,12 +262,12 @@ the session protocol reads out of the table.
 ## The ADR queue
 
 In the order they must be written, numbered **from 0008** —
-`docs/adr/0007-projection-runner-decodes.md` is accepted on disk and dated
+`.kb/decisions/0007-projection-runner-decodes.md` is accepted on disk and dated
 2026-08-06, and both prior planning documents allocated 0007 a second time
 (`PRESSURE-TEST.md:254-262`). Each line is the single question that ADR answers;
 an ADR that cannot be stated as one question is two ADRs.
 
-Checked against `docs/adr/` at this revision: 0001–0007 exist, 0008–0028 are free,
+Checked against `.kb/decisions/` at this revision: 0001–0007 exist, 0008–0028 are free,
 and no queued number collides with one on disk. ADR-0002 and ADR-0005 need no
 entry here despite phase 0 executing a rename that invalidates their content —
 both already carry a superseded status (`0002:3`, `0005:3`), which is what makes
@@ -283,16 +283,16 @@ scheduling defect.
 
 | ADR | Phase | The question it answers |
 |---|---|---|
-| ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
-| ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](docs/adr/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
-| **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
-| ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](docs/adr/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
+| ~~**0008**~~ | 1 | ~~Is the second trait flavour derived by `trait_variant` or hand-written — for `EventStore` **and** `ProjectionStore` in one decision (PS-35) — given that a provided body is cloned into the variant and must type-check under both flavours' bounds at once?~~ **Written**, as [ADR-0008](.kb/decisions/0008-one-derivation-for-both-ports.md). The first half of the question was stale on arrival — ES-1 is `[FROZEN]` on "MUST be derived" — so the ADR answers the second and third halves and says so |
+| ~~**0009**~~ | 2 | ~~Does the store's `Error` associated type carry `Send + Sync + 'static`, and may the two flavours differ in it? (ES-6)~~ **Written**, as [ADR-0009](.kb/decisions/0009-error-send-sync.md). No to the first, no to the second — and *may they differ* turned out not to be a policy question: there is no mechanism, which one edit to one declaration demonstrated by reporting against both flavours. The strength moves to a marker trait that works from downstream, so the contract crate need not change |
+| **0029** | 2 | *(unscheduled — the queue had no number for it)* What is the MSRV, now that a dependency's build script forces the question? [ADR-0029](.kb/decisions/0029-msrv-raised-to-1-97-1.md), amending ADR-0004: **1.97.1** |
+| ~~**0010**~~ | 3 | ~~What is the conformance suite's own proof obligation — what must every rule be demonstrated to fail, what shape must the fixture take, and how are rules emitted for runtimes that are not tokio? (CF-1 – CF-29)~~ **Written**, as [ADR-0010](.kb/decisions/0010-the-suite-must-prove-itself.md). The third question was already answered by phase 1's registry and is ratified rather than decided; the first two are the phase's work |
 | **0011** | 4 | What does `read` promise about laziness and isolation — when is the store's state sampled, and do the items of one `Query` share one sample? (ES-11 – ES-13; **written**, and it also discharges ES-8, ES-9, ES-14 – ES-16 and VT-26 – VT-31's read half, which the scope below did not name) |
 | **0012** | 4 | What shape does `append` take and what are its preconditions — who owns the batch, what an empty batch is, whether a batch can violate its own condition, and what a dropped future may have done? (ES-17 – ES-24; **written**, and it also discharges ES-25 – ES-29, ES-37 and VT-30) |
 | **0013** | 4 | What does a store promise about position assignment and visibility — gaps, reuse, and the invariant that makes `AppendCondition::after` sound? (VT-11 – VT-13, ES-10, ES-38; **written**, and it also discharges ES-30 – ES-32's head/count questions, ES-35 and ES-40) |
 | **0014** | 4 | What does an event carry beyond type, data and tags — identity, store incarnation, recorded time — and who assigns each? (VT-4 – VT-10; **written**, and it also adds ES-41 and adopts **VT-2**, which this queue assigned to nobody) |
 | **0015** | 4 | How is a validated identifier constructed, and is `Tag` equality byte equality? (VT-14 – VT-25; **written**) |
-| ~~**0016**~~ | 5 | ~~What is the wire format, and whose format is it? (WF-1 – WF-12)~~ **Written**, as [ADR-0016](docs/adr/0016-the-wire-format.md), and accepted. The format is **private to happenstance**, which is what makes every reversal in it free rather than breaking. WF-1's interoperability half stays `[DEFERRED]` on a *stronger* reason than the one its marker gave. The ADR adds no clause, removes none and moves no marker — D12's fix gets an xtask manifest lint rather than a WF-13 (§14), so §1.3's census is unchanged |
+| ~~**0016**~~ | 5 | ~~What is the wire format, and whose format is it? (WF-1 – WF-12)~~ **Written**, as [ADR-0016](.kb/decisions/0016-the-wire-format.md), and accepted. The format is **private to happenstance**, which is what makes every reversal in it free rather than breaking. WF-1's interoperability half stays `[DEFERRED]` on a *stronger* reason than the one its marker gave. The ADR adds no clause, removes none and moves no marker — D12's fix gets an xtask manifest lint rather than a WF-13 (§14), so §1.3's census is unchanged |
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
 | **0019** | 6 | What happens when `apply` fails? (PS-26 – PS-30) |
@@ -1303,7 +1303,7 @@ take.
 
 - [x] ADR-0008 written, quoting the compiled evidence for the derived-versus-hand-written
       choice, and covering both ports in one decision (PS-35).
-      [ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md). See the caveat above
+      [ADR-0008](.kb/decisions/0008-one-derivation-for-both-ports.md). See the caveat above
       on what "the choice" turned out to be.
 - [x] ADR-0001's `provisional` marker removed, or ADR-0001 superseded. Its full
       proof is cited forward to phase 9. Removed, with the banner rewritten to
@@ -1560,7 +1560,7 @@ ES-10 is frozen at phase 4 and an invariant nothing can afford is not an invaria
       any of them. `trybuild` is the only mechanism, and it stays phase 6's
       decision.
 - [x] ADR-0009 written, or ES-6 restated as deferred with the compiled reason.
-      [ADR-0009](docs/adr/0009-error-send-sync.md) — **written, and it settles rather
+      [ADR-0009](.kb/decisions/0009-error-send-sync.md) — **written, and it settles rather
       than renews.** `Error` keeps its bound; the strength moves into a marker
       trait. Note what decided it, because it was not the question the phase body
       asked: the *derived* flavour does not imply a `Send` error either, so ES-6's
@@ -1697,7 +1697,7 @@ evidence half of E2E-24 (a `Batch` need not be a live transaction).
   remembers is one phase 6 will have to re-derive.
 
   *The MSRV moved, and the way it broke is the lesson.*
-  [ADR-0029](docs/adr/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.
+  [ADR-0029](.kb/decisions/0029-msrv-raised-to-1-97-1.md) raises it to 1.97.1.
   `libsqlite3-sys` uses `cfg_select!` in a **build script** and declares no
   `rust-version` — and neither do `rusqlite`, `sqlx`, `sqlx-core` or
   `sqlx-postgres`. Five of five. So `cargo hack --rust-version` cannot protect a
@@ -2151,7 +2151,7 @@ testkit's `proptest` feature, which is why the gate's invocation carries
 **Exit criteria**
 
 - [x] ADR-0010 written before the code it constrains.
-      [ADR-0010](docs/adr/0010-the-suite-must-prove-itself.md). Two corrections it
+      [ADR-0010](.kb/decisions/0010-the-suite-must-prove-itself.md). Two corrections it
       makes to clauses this phase will re-spell: CF-23's parameterised wrapper is
       justified by **`wasm32` portability, not `Send`-ness** — `#[tokio::test]`
       drives a `!Send` store perfectly well, because `Runtime::block_on` is not
@@ -3825,7 +3825,9 @@ and are recorded rather than decided — the sharpest being that
 independence proposition and no clause states it; the word "disjoint" does not
 occur in the specification. Two are held in `UNCLAIMED_PENDING_ADR` in
 `xtask/src/spec_trace.rs`, which prints them on every green run. The rest are in
-[`.kb/_intake/gaps-owed-a-decision.md`](.kb/_intake/gaps-owed-a-decision.md)
+[`.kb/open-questions/`](.kb/open-questions/) — one atom per gap, since the
+intake wave of 2026-08-10 refused to merge six independent questions into one —
+indexed at [`.kb/maps/open-questions-index.md`](.kb/maps/open-questions-index.md),
 for the next ADR pass.
 
 **Session log**
@@ -4682,27 +4684,27 @@ Names are the post-phase-0 ones.
 1. **Never introduce `#[async_trait]`.** It injects `+ Send`, which makes the
    `wasm32` / Workers target impossible. Ports are defined once without a `Send`
    bound and `trait_variant` derives the `Send` flavour.
-   ([ADR-0001](docs/adr/0001-async-port-flavours.md), ADR-0008)
+   ([ADR-0001](.kb/decisions/0001-async-port-flavours.md), ADR-0008)
 2. **Never put `serde` in `happenstance-core`'s default features.** Payloads are
    opaque `Bytes`; the `serde` feature covers envelope types only.
    **This attaches to the ports crate, not to the string on the front of it** —
    after the rename, `happenstance` is the crate whose job *is* encoding and it
    depends on `serde` by design.
-   ([ADR-0003](docs/adr/0003-opaque-payloads.md), [ADR-0006](docs/adr/0006-bare-name-to-the-typed-layer.md))
+   ([ADR-0003](.kb/decisions/0003-opaque-payloads.md), [ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md))
 3. **`EventStore::read` returns the stream at the top level and is not `async`.**
    Nesting it inside a future silently drops `+ Send` from the stream on the `Send`
    flavour, defeating the entire two-trait design. The unit test that asserts this
    is currently vacuous — it asserts on a concrete type, where auto-trait leakage
    makes it pass regardless — and **phase 1 replaces it with a generic one**. Until
    then this constraint protects a test that cannot fail.
-   ([ADR-0001](docs/adr/0001-async-port-flavours.md))
+   ([ADR-0001](.kb/decisions/0001-async-port-flavours.md))
 4. **Bind `EventStore`, not `SendEventStore`, in generic code.** It is the weaker
    requirement and accepts both flavours. Import only one of the two names per
    module — having both in scope makes method calls ambiguous. Prefer
    `happenstance_core::prelude` once phase 4 ships it.
 5. **No let-chains.** Stable only from 1.88; the MSRV is 1.85 — but until first
    publish the MSRV is a *preference*, not a promise. Weigh it; do not obey it.
-   ([ADR-0004](docs/adr/0004-edition-and-msrv.md))
+   ([ADR-0004](.kb/decisions/0004-edition-and-msrv.md))
 
 And the rules that outrank the rest, with the two amendments this plan adds:
 

@@ -44,19 +44,19 @@ So, for authority purposes:
 ## Provenance check
 
 Every one of the seventeen intake files is a **byte-identical copy of a file that still exists
-in `docs/adr/`** (`diff -q`, spot-checked on 0001, 0016 and 0029, 2026-08-10; all silent). That
+in `.kb/decisions/`** (`diff -q`, spot-checked on 0001, 0016 and 0029, 2026-08-10; all silent). That
 single fact governs more of this plan than any score in it:
 
-- `docs/adr/` is the canonical, human-signed ADR corpus and is **not** consumed by this ingest.
-  A successful ingest deletes `.kb/_intake/`; `docs/adr/` is untouched.
+- `.kb/decisions/` is the canonical, human-signed ADR corpus and is **not** consumed by this ingest.
+  A successful ingest deletes `.kb/_intake/`; `.kb/decisions/` is untouched.
 - The intake files run **302 to 15,305 words** (`wc -w`). Eleven of the seventeen exceed the
   900-word atomicity ceiling, four by an order of magnitude. A `.kb` decision atom therefore
   **cannot** be the ADR; it is a summary, its commitments, its rejected alternatives, and a
-  pointer to `docs/adr/NNNN-*.md`. That is the reference README's pointer rule applied to the
+  pointer to `.kb/decisions/NNNN-*.md`. That is the reference README's pointer rule applied to the
   decisions layer, and it is why no ADR is split into three atoms to make the words fit — see
   `02`, "One atom per ADR".
 - Every `source_paths` entry proposed in `02` was tested against this worktree. All resolve:
-  `docs/adr/` (17 files), `spec/SPECIFICATION.md`, `spec/E2E-CASES.md`, `RUNBOOK.md`,
+  `.kb/decisions/` (17 files), `spec/SPECIFICATION.md`, `spec/E2E-CASES.md`, `RUNBOOK.md`,
   `CLAUDE.md`, `references/evaluation/{phase-4-reconciliation,phase-4-5-reconciliation}.md`,
   `references/adapter-shapes.md`, `experiments/{position-visibility,wire-format}/`,
   `crates/happenstance-core/src/{event,identity,limits,store,append,projection,memory}.rs`,

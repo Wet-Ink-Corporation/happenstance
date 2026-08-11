@@ -2,7 +2,7 @@
 
 **Lens:** Rust API Guidelines checklist + 2024-edition idiom
 **Scope read:** every file under `crates/happenstance/src/` and `crates/happenstance-testkit/src/`,
-plus `docs/adr/0001`, `RUNBOOK.md`, `examples/course-subscriptions/src/main.rs`, all manifests.
+plus `.kb/decisions/0001`, `RUNBOOK.md`, `examples/course-subscriptions/src/main.rs`, all manifests.
 **Date:** 2026-08-05. **Everything below was compiled**, not reasoned about — see "Probe log".
 
 ---

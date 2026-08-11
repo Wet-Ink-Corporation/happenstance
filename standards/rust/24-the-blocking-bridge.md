@@ -68,8 +68,8 @@ author has no test for, because a rule that only ever calls `read` from inside a
 `crates/happenstance-sqlite/src/event_store.rs:203 (Nothing is executed here on purpose)` ·
 [ES-2](../../spec/SPECIFICATION.md) ·
 [ES-11](../../spec/SPECIFICATION.md) ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
-[ADR-0011](../../docs/adr/0011-read-laziness-and-isolation.md)
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
+[ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md)
 
 ## RS-24-2. Turn a runtime-less poll into a stream item error with `Handle::try_current`.
 

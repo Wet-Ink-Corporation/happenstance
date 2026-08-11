@@ -2,7 +2,7 @@
 
 ## Before you start
 
-Read [`docs/adr/`](docs/adr). A handful of decisions shape everything else: the
+Read [`.kb/decisions/`](.kb/decisions/). A handful of decisions shape everything else: the
 two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
 naming. Changing one is fine — but it means writing a new ADR that supersedes
 the old one, not working around it in code. ADR-0002/ADR-0005 and
@@ -96,8 +96,8 @@ fix the rule — a bad rule costs every future adapter author a day.
 
 ## Adding a method to a port
 
-The two-flavour derivation ([ADR-0001](docs/adr/0001-async-port-flavours.md),
-[ADR-0008](docs/adr/0008-one-derivation-for-both-ports.md)) constrains how a
+The two-flavour derivation ([ADR-0001](.kb/decisions/0001-async-port-flavours.md),
+[ADR-0008](.kb/decisions/0008-one-derivation-for-both-ports.md)) constrains how a
 *provided* method is written, and gets it wrong in a way that is easy to
 misdiagnose. Three rules, in the order you will meet them.
 
@@ -161,7 +161,7 @@ When adding one:
   a declining adapter a green suite and one `SKIP` line, which is the whole
   reason the two macros are separate.
 - **Write the wrong implementation.** A rule no adapter can fail is decorative,
-  and since [ADR-0010](docs/adr/0010-the-suite-must-prove-itself.md) that is
+  and since [ADR-0010](.kb/decisions/0010-the-suite-must-prove-itself.md) that is
   enforced rather than reviewed: adding a rule fails
   `mutation_coverage::every_rule_has_a_mutant` until a mutant declares it. Three
   deliberately separate edits, all under

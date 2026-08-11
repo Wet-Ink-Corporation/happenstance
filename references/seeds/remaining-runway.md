@@ -115,7 +115,7 @@ are more specific.
 | --- | --- |
 | `RUNBOOK.md` | The plan of record: what each remaining body of work is for, what would prove it, and what must not be reordered. Also the record of an adversarial pass that found eighteen defects in an earlier version of itself. |
 | `spec/SPECIFICATION.md` | 200 numbered clauses across three ports, each with a maturity marker, the rule that checks it, and the wrong implementation it forbids. Current truth. |
-| `docs/adr/` | Seventeen decision records — why each decision was taken, and when. History rather than current truth. |
+| `.kb/decisions/` | Seventeen decision records — why each decision was taken, and when. History rather than current truth. |
 | `spec/E2E-CASES.md` | The end-to-end cases the library must satisfy, stated as observable behaviour. |
 | `references/evaluation/` | The research and the adversarial reviews the design rests on, including a pressure test that refuted an earlier plan's headline claim by compiling it. |
 | `experiments/` | Measurements, reproducible and deliberately outside the gate — including what four Postgres position-visibility mechanisms actually cost, and a rustc crash this architecture reaches by construction. |

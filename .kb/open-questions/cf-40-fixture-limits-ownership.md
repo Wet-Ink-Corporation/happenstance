@@ -14,8 +14,8 @@ related:
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - .kb/_intake/0012-append-shape-and-preconditions.md
-  - docs/adr/0015-validated-identifiers-and-store-limits.md
-  - docs/adr/0012-append-shape-and-preconditions.md
+  - references/adr/0015-validated-identifiers-and-store-limits.md
+  - references/adr/0012-append-shape-and-preconditions.md
   - crates/happenstance-testkit/src/fixtures.rs
   - spec/SPECIFICATION.md
 last_reviewed: 2026-08-10

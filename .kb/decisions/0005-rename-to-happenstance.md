@@ -26,7 +26,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
-  - docs/adr/0005-rename-to-happenstance.md
+  - references/adr/0005-rename-to-happenstance.md
   - CONTRIBUTING.md
   - CLAUDE.md
 last_reviewed: 2026-08-10

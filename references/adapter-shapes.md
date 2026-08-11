@@ -153,7 +153,7 @@ the associated type cannot be varied between flavours — observed rather than
 argued.
 
 The full transcript and the ES-6 argument it feeds are in
-[ADR-0009](../docs/adr/0009-error-send-sync.md).
+[ADR-0009](../.kb/decisions/0009-error-send-sync.md).
 
 ### 2.2 The attempts nobody required, which produced more
 

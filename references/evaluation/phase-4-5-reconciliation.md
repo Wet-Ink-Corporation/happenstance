@@ -477,9 +477,9 @@ line bound — and recommended the identical remedy: port `parse_citation` and
 The overlap and the residue:
 
 - **Five of its six `SPECIFICATION.md` citations are discharged by this pass.**
-- **The `docs/adr/0009` row is discharged too**, and by an edit this pass did not
+- **The `.kb/decisions/0009` row is discharged too**, and by an edit this pass did not
   plan to make. A sweep agent scoped to `SPECIFICATION.md` repaired three
-  citations in `docs/adr/0009-error-send-sync.md` as well —
+  citations in `.kb/decisions/0009-error-send-sync.md` as well —
   `store.rs:100 → :101`, `projection.rs:73 → :90`, and `memory.rs:143-145 →
   :291`, two of them now carrying the `(anchor)` form. The edits are correct and
   are exactly the drift `review-citation-drift.md` §1 names. They are kept rather
@@ -627,8 +627,8 @@ does not require `append` to return a position. Recorded so it is not re-derived
 
 Stated because a review that does not bound itself gets read as exhaustive.
 
-- **It does not audit `docs/adr/`.** The audit's corpus was `SPECIFICATION.md`.
-  Three citations in `docs/adr/0009` were repaired incidentally — see above — and
+- **It does not audit `.kb/decisions/`.** The audit's corpus was `SPECIFICATION.md`.
+  Three citations in `.kb/decisions/0009` were repaired incidentally — see above — and
   that is the whole of the ADRs' coverage: seventeen files carrying `file:line`
   citations under exactly the same exposure, with no check over them at all.
   `check_citations` is handed `SPEC`'s contents and nothing else

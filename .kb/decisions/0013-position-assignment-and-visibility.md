@@ -45,7 +45,7 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
-  - docs/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0013-position-assignment-and-visibility.md
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-core/src/store.rs
   - experiments/position-visibility/

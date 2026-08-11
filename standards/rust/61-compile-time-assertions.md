@@ -75,7 +75,7 @@ second test, and it takes both.
 `crates/happenstance-core/src/memory.rs:621 (on a concrete store)` ·
 `crates/happenstance-core/src/memory.rs:643 (async fn spawns_from_generic)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md)
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
 ---
 

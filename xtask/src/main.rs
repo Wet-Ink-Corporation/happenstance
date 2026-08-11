@@ -53,7 +53,7 @@
 //! that silently updates `Cargo.lock` is a gate that tested a dependency graph
 //! nobody committed.
 //!
-//! [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
+//! [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -780,7 +780,7 @@ fn print_help() {
 /// wasm32 and then cannot run there, which is a failure no `cargo check` of
 /// `happenstance-core` can see.
 ///
-/// [ADR-0001]: ../../docs/adr/0001-async-port-flavours.md
+/// [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 fn wasm_steps() -> Vec<&'static Step> {
     steps_named(&[
         "wasm32 build of the contract crate",

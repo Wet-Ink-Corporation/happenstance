@@ -29,8 +29,8 @@ source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
   - .kb/_intake/0007-projection-runner-decodes.md
-  - docs/adr/0002-crate-naming.md
-  - docs/adr/0006-bare-name-to-the-typed-layer.md
+  - references/adr/0002-crate-naming.md
+  - references/adr/0006-bare-name-to-the-typed-layer.md
   - CONTRIBUTING.md
   - .kb/decisions/README.md
 last_reviewed: 2026-08-10

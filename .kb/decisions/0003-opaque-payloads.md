@@ -26,7 +26,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
-  - docs/adr/0003-opaque-payloads.md
+  - references/adr/0003-opaque-payloads.md
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-core/Cargo.toml
   - CLAUDE.md

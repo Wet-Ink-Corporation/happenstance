@@ -58,7 +58,7 @@ have seen that the future has no `Send` bound and never will have one.
 `crates/happenstance-neon/src/transport.rs:40 (async_fn_in_trait)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) *(why `Fixture` is
 hand-written and un-derived, and so is subject to the lint)* ·
-[ADR-0001](../../docs/adr/0001-async-port-flavours.md) ·
+[ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
 [rustc lint listing](https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#async-fn-in-trait) *(checked 2026-08-09, rustc 1.97.1)*
 
 ---
@@ -125,7 +125,7 @@ in a crate whose conformance suite does not exist yet, so nothing else asks.
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:54 (refining_impl_trait)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) *(the `read` case,
 `[FROZEN]`, and the two tests it takes)* ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md)
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
 ---
 
@@ -186,7 +186,7 @@ as a signature that got simpler.
 `crates/happenstance-core/src/memory.rs:672 (Inlining is E0716)` ·
 [SPECIFICATION ES-13](../../spec/SPECIFICATION.md) *(`[FROZEN]`: `read`
 takes `&Query`, and what by-value costs)* ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [edition guide, RPIT lifetime capture](https://doc.rust-lang.org/edition-guide/rust-2024/rpit-lifetime-capture.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ---
@@ -310,5 +310,5 @@ opposite directions, with an owned batch and a borrowed one.
 `crates/happenstance-postgres/src/projection_store.rs:101 (Transaction<'static, Postgres>)` ·
 [SPECIFICATION PS-5](../../spec/SPECIFICATION.md) *(provisional: an owned
 `type Batch;` removes `E0195` entirely, and what would falsify that)* ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md)

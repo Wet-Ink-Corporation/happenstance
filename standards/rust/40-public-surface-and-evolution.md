@@ -64,7 +64,7 @@ somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:248 (async fn head)` ·
 `.github/workflows/ci.yml:309 (baseline-rev)` ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md) ·
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
 does not detect breaking type changes, generic/lifetime changes, or breakage
@@ -122,7 +122,7 @@ only fix is a breaking change to a trait somebody else's crates implement.
 **Evidence.** `crates/happenstance-core/src/store.rs:222 (Why this is required rather than provided)` ·
 `crates/happenstance-core/src/store.rs:248 (async fn head)` ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) *(the `E0119` row)* ·
-[ADR-0008](../../docs/adr/0008-one-derivation-for-both-ports.md)
+[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
 ## RS-40-3. Return a `#[non_exhaustive]` struct wherever a tuple would freeze the arity.
 
@@ -206,7 +206,7 @@ adapter rather than to read `cargo tree -d`.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:126 (pub use bytes)` ·
 `crates/happenstance-core/src/store.rs:123 (impl Stream<Item =)` ·
-[ADR-0003](../../docs/adr/0003-opaque-payloads.md) ·
+[ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
 [RUNBOOK](../../RUNBOOK.md) *(`pub use futures_core;` is proposed and not landed)*
 
 ## RS-40-5. Spell an optional capability as an associated `const` whose constructor rejects an empty reason.
