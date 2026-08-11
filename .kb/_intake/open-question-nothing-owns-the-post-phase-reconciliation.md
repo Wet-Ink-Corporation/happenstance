@@ -6,21 +6,21 @@
 without forcing: a known gap the work uncovered and did not close, with what is actually true
 today. **Kind: `open_question`. `authority_tier: note`** — it binds nothing.
 
-`source_paths`: `docs/RUNBOOK.md`, `docs/architecture/SPECIFICATION.md`,
-`xtask/src/spec_trace.rs`, `docs/evaluation/phase-4-5-reconciliation.md`, and this intake file.
+`source_paths`: `RUNBOOK.md`, `spec/SPECIFICATION.md`,
+`xtask/src/spec_trace.rs`, `references/evaluation/phase-4-5-reconciliation.md`, and this intake file.
 
 Per the layer README, add a bullet for the resulting atom on whichever `map` atom indexes the
 specification/governance area once one exists.
 
 ## What is true today
 
-`docs/architecture/SPECIFICATION.md` holds 200 numbered clauses describing what is true of the
+`spec/SPECIFICATION.md` holds 200 numbered clauses describing what is true of the
 contract now. Phases 4 and 5 were, by the runbook's own account, "the two largest changes to
 the contract in the plan." Neither carried an item obliging anyone to read the specification
 back against the tree it had just changed.
 
 The consequence was measured in August 2026 and is recorded at
-`docs/RUNBOOK.md:3777-3842`, under the heading **"Between 5 and 6 — the reconciliation nothing
+`RUNBOOK.md:3777-3842`, under the heading **"Between 5 and 6 — the reconciliation nothing
 owned"**, which opens:
 
 > Not a phase. A pass that had to happen and that this plan had not scheduled, recorded here so
@@ -33,14 +33,14 @@ gate step that was supposed to check them.
 
 **The rule that would have caught this was already written down, in the same file, and nothing
 implements it.** From the end of the ADR queue, quoted verbatim
-(`docs/RUNBOOK.md:334-336`, restated at `:3284-3286` and again at `:3806-3807`):
+(`RUNBOOK.md:334-336`, restated at `:3284-3286` and again at `:3806-3807`):
 
 > **The rule this leaves behind, for every later phase:** a phase's clause range and the union
 > of its ADRs' clause ranges are two numbers, and nothing checks that they are equal. Compute
 > both at the phase's exit.
 
 The reconciliation pass responded by writing a standing exit criterion into the runbook
-(`docs/RUNBOOK.md:3810-3820`), applying to "Every phase from 6 onward, before its box is
+(`RUNBOOK.md:3810-3820`), applying to "Every phase from 6 onward, before its box is
 ticked":
 
 - [ ] Every clause the phase's ADRs discharge has been read against the code as it now stands,
@@ -57,7 +57,7 @@ ticked":
 to no tool.** Three things are open, and they are separable:
 
 **(a) Does it become an item in each phase's own `Work` list?** Phase 6's section
-(`docs/RUNBOOK.md:3846` onward) enumerates its work as checkboxes and does *not* carry these
+(`RUNBOOK.md:3846` onward) enumerates its work as checkboxes and does *not* carry these
 three. A standing rule stated once, several thousand lines above the phase that must obey it,
 is a rule with the same enforcement profile as the one that already failed — which was also
 written down, three times, and observed zero times.

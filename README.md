@@ -93,7 +93,7 @@ The stubs are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
 
-[`docs/RUNBOOK.md`](docs/RUNBOOK.md) sequences the remaining work — what comes
+[`RUNBOOK.md`](RUNBOOK.md) sequences the remaining work — what comes
 next, why in that order, and what each phase has to prove before it counts as
 finished.
 

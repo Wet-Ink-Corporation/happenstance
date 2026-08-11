@@ -6,8 +6,8 @@
 interaction pattern, nor an open question. **KB root**, or a `playbooks/` layer if one is
 created. **Kind: `playbook`.**
 
-`source_paths`: `xtask/src/spec_trace.rs`, `docs/architecture/SPECIFICATION.md`,
-`docs/RUNBOOK.md`, `docs/evaluation/phase-4-5-reconciliation.md`, and this intake file.
+`source_paths`: `xtask/src/spec_trace.rs`, `spec/SPECIFICATION.md`,
+`RUNBOOK.md`, `references/evaluation/phase-4-5-reconciliation.md`, and this intake file.
 
 ## The situation this addresses
 

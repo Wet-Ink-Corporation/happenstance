@@ -27,7 +27,7 @@ not against how the work felt.
 ## What does not belong here
 
 **A commitment.** If it says *must*, *shall*, or *must not* — if a future change would need a
-decision to reverse it — it is a `decision` atom in [`../decisions/`](../decisions/), and
+decision to reverse it — it is a `decision` atom in [`../decisions/`](../decisions), and
 filing it here strips it of the immutability that makes it enforceable.
 
 **A one-off.** Something true of exactly one file, one clause, or one afternoon is either a

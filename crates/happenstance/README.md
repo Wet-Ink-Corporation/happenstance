@@ -51,7 +51,7 @@ async fn count_everything() -> Result<(), Box<dyn std::error::Error>> {
 ## Design
 
 The design is specified rather than described:
-[`docs/architecture/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md)
+[`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 carries the normative clauses, each with a maturity marker, the conformance rule
 that checks it, and the wrong implementation it forbids.
 

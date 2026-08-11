@@ -64,7 +64,7 @@ mod wire {
     /// one — so the buffers these tests decode cannot come from the type under
     /// test. They come from here instead. The framing is byte-identical to the
     /// real envelope's in both formats; measured in
-    /// `docs/experiments/wire-format/tests/decorative_envelope_witness.rs`, and
+    /// `experiments/wire-format/tests/decorative_envelope_witness.rs`, and
     /// re-proved at the top of [`rejects_an_unknown_format_version`] so that a
     /// refusal can never be a framing mismatch wearing a version refusal's face.
     #[derive(Serialize)]

@@ -192,7 +192,7 @@ mod serde_impls {
     //! bytes in the human-readable one. Each arm is internally consistent, so
     //! encode-then-decode agrees with itself whichever one ran and a round-trip
     //! test passes in **both** formats — measured, on a deliberately inverted
-    //! newtype, in `docs/experiments/wire-format/tests/decorative_inverted_branch.rs`.
+    //! newtype, in `experiments/wire-format/tests/decorative_inverted_branch.rs`.
     //! That is why WF-6 names two rules asserting the bytes actually on the wire
     //! (`wire::store_id_encodes_as_hex_in_json` and
     //! `wire::store_id_encodes_as_bytes_in_postcard`) rather than one asserting

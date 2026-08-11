@@ -8,12 +8,12 @@ document — not a persona, not an interaction pattern, and not itself unsettled
 `authority_tier` chosen from the documented vocabulary rather than invented; it describes how
 to work under a constraint rather than imposing a new one.
 
-`source_paths`: `docs/architecture/SPECIFICATION.md`, `CLAUDE.md`, `docs/RUNBOOK.md`,
-`xtask/src/spec_trace.rs`, `docs/evaluation/phase-4-5-reconciliation.md`, and this intake file.
+`source_paths`: `spec/SPECIFICATION.md`, `CLAUDE.md`, `RUNBOOK.md`,
+`xtask/src/spec_trace.rs`, `references/evaluation/phase-4-5-reconciliation.md`, and this intake file.
 
 ## The constraint
 
-`docs/architecture/SPECIFICATION.md` carries 200 numbered clauses, each with a maturity
+`spec/SPECIFICATION.md` carries 200 numbered clauses, each with a maturity
 marker. `CLAUDE.md` states the rule: **"Changing a `[FROZEN]` clause requires a new ADR, not an
 edit."** 139 of the 200 clauses are `[FROZEN]` today.
 
@@ -62,7 +62,7 @@ an oversight.**
 
 ### PS-20, the worked example
 
-`docs/architecture/SPECIFICATION.md:5250-5271`. The clause is `[FROZEN]`:
+`spec/SPECIFICATION.md:5250-5271`. The clause is `[FROZEN]`:
 
 > **PS-20 — A runner MUST resume strictly after the checkpoint's position, and MUST start at
 > the store's first position, inclusive, when the checkpoint is `NeverRun`.**
@@ -136,7 +136,7 @@ reasons, in order of weight:
    nearby clause. Both attachments would have asserted that a `[FROZEN]` clause contains a
    proposition it does not contain — a documentation defect strictly worse than the missing
    attribution, because it would be invisible to every check.
-3. **ADRs in this repository have a described process and a human sign-off.** `docs/RUNBOOK.md`
+3. **ADRs in this repository have a described process and a human sign-off.** `RUNBOOK.md`
    assigns each open question to a phase and an owner; ADR-0029 is the standing example of a
    constraint moved deliberately, in an ADR, rather than in silence. A pass that shortcuts that
    is not saving work, it is moving work to a place where it is not recorded.

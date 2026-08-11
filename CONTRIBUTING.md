@@ -2,7 +2,7 @@
 
 ## Before you start
 
-Read [`docs/adr/`](docs/adr/). A handful of decisions shape everything else: the
+Read [`docs/adr/`](docs/adr). A handful of decisions shape everything else: the
 two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
 naming. Changing one is fine — but it means writing a new ADR that supersedes
 the old one, not working around it in code. ADR-0002/ADR-0005 and
@@ -278,7 +278,7 @@ Two things to know before your first commit:
   `#![allow(clippy::unwrap_used)]`.
 
 Everything else — and the reasoning behind both of those — is in
-[`docs/rust/`](docs/rust/README.md), the Rust constitution. It is organised so
+[`standards/rust/`](standards/rust/README.md), the Rust constitution. It is organised so
 you load one to three files for the task in front of you rather than reading it
 through: start at the router's trigger table. The gate checks it like anything
 else, so its examples compile and its citations resolve.

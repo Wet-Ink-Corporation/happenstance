@@ -13,7 +13,7 @@
 >
 > **Lifts when** `happenstance-sync` round-trips an event between two stores
 > without deserialising its payload
-> ([phase 13](../RUNBOOK.md#phase-13--happenstance-sync-and-its-testkit)).
+> ([phase 13](../../RUNBOOK.md#phase-13--happenstance-sync-and-its-testkit)).
 
 ## Context
 

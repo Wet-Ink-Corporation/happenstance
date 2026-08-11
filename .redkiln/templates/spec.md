@@ -100,7 +100,7 @@ Write the narrowest set that is honestly true. A boundary widened to make a fail
 boundary that has stopped meaning anything; widen it in the spec, deliberately, or split the story.
 
 Include the story's own backlog folder when it will carry a ledger or report, and remember that
-`docs/architecture/SPECIFICATION.md` is source here even though rustc never opens it.
+`spec/SPECIFICATION.md` is source here even though rustc never opens it.
 
 ```
 crates/<crate>/src/**

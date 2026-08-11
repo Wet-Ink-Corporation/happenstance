@@ -22,7 +22,7 @@
 
 // The Rust constitution's examples, one private module per atom. Same argument
 // as the README above — the files live outside every publishable package — but
-// with a stricter obligation: `docs/rust/` claims its examples compile, and this
+// with a stricter obligation: `standards/rust/` claims its examples compile, and this
 // is the only place that claim is checked. See the module's own docs for why the
 // atoms are not all attached to one module.
 mod constitution;

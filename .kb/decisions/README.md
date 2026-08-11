@@ -39,11 +39,11 @@ this one cites. Separating them is what lets a decision be superseded without in
 evidence underneath it.
 
 **A decision not yet taken.** That is an `open_question` in
-[`../open-questions/`](../open-questions/). Filing a live question here gives it an authority
+[`../open-questions/`](../open-questions). Filing a live question here gives it an authority
 nobody granted it.
 
 **Current truth.** A decision record is *history* — why a choice was made, and when.
-`docs/architecture/SPECIFICATION.md` says what is true **now**, and where the two disagree, the
+`spec/SPECIFICATION.md` says what is true **now**, and where the two disagree, the
 specification wins. An ADR is never updated to match the code.
 
 ## Why this layer exists

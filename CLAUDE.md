@@ -38,10 +38,18 @@ crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. hos
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
-docs/adr/                        the decisions this design rests on.
-docs/architecture/               SPECIFICATION.md — every clause that is true now.
-docs/adapter-shapes.md           what the six skeletons told the type checker.
-docs/experiments/                measurements. reproducible, and not in the gate.
+docs/adr/                        the decisions this design rests on. moving to .kb/.
+spec/                            SPECIFICATION.md — every clause that is true now.
+                                 E2E-CASES.md — the cases stated as observable behaviour.
+standards/rust/                  the Rust constitution. router + 27 atoms.
+experiments/                     measurements. reproducible, and not in the gate.
+references/                      evidence kept for citation, binding nothing.
+  evaluation/                      the fourteen reviews, and the Crux explorations.
+  scenarios/                       six deployments the contract was walked against.
+  adapter-shapes.md                what the six skeletons told the type checker.
+  seeds/                           raw material for `/redkiln:initiative`.
+docs/                            user documentation. nothing else.
+RUNBOOK.md                       the plan of record, and how far it has got.
 
 .kb/                             the knowledge base — what is settled.
   _intake/                         staging. `/redkiln:kb-ingest` consumes and clears it.
@@ -213,13 +221,13 @@ for. They are instruments first and targets second.
 
 ## House style
 
-**It lives in [`docs/rust/`](docs/rust/README.md) — the Rust constitution.**
+**It lives in [`standards/rust/`](standards/rust/README.md) — the Rust constitution.**
 Twenty-seven atoms, each carrying rules with a compiled example and a named
 wrong implementation. Read the router first and pull the one to three atoms your
 task needs; do not load the corpus.
 
-The four bullets that used to sit here are [`70-rustdoc-obligations.md`](docs/rust/70-rustdoc-obligations.md)
-and [`00-prime-directives.md`](docs/rust/00-prime-directives.md), in full and with
+The four bullets that used to sit here are [`70-rustdoc-obligations.md`](standards/rust/70-rustdoc-obligations.md)
+and [`00-prime-directives.md`](standards/rust/00-prime-directives.md), in full and with
 the mechanism attached. They are not repeated here because this file loads on
 *every* task, including the ones that will never write a doctest — and because
 two copies of a style guide is two things to update and one that goes stale.
@@ -279,12 +287,12 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
-[`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) says
+[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
 what is **true now** — 200 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and
-citations cannot rot into decoration. [`docs/RUNBOOK.md`](docs/RUNBOOK.md) says
+citations cannot rot into decoration. [`RUNBOOK.md`](RUNBOOK.md) says
 **who settles what is still open, and when**. Where a summary below disagrees
 with a clause, the clause wins; the summaries are orientation only.
 

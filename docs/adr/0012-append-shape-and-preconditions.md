@@ -2,7 +2,7 @@
 
 - **Status:** accepted — with **one** part left provisional. ES-17 (batch
   ownership) keeps its `[PROVISIONAL]` marker, and the marker lifts at
-  [phase 8](../RUNBOOK.md#phase-8--sqlite), which is the phase that builds the
+  [phase 8](../../RUNBOOK.md#phase-8--sqlite), which is the phase that builds the
   SQLite multi-row insert benchmark ES-17's own falsifier names. Nothing else
   below is provisional except CF-39, which is new and says why.
 
@@ -29,7 +29,7 @@
 - **Extends:** [ADR-0010](0010-the-suite-must-prove-itself.md), whose corollary —
   a rule that no adapter can fail is decorative — every new rule below is written
   against by naming the implementation it rejects
-- **Reads from:** [`docs/evaluation/phase-4-reconciliation.md`](../evaluation/phase-4-reconciliation.md),
+- **Reads from:** [`references/evaluation/phase-4-reconciliation.md`](../../references/evaluation/phase-4-reconciliation.md),
   which is where the compiled results quoted here were produced. Every Rust claim
   in this document traces to that file's *What the compiler said* section, or to
   the two compiles this ADR's review ran for itself and reports inline in §9, or

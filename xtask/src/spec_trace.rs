@@ -2,7 +2,7 @@
 //!
 //! # What this exists to stop
 //!
-//! `docs/architecture/SPECIFICATION.md` claims, for every normative clause, that
+//! `spec/SPECIFICATION.md` claims, for every normative clause, that
 //! some conformance rule can observe a violation of it and that some end-to-end
 //! case exercises it. Those claims were written by hand. Nothing has ever checked
 //! them, and a specification whose cross-references have quietly rotted is worse
@@ -47,7 +47,7 @@
 //! output, so a parser that quietly stops recognising a clause form shifts the
 //! census and the table *together* and the equality check above stays green. §1.3
 //! is the only count in the document a human computed by reading it, which is why
-//! `docs/RUNBOOK.md` treats its agreement with the checker as the best evidence
+//! `RUNBOOK.md` treats its agreement with the checker as the best evidence
 //! available that the parser reads the document the way a person does. Moving it
 //! inside the generated markers would destroy the very property it is being used
 //! to prove — and that will be the next contributor's first instinct, because the
@@ -64,8 +64,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-const SPEC: &str = "docs/architecture/SPECIFICATION.md";
-const CASES: &str = "docs/scenarios/E2E-CASES.md";
+const SPEC: &str = "spec/SPECIFICATION.md";
+const CASES: &str = "spec/E2E-CASES.md";
 const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 
 /// Every file a conformance rule may be defined in.
@@ -373,7 +373,7 @@ fn check_citations(
 
 /// How far from the cited line the subject may sit before the citation is wrong.
 ///
-/// Twelve, where `docs/rust`'s own citation lint uses ten
+/// Twelve, where `standards/rust`'s own citation lint uses ten
 /// (`lint_constitution.rs:111`) — wider because a derived anchor has further to
 /// travel than a written one. There the anchor is quoted beside the line and
 /// names the exact text; here it is the identifier the prose happened to use,
@@ -2100,7 +2100,7 @@ struct Citation {
 /// `is_violated_by` compares raw values (`append.rs:239-253`)
 /// ```
 ///
-/// So the anchor need not be written into the citation the way `docs/rust`
+/// So the anchor need not be written into the citation the way `standards/rust`
 /// writes it — it is already in the prose, and deriving it costs no change at
 /// 358 sites. The search runs backwards across line breaks, because the
 /// document wraps at 80 columns and a subject is frequently on the line above

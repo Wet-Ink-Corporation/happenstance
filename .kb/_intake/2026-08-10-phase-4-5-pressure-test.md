@@ -2,7 +2,7 @@
 
 ## Read this first: extract the pointer, not the evidence
 
-The evidence for everything below lives in **`docs/evaluation/phase-4-5-reconciliation.md`**,
+The evidence for everything below lives in **`references/evaluation/phase-4-5-reconciliation.md`**,
 a document written for this pass and committed to the repository. That file is the artifact.
 This one is a pointer to it plus a census.
 
@@ -17,9 +17,9 @@ failure this pass existed to repair.
 Two sibling documents carry the same story at different altitudes and should be linked, not
 absorbed:
 
-- `docs/RUNBOOK.md`, section **"Between 5 and 6 — the reconciliation nothing owned"**
+- `RUNBOOK.md`, section **"Between 5 and 6 — the reconciliation nothing owned"**
   (the plan's own account, with the standing exit criterion it produced).
-- `docs/evaluation/review-citation-drift.md`, written independently the same day.
+- `references/evaluation/review-citation-drift.md`, written independently the same day.
 
 ## Where this expects to land
 
@@ -31,14 +31,14 @@ a stock answer the standing of a finding. This atom belongs at the **KB root**, 
 grounded state of the world rather than a decision or a reusable practice.
 
 `source_paths` should include, at minimum:
-`docs/evaluation/phase-4-5-reconciliation.md`, `docs/RUNBOOK.md`,
-`docs/architecture/SPECIFICATION.md`, `xtask/src/spec_trace.rs`,
-`docs/evaluation/review-citation-drift.md`, and this intake file's own path.
+`references/evaluation/phase-4-5-reconciliation.md`, `RUNBOOK.md`,
+`spec/SPECIFICATION.md`, `xtask/src/spec_trace.rs`,
+`references/evaluation/review-citation-drift.md`, and this intake file's own path.
 
 ## What the pass was
 
 Six commits on branch `redkiln-adoption`, `3c704d3` through `84dcc67`, on top of `3712c9b`,
-each landing with `cargo xtask ci` green. It reconciled `docs/architecture/SPECIFICATION.md`
+each landing with `cargo xtask ci` green. It reconciled `spec/SPECIFICATION.md`
 with the tree that phases 4 and 5 actually produced. No phase owned this work; it is recorded
 in the runbook as "Not a phase. A pass that had to happen and that this plan had not
 scheduled."
@@ -124,11 +124,11 @@ lesson for why raising it by guessing was measured and rejected.
 
 ## The independent corroboration
 
-`docs/evaluation/review-citation-drift.md` (dated 2026-08-10, pinned to `3712c9b`) was written
-as a byproduct of building `docs/rust/`, with no knowledge of this pass. It found six stale
+`references/evaluation/review-citation-drift.md` (dated 2026-08-10, pinned to `3712c9b`) was written
+as a byproduct of building `standards/rust/`, with no knowledge of this pass. It found six stale
 citations, diagnosed the identical root cause, and recommended the identical remedy — porting
 `parse_citation` / `check_citations` from `xtask/src/lint_constitution.rs`, which it estimated
-at "about forty lines" (`docs/evaluation/review-citation-drift.md:69`). Five of its six
+at "about forty lines" (`references/evaluation/review-citation-drift.md:69`). Five of its six
 `SPECIFICATION.md` citations are discharged by this pass, and so is the one into
 `docs/adr/0009` — by an incidental out-of-scope edit rather than by a sweep, kept under
 ADR-0006's *rewrite the referent, never the reasoning* rule and recorded in the evaluation

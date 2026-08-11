@@ -19,7 +19,7 @@ not the same as what a user needed to be told.
 - **`ProjectionStore` ships behind an off-by-default `unstable-projection`
   feature** and is exempt from semver until two adapters at opposite ends of the
   batch-shape axis have passed its conformance suite. See
-  [`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) §4.
+  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
 
@@ -31,7 +31,7 @@ not the same as what a user needed to be told.
   real associated types. Every body is `todo!()` and every crate is
   `publish = false`, so nothing here changes what a consumer sees — but the ports
   have now been disagreed with by five storage shapes instead of one, and
-  [`docs/adapter-shapes.md`](docs/adapter-shapes.md) records what each one said.
+  [`references/adapter-shapes.md`](references/adapter-shapes.md) records what each one said.
 - [ADR-0009](docs/adr/0009-error-send-sync.md), settling ES-6 — the highest
   blast-radius open question in the workspace, and the last one that was
   semver-visible. **`Error` keeps its bound**; the stronger property becomes a
@@ -846,7 +846,7 @@ not the same as what a user needed to be told.
   it was already working while the general path was the one that got reviewed. The
   result is a store whose answer depends on how many fragments the caller's
   decision model happened to read. Its coverage overlaps the single-guard family by
-  construction, and `docs/architecture/SPECIFICATION.md` VT-30 records that.
+  construction, and `spec/SPECIFICATION.md` VT-30 records that.
 
 - **Seven wrong implementations** in `happenstance-testkit`'s own `tests/`, one
   per new rule and none of them a saboteur: `ReverseOrderBatchStore` (a bulk

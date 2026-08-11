@@ -100,7 +100,7 @@ use happenstance_core::EventStore;
 /// handle onto this fixture", and it is the shape to keep away from. `where Self:
 /// 'a` on a GAT implemented for a foreign trait is one of the five independently
 /// necessary ingredients of the rustc ICE this repository already minimised
-/// (rust-lang/rust#158983; `docs/experiments/rustc-ice-gat-foreign-trait/`),
+/// (rust-lang/rust#158983; `experiments/rustc-ice-gat-foreign-trait/`),
 /// which still reproduces on 1.97.1.
 ///
 /// Nothing is lost. A pool-backed fixture holds its pool in an `Arc` and returns

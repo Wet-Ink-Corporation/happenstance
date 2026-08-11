@@ -614,7 +614,7 @@ mod serde_impls {
     /// encode-then-decode agrees with itself whichever one ran and a round-trip
     /// test passes in **both** formats — measured, on a deliberately inverted
     /// newtype over `[de ad be ef]`, in
-    /// `docs/experiments/wire-format/tests/decorative_inverted_branch.rs`. That
+    /// `experiments/wire-format/tests/decorative_inverted_branch.rs`. That
     /// is why WF-11 names two rules asserting the bytes actually on the wire
     /// (`wire::payload_is_base64_in_json` and `wire::payload_is_raw_in_postcard`)
     /// rather than one asserting a round trip.

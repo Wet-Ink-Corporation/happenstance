@@ -17,7 +17,7 @@ pass.
 > suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
 > port has no suite at all, and several axes of the instrument portfolio have
 > no implementation at their far end — see
-> [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md)
+> [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > §6.2 and §6.5, which name them rather than summarising them.
 
 ## Use

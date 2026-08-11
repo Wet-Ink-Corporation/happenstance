@@ -1,4 +1,4 @@
-//! The Rust constitution's internal consistency check (`docs/rust/`).
+//! The Rust constitution's internal consistency check (`standards/rust/`).
 //!
 //! The constitution claims its examples compile and its citations resolve. The
 //! first claim is discharged by `cargo test -p xtask --doc`, which compiles every
@@ -52,10 +52,10 @@ use anyhow::{Context, Result, bail};
 use crate::spec_trace::workspace_root;
 
 /// The directory the atoms live in.
-const ATOM_DIR: &str = "docs/rust";
+const ATOM_DIR: &str = "standards/rust";
 
 /// The router, which is the only file in [`ATOM_DIR`] that is not an atom.
-const ROUTER: &str = "docs/rust/README.md";
+const ROUTER: &str = "standards/rust/README.md";
 
 /// The harness that compiles the atoms' examples.
 const HARNESS: &str = "xtask/src/constitution.rs";

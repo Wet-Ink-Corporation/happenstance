@@ -8,13 +8,13 @@ belongs at the **KB root** or in a `playbooks/` layer if one is created.
 **Kind: `playbook`.**
 
 `source_paths`: `xtask/src/spec_trace.rs`, `xtask/src/lint_constitution.rs`,
-`docs/architecture/SPECIFICATION.md`, `docs/rust/README.md`,
-`docs/evaluation/phase-4-5-reconciliation.md`,
-`docs/evaluation/review-citation-drift.md`, and this intake file.
+`spec/SPECIFICATION.md`, `standards/rust/README.md`,
+`references/evaluation/phase-4-5-reconciliation.md`,
+`references/evaluation/review-citation-drift.md`, and this intake file.
 
 ## The problem
 
-`docs/architecture/SPECIFICATION.md` carries 358 ``file:line`` citations into the source tree.
+`spec/SPECIFICATION.md` carries 358 ``file:line`` citations into the source tree.
 Line numbers in the source move on every commit. A checker that verifies only that the line
 exists passes forever while the citations rot; a checker that pins content exactly fails on
 every ordinary edit. Between those two is a narrow band, and finding it took four attempts,
@@ -38,7 +38,7 @@ and it fails when the item genuinely moves.
 
 ## The two spellings of an anchor, and their costs
 
-**Explicit — what `docs/rust/` does.** The Rust constitution writes the anchor into the
+**Explicit — what `standards/rust/` does.** The Rust constitution writes the anchor into the
 citation itself: `` `path:line (anchor)` ``, checked by `parse_citation` /
 `check_citations` in `xtask/src/lint_constitution.rs:674-722`, with
 `const ANCHOR_SLACK: usize = 10` (`:111`). An unparseable citation is a hard failure, on the
@@ -151,14 +151,14 @@ rather than a defeat.
 ## Two observations worth carrying, one of them a defect
 
 **Line-numbered citations across documents are a standing tax.** Every edit to `crates/**` or
-`xtask/**` during this pass broke citations in `docs/rust/` — three separate times, each caught
+`xtask/**` during this pass broke citations in `standards/rust/` — three separate times, each caught
 by `cargo xtask lint-constitution`. The check works; the tax is real and should be priced in
 before adopting line-numbered cross-references at all. An anchor-only citation with no line
 number would not have this cost, at the price of ambiguity when a name occurs many times.
 
 **The two slack constants disagree with each other, and one of them says they do not.**
 `xtask/src/spec_trace.rs:381` sets `const ANCHOR_SLACK: usize = 12` and its doc comment at
-`:374-380` describes it as "the same twelve `docs/rust`'s own citation lint uses". That lint's
+`:374-380` describes it as "the same twelve `standards/rust`'s own citation lint uses". That lint's
 constant is `const ANCHOR_SLACK: usize = 10` (`xtask/src/lint_constitution.rs:111`). The
 values are 12 and 10. This is exactly the class of defect the pass was repairing — a sentence
 about another file that is no longer true — surviving inside the repair itself, and it is

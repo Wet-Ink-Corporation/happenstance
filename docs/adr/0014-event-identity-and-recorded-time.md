@@ -239,7 +239,7 @@ What an adapter must do, stated as a rule rather than a preference:
 > if** it can detect that its state was restored or cloned, **or** the deployment
 > is documented to invoke the re-mint. An adapter that can do neither **MUST**
 > mint a fresh incarnation on every open, and MUST record which mechanism it
-> chose in `docs/adapter-shapes.md`.
+> chose in `references/adapter-shapes.md`.
 
 That turns VT-6's SHOULD into a conditional with a stated default and makes the
 undetectable case safe by construction rather than by procedure.

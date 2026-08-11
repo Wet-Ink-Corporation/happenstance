@@ -242,7 +242,7 @@ fn check(artefact: &Artefact) -> Result<()> {
 /// How many subjects the mutant registry declares.
 ///
 /// Printed rather than asserted, and the distinction is the point: the count is
-/// a fact about the tree that `CHANGELOG.md` and `docs/RUNBOOK.md` both quote in
+/// a fact about the tree that `CHANGELOG.md` and `RUNBOOK.md` both quote in
 /// prose ("fifty wrong implementations", "fifty-two stores drive the suite"), and
 /// a number quoted in two documents and computed nowhere goes stale the first
 /// time a mutant lands — which it did: the runbook's stage-6 session log read

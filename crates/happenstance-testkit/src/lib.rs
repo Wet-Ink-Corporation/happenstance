@@ -217,7 +217,7 @@ pub use suite::rules;
 /// `tests/` cannot host it: an integration test that fails to compile fails the
 /// build, so the only instrument that can assert a *non*-compile is one rustdoc
 /// runs. And a bare `compile_fail` passes when the snippet fails to compile for
-/// **any** reason — measured in `docs/experiments/wire-format/`, where of four
+/// **any** reason — measured in `experiments/wire-format/`, where of four
 /// spellings of one assertion a type-name typo, a misspelt trait and a wrong
 /// crate path all reported ok against a false claim. Annotating the code does
 /// not fix it: rustdoc on 1.97.1 silently ignores an error-code annotation it

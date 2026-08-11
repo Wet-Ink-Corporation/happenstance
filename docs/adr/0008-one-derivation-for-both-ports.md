@@ -147,7 +147,7 @@ first time since it was written.
 
 **Good.** ADR-0001 loses `provisional`. Its lift condition — a `!Send` reference
 store passing the suite — is met in-tree. The *full* proof remains the Cloudflare
-adapter at [phase 9](../RUNBOOK.md#phase-9--cloudflare-durable-object), and
+adapter at [phase 9](../../RUNBOOK.md#phase-9--cloudflare-durable-object), and
 nothing here anticipates it: what is proved is that the design admits a `!Send`
 implementer and that the suite can drive one, not that a real platform SDK fits.
 

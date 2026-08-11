@@ -31,7 +31,7 @@ its momentum, and the argument given for it does not survive inspection:
 
 Two problems. It is an empirical claim about the behaviour of users who do not
 exist, asserted without evidence. And the facade it says "may never be built" is
-**phase 3 of [`docs/RUNBOOK.md`](../RUNBOOK.md)** — scheduled, with dependencies,
+**phase 3 of [`RUNBOOK.md`](../../RUNBOOK.md)** — scheduled, with dependencies,
 an exit criterion, and the worked example rewritten on top of it. The two
 documents, written the same afternoon, contradict each other.
 
@@ -173,7 +173,7 @@ because a naming decision is settled by being made, not by being tested.
 ## On the historical record
 
 *Added when this ADR was executed, in phase 0 of
-[`docs/RUNBOOK.md`](../RUNBOOK.md), commit `7d6c1b0`.*
+[`RUNBOOK.md`](../../RUNBOOK.md), commit `7d6c1b0`.*
 
 ADR-0001, ADR-0003, ADR-0004, ADR-0007 and CLAUDE.md's binding constraints had
 their crate names **rewritten** to `happenstance-core`, rather than left as
@@ -205,7 +205,7 @@ overturned, so an intact body would preserve nothing except a misdirection.
 
 ### Stale in the body above, recorded here rather than edited
 
-The body cites **phase 3 of `docs/RUNBOOK.md`** three times: for the typed
+The body cites **phase 3 of `RUNBOOK.md`** three times: for the typed
 layer's schedule, for its exit criterion of rewriting `course-subscriptions`
 against it, and for the rejected alternative of deferring the allocation until
 it. That runbook has since been replaced (`8f2ce15`) by a fifteen-phase plan in

@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-08-05
 - **Provisional marker lifted:** 2026-08-06, at
-  [phase 1](../RUNBOOK.md#phase-1--the-send-proof-and-the-derivation-decision)
+  [phase 1](../../RUNBOOK.md#phase-1--the-send-proof-and-the-derivation-decision)
 - **Extended by:** [ADR-0008](0008-one-derivation-for-both-ports.md), which
   covers `ProjectionStore` under the same scheme and states what a provided body
   owes both flavours
@@ -25,7 +25,7 @@
 > for the first time.
 >
 > **The full proof is still the Cloudflare adapter**
-> ([phase 9](../RUNBOOK.md#phase-9--cloudflare-durable-object)). What is settled
+> ([phase 9](../../RUNBOOK.md#phase-9--cloudflare-durable-object)). What is settled
 > is that the design admits a `!Send` implementer and that the suite can drive
 > one on the target. Whether a real platform SDK fits — `worker::Error`, a
 > `JsValue` in an error payload, `SqlStorage`'s async shape — is phase 9's, and

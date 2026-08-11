@@ -358,7 +358,7 @@ mod wire {
     ///
     /// Not arbitrary, and not a marker chosen to be recognisable. These five
     /// bytes are W1's eighth neighbour
-    /// (`docs/experiments/wire-format/tests/w1_postcard_desynchronisation.rs`),
+    /// (`experiments/wire-format/tests/w1_postcard_desynchronisation.rs`),
     /// which is one of the three of nine measured to make a skipped field decode
     /// to a **wrong value with no error**: `01` is read as `Some`, `02` as a
     /// two-byte length, and `AA BB` as the payload, leaving `05` behind.
@@ -942,7 +942,7 @@ mod wire {
     // shape: an *inverted* `is_human_readable` branch — hex/base64 and raw
     // bytes swapped between the two formats. Measured
     // (`decorative_inverted_human_readable_branch`,
-    // docs/experiments/wire-format/tests/decorative_inverted_branch.rs): a
+    // experiments/wire-format/tests/decorative_inverted_branch.rs): a
     // deliberately inverted newtype over `[de ad be ef]` still round-trips
     // `Ok(true)` in **both** `serde_json` and `postcard`, because hex and
     // base64 are symmetric — an encoder that writes the wrong arm and a
@@ -1448,7 +1448,7 @@ mod wire {
         //! Because it was measured and it does not work. A `compile_fail`
         //! doctest passes when the snippet fails to compile **for any reason**:
         //! of four spellings of this same assertion (ADR-0016 §13, D1 – D4 in
-        //! `docs/experiments/wire-format/src/lib.rs`), the honest one correctly
+        //! `experiments/wire-format/src/lib.rs`), the honest one correctly
         //! *failed* against a serialisable `ReadOptions` while a type-name typo,
         //! a misspelt trait and a wrong crate path all reported ok. Three of
         //! four green against a false claim. And `tests/` cannot host one at

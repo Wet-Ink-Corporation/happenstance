@@ -1,9 +1,9 @@
-//! Compiles every example in `docs/rust/` — the Rust constitution.
+//! Compiles every example in `standards/rust/` — the Rust constitution.
 //!
 //! The constitution's whole enforcement model is that its examples are checked
 //! by the compiler rather than by a reader. That requires a crate to attach them
 //! to, and it cannot be a published one: `include_str!` resolves at compile time
-//! against the file tree, and `crates/happenstance/src/../../../docs/rust/…`
+//! against the file tree, and `crates/happenstance/src/../../../standards/rust/…`
 //! does not exist inside a packaged `.crate`. `xtask` is `publish = false` and is
 //! built by CI on every push, which is the same argument [`crate`]'s root already
 //! makes for the repository README.
@@ -40,135 +40,135 @@
 
 #[cfg(doctest)]
 mod prime_directives {
-    #![doc = include_str!("../../docs/rust/00-prime-directives.md")]
+    #![doc = include_str!("../../standards/rust/00-prime-directives.md")]
 }
 
 #[cfg(doctest)]
 mod standard_of_evidence {
-    #![doc = include_str!("../../docs/rust/01-standard-of-evidence.md")]
+    #![doc = include_str!("../../standards/rust/01-standard-of-evidence.md")]
 }
 
 #[cfg(doctest)]
 mod newtypes_and_niches {
-    #![doc = include_str!("../../docs/rust/10-newtypes-and-niches.md")]
+    #![doc = include_str!("../../standards/rust/10-newtypes-and-niches.md")]
 }
 
 #[cfg(doctest)]
 mod const_construction_and_panics {
-    #![doc = include_str!("../../docs/rust/11-const-construction-and-panics.md")]
+    #![doc = include_str!("../../standards/rust/11-const-construction-and-panics.md")]
 }
 
 #[cfg(doctest)]
 mod manual_impls_and_derive_traps {
-    #![doc = include_str!("../../docs/rust/12-manual-impls-and-derive-traps.md")]
+    #![doc = include_str!("../../standards/rust/12-manual-impls-and-derive-traps.md")]
 }
 
 #[cfg(doctest)]
 mod sealing_and_exhaustiveness {
-    #![doc = include_str!("../../docs/rust/13-sealing-and-exhaustiveness.md")]
+    #![doc = include_str!("../../standards/rust/13-sealing-and-exhaustiveness.md")]
 }
 
 #[cfg(doctest)]
 mod two_flavour_ports {
-    #![doc = include_str!("../../docs/rust/20-two-flavour-ports.md")]
+    #![doc = include_str!("../../standards/rust/20-two-flavour-ports.md")]
 }
 
 #[cfg(doctest)]
 mod send_is_not_inherited {
-    #![doc = include_str!("../../docs/rust/21-send-is-not-inherited.md")]
+    #![doc = include_str!("../../standards/rust/21-send-is-not-inherited.md")]
 }
 
 #[cfg(doctest)]
 mod rpitit_and_lifetime_capture {
-    #![doc = include_str!("../../docs/rust/22-rpitit-and-lifetime-capture.md")]
+    #![doc = include_str!("../../standards/rust/22-rpitit-and-lifetime-capture.md")]
 }
 
 #[cfg(doctest)]
 mod streams_and_state_machines {
-    #![doc = include_str!("../../docs/rust/23-streams-and-state-machines.md")]
+    #![doc = include_str!("../../standards/rust/23-streams-and-state-machines.md")]
 }
 
 #[cfg(doctest)]
 mod the_blocking_bridge {
-    #![doc = include_str!("../../docs/rust/24-the-blocking-bridge.md")]
+    #![doc = include_str!("../../standards/rust/24-the-blocking-bridge.md")]
 }
 
 #[cfg(doctest)]
 mod what_removes_send_and_sync {
-    #![doc = include_str!("../../docs/rust/25-what-removes-send-and-sync.md")]
+    #![doc = include_str!("../../standards/rust/25-what-removes-send-and-sync.md")]
 }
 
 #[cfg(doctest)]
 mod error_taxonomy {
-    #![doc = include_str!("../../docs/rust/30-error-taxonomy.md")]
+    #![doc = include_str!("../../standards/rust/30-error-taxonomy.md")]
 }
 
 #[cfg(doctest)]
 mod public_surface_and_evolution {
-    #![doc = include_str!("../../docs/rust/40-public-surface-and-evolution.md")]
+    #![doc = include_str!("../../standards/rust/40-public-surface-and-evolution.md")]
 }
 
 #[cfg(doctest)]
 mod declarative_macros {
-    #![doc = include_str!("../../docs/rust/41-declarative-macros.md")]
+    #![doc = include_str!("../../standards/rust/41-declarative-macros.md")]
 }
 
 #[cfg(doctest)]
 mod dependency_hygiene {
-    #![doc = include_str!("../../docs/rust/50-dependency-hygiene.md")]
+    #![doc = include_str!("../../standards/rust/50-dependency-hygiene.md")]
 }
 
 #[cfg(doctest)]
 mod features_and_no_std {
-    #![doc = include_str!("../../docs/rust/51-features-and-no-std.md")]
+    #![doc = include_str!("../../standards/rust/51-features-and-no-std.md")]
 }
 
 #[cfg(doctest)]
 mod wasm32_and_target_cfg {
-    #![doc = include_str!("../../docs/rust/52-wasm32-and-target-cfg.md")]
+    #![doc = include_str!("../../standards/rust/52-wasm32-and-target-cfg.md")]
 }
 
 #[cfg(doctest)]
 mod what_a_test_must_prove {
-    #![doc = include_str!("../../docs/rust/60-what-a-test-must-prove.md")]
+    #![doc = include_str!("../../standards/rust/60-what-a-test-must-prove.md")]
 }
 
 #[cfg(doctest)]
 mod compile_time_assertions {
-    #![doc = include_str!("../../docs/rust/61-compile-time-assertions.md")]
+    #![doc = include_str!("../../standards/rust/61-compile-time-assertions.md")]
 }
 
 #[cfg(doctest)]
 mod doctests_and_harnesses {
-    #![doc = include_str!("../../docs/rust/62-doctests-and-harnesses.md")]
+    #![doc = include_str!("../../standards/rust/62-doctests-and-harnesses.md")]
 }
 
 #[cfg(doctest)]
 mod rustdoc_obligations {
-    #![doc = include_str!("../../docs/rust/70-rustdoc-obligations.md")]
+    #![doc = include_str!("../../standards/rust/70-rustdoc-obligations.md")]
 }
 
 #[cfg(doctest)]
 mod the_gate {
-    #![doc = include_str!("../../docs/rust/80-the-gate.md")]
+    #![doc = include_str!("../../standards/rust/80-the-gate.md")]
 }
 
 #[cfg(doctest)]
 mod checks_that_cannot_be_types {
-    #![doc = include_str!("../../docs/rust/81-checks-that-cannot-be-types.md")]
+    #![doc = include_str!("../../standards/rust/81-checks-that-cannot-be-types.md")]
 }
 
 #[cfg(doctest)]
 mod skeletons_and_todo {
-    #![doc = include_str!("../../docs/rust/90-skeletons-and-todo.md")]
+    #![doc = include_str!("../../standards/rust/90-skeletons-and-todo.md")]
 }
 
 #[cfg(doctest)]
 mod adapter_authoring_recipe {
-    #![doc = include_str!("../../docs/rust/91-adapter-authoring-recipe.md")]
+    #![doc = include_str!("../../standards/rust/91-adapter-authoring-recipe.md")]
 }
 
 #[cfg(doctest)]
 mod toolchain_limits_and_dead_ends {
-    #![doc = include_str!("../../docs/rust/92-toolchain-limits-and-dead-ends.md")]
+    #![doc = include_str!("../../standards/rust/92-toolchain-limits-and-dead-ends.md")]
 }

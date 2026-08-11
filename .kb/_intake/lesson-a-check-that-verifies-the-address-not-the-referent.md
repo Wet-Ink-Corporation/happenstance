@@ -9,8 +9,8 @@ one is created. **Kind: `playbook`** — it prescribes what to do when building 
 cross-reference check.
 
 `source_paths`: `xtask/src/spec_trace.rs`, `xtask/src/lint_constitution.rs`,
-`docs/architecture/SPECIFICATION.md`, `docs/RUNBOOK.md`,
-`docs/evaluation/phase-4-5-reconciliation.md`, and this intake file.
+`spec/SPECIFICATION.md`, `RUNBOOK.md`,
+`references/evaluation/phase-4-5-reconciliation.md`, and this intake file.
 
 ## The claim
 
@@ -31,7 +31,7 @@ every run, and nobody ever has cause to look at it.
 ## The measurement this comes from
 
 `xtask/src/spec_trace.rs` runs as a step of `cargo xtask ci` and, among other things, verifies
-that the ``file:line`` citations in `docs/architecture/SPECIFICATION.md` resolve. Its parser
+that the ``file:line`` citations in `spec/SPECIFICATION.md` resolve. Its parser
 (`fn citations`, `xtask/src/spec_trace.rs:2199`) filtered on two conditions before this pass:
 the citation had to be path-qualified, and it had to name a `.rs` or a `.toml`. The old filter,
 recorded verbatim in that function's own doc comment:

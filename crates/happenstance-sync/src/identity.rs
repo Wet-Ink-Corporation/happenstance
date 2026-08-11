@@ -26,7 +26,7 @@
 //! [`StoreId`], [`EventId`] and [`RecordedAt`] are **not** this crate's to
 //! define. VT-4 – VT-10 settle them, ADR-0014 writes them, and they land on
 //! `SequencedEvent` in `happenstance-core` at
-//! [phase 4](../../../../docs/RUNBOOK.md#phase-4--freeze-the-contract-signatures-value-types-and-identity).
+//! [phase 4](../../../../RUNBOOK.md#phase-4--freeze-the-contract-signatures-value-types-and-identity).
 //! VT-5 is `[FROZEN]`. What is sketched here is the *shape the sketch needed in
 //! order to compile*, and it is a coincidence rather than a design if it matches
 //! what phase 4 arrives at.

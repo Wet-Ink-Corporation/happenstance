@@ -211,11 +211,11 @@ pub(crate) fn affected_packages(
                 // `xtask`, whose lib target compiles it as doctests; the rest —
                 // `docs/`, `.github/`, `.bklg/`, `.kb/` — reaches no package.
                 // Anything unrecognised widens rather than narrows.
-                if path == "README.md" || path.starts_with("docs/rust/") {
+                if path == "README.md" || path.starts_with("standards/rust/") {
                     // Both are real dependencies of `xtask`, whose lib target
-                    // compiles them as doctests. `docs/rust/` is the Rust
+                    // compiles them as doctests. `standards/rust/` is the Rust
                     // constitution: its examples are only ever compiled through
-                    // that crate, so without this arm a docs-only change selects
+                    // that crate, so without this arm a prose-only change selects
                     // nothing and the atoms are never built on the pull request
                     // that breaks them.
                     direct.insert("xtask".to_owned());
@@ -233,12 +233,24 @@ pub(crate) fn affected_packages(
 ///
 /// The list is deliberately short and deliberately a *list*: every path not on it
 /// widens the gate to the whole workspace, so forgetting to add one costs time
-/// and never coverage. `docs/` is inert to the compiler and **not** to the gate —
-/// `SPECIFICATION.md` is read by `spec-trace`, which this module runs on every
-/// invocation regardless of what changed.
+/// and never coverage.
+///
+/// **Inert to the compiler is not inert to the gate.** `spec/` holds
+/// `SPECIFICATION.md` and `E2E-CASES.md`, which `spec-trace` reads on every
+/// invocation of this module regardless of what changed; `experiments/` is
+/// outside the workspace by construction, so nothing here compiles it and its
+/// own `Cargo.toml` opens with a bare `[workspace]` table to keep it that way.
+/// Both reach no package, and both are still checked.
+///
+/// `standards/rust/` is deliberately **absent**: it is caught by the arm above,
+/// which selects `xtask` because the constitution's examples compile as that
+/// crate's doctests. Adding it here would silently un-compile the corpus.
 fn is_inert(path: &str) -> bool {
     const INERT: &[&str] = &[
         "docs/",
+        "spec/",
+        "references/",
+        "experiments/",
         ".github/",
         ".bklg/",
         ".kb/",
@@ -247,6 +259,7 @@ fn is_inert(path: &str) -> bool {
         "CHANGELOG.md",
         "CLAUDE.md",
         "CONTRIBUTING.md",
+        "RUNBOOK.md",
         "LICENSE-MIT",
         "LICENSE-APACHE",
         ".gitignore",
@@ -636,8 +649,26 @@ mod tests {
 
     #[test]
     fn a_docs_only_change_selects_nothing() {
-        let affected = affected_packages(&changed(&["docs/RUNBOOK.md"]), &members());
+        let affected = affected_packages(&changed(&["RUNBOOK.md"]), &members());
         assert!(affected.is_empty());
+    }
+
+    /// The three trees that left `docs/` when it was reserved for user
+    /// documentation. Each is inert for a different reason — `spec/` and
+    /// `references/` reach no package, and `experiments/` is outside the
+    /// workspace by construction — and each would widen the gate to everything
+    /// if its prefix were dropped from the list.
+    #[test]
+    fn the_relocated_trees_stay_inert() {
+        for path in [
+            "spec/SPECIFICATION.md",
+            "spec/E2E-CASES.md",
+            "references/evaluation/PRESSURE-TEST.md",
+            "experiments/wire-format/src/lib.rs",
+        ] {
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
     }
 
     /// `README.md` is compiled as doctests of `xtask`'s lib target, so it is
@@ -648,24 +679,25 @@ mod tests {
         assert_eq!(affected, changed(&["xtask"]));
     }
 
-    /// The Rust constitution's atoms are compiled the same way, and `docs/` is
-    /// otherwise inert — so without the arm this covers, editing an atom selects
-    /// no package and its examples are never built on the change that breaks
-    /// them. That is the whole of what makes the corpus's claim checkable.
+    /// The Rust constitution's atoms are compiled the same way, and every
+    /// neighbouring prose tree is inert — so without the arm this covers,
+    /// editing an atom selects no package and its examples are never built on
+    /// the change that breaks them. That is the whole of what makes the corpus's
+    /// claim checkable.
     #[test]
     fn a_constitution_atom_selects_xtask() {
         let affected = affected_packages(
-            &changed(&["docs/rust/21-send-is-not-inherited.md"]),
+            &changed(&["standards/rust/21-send-is-not-inherited.md"]),
             &members(),
         );
         assert_eq!(affected, changed(&["xtask"]));
     }
 
     /// And the neighbouring prose stays inert, so the arm above is a rule about
-    /// one directory rather than about `docs/`.
+    /// one directory rather than about every tree of markdown.
     #[test]
-    fn the_constitution_arm_does_not_widen_to_all_of_docs() {
-        let affected = affected_packages(&changed(&["docs/adapter-shapes.md"]), &members());
+    fn the_constitution_arm_does_not_widen_to_all_prose() {
+        let affected = affected_packages(&changed(&["references/adapter-shapes.md"]), &members());
         assert!(affected.is_empty());
     }
 

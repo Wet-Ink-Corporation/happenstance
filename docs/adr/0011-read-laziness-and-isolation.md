@@ -141,7 +141,7 @@ re-checks anything.
 
 ## What was compiled for this decision
 
-The dossier ([`docs/evaluation/phase-4-reconciliation.md`](../evaluation/phase-4-reconciliation.md))
+The dossier ([`references/evaluation/phase-4-reconciliation.md`](../../references/evaluation/phase-4-reconciliation.md))
 carries nine experiments. This ADR leans on E1, E2, E3, E5 and E9 as recorded
 there, and adds three of its own — E10, E11 and E12 — all run against
 **unmodified** `happenstance-core` on rustc 1.97.1 (the pinned toolchain,
@@ -590,7 +590,7 @@ cannot be shadowed by an inherent method.
 ## Consequences
 
 **Good.** Nothing in `read`'s signature changes, so no adapter signature changes,
-`docs/adapter-shapes.md`'s recorded stream types stay valid, and ADR-0001's and
+`references/adapter-shapes.md`'s recorded stream types stay valid, and ADR-0001's and
 ADR-0008's derivation is untouched. The freeze is a freeze rather than a rewrite.
 
 **Good.** ES-11 and ES-12 acquire an implementation strategy that is stated once
@@ -941,7 +941,7 @@ Outside the specification, and recorded for the same reason.
   pinning at both methods, erases the port today with no `unsafe` and no change to
   the port (E11, compiled and run). `dynosaur` becomes usable only if `+ Unpin`
   is ever added, which item 8 above declines.
-- **`docs/scenarios/E2E-CASES.md:1432`** — carries the same `dynosaur` assertion
+- **`spec/E2E-CASES.md:1432`** — carries the same `dynosaur` assertion
   and takes the same correction.
 - **`crates/happenstance-core/src/store.rs:104-109`** — the laziness docstring
   (defect D7). It must promise the **sampling instant** rather than deferral:

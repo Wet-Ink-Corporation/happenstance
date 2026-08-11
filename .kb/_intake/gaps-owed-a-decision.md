@@ -32,7 +32,7 @@ run. Those two have a mechanism; the other four rely on being read.
 (`crates/happenstance-testkit/src/concurrency.rs:436`) is a live conformance rule. It enforces
 the proposition that commands sharing no consistency boundary do not conflict — the
 independence property that Dynamic Consistency Boundary exists for. **No clause in
-`docs/architecture/SPECIFICATION.md` states it.** The word "disjoint" occurs zero times in the
+`spec/SPECIFICATION.md` states it.** The word "disjoint" occurs zero times in the
 document; verified by grep against the working tree on 2026-08-10.
 
 **Why it was not simply attached to a nearby clause.** ES-25 is the obvious candidate and it is
@@ -85,7 +85,7 @@ property-based rule.
 
 *Suggested slug: `ps-1-states-no-progress-obligation`.*
 
-**What is true today.** PS-1 (`docs/architecture/SPECIFICATION.md:4733`) is `[FROZEN]`:
+**What is true today.** PS-1 (`spec/SPECIFICATION.md:4733`) is `[FROZEN]`:
 
 > The read-model write and the checkpoint write MUST become durable together or not at all.
 
@@ -105,7 +105,7 @@ an ADR's rather than an edit's because PS-1 is `[FROZEN]` — adding a progress 
 change the set of implementations the clause admits, which is the repair-versus-gap test's
 dividing line.
 
-**Owner. Phase 6** ("Freeze `ProjectionStore`", `docs/RUNBOOK.md:3846`), which discharges
+**Owner. Phase 6** ("Freeze `ProjectionStore`", `RUNBOOK.md:3846`), which discharges
 PS-1 – PS-37 and settles ADR-0017, ADR-0018 and ADR-0019.
 
 ---
@@ -114,7 +114,7 @@ PS-1 – PS-37 and settles ADR-0017, ADR-0018 and ADR-0019.
 
 *Suggested slug: `ps-19-scope-narrower-than-its-rule`.*
 
-**What is true today.** PS-19 (`docs/architecture/SPECIFICATION.md:5218`) is `[FROZEN]`:
+**What is true today.** PS-19 (`spec/SPECIFICATION.md:5218`) is `[FROZEN]`:
 
 > After a successful `reset`, `checkpoint(id)` MUST return `Checkpoint::NeverRun`, and this
 > MUST be distinguishable from `commit(empty_batch, id, SequencePosition::FIRST, Live)`.
@@ -144,13 +144,13 @@ check the other 35 PS clauses for the same shape** before deciding the scope of 
 
 *Suggested slug: `es-6-names-an-unwritable-rule`.*
 
-**What is true today.** ES-6 (`docs/architecture/SPECIFICATION.md:2629`) is `[FROZEN]` and its
+**What is true today.** ES-6 (`spec/SPECIFICATION.md:2629`) is `[FROZEN]` and its
 `Rule:` field names `store_error_crosses_a_join_handle` **(new)**
 (`SPECIFICATION.md:2670`). §7.2's generated table renders it with `†`
 (`SPECIFICATION.md:8588`), where the legend defines `†` as "does not exist yet".
 
 **That rule occurs as no `fn` anywhere in the workspace.** It occurs only in prose: twice in
-`docs/RUNBOOK.md`, once in `docs/adr/0008`, three times in `docs/adr/0009`, three times in
+`RUNBOOK.md`, once in `docs/adr/0008`, three times in `docs/adr/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments
 (`crates/happenstance-cloudflare/src/lib.rs:92`) states that it "is unwritable against today's
 port for *every* adapter, not merely for this one", and the probe backing that claim is
@@ -179,8 +179,8 @@ ES-6's `(new)` and its `†` come off, and the escape hatch stops applying), or 
 taken about `†` clauses that have no scheduled phase. The second is worth taking regardless:
 **a `†` with no owning phase should probably be a hard failure, and today it is silence.**
 
-**Found twice, independently.** `docs/evaluation/review-citation-drift.md` §2 reports the same
-finding, written the same day from the `docs/rust/` work with no knowledge of this pass, and
+**Found twice, independently.** `references/evaluation/review-citation-drift.md` §2 reports the same
+finding, written the same day from the `standards/rust/` work with no knowledge of this pass, and
 records that the identifier occurs "in **three**, all of them comment" locations in the crates.
 
 **Owner.** ADR-0009 exists and is accepted; the phase that writes the rule is unassigned.
@@ -196,7 +196,7 @@ A `[PROVISIONAL]` marker in this specification carries a stated falsifier — th
 that would demote or change the clause. Two markers name falsifiers that no longer discriminate,
 and **moving a maturity marker is an ADR's**, so both are recorded rather than moved.
 
-**6a — ES-7.** `docs/architecture/SPECIFICATION.md:2685`. The clause says a downstream crate
+**6a — ES-7.** `spec/SPECIFICATION.md:2685`. The clause says a downstream crate
 may implement the bare flavour directly without colliding with the blanket impl. Its marker
 reads:
 
@@ -212,7 +212,7 @@ downstream crate, alongside the blanket `impl<T: SendEventStore> EventStore for 
 `trait_variant` emits… **No `error[E0119]`.**" The instrument passes natively and on `wasm32`.
 A falsifier its own named instrument cannot produce is not doing work.
 
-**6b — VT-9.** `docs/architecture/SPECIFICATION.md:903`. The marker reads:
+**6b — VT-9.** `spec/SPECIFICATION.md:903`. The marker reads:
 
 > `[PROVISIONAL — falsified by a target that cannot supply a wall clock at append time; a
 > Cloudflare Durable Object returning a frozen clock between I/O operations is the candidate,
