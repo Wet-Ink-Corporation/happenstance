@@ -2,7 +2,7 @@
 
 ## Before you start
 
-Read [`docs/adr/`](docs/adr/). A handful of decisions shape everything else: the
+Read [`docs/adr/`](docs/adr). A handful of decisions shape everything else: the
 two-flavour async ports, opaque payloads, the edition and MSRV, and the crate
 naming. Changing one is fine — but it means writing a new ADR that supersedes
 the old one, not working around it in code. ADR-0002/ADR-0005 and
@@ -271,12 +271,17 @@ loaded host every writer can finish before the reader runs once.
 
 ## Style
 
-- Public items are documented. Fallible functions get an `# Errors` section.
+Two things to know before your first commit:
+
+- Public items are documented, and fallible functions get an `# Errors` section.
 - No `unwrap`/`expect` in library code. Test modules opt out locally with
   `#![allow(clippy::unwrap_used)]`.
-- No `anyhow` in library crates; `xtask` and examples may use it.
-- Comments explain why, not what.
-- Prefer a runnable doctest to a described example.
+
+Everything else — and the reasoning behind both of those — is in
+[`standards/rust/`](standards/rust/README.md), the Rust constitution. It is organised so
+you load one to three files for the task in front of you rather than reading it
+through: start at the router's trigger table. The gate checks it like anything
+else, so its examples compile and its citations resolve.
 
 ## Commits and pull requests
 

@@ -2,7 +2,7 @@
 //!
 //! # What this exists to stop
 //!
-//! `docs/architecture/SPECIFICATION.md` claims, for every normative clause, that
+//! `spec/SPECIFICATION.md` claims, for every normative clause, that
 //! some conformance rule can observe a violation of it and that some end-to-end
 //! case exercises it. Those claims were written by hand. Nothing has ever checked
 //! them, and a specification whose cross-references have quietly rotted is worse
@@ -47,7 +47,7 @@
 //! output, so a parser that quietly stops recognising a clause form shifts the
 //! census and the table *together* and the equality check above stays green. §1.3
 //! is the only count in the document a human computed by reading it, which is why
-//! `docs/RUNBOOK.md` treats its agreement with the checker as the best evidence
+//! `RUNBOOK.md` treats its agreement with the checker as the best evidence
 //! available that the parser reads the document the way a person does. Moving it
 //! inside the generated markers would destroy the very property it is being used
 //! to prove — and that will be the next contributor's first instinct, because the
@@ -56,7 +56,7 @@
 //! §7.3 through §7.6 stay authored and are never touched: they carry the
 //! judgement about *why* a gap exists, which no parser can recover.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::ops::Range;
@@ -64,8 +64,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-const SPEC: &str = "docs/architecture/SPECIFICATION.md";
-const CASES: &str = "docs/scenarios/E2E-CASES.md";
+const SPEC: &str = "spec/SPECIFICATION.md";
+const CASES: &str = "spec/E2E-CASES.md";
 const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 
 /// Every file a conformance rule may be defined in.
@@ -289,23 +289,147 @@ impl Census {
 }
 
 /// Checks that every `file:line` citation resolves.
-fn check_citations(root: &Path, spec: &str, problems: &mut Vec<String>) {
-    for (line_no, citation, path, line) in citations(spec) {
-        match fs::read_to_string(root.join(&path)) {
-            Err(_) => problems.push(format!(
-                "{SPEC}:{line_no} — citation `{citation}` names a file that does not exist"
+///
+/// Returns how many it looked at, because a check that does not state its own
+/// coverage is indistinguishable from one that sees everything — which is
+/// exactly how this step reported success while parsing a quarter of the
+/// corpus. The count goes in the summary line.
+fn check_citations(
+    root: &Path,
+    spec: &str,
+    index: &BTreeMap<String, Vec<String>>,
+    problems: &mut Vec<String>,
+) -> (usize, usize, usize) {
+    let mut checked = 0usize;
+    let mut external = 0usize;
+    let mut anchored = 0usize;
+    let historical = historical_span(spec);
+    for c in citations(spec, index) {
+        let (line_no, text) = (c.spec_line, &c.text);
+        match c.target {
+            Target::External => external += 1,
+            Target::Unknown => problems.push(format!(
+                "{SPEC}:{line_no} — citation `{text}` names a file that is in neither the \
+                 workspace nor `EXTERNAL_CITATIONS`"
             )),
-            Ok(body) => {
-                let len = body.lines().count();
-                if line > len {
-                    problems.push(format!(
-                        "{SPEC}:{line_no} — citation `{citation}` points past the end of {} \
-                         ({len} lines)",
-                        path.display()
-                    ));
+            Target::Ambiguous(candidates) => problems.push(format!(
+                "{SPEC}:{line_no} — citation `{text}` is a bare name the workspace defines {} \
+                 times ({}). Qualify it with its path, or add it to `BARE_NAME_MAP` with the \
+                 evidence for which one is meant.",
+                candidates.len(),
+                candidates.join(", ")
+            )),
+            Target::Path(path) => match fs::read_to_string(root.join(&path)) {
+                Err(_) => problems.push(format!(
+                    "{SPEC}:{line_no} — citation `{text}` names a file that does not exist"
+                )),
+                Ok(body) => {
+                    checked += 1;
+                    let lines: Vec<&str> = body.lines().collect();
+                    if c.line > lines.len() {
+                        problems.push(format!(
+                            "{SPEC}:{line_no} — citation `{text}` points past the end of {} \
+                             ({} lines)",
+                            path.display(),
+                            lines.len()
+                        ));
+                    } else if let Some(subject) = &c.subject
+                        && !historical.contains(&line_no)
+                        && !UNANCHORED_CITATIONS.iter().any(|(t, _)| t == text)
+                    {
+                        // If the subject appears nowhere in the cited file, the
+                        // derivation picked the wrong word — not the citation the
+                        // wrong line. "`limit` cannot stand in for it because
+                        // `event.rs:215-217` forbids…" derives `limit`, which is
+                        // a `query.rs` name and has no business being looked for
+                        // here. Declining is the difference between a check that
+                        // reports drift and one that reports its own guesses:
+                        // the subject being *elsewhere in the same file* is the
+                        // signal worth having, and that is what survives.
+                        let present = lines.iter().any(|l| l.contains(subject.as_str()));
+                        if !present {
+                            continue;
+                        }
+                        anchored += 1;
+                        let lo = c.line.saturating_sub(ANCHOR_SLACK + 1);
+                        let hi = (c.line_end + ANCHOR_SLACK).min(lines.len());
+                        if !lines[lo..hi].iter().any(|l| l.contains(subject.as_str())) {
+                            problems.push(format!(
+                                "{SPEC}:{line_no} — citation `{text}` is evidence for `{subject}`, \
+                                 and `{subject}` is not within {ANCHOR_SLACK} lines of {}:{}. The \
+                                 citation points at the wrong place, or the sentence attributes it \
+                                 to the wrong thing.",
+                                path.display(),
+                                c.line
+                            ));
+                        }
+                    }
                 }
-            }
+            },
         }
+    }
+    (checked, external, anchored)
+}
+
+/// How far from the cited line the subject may sit before the citation is wrong.
+///
+/// Twelve, where `standards/rust`'s own citation lint uses ten
+/// (`lint_constitution.rs:111`) — wider because a derived anchor has further to
+/// travel than a written one. There the anchor is quoted beside the line and
+/// names the exact text; here it is the identifier the prose happened to use,
+/// which may sit a few lines from the item's `fn` line.
+///
+/// The reason for a window at all is the same in both: an anchor is a claim
+/// about *what* is at a location, and a doc comment growing above an item must
+/// not red the gate. That is the property that makes the check survivable — a
+/// content hash fails on every ordinary edit, and its refresh command becomes a
+/// reflex nobody reads.
+///
+/// (This comment claimed the two constants were equal until it was checked. A
+/// citation-drift defect inside the citation-drift check is worth leaving a note
+/// about rather than quietly correcting.)
+const ANCHOR_SLACK: usize = 12;
+
+/// Citations that are deliberately not about the thing beside them.
+///
+/// One entry. §2.7 quotes a claim **in order to call it false** — "the second leg
+/// this bullet used to offer is false: it said `memory.rs:154` and …" — so the
+/// number is part of the quotation. Repairing it, or anchoring it, would falsify
+/// the record of what was once claimed.
+const UNANCHORED_CITATIONS: [(&str, &str); 1] = [(
+    "memory.rs:154",
+    "quoted inside a sentence that calls the claim it quotes false (§2.7)",
+)];
+
+/// The lines of §6.1 and §6.2, whose citations are a measurement of `b4b593d`.
+///
+/// Found by content rather than by line number, because line numbers in this
+/// document move on every pass and a hard-coded span would come to cover the
+/// wrong section silently — which is the failure this whole check exists to
+/// prevent, one level up.
+///
+/// The declaration is §6's own: the measurement is of *that* tree, "line numbers
+/// included — which is why those numbers do not resolve against the working copy
+/// and are not meant to. That covers the rest of this paragraph as well as §6.1
+/// and §6.2 below." So the span runs from that sentence to the start of §6.3,
+/// which is where the document says the present tense resumes.
+fn historical_span(spec: &str) -> BTreeSet<usize> {
+    let lines: Vec<&str> = spec.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.contains("line numbers included"))
+        .map(|i| i + 1);
+    let end = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("### 6.3"))
+        .map(|i| i + 1);
+    match (start, end) {
+        (Some(s), Some(e)) if s < e => (s..=e).collect(),
+        // Neither anchor found means the document has been restructured. Return
+        // nothing rather than guess: the check then reports the region's
+        // citations, which is loud and correct, instead of exempting a span that
+        // may no longer be the historical one.
+        _ => BTreeSet::new(),
     }
 }
 
@@ -487,7 +611,6 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     let root = workspace_root()?;
     let spec = read(&root, SPEC)?;
     let cases_doc = read(&root, CASES)?;
-    let suite = read(&root, SUITE)?;
 
     let clauses = parse_clauses(&spec);
     if clauses.is_empty() {
@@ -497,15 +620,29 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     }
 
     let known_cases = collect_cases(&cases_doc);
-    let known_rules = collect_rules(&suite);
+    // All three rule files, not just `suite.rs`. [`RULE_FILES`]'s own docs used
+    // to say "[`run`]'s clause checks stay scoped to [`SUITE`] on purpose — only
+    // that family's rules are claimed by clauses today", and that reason is
+    // circular: they were not claimed *because* nothing required them to be.
+    // Six rules — five in `concurrency.rs` and one in `model.rs` — had never
+    // been named by any clause, and check 6 was structurally unable to notice,
+    // including the one that pins the central DCB proposition. Four were
+    // attribution errors and are claimed as of this commit, by ES-18, ES-19,
+    // ES-25 and VT-11. The other two are in [`UNCLAIMED_PENDING_ADR`].
+    let known_rules = all_rules(&root)?;
 
     // Two sets, not one, and which check gets which is load-bearing (ADR-0016
-    // §15). `known_rules` is the suite's own — check 6 sweeps it, so nothing may
-    // enter it that a clause is not obliged to claim. `resolvable` is that set
-    // plus the `wire::`-qualified tests, and it answers the *other* question:
-    // does a name a clause cites exist anywhere. Check 4 and `rule_cell` ask
-    // that one. Wiring only check 4 would leave every written wire test
-    // rendering `†` in §7.2 under a legend that defines `†` as "must be written".
+    // §15). `known_rules` is every conformance rule — check 6 sweeps it, so
+    // nothing may enter it that a clause is not obliged to claim. `resolvable`
+    // is that set plus the `wire::`-qualified tests, and it answers the *other*
+    // question: does a name a clause cites exist anywhere. Check 4 and
+    // `rule_cell` ask that one. Wiring only check 4 would leave every written
+    // wire test rendering `†` in §7.2 under a legend that defines `†` as "must
+    // be written".
+    //
+    // The two move together by construction, which is what makes the widening
+    // above safe: claiming a `concurrency.rs` rule in a clause would fail check
+    // 4 if `resolvable` had stayed scoped to `suite.rs`.
     let resolvable: BTreeSet<String> = known_rules.union(&wire_rules(&root)?).cloned().collect();
 
     let mut problems: Vec<String> = Vec::new();
@@ -585,23 +722,15 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
-    // 6. Every rule in the suite is claimed by a clause, or disposed of by one.
-    //
-    //    `known_rules`, deliberately, and never `resolvable`: see [`WIRE_TESTS`].
-    //    This is the direction of resolution that stays one-way.
-    let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
-    let retired: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.retires).collect();
-    for rule in &known_rules {
-        if !claimed.contains(rule) && !retired.contains(rule) {
-            problems.push(format!(
-                "{SUITE} — rule `{rule}` is named by no clause and disposed of by none. Either a \
-                 clause claims it, or one retires it with `Retires: {rule} — <reason>`."
-            ));
-        }
-    }
+    // 6. Every conformance rule is claimed by a clause, or disposed of by one,
+    //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
+    let unclaimed_pending = check_rule_ownership(&clauses, &known_rules, &mut problems);
 
-    // 7. Every `file:line` citation resolves to a file that exists and is long enough.
-    check_citations(&root, &spec, &mut problems);
+    // 7. Every `file:line` citation resolves to a file that exists and is long
+    //    enough — bare names and `.md` targets included, which is three quarters
+    //    of them and was none of them until this widening.
+    let index = workspace_index(&root);
+    let citation_coverage = check_citations(&root, &spec, &index, &mut problems);
 
     let census = Census::of(&clauses);
 
@@ -617,9 +746,57 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &census,
         &known_rules,
         &known_cases,
+        citation_coverage,
+        &unclaimed_pending,
         &problems,
         stale.as_deref(),
     )
+}
+
+/// Check 6 — every conformance rule is owned by a clause, retired by one, or on
+/// record as owing a decision. Returns the third group, for the summary.
+///
+/// `known_rules`, deliberately, and never `resolvable`: see [`WIRE_TESTS`]. This
+/// is the direction of resolution that stays one-way.
+///
+/// Extracted from [`run`] when the widening to [`RULE_FILES`] pushed that
+/// function past clippy's line limit — the arm that records a pending decision
+/// is the whole of the growth, and it reads better beside the array it consults.
+fn check_rule_ownership(
+    clauses: &[Clause],
+    known_rules: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) -> Vec<String> {
+    let claimed: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.rules).collect();
+    let retired: BTreeSet<&String> = clauses.iter().flat_map(|c| &c.retires).collect();
+    let mut pending = Vec::new();
+
+    for rule in known_rules {
+        if claimed.contains(rule) || retired.contains(rule) {
+            // A rule cannot be both claimed and owed a decision. If it is, the
+            // exemption has been discharged and must go, or it sits there
+            // asserting an open question that is closed. This is the half that
+            // makes the array a ratchet rather than an allowlist.
+            if UNCLAIMED_PENDING_ADR.iter().any(|(r, _)| r == rule) {
+                problems.push(format!(
+                    "`{rule}` is claimed by a clause *and* listed in `UNCLAIMED_PENDING_ADR`. \
+                     The exemption is discharged — delete its entry."
+                ));
+            }
+            continue;
+        }
+        if let Some((_, owed)) = UNCLAIMED_PENDING_ADR.iter().find(|(r, _)| r == rule) {
+            pending.push(format!("{rule} — {owed}"));
+            continue;
+        }
+        problems.push(format!(
+            "a conformance rule in {} — `{rule}` is named by no clause and disposed of by none. \
+             Either a clause claims it, or one retires it with `Retires: {rule} — <reason>`, or \
+             it goes in `UNCLAIMED_PENDING_ADR` with the decision it is waiting on.",
+            RULE_FILES.join(", ")
+        ));
+    }
+    pending
 }
 
 /// Checks that no rule a clause disposes of is still live (§7.4).
@@ -793,6 +970,8 @@ fn report(
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
+    citations: (usize, usize, usize),
+    unclaimed_pending: &[String],
     problems: &[String],
     stale: Option<&str>,
 ) -> Result<()> {
@@ -809,11 +988,36 @@ fn report(
     let _ = write!(summary, "{}), ", parts.join(", "));
     let _ = write!(
         summary,
-        "{} suite rules, {} e2e cases",
+        "{} conformance rules, {} e2e cases",
         rules.len(),
         cases.len()
     );
+    // The coverage number is in the summary rather than in a comment because the
+    // failure this step spent a phase inside was not a wrong check, it was a
+    // check whose scope nobody could see. A reader who is told "338 citations"
+    // can notice that the document has more.
+    let (checked, external, anchored) = citations;
+    let _ = write!(
+        summary,
+        ", {checked} citations checked ({anchored} anchored to their subject"
+    );
+    if external > 0 {
+        let _ = write!(summary, ", {external} external");
+    }
+    let _ = write!(summary, ")");
     println!("{summary}");
+
+    // Printed on a green run, on purpose. An open question that only shows up
+    // when something else is already broken is an open question nobody reads.
+    if !unclaimed_pending.is_empty() {
+        println!(
+            "{} rule(s) claimed by no clause and owing a decision:",
+            unclaimed_pending.len()
+        );
+        for r in unclaimed_pending {
+            println!("  {r}");
+        }
+    }
 
     if problems.is_empty() && stale.is_none() {
         println!("traceability: no problems found; §7.1–§7.2 matches the checker");
@@ -1746,11 +1950,288 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// `path:line` citations in backticks, as `(spec line, citation, path, line)`.
-fn citations(spec: &str) -> Vec<(usize, String, PathBuf, usize)> {
+/// Rules that exist, pass, and are claimed by no clause because claiming them
+/// would take a decision this checker is not allowed to take.
+///
+/// Check 6's bar is that every conformance rule is claimed by a clause or
+/// retired by one. Widening it to all of [`RULE_FILES`] found six rules that
+/// were neither — five in `concurrency.rs`, one in `model.rs`. Four were
+/// attribution errors: the clause already stated the proposition and already
+/// named the wrong implementation, and only the rule's name was missing. The
+/// remaining two are not errors — they are holes in the specification, and the
+/// honest repair is an ADR rather than an edit.
+///
+/// The two differ in shape, which is why neither can be absorbed by a clause.
+/// One states a proposition no clause states. The other states *several*, and
+/// belongs to no single clause for that reason.
+///
+/// This list is the difference between a gap that is **recorded and counted**
+/// and one that is invisible, which is the only thing check 6 was ever for. It
+/// is not an allowlist in the usual sense, because it cannot be used to make a
+/// problem go away quietly: every entry is printed on every green run, and an
+/// entry whose rule *becomes* claimed is itself a failure, so the list can only
+/// shrink. Deleting the last entry deletes the mechanism.
+///
+/// Per the drift allowlist that came before it (`3712c9b`), the count is
+/// computed and printed rather than written here, so this comment cannot come to
+/// disagree with the array beneath it.
+const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
+    (
+        "k_disjoint_boundaries_admit_exactly_k_commits",
+        "the central DCB independence proposition — that commands sharing no \
+         consistency boundary do not conflict — is enforced by this rule and \
+         stated by no clause. The word \"disjoint\" does not appear in the \
+         specification. ES-25's *only if* half forbids the false-positive \
+         direction and does not say this, so claiming it there would assert \
+         that a FROZEN clause contains a proposition it does not. Owed: an ADR, \
+         either widening ES-25 or minting a clause",
+    ),
+    (
+        "ops_agree_with_the_model",
+        "the model family's single rule enforces no single clause's sentence. \
+         It replays a generated sequence of appends, conditional appends and \
+         reads against a model and compares every answer, so what it checks is \
+         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-18 and ES-25 \
+         over inputs no clause enumerates — which is the whole reason the \
+         family exists, since the named rules are worked examples and this is \
+         not. §6.4 names it, but only as CF-22's illustration of a per-family \
+         enumeration, and CF-22's MUST is where the rule list lives rather than \
+         what any rule asserts. Claiming it under any one of the clauses it \
+         exercises would say that clause is what it checks. Owed: an ADR, \
+         either minting the clause the model family has never had — a store \
+         agrees with the contract over arbitrary operation sequences, not only \
+         over the examples the suite enumerates — or deciding that check 6's \
+         bar is per-clause and a cross-clause rule is disposed of some other \
+         way",
+    ),
+];
+
+/// A citation whose file name is not a path in this repository.
+///
+/// One entry, and it earns the mechanism. §3.1 cites `trait_variant`'s own
+/// source twelve times, declaring once that `variant.rs` means the crate's
+/// `src/variant.rs` under `~/.cargo/registry`. That is a real citation and a
+/// useful one — it is the evidence for how the derive expands — but the file is
+/// not in the tree, so the moment [`citations`] learned to read bare names all
+/// twelve would have turned red.
+///
+/// The table is the difference between "not in this repository" and "does not
+/// exist", which are the same string to a checker and opposite facts to a
+/// reader. A bare name that is in neither the table nor the workspace is a
+/// failure, so this cannot become a place to hide a typo.
+const EXTERNAL_CITATIONS: [&str; 1] = [
+    // `trait-variant` 0.1.3's `src/variant.rs`, under `~/.cargo/registry`. §3.1
+    // declares the shorthand once and then uses it twelve times as the evidence
+    // for how the derive expands.
+    "variant.rs",
+];
+
+/// Bare file names the workspace defines more than once, and which one the
+/// specification means.
+///
+/// The document cites by bare name on purpose — `event.rs:215` reads better in
+/// a sentence than the path does, and most of the 200 bare citations resolve
+/// uniquely. Four do not, and **the obvious default is wrong for half of them**,
+/// which is why this is a table rather than a "prefer `happenstance-core`" rule:
+/// bare `lib.rs` means the *sync* crate at both of its sites (§1.6's port table
+/// and §5), and `happenstance-core` also has a `lib.rs`. A preference rule would
+/// have resolved both to the wrong file and passed.
+///
+/// Each entry is evidence, not preference — it records where the citations
+/// actually point, checked one by one. Two things keep it honest. A basename
+/// that is ambiguous and *absent* here is a hard failure naming the candidates,
+/// so a new collision cannot resolve silently. And the anchor check is the
+/// backstop for this table being wrong: if a citation mapped here to `core`
+/// really meant `sync`, the anchor it names will not be found in the file this
+/// sends it to.
+const BARE_NAME_MAP: [(&str, &str); 5] = [
+    ("memory.rs", "crates/happenstance-core/src/memory.rs"),
+    ("error.rs", "crates/happenstance-core/src/error.rs"),
+    ("identity.rs", "crates/happenstance-core/src/identity.rs"),
+    ("lib.rs", "crates/happenstance-sync/src/lib.rs"),
+    // Fourteen manifests carry this name and the root's own relative path *is*
+    // the bare name, so qualifying the two citations would not have changed the
+    // string they contain. Both mean the workspace root, and §8036 says so in
+    // the sentence around it: "inheriting `version` from the workspace root".
+    ("Cargo.toml", "Cargo.toml"),
+];
+
+/// What a citation's file name resolved to.
+enum Target {
+    /// A file in this repository.
+    Path(PathBuf),
+    /// Deliberately outside it — see [`EXTERNAL_CITATIONS`].
+    External,
+    /// Several files carry this name and no [`BARE_NAME_MAP`] entry picks one.
+    Ambiguous(Vec<String>),
+    /// No file in the workspace carries this name, and it is not external.
+    Unknown,
+}
+
+/// A parsed citation.
+struct Citation {
+    /// The line of `SPECIFICATION.md` it appears on.
+    spec_line: usize,
+    /// The citation verbatim, for the error message.
+    text: String,
+    /// Where its file name resolved to.
+    target: Target,
+    /// The line it names.
+    line: usize,
+    /// The end of the range it names, when it names one — `404-427` ends at 427.
+    line_end: usize,
+    /// The identifier the sentence attributes to that location, if it names one.
+    ///
+    /// `None` for a `.md` target. A citation into Markdown is evidence for a
+    /// *passage* — an argument, a scenario, a measurement — and the backticked
+    /// word beside it is whatever the sentence happened to be discussing, not a
+    /// definition that lives at that line. Anchoring them produced a third of
+    /// this check's first run as false reports.
+    subject: Option<String>,
+}
+
+/// The nearest backticked identifier before a citation — what the sentence says
+/// is at the place it cites.
+///
+/// The document has one citation idiom and it is remarkably consistent: a
+/// backticked identifier, then the citation, usually parenthesised.
+///
+/// ```text
+/// `is_violated_by` compares raw values (`append.rs:239-253`)
+/// ```
+///
+/// So the anchor need not be written into the citation the way `standards/rust`
+/// writes it — it is already in the prose, and deriving it costs no change at
+/// 358 sites. The search runs backwards across line breaks, because the
+/// document wraps at 80 columns and a subject is frequently on the line above
+/// its citation.
+///
+/// Returns `None` when the nearest span is not an identifier — a quoted phrase,
+/// a type with generics, another citation — rather than guessing. A citation
+/// with no derivable subject is counted and not anchored, which is the honest
+/// outcome: this check tightens the ones it can read and never invents a claim
+/// to check.
+fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
+    let (cite_line, _) = spans.get(i)?;
+    let (subj_line, s) = spans.get(i.checked_sub(1)?)?;
+
+    // Only the span *immediately* before, and only on the citation's own line or
+    // the one above it. Four attempts got here, and the numbers are the argument
+    // for how narrow it ended up: walking back up to four spans reported **118
+    // of 316 anchored**; excluding `.md` targets and searching the whole cited
+    // range rather than its first line took it to **70 of 262**; this
+    // restriction took it to 10; declining when the subject appears nowhere in
+    // the cited file took it to 2, and both of those were real defects.
+    //
+    // Nearly every false report was one shape: a sentence with no backticked
+    // subject at all —
+    // "the prohibition on arithmetic is already documented at `event.rs:215-217`"
+    // — where reaching back far enough always finds *some* identifier, and it
+    // belongs to the previous sentence. A derived anchor is only worth having
+    // where the derivation is certain, so this declines rather than guesses.
+    if cite_line.saturating_sub(*subj_line) > 1 {
+        return None;
+    }
+
+    // An identifier may carry `::` qualifiers and a trailing `()`. Anything else
+    // — spaces, attributes like `#[non_exhaustive]`, generics, another citation —
+    // means the span is not a name and the anchor is not derivable.
+    let core = s.trim().trim_end_matches("()");
+    if core.is_empty()
+        || !core
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+    {
+        return None;
+    }
+    // `Type::method` anchors on the last segment: the definition site spells
+    // `fn method`, not `Type::method`.
+    let last = core.rsplit("::").next().unwrap_or(core);
+
+    // A type name is a poor anchor even when it is the grammatical subject:
+    // "`MemoryEventStore` already behaves that way by accident of ordering
+    // (`memory.rs:372-388`)" cites the *behaviour*, and the type is declared four
+    // hundred lines away. Names that start lower-case are functions, methods,
+    // fields and rules, and those are cited at their definitions.
+    if last.len() < 4 || last.starts_with(|c: char| c.is_uppercase()) {
+        return None;
+    }
+    Some(last.to_owned())
+}
+
+/// Every file in the workspace that a citation could name, by base name.
+///
+/// Built once per run by walking the tree. `target/` is skipped because it holds
+/// a copy of half the workspace under `package/`, and every one of those copies
+/// would register as a second definition of a name that is otherwise unique —
+/// turning the ambiguity check from a guard into noise. `.git` is skipped for
+/// size alone.
+fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
+    fn walk(dir: &Path, root: &Path, out: &mut BTreeMap<String, Vec<String>>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if name == "target" || name == ".git" || name == "node_modules" {
+                    continue;
+                }
+                walk(&path, root, out);
+            } else if [".rs", ".toml", ".md"].iter().any(|e| {
+                name.len() > e.len() && name[name.len() - e.len()..].eq_ignore_ascii_case(e)
+            }) && let Ok(rel) = path.strip_prefix(root)
+            {
+                out.entry(name)
+                    .or_default()
+                    .push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(root, root, &mut out);
+    for paths in out.values_mut() {
+        paths.sort();
+    }
+    out
+}
+
+/// `path:line` citations in backticks, as parsed [`Citation`]s.
+///
+/// # What this used to skip, and why that mattered
+///
+/// The filter was `!path.contains('/') || !(has_ext(".rs") || has_ext(".toml"))`
+/// — a citation had to be path-qualified *and* name Rust or a manifest. The
+/// document carries 338 citations and only 84 satisfy both: **200 are bare file
+/// names and 56 name a `.md`**, and neither form was ever parsed, so neither was
+/// ever checked. `check_citations` was not a weak check over the corpus; it was a
+/// correct check over a quarter of it, and three quarters of the document's
+/// evidence sat unverified behind a green step.
+///
+/// That is not a hypothetical exposure. Commit `2e4407b` found eight citations
+/// that were "green and wrong" and repaired them by hand; the ones this widening
+/// exposes are the same defect in the part of the corpus nobody could see.
+fn citations(spec: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<Citation> {
+    // Every backticked span in the document, in order, with the line it sits on.
+    // Collected up front rather than per line because a subject and its citation
+    // are often on different lines — the document wraps at 80 columns and does
+    // not treat the pair as unbreakable.
+    let spans: Vec<(usize, String)> = spec
+        .lines()
+        .enumerate()
+        .flat_map(|(n, line)| {
+            line.split('`')
+                .skip(1)
+                .step_by(2)
+                .map(move |c| (n + 1, c.to_owned()))
+        })
+        .collect();
+
     let mut out = Vec::new();
-    for (n, line) in spec.lines().enumerate() {
-        for chunk in line.split('`').skip(1).step_by(2) {
+    for (i, (n, chunk)) in spans.iter().enumerate() {
+        {
+            let chunk = chunk.as_str();
             let Some((path, tail)) = chunk.rsplit_once(':') else {
                 continue;
             };
@@ -1761,14 +2242,63 @@ fn citations(spec: &str) -> Vec<(usize, String, PathBuf, usize)> {
             let has_ext = |e: &str| {
                 path.len() > e.len() && path[path.len() - e.len()..].eq_ignore_ascii_case(e)
             };
-            if !path.contains('/') || !(has_ext(".rs") || has_ext(".toml")) {
+            if !(has_ext(".rs") || has_ext(".toml") || has_ext(".md")) {
+                continue;
+            }
+            // A path has no spaces. Dropping the `contains('/')` requirement let
+            // whole backticked *sentences* through: a span reading
+            // "[DEFERRED — settled by the experiment named in PRESSURE-TEST.md:688-693"
+            // ends in `.md:<digits>` and `rsplit_once(':')` happily calls the
+            // entire clause a path. The old filter excluded these by accident,
+            // because prose rarely contains a slash; this excludes them on
+            // purpose.
+            if path.chars().any(char::is_whitespace) {
                 continue;
             }
             let first: String = tail.chars().take_while(char::is_ascii_digit).collect();
             let Ok(num) = first.parse::<usize>() else {
                 continue;
             };
-            out.push((n + 1, chunk.to_owned(), PathBuf::from(path), num));
+            // `404-427` names a span, and the subject may be anywhere in it. The
+            // first run of the anchor check searched only around the start line
+            // and reported `into_parts` missing from `event.rs:404-427` because
+            // the doc comment occupies the first fourteen lines of its own
+            // citation.
+            let end: String = tail
+                .strip_prefix(&first)
+                .and_then(|r| r.strip_prefix('-'))
+                .map(|r| r.chars().take_while(char::is_ascii_digit).collect())
+                .unwrap_or_default();
+            let num_end = end.parse::<usize>().unwrap_or(num).max(num);
+
+            let base = path.rsplit('/').next().unwrap_or(path);
+            let target = if path.contains('/') {
+                Target::Path(PathBuf::from(path))
+            } else if EXTERNAL_CITATIONS.contains(&base) {
+                Target::External
+            } else if let Some((_, mapped)) = BARE_NAME_MAP.iter().find(|(n, _)| *n == base) {
+                Target::Path(PathBuf::from(*mapped))
+            } else {
+                match index.get(base).map(Vec::as_slice) {
+                    Some([only]) => Target::Path(PathBuf::from(only)),
+                    Some(many) if many.len() > 1 => Target::Ambiguous(many.to_vec()),
+                    _ => Target::Unknown,
+                }
+            };
+
+            let markdown = has_ext(".md");
+            out.push(Citation {
+                spec_line: *n,
+                text: chunk.to_owned(),
+                target,
+                line: num,
+                line_end: num_end,
+                subject: if markdown {
+                    None
+                } else {
+                    subject_before(&spans, i)
+                },
+            });
         }
     }
     out

@@ -1,0 +1,68 @@
+name: story-lite
+# Stories only. A bug has its own leaner lane (`bug.yaml`) and a spike is
+# exploratory by nature — neither is a "small story", so neither opts in here.
+applies_to: [story]
+id_prefix: S
+# Identical to `story`'s lifecycle: a lite story is the SAME kind of object at the
+# same statuses, just reached with fewer stops. Diverging the lifecycle would make
+# the two incomparable on the board for no gain.
+lifecycle: [pending, specced, ready, in-progress, in-review, done, blocked]
+stages:
+  # `discover`'s ARTIFACT and CHECKLIST are cut — its `discover.md` restates, at
+  # lower fidelity, what the spec is about to say properly, and for a one-slice
+  # story with a decided approach that is the same document written twice.
+  #
+  # But the STAGE remains, as an empty starting position, and that is load-bearing:
+  # a `review` gate pauses on ENTRY to its stage, and `writeItem` seeds a new item
+  # directly onto stages[0]. Making `spec` the first stage therefore meant the item
+  # was BORN past its own review gate — `advance --to implement` walked straight
+  # through and the human spec sign-off silently never happened. Cutting ceremony
+  # must never cut a gate; keeping a zero-artifact stage here is what makes
+  # `intake -> spec` a real entry that the gate below can stop.
+  #
+  # It also keeps a lite story starting at `pending` like every other story, so the
+  # board stays comparable across tiers.
+  - id: intake
+    status_on_enter: pending
+    produces: []
+  - id: spec
+    status_on_enter: specced
+    produces: [spec.md]
+    template: spec
+    # KEPT. The acceptance criteria are what every downstream gate keys on — the
+    # ledger, the verify grain, the review rubric. A small story has fewer of them,
+    # never none.
+    requires_ac: true
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  # `plan` is cut. Its `plan.md` is a ~60-word stub in every story the pipeline has
+  # ever produced: for work of this size the implementation approach is the spec's
+  # last paragraph, not a separate gated artifact.
+  - id: implement
+    status_on_enter: in-progress
+    produces: [implementation-report.md]
+    template: implementation-report
+    # KEPT, UNCHANGED. This is the deterministic bar (RFC §6.3/D2) and it is
+    # explicitly NOT part of what a lite pack cuts: tier decides how much is
+    # WRITTEN about the work, never how much is CHECKED. A command gate runs on
+    # both sides of its stage, so this guards spec -> implement AND implement ->
+    # report. Non-zero exit blocks the transition (EC-003); an undeclared `verify`
+    # config command is a trivial pass, so pre-`verify` repos are unaffected.
+    gate: { kind: command, run: "{{redkiln}} verify --item {{id}} --grain story", blocking: true }
+  - id: report
+    status_on_enter: in-review
+    produces: [report.md]
+    template: report
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: closeout
+    status_on_enter: done
+    produces: []
+    harvest_kb: true
+transitions:
+  # `changes-requested`, not `bounce`: the engine matches an edge on the verdict
+  # string itself, so an edge named for a verdict no gate offers never fires and
+  # the rejecting verdict falls through to the normal forward transition.
+  - on: changes-requested
+    from: report
+    to: implement
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]

@@ -188,6 +188,80 @@ pub use contract::{Capability, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, Rule
 pub use registry::block_on;
 pub use suite::rules;
 
+/// VT-26's compile test, run from a crate that really is downstream of
+/// `happenstance-core`.
+///
+/// [`Query::Items`] carries `#[non_exhaustive]`, so outside the defining crate
+/// it can be matched but not constructed. The seal is load-bearing rather than
+/// tidy: `Query::Items(Vec::new().into_boxed_slice())` is a query with no items,
+/// `Query::matches` then answers `false` for every event, and an
+/// `AppendCondition` over it can never be violated — a conditional append that
+/// is silently unconditional, which is a lost update with no diagnostic
+/// anywhere. The check has to run *downstream*, because inside
+/// `happenstance-core` the variant is ordinary and nothing there can fail.
+///
+/// **Rejects:** a `Query::Items` without `#[non_exhaustive]`. Strike the
+/// attribute and the first block below compiles, so the test fails with
+/// *"Test compiled successfully, but it's marked `compile_fail`"*.
+///
+/// ```compile_fail
+/// use happenstance_core::{Query, QueryItem};
+///
+/// let items = vec![QueryItem::of_types(["CourseDefined"]).unwrap()].into_boxed_slice();
+/// let query = Query::Items(items);
+/// assert!(!query.is_all());
+/// ```
+///
+/// # Why a doctest, in a repository this one has bitten before
+///
+/// `tests/` cannot host it: an integration test that fails to compile fails the
+/// build, so the only instrument that can assert a *non*-compile is one rustdoc
+/// runs. And a bare `compile_fail` passes when the snippet fails to compile for
+/// **any** reason — measured in `experiments/wire-format/`, where of four
+/// spellings of one assertion a type-name typo, a misspelt trait and a wrong
+/// crate path all reported ok against a false claim. Annotating the code does
+/// not fix it: rustdoc on 1.97.1 silently ignores an error-code annotation it
+/// cannot match, so `compile_fail,E0639` is the weaker check rather than the
+/// stricter one (`happenstance-core/src/event.rs`'s `from_static`, and
+/// [`Capability::declined`], both record this).
+///
+/// The **twin** below is what makes the pair sound. It is the same snippet with
+/// one expression changed — `Query::Items(items)` becomes
+/// `Query::from_items(items)` — and it must *compile*. A typo, a renamed item
+/// or a wrong path breaks the twin, and a broken twin is a hard test failure,
+/// so the only thing the pair can be reporting is the one expression that
+/// differs between them.
+///
+/// ```
+/// use happenstance_core::{Query, QueryItem};
+///
+/// let items = vec![QueryItem::of_types(["CourseDefined"]).unwrap()].into_boxed_slice();
+/// let query = Query::from_items(items).unwrap();
+/// assert!(!query.is_all());
+///
+/// // Reading the variant from outside the crate still works, which is what
+/// // variant-level `#[non_exhaustive]` buys over enum-level: matching is
+/// // allowed and construction is not.
+/// //
+/// // **In the struct-pattern spelling, and only that one.** `Query::Items(..)`
+/// // — the tuple form the specification and `query.rs` both name — is
+/// // `error[E0603]: tuple variant `Items` is private` downstream, because a
+/// // tuple pattern resolves through the variant's *constructor* and
+/// // `#[non_exhaustive]` is what makes that constructor private outside the
+/// // crate. Braces reach the fields directly and never name the constructor,
+/// // so `{ .. }` and `{ 0: …, .. }` both compile. Measured here, on 1.97.1;
+/// // `Query::items()` remains the accessor nobody has to know this for.
+/// assert!(matches!(query, Query::Items { .. }));
+/// assert!(matches!(query, Query::Items { 0: ref held, .. } if held.len() == 1));
+/// ```
+///
+/// `trybuild` would pin the diagnostic outright and make the twin unnecessary;
+/// ADR-0015 records that phase 6 owns that dependency decision.
+///
+/// [`Query::Items`]: happenstance_core::Query::Items
+#[cfg(doctest)]
+mod query_items_is_not_constructible_downstream {}
+
 /// Generates the full DCB conformance suite for an event store adapter.
 ///
 /// Takes an expression that produces a [`Fixture`] — one isolated backing store

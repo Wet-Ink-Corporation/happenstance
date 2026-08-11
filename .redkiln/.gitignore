@@ -1,0 +1,4 @@
+# Derived, fully rebuildable index (spec §3, §5).
+index/
+# Derived, machine-local gate memo (see src/store/verify-cache.ts).
+cache/

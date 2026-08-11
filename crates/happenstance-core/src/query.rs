@@ -154,8 +154,18 @@ pub enum Query {
     /// Matches events satisfying at least one item.
     ///
     /// `#[non_exhaustive]` so that no downstream crate can build one directly.
-    /// Inside this crate the variant is ordinary; outside it, it can be matched
-    /// only as `Query::Items(..)` and constructed not at all.
+    /// Inside this crate the variant is ordinary; outside it, it is matchable
+    /// but not constructible.
+    ///
+    /// **Downstream, the tuple spelling is not one of the ways to match it.**
+    /// `Query::Items(..)` is `error[E0603]: tuple variant `Items` is private`,
+    /// because a tuple pattern resolves through the variant's *constructor* and
+    /// `#[non_exhaustive]` is precisely what makes that constructor crate-private.
+    /// The struct spellings reach the fields without naming the constructor, so
+    /// `Query::Items { .. }` and `Query::Items { 0: held, .. }` both compile.
+    /// Measured on 1.97.1 by `query_items_is_not_constructible_downstream` in
+    /// `happenstance-testkit`. Most callers want [`Query::items`] and never meet
+    /// this.
     #[non_exhaustive]
     Items(Box<[QueryItem]>),
 }

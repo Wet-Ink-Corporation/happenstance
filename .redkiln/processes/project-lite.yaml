@@ -1,0 +1,75 @@
+name: project-lite
+applies_to: [project]
+id_prefix: P
+lifecycle: [pending, planning, ready, implementing, in-review, done, blocked]
+stages:
+  - id: intake
+    status_on_enter: pending
+    produces: [_intake-brief.md]
+    template: _intake-brief
+    automation: HITL
+    gate: { kind: checklist, ref: gates/intake }
+  # `storymap` is cut. It exists so a large project's story decomposition gets its
+  # own artifact and its own stop; at one-to-three stories the map IS a section of
+  # `_decomposition.md`, and promoting it to a stage means writing the same list
+  # twice and reviewing it twice.
+  - id: briefs
+    status_on_enter: planning
+    # Both artifacts stay DECLARED so the engine renders them, `validate` covers
+    # them, and a planning workflow that silently fails to author one is caught
+    # here rather than a full stage later. What shrinks at this stage is the GRAIN
+    # (fewer warranted briefs, charter and grounding authored in one pass), which
+    # is the planning workflow's business, not the pack's.
+    #
+    # Note the status: without `storymap`, `briefs` is where a lite project enters
+    # `planning`, so the board still shows it moving through planning before ready.
+    produces: [_decomposition.md, _grounding.md]
+    template: _decomposition
+  - id: design
+    status_on_enter: ready
+    # KEPT, and kept GATED. Cutting this is the tempting saving and the wrong one:
+    # the stage exists precisely because presentation was a question no project
+    # owned, and silence — not disagreement — is what let an implementer's first
+    # guess become the shipped layout. Re-introducing that hole for a small project
+    # would trade the exact defect this stage was added to close against two sonnet
+    # agents, since the design pass already right-sizes itself: a project with no
+    # user-facing surface says so in one line and skips the mock and the perceptual
+    # review entirely.
+    produces: [_design.md]
+    template: _design
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: implementation
+    status_on_enter: implementing
+    # The slice ledger, unchanged. A slice's stories commit BEFORE its adversarial
+    # review runs, so commit history alone cannot tell a finished slice from a
+    # rejected one — the ledger is how a re-launch knows. A small project has fewer
+    # slices, not less need to tell them apart.
+    produces: [_slices.md]
+    template: _slices
+  - id: integration
+    status_on_enter: implementing
+    produces: [_integration.md]
+    template: _integration
+    # KEPT, UNCHANGED — see the same note on story-lite's `implement`. This is the
+    # deterministic whole-feature bar (RFC §6.3/D2/D3) and it runs on both sides of
+    # its stage, guarding implementation -> integration AND integration -> review.
+    # `--to review` cannot route around it: `--to` walks every intermediate stage
+    # and runs each one's gate.
+    gate:
+      { kind: command, run: "{{redkiln}} verify --item {{id}} --grain integration", blocking: true }
+  - id: review
+    status_on_enter: in-review
+    produces: [_review.md]
+    template: _review
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: closeout
+    status_on_enter: done
+    produces: [closure.md]
+    template: closure
+    harvest_kb: true
+transitions:
+  - on: changes-requested
+    from: review
+    to: implementation
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]

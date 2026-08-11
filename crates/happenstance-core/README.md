@@ -7,7 +7,7 @@ event store. Storage-agnostic, and built on the
 
 > **Status: early.** The contract and its conformance suite are real and tested;
 > every storage adapter is a documented stub. The port is not frozen — see
-> [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md),
+> [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md),
 > where every clause carries a maturity marker and, where it is not settled, the
 > experiment that would settle it.
 

@@ -18,7 +18,7 @@
 
 ## The one question, and the two questions it is not
 
-The queue's question ([`RUNBOOK.md:288`](../RUNBOOK.md)) is *how is a validated
+The queue's question ([`RUNBOOK.md:288`](../../RUNBOOK.md)) is *how is a validated
 identifier constructed, and is `Tag` equality byte equality?* Phase 4's body adds
 a third face: *and what capacity must every store accept?* They are one question
 asked at three moments in the life of the same three values — `EventType`, `Tag`
@@ -57,7 +57,7 @@ Seven of the twelve clauses in scope are `[FROZEN]`: VT-15, VT-16, VT-17, VT-18,
 VT-19, VT-20 and VT-25. For those, phase 4's job is transcription and
 implementation, and the temptation to mistake execution for design is the main
 hazard in this ADR. In particular, the RUNBOOK asks this phase to "take a position
-on `Cf` format characters" and "on normalisation" ([`RUNBOOK.md:2940-2949`](../RUNBOOK.md)).
+on `Cf` format characters" and "on normalisation" ([`RUNBOOK.md:2940-2949`](../../RUNBOOK.md)).
 **Both positions are already taken.** VT-14 forbids blanket `Cf` rejection in
 terms; VT-15 is `[FROZEN]` on byte equality and on the contract normalising
 nothing. Neither is reopened here. What is owed is transcription into `Tag`'s
@@ -138,7 +138,7 @@ what four doc comments in the crate currently claim happens."*
 decision 1 and it goes the other way.
 
 **A note on experiment numbers, because they have already collided once.** E1 –
-E9 are the dossier's (`docs/evaluation/phase-4-reconciliation.md`, *What the
+E9 are the dossier's (`references/evaluation/phase-4-reconciliation.md`, *What the
 compiler said*). **E10 is ADR-0011's** — "do the escaping cases compile under
 `&Query` today?" — recorded in that ADR rather than in the dossier. This ADR's
 compiles are therefore **E11**, and they are recorded here, in decisions 1, 3 and
@@ -402,7 +402,7 @@ pub enum InvalidQuery {
 ```
 
 The RUNBOOK item is titled "**One umbrella validation error**"
-([`RUNBOOK.md:2923`](../RUNBOOK.md)). Read as a single collapsed `InvalidInput`,
+([`RUNBOOK.md:2923`](../../RUNBOOK.md)). Read as a single collapsed `InvalidInput`,
 that is forbidden by VT-18's own body (`SPECIFICATION.md:1231-1234`) on three
 grounds: the three enums are returned by three different constructors and matching
 on which one failed is worth keeping, `#[non_exhaustive]` enums are cheap, and the
@@ -430,7 +430,7 @@ So, precisely:
 - **The four-way union in E2E-51's *Falsifies* prose does not**, and cannot in this
   crate. A handler that also reads and appends still needs its own error type or a
   `Box<dyn Error>`. That is the typed layer's ergonomic surface and belongs to
-  [phase 7](../RUNBOOK.md#phase-7--the-typed-layer-and-the-worked-example), which
+  [phase 7](../../RUNBOOK.md#phase-7--the-typed-layer-and-the-worked-example), which
   is where the worked example that reaches for `anyhow` actually lives. The
   RUNBOOK's observation that the library "ships nothing to copy instead" is true
   and stays true until phase 7 ships it.
@@ -490,7 +490,7 @@ testkit rather than the RUNBOOK.** `suite.rs:128-130` says *"Note the discrepanc
 the runbook's own prose carries: its value-edge item says '1 MiB' and VT-21 says
 65,536 bytes. The clause wins."* — present tense, and no longer true: phase 3
 struck the RUNBOOK line through and corrected it in place
-([`RUNBOOK.md:2051`](../RUNBOOK.md), recorded at `:2364`). The comment is right
+([`RUNBOOK.md:2051`](../../RUNBOOK.md), recorded at `:2364`). The comment is right
 about which document wins and wrong about the state of the other one, which is
 exactly the failure mode the comment was written to prevent. It is replaced in the
 same change that turns the four consts into imports.
@@ -649,7 +649,7 @@ need no decision — VT-17 settles them legal, and `Tags::from_pairs([("tenant",
 on the whole `key:value` string.
 
 The RUNBOOK asks for `Tags::value_of(key)` as a `partition_point` on the `"key:"`
-prefix ([`RUNBOOK.md:2985-2988`](../RUNBOOK.md)), notices the conflict, and does
+prefix ([`RUNBOOK.md:2985-2988`](../../RUNBOOK.md)), notices the conflict, and does
 not resolve it. **The single-value form is declined.** What ships instead is
 
 ```rust
@@ -677,7 +677,7 @@ scan, and the existing sort is the only thing that makes it possible.
 
 The worked example writes that scan by hand **once**, at O(n)
 (`examples/course-subscriptions/src/main.rs:136-138`).
-[`RUNBOOK.md:2986`](../RUNBOOK.md) says "twice"; it is one site, and the
+[`RUNBOOK.md:2986`](../../RUNBOOK.md) says "twice"; it is one site, and the
 correction is owed with the others in item 15. One site is still the argument,
 because it is the only place in the workspace that has ever wanted this and it
 reached straight past the type for `iter().any()`.
@@ -694,7 +694,7 @@ succeeds and becomes the primary key of a checkpoint row. No VT clause covers it
 
 The RUNBOOK offers two exits: validate it the way `EventType` is validated, or
 "state in the docstring that it is a deliberately opaque operator-chosen key"
-([`RUNBOOK.md:2976-2980`](../RUNBOOK.md)). **Phase 4 takes neither, and this is a
+([`RUNBOOK.md:2976-2980`](../../RUNBOOK.md)). **Phase 4 takes neither, and this is a
 result rather than a dodge.**
 
 Validating it now is out of scope in a way that matters: `ProjectionId` belongs to
@@ -784,7 +784,7 @@ without ever producing a diagnostic that names the cause.
 
 **`Hash` on `Event` is declined, and the reason is that phase 13 asked for the
 wrong instrument.** The RUNBOOK wants "`Hash` on the wire types, which phase 13's
-dedup needs" ([`RUNBOOK.md:2983`](../RUNBOOK.md)). Content hashing is not how a
+dedup needs" ([`RUNBOOK.md:2983`](../../RUNBOOK.md)). Content hashing is not how a
 replicated event should be deduplicated: VT-4 and VT-5 give `SequencedEvent` a
 store-assigned `EventId`, and two legitimately distinct events with identical
 type, data and tags are ordinary — a `SeatReleased` for the same seat twice is not
@@ -1093,7 +1093,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
 
 ### Owed outside `SPECIFICATION.md`
 
-15. **`docs/scenarios/E2E-CASES.md` gains E2E-57**, VT-17's missing case:
+15. **`spec/E2E-CASES.md` gains E2E-57**, VT-17's missing case:
     construct a `Tag` with no colon and one with two, assert both are accepted and
     that neither acquires structure — `key()` is `None` for the first and `Some`
     of the text before the *first* colon for the second, with the remainder,
@@ -1116,7 +1116,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
     nothing checks this file's cross-references; that is a live item in phase 4's
     own body.
 
-16. **`docs/RUNBOOK.md`**, five edits, all in phase 4's body or its ledger. (The
+16. **`RUNBOOK.md`**, five edits, all in phase 4's body or its ledger. (The
     "1 MiB" discrepancy is **not** among them: phase 3 already corrected it at
     `:2051` and recorded the correction at `:2364`. The stale copy is
     `suite.rs:128-130`'s comment, which is item 17.)

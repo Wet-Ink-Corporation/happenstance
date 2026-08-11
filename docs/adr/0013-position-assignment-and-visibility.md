@@ -85,7 +85,7 @@ unaffordable answers reopen them, which is a contract change and not a schedulin
 one.
 
 Phase 2 ran the probe against a real PostgreSQL with `fsync=on`
-([`docs/experiments/position-visibility/`](../experiments/position-visibility/README.md)).
+([`experiments/position-visibility/`](../../experiments/position-visibility/README.md)).
 Arm C — `xid8` + `pg_snapshot_xmin` — is the only arm that both passes the
 inversion detector on both writer pairs **and** leaves writers unserialised.
 Throughput ratio to a bracketing baseline: **0.987 / 0.993 / 1.015 / 1.026** at
@@ -654,7 +654,7 @@ today:
    satisfy read-your-own-writes, and has staleness bounded by the longest open
    write transaction anywhere in the cluster — 0.688 ms unloaded and 4010.719 ms
    behind an unrelated five-second write in an unrelated database, both measured
-   (`docs/experiments/position-visibility/results/staleness_pinned.txt`);
+   (`experiments/position-visibility/results/staleness_pinned.txt`);
 3. that `nothing_below_an_observed_position_appears_later` has a strength that
    varies with the adapter's poll shape, because `Fixture` cannot express a poll
    budget, and that the bounding instrument is owed by phase 10.

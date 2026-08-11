@@ -1,0 +1,31 @@
+name: incident
+applies_to: [incident]
+id_prefix: N
+lifecycle: [triage, mitigating, resolved, postmortem, closed, blocked]
+stages:
+  - id: triage
+    status_on_enter: triage
+    produces: [discover.md]
+    template: discover
+    automation: HITL
+    gate: { kind: checklist, ref: gates/discover }
+  - id: mitigate
+    status_on_enter: mitigating
+    produces: [implementation-report.md]
+    template: implementation-report
+  - id: resolve
+    status_on_enter: resolved
+    produces: [report.md]
+    template: report
+  - id: postmortem
+    status_on_enter: postmortem
+    produces: [report.md]
+    template: report
+    requires_ac: false
+    harvest_kb: true
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: close
+    status_on_enter: closed
+    produces: []
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]

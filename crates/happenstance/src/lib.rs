@@ -33,7 +33,7 @@
 //! never grows a `serde` dependency in its default feature set.
 //!
 //! Planned, and specified in
-//! [`docs/architecture/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/architecture/SPECIFICATION.md):
+//! [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md):
 //!
 //! * **`Codec`** — payload encoding. Events carry a codec tag so one store can
 //!   hold more than one encoding at a time, which is what makes a migration

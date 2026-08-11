@@ -1,0 +1,16 @@
+# Telemetry partitions merge as a UNION. A partition is append-only JSONL — one
+# event per line, every line independent and self-timestamped — so when the same
+# partition file name exists on two branches, `keep every line of both` is the
+# correct resolution and git can reach it with no human in the loop.
+#
+# Without this, one name on two branches CONFLICTS: `CONFLICT (content)` when the
+# branches share a base and both appended, `CONFLICT (add/add)` when the two copies
+# have no shared base at all. Branches that touch DIFFERENT partition names merge
+# cleanly either way — union is not what makes the ordinary case work. It is the
+# net under the case where one name acquires two writers, which redkiln has shipped
+# as a bug once already (its issue #64).
+#
+# Scoped to telemetry, never a blanket `*.jsonl`: union resolves SILENTLY, which is
+# only ever right for an append-only log. Anywhere else it fabricates a file that
+# neither side wrote.
+telemetry/**/*.jsonl merge=union

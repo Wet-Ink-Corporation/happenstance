@@ -9,11 +9,28 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 
-# Only so the repository README's examples can be compiled as doctests of this
-# crate's lib target — see src/lib.rs for why they cannot live in a published
-# crate. xtask itself uses neither.
+# Only so the repository README's examples, and the Rust constitution's, can be
+# compiled as doctests of this crate's lib target — see src/lib.rs and
+# src/constitution.rs for why they cannot live in a published crate. xtask itself
+# uses none of these.
+#
+# Deliberately absent: `rusqlite` and `sqlx`. `rusqlite/bundled` would compile the
+# SQLite C amalgamation into xtask's dev graph, which every `cargo xtask ci` then
+# builds, and `sqlx` would widen `cargo deny`'s scope — both for the sake of a
+# handful of examples. Atoms 23 and 24 model those drivers' *shapes* with a
+# stand-in and cite the real call site, and they say so where a reader will see it.
 [dev-dependencies]
 happenstance = { workspace = true, features = ["std", "memory"] }
+happenstance-core = { workspace = true, features = ["std", "memory", "serde"] }
+happenstance-testkit = { workspace = true }
+bytes.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+proptest.workspace = true
+serde = { workspace = true, features = ["std", "derive"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+trait-variant.workspace = true
 
 [lints]
 workspace = true

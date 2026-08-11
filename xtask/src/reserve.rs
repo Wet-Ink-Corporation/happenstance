@@ -19,7 +19,7 @@
 //! resolves those requirements against crates.io rather than against the path.
 //!
 //! Publishing the real crates at their actual version is worse. `0.1.0` makes
-//! the API semver-binding, and the whole plan in `docs/RUNBOOK.md` is built
+//! the API semver-binding, and the whole plan in `RUNBOOK.md` is built
 //! around freezing the contract *deliberately*, at phases 4 through 6, against
 //! evidence. Reserving a name is not a reason to freeze an API, and a
 //! reservation that quietly does so has cost more than it bought.
@@ -251,9 +251,9 @@ library for Rust built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
 The work is public and active. The design is specified clause by clause in
-[`docs/architecture/SPECIFICATION.md`]({REPOSITORY}/blob/main/docs/architecture/SPECIFICATION.md),
+[`spec/SPECIFICATION.md`]({REPOSITORY}/blob/main/spec/SPECIFICATION.md),
 where every clause carries what would falsify it, and the plan to finish it is in
-[`docs/RUNBOOK.md`]({REPOSITORY}/blob/main/docs/RUNBOOK.md).
+[`RUNBOOK.md`]({REPOSITORY}/blob/main/RUNBOOK.md).
 
 The first functional release will be `0.1.0-alpha.1`. Until then there is nothing
 here worth depending on, and this version says so rather than pretending

@@ -26,6 +26,40 @@ pub const MAX_TAG_LEN: usize = 255;
 /// tag written in the source costs no allocation and a tag arriving from a peer
 /// at run time is still representable.
 ///
+/// # Equality is byte equality, and nothing is normalised
+///
+/// Two tags are equal exactly when their UTF-8 bytes are equal. The contract
+/// applies no Unicode normalisation, no case folding and no trimming, and no
+/// adapter may apply any either: a store that rewrites a caller's tag makes the
+/// value read back differ from the value written, which breaks byte-faithful
+/// replication and puts the store's index out of step with every external
+/// system holding the original string.
+///
+/// Whitespace is therefore significant, including leading and trailing
+/// whitespace — `"turbine:HW2-A14 "` and `"turbine:HW2-A14"` are two tags and
+/// so two consistency boundaries. `"café"` written NFC (`caf` + `U+00E9`) and
+/// NFD (`cafe` + `U+0301`) is the same failure with no visible cue at all: the
+/// two render identically and index separately.
+///
+/// Choosing a normal form is the application's job, done before the tag is
+/// built. The contract's job is to say loudly that it does not choose one — the
+/// DCB specification treats a tag as an opaque string, and a contract that
+/// normalised would be deciding what a caller's identifier means.
+///
+/// ```
+/// use happenstance_core::Tag;
+///
+/// // "café" twice: one code point, then `e` plus a combining acute.
+/// assert_ne!(Tag::new("city:caf\u{e9}")?, Tag::new("city:cafe\u{301}")?);
+///
+/// // A trailing space is part of the tag.
+/// assert_ne!(Tag::new("turbine:HW2-A14 ")?, Tag::new("turbine:HW2-A14")?);
+///
+/// // As is case.
+/// assert_ne!(Tag::new("course:C1")?, Tag::new("course:c1")?);
+/// # Ok::<(), happenstance_core::InvalidTag>(())
+/// ```
+///
 /// # Examples
 ///
 /// ```
@@ -217,6 +251,13 @@ impl TryFrom<String> for Tag {
 /// * [`Tags::contains_all`] is a linear merge-scan rather than a nested loop;
 /// * `PartialEq`/`Hash` mean set equality, not insertion-order equality;
 /// * storage adapters get a stable serialisation to build an index on.
+///
+/// The `key:value` shape is a convention this type does not enforce, so **a key
+/// may legally appear more than once**: deduplication is on the whole tag
+/// string, which makes `Tags::from_pairs([("tenant", "a"), ("tenant", "b")])` a
+/// two-element set. [`Tags::values_of`] is the accessor that follows from it,
+/// and its own documentation says why there is no `get(key)`. An adapter that
+/// indexes tags as a key-to-value map silently drops one of the two.
 ///
 /// # Examples
 ///

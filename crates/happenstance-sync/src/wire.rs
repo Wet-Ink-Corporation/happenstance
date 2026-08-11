@@ -33,7 +33,7 @@
 //!   `Deserialize`, before the message is touched.
 //!
 //! The measurements behind both statements are in
-//! `docs/experiments/wire-format/tests/w6_envelope_varint.rs` and
+//! `experiments/wire-format/tests/w6_envelope_varint.rs` and
 //! `decorative_envelope_witness.rs`.
 
 use core::fmt;

@@ -1,0 +1,47 @@
+name: story
+applies_to: [story, bug, spike]
+id_prefix: S
+lifecycle: [pending, specced, ready, in-progress, in-review, done, blocked]
+stages:
+  - id: discover
+    status_on_enter: pending
+    produces: [discover.md]
+    template: discover
+    automation: HITL
+    gate: { kind: checklist, ref: gates/discover }
+  - id: spec
+    status_on_enter: specced
+    produces: [spec.md]
+    template: spec
+    requires_ac: true
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: plan
+    status_on_enter: ready
+    produces: [plan.md]
+    template: plan
+  - id: implement
+    status_on_enter: in-progress
+    produces: [implementation-report.md]
+    template: implementation-report
+    # Deterministic gate (RFC §6.3/D2): a self-reported green can no longer stamp
+    # implement -> report. A command gate runs on BOTH sides of its stage, so this
+    # guards plan -> implement AND implement -> report. The engine runs `redkiln
+    # verify` at the advance seam; a non-zero exit blocks the transition (EC-003).
+    # No `verify` config commands declared => trivial pass, so pre-`verify` repos
+    # are unaffected.
+    gate: { kind: command, run: "{{redkiln}} verify --item {{id}} --grain story", blocking: true }
+  - id: report
+    status_on_enter: in-review
+    produces: [report.md]
+    template: report
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: closeout
+    status_on_enter: done
+    produces: []
+    harvest_kb: true
+transitions:
+  - on: changes-requested
+    from: report
+    to: implement
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]

@@ -1,0 +1,29 @@
+name: bug
+applies_to: [bug]
+id_prefix: B
+lifecycle: [pending, specced, ready, in-progress, in-review, done, blocked]
+stages:
+  - id: triage
+    status_on_enter: pending
+    produces: [discover.md]
+    template: discover
+    automation: HITL
+    gate: { kind: checklist, ref: gates/discover }
+  - id: fix
+    status_on_enter: in-progress
+    produces: [implementation-report.md]
+    template: implementation-report
+  - id: verify
+    status_on_enter: in-review
+    produces: [report.md]
+    template: report
+    gate: { kind: review, approver: human, verdicts: [approved, changes-requested] }
+  - id: done
+    status_on_enter: done
+    produces: []
+transitions:
+  - on: changes-requested
+    from: verify
+    to: fix
+telemetry:
+  emit: [stage_enter, stage_exit, gate_result, verdict]
