@@ -67,6 +67,18 @@ layers by name, so a repo that invents its own meaning for one of them diverges 
   forcing a resolution to. Binds nothing; exists so an absent decision is legible instead of
   being rediscovered.
 
+Three more are scaffolded by **this repository** rather than by redkiln, following the suggested
+layout above. They exist so that ingest placement is deterministic: a layer with a README is a
+layer the pipeline can route into, and a layer that has to be invented mid-wave gets invented
+differently each time.
+
+- **`decisions/`** — the ADR corpus (`decision` atoms, `authority_tier: decision`). Accepted
+  atoms are immutable; supersede, never edit.
+- **`playbooks/`** — transferable practice (`playbook` atoms, `authority_tier: guideline`): a
+  method, its evidence, and the conditions under which it stops holding.
+- **`reference/`** — measurements, censuses and pointers (`reference` atoms,
+  `authority_tier: note`), each stating the commit or date it is true of.
+
 The first two hold knowledge authored **once** and referenced by many initiatives, and both
 previously died inside an archived backlog folder and were re-derived from scratch every round.
 For those, harvest the decision and its reasoning, not the pixel layout of one screen — the

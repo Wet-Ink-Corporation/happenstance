@@ -42,6 +42,14 @@ docs/adr/                        the decisions this design rests on.
 docs/architecture/               SPECIFICATION.md — every clause that is true now.
 docs/adapter-shapes.md           what the six skeletons told the type checker.
 docs/experiments/                measurements. reproducible, and not in the gate.
+
+.kb/                             the knowledge base — what is settled.
+  _intake/                         staging. `/redkiln:kb-ingest` consumes and clears it.
+  product/ design/                 personas and journeys; signed-off design patterns.
+  playbooks/ reference/            transferable practice; measurements and pointers.
+  open-questions/                  what is deliberately not settled.
+.bklg/                           the backlog — work in motion. `redkiln status`.
+.redkiln/                        config, the pinned process pack, templates, telemetry.
 ```
 
 **🔩 skeleton** means real associated types and `todo!()` bodies, `publish =
@@ -59,6 +67,52 @@ depend on it the way store adapters depend on `happenstance-core`, and its
 conformance suite will live in `happenstance-sync-testkit`, which does not exist
 yet. It stays out of the contract crate so that publishing `happenstance-core`
 never waits on replication.
+
+## Where the work lives
+
+This repository is Redkiln-managed. Three trees, and they answer different
+questions — putting something in the wrong one is how it stops being findable.
+
+- **`.kb/` — what is settled.** Durable knowledge as *atoms*: markdown with
+  frontmatter that `redkiln validate --kb` checks. An **accepted decision atom is
+  immutable** — validation checks each one against `HEAD`, so correcting one means
+  writing a new atom that supersedes it, never editing the body. That is the
+  discipline `docs/adr/` was always written under and nothing previously enforced.
+  Atoms are authored by `/redkiln:kb-ingest` from `.kb/_intake/`, not by hand:
+  hand-writing them produces the directory layout of the process without the
+  process, which is why the first attempt at this was reverted (`0269720`).
+- **`.bklg/` — work in motion.** Initiatives decompose into projects, projects into
+  stories. `redkiln status`, `redkiln next`, `redkiln board`.
+- **`.redkiln/` — the engine.** Config, the process pack and templates (both pinned
+  at `init`), and committed telemetry.
+
+**The CLI is the only writer of an item's system frontmatter.** Never hand-edit
+`id`, `stage`, `status`, `updated` or `links`; drive every state change through
+`redkiln <command>`. A `PreToolUse` hook denies the edit, and the prose body of an
+artifact is yours to write freely.
+
+Six templates under `.redkiln/templates/` are deliberately customised — `spec.md`,
+`_design.md`, `_intake-brief.md`, `discover.md` and the two gate checklists — so
+`redkiln doctor` reports six `template-drift` advisories forever. That is expected,
+and the `backlog` CI job asserts the set is **exactly** those six: a seventh is a
+template someone changed without deciding to, and a missing one is a customisation
+reverted by `adopt --templates`.
+
+**Never run `redkiln adopt --templates`.** `redkiln upgrade` recommends it, and it
+is wrong here: it would overwrite all six customisations with the bundled defaults,
+silently — and the CI assertion above would then fail on the *absence* it created.
+The customisations are the repository's own gate bars, and one of them (the
+one-line checklist boxes) exists because the parser matches line-by-line and a
+wrapped box can never match.
+
+`_design.md` is the bundled design stage repurposed. Redkiln ships it because
+nothing else in its pipeline could perceive what a screen looks like; a library has
+the same hole in another medium, so here it asks for the **public API surface** —
+signatures, visibility decisions, what the shape costs a caller, and a doctest in
+place of a mock. Every other check in this repository is satisfied by an API that
+is correct and unusable. `design.capture` is deliberately absent from
+`.redkiln/config.yaml`, which makes the perceptual review a *skip* rather than a
+silent pass: there is no app to screenshot.
 
 ## Binding constraints
 
@@ -178,11 +232,21 @@ every example in it.
 
 ```console
 cargo xtask ci                          # the whole gate — run this before saying "done"
+cargo xtask ci --fast                   # REQUIRED only; the bar a non-terminal project meets
+cargo xtask affected --base main        # the story grain: only what this diff could break
 cargo test --workspace --all-features
 cargo run -p course-subscriptions        # the worked example
 cargo xtask wasm                        # just the wasm32 check
 cargo xtask spec-trace                  # just the specification's cross-references
+
+redkiln status                          # the backlog roll-up
+redkiln next                            # what is actually actionable
+redkiln validate --kb && redkiln doctor # the backlog and knowledge base check
 ```
+
+The middle two are not conveniences — they are the commands `.redkiln/config.yaml`'s
+`verify:` block wires to redkiln's story and integration grains, so they run whether
+or not anyone types them.
 
 `cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, four wasm32 steps —
 the build of `happenstance-core`, which is the standing guard on constraint 1 and
