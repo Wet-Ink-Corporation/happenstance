@@ -13,9 +13,11 @@ summary: >-
 depends_on: []
 related:
   - kb-map-open-questions-index-001
+  - kb-map-decision-001
 source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake/01-claims-and-classification.md
   - .kb/_governance/integration-waves/2026-08-10-intake/02-placement-and-adjudication.md
+  - .kb/_governance/integration-waves/2026-08-10-intake-2
 last_reviewed: 2026-08-10
 ---
 
@@ -76,6 +78,68 @@ for the full, self-contained list. The ones this domain owns:
 `kb-open-question-es-6-unwritable-rule-001`,
 `kb-open-question-provisional-falsifiers-001`,
 `kb-open-question-post-phase-reconciliation-001`.
+
+## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
+
+The area concerned with `happenstance-core`'s async port design (`EventStore`,
+`ProjectionStore`), the conformance suite that proves an adapter against it, and the
+seventeen-ADR decision record — async port flavours through the wire format — that this
+project's early phases rest on. Established by the 2026-08-10 ADR import, which brought
+`docs/adr/0001` through `docs/adr/0016` and `docs/adr/0029` into `.kb/decisions/` as one wave.
+The full decision list, including status and supersession, is
+[`decision-map.md`](decision-map.md) rather than repeated here.
+
+**Reference**
+
+- [`port-traits-compiled-findings.md`](../reference/port-traits-compiled-findings.md)
+  (`kb-reference-port-traits-compiled-findings-001`) — what compiling `EventStore` and
+  `ProjectionStore`, rather than reasoning about them, found across ADR-0001, ADR-0008,
+  ADR-0009, ADR-0010 and ADR-0011.
+- [`position-visibility-experiment-2026-08.md`](../reference/position-visibility-experiment-2026-08.md)
+  (`kb-reference-position-visibility-experiment-001`) — the four-arm measurement against real
+  PostgreSQL that ADR-0013's visibility invariant rests on.
+- [`wire-format-encoding-measurements.md`](../reference/wire-format-encoding-measurements.md)
+  (`kb-reference-wire-format-measurements-001`) — the encoding-size measurements ADR-0016 rests
+  on, plus two instruments that measured wrong.
+
+**Concepts**
+
+- [`torn-reads-and-the-append-condition-boundary.md`](../concepts/torn-reads-and-the-append-condition-boundary.md)
+  (`kb-concept-torn-read-append-boundary-001`) — why the append condition, derived from the
+  read's own observed maximum, cannot catch a torn read; the mechanism ADR-0011, ADR-0012 and
+  ADR-0013 each protect without stating.
+
+**Governance**
+
+- [`rewrite-the-referent-never-the-reasoning.md`](../governance/rewrite-the-referent-never-the-reasoning.md)
+  (`kb-governance-referent-not-reasoning-001`) — the discrimination between a rename that may be
+  rewritten in place and reasoning that, once a decision stands, is never touched, worked out
+  against ADR-0001 through ADR-0007.
+
+**Playbooks**
+
+- [`one-decision-per-adr-title.md`](../playbooks/one-decision-per-adr-title.md)
+  (`kb-playbook-one-decision-per-adr-title-001`) — an "and" in a decision's title is usually a
+  strong decision and a weaker one bundled together, and the weaker half is the one likely to be
+  reversed.
+- [`testing-interleavings-with-cold-futures.md`](../playbooks/testing-interleavings-with-cold-futures.md)
+  (`kb-playbook-cold-future-hand-polling-001`) — hand-polling two cold futures out of order to
+  make a conformance rule observe a specific interleaving with no executor, thread or clock.
+
+**Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
+self-contained list. The ones this domain owns:
+`kb-open-question-adr-status-vocabulary-001`,
+`kb-open-question-projection-batch-no-apply-001`,
+`kb-open-question-query-union-rule-unowned-001`,
+`kb-open-question-global-vs-boundary-visibility-001`,
+`kb-open-question-postgres-arm-c-cost-001`,
+`kb-open-question-poll-count-rule-strength-001`,
+`kb-open-question-es-38-and-gap-read-unowned-001`,
+`kb-open-question-projection-id-unvalidated-001`,
+`kb-open-question-cf-40-ownership-001`,
+`kb-open-question-dcb-no-published-format-001`,
+`kb-open-question-human-readable-encoding-limits-001`,
+`kb-open-question-sync-message-set-undesigned-001`.
 
 ## Adding a domain
 

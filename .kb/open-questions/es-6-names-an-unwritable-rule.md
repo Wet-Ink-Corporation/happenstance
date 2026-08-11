@@ -14,18 +14,30 @@ summary: >-
   week. ADR-0009 is accepted and makes the rule writable, so this may be a scheduling gap rather
   than a design gap — but the clause is frozen and names an unwritten rule. Settled by writing the
   rule against ADR-0009's marker, or by deciding that a † with no owning phase is a hard failure.
-  Found independently the same day by references/evaluation/review-citation-drift.md §2.
+  Found independently the same day by references/evaluation/review-citation-drift.md §2. ADR-0008
+  and ADR-0009 are now imported as decision atoms: ADR-0008 adds that the rule, when written, must
+  assert on the future's Output and not on the future, since a future-only check is decorative
+  against a !Send error, and ADR-0009 supplies the ThreadSafeEventStore marker the rule's bound
+  would name.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-playbook-repair-frozen-clause-001
+  - kb-decision-0008
+  - kb-decision-0009
+  - kb-reference-port-traits-compiled-findings-001
+  - kb-open-question-es-38-and-gap-read-unowned-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
+  - .kb/_intake/0008-one-derivation-for-both-ports.md
+  - .kb/_intake/0009-error-send-sync.md
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
   - crates/happenstance-cloudflare/src/lib.rs
   - crates/happenstance-cloudflare/src/send_shape.rs
   - references/evaluation/review-citation-drift.md
+  - docs/adr/0008-one-derivation-for-both-ports.md
+  - docs/adr/0009-error-send-sync.md
 last_reviewed: 2026-08-10
 ---
 
@@ -68,9 +80,24 @@ real gap and not an artifact of one reading.
 
 Whether the rule gets written against ADR-0009's marker — after which ES-6's `(new)` and `†` come
 off and the check-4 escape hatch stops applying to it — or whether a broader decision is taken
-about `†` clauses that have no owning phase at all. `ADR-0009` is named here by id only; it is not
-imported as a decision atom in this wave (importing `docs/adr/` is a separate wave with a human in
-it), so this open question links to nothing for it and carries no dangling reference.
+about `†` clauses that have no owning phase at all.
+
+Both ADRs are now imported as decision atoms — `kb-decision-0008` and `kb-decision-0009` — and
+between them they narrow this question without closing it. ADR-0008 was deliberately neutral on
+ES-6 but recorded the shape of the rule for whoever writes it: the derived flavour genuinely admits
+a `!Send` error, the failure lands at a call site demanding `F::Output: Send` rather than at the
+declaration, and therefore `store_error_crosses_a_join_handle` **must assert on the future's
+`Output`** — a rule that only checks the future is `Send` passes against a `!Send` error and is
+decorative. ADR-0009 then supplies the bound the rule would name,
+`ThreadSafeEventStore: SendEventStore<Error: Send + Sync>` with a blanket impl, compiled downstream
+so the contract crate need not grow anything; it also names the rule's obligation as belonging to
+an **opt-in marker-bound rule group** and moves ES-6 from `[DEFERRED]` to `[FROZEN]`. That is the
+provenance of the `[FROZEN]`-with-an-unwritten-rule state this atom describes: the freeze and the
+rule arrived in the same decision, and only the freeze was executed. Neither ADR writes the rule,
+neither assigns it an owning phase — ADR-0009 explicitly leaves the suite to phase 3 and the
+surface question of shipping the marker in `happenstance-core` to phase 4 — so the gap is a
+scheduling gap with a named remedy and no owner, which is exactly the condition sub-question 2 is
+about.
 
 ## What forces it
 

@@ -20,6 +20,11 @@ related:
   - kb-open-question-ps-1-no-progress-obligation-001
   - kb-open-question-ps-19-scope-narrower-001
   - kb-open-question-provisional-falsifiers-001
+  - kb-decision-0010
+  - kb-decision-0012
+  - kb-decision-0015
+  - kb-governance-referent-not-reasoning-001
+  - kb-open-question-es-6-unwritable-rule-001
 source_paths:
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md
   - spec/SPECIFICATION.md
