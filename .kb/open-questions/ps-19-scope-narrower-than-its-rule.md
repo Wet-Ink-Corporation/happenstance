@@ -19,6 +19,7 @@ related:
   - kb-playbook-repair-frozen-clause-001
   - kb-open-question-ps-1-no-progress-obligation-001
   - kb-open-question-post-phase-reconciliation-001
+  - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - spec/SPECIFICATION.md
