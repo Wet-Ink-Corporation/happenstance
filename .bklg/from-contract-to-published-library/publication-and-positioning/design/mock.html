@@ -1,0 +1,1382 @@
+<!--
+  STATIC SIGN-OFF MOCK — HS-P0016 "0.2.0 — where private opinions become promises"
+  Design of record: .bklg/from-contract-to-published-library/publication-and-positioning/_design.md
+
+  ==========================================================================================
+  SUBSTRATE NOTE — READ BEFORE JUDGING THE CSS IN THIS FILE
+  ==========================================================================================
+  This repository has NO design-system primitive layer. Verified in this worktree:
+
+      find . -name package.json -not -path './.git/*'   -> 0 results
+      find . -name '*.css'      -not -path './.git/*'   -> 0 results
+      (no token file, no theme file, no component package anywhere in the tree)
+
+  That is not an oversight; it is _design.md's gap #1 and it is correct for a Rust library
+  workspace. crates.io, docs.rs and GitHub own the theme, and none of them honours anything
+  this repository writes. So there is no repo token to import and none is invented here.
+
+  What this mock composes from instead — every one of these VERIFIED to exist in the tree:
+    * crates/happenstance/README.md            (identity line, callout, triad, guarantees form)
+    * crates/happenstance-core/README.md       (triad-pointing-away form, guarantees form)
+    * crates/happenstance-testkit/README.md    (the sharper callout form, the usage fence)
+    * README.md                                (badges, 8-row status table, prior art, quick start)
+    * crates/happenstance/src/lib.rs           (module-doc ladder; #![doc(html_no_source)])
+    * crates/happenstance-core/src/lib.rs      (module-doc ladder, API shape table)
+    * crates/happenstance-testkit/src/lib.rs   (module-doc ladder)
+    * crates/happenstance-core/Cargo.toml:54-56, crates/happenstance-testkit/Cargo.toml:56-58
+                                               ([package.metadata.docs.rs], all-features = true)
+    * spec/SPECIFICATION.md:219-222            (the four census counts: 139/49/10/2 of 200)
+    * .kb/open-questions/es-38-and-gap-read-rules-are-unowned.md (the non-ownership line)
+
+  The host chrome below is a HAND-BUILT FACSIMILE of crates.io / docs.rs / GitHub. It is not a
+  repo primitive and must never be copied into the repo (AP-7 forbids raw HTML/CSS on a
+  published surface). Two honesty rules were applied to it:
+    - crates.io's DOM classes are build-hashed and unstable, so NOTHING here claims to mirror
+      them. What is mirrored is the type scale and the layout geometry, dimensioned to
+      _design.md ## Density budget.
+    - docs.rs/rustdoc and GitHub DO emit stable class contracts, and the real ones are used
+      where they exist: `rustdoc`, `sidebar`, `main-content`, `docblock`, `stab portability`
+      (rustdoc's own doc(cfg) pill), and `markdown-body` (github-markdown-css). Those class
+      names are reproduced faithfully so an implementer reading this mock is reading the same
+      names the renderer will emit.
+
+  Every band height in the host chrome is set so that the visible README area equals the
+  budget _design.md declares (1440x900: 500px = 21 lines; 1024x768: 340px = 14 lines). The
+  frames are therefore DIMENSIONED TO THE BUDGET, not measured from the live site — measuring
+  the live site is AC-007's rendered-page preflight, which is the instrument this stage does
+  not have (design.capture is undeclared; xtask/src/package.rs:4-18 says why).
+
+  Self-contained: no network fetch. System font stacks only. The two badges are inline
+  data:image/svg+xml URIs so the images-blocked state is a real state and not a claim.
+  The mock's own annotations (region tags R1..R12, fold rules, counter-example strips) are
+  drawn in the accent colour and are marked "mock annotation"; none of them is page copy.
+-->
+<title>Sign-off mock — 0.2.0, where private opinions become promises</title>
+<style>
+/* ============================================================================
+   TOKENS
+   --mock-*  : this mock's own chrome. Not a repo token — the repo has none.
+   --cio-*   : crates.io facsimile palette.
+   --rd-*    : docs.rs / rustdoc facsimile palette (light theme).
+   --gh-*    : GitHub facsimile palette (light theme).
+   Themes declared for this capture run: ["light"]. The light palette is therefore the
+   complete definition on :root; one supplementary dark frame carries its own .theme-dark
+   overrides so that _design.md's Theme-state claim ("we set no colour, so both are
+   legible") is falsifiable rather than merely asserted.
+   ============================================================================ */
+:root{
+  --mock-bg:#eef1f5; --mock-panel:#ffffff; --mock-ink:#15181d; --mock-mute:#5d6874;
+  --mock-line:#cfd6df; --mock-line-soft:#e4e9ef; --mock-accent:#a3320d; --mock-accent-soft:#fbeee9;
+  --mock-ok:#1a6b3c; --mock-warn:#8a5a00; --mock-code:#f2f4f7;
+  --mock-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mock-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --cio-bg:#f9f7ec; --cio-panel:#ffffff; --cio-ink:#383838; --cio-mute:#606060;
+  --cio-link:#00794d; --cio-header:#3b6e35; --cio-line:#e0ddcd; --cio-code:#f5f3e8;
+
+  --rd-bg:#ffffff; --rd-ink:#000000; --rd-mute:#4e4e4e; --rd-link:#3873ad;
+  --rd-side:#f5f5f5; --rd-line:#dddddd; --rd-code:#f5f5f5;
+  --rd-stab-bg:#fff5d6; --rd-stab-line:#f0d999; --rd-topbar:#232323;
+
+  --gh-bg:#ffffff; --gh-ink:#1f2328; --gh-mute:#59636e; --gh-link:#0969da;
+  --gh-line:#d1d9e0; --gh-canvas:#f6f8fa; --gh-topbar:#1f2328;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--mock-bg);color:var(--mock-ink);font-family:var(--mock-font);font-size:15px;line-height:1.55}
+
+/* ---------- page chrome ---------- */
+.page{padding:0 28px 96px}
+.masthead{max-width:1100px;margin:0 auto;padding:34px 0 22px}
+.eyebrow{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--mock-accent);font-weight:700;margin:0 0 8px}
+h1.title{font-size:30px;line-height:1.22;margin:0 0 10px;letter-spacing:-.015em}
+.masthead .lede{margin:0 0 18px;color:var(--mock-mute);max-width:76ch}
+.provenance{font-family:var(--mock-mono);font-size:12.5px;line-height:1.8;color:var(--mock-mute);
+  background:var(--mock-panel);border:1px solid var(--mock-line);border-radius:8px;padding:14px 16px;margin:0 0 18px}
+.provenance b{color:var(--mock-ink);font-weight:600}
+.note{background:var(--mock-accent-soft);border:1px solid #eccfc3;border-left:4px solid var(--mock-accent);
+  border-radius:8px;padding:14px 18px;margin:0 0 18px;max-width:100ch}
+.note h2{font-size:14px;margin:0 0 8px;letter-spacing:.02em;text-transform:uppercase;color:var(--mock-accent)}
+.note p{margin:0 0 8px}.note p:last-child{margin:0}
+.note code,.provenance code{font-family:var(--mock-mono);font-size:12.5px}
+
+/* ---------- sticky control bar ---------- */
+.bar{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.4) blur(6px);
+  border-bottom:1px solid var(--mock-line);margin:0 -28px 26px;padding:9px 28px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.bar nav{display:flex;gap:4px;flex-wrap:wrap}
+.bar nav a{font-size:12.5px;color:var(--mock-mute);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent;white-space:nowrap}
+.bar nav a:hover{background:var(--mock-code);border-color:var(--mock-line-soft);color:var(--mock-ink)}
+.spacer{flex:1 1 auto}
+.seg{display:inline-flex;border:1px solid var(--mock-line);border-radius:7px;overflow:hidden;background:var(--mock-panel)}
+.seg button{appearance:none;border:0;background:transparent;font:inherit;font-size:12.5px;padding:6px 11px;cursor:pointer;
+  color:var(--mock-mute);border-right:1px solid var(--mock-line-soft)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--mock-ink);color:#fff}
+.seg button:hover:not([aria-pressed="true"]){background:var(--mock-code);color:var(--mock-ink)}
+.ctl-label{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mock-mute);font-weight:600}
+
+/* ---------- surface sections ---------- */
+.surface{max-width:1100px;margin:0 auto 12px;padding-top:26px}
+.surface h2{font-size:21px;margin:0 0 4px;letter-spacing:-.01em}
+.surface h2 .pri{font-size:11px;vertical-align:middle;margin-left:10px;padding:3px 8px;border-radius:999px;
+  background:var(--mock-ink);color:#fff;letter-spacing:.06em;text-transform:uppercase;font-weight:700}
+.surface h2 .sec{background:var(--mock-code);color:var(--mock-mute);border:1px solid var(--mock-line)}
+.surface .meta{font-family:var(--mock-mono);font-size:12.5px;color:var(--mock-mute);margin:0 0 6px;line-height:1.85}
+.surface .meta b{color:var(--mock-ink);font-weight:600}
+.surface .pattern{margin:0 0 6px;color:var(--mock-mute);max-width:96ch}
+
+/* ---------- frames ---------- */
+.frames{display:block}
+.frame{background:var(--mock-panel);border:1px solid var(--mock-line);border-radius:10px;margin:18px 0 0;overflow:hidden}
+.frame-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--mock-line);
+  background:linear-gradient(180deg,#fff, #fafbfc)}
+.frame-head .fid{font-family:var(--mock-mono);font-size:12.5px;font-weight:600}
+.tag{font-family:var(--mock-mono);font-size:11.5px;padding:2px 7px;border-radius:5px;border:1px solid var(--mock-line);
+  background:var(--mock-code);color:var(--mock-mute)}
+.tag.state{background:#eef4ff;border-color:#c9dbff;color:#1c3f7a}
+.tag.clip{background:#fdf1e7;border-color:#f0cdb0;color:#8a4310}
+.frame-note{padding:8px 14px;border-bottom:1px solid var(--mock-line-soft);font-size:12.5px;color:var(--mock-mute);background:#fcfdfe}
+.frame-note b{color:var(--mock-ink)}
+.stage{overflow-x:auto;overflow-y:hidden;background:repeating-linear-gradient(45deg,#eceff3,#eceff3 8px,#e7ebf0 8px,#e7ebf0 16px);padding:18px}
+.stage-inner{display:inline-block}
+
+/* ---------- the device ---------- */
+.device{position:relative;background:#fff;box-shadow:0 2px 10px rgba(20,25,35,.14);border-radius:6px;overflow:hidden;
+  font-size:16px;line-height:1.5;color:var(--gh-ink)}
+.device.vw-1440{width:1440px}
+.device.vw-1024{width:1024px}
+.device.clip.vp-900{height:900px}
+.device.clip.vp-768{height:768px}
+.device.fullpage{max-height:1500px;overflow-y:auto}
+.device.clip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--mock-accent);z-index:20;pointer-events:none}
+.foldflag{position:absolute;right:0;bottom:3px;z-index:21;background:var(--mock-accent);color:#fff;font-family:var(--mock-mono);
+  font-size:11px;padding:2px 8px;border-radius:4px 0 0 0;letter-spacing:.04em}
+
+/* browser chrome — 84px, identical on every host */
+.chrome-browser{height:84px;background:#dfe3e8;border-bottom:1px solid #c4cad1;padding:8px 12px 0;user-select:none}
+.chrome-tabs{display:flex;gap:6px;align-items:flex-end;height:30px}
+.chrome-tab{background:#fff;border-radius:7px 7px 0 0;padding:6px 14px;font-size:12px;color:#3c444d;max-width:340px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #c4cad1;border-bottom:0}
+.chrome-dots{display:flex;gap:5px;margin-right:10px;align-self:center}
+.chrome-dots i{width:10px;height:10px;border-radius:50%;background:#b6bec7;display:block}
+.chrome-url{margin-top:8px;height:30px;background:#fff;border:1px solid #c4cad1;border-radius:15px;display:flex;align-items:center;
+  padding:0 14px;font-family:var(--mock-mono);font-size:12px;color:#3c444d;gap:8px}
+.chrome-url .lock{color:#1a6b3c;font-size:11px}
+
+/* =====================  crates.io facsimile  ===================== */
+.host-crates .host{background:var(--cio-bg);color:var(--cio-ink)}
+.cio-header{height:60px;background:var(--cio-header);display:flex;align-items:center;padding:0 24px;gap:20px;color:#fff}
+.cio-mark{font-weight:700;font-size:19px;letter-spacing:-.01em}
+.cio-search{flex:0 1 420px;height:32px;background:rgba(255,255,255,.92);border-radius:5px;border:1px solid rgba(0,0,0,.12);
+  display:flex;align-items:center;padding:0 11px;color:#7b8078;font-size:13px}
+.cio-nav{display:flex;gap:18px;margin-left:auto;font-size:13.5px;color:#e8f1e6}
+/* Band heights are chosen so that README TEXT begins exactly at the declared budget offset:
+   1440x900 -> 84 browser + 60 header + 230 crate block + 26 .cio-main padding = 400; 900-400 = 500px = 21 lines
+   1024x768 -> 84 + 60 + 218 crate block + 40 stacked metadata + 26 = 428; 768-428 = 340px = 14 lines  */
+.cio-crate{padding:20px 24px 0;border-bottom:1px solid var(--cio-line);background:var(--cio-bg);overflow:hidden}
+.vw-1440 .cio-crate{height:230px}
+.vw-1024 .cio-crate{height:218px}
+.cio-crate .row1{display:flex;align-items:baseline;gap:12px}
+.cio-crate h1{font-size:27px;margin:0;font-weight:600;letter-spacing:-.01em}
+.cio-crate .ver{font-size:16px;color:var(--cio-mute)}
+.cio-desc{margin:10px 0 0;font-size:15px;color:var(--cio-ink);max-width:74ch}
+.cio-install{margin-top:14px;display:flex;gap:10px;align-items:center}
+.cio-install code{font-family:var(--mock-mono);font-size:13px;background:var(--cio-code);border:1px solid var(--cio-line);
+  border-radius:5px;padding:7px 11px;color:var(--cio-ink)}
+.cio-btn{font-size:12.5px;border:1px solid var(--cio-line);background:#fff;border-radius:5px;padding:7px 11px;color:var(--cio-link);cursor:pointer}
+.cio-tabs{display:flex;gap:2px;margin-top:16px}
+.cio-tabs span{font-size:13.5px;padding:9px 14px;color:var(--cio-mute);border-bottom:3px solid transparent}
+.cio-tabs span.on{color:var(--cio-ink);border-bottom-color:var(--cio-header);font-weight:600}
+.cio-metastack{height:40px;padding:0 24px;border-bottom:1px solid var(--cio-line);display:none;gap:28px;
+  background:#fffdf4;align-items:center;overflow:hidden}
+.vw-1024 .cio-metastack{display:flex}
+.cio-metastack div{font-size:12.5px;color:var(--cio-mute);white-space:nowrap}
+.cio-metastack b{color:var(--cio-ink);font-size:12.5px;font-weight:600;margin-right:6px}
+.cio-main{display:flex;gap:28px;justify-content:center;padding:26px 24px 60px}
+.cio-readme{width:800px;flex:0 0 800px}
+.cio-side{width:250px;flex:0 0 250px;font-size:13px;color:var(--cio-mute)}
+.vw-1024 .cio-side{display:none}
+.cio-side h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--cio-mute);margin:0 0 6px}
+.cio-side .blk{background:#fffdf4;border:1px solid var(--cio-line);border-radius:6px;padding:11px 13px;margin-bottom:12px}
+.cio-side .blk p{margin:0 0 5px}
+.host-crates .md a{color:var(--cio-link)}
+.host-crates .md h1{font-size:28px}
+.host-crates .md code{background:var(--cio-code)}
+.host-crates .md pre{background:var(--cio-code);border:1px solid var(--cio-line)}
+.host-crates .md blockquote{border-left:4px solid #cfd8c9;background:#fffdf4}
+
+/* =====================  docs.rs / rustdoc facsimile  =====================
+   Class names in this block that are REAL rustdoc output, reproduced faithfully:
+   .rustdoc  .sidebar  .sidebar-crate  .location  .block  .main-content  .docblock
+   .stab.portability  .item-table .  Everything prefixed .rd- is mock chrome.       */
+.host-docs .host{background:var(--rd-bg);color:var(--rd-ink)}
+.rd-topbar{height:60px;background:var(--rd-topbar);color:#e6e6e6;display:flex;align-items:center;gap:18px;padding:0 20px}
+.rd-topbar .mark{font-weight:700;font-size:17px}
+.rd-topbar .search{flex:0 1 460px;height:30px;background:#3a3a3a;border:1px solid #4d4d4d;border-radius:4px;display:flex;
+  align-items:center;padding:0 10px;color:#9a9a9a;font-size:13px}
+.rd-topbar .links{margin-left:auto;display:flex;gap:16px;font-size:13px;color:#c9c9c9}
+/* 1440x900 -> 84 browser + 60 topbar + 34 crumb + 22 .main-content padding = 200; 900-200 = 700px = 29 lines
+   1024x768 -> 84 + 60 + 52 crumb (the sidebar collapses into it) + 22 = 218; 768-218 = 550px = 22 lines   */
+.rd-crumb{height:34px;border-bottom:1px solid var(--rd-line);display:flex;align-items:center;padding:0 20px;gap:12px;
+  font-family:var(--mock-mono);font-size:12.5px;color:var(--rd-mute);background:#fafafa;overflow:hidden}
+.vw-1024 .rd-crumb{height:52px;flex-wrap:wrap;align-content:center;padding-top:4px}
+.rd-crumb .pill{font-family:var(--mock-font);font-size:11.5px;border:1px solid var(--rd-line);border-radius:4px;padding:1px 7px;background:#fff}
+.rd-sections{display:none;gap:10px;flex-basis:100%;font-family:var(--mock-font);font-size:11.5px;color:var(--rd-link)}
+.vw-1024 .rd-sections{display:flex;flex-wrap:wrap}
+.rustdoc{display:flex;gap:0}
+.rustdoc .sidebar{width:200px;flex:0 0 200px;background:var(--rd-side);border-right:1px solid var(--rd-line);
+  padding:16px 14px 60px;font-size:13.5px}
+.vw-1024 .rustdoc .sidebar{display:none}
+.sidebar-crate{font-weight:600;font-size:15px;margin:0 0 2px}
+.sidebar-crate .v{display:block;font-size:12px;color:var(--rd-mute);font-weight:400}
+.rustdoc .sidebar .location{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--rd-mute)}
+.rustdoc .sidebar .block ul{list-style:none;margin:0;padding:0}
+.rustdoc .sidebar .block li{margin:0 0 4px}
+.rustdoc .sidebar .block a{color:var(--rd-link);text-decoration:none}
+.rustdoc .main-content{flex:1 1 auto;padding:22px 26px 70px;max-width:900px}
+.main-content h1.fqn{font-size:24px;margin:0 0 12px;font-weight:500;font-family:var(--mock-mono)}
+.main-content h1.fqn .ver{font-family:var(--mock-font);font-size:13px;color:var(--rd-mute);margin-left:10px}
+.stab.portability{display:block;background:var(--rd-stab-bg);border:1px solid var(--rd-stab-line);border-radius:3px;
+  padding:5px 10px;font-size:14px;margin:8px 0;color:#3a2c00}
+.stab.portability code{background:transparent;font-family:var(--mock-mono);font-size:13.5px}
+.item-table{width:100%;border-collapse:collapse;margin:10px 0 18px;font-size:15px}
+.item-table td{padding:5px 10px 5px 0;vertical-align:top;border-bottom:1px solid #f0f0f0}
+.item-table td:first-child{white-space:nowrap;font-family:var(--mock-mono);font-size:14px}
+.item-table a{color:var(--rd-link)}
+.host-docs .md a,.host-docs .docblock a{color:var(--rd-link)}
+.host-docs .md h1{font-size:22px}
+.host-docs .md code,.host-docs .docblock code{background:var(--rd-code)}
+.host-docs .md pre,.host-docs .docblock pre{background:var(--rd-code);border:1px solid var(--rd-line)}
+.rd-fail{padding:44px 26px 70px;max-width:820px;margin:0 auto}
+.rd-fail h2{font-size:22px;margin:0 0 12px}
+.rd-fail .bang{display:inline-block;background:#b3261e;color:#fff;border-radius:4px;font-size:12px;padding:3px 9px;
+  letter-spacing:.05em;text-transform:uppercase;font-weight:700;margin-bottom:14px}
+.rd-fail pre{background:#1e1e1e;color:#dcdcdc;padding:14px 16px;border-radius:5px;font-family:var(--mock-mono);font-size:13px;
+  overflow:auto;line-height:1.6}
+.rd-fail p{margin:0 0 12px;color:var(--rd-mute)}
+.rd-fail a{color:var(--rd-link)}
+
+/* =====================  GitHub facsimile  =====================
+   .markdown-body is github-markdown-css's real class contract for a rendered README.   */
+.host-gh .host{background:var(--gh-bg);color:var(--gh-ink)}
+.gh-topbar{height:62px;background:var(--gh-topbar);color:#f0f6fc;display:flex;align-items:center;gap:18px;padding:0 22px;font-size:14px}
+.gh-topbar .mark{font-weight:700;font-size:17px}
+.gh-topbar .search{flex:0 1 340px;height:30px;background:#0d1117;border:1px solid #3d444d;border-radius:6px;display:flex;
+  align-items:center;padding:0 10px;color:#8d96a0;font-size:13px}
+.gh-topbar .right{margin-left:auto;display:flex;gap:16px;color:#d1d7dd}
+/* 1440x900 -> 84 browser + 62 topbar + 136 repo head + 22 .gh-body pad + 26 .gh-readme pad = 330; 900-330 = 570 = 24 lines
+   1024x768 -> 84 + 62 + 156 + 22 + 26 = 350; 768-350 = 418px = 17 lines                                                 */
+.gh-repohead{padding:12px 22px 0;border-bottom:1px solid var(--gh-line);background:var(--gh-bg);overflow:hidden}
+.vw-1440 .gh-repohead{height:136px}
+.vw-1024 .gh-repohead{height:156px}
+.gh-repohead .name{font-size:19px;margin:0 0 6px}
+.gh-repohead .name a{color:var(--gh-link);text-decoration:none;font-weight:600}
+.gh-repohead .name .slash{color:var(--gh-mute);margin:0 5px;font-weight:400}
+.gh-repohead .name .vis{font-size:11.5px;border:1px solid var(--gh-line);border-radius:999px;padding:2px 8px;color:var(--gh-mute);margin-left:8px}
+.gh-tabs{display:flex;gap:4px;margin-top:10px}
+.gh-tabs span{font-size:14px;padding:6px 12px;color:var(--gh-ink);border-bottom:2px solid transparent}
+.gh-tabs span.on{font-weight:600;border-bottom-color:#fd8c73}
+.gh-filebar{margin-top:10px;border:1px solid var(--gh-line);border-radius:6px 6px 0 0;background:var(--gh-canvas);
+  padding:8px 14px;font-size:13px;color:var(--gh-mute);display:flex;gap:14px;align-items:center}
+.gh-body{display:flex;gap:24px;padding:22px 22px 70px}
+.gh-readme{flex:0 0 900px;width:900px;border:1px solid var(--gh-line);border-top:0;border-radius:0 0 6px 6px;padding:26px 32px 40px;background:#fff}
+.vw-1024 .gh-readme{flex:0 0 900px;width:900px}
+.gh-about{flex:1 1 auto;font-size:13.5px;color:var(--gh-mute);min-width:180px}
+.gh-about h3{font-size:14px;color:var(--gh-ink);margin:0 0 8px}
+.host-gh .md a,.markdown-body a{color:var(--gh-link)}
+.host-gh .md h1{font-size:32px}
+.host-gh .md code{background:var(--gh-canvas)}
+.host-gh .md pre{background:var(--gh-canvas);border:1px solid var(--gh-line)}
+.host-gh .md blockquote{border-left:4px solid var(--gh-line);color:var(--gh-mute)}
+
+/* =====================  rendered-markdown vocabulary  =====================
+   This is the ONLY primitive set _design.md permits: the block vocabulary a Markdown
+   renderer emits. Nothing here sets a colour on content, a font size on a primary label,
+   or any inline style — AP-7 and ## Density budget's "minimum legible size" rule.        */
+.md{position:relative;font-size:16px;line-height:1.5}
+.md > section{position:relative}
+/* Block metrics are github-markdown-css's real ones (margin-bottom 16px on every block, li
+   margin-top 4px, blockquote padded horizontally only), not comfortable ones chosen here.
+   That matters: the 14-line first-screen budget has no slack once an H1 (35px + 16) and an H2
+   (26px + 5 + 1 + 24 + 12) are charged at their true cost rather than at one body line each. */
+.md h1{margin:0 0 16px;line-height:1.25;font-weight:600;letter-spacing:-.01em}
+.md h2{font-size:20px;margin:24px 0 12px;line-height:1.3;font-weight:600;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,.08)}
+.md p{margin:0 0 16px}
+.md ul{margin:0 0 16px;padding-left:24px}
+.md li{margin:4px 0 0}
+.md li > ul{margin:4px 0 0}
+.md blockquote{margin:0 0 16px;padding:0 14px}
+.md blockquote p{margin:0 0 6px}.md blockquote p:last-child{margin:0}
+.md code{font-family:var(--mock-mono);font-size:13.6px;padding:.15em .35em;border-radius:4px}
+.md pre{margin:0 0 14px;padding:13px 15px;border-radius:6px;overflow-x:auto}
+.md pre code{background:transparent;padding:0;font-size:13.2px;line-height:1.55;display:block;white-space:pre}
+.md table{border-collapse:collapse;width:100%;margin:0 0 14px;font-size:14.5px}
+.md th,.md td{border:1px solid rgba(0,0,0,.14);padding:6px 11px;text-align:left;vertical-align:top}
+.md th{background:rgba(0,0,0,.035);font-weight:600}
+.md hr{border:0;border-top:1px solid rgba(0,0,0,.12);margin:20px 0}
+.md .badges{margin:0 0 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.md .badges img{display:inline-block;height:20px;vertical-align:middle}
+.md .badge-alt{display:none;font-family:var(--mock-mono);font-size:12px;color:var(--mock-mute);
+  border:1px dotted #9aa4af;border-radius:3px;padding:2px 7px;background:#fff}
+
+/* ---------- state modifiers ---------- */
+.state-images-blocked .md .badges img{display:none}
+.state-images-blocked .md .badge-alt{display:inline-block}
+.state-long-label tbody[data-rows="normal"]{display:none}
+tbody[data-rows="long"]{display:none}
+.state-long-label tbody[data-rows="long"]{display:table-row-group}
+.counterex{display:none}
+.state-all-features .counterex{display:block}
+.state-all-features .stab.portability{outline:2px solid var(--mock-accent);outline-offset:2px}
+
+/* ---------- mock annotations ---------- */
+.md > section::before{content:attr(data-region);position:absolute;left:-58px;top:2px;font-family:var(--mock-mono);
+  font-size:10.5px;color:var(--mock-accent);background:var(--mock-accent-soft);border:1px solid #eccfc3;border-radius:4px;
+  padding:1px 5px;letter-spacing:.03em}
+body.no-regions .md > section::before{display:none}
+.counterex{margin:8px 0 16px;border:1px dashed var(--mock-accent);background:var(--mock-accent-soft);border-radius:6px;
+  padding:9px 12px;font-size:13px;color:#6d2408;font-family:var(--mock-font)}
+.counterex b{font-family:var(--mock-mono);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:3px}
+.budgetline{margin:0 0 14px;font-family:var(--mock-mono);font-size:11.5px;color:var(--mock-accent)}
+
+/* ---------- supplementary dark frame ---------- */
+.device.theme-dark .host{background:#131313;color:#ddd}
+.device.theme-dark .cio-header{background:#2b4f27}
+.device.theme-dark .cio-crate,.device.theme-dark .cio-metastack{background:#131313;border-color:#333}
+.device.theme-dark .cio-crate h1,.device.theme-dark .cio-desc{color:#e6e6e6}
+.device.theme-dark .cio-install code{background:#1f1f1f;border-color:#3a3a3a;color:#ddd}
+.device.theme-dark .cio-tabs span{color:#9a9a9a}
+.device.theme-dark .cio-tabs span.on{color:#eee}
+.device.theme-dark .md code,.device.theme-dark .md pre{background:#1f1f1f;border-color:#3a3a3a;color:#e2e2e2}
+.device.theme-dark .md blockquote{background:#1b1b1b;border-left-color:#3f5c3a}
+.device.theme-dark .md a{color:#57b894}
+.device.theme-dark .md h2{border-bottom-color:rgba(255,255,255,.14)}
+.device.theme-dark .md th,.device.theme-dark .md td{border-color:rgba(255,255,255,.18)}
+.device.theme-dark .cio-side .blk{background:#1b1b1b;border-color:#333}
+
+/* ---------- closing checklist ---------- */
+.closing{max-width:1100px;margin:44px auto 0;background:var(--mock-panel);border:1px solid var(--mock-line);border-radius:10px;padding:20px 24px}
+.closing h2{font-size:18px;margin:0 0 10px}
+.closing ul{margin:0 0 14px;padding-left:20px}
+.closing li{margin:0 0 6px}
+.closing table{border-collapse:collapse;width:100%;font-size:13.5px}
+.closing th,.closing td{border:1px solid var(--mock-line);padding:6px 10px;text-align:left;vertical-align:top}
+.closing th{background:var(--mock-code)}
+.closing code{font-family:var(--mock-mono);font-size:12.5px;background:var(--mock-code);padding:.1em .35em;border-radius:4px}
+</style>
+
+<div class="page">
+
+<div class="masthead">
+  <p class="eyebrow">Static sign-off mock &middot; design stage</p>
+  <h1 class="title">0.2.0 — where private opinions become promises</h1>
+  <p class="lede">Seven rendered pages, drawn at their declared widths with the copy this release would
+  actually ship. The reviewer's job is to approve <em>form</em>: what occupies the first screen, what was
+  demoted below it, and what is one hop away.</p>
+
+  <div class="provenance">
+    <b>project</b> &nbsp;HS-P0016 &middot; publication-and-positioning &middot; initiative from-contract-to-published-library<br>
+    <b>design</b> &nbsp;&nbsp;.bklg/from-contract-to-published-library/publication-and-positioning/_design.md<br>
+    <b>mock</b> &nbsp;&nbsp;&nbsp;&nbsp;.bklg/from-contract-to-published-library/publication-and-positioning/design/mock.html<br>
+    <b>source</b> &nbsp;composed from this worktree's own files — crates/happenstance/README.md,
+    crates/happenstance-core/README.md, crates/happenstance-testkit/README.md, README.md,
+    crates/*/src/lib.rs, spec/SPECIFICATION.md:219-222,
+    .kb/open-questions/es-38-and-gap-read-rules-are-unowned.md<br>
+    <b>offline</b> no network fetch, no webfonts, no external stylesheet; badges are inline
+    <code>data:image/svg+xml</code> URIs so <code>images-blocked</code> is a real state
+  </div>
+
+  <div class="note">
+    <h2>Substrate: there is no design-system primitive layer, and none was invented</h2>
+    <p>Verified in this worktree: <code>find . -name package.json</code> → 0 results;
+    <code>find . -name '*.css'</code> → 0 results; no token file, no theme file, no component package.
+    That is <em>correct</em> for a Rust library workspace — crates.io, docs.rs and GitHub own the theme and
+    none of them honours anything this repository writes.</p>
+    <p>The primitive set composed from here is therefore the one <code>_design.md</code> names: the
+    <b>rendered-Markdown block vocabulary</b> (H1, blockquote, list, fenced code, table, link) plus rustdoc's
+    own <code>doc(cfg)</code> pill. Where a host emits a stable class contract it is reproduced faithfully —
+    rustdoc's <code>.rustdoc / .sidebar / .main-content / .docblock / .stab.portability / .item-table</code>,
+    and github-markdown-css's <code>.markdown-body</code>. crates.io's DOM classes are build-hashed and
+    unstable, so nothing here claims to mirror them; what is mirrored is its type scale and layout geometry.</p>
+    <p>All host chrome below is a hand-built facsimile, <b>dimensioned to <code>_design.md</code> ## Density
+    budget</b> (1440×900 → 500 px ≈ 21 lines of README above the fold; 1024×768 → 340 px ≈ 14 lines).
+    It is not a repo primitive and must never be copied into the repo — <b>AP-7</b> forbids raw HTML or CSS on a
+    published surface. Measuring the <em>live</em> site is AC-007's rendered-page preflight, the instrument
+    this stage does not have (<code>design.capture</code> undeclared;
+    <code>xtask/src/package.rs:4-18</code> says why nothing automated stands in).</p>
+    <p><b>Annotations are not copy.</b> Anything in this rust-orange — the <code>R1…R12</code> region tags,
+    the fold rule at the bottom edge of a clipped frame, the dashed counter-example strips — is a mock
+    annotation. Toggle the region tags off in the bar above to read a frame as a reader would.</p>
+  </div>
+</div>
+
+<div class="bar">
+  <nav id="nav"></nav>
+  <span class="spacer"></span>
+  <span class="ctl-label">regions</span>
+  <span class="seg" id="seg-regions">
+    <button data-v="on" aria-pressed="true">on</button><button data-v="off" aria-pressed="false">off</button>
+  </span>
+  <span class="ctl-label">zoom</span>
+  <span class="seg" id="seg-zoom">
+    <button data-v="1" aria-pressed="true">100%</button><button data-v="0.75" aria-pressed="false">75%</button><button data-v="0.5" aria-pressed="false">50%</button>
+  </span>
+</div>
+
+<div id="out"></div>
+
+<div class="closing">
+  <h2>What this mock is asking the approver to decide</h2>
+  <ul>
+    <li><b>The 14-line first screen is exact, not approximate.</b> On every
+      <code>first-screen-1024x768</code> frame the fold rule lands immediately under the third bullet of the
+      triad. Identity 3 + blank 1 + callout 3 + blank 1 + triad 6 = 14. Nothing else fits; the frames show
+      what falls off if anything is added.</li>
+    <li><b>Badges sit below the maturity census on the packaged surfaces</b> (R5 under R4) and stay at the
+      top on GitHub. Compare the <code>images-blocked</code> frames: on crates.io the region collapses to
+      nothing and costs the reader nothing, which is the argument for the demotion.</li>
+    <li><b>The 8-row status table is on GitHub only.</b> No crates.io frame contains it. Its
+      <code>overflow</code> and <code>long-label</code> behaviour is shown on the GitHub frames at 1024×768,
+      where the Role cell wraps and the Status cell — glyph <em>and</em> words, never glyph alone — does not.</li>
+    <li><b>docs.rs shows gated items with their gate.</b> The <code>all-features</code> frames carry rustdoc's
+      real <code>.stab.portability</code> pill; the dashed strip beside it is the AP-8 counter-example — what
+      the same item looks like built without <code>--cfg docsrs</code> (no gate) or without
+      <code>all-features</code> (absent entirely).</li>
+    <li><b>The docs-build-failed frames are the reason the crates.io README is self-sufficient.</b> No claim
+      on any crates.io frame depends on a docs.rs page rendering.</li>
+  </ul>
+  <div class="note" style="margin:6px 0 18px">
+    <h2>One finding this mock produced, for the approver rather than for the implementer</h2>
+    <p><b>The 14-line budget has no slack once headings are charged at their true cost.</b>
+    <code>_design.md</code> ## Density budget models a rendered line as 24 px and allocates
+    <em>identity 3 + blank 1 + callout 3 + blank 1 + triad 6 = 14</em>. Drawn at the real block metrics a
+    Markdown renderer uses — <code>margin-bottom: 16px</code> on every block, an H1 at 35 px, an H2 at 26 px plus
+    its rule and its 24 px top margin — the same five regions measure <b>≈343 px against a 340 px budget</b>. It
+    fits, but only after the callouts were tightened from three rendered lines to two and each triad bullet to
+    one line, which is what the frames above show.</p>
+    <p><b>What the approver is being asked to accept:</b> either the budget's line model gains a heading
+    surcharge (an H1 costs ~2.1 lines, an H2 ~2.8 including margins), or the first screen is understood to be
+    <em>full</em> at 0.2.0 — any sixth region, any callout that grows back to three lines, and the triad's third
+    bullet crosses the fold and <b>AP-1</b> fails. The demotion order in ## Density budget already names what
+    yields; this finding says it will be needed sooner than the arithmetic implies.</p>
+  </div>
+
+  <h2>Reference captures the design review will compare against</h2>
+  <table>
+    <thead><tr><th>Surface</th><th>1440×900</th><th>1024×768</th></tr></thead>
+    <tbody id="refrows"></tbody>
+  </table>
+  <p style="margin:12px 0 0;color:var(--mock-mute);font-size:13.5px">Capture is manual at this stage:
+  <code>design.capture</code> is undeclared in <code>.redkiln/config.yaml</code> and there is no app route.
+  These paths are where the reviewer drops the reads, and they are the same paths recorded in
+  <code>_design.md</code> ## Mock.</p>
+</div>
+
+</div>
+
+<!-- ============================================================================================
+     CONTENT TEMPLATES
+     Each body below is the DESIGNED 0.2.0 copy — not today's file verbatim. Where a region is
+     carried over unchanged from the tree it is noted inline. Regions are wrapped in
+     <section data-region="Rn"> so the frames tie back to _design.md ## Composition row by row.
+     Dates are left as the literal YYYY-MM-DD placeholder on purpose: IQ-7 requires every date to
+     be re-read at the publish commit, so a date invented here would be the exact defect.
+     ============================================================================================ -->
+
+<template id="tpl-crates-io-happenstance">
+<section data-region="R1">
+  <h1>happenstance</h1>
+  <p>A storage-agnostic event sourcing library for Rust on the
+  <a href="https://dcb.events/specification/">Dynamic Consistency Boundary specification</a>: a contract for
+  storage, and a published conformance suite that decides who meets it.</p>
+</section>
+<section data-region="R2">
+  <blockquote>
+    <p><strong>Status at 0.2.0 (YYYY-MM-DD): the contract and its 89-rule suite are real; the typed layer is
+    not here yet.</strong> It re-exports <code>happenstance-core</code>; no adapter has run the suite yet.</p>
+  </blockquote>
+</section>
+<section data-region="R3">
+  <h2>Which crate do I want?</h2>
+  <ul>
+    <li><strong>Writing an application?</strong> This one.</li>
+    <li><strong>Writing a storage adapter?</strong>
+      <a href="https://crates.io/crates/happenstance-core"><code>happenstance-core</code></a> — the smaller semver surface.</li>
+    <li><strong>Measuring an adapter?</strong>
+      <a href="https://crates.io/crates/happenstance-testkit"><code>happenstance-testkit</code></a> — 89 rules, and it decides.</li>
+  </ul>
+</section>
+<section data-region="R4">
+  <p>As published at <code>0.2.0</code> (YYYY-MM-DD) the specification carries 200 clause IDs:
+  <strong>139 frozen</strong> (changing one takes a decision record), <strong>49 provisional</strong> (each
+  carries its falsifier), <strong>10 deferred</strong> (each names its owning phase), and <strong>2</strong>
+  demoted to prose. <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md">The ledger</a>.</p>
+</section>
+<section data-region="R5">
+  <p class="badges">
+    <img alt="CI: passing" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='20'%3E%3Crect width='30' height='20' rx='3' fill='%23555'/%3E%3Crect x='26' width='62' height='20' rx='3' fill='%234c1'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3ECI%3C/text%3E%3Ctext x='32' y='14'%3Epassing%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] CI: passing</span>
+    <img alt="License: MIT OR Apache-2.0" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='20'%3E%3Crect width='54' height='20' rx='3' fill='%23555'/%3E%3Crect x='50' width='118' height='20' rx='3' fill='%23007ec6'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3Elicense%3C/text%3E%3Ctext x='56' y='14'%3EMIT OR Apache-2.0%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] License: MIT OR Apache-2.0</span>
+  </p>
+</section>
+<section data-region="R6">
+  <h2>DCB compliance, and how to check it</h2>
+  <p><strong>This is a DCB-compliant event store contract, and the reference store passes its own suite.</strong>
+  On YYYY-MM-DD, <code>happenstance-core</code>'s <code>MemoryEventStore</code> passed all 89 rules of
+  <code>happenstance-testkit 0.2.0</code>, plus the property-based family. Every rule is also demonstrated to
+  <em>fail</em> against a named wrong store in the testkit's own <code>tests/</code>, so a rule that stopped
+  discriminating is a red build. No third-party adapter has run it yet.
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#conformance">The run, and what it covers</a>.</p>
+</section>
+<section data-region="R7">
+  <h2>Quick start</h2>
+<pre><code class="language-toml">[dependencies]
+happenstance = "0.2"</code></pre>
+  <p>That resolves. The example below is this crate's own doctest, and it is the same text the
+  published-install smoke test runs against the registry version — what you copy is what was proved.</p>
+<pre><code class="language-rust">use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
+
+async fn define_course() -> Result&lt;(), Box&lt;dyn core::error::Error&gt;&gt; {
+    let store = MemoryEventStore::new();
+
+    store
+        .append(
+            &amp;[Event::new("CourseDefined", &amp;br#"{"capacity":2}"#[..])?
+                .with_tags(Tags::from_pairs([("course", "c1")])?)],
+            None,
+        )
+        .await?;
+
+    // Positions are unique and increasing. Gaps are permitted: do not assume `n + 1`.
+    let events = collect(store.read(&amp;Query::all(), ReadOptions::new())).await?;
+    assert_eq!(events.len(), 1);
+    Ok(())
+}</code></pre>
+</section>
+<section data-region="R8">
+  <h2>What DCB buys you</h2>
+  <p>There are no aggregates. An event carries a type, opaque bytes and a set of tags; a query selects across
+  them; a command reads what it needs, folds it, decides, and appends conditioned on nothing new having
+  appeared. The consistency boundary is whatever that query selects — chosen per decision, and free to span
+  what aggregates would have separated without reaching for a saga.</p>
+</section>
+<section data-region="R9">
+  <h2>Guarantees</h2>
+  <ul>
+    <li><code>#![forbid(unsafe_code)]</code>, workspace-wide and verified opted into by every member.</li>
+    <li>Every feature this crate has is forwarded from
+      <a href="https://crates.io/crates/happenstance-core"><code>happenstance-core</code></a>, so the two cannot
+      disagree about what <code>default-features = false</code> means.</li>
+    <li><strong>Positions are unique and increasing, and gaps are permitted</strong> — code that assumes the
+      next position is <code>n + 1</code> is wrong against a conformant store, and one of ours assigns in steps
+      of seven from 4,096. Resume with <code>checkpoint.next()</code> as an inclusive lower bound, never as a seek
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#es-10">clause ES-10</a>).
+      <ul><li>What a read <em>from</em> a gap position must do is <strong>not settled</strong>: two accepted
+        decisions name the rule and neither owns it, so it is recorded as an
+        <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/open-questions/es-38-and-gap-read-rules-are-unowned.md">open question</a>
+        rather than promised here.</li></ul></li>
+    <li><strong>MSRV 1.97.1, and at this release it is a promise rather than a preference.</strong> A raise is a
+      minor version, and under <code>0.x</code> a minor bump is the breaking-change signal — pin accordingly
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/">the decision atom</a>).</li>
+    <li><strong>Constrained runtimes are supported and always were.</strong> On
+      <code>wasm32-unknown-unknown</code> take <code>default-features = false, features = ["memory"]</code> and
+      implement the bare <code>EventStore</code> flavour, which carries no <code>Send</code> bound
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0001-no-async-trait.md">ADR-0001</a>).</li>
+  </ul>
+</section>
+<section data-region="R10">
+  <h2>Prior art</h2>
+  <p>As of YYYY-MM-DD, <code>disintegrate</code> is the mature choice if you want DCB on Postgres today and
+  <code>umadb-dcb</code> ships duplicated sync and async traits; happenstance's bet is different — ports plus a
+  <em>published</em> suite, so "storage agnostic" is a claim anyone can check.
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance#prior-art">Prior art, in full</a>.</p>
+</section>
+<section data-region="R11">
+  <h2>Design</h2>
+  <p>The design is specified rather than described:
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md"><code>spec/SPECIFICATION.md</code></a>
+  carries the normative clauses — each in one of the four states counted above, each naming the conformance rule
+  that checks it and the wrong implementation it forbids.</p>
+</section>
+<section data-region="R12">
+  <h2>Licence</h2>
+  <p>MIT OR Apache-2.0.</p>
+</section>
+</template>
+
+<template id="tpl-crates-io-happenstance-core">
+<section data-region="R1">
+  <h1>happenstance-core</h1>
+  <p>The contract: DCB value types, the storage ports, the error taxonomy, and an in-memory reference event
+  store. It holds no I/O and takes no opinion on serialisation.</p>
+</section>
+<section data-region="R2">
+  <blockquote>
+    <p><strong>Status at 0.2.0 (YYYY-MM-DD): the contract and its suite are real; no storage adapter is.</strong>
+    Every adapter here is a documented skeleton; the census below says how much of the port is settled.</p>
+  </blockquote>
+</section>
+<section data-region="R3">
+  <h2>Which crate do I want?</h2>
+  <ul>
+    <li><strong>Writing an application?</strong>
+      <a href="https://crates.io/crates/happenstance"><code>happenstance</code></a> — it re-exports everything here.</li>
+    <li><strong>Writing a storage adapter?</strong> This crate — the smaller semver surface.</li>
+    <li><strong>Measuring an adapter?</strong>
+      <a href="https://crates.io/crates/happenstance-testkit"><code>happenstance-testkit</code></a> measures you against it.</li>
+  </ul>
+</section>
+<section data-region="R4">
+  <p>As published at <code>0.2.0</code> (YYYY-MM-DD) the specification carries 200 clause IDs:
+  <strong>139 frozen</strong> (changing one takes a decision record), <strong>49 provisional</strong> (each
+  carries its falsifier), <strong>10 deferred</strong> (each names its owning phase), and <strong>2</strong>
+  demoted to prose. <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md">The ledger</a>.</p>
+</section>
+<section data-region="R5">
+  <p class="badges">
+    <img alt="CI: passing" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='20'%3E%3Crect width='30' height='20' rx='3' fill='%23555'/%3E%3Crect x='26' width='62' height='20' rx='3' fill='%234c1'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3ECI%3C/text%3E%3Ctext x='32' y='14'%3Epassing%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] CI: passing</span>
+    <img alt="License: MIT OR Apache-2.0" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='20'%3E%3Crect width='54' height='20' rx='3' fill='%23555'/%3E%3Crect x='50' width='118' height='20' rx='3' fill='%23007ec6'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3Elicense%3C/text%3E%3Ctext x='56' y='14'%3EMIT OR Apache-2.0%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] License: MIT OR Apache-2.0</span>
+  </p>
+</section>
+<section data-region="R6">
+  <h2>DCB compliance, and how to check it</h2>
+  <p><strong>This is a DCB-compliant event store contract, and the reference store passes its own suite.</strong>
+  On YYYY-MM-DD, this crate's <code>MemoryEventStore</code> passed all 89 rules of
+  <code>happenstance-testkit 0.2.0</code>, plus the property-based family. Every rule is also demonstrated to
+  <em>fail</em> against a named wrong store in the testkit's own <code>tests/</code>. No third-party adapter has
+  run it yet.
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#conformance">The run, and what it covers</a>.</p>
+</section>
+<section data-region="R7">
+  <h2>Quick start</h2>
+<pre><code class="language-rust">use happenstance_core::{EventStore, MemoryEventStore, Query, ReadOptions, collect};
+
+async fn count_everything() -> Result&lt;(), Box&lt;dyn core::error::Error&gt;&gt; {
+    let store = MemoryEventStore::new();
+    let events = collect(store.read(&amp;Query::all(), ReadOptions::new())).await?;
+    assert!(events.is_empty());
+    Ok(())
+}</code></pre>
+  <h2>An adapter is not an adapter until it passes the suite</h2>
+<pre><code class="language-rust">happenstance_testkit::event_store_conformance!(MyFixture::new());</code></pre>
+  <p>The expression builds a <em>fixture</em> — one isolated backing store per instance, one handle per
+  <code>connect()</code> — not a store directly.</p>
+</section>
+<section data-region="R8">
+  <h2>What it gives you</h2>
+  <p>DCB has no aggregates. An event carries a type, opaque bytes, and a set of tags; a query selects across
+  them; and a command reads what it needs, decides, and appends conditioned on nothing new having appeared. The
+  consistency boundary is whatever that query selects — per decision, and free to span what aggregates would
+  have separated.</p>
+</section>
+<section data-region="R9">
+  <h2>Guarantees</h2>
+  <ul>
+    <li><code>#![forbid(unsafe_code)]</code>, workspace-wide and verified opted into by every member.</li>
+    <li><strong>No <code>serde</code> on any default path.</strong> Payloads are opaque <code>Bytes</code>, which
+      is what lets a replication peer forward an event without ever parsing it
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0003-no-serde-in-core.md">ADR-0003</a>).</li>
+    <li><code>no_std</code> + <code>alloc</code> supported; <code>std</code> and <code>memory</code> are on by
+      default and <code>memory</code> is fully dead-code-eliminated when unused.</li>
+    <li><strong>Positions are unique and increasing, and gaps are permitted</strong> — code that assumes the next
+      position is <code>n + 1</code> is wrong against a conformant store. Resume with
+      <code>checkpoint.next()</code> as an inclusive lower bound, never as a seek
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#es-10">clause ES-10</a>).
+      <ul><li>What a read <em>from</em> a gap position must do is <strong>not settled</strong>: two accepted
+        decisions name the rule and neither owns it, so it is recorded as an
+        <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/open-questions/es-38-and-gap-read-rules-are-unowned.md">open question</a>
+        rather than promised here.</li></ul></li>
+    <li><strong>MSRV 1.97.1, and at this release it is a promise rather than a preference.</strong> A raise is a
+      minor version, and under <code>0.x</code> a minor bump is the breaking-change signal
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/">the decision atom</a>).</li>
+    <li><strong>Both port flavours cost the same.</strong> <code>EventStore</code> carries no
+      <code>Send</code> bound so it can be implemented on <code>wasm32</code>; <code>SendEventStore</code> is
+      derived for native use, and generic code binds the weaker one
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0001-no-async-trait.md">ADR-0001</a>).</li>
+  </ul>
+</section>
+<section data-region="R10">
+  <h2>Prior art</h2>
+  <p>As of YYYY-MM-DD, <code>disintegrate</code> is the mature choice if you want DCB on Postgres today and
+  <code>umadb-dcb</code> ships duplicated sync and async traits; happenstance's bet is ports plus a
+  <em>published</em> suite. <a href="https://github.com/Wet-Ink-Corporation/happenstance#prior-art">Prior art, in full</a>.</p>
+</section>
+<section data-region="R11">
+  <h2>Design</h2>
+  <p>The design is specified rather than described:
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md"><code>spec/SPECIFICATION.md</code></a>
+  carries the normative clauses — each in one of the four states counted above, each naming the conformance rule
+  that checks it and the wrong implementation it forbids.</p>
+</section>
+<section data-region="R12">
+  <h2>Licence</h2>
+  <p>MIT OR Apache-2.0.</p>
+</section>
+</template>
+
+<template id="tpl-crates-io-happenstance-testkit">
+<section data-region="R1">
+  <h1>happenstance-testkit</h1>
+  <p>The conformance suite for happenstance event store adapters: 89 rules, each tracing to a MUST in the
+  <a href="https://dcb.events/specification/">DCB specification</a> and each shown to reject a named wrong store.</p>
+</section>
+<section data-region="R2">
+  <blockquote>
+    <p><strong>Status at 0.2.0 (YYYY-MM-DD): the event-store family discriminates; everything around it is
+    early.</strong> <strong>No adapter has run this suite</strong>, and <code>ProjectionStore</code> has none at all.</p>
+  </blockquote>
+</section>
+<section data-region="R3">
+  <h2>Which crate do I want?</h2>
+  <ul>
+    <li><strong>Measuring an adapter?</strong> This one — it is the bar.</li>
+    <li><strong>Writing the adapter?</strong> Depend on
+      <a href="https://crates.io/crates/happenstance-core"><code>happenstance-core</code></a> for the ports.</li>
+    <li><strong>Writing an application?</strong>
+      <a href="https://crates.io/crates/happenstance"><code>happenstance</code></a>, and you will never call this crate.</li>
+  </ul>
+</section>
+<section data-region="R6">
+  <h2>DCB compliance, and how to check it</h2>
+  <p><strong>This crate is the instrument the compliance claim is made with.</strong> On YYYY-MM-DD it ran green
+  against <code>happenstance-core</code>'s <code>MemoryEventStore</code> — all 89 rules plus the property-based
+  family — and red against each of the deliberately-wrong stores in <code>tests/mutation_coverage/</code>,
+  exactly as their registry rows claim. No third-party adapter has run it yet.
+  <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#conformance">The run, and what it covers</a>.</p>
+</section>
+<section data-region="R7">
+  <h2>Use</h2>
+<pre><code class="language-rust">happenstance_testkit::event_store_conformance!(MyFixture::new());</code></pre>
+  <p>That expands to one <code>#[tokio::test]</code> per rule, so a failure names the rule rather than a line
+  number. The expression builds a <strong>fixture</strong>, not a store: one fixture instance is one isolated
+  backing store, and each <code>connect()</code> on it returns one handle onto that store. A rule needing a
+  capability your fixture declines still runs and prints your stated reason — it is never silently dropped from
+  the binary, because a rule that is absent is indistinguishable in CI output from a rule that passed.</p>
+</section>
+<section data-region="R4">
+  <p>As published at <code>0.2.0</code> (YYYY-MM-DD) the specification carries 200 clause IDs:
+  <strong>139 frozen</strong> (changing one takes a decision record), <strong>49 provisional</strong> (each
+  carries its falsifier), <strong>10 deferred</strong> (each names its owning phase), and <strong>2</strong>
+  demoted to prose. <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md">The ledger</a>.</p>
+</section>
+<section data-region="R5">
+  <p class="badges">
+    <img alt="CI: passing" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='20'%3E%3Crect width='30' height='20' rx='3' fill='%23555'/%3E%3Crect x='26' width='62' height='20' rx='3' fill='%234c1'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3ECI%3C/text%3E%3Ctext x='32' y='14'%3Epassing%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] CI: passing</span>
+    <img alt="License: MIT OR Apache-2.0" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='20'%3E%3Crect width='54' height='20' rx='3' fill='%23555'/%3E%3Crect x='50' width='118' height='20' rx='3' fill='%23007ec6'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3Elicense%3C/text%3E%3Ctext x='56' y='14'%3EMIT OR Apache-2.0%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] License: MIT OR Apache-2.0</span>
+  </p>
+</section>
+<section data-region="R8">
+  <h2>Why this exists as a published crate</h2>
+  <p>A claim about behaviour is worth exactly as much as the test that checks it. Publishing the suite means an
+  adapter author outside this repository can make the same claim on the same terms, and it means the reference
+  store is measured by the same instrument as everyone else. Two rules govern what goes in it, both learned
+  expensively: <strong>a rule no adapter can fail is decorative</strong>, and <strong>never assert on literal
+  position values</strong> — the specification permits gaps, and a conformant adapter may leave them.</p>
+</section>
+<section data-region="R9">
+  <h2>Guarantees</h2>
+  <ul>
+    <li><code>#![forbid(unsafe_code)]</code>, workspace-wide and verified opted into by every member.</li>
+    <li><strong>Adding a rule is a semver-minor change that can turn a passing adapter's CI red.</strong> Treat
+      that as breaking in practice and pin this crate exactly; its version is independent of the rest of the
+      workspace for that reason.</li>
+    <li><strong>Positions are unique and increasing, and gaps are permitted</strong> — rules compare against
+      positions your store actually assigned, and a conformant store that steps by seven from 4,096 is what
+      fails a rule that forgets
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md#es-10">clause ES-10</a>).
+      <ul><li>What a read <em>from</em> a gap position must do is <strong>not settled</strong> — an
+        <a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/open-questions/es-38-and-gap-read-rules-are-unowned.md">open question</a>,
+        not a promise.</li></ul></li>
+    <li><strong>No rule reads a clock.</strong> A wall-clock deadline passes on the author's machine and fails on
+      a loaded runner. The consequence is worth knowing before you meet it: an adapter that <em>deadlocks</em>
+      under contention hangs your CI job rather than failing a named rule.</li>
+    <li><strong>MSRV 1.97.1, and at this release it is a promise rather than a preference</strong>
+      (<a href="https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/">the decision atom</a>).</li>
+  </ul>
+</section>
+<section data-region="R12">
+  <h2>Licence</h2>
+  <p>MIT OR Apache-2.0.</p>
+</section>
+</template>
+
+<!-- docs.rs bodies. Order is the DESIGNED order — summary, # Status, # Using it today, then the rest —
+     which is a reordering of what crates/*/src/lib.rs carries today (core's ladder currently opens with
+     "# DCB in a paragraph" and reaches "# Getting started" at line 66). The sidebar is generated from the
+     `#` headings, so heading choice IS layout: _design.md requires the first `#` within 12 rendered lines. -->
+<template id="tpl-docs-rs-happenstance">
+<section data-region="D1">
+  <p>DCB-compliant event sourcing, with batteries.</p>
+</section>
+<section data-region="D2">
+  <h1>Status at 0.2.0</h1>
+  <p>Today this crate re-exports the contract crate and adds nothing of its own. It is published anyway so that
+  <code>cargo add happenstance</code> is true throughout — including before the typed layer exists — and so that
+  the name never has to move once people depend on it.</p>
+</section>
+<section data-region="D3">
+  <h1>Using it today</h1>
+  <p>Everything the contract crate exports is available here under the same paths, so nothing has to be
+  rewritten when the typed layer lands:</p>
+<pre><code class="language-rust">use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
+
+let store = MemoryEventStore::new();
+store.append(&amp;[Event::new("CourseDefined", &amp;br#"{"capacity":2}"#[..])?
+    .with_tags(Tags::from_pairs([("course", "c1")])?)], None).await?;
+
+// Positions are unique and increasing. Gaps are permitted: do not assume `n + 1`.
+let events = collect(store.read(&amp;Query::all(), ReadOptions::new())).await?;
+assert_eq!(events.len(), 1);</code></pre>
+</section>
+<section data-region="D4">
+  <h1>What arrives here, and what stays below</h1>
+  <p>The discriminator is <strong>encoding</strong>. <code>happenstance_core</code> deals in opaque bytes on
+  purpose — that is what keeps adapters free of domain knowledge and lets replication forward events without
+  deserialising them. Anything that knows how a payload is <em>shaped</em> belongs here, so that the contract
+  crate never grows a <code>serde</code> dependency in its default feature set.</p>
+  <table class="item-table">
+    <tr><td><a href="#">Codec</a></td><td>payload encoding; events carry a codec tag so one store can hold more than one encoding at a time</td></tr>
+    <tr><td><a href="#">DomainEvent</a></td><td>a Rust type's mapping to its <a href="#">EventType</a> and <a href="#">Tags</a></td></tr>
+    <tr><td><a href="#">DecisionModel</a></td><td>folds read events into decidable state and produces the matching <a href="#">Query</a></td></tr>
+  </table>
+</section>
+<section data-region="D5">
+  <h1>Feature flags</h1>
+  <table class="item-table">
+    <tr><td><code>std</code></td><td><em>(default)</em> forwarded from <code>happenstance-core</code></td></tr>
+    <tr><td><code>memory</code></td><td><em>(default)</em> the in-memory reference store</td></tr>
+    <tr><td><code>serde</code></td><td>envelope types only, for replication</td></tr>
+    <tr><td><code>unstable-projection</code></td><td>the projection port, off by default</td></tr>
+  </table>
+  <p><a href="#">pub trait <strong>ProjectionStore</strong></a></p>
+  <span class="stab portability">Available on <strong>crate feature <code>unstable-projection</code></strong> only.</span>
+  <p>The read-model and checkpoint seam. <strong>Documented exemption from semver while gated.</strong></p>
+  <div class="counterex"><b>mock annotation · AP-8 counter-example</b>
+    Built without <code>--cfg docsrs</code> this item renders with <em>no</em> pill above it — the gate is
+    invisible and the reader concludes the item is unconditional. Built without <code>all-features = true</code>
+    the item is <em>absent entirely</em>, which reads as "not supported" and is a false claim.
+    <code>crates/happenstance/Cargo.toml</code> has no <code>[package.metadata.docs.rs]</code> block today;
+    adding it is this project's only manifest change.</div>
+</section>
+</template>
+
+<template id="tpl-docs-rs-happenstance-core">
+<section data-region="D1">
+  <p>The happenstance contract: DCB-compliant event sourcing types and storage ports.</p>
+</section>
+<section data-region="D2">
+  <h1>Status at 0.2.0</h1>
+  <p>This crate defines <em>what</em> an event store is and nothing about <em>how</em> one is built. It holds no
+  I/O, opens no connections, and takes no opinion on serialisation. Every storage adapter in the workspace is
+  still a documented skeleton; the ports carry per-clause maturity rather than a blanket promise.</p>
+</section>
+<section data-region="D3">
+  <h1>Using it today</h1>
+<pre><code class="language-rust">use happenstance_core::{EventStore, MemoryEventStore, Query, ReadOptions, collect};
+
+let store = MemoryEventStore::new();
+let events = collect(store.read(&amp;Query::all(), ReadOptions::new())).await?;
+assert!(events.is_empty());</code></pre>
+</section>
+<section data-region="D4">
+  <h1>The shape of the API</h1>
+  <table>
+    <thead><tr><th>Concern</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>What happened</td><td><a href="#">Event</a>, <a href="#">EventType</a>, <a href="#">Tag</a>, <a href="#">Tags</a></td></tr>
+      <tr><td>Where it sits in the log</td><td><a href="#">SequencePosition</a>, <a href="#">SequencedEvent</a></td></tr>
+      <tr><td>What to read</td><td><a href="#">Query</a>, <a href="#">QueryItem</a>, <a href="#">ReadOptions</a></td></tr>
+      <tr><td>What must not have changed</td><td><a href="#">AppendCondition</a></td></tr>
+      <tr><td>Storage seams</td><td><a href="#">EventStore</a>, <a href="#">ProjectionStore</a></td></tr>
+    </tbody>
+  </table>
+</section>
+<section data-region="D5">
+  <h1>DCB in a paragraph</h1>
+  <p>Classical event sourcing draws consistency boundaries ahead of time, as aggregates, and every decision must
+  fit inside one. DCB draws them per decision instead. A command handler reads whatever events it needs — across
+  any number of entities — and then appends conditioned on <em>nothing matching that same query having appeared
+  since</em>. The boundary is whatever the handler actually looked at.</p>
+</section>
+<section data-region="D6">
+  <h1>Feature flags</h1>
+  <table class="item-table">
+    <tr><td><code>std</code></td><td><em>(default)</em></td></tr>
+    <tr><td><code>memory</code></td><td><em>(default)</em> the in-memory reference store, fully dead-code-eliminated when unused</td></tr>
+    <tr><td><code>serde</code></td><td>envelope types only — never on a default path</td></tr>
+    <tr><td><code>unstable-projection</code></td><td>the projection port, off by default</td></tr>
+  </table>
+  <p><a href="#">pub trait <strong>ProjectionStore</strong></a></p>
+  <span class="stab portability">Available on <strong>crate feature <code>unstable-projection</code></strong> only.</span>
+  <p>Read-model write and checkpoint write in one transaction. <strong>Documented exemption from semver while
+  gated</strong> — the port has no conformance suite yet, and a port without one is a guess.</p>
+  <div class="counterex"><b>mock annotation · AP-8 counter-example</b>
+    Without <code>--cfg docsrs</code> the pill above is absent and the gate is invisible; without
+    <code>all-features = true</code> the whole item is. This crate's manifest already carries both
+    (<code>crates/happenstance-core/Cargo.toml:54-56</code>) — the facade's does not.</div>
+</section>
+</template>
+
+<template id="tpl-docs-rs-happenstance-testkit">
+<section data-region="D1">
+  <p>The DCB conformance suite for happenstance event store adapters.</p>
+</section>
+<section data-region="D2">
+  <h1>Status at 0.2.0</h1>
+  <p>"Storage agnostic" is a claim about behaviour, and a claim about behaviour is worth exactly as much as the
+  test that checks it. This crate is that test. An adapter in this workspace is not considered to exist until it
+  invokes <a href="#">event_store_conformance!</a> and passes — and <strong>none has yet</strong>.</p>
+</section>
+<section data-region="D3">
+  <h1>Using it today</h1>
+  <p>In your adapter's <code>tests/</code> directory or a <code>#[cfg(test)]</code> module:</p>
+<pre><code class="language-rust">happenstance_testkit::event_store_conformance!(MyFixture::new());</code></pre>
+  <p>The macro takes an expression that builds a <strong>fixture</strong> — see <a href="#">Fixture</a> — and
+  expands to one <code>#[tokio::test]</code> per rule, so a failure names the rule rather than a line number.</p>
+</section>
+<section data-region="D4">
+  <h1>What a fixture is, and why it is not a closure</h1>
+  <p>One fixture instance is one isolated backing store; each <code>connect()</code> on it returns one handle
+  onto that store, and two instances share nothing. A bare <code>Fn() -&gt; S</code> could not say which of the
+  two it meant, which foreclosed durability, reopen and every genuinely multi-connection check at once.</p>
+  <table class="item-table">
+    <tr><td><a href="#">Fixture</a></td><td>what tells the suite how to reach your store</td></tr>
+    <tr><td><a href="#">Capability</a></td><td>declared as associated constants; a declined rule still runs and prints your reason</td></tr>
+    <tr><td><a href="#">fixtures::MemoryFixture</a></td><td>the worked example to read first</td></tr>
+  </table>
+</section>
+<section data-region="D5">
+  <h1>Choosing a harness</h1>
+  <table class="item-table">
+    <tr><td><a href="#">event_store_conformance!</a></td><td>the 89 named rules</td></tr>
+    <tr><td><a href="#">event_store_model_conformance!</a></td><td>additive, property-based</td></tr>
+    <tr><td><a href="#">event_store_concurrency_conformance!</a></td><td>additive, opt-in, eight OS threads</td></tr>
+  </table>
+</section>
+<section data-region="D6">
+  <h1>Feature flags</h1>
+  <table class="item-table">
+    <tr><td><code>proptest</code></td><td>the model-based family, off by default, absent on <code>wasm32-unknown-unknown</code></td></tr>
+    <tr><td><code>concurrency</code></td><td>the racing family, opt-in; requires <code>F::Store: EventStore + Send</code></td></tr>
+  </table>
+  <p><a href="#">pub macro <strong>event_store_model_conformance!</strong></a></p>
+  <span class="stab portability">Available on <strong>crate feature <code>proptest</code></strong> only.</span>
+  <p>Runs your store through generated sequences and predicts every conditional append's outcome before calling
+  you. Positions are never generated — the generator emits a <em>symbolic</em> anchor, resolved against what your
+  store actually assigned.</p>
+  <div class="counterex"><b>mock annotation · AP-8 counter-example</b>
+    <code>crates/happenstance-testkit/Cargo.toml:56-58</code> already carries
+    <code>all-features = true</code> and <code>rustdoc-args = ["--cfg", "docsrs"]</code>. Drop either and this
+    entire family disappears from the page — which reads as "the suite has no property tests", a claim the crate's
+    own README contradicts.</div>
+</section>
+</template>
+
+<template id="tpl-github-landing">
+<section data-region="G0">
+  <p class="badges">
+    <img alt="CI: passing" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='20'%3E%3Crect width='30' height='20' rx='3' fill='%23555'/%3E%3Crect x='26' width='62' height='20' rx='3' fill='%234c1'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3ECI%3C/text%3E%3Ctext x='32' y='14'%3Epassing%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] CI: passing</span>
+    <img alt="License: MIT OR Apache-2.0" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='20'%3E%3Crect width='54' height='20' rx='3' fill='%23555'/%3E%3Crect x='50' width='118' height='20' rx='3' fill='%23007ec6'/%3E%3Cg fill='%23fff' font-family='Verdana,DejaVu Sans,sans-serif' font-size='11'%3E%3Ctext x='6' y='14'%3Elicense%3C/text%3E%3Ctext x='56' y='14'%3EMIT OR Apache-2.0%3C/text%3E%3C/g%3E%3C/svg%3E">
+    <span class="badge-alt">[alt] License: MIT OR Apache-2.0</span>
+  </p>
+</section>
+<section data-region="G1">
+  <h1>happenstance</h1>
+  <p>An opinionated, storage-agnostic event sourcing library for Rust, built on the
+  <a href="https://dcb.events/specification/">Dynamic Consistency Boundary specification</a>: a contract for
+  storage, and a published conformance suite that decides who meets it.</p>
+</section>
+<section data-region="G2">
+  <blockquote>
+    <p><strong>Status at 0.2.0 (YYYY-MM-DD): published, and precise about what is in it.</strong> The contract and
+    its 89-rule conformance suite are real and tested. The typed layer is a facade over the contract, and every
+    storage adapter is a documented skeleton. <code>0.2.0</code> is the contract, the suite and the facade;
+    SQLite, Postgres, Neon, Ladybug and replication come after it. See <a href="#status">status</a>.</p>
+  </blockquote>
+</section>
+<section data-region="G3">
+  <h2>Status</h2>
+  <table>
+    <thead><tr><th>Crate</th><th>Role</th><th>Status</th></tr></thead>
+    <tbody data-rows="normal">
+      <tr><td><a href="crates/happenstance-core">happenstance-core</a></td><td>DCB types, storage ports, in-memory reference store</td><td>✅ published 0.2.0 — passes the suite</td></tr>
+      <tr><td><a href="crates/happenstance-testkit">happenstance-testkit</a></td><td>Conformance suite adapters must pass</td><td>✅ published 0.2.0 — 89 rules + property tests</td></tr>
+      <tr><td><a href="crates/happenstance">happenstance</a></td><td>Codecs, typed domain events, decision models — the crate an application programs against</td><td>✅ published 0.2.0 — compiles as a facade, typed layer next</td></tr>
+      <tr><td><a href="crates/happenstance-sqlite">happenstance-sqlite</a></td><td>SQLite event store and projection store</td><td>🔲 skeleton — has not run the suite</td></tr>
+      <tr><td><a href="crates/happenstance-ladybug">happenstance-ladybug</a></td><td>LadybugDB graph projection store</td><td>🔲 skeleton — has not run the suite</td></tr>
+      <tr><td>happenstance-postgres</td><td>Postgres store — the target that does <em>not</em> serialise its writers</td><td>🔲 planned — instrument first, target second</td></tr>
+      <tr><td>happenstance-neon</td><td>Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor</td><td>🔲 planned — instrument first, target second</td></tr>
+      <tr><td><a href="crates/happenstance-sync">happenstance-sync</a></td><td>The replication port: peers, and a runner that fans out across them</td><td>🔲 skeleton — open questions written down</td></tr>
+    </tbody>
+    <tbody data-rows="long">
+      <tr><td><a href="crates/happenstance-testkit">happenstance-testkit</a></td><td>Conformance suite adapters must pass, including the property-based and concurrency families</td><td>✅ published 0.2.0 — 89 rules + property tests</td></tr>
+      <tr><td>happenstance-cloudflare</td><td>Durable Object event store — the workspace's only <code>!Send</code> store, and the reason no port carries a <code>Send</code> bound</td><td>🔲 planned — instrument first, target second</td></tr>
+      <tr><td>happenstance-neon</td><td>Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor, and no way to hold a snapshot open across a decision</td><td>🔲 planned — instrument first, target second</td></tr>
+      <tr><td><a href="crates/happenstance-core">happenstance-core</a></td><td>DCB types, storage ports, in-memory reference store</td><td>✅ published 0.2.0 — passes the suite</td></tr>
+      <tr><td><a href="crates/happenstance">happenstance</a></td><td>Codecs, typed domain events, decision models — the crate an application programs against</td><td>✅ published 0.2.0 — compiles as a facade, typed layer next</td></tr>
+      <tr><td><a href="crates/happenstance-sqlite">happenstance-sqlite</a></td><td>SQLite event store and projection store</td><td>🔲 skeleton — has not run the suite</td></tr>
+      <tr><td><a href="crates/happenstance-ladybug">happenstance-ladybug</a></td><td>LadybugDB graph projection store</td><td>🔲 skeleton — has not run the suite</td></tr>
+      <tr><td><a href="crates/happenstance-sync">happenstance-sync</a></td><td>The replication port: peers, and a runner that fans out across them</td><td>🔲 skeleton — open questions written down</td></tr>
+    </tbody>
+  </table>
+  <p>The skeletons are not placeholders in the empty sense: each carries the design constraints and open decisions
+  for its pass. <a href="RUNBOOK.md"><code>RUNBOOK.md</code></a> sequences the remaining work.</p>
+</section>
+<section data-region="G4">
+  <h2>Quick start</h2>
+<pre><code class="language-toml">[dependencies]
+happenstance = "0.2"</code></pre>
+  <p>That resolves. The snippet on the crate's own page is its doctest and is the same text the published-install
+  smoke runs — see <a href="crates/happenstance/README.md"><code>crates/happenstance/README.md</code></a>.</p>
+</section>
+<section data-region="G5">
+  <h2>DCB in sixty seconds</h2>
+  <p>Classical event sourcing makes you draw consistency boundaries <em>before</em> you know what decisions you
+  will make. DCB draws the boundary <em>per decision</em> instead: a command handler reads exactly the events its
+  decision depends on — across as many entities as it likes — and then appends conditioned on <strong>nothing
+  matching that same query having appeared since</strong>.</p>
+<pre><code class="language-rust">let query = Query::from_items([
+    QueryItem::new(
+        ["CourseDefined", "StudentSubscribed", "StudentUnsubscribed"],
+        Tags::from_pairs([("course", "c1")])?,
+    )?,
+    QueryItem::new(
+        ["StudentSubscribed", "StudentUnsubscribed"],
+        Tags::from_pairs([("course", "c1"), ("student", "s1")])?,
+    )?,
+])?;
+
+let (events, last_seen) = read_decision_model(store, &amp;query).await?;
+let condition = AppendCondition::new(query).after_opt(last_seen);
+store.append(&amp;[subscribed], Some(&amp;condition)).await?;</code></pre>
+  <p>No aggregate. No saga. Run the full worked example: <code>cargo run -p course-subscriptions</code>.</p>
+</section>
+<section data-region="G6">
+  <h2>Prior art</h2>
+  <p><strong>As of YYYY-MM-DD.</strong> <a href="https://github.com/disintegrate-es/disintegrate">Disintegrate</a>
+  is the other Rust DCB library; it is Postgres-bound and macro-driven, and if you want DCB on Postgres today it
+  is the mature choice. <a href="https://crates.io/crates/umadb-dcb"><code>umadb-dcb</code></a> ships duplicated
+  sync and async traits. happenstance's bet is different: ports plus a <em>published</em> conformance suite, so
+  that "storage agnostic" is a claim anyone can check and third parties can ship adapters against.</p>
+</section>
+<section data-region="G7">
+  <h2>Licence</h2>
+  <p>Dual-licensed under <a href="LICENSE-MIT">MIT</a> or <a href="LICENSE-APACHE">Apache-2.0</a>, at your option.</p>
+</section>
+</template>
+
+<script>
+/* ============================================================================================
+   Frame builder. The mock is static; this script only stamps the same content into each
+   declared (surface x state x viewport x theme) cell so the matrix cannot silently lose a cell.
+   No fetch, no external module.
+   ============================================================================================ */
+const VP = { '1440x900': [1440, 900], '1024x768': [1024, 768] };
+const BUDGET = { '1440x900': { crates: 500, docs: 700, gh: 570 }, '1024x768': { crates: 340, docs: 550, gh: 418 } };
+const LINES  = { '1440x900': { crates: 21,  docs: 29,  gh: 24  }, '1024x768': { crates: 14,  docs: 22,  gh: 17  } };
+
+const SURFACES = [
+  { id:'crates-io-happenstance', host:'crates', primary:true,
+    route:'https://crates.io/crates/happenstance',
+    selector:'crates/happenstance/README.md',
+    renders:'readme = "README.md" (crates/happenstance/Cargo.toml:12)',
+    pattern:'proof-led identity block',
+    crate:{ name:'happenstance', ver:'0.2.0', desc:'DCB-compliant event sourcing with batteries: typed events, decision models and projection runners over a storage-agnostic contract.' },
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['images-blocked',['1440x900','1024x768']] ] },
+  { id:'crates-io-happenstance-core', host:'crates', primary:false,
+    route:'https://crates.io/crates/happenstance-core',
+    selector:'crates/happenstance-core/README.md',
+    renders:'readme = "README.md"',
+    pattern:'proof-led identity block',
+    crate:{ name:'happenstance-core', ver:'0.2.0', desc:'The happenstance contract: DCB value types, storage ports, error taxonomy and an in-memory reference event store.' },
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['images-blocked',['1440x900','1024x768']] ] },
+  { id:'crates-io-happenstance-testkit', host:'crates', primary:false,
+    route:'https://crates.io/crates/happenstance-testkit',
+    selector:'crates/happenstance-testkit/README.md',
+    renders:'readme = "README.md"',
+    pattern:'proof-led identity block, census demoted below the fold',
+    crate:{ name:'happenstance-testkit', ver:'0.2.0', desc:'The DCB conformance suite for happenstance event store adapters: 89 rules, each shown to reject a named wrong store.' },
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['images-blocked',['1440x900','1024x768']] ] },
+  { id:'docs-rs-happenstance', host:'docs', primary:true,
+    route:'https://docs.rs/happenstance/0.2.0/happenstance/',
+    selector:'crates/happenstance/src/lib.rs (//! module docs)',
+    renders:'rustdoc under [package.metadata.docs.rs], all-features = true — ABSENT today, added by this project',
+    pattern:'module-doc ladder with doc(cfg) gate annotations',
+    crate:{ name:'happenstance', ver:'0.2.0', mod:'happenstance' },
+    sidebar:['Status at 0.2.0','Using it today','What arrives here, and what stays below','Feature flags'],
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['all-features',['1440x900','1024x768']],
+             ['docs-build-failed',['1440x900','1024x768']] ] },
+  { id:'docs-rs-happenstance-core', host:'docs', primary:false,
+    route:'https://docs.rs/happenstance-core/0.2.0/happenstance_core/',
+    selector:'crates/happenstance-core/src/lib.rs (//! module docs)',
+    renders:'rustdoc under [package.metadata.docs.rs] (crates/happenstance-core/Cargo.toml:54-56)',
+    pattern:'module-doc ladder with doc(cfg) gate annotations',
+    crate:{ name:'happenstance-core', ver:'0.2.0', mod:'happenstance_core' },
+    sidebar:['Status at 0.2.0','Using it today','The shape of the API','DCB in a paragraph','Feature flags'],
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['all-features',['1440x900','1024x768']],
+             ['docs-build-failed',['1440x900','1024x768']] ] },
+  { id:'docs-rs-happenstance-testkit', host:'docs', primary:false,
+    route:'https://docs.rs/happenstance-testkit/0.2.0/happenstance_testkit/',
+    selector:'crates/happenstance-testkit/src/lib.rs (//! module docs)',
+    renders:'rustdoc under [package.metadata.docs.rs] (crates/happenstance-testkit/Cargo.toml:56-58)',
+    pattern:'module-doc ladder with doc(cfg) gate annotations',
+    crate:{ name:'happenstance-testkit', ver:'0.2.0', mod:'happenstance_testkit' },
+    sidebar:['Status at 0.2.0','Using it today','What a fixture is, and why it is not a closure','Choosing a harness','Feature flags'],
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['all-features',['1440x900','1024x768']],
+             ['docs-build-failed',['1440x900','1024x768']] ] },
+  { id:'github-landing', host:'gh', primary:false,
+    route:'https://github.com/Wet-Ink-Corporation/happenstance',
+    selector:'README.md',
+    renders:'GitHub, repo-root README — compiled by xtask, never published',
+    pattern:'contributor landing with the full status table and the full peer statement',
+    crate:{ name:'happenstance', ver:'0.2.0' },
+    states:[ ['first-screen-1440x900',['1440x900']], ['first-screen-1024x768',['1024x768']],
+             ['full-page',['1440x900','1024x768']], ['images-blocked',['1440x900','1024x768']],
+             ['long-label',['1440x900','1024x768']] ] }
+];
+
+const NOTES = {
+  'first-screen-1440x900': 'Clipped to the viewport. The rust-orange rule at the bottom edge IS the fold.',
+  'first-screen-1024x768': 'Clipped to the viewport. This is the binding constraint the whole design is dimensioned against.',
+  'full-page':      'Unclipped. The frame scrolls internally past 1500px; the true page height is printed below.',
+  'images-blocked': 'Every badge &lt;img&gt; is hidden and its alt text shown in a dotted box, as a browser with images off renders it.',
+  'all-features':   'Built with all-features = true and --cfg docsrs. The gated item carries rustdoc\'s real .stab.portability pill; the dashed strip is the AP-8 counter-example.',
+  'docs-build-failed': 'The docs.rs error page carrying our crate name. Nothing on any crates.io frame depends on this page rendering — that is why the packaged README is self-sufficient.',
+  'long-label':     'The longest crate name beside the longest role text. The Role cell wraps; the Status cell never does, because it is glyph AND 2-5 words.'
+};
+
+function el(tag, cls, html){ const n = document.createElement(tag); if(cls) n.className = cls; if(html!=null) n.innerHTML = html; return n; }
+
+function browserChrome(route, name){
+  return `<div class="chrome-browser">
+    <div class="chrome-tabs"><span class="chrome-dots"><i></i><i></i><i></i></span>
+      <div class="chrome-tab">${name}</div></div>
+    <div class="chrome-url"><span class="lock">&#128274;</span>${route}</div>
+  </div>`;
+}
+
+function cratesHost(s, bodyHtml){
+  return `<div class="host">
+    <div class="cio-header">
+      <span class="cio-mark">crates.io</span>
+      <span class="cio-search">Search crates…</span>
+      <span class="cio-nav"><span>Browse All Crates</span><span>Docs</span><span>Log in with GitHub</span></span>
+    </div>
+    <div class="cio-crate">
+      <div class="row1"><h1>${s.crate.name}</h1><span class="ver">${s.crate.ver}</span></div>
+      <p class="cio-desc">${s.crate.desc}</p>
+      <div class="cio-install"><code>cargo add ${s.crate.name}</code>
+        <button class="cio-btn" type="button">Copy Cargo.toml snippet</button>
+        <button class="cio-btn" type="button">Copy crate name and version</button></div>
+      <div class="cio-tabs"><span class="on">Readme</span><span>${s.crate.ver}</span><span>Dependencies</span><span>Dependents</span><span>Versions</span></div>
+    </div>
+    <div class="cio-metastack">
+      <div><b>Metadata</b>MIT OR Apache-2.0 &middot; ~48 KiB</div>
+      <div><b>Install</b>cargo add ${s.crate.name}</div>
+      <div><b>Documentation</b>docs.rs/${s.crate.name}</div>
+      <div><b>Repository</b>github.com/Wet-Ink-Corporation/happenstance</div>
+    </div>
+    <div class="cio-main">
+      <div class="cio-readme md">${bodyHtml}</div>
+      <aside class="cio-side">
+        <div class="blk"><h3>Metadata</h3><p>MIT OR Apache-2.0</p><p>~48 KiB</p><p>Rust 1.97.1+</p></div>
+        <div class="blk"><h3>Links</h3><p>Documentation</p><p>Repository</p><p>Homepage</p></div>
+        <div class="blk"><h3>Owners</h3><p>Wet Ink Corporation</p></div>
+      </aside>
+    </div>
+  </div>`;
+}
+
+function docsHost(s, bodyHtml){
+  const side = (s.sidebar||[]).map(h => `<li><a href="#">${h}</a></li>`).join('');
+  return `<div class="host">
+    <div class="rd-topbar"><span class="mark">Docs.rs</span>
+      <span class="search">Click or press ‘S’ to search…</span>
+      <span class="links"><span>Releases</span><span>Dependencies</span><span>Versions</span><span>Platform</span></span></div>
+    <div class="rd-crumb"><span>${s.crate.name} ${s.crate.ver}</span>
+      <span class="pill">All Items</span><span class="pill">Settings</span><span class="pill">Help</span>
+      <span class="pill">Summary</span><span class="pill">Source</span>
+      <span class="rd-sections">${(s.sidebar||[]).map(h=>`<span>${h}</span>`).join('')}</span></div>
+    <div class="rustdoc">
+      <nav class="sidebar">
+        <p class="sidebar-crate">${s.crate.mod}<span class="v">${s.crate.ver}</span></p>
+        <h2 class="location">Sections</h2>
+        <div class="block"><ul>${side}</ul></div>
+        <h2 class="location">Crate items</h2>
+        <div class="block"><ul>
+          <li><a href="#">Structs</a></li><li><a href="#">Enums</a></li><li><a href="#">Traits</a></li>
+          <li><a href="#">Functions</a></li><li><a href="#">Macros</a></li></ul></div>
+      </nav>
+      <main class="main-content">
+        <h1 class="fqn">Crate ${s.crate.mod}<span class="ver">${s.crate.ver}</span></h1>
+        <div class="docblock md">${bodyHtml}</div>
+      </main>
+    </div>
+  </div>`;
+}
+
+function docsFailHost(s){
+  return `<div class="host">
+    <div class="rd-topbar"><span class="mark">Docs.rs</span>
+      <span class="search">Click or press ‘S’ to search…</span>
+      <span class="links"><span>Releases</span><span>Builds</span><span>Versions</span></span></div>
+    <div class="rd-crumb"><span>${s.crate.name} ${s.crate.ver}</span><span class="pill">Builds</span></div>
+    <div class="rd-fail">
+      <span class="bang">build failed</span>
+      <h2>${s.crate.name} ${s.crate.ver} failed to build</h2>
+      <p>The documentation for this release could not be generated. You may want to try the
+        <a href="#">latest successful build</a>, or read the build log below.</p>
+<pre>[INFO] running &#96;docker exec -t ... cargo +nightly rustdoc --lib -Zrustdoc-map
+       --config build.rustdocflags=["--cfg","docsrs"] --all-features&#96;
+error[E0432]: unresolved import &#96;happenstance_core::ProjectionStore&#96;
+  --&gt; src/lib.rs:76:9
+   |
+76 | pub use happenstance_core::*;
+   |         ^^^^^^^^^^^^^^^^^^^^ no &#96;ProjectionStore&#96; in the root
+error: could not document &#96;${s.crate.name}&#96;</pre>
+      <p>Reading this page is the failure mode the packaged README is written to survive: no claim on the
+        crates.io page depends on docs.rs rendering, and the compliance evidence link does not point here.</p>
+    </div>
+  </div>`;
+}
+
+function ghHost(s, bodyHtml){
+  return `<div class="host">
+    <div class="gh-topbar"><span class="mark">GitHub</span>
+      <span class="search">Type / to search</span>
+      <span class="right"><span>Pull requests</span><span>Issues</span><span>Marketplace</span><span>Explore</span></span></div>
+    <div class="gh-repohead">
+      <p class="name"><a href="#">Wet-Ink-Corporation</a><span class="slash">/</span><a href="#">happenstance</a>
+        <span class="vis">Public</span></p>
+      <div class="gh-tabs"><span class="on">Code</span><span>Issues</span><span>Pull requests</span><span>Actions</span><span>Projects</span><span>Security</span><span>Insights</span></div>
+      <div class="gh-filebar"><span>main</span><span>27 branches</span><span>3 tags</span><span style="margin-left:auto">Go to file</span><span>Add file</span><span>Code</span></div>
+    </div>
+    <div class="gh-body">
+      <div class="gh-readme markdown-body md">${bodyHtml}</div>
+      <aside class="gh-about"><h3>About</h3>
+        <p>DCB-compliant, storage-agnostic event sourcing for Rust: a contract, and a published conformance suite.</p>
+        <p>dcb &middot; event-sourcing &middot; rust &middot; cqrs</p>
+        <h3 style="margin-top:14px">Releases</h3><p>0.2.0 — latest</p>
+        <h3 style="margin-top:14px">Packages</h3><p>3 published crates</p></aside>
+    </div>
+  </div>`;
+}
+
+function buildFrame(s, state, vpKey){
+  const [w, h] = VP[vpKey];
+  const clip = state.startsWith('first-screen');
+  const body = document.getElementById('tpl-' + s.id).innerHTML;
+
+  const frame = el('div', 'frame');
+  const head = el('div', 'frame-head');
+  head.appendChild(el('span', 'fid', s.id));
+  head.appendChild(el('span', 'tag state', state));
+  head.appendChild(el('span', 'tag', vpKey));
+  head.appendChild(el('span', 'tag', 'theme: light'));
+  if (clip) head.appendChild(el('span', 'tag clip', 'clipped at the fold'));
+  frame.appendChild(head);
+
+  const noteBits = [NOTES[state]];
+  if (clip) {
+    const b = BUDGET[vpKey][s.host], l = LINES[vpKey][s.host];
+    noteBits.push(`<b>Budget:</b> ${h}px viewport − 84px browser chrome − host chrome = <b>${b}px ≈ ${l} rendered lines</b> of content above the fold (16px / 1.5 ⇒ 24px per line).`);
+  }
+  frame.appendChild(el('div', 'frame-note', noteBits.filter(Boolean).join(' ')));
+
+  const stage = el('div', 'stage');
+  const inner = el('div', 'stage-inner');
+  const dev = el('div', `device host-${s.host} vw-${w} vp-${h} ${clip ? 'clip' : 'fullpage'} state-${state}`);
+  let hostHtml;
+  if (state === 'docs-build-failed') hostHtml = docsFailHost(s);
+  else if (s.host === 'crates')      hostHtml = cratesHost(s, body);
+  else if (s.host === 'docs')        hostHtml = docsHost(s, body);
+  else                               hostHtml = ghHost(s, body);
+  dev.innerHTML = browserChrome(s.route, s.crate.name + ' — ' + (s.host === 'crates' ? 'crates.io' : s.host === 'docs' ? 'docs.rs' : 'GitHub')) + hostHtml;
+  if (clip) dev.appendChild(el('div', 'foldflag', 'fold — ' + vpKey));
+  inner.appendChild(dev);
+  stage.appendChild(inner);
+  frame.appendChild(stage);
+
+  if (!clip) {
+    const m = el('div', 'frame-note');
+    frame.appendChild(m);
+    requestAnimationFrame(() => {
+      m.innerHTML = `<b>True page height:</b> ${dev.scrollHeight}px at ${w}px wide — ` +
+        `${Math.round((dev.scrollHeight - 84) / 24)} rendered lines of host + content. ` +
+        `The frame above shows the first 1500px and scrolls.`;
+    });
+  }
+  return frame;
+}
+
+const out = document.getElementById('out'), nav = document.getElementById('nav'), refrows = document.getElementById('refrows');
+SURFACES.forEach(s => {
+  const sec = el('section', 'surface');
+  sec.id = s.id;
+  sec.innerHTML =
+    `<h2>${s.id}<span class="pri ${s.primary ? '' : 'sec'}">${s.primary ? 'primary' : 'secondary'}</span></h2>
+     <p class="meta"><b>route</b> ${s.route}<br><b>source of record</b> ${s.selector}<br><b>renders from</b> ${s.renders}</p>
+     <p class="pattern"><b>Pattern:</b> ${s.pattern}. No DOM selector is nameable for this surface — it is a
+     third-party renderer this project ships Markdown or rustdoc <em>into</em>, so <code>selector</code> carries the
+     file in this tree the page is rendered from.</p>
+     <p class="pattern"><b>State accounting.</b> The declared state <code>light-theme</code> is the theme axis of
+     every frame below (this run's theme list is <code>["light"]</code>), so it is carried rather than drawn
+     separately. <code>dark-theme</code> is declared on the surface but is outside this run's theme list; it is
+     drawn once, supplementary, on <code>crates-io-happenstance</code>. Every other declared state is drawn at
+     both viewports, except the two that name their own viewport.</p>`;
+  const frames = el('div', 'frames');
+  s.states.forEach(([state, vps]) => vps.forEach(vp => frames.appendChild(buildFrame(s, state, vp))));
+  sec.appendChild(frames);
+  out.appendChild(sec);
+
+  const a = el('a', null, s.id.replace('crates-io-', 'cio·').replace('docs-rs-', 'docs·').replace('github-', 'gh·'));
+  a.href = '#' + s.id; nav.appendChild(a);
+
+  const tr = el('tr');
+  tr.innerHTML = `<td><code>${s.id}</code></td>` +
+    ['1440x900', '1024x768'].map(v =>
+      `<td><code>.bklg/from-contract-to-published-library/publication-and-positioning/design/reference/${s.id}@${v}.png</code></td>`).join('');
+  refrows.appendChild(tr);
+});
+
+/* ---- supplementary dark frame: not in this run's theme list, kept so the "we set no colour,
+        so it is legible in both" claim in _design.md ## States is falsifiable rather than asserted ---- */
+(function () {
+  const s = SURFACES[0];
+  const sec = document.getElementById(s.id);
+  const f = buildFrame(s, 'full-page', '1440x900');
+  f.querySelector('.frame-head').innerHTML =
+    `<span class="fid">${s.id}</span><span class="tag state">dark-theme</span><span class="tag">1440x900</span>` +
+    `<span class="tag clip">supplementary — outside this run's theme list ["light"]</span>`;
+  f.querySelectorAll('.frame-note')[0].innerHTML =
+    'Declared on the surface but <b>not</b> in this capture run\'s theme list, so it is not part of the sign-off ' +
+    'matrix. It is drawn once because the design\'s Theme-state claim — <i>we set no colour, so both themes are ' +
+    'legible</i> — is otherwise unfalsifiable. Nothing in the copy changes; only the host repaints.';
+  f.querySelector('.device').classList.add('theme-dark');
+  sec.querySelector('.frames').appendChild(f);
+})();
+
+/* ---- controls ---- */
+document.getElementById('seg-regions').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.body.classList.toggle('no-regions', b.dataset.v === 'off');
+});
+document.getElementById('seg-zoom').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('.stage-inner').forEach(n => { n.style.zoom = b.dataset.v; });
+});
+</script>

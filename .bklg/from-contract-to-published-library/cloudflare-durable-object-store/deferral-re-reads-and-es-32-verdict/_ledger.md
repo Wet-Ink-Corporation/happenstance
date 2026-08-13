@@ -1,0 +1,91 @@
+---
+item: "HS-S0057"
+stage: implement
+created: "2026-08-12"
+updated: "2026-08-12"
+---
+
+# Acceptance ledger — CF-14 and CF-27 re-read on this runtime, and the ES-32 verdict on disk
+
+The machine-checkable Definition-of-Done ledger for this story (RFC §6.5). One row per spec
+`AC-###`. Planning authors every row with `satisfied: false`; the implementer may only flip a row to
+`satisfied: true` and MUST cite real evidence (a `file:line` and/or the verifying test id) — never
+edit, remove, or re-word a criterion, and never flip a satisfied row back. `redkiln verify --grain
+story` reads the fenced block below and blocks `implement → report` unless every spec AC is present,
+`satisfied: true`, and carries non-placeholder evidence (and no AC that was satisfied on the base
+branch has regressed). Scope changes are a human decision recorded through `redkiln advance`, not a
+quiet ledger edit.
+
+**A note this story needs and most do not.** Nothing here is proven by a compiler.
+`RUNBOOK.md` is inert to package selection (`xtask/src/affected.rs:262`), so the automated half of
+this gate is `cargo xtask spec-trace` plus five file lints, and the rest is a reviewer performing
+named procedures. Evidence on these rows must therefore be a `RUNBOOK.md:<line>` for the written
+verdict **and** the artefact it was read from — a per-rule line from the `workerd` run, a fixture
+`Capability` reason, or a documented `SqlStorage` property. A row whose evidence cites only the
+sentence it wrote is a row that proves the sentence exists, not that it is a verdict (spec AC-007).
+
+If a re-read fires a falsifier, AC-009's row is where it is recorded and handed to
+`adr-0023-and-atom-resolutions` (HS-S0058). If none fires, that row says so explicitly.
+
+```yaml
+- id: AC-001
+  criterion: "GIVEN a gate reader on backbone activity D — know what this runtime cannot do, and why (_storymap.md:29) — who knows the workspace bought a REOPEN capability and a DurableFixture at phase 3 before any real store could reopen anything, WHEN they open RUNBOOK.md's ten-row [DEFERRED] table and read the CF-14 row without opening spec/SPECIFICATION.md, THEN the cell's first clause is the verdict for this runtime — the deferral still holds here, or it does not — and what follows is the one narrow finding it rests on: whether CloudflareFixture honoured REOPEN through the same contract shape MemoryFixture and DurableFixture use, or whether \"durable\" needed grading — naming the fixture, the rule acknowledged_writes_survive_a_reopen, and the workerd run it was read from"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:559 — the CF-14 row of `### The 10 [DEFERRED] clauses`"
+  verifying_test: "cargo xtask spec-trace; review gate — RUNBOOK.md:559 read against spec/SPECIFICATION.md:7471-7480 and :7565-7576, with the cited run line traced to .bklg/from-contract-to-published-library/cloudflare-durable-object-store/every-rule-under-workerd/_ledger.md"
+- id: AC-002
+  criterion: "GIVEN the implementer of sqlite-durable-store (HS-P0012), who inherits CF-14's far end and must not discover from an absence that it was left to them, WHEN they read the same row and the durability Decision-ledger row above it, THEN the re-read says in a sentence that this project supplied no store that can lose an acknowledged write to a fault rather than to an instruction, names phase 8 / HS-P0012 as the owner of that far end, and RUNBOOK.md:486 is reconciled to point at the phase-9 reading instead of stopping at phase 3's — so the two rows agree rather than one going stale"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:559 and RUNBOOK.md:486 (the durability Decision-ledger row), reconciled in one commit"
+  verifying_test: "review gate — the :559/:486 diff read together; `git diff -- spec/` empty (CF-14's [DEFERRED] marker untouched); owner named matches .bklg/from-contract-to-published-library/sqlite-durable-store/project.md and RUNBOOK.md:605"
+- id: AC-003
+  criterion: "GIVEN an evaluator on Decide in one sitting who wants to know what this library's stores may quietly forget before adopting it, WHEN they read the CF-27 row, THEN it states whether a Durable Object makes the suffix-store hazard more or less real than the portfolio's \"No, and nothing is planned\" completeness row records (spec/SPECIFICATION.md:8096), read against what this runtime actually permits — an object's storage deletable wholesale, an object evictable — as the real bindings and their four modelled properties leave it, and not against the clause text"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:560 — the CF-27 row of `### The 10 [DEFERRED] clauses`"
+  verifying_test: "cargo xtask spec-trace; review gate — RUNBOOK.md:560 read against spec/SPECIFICATION.md:8034-8045 and :8096, and against crates/happenstance-cloudflare/src/sql_storage.rs:1-24 as the real bindings landed it"
+- id: AC-004
+  criterion: "GIVEN the implementer of retention-and-incomplete-logs (HS-P0018), who owns the completeness instrument and whose project is the only place initiative DoD 15 can close (initiative.md:400-402), WHEN they open the CF-27 row looking for their input, THEN the row names HS-P0018 / phase 14 as the owner of a testkit-adjacent store that holds only a suffix of its own log and reports that it does, and states in the same breath that this story deliberately refuses to build it — so the clause stays owned and RUNBOOK.md:562-563's standing claim \"No deferred clause is unowned\" survives the diff rather than being weakened by an ownerless observation"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:560 — the CF-27 row's owning-phase and handoff half"
+  verifying_test: "review gate — RUNBOOK.md:560 read against .bklg/from-contract-to-published-library/retention-and-incomplete-logs/project.md and _intake-brief.md:83-85; the ten-row deferred table still lists CF-27 with a named owning phase"
+- id: AC-005
+  criterion: "GIVEN a gate reader arriving at Phase 9's exit criteria to decide whether the phase is finished, WHEN they read RUNBOOK.md:4300 and follow it into the phase's Session log, THEN one paragraph answers the falsifier exactly as RUNBOOK.md:597 poses it — does a Durable Object's storage API, including its alarm, make a tail or subscription seam cheap enough to reopen post-0.1 — engaging ES-32's own asymmetry (adding the capability later is additive, while removing it later is not) and the three shapes that cannot hold a subscriber open, reaching a verdict either way, and stating which falsifier it answers so the clause's other, benchmark-shaped falsifier (the projection-runner measurement, spec/SPECIFICATION.md:4026-4030, owned with phase 7 at RUNBOOK.md:498) is visibly not claimed as discharged"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:4307 (Phase 9 Session log — the paragraph), with RUNBOOK.md:4300 ticked and RUNBOOK.md:597 and :498 pointing at it"
+  verifying_test: "review gate — the paragraph read against spec/SPECIFICATION.md:4021-4052; a reviewer finds the paragraph from the :4300 tick in one hop; cargo xtask spec-trace green"
+- id: AC-006
+  criterion: "GIVEN a reviewer whose job is to confirm that a recorded verdict did not quietly become an acted-on one — the exact failure ES-32 forbids at 0.1 — WHEN they read `git diff --stat`, THEN the diff touches only RUNBOOK.md and this story's own directory: no crates/**, no spec/**, no .kb/**; no tail, subscribe or notify method, no TailingEventStore sub-trait, no alarm plumbing, no Cargo feature; and the PR is revertible on its own, because nothing outside prose depends on anything it wrote"
+  satisfied: false
+  evidence: ""
+  mount_point: "the PR boundary block in spec.md — RUNBOOK.md plus .bklg/from-contract-to-published-library/cloudflare-durable-object-store/deferral-re-reads-and-es-32-verdict/**"
+  verifying_test: "`git diff --stat` read against the PR boundary block; cargo xtask ci --fast (.redkiln/config.yaml integration_scoped) green"
+- id: AC-007
+  criterion: "GIVEN an adapter author on Learn when you are finished, who has been told by this project's own intake that a build proves nothing because a todo!() body type-checks against any signature (_intake-brief.md:69-76), WHEN they read all three verdicts, THEN each one cites at least one artefact this project produced and could not have been written before that artefact existed — a per-rule line from the workerd run, a CloudflareFixture Capability constant with its stated reason as the run emitted it, or a documented property of the real SqlStorage bindings — and none of the three is the clause restated in other words"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:559, :560 and :4307 — every one of the three verdicts"
+  verifying_test: "evidence trace — each cited artefact resolved in every-rule-under-workerd/_ledger.md or measured-store-limits/spec.md, with crates/happenstance-testkit/src/contract.rs:473-483 as the shape of skip evidence; plus the recorded negative control (each sentence cannot be written from the clause text alone), pasted into the implementation report"
+- id: AC-008
+  criterion: "GIVEN a gate reader who knows §1.3's census is the one count in the specification a human computed by reading it and that spec-trace therefore checks it rather than generating it, WHEN this PR merges, THEN CF-14 and CF-27 are still [DEFERRED], ES-32 is still [PROVISIONAL], the deferred table still carries thirteen rows of which three are struck and ten live — struck rows preserved for a reader arriving from an older commit — and the checker still counts and names the same ten"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md:538-563 (the deferred table and its equality statement) and RUNBOOK.md:588-597 (the provisional group table); spec/SPECIFICATION.md unmodified"
+  verifying_test: "cargo xtask spec-trace; cargo xtask affected --base main (runs retired_rules, the five file lints and spec-trace unconditionally — xtask/src/affected.rs:119-125, :248-266); `git diff -- spec/SPECIFICATION.md` empty"
+- id: AC-009
+  criterion: "GIVEN the implementer of adr-0023-and-atom-resolutions (HS-S0058), who merges last in this milestone and owns every .kb/ write in this project, WHEN a re-read fires a falsifier — CloudflareFixture could not express REOPEN in one shape, or the ES-32 reading concludes the port should move before 0.1 — THEN the finding is written as a named open item in this story's _ledger.md evidence and in the RUNBOOK row that carries the verdict, handed by name to HS-S0058 and to the runbook's ADR queue (RUNBOOK.md:302), and no atom, ADR or clause edit originates in this PR; and if no falsifier fires, the ledger says so explicitly rather than leaving the question blank"
+  satisfied: false
+  evidence: ""
+  mount_point: "this _ledger.md row plus the RUNBOOK.md row carrying the affected verdict (:559, :560 or :4307), handed to RUNBOOK.md:302's ADR-0023 queue row"
+  verifying_test: "`git diff --stat` shows no path under .kb/; redkiln validate --kb && redkiln doctor clean; review gate — the handoff sentence read against _storymap.md:94-102"
+- id: AC-010
+  criterion: "GIVEN the gate reader of backbone activity D again, now mid-scroll and unwilling to open a second file, WHEN they reach the deferred table, THEN each verdict is where they already are — a cell in an existing table row and a paragraph inside Phase 9's existing Session log, with no new top-level section, no new table and no bare \"see phase 9\" pointer that costs a jump without carrying a conclusion; each row cell stays within the one-to-three-sentence budget its ten neighbours keep (RUNBOOK.md:548-560); the long form exists once, in the session log, and the other four sites point at it rather than copying it; and CF-14, CF-27 and ES-32 are each greppable in plain text from the row that carries their verdict"
+  satisfied: false
+  evidence: ""
+  mount_point: "RUNBOOK.md — the five sites together: :486, :498, :559, :560, :597, and the Session log at :4307"
+  verifying_test: "review gate — the rendered RUNBOOK.md diff against its neighbouring rows at :549-557; the `rg -n \"CF-14|CF-27|ES-32\" RUNBOOK.md` walk showing one authoritative statement per clause and pointers rather than copies; sentence count per new cell"
+```
