@@ -7,9 +7,9 @@ title: DT-3 and DT-8 resolved in the public-API design record
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,12 +22,13 @@ archetype: foundation
 slice: decisions-and-design-record
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:08:49.976Z
+updated: 2026-08-14T13:32:02.615Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 0df2c1c
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
