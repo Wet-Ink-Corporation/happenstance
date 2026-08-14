@@ -233,7 +233,8 @@ mod registry;
 mod suite;
 
 pub use contract::{
-    Capability, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, ProjectionFixture, RuleOutcome,
+    Capability, Fixture, NO_BATCH_READ_PATH, NO_BATCH_READ_PATH_REASON, NO_CEILING_REASON,
+    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome,
 };
 pub use registry::block_on;
 pub use suite::rules;

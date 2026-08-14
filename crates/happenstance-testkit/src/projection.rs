@@ -41,11 +41,11 @@
 //! workspace red, and there is no exemption list.
 //!
 //! What a green run still does **not** prove is that this family is complete.
-//! Three of §4.11's seventeen rules are unwritten — `batch_reads_reflect_pending_writes`,
-//! `rebuild_is_chunk_size_invariant` and `rebuilding_is_distinguishable_from_live`,
-//! which land with the read-through and rebuild family — and six more are
-//! runner-dependent and belong to the workspace e2e crate under CF-36
-//! (`spec/SPECIFICATION.md:5694-5703`).
+//! Every rule §4.11 assigns to an adapter's own suite is now written; what is
+//! still owed is the **six runner-dependent** ones, which CF-36 moves to the
+//! workspace e2e crate because they need a runner rather than a store
+//! (`spec/SPECIFICATION.md:5694-5703`). A store that passes everything here has
+//! not been observed under replay.
 //!
 //! # Two rules here are answered by a skip against the reference fixture
 //!
@@ -64,8 +64,20 @@
 //! therefore prints two `SKIP` lines, and an adapter that wants either conjunct
 //! checked has to supply what its own store can do.
 //!
-//! Read that as the answer to "does a green run mean anything here": for eleven
-//! of the thirteen landed rules it means the store was driven and asserted
+//! A third switch can produce a skip and is not on the fixture at all:
+//! [`READS_THROUGH_BATCH`](happenstance_core::ProjectionProbe::READS_THROUGH_BATCH)
+//! is a `const` on the **store's** probe impl, because whether a batch can be
+//! read through is a property of the batch type. An adapter declaring it `false`
+//! — which PS-12 permits outright — gets
+//! [`batch_reads_reflect_pending_writes`](rules::batch_reads_reflect_pending_writes)
+//! and [`rebuild_is_chunk_size_invariant`](rules::rebuild_is_chunk_size_invariant)
+//! as skips naming that constant, with a reason the testkit writes rather than
+//! the fixture, for [`NO_CEILING_REASON`](crate::NO_CEILING_REASON)'s reason.
+//! `MemoryProjectionStore` declares `true`, so a reference run does not print
+//! those two.
+//!
+//! Read that as the answer to "does a green run mean anything here": for fifteen
+//! of the seventeen landed rules it means the store was driven and asserted
 //! about; for these two it means what the `SKIP` lines say. Neither rule is
 //! decorative — `PartialCommitStore`, `RefusalAsSuccessStore` and
 //! `RefusalAfterTheFactStore` fail them by name in
@@ -170,6 +182,37 @@ macro_rules! require {
     };
 }
 
+/// Returns a reported skip unless the fixture's **store** can be read through an
+/// open batch.
+///
+/// [`require!`]'s third sibling, and the one whose switch is not on the fixture
+/// at all: [`READS_THROUGH_BATCH`](happenstance_core::ProjectionProbe::READS_THROUGH_BATCH)
+/// lives on the probe, beside the store, because whether a batch can be read
+/// through is a property of the batch *type* rather than of the fixture's
+/// environment. So this cannot be `require!` with a different argument — that
+/// macro resolves `<F as ProjectionFixture>::$capability` and stringifies an
+/// identifier, and there is no identifier here for it to stringify.
+///
+/// What it reports instead is [`NO_BATCH_READ_PATH`](crate::NO_BATCH_READ_PATH),
+/// a `&'static str` naming the constant with its path, and
+/// [`NO_BATCH_READ_PATH_REASON`](crate::NO_BATCH_READ_PATH_REASON), which is
+/// **testkit-written** for [`NO_CEILING_REASON`](crate::NO_CEILING_REASON)'s
+/// reason and is the second and last instance of that exception. The skip is the
+/// same [`RuleOutcome::Skipped`](crate::RuleOutcome::Skipped), rendered by the
+/// same `skip_line`, in the same one-line shape: there is no second declension
+/// policy here, only a switch in a second place.
+macro_rules! require_read_through {
+    ($fixture:ident) => {
+        if !<<$fixture as $crate::ProjectionFixture>::Store as ProjectionProbe>::READS_THROUGH_BATCH
+        {
+            return $crate::RuleOutcome::Skipped {
+                capability: $crate::NO_BATCH_READ_PATH,
+                reason: $crate::NO_BATCH_READ_PATH_REASON,
+            };
+        }
+    };
+}
+
 /// The projection conformance rules.
 ///
 /// Each rule is an independent async function taking `impl AsyncFn() -> F`: not
@@ -220,6 +263,23 @@ pub mod rules {
     /// a store that writes the right key with the wrong value is a defect a
     /// shared value would hide.
     const SECOND_VALUE: u64 = 37;
+
+    /// The replay [`rebuild_is_chunk_size_invariant`] runs at three chunk sizes,
+    /// as keys.
+    ///
+    /// Two keys, one written four times and one twice, arranged so that chunk
+    /// size 3 puts a repeated key both **inside** one chunk and **across** a
+    /// boundary. Without a key repeated inside a chunk the arithmetic cannot
+    /// diverge and the rule passes against a store that cannot read through its
+    /// own batch — which is the shape of a rule that certifies PS-13 and PS-14 on
+    /// nothing.
+    ///
+    /// At module scope rather than inside the rule because a `const` after a
+    /// statement is `clippy::items_after_statements`, and the gate runs
+    /// `-D warnings`.
+    const REBUILD_SEQUENCE: [&str; 6] = [
+        PROBE_KEY, PROBE_KEY, SECOND_KEY, PROBE_KEY, SECOND_KEY, PROBE_KEY,
+    ];
 
     /// The key an *anchoring* commit writes.
     ///
@@ -1515,6 +1575,263 @@ pub mod rules {
 
         RuleOutcome::Ran
     }
+
+    // ---------------------------------------------------------------------
+    // Reading, and rebuilding
+    //
+    // Three of `ProjectionStore`'s guarantees are about a *read*: whether a
+    // batch can see its own pending writes, whether a rebuild produces the same
+    // read model however it is chunked, and whether a store rebuilding a
+    // projection is distinguishable from one serving it live. The first two are
+    // gated on the probe's own switch, because an adapter that buffers its
+    // writes has no read path to answer them with and PS-12 permits that
+    // outright.
+    // ---------------------------------------------------------------------
+
+    /// An open batch can be read through, and sees its own pending writes.
+    ///
+    /// PS-12. A projection that maintains a counter, a running total or any
+    /// other read-modify-write does `get` then `set` **inside** the batch, and a
+    /// store whose batch `get` answers from committed state loses every write
+    /// the batch has not committed yet — silently, and worst exactly when the
+    /// chunk is large.
+    ///
+    /// **Rejects:** `CommittedReadBatchStore` — a batch `get` that goes to the
+    /// store. It is the *natural* shape rather than a contrivance: one round
+    /// trip on the connection the batch is already holding is what an adapter
+    /// author writes, and it is right for every projection that never reads what
+    /// it wrote.
+    ///
+    /// The assertion is on the **value** written, not on `is_some()`: a store
+    /// that answered `Some(0)` for every key would pass a presence check while
+    /// losing the write.
+    ///
+    /// # What a skip here does not cover, stated rather than left to be inferred
+    ///
+    /// Declaring [`READS_THROUGH_BATCH`](happenstance_core::ProjectionProbe::READS_THROUGH_BATCH)
+    /// `false` is a conformant answer — PS-12's second arm permits a batch with
+    /// no read path at all — and this rule then reports a skip. What that skip
+    /// does **not** say is that the adapter is safe for read-modify-write
+    /// projections. It says the opposite: such an adapter has no read path for a
+    /// projection's `apply` to use, which is the situation §4.4 describes going
+    /// wrong, and [`rebuild_is_chunk_size_invariant`] is unverified for it for
+    /// exactly the same reason.
+    pub async fn batch_reads_reflect_pending_writes<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // No `must!`: the read under test is through the *same* handle that owns
+        // the batch, by construction. A fixture that declines `SECOND_HANDLE`
+        // still runs this rule and still passes it.
+        require_read_through!(F);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+
+        let mut batch = writer.begin();
+        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+
+        assert_eq!(
+            writer.probe_read_through(&batch, PROBE_KEY),
+            Some(PROBE_VALUE),
+            "a store declaring `READS_THROUGH_BATCH` must let an open batch see \
+             its own pending writes, and this one answered from committed state. \
+             A projection doing `get` then `set` inside one batch then reads the \
+             value from *before* the batch began, and every increment after the \
+             first is lost — with no error, and least visibly when the chunk is \
+             largest"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A rebuild produces the same read model however it is chunked.
+    ///
+    /// PS-13 and PS-14, both `[FROZEN]`. A rebuild is run at whatever chunk size
+    /// fits the operator's memory budget, and an adapter that lets the chunk size
+    /// change the answer turns "how much RAM did we give it" into a correctness
+    /// variable nobody logs.
+    ///
+    /// **Rejects:** `CommittedReadBatchStore`, whose batch `get` answers from
+    /// committed state, and `FirstWriteWinsBatchStore`, whose batch stages writes
+    /// with `entry().or_insert(…)` and keeps the **first** value for a key — the
+    /// natural spelling when the batch is thought of as a dedup buffer. Its reads
+    /// through the batch are honest, so it passes the rule above and fails only
+    /// this one.
+    ///
+    /// # The sequence, and why each step is a read-modify-write
+    ///
+    /// One fixed sequence — `a, a, b, a, b, a` — replayed at chunk sizes **1**,
+    /// **3** and whole-log against **three isolated stores**, one `open()` per
+    /// run. Each step reads the key *through the batch* and writes one more than
+    /// it saw, so the correct final state is `a = 4, b = 2` at every chunking.
+    ///
+    /// A plain `set` instead of an increment is the trap: last-writer-wins is
+    /// chunk-insensitive **by construction**, so a rule written that way passes
+    /// against a store that cannot read through its own batch and certifies PS-13
+    /// and PS-14 on nothing. The sizes are chosen for the same reason — 1 is the
+    /// degenerate case where pending and committed state coincide and a broken
+    /// store gets it right, 3 is the smallest size that puts a repeated key both
+    /// inside one chunk and across a boundary, and whole-log is what a rebuild
+    /// actually runs at.
+    ///
+    /// # Two things it deliberately does not do
+    ///
+    /// It compares **read models**, never checkpoints and never positions: the
+    /// positions it commits at are its own, deliberately non-contiguous so that a
+    /// later edit growing a `position == index + 1` assumption is visible, and
+    /// strictly increasing so it does not trip PS-22 for a reason that has
+    /// nothing to do with what it is testing.
+    ///
+    /// And the end-of-run comparison uses `probe_read`, which is the *suite*
+    /// reading committed state after the fact. That is not the out-of-band read
+    /// PS-13 forbids: the clause constrains what a **projection's** `apply` may
+    /// read while it is writing, and every read this rule makes on that path goes
+    /// through the batch.
+    pub async fn rebuild_is_chunk_size_invariant<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require_read_through!(F);
+
+        let mut runs = Vec::new();
+
+        for chunk in [1_usize, 3, REBUILD_SEQUENCE.len()] {
+            // One `open()` per run: three isolated backing stores, so a run can
+            // neither see nor be seen by the others.
+            let fixture = open().await;
+            let writer = fixture.connect().await;
+            let id = ProjectionId::new("rebuild_is_chunk_size_invariant");
+
+            // Non-contiguous on purpose, and strictly increasing across chunks.
+            let mut position = SequencePosition::FIRST;
+
+            for slice in REBUILD_SEQUENCE.chunks(chunk) {
+                let mut batch = writer.begin();
+                for key in slice {
+                    // The read-modify-write, entirely through the batch. A plain
+                    // `set` here would make this rule chunk-insensitive and
+                    // therefore decorative.
+                    let seen = writer.probe_read_through(&batch, key).unwrap_or(0);
+                    writer.probe_write(&mut batch, key, seen + 1);
+                }
+                commit_ok(&writer, batch, &id, position, Authority::Rebuilding).await;
+                position = after(after(position));
+            }
+
+            runs.push((
+                chunk,
+                probe_read_ok(&writer, PROBE_KEY).await,
+                probe_read_ok(&writer, SECOND_KEY).await,
+            ));
+        }
+
+        let (baseline_chunk, baseline_first, baseline_second) = runs[0];
+        for &(chunk, first, second) in &runs[1..] {
+            assert_eq!(
+                (first, second),
+                (baseline_first, baseline_second),
+                "a rebuild must produce the same read model however it is \
+                 chunked, and replaying the same sequence at chunk size {chunk} \
+                 produced a different read model from chunk size \
+                 {baseline_chunk}. Every step of that sequence reads its key \
+                 through the open batch and writes one more than it saw, so a \
+                 store whose batch reads answer from committed state — or whose \
+                 batch keeps the first staged value for a key rather than the \
+                 last — loses every write after the first *within* a chunk, and \
+                 the operator's memory budget silently becomes a correctness \
+                 variable"
+            );
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// A projection being rebuilt is distinguishable from one serving live.
+    ///
+    /// PS-24. A reader deciding whether the rows in front of it are
+    /// authoritative gets its answer from the checkpoint's **variant**, and a
+    /// store that rebuilds in place behind a single position field cannot tell
+    /// it: the read model is half-built, the checkpoint says `Live`, and the
+    /// dashboard reads the wrong number without anything anywhere reporting a
+    /// problem.
+    ///
+    /// **Rejects:** `LiveOnlyCheckpointStore` — a store that ignores `Authority`
+    /// and records `Live` whatever the commit claimed. It is the obvious reading
+    /// of the port and the only one `Option<SequencePosition>` could express
+    /// before [`Checkpoint`] existed.
+    ///
+    /// Everything it needs is on the port's own signature — `commit`'s
+    /// `authority` argument and `checkpoint`'s return — so **no runner and no
+    /// rebuild driver is built**; the six runner-dependent rules of §4.11 belong
+    /// to the workspace e2e crate under CF-36.
+    ///
+    /// # Two details the specification fixes and this rule does not soften
+    ///
+    /// It asserts the **variant** and never the `through` value it carries. And
+    /// it asserts nothing at all immediately after the reset that opens it: a
+    /// rebuild that has committed nothing reads `NeverRun`, not `Rebuilding`,
+    /// and that is correct — both mean the rows are not authoritative and the
+    /// reader's decision is the same.
+    pub async fn rebuilding_is_distinguishable_from_live<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!`: every checkpoint below is read back through a fresh handle,
+        // because a claim about what a *reader* sees is a claim about what
+        // something other than the writer sees.
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("rebuilding_is_distinguishable_from_live");
+
+        // A rebuild starts by clearing what is there. `reset` is a *step* here
+        // and not the subject: the rules that interrogate it are the reset
+        // family's.
+        let mut clearing = writer.begin();
+        writer.probe_delete_all(&mut clearing);
+        reset_ok(&writer, clearing, &id).await;
+
+        let first_chunk = SequencePosition::FIRST;
+        let second_chunk = after(first_chunk);
+        let caught_up = after(second_chunk);
+
+        for (position, key, value) in [
+            (first_chunk, PROBE_KEY, PROBE_VALUE),
+            (second_chunk, SECOND_KEY, SECOND_VALUE),
+        ] {
+            let mut batch = writer.begin();
+            writer.probe_write(&mut batch, key, value);
+            commit_ok(&writer, batch, &id, position, Authority::Rebuilding).await;
+
+            let observer = fixture.connect().await;
+            let checkpoint = checkpoint_ok(&observer, &id).await;
+            assert!(
+                matches!(checkpoint, Checkpoint::Rebuilding { .. }),
+                "a commit claiming `Authority::Rebuilding` must leave a \
+                 checkpoint a reader can recognise as a rebuild in flight, and \
+                 this store reported {checkpoint:?}. A store that rebuilds in \
+                 place behind a single position field says `Live` over a \
+                 half-built read model, and every reader that asked whether the \
+                 rows were authoritative was told yes"
+            );
+        }
+
+        let mut caught_up_batch = writer.begin();
+        writer.probe_write(&mut caught_up_batch, ANCHOR_KEY, PROBE_VALUE);
+        commit_ok(&writer, caught_up_batch, &id, caught_up, Authority::Live).await;
+
+        let observer = fixture.connect().await;
+        let checkpoint = checkpoint_ok(&observer, &id).await;
+        assert!(
+            matches!(checkpoint, Checkpoint::Live { .. }),
+            "the commit that finishes a rebuild claims `Authority::Live`, and \
+             the checkpoint must then say the rows are authoritative — this \
+             store reported {checkpoint:?}. A store that cannot leave the \
+             rebuilding state leaves every reader treating a finished read model \
+             as untrustworthy for ever"
+        );
+
+        RuleOutcome::Ran
+    }
 }
 
 // =====================================================================
@@ -1566,6 +1883,11 @@ macro_rules! for_each_projection_store_rule {
             refused_reset_changes_nothing,
             fresh_projection_has_no_checkpoint,
             reset_is_not_commit_at_first,
+
+            // --- Reading, and rebuilding -----------------------------------
+            batch_reads_reflect_pending_writes,
+            rebuild_is_chunk_size_invariant,
+            rebuilding_is_distinguishable_from_live,
         }
     };
 }

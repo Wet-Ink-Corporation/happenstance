@@ -75,6 +75,8 @@ mod correct;
 mod harness;
 #[path = "projection_mutation_coverage/mutants.rs"]
 mod mutants;
+#[path = "projection_mutation_coverage/variants.rs"]
+mod variants;
 
 use harness::{Origin, RUNTIME_PANICS, SubjectReport, Verdict};
 
@@ -92,13 +94,12 @@ enum Kind {
     Mutant,
     /// A store that is legally different from `MemoryProjectionStore` and MUST
     /// pass everything (CF-5).
-    #[expect(
-        dead_code,
-        reason = "CF-5's projection half is `buffering-conformant-variant` (HS-S0014). \
-                  The variant is declared now so the shape is one shape across both \
-                  families; the `expect` goes unfulfilled — and therefore red — on the \
-                  day a row uses it, which is the day the deferral ends."
-    )]
+    ///
+    /// The `#[expect(dead_code)]` this arm carried came off with
+    /// `read-through-and-rebuild-rules`: `NoBatchReadStore` is the first row to
+    /// use it, which is the day the deferral the attribute named ended. The
+    /// buffering replay-at-commit variant is still owed and is a *second*
+    /// instance rather than this one arriving late.
     ConformantVariant,
 }
 
@@ -328,6 +329,11 @@ const REGISTRY: &[Declared] = &[
             // repair to refuse would be weakening the new rule so this
             // declaration survived.
             "reset_is_not_commit_at_first",
+            // The seventh, from `read-through-and-rebuild-rules`, at the same
+            // anchor again: a store that commits nothing has no checkpoint for a
+            // reader to recognise a rebuild in, so the first `Rebuilding`
+            // assertion sees `NeverRun`.
+            "rebuilding_is_distinguishable_from_live",
         ],
         provenance: "an adapter whose `commit` executes the batch inside a transaction it \
                      never commits — the statements go out, the connection returns to the \
@@ -366,6 +372,10 @@ const REGISTRY: &[Declared] = &[
             (
                 "reset_is_not_commit_at_first",
                 "must be **distinguishable by variant**",
+            ),
+            (
+                "rebuilding_is_distinguishable_from_live",
+                "must leave a checkpoint a reader can recognise as a rebuild",
             ),
         ],
     },
@@ -705,6 +715,90 @@ const REGISTRY: &[Declared] = &[
             ("commit_rejects_a_foreign_batch", "moved its checkpoint"),
         ],
     },
+    Declared {
+        name: "CommittedReadBatchStore",
+        kind: Kind::Mutant,
+        // Two rules, and both are the same defect seen at two magnifications:
+        // one write lost inside one batch, and a whole rebuild whose answer
+        // depends on the chunk size. Neither rule is covered by this store alone.
+        fails: &[
+            "batch_reads_reflect_pending_writes",
+            "rebuild_is_chunk_size_invariant",
+        ],
+        provenance: "a batch `get` implemented as one round trip on the connection the batch is \
+                     already holding — which is what an adapter author writes, and which is right \
+                     for every projection that never reads what it wrote. §4.11 names the shape \
+                     for PS-12's rule. For a read-modify-write projection it loses every write \
+                     the batch has not committed yet, silently, and loses most of them exactly \
+                     when the chunk is largest",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "batch_reads_reflect_pending_writes",
+                "must let an open batch see",
+            ),
+            (
+                "rebuild_is_chunk_size_invariant",
+                "must produce the same read model however it is",
+            ),
+        ],
+    },
+    Declared {
+        name: "FirstWriteWinsBatchStore",
+        kind: Kind::Mutant,
+        // Exactly one, and it is the store that makes the chunk rule worth
+        // having: its reads through the batch are honest, so PS-12's rule passes
+        // it and only the chunked replay can see the defect.
+        fails: &["rebuild_is_chunk_size_invariant"],
+        provenance: "a batch that stages writes with `entry().or_insert(…)`, keeping the first \
+                     value staged for a key rather than the last — the natural spelling when the \
+                     batch is thought of as a dedup buffer. It reads back through the batch \
+                     honestly, so nothing about it looks wrong until a rebuild run at one event \
+                     per chunk and the same rebuild run whole produce different read models",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "rebuild_is_chunk_size_invariant",
+            "must produce the same read model however it is",
+        )],
+    },
+    Declared {
+        name: "LiveOnlyCheckpointStore",
+        kind: Kind::Mutant,
+        fails: &["rebuilding_is_distinguishable_from_live"],
+        provenance: "a rebuild in place behind a single position field: `Authority` arrives at \
+                     `commit` and is dropped, so every checkpoint claims the rows are \
+                     authoritative. It is the obvious reading of the port and the only one \
+                     `Option<SequencePosition>` could express before `Checkpoint` had three \
+                     variants (`spec/SPECIFICATION.md:5344-5352`). A reader asking whether the \
+                     rows in front of it can be trusted is told yes over a half-built read model. \
+                     It preserves `NeverRun` for an id it has never seen, because its defect is \
+                     that `Rebuilding` is unrepresentable rather than that a missing row reads \
+                     wrongly",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "rebuilding_is_distinguishable_from_live",
+            "must leave a checkpoint a reader can recognise as a rebuild",
+        )],
+    },
+    Declared {
+        name: "NoBatchReadStore",
+        kind: Kind::ConformantVariant,
+        // CF-5's first projection row, and `fails` is empty because the store is
+        // *correct*: PS-12 permits a batch with no read path in as many words.
+        // The two rules gated on that switch report a skip against it, which
+        // `projection_conformant_variants_pass_everything` accepts only because
+        // the store itself declares the switch `false`.
+        fails: &[],
+        provenance: "an adapter that buffers its writes and offers no read path on the open batch \
+                     — the write-behind and queued-statement shapes, whose batch has nothing to \
+                     read *from* until it is sent. PS-12 permits it outright as the second arm of \
+                     its MUST, so declining honestly is a conformant answer rather than a \
+                     failure. It exists because both arms of a gate need a fixture or one arm is \
+                     code no test executes: every other store in this binary, and the reference \
+                     store, declare `READS_THROUGH_BATCH = true`",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
 ];
 
 /// Hands every registered projection mutant type to `$callback`.
@@ -731,6 +825,12 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::RefusalAsSuccessStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAfterTheFactStore>,
             crate::correct::MutantFixture<crate::mutants::PresumedLiveCheckpointStore>,
+
+            crate::correct::MutantFixture<crate::mutants::CommittedReadBatchStore>,
+            crate::correct::MutantFixture<crate::mutants::FirstWriteWinsBatchStore>,
+            crate::correct::MutantFixture<crate::mutants::LiveOnlyCheckpointStore>,
+
+            crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
         }
     };
 }
@@ -773,6 +873,15 @@ fn declared(name: &str) -> Option<&'static Declared> {
     REGISTRY.iter().find(|entry| entry.name == name)
 }
 
+/// Drives the one store whose batch offers no read path.
+///
+/// Named here rather than spelled inside the test that uses it, because the type
+/// is a `MutantFixture<…>` three segments deep and the assertion it feeds is
+/// about the *outcome*, not about how the subject is spelled.
+fn run_no_batch_read_store() -> SubjectReport {
+    harness::run_subject::<correct::MutantFixture<variants::NoBatchReadStore>>()
+}
+
 // =====================================================================
 // The meta-tests
 // =====================================================================
@@ -785,7 +894,7 @@ fn declared(name: &str) -> Option<&'static Declared> {
 mod projection_mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, Origin, REGISTRY, RUNTIME_PANICS, Verdict,
-        all_projection_rules, declared, registered_names, reports,
+        all_projection_rules, declared, registered_names, reports, run_no_batch_read_store,
     };
 
     /// Every rule the registry claims a mutant for.
@@ -1112,6 +1221,135 @@ mod projection_mutation_coverage {
                  catches this — and what its provenance claims it demonstrates is no \
                  longer what it demonstrates. Message: {message}",
                 entry.name
+            );
+        }
+    }
+
+    /// CF-5. A store that is legally different from the reference one **passes
+    /// everything**.
+    ///
+    /// The positive control, and it is not the mirror of
+    /// [`projection_mutants_fail_exactly_their_declared_rules`] — it is the only
+    /// assertion in this binary that can point at a **rule** rather than at a
+    /// store. A rule over-specified beyond what its clause requires fails a
+    /// conformant variant, and every other test here would read that as the
+    /// store being wrong.
+    ///
+    /// It landed with `read-through-and-rebuild-rules`, which is the story that
+    /// gave [`Kind::ConformantVariant`] its first row. Before that the set was
+    /// empty and this test would have passed while asserting nothing, which is
+    /// the vacuity CF-5 exists to prevent arriving one level up; that is why the
+    /// hole was named rather than filled with an empty control.
+    ///
+    /// # A skip is accounted for, never waved through
+    ///
+    /// `NoBatchReadStore` declares `READS_THROUGH_BATCH = false`, so the two
+    /// rules gated on it report a skip rather than running. That is the outcome
+    /// PS-12's second arm requires, and it is accepted here **only** because the
+    /// subject itself declares the switch — the `(capability, reason)` pair has
+    /// to be one `harness::declines` collected from the store. A skip from
+    /// anywhere else means a rule stopped running and nothing noticed.
+    #[test]
+    fn projection_conformant_variants_pass_everything() {
+        let mut variants = 0_usize;
+
+        for report in reports() {
+            let Some(entry) = declared(report.name) else {
+                continue; // `projection_mutant_registry_is_exhaustive` owns this.
+            };
+            if entry.kind != Kind::ConformantVariant {
+                continue;
+            }
+            variants += 1;
+
+            for (rule, verdict) in &report.outcomes {
+                match verdict {
+                    Verdict::Passed => {}
+                    Verdict::Skipped { capability, reason } => assert!(
+                        report.declines.contains(&(*capability, *reason)),
+                        "`{}` is a conformant variant and skipped `{rule}` citing \
+                         `{capability}`, which it does not declare — so a rule \
+                         stopped running for a reason nothing accounts for. \
+                         Declares: {:?}",
+                        entry.name,
+                        report.declines
+                    ),
+                    Verdict::Panicked { .. } => panic!(
+                        "`{}` is registered as a conformant variant and failed \
+                         `{rule}`. Either it is not conformant — in which case it \
+                         is a mutant and its row is wrong — or the rule is \
+                         over-specified beyond what its clause requires, which is \
+                         the defect no other test in this binary can see. Saw: {}",
+                        entry.name,
+                        verdict.describe()
+                    ),
+                }
+            }
+        }
+
+        assert!(
+            variants > 0,
+            "no conformant variant was driven, so this test passed over an empty \
+             set and asserted nothing — which is the vacuity CF-5 exists to \
+             prevent, one level up. At least one `Kind::ConformantVariant` row \
+             must be registered and enumerated"
+        );
+    }
+
+    /// A store with no read path on its batch is told so **by name**, in the
+    /// vocabulary every other declension uses.
+    ///
+    /// CF-18's second projection instance, and the first one whose switch is not
+    /// a fixture `Capability`: `ProjectionProbe::READS_THROUGH_BATCH` lives on
+    /// the store's probe impl. The skip is still the same
+    /// [`RuleOutcome::Skipped`] rendered by the same `skip_line`, and this test
+    /// asserts **both** of its fields — the capability names the constant an
+    /// adapter author can go and change, path and all, and the reason is the
+    /// testkit's own const rather than a literal repeated here.
+    ///
+    /// Asserted on the **value**, never on stdout, for the reason
+    /// `RuleOutcome::report`'s own documentation gives: libtest suppresses a
+    /// passing test's output without `--show-output`, and `println!` writes
+    /// nowhere at all on `wasm32-unknown-unknown`.
+    #[test]
+    fn a_batch_with_no_read_path_is_reported_as_a_skip() {
+        let report = run_no_batch_read_store();
+
+        let skipped: Vec<&str> = report
+            .outcomes
+            .iter()
+            .filter(|(_, verdict)| matches!(verdict, Verdict::Skipped { .. }))
+            .map(|(rule, _)| *rule)
+            .collect();
+        assert_eq!(
+            skipped,
+            vec![
+                "batch_reads_reflect_pending_writes",
+                "rebuild_is_chunk_size_invariant",
+            ],
+            "exactly the two rules that read through an open batch may skip \
+             against a store declaring `READS_THROUGH_BATCH = false`, in \
+             enumeration order — a rule that joined this set lost its way to a \
+             read path, and one that left it stopped being gated. Saw {skipped:?}"
+        );
+
+        let expected = Verdict::Skipped {
+            capability: happenstance_testkit::NO_BATCH_READ_PATH,
+            reason: happenstance_testkit::NO_BATCH_READ_PATH_REASON,
+        }
+        .describe();
+        for (rule, verdict) in &report.outcomes {
+            if !skipped.contains(rule) {
+                continue;
+            }
+            assert_eq!(
+                verdict.describe(),
+                expected,
+                "`{rule}`'s skip must name `ProjectionProbe::READS_THROUGH_BATCH` \
+                 — the constant an adapter author can actually change, and not a \
+                 fixture const that does not exist — and carry the testkit's own \
+                 stated reason, compared against the exported constants rather \
+                 than against literals repeated here"
             );
         }
     }

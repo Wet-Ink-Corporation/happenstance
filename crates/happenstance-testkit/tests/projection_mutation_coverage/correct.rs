@@ -212,6 +212,18 @@ pub(crate) trait Defect: 'static + Sized {
     /// The registry key, which names the *store*.
     const NAME: &'static str;
 
+    /// Whether this store's batch offers a read path at all.
+    ///
+    /// PS-12's switch, and the one seam here that is a `const` rather than a
+    /// function: it is read by the rules' gate *before* any store exists, which
+    /// is what makes a declining adapter's skip free rather than a call that has
+    /// to answer something. The correct answer for this core is `true` — its
+    /// batch is a materialised delta layered over committed state, the same end
+    /// of the batch-shape axis `MemoryProjectionStore` sits at — and the
+    /// conformant variant that declares `false` is not a defect but the clause's
+    /// own second arm.
+    const READS_THROUGH_BATCH: bool = true;
+
     /// The identity a fresh store instance is minted with.
     ///
     /// PS-15's seam. The correct answer is a value from a process-local counter,
@@ -324,6 +336,54 @@ pub(crate) trait Defect: 'static + Sized {
     /// the rows stay durable and the call still reports success.
     fn rollback(state: &mut State, batch: &mut MutantBatch<Self>) {
         let _ = (state, batch);
+    }
+
+    /// How a write is staged into an open batch.
+    ///
+    /// PS-13/PS-14's seam on the *write* side. The correct answer keeps the
+    /// **last** value staged for a key, which is what "write this value" means;
+    /// the wrong one keeps the first, which is what an author writes when the
+    /// batch is thought of as a dedup buffer and `entry().or_insert(…)` is the
+    /// obvious call. A store that does that reads back honestly through the
+    /// batch and still makes a rebuild's answer depend on the chunk size.
+    fn stage_write(batch: &mut MutantBatch<Self>, key: &str, value: u64) {
+        batch.writes.insert(key.to_owned(), value);
+    }
+
+    /// How a key reads **through** an open batch.
+    ///
+    /// PS-12's seam. The correct answer layers the batch's pending writes over
+    /// committed state, honouring a queued clear in between; the wrong one goes
+    /// straight to committed state, which is one round trip on a connection the
+    /// batch is already holding and is what an adapter author writes first.
+    ///
+    /// It takes `&State` rather than the store, because a step that could reach
+    /// the store could also reach the checkpoints — and no defect this seam
+    /// exists to model wants to.
+    fn probe_read_through(state: &State, batch: &MutantBatch<Self>, key: &str) -> Option<u64> {
+        if let Some(pending) = batch.writes.get(key) {
+            return Some(*pending);
+        }
+        if batch.clear_all {
+            return None;
+        }
+        state.rows.get(key).copied()
+    }
+
+    /// What a commit's [`Authority`] claim becomes in the checkpoint.
+    ///
+    /// PS-24's seam. The correct answer carries the claim through, so a reader
+    /// can tell a rebuild in flight from an authoritative read model; the wrong
+    /// one records `Live` whatever the commit said, which is the obvious reading
+    /// of the port and the only one an `Option<SequencePosition>` could express
+    /// before [`Checkpoint`] had three variants.
+    fn checkpoint_for(authority: Authority, position: SequencePosition) -> Checkpoint {
+        match authority {
+            Authority::Rebuilding => Checkpoint::Rebuilding { through: position },
+            // `Live` and any variant added later: a commit that does not claim a
+            // rebuild is claiming the rows are authoritative.
+            _ => Checkpoint::Live { through: position },
+        }
     }
 
     /// How a checkpoint row that is **not there** resolves.
@@ -627,12 +687,7 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             return Err(refusal);
         }
 
-        let checkpoint = match authority {
-            Authority::Rebuilding => Checkpoint::Rebuilding { through: position },
-            // `Live` and any variant added later: a commit that does not claim a
-            // rebuild is claiming the rows are authoritative.
-            _ => Checkpoint::Live { through: position },
-        };
+        let checkpoint = D::checkpoint_for(authority, position);
 
         // The armed fault fires *here*, after every port-level refusal and in
         // place of the write, because that is where a real one fires: a trigger
@@ -702,13 +757,13 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
 }
 
 impl<D: Defect> ProjectionProbe for MutantStore<D> {
-    /// `true`: this store's batch is a materialised delta layered over committed
-    /// state, so it can be read back through before it commits — the same end of
-    /// the batch-shape axis `MemoryProjectionStore` sits at.
-    const READS_THROUGH_BATCH: bool = true;
+    /// The defect's answer, which is `true` for the correct core and for every
+    /// store here except the conformant variant written to exercise PS-12's
+    /// second arm.
+    const READS_THROUGH_BATCH: bool = D::READS_THROUGH_BATCH;
 
     fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
-        batch.writes.insert(key.to_owned(), value);
+        D::stage_write(batch, key, value);
     }
 
     fn probe_delete_all(&self, batch: &mut Self::Batch) {
@@ -721,13 +776,11 @@ impl<D: Defect> ProjectionProbe for MutantStore<D> {
     }
 
     fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
-        if let Some(pending) = batch.writes.get(key) {
-            return Some(*pending);
-        }
-        if batch.clear_all {
-            return None;
-        }
-        self.state.borrow().rows.get(key).copied()
+        // Bound rather than inlined: the step takes `&State`, and a temporary
+        // `Ref` inside the argument list would be dropped at the end of the
+        // statement it was created in.
+        let state = self.state.borrow();
+        D::probe_read_through(&state, batch, key)
     }
 }
 

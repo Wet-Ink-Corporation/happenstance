@@ -32,6 +32,7 @@ use std::panic;
 use std::path::Path;
 use std::sync::Once;
 
+use happenstance_core::ProjectionProbe;
 use happenstance_testkit::{ProjectionFixture, RuleOutcome};
 
 // =====================================================================
@@ -423,7 +424,25 @@ pub(crate) fn run_subject<S: ProjectionSubject>() -> SubjectReport {
 /// omission: `CommitError` and `ResetError` carry no capacity variant, so the
 /// projection family declares no numeric-limit constants and never reaches the
 /// surface CF-40 is about.
+///
+/// # The fourth switch is not on the fixture, and this is where that costs
+/// something
+///
+/// `ProjectionProbe::READS_THROUGH_BATCH` is a `const` on the **store's** probe
+/// impl rather than a [`Capability`](happenstance_testkit::Capability) on the
+/// fixture, because whether a batch can be read through is a property of the
+/// batch type. It is still a declension a rule can skip on, so it has to appear
+/// here — otherwise a store that declares `false` would produce a skip this
+/// binary's meta-tests could not account for, which is exactly the "a rule
+/// stopped running and nothing noticed" hole [`SubjectReport::declines`] exists
+/// to close. Its capability name and its reason come from the testkit's own
+/// constants, never from a literal repeated here.
 fn declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static str)> {
+    let no_read_path = (!<S::Store as ProjectionProbe>::READS_THROUGH_BATCH).then_some((
+        happenstance_testkit::NO_BATCH_READ_PATH,
+        happenstance_testkit::NO_BATCH_READ_PATH_REASON,
+    ));
+
     [
         S::SECOND_HANDLE
             .reason()
@@ -434,6 +453,7 @@ fn declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static str)> {
         S::COMMIT_FAULT
             .reason()
             .map(|reason| ("COMMIT_FAULT", reason)),
+        no_read_path,
     ]
     .into_iter()
     .flatten()

@@ -240,6 +240,55 @@ not the same as what a user needed to be told.
   from the store's first position when the checkpoint is `NeverRun` — asserting
   the event at the first position is applied in the reset case and not in the
   substitute's. No runner is built: the derivation is four lines the rule owns.
+- **`batch_reads_reflect_pending_writes`** — PS-12, and the first projection rule
+  whose gate is not on the fixture. The defect it detects is a batch `get`
+  implemented as one round trip on the connection the batch is already holding,
+  so it answers from **committed** state: a projection doing `get` then `set`
+  inside one batch reads the value from before the batch began, and every
+  increment after the first is lost with no error anywhere — least visibly when
+  the chunk is largest. The rule asserts the *value* it wrote, not merely that
+  something came back, so a store answering `Some(0)` for everything fails it.
+  An adapter whose batch offers no read path at all declares
+  `ProjectionProbe::READS_THROUGH_BATCH = false`, which PS-12 permits outright,
+  and gets a reported skip naming that constant — the switch is on the probe
+  beside the store, because whether a batch can be read through is a property of
+  the batch type rather than of the fixture's environment.
+- **`rebuild_is_chunk_size_invariant`** — PS-13 and PS-14, both `[FROZEN]`. A
+  rebuild runs at whatever chunk size fits the operator's memory budget, and this
+  rule is what stops that becoming a correctness variable nobody logs. It replays
+  one fixed sequence — `a, a, b, a, b, a` — at chunk sizes 1, 3 and whole-log
+  against three isolated stores, each step a read-modify-write **through the open
+  batch**, and requires the three runs' read models to be identical per key. The
+  defects it detects are a batch that reads from committed state (which loses
+  every repeat inside a chunk) and a batch that stages writes with
+  `entry().or_insert(…)`, keeping the **first** value for a key — the natural
+  spelling when a batch is thought of as a dedup buffer, whose reads are honest
+  and which therefore fails only here. The increment is load-bearing: a plain
+  `set` is chunk-insensitive by construction and would certify both clauses on
+  nothing.
+- **`rebuilding_is_distinguishable_from_live`** — PS-24. A reader deciding
+  whether the rows in front of it are authoritative gets its answer from the
+  checkpoint's variant, and the defect this detects is a rebuild in place behind
+  a single position field: `Authority` arrives at `commit` and is dropped, so the
+  checkpoint says `Live` over a half-built read model and every reader that asked
+  is told yes. The rule commits two chunks claiming `Authority::Rebuilding` and
+  one claiming `Authority::Live`, asserting the **variant** after each and never
+  the position it carries. It builds no runner: everything it needs is on the
+  port's own signature. It asserts nothing immediately after the reset that opens
+  it, because a rebuild that has committed nothing correctly reads `NeverRun`.
+- **A conformant projection variant, so both arms of a gate have a fixture.**
+  `NoBatchReadStore` declares `READS_THROUGH_BATCH = false` and leaves
+  `probe_read_through` `unimplemented!()` — the buffering and write-behind shape,
+  whose batch has nothing to read from until it is sent — and is registered as
+  `Kind::ConformantVariant` with an empty `fails` list. It is the projection
+  registry's first conformant variant, so
+  `projection_conformant_variants_pass_everything` lands with it: the only
+  assertion in that binary that can point at a **rule** rather than at a store,
+  because a rule over-specified beyond its clause fails a store that is
+  deliberately, legally different. `NO_BATCH_READ_PATH` and
+  `NO_BATCH_READ_PATH_REASON` are exported beside `NO_STORE_LIMITS` and
+  `NO_CEILING_REASON` and are the second and last instance of the
+  testkit-written-reason exception.
 - **Six more wrong projection stores, and three declarations grown.**
   `TwoStatementResetStore` (the 02:46:31 truncate whose second statement never
   ran), `TruncatingResetStore` (`DELETE FROM projection_checkpoints`, no

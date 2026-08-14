@@ -22,7 +22,9 @@
 
 use core::cell::Cell;
 
-use happenstance_core::{Checkpoint, CommitError, ProjectionId, ResetError, SequencePosition};
+use happenstance_core::{
+    Authority, Checkpoint, CommitError, ProjectionId, ResetError, SequencePosition,
+};
 
 use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
 
@@ -457,5 +459,77 @@ impl Defect for PresumedLiveCheckpointStore {
         Checkpoint::Live {
             through: SequencePosition::FIRST,
         }
+    }
+}
+
+/// A batch `get` that answers from committed state.
+///
+/// One round trip on the connection the batch is already holding, which is what
+/// an adapter author writes and what is perfectly right for every projection
+/// that never reads what it wrote. For one that does — a counter, a running
+/// total, any read-modify-write — it silently loses every write the batch has
+/// not committed yet, and loses most of them exactly when the chunk is largest.
+///
+/// The specification names this shape for PS-12's rule, and the reason it is
+/// worth registering is that nothing about it looks wrong: the batch really is
+/// applied at commit, the value really is in the store afterwards, and the only
+/// window in which it is invisible is the one the projection is standing in.
+pub(crate) struct CommittedReadBatchStore;
+
+impl Defect for CommittedReadBatchStore {
+    const NAME: &'static str = "CommittedReadBatchStore";
+
+    fn probe_read_through(state: &State, batch: &MutantBatch<Self>, key: &str) -> Option<u64> {
+        // The whole defect: the pending writes are never consulted.
+        let _ = batch;
+        state.rows.get(key).copied()
+    }
+}
+
+/// A batch that stages writes with `entry().or_insert(…)`.
+///
+/// The natural spelling when the batch is thought of as a **dedup buffer**:
+/// every key appears once, the first value staged for it wins, and a second
+/// write for the same key inside one batch is discarded as a duplicate. Its
+/// reads through the batch are entirely honest — it answers with what it staged
+/// — so it passes PS-12's rule and fails only the chunked replay.
+///
+/// What it costs is that a rebuild's answer depends on how the operator chunked
+/// it: at one event per chunk every write is the first for its key and the store
+/// is correct, and at any larger size every repeat inside a chunk is thrown away.
+pub(crate) struct FirstWriteWinsBatchStore;
+
+impl Defect for FirstWriteWinsBatchStore {
+    const NAME: &'static str = "FirstWriteWinsBatchStore";
+
+    fn stage_write(batch: &mut MutantBatch<Self>, key: &str, value: u64) {
+        // The whole defect, and it is one call: `or_insert` where the correct
+        // step writes `insert`.
+        batch.writes.entry(key.to_owned()).or_insert(value);
+    }
+}
+
+/// A rebuild in place, behind one position field.
+///
+/// The obvious reading of the port, and the only one `Option<SequencePosition>`
+/// could express before [`Checkpoint`] had three variants: `Authority` arrives at
+/// `commit` and is dropped, so every checkpoint says the rows are authoritative
+/// whatever the commit claimed. A reader deciding whether to trust the rows in
+/// front of it is told yes over a read model that is half-built, and the
+/// dashboard shows the wrong number with nothing anywhere reporting a problem.
+///
+/// It preserves `NeverRun` for an id it has never seen — its defect is precisely
+/// that `Rebuilding` is unrepresentable, not that a missing row reads wrongly —
+/// so it does not also fail the rule that asks about an unseen projection, and
+/// its declaration stays true.
+pub(crate) struct LiveOnlyCheckpointStore;
+
+impl Defect for LiveOnlyCheckpointStore {
+    const NAME: &'static str = "LiveOnlyCheckpointStore";
+
+    fn checkpoint_for(authority: Authority, position: SequencePosition) -> Checkpoint {
+        // The whole defect: the claim is read and dropped.
+        let _ = authority;
+        Checkpoint::Live { through: position }
     }
 }

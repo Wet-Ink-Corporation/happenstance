@@ -3336,7 +3336,7 @@ mod mutation_coverage {
     /// The projection family's [`MUST_REJECT`]: every projection rule that
     /// spells `must!` rather than `require!`.
     ///
-    /// Twelve of the family's fourteen rules are on it, and every one belongs
+    /// Thirteen of the family's seventeen rules are on it, and every one belongs
     /// there rather than being gated with `require!`, because every one reads
     /// the read model or the checkpoint back through a **fresh handle**. A
     /// projection fixture that cannot open a second handle cannot observe PS-1 —
@@ -3355,14 +3355,17 @@ mod mutation_coverage {
     /// declines both of the others — see the tail of
     /// [`projection_capability_skips_are_reported`].
     ///
-    /// **The two absentees are absent on purpose, and the absence is the
+    /// **The four absentees are absent on purpose, and the absence is the
     /// interesting part.** `commit_rejects_a_foreign_batch` wants two *isolated
     /// stores*, not two handles onto one, and two `open()` calls on the
     /// `impl AsyncFn() -> F` every rule is handed already produce them (PS-15
     /// says so in as many words). `fresh_projection_has_no_checkpoint` reads one
-    /// checkpoint through one handle and writes nothing at all. Both therefore
-    /// spell no gate, run against a fixture declining everything, and **pass** —
-    /// which is what this list asserts by omission, through the
+    /// checkpoint through one handle and writes nothing at all.
+    /// `batch_reads_reflect_pending_writes` reads through the *same* handle that
+    /// owns the batch, by construction, and `rebuild_is_chunk_size_invariant`
+    /// opens a fixture per run and connects once to each. All four therefore
+    /// spell no `must!`, run against a fixture declining everything, and
+    /// **pass** — which is what this list asserts by omission, through the
     /// `Verdict::Passed` arm of [`assert_projection_declension`]. A rule added
     /// to this list "for safety" would make that assertion unreachable.
     ///
@@ -3380,6 +3383,7 @@ mod mutation_coverage {
         "reset_is_scoped_to_one_projection",
         "refused_reset_changes_nothing",
         "reset_is_not_commit_at_first",
+        "rebuilding_is_distinguishable_from_live",
     ];
 
     /// [`PROJECTION_MUST_REJECT`]'s mirror **against this instrument**, and it

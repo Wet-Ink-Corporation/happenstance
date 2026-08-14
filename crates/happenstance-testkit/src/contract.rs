@@ -822,6 +822,38 @@ impl Capability {
 /// they did set.
 pub const NO_STORE_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH";
 
+/// The `capability` name a rule reports when an adapter's **batch offers no read
+/// path** at all.
+///
+/// Not a [`ProjectionFixture`] associated const, and that is the whole reason it
+/// is spelled as a string rather than `stringify!`-ed from one:
+/// [`ProjectionProbe::READS_THROUGH_BATCH`]
+/// lives on the **probe**, beside the store, because whether a batch can be read
+/// through is a property of the batch type rather than of the fixture's
+/// environment. A skip that named a fixture const would send an adapter author
+/// looking for a constant that does not exist in their code, so this names the
+/// one they can actually go and change, path and all.
+pub const NO_BATCH_READ_PATH: &str = "ProjectionProbe::READS_THROUGH_BATCH";
+
+/// The reason a rule reports when an adapter's batch offers no read path.
+///
+/// Written by the testkit rather than by the fixture, and it is the second and
+/// last instance of [`NO_CEILING_REASON`]'s exception rather than a new policy:
+/// a declined [`Capability`]'s reason is an adapter's account of a trade only it
+/// can describe, while *"this batch exposes no read path"* is the same sentence
+/// for every store that says it — PS-12's second arm, which the clause permits
+/// outright. Asking each fixture to phrase it would buy a paraphrase per adapter
+/// and no information.
+///
+/// **What a skip carrying this reason does not cover** is stated here rather
+/// than left to be inferred: chunk-size invariance is *unverified* for such an
+/// adapter, because a projection's read-modify-write has no read path to use in
+/// the first place.
+pub const NO_BATCH_READ_PATH_REASON: &str = "this adapter's batch exposes no read path, which PS-12 permits outright: \
+     `READS_THROUGH_BATCH` is `false`, so `probe_read_through` is never called \
+     and the rules that would have used it report this instead of asserting \
+     over a store that cannot answer them";
+
 /// The reason a rule reports when a fixture states no ceiling on any store
 /// limit.
 ///
