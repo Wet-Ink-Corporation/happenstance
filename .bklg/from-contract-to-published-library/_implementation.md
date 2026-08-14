@@ -115,3 +115,75 @@ commits are skipped, and `decisions-and-design-record` is committed but sealed b
 implementer. The full-suite gate is skipped against `entry_baseline`;
 `cargo xtask affected --base main` was green beforehand ("no package affected" — the
 merge touched only `.kb/`, `.bklg/` and `references/`).
+
+**Result.** 6 of 17 stories committed, `degradedSummary: none` (run 1's three isolation
+trips did not recur), no `baselineRepairs`. Halted at the **review** step of slice
+`projection-port-and-probe`, verdict `changes-requested`. No project transition — HS-P0010
+stays at `implementation`; `_integration.md` and `_review.md` were never reached.
+
+| Slice | Verdict | Sealed by | Stories |
+|-------|---------|-----------|---------|
+| `decisions-and-design-record` | **approved** | `560bb4b` | `f77f183` · `9520b28` · `0df2c1c` |
+| `projection-port-and-probe` | **changes-requested** | `0ccf16e` | `2eade38` · `cb495ee` · `5fd62c6` |
+
+Slice 1 re-entered at Review with no implementer dispatched, exactly as the two-axis resume
+model intends, took one reconcile commit (`fb4161c`) and sealed approved.
+
+**Story verdicts recorded** (human, batched):
+
+| Story | Stage now | Verdict |
+|-------|-----------|---------|
+| `ps-clause-pairing-sweep` HS-S0001 | `report` / `in-review` | approved |
+| `projection-decision-atoms` HS-S0002 | `report` / `in-review` | approved |
+| `projection-api-design-record` HS-S0003 | `report` / `in-review` | approved |
+| `owned-batch-port-shape` HS-S0004 | **`plan` / `ready`** | **none — gate red, see below** |
+| `projection-probe-conformance-feature` HS-S0005 | `implement` / `in-progress` | changes-requested |
+| `memory-projection-store` HS-S0006 | `implement` / `in-progress` | changes-requested |
+
+### Three findings carried into run 3
+
+1. **`crates/happenstance-core/src/projection.rs:495-499` publishes a `[dev-dependencies]`
+   block that contradicts the paragraph three lines above it.** `:490-491` states "the only
+   way out is a **non-dev** dependency on the testkit, feature-gated"; the snippet then shows
+   `[dev-dependencies]`. It cannot work — a dev-dependency does not make `ProjectionProbe`
+   exist for the lib build, the impl must live in the adapter's `src/` because the orphan rule
+   rejects it in `tests/`, and Rust cannot `#[cfg]` on a dependency's feature. The spec
+   anticipated it: **AC-002 reads "`[dependencies]` (not `[dev-dependencies]`)"**. The
+   `_ledger.md` records the wrong form as *satisfying* evidence for AC-006.
+2. **`projection.rs:504-507` is self-refuting.** "The falsifier is the story that builds an
+   outside author's fixture from the documentation alone, **and it is named here**" — no name
+   follows. AC-006 requires naming `documented-extension-surface`. The ledger claims it met.
+3. **`owned-batch-port-shape`'s checkpoint `2eade38` writes outside its declared boundary** —
+   `crates/happenstance-ladybug/src/stand_in.rs`. Found by the story's own deterministic gate,
+   not by the reviewer. This is why HS-S0004 sits at `plan`: `advance --to report` runs
+   `implement`'s command gate on the way out, the gate is red, and the story never reaches
+   `report`, so **no rejection could be recorded against it** — it is held where it started.
+   Either the boundary in `spec.md` is too narrow for work the story legitimately owns, or the
+   implementer reached into the ladybug skeleton it should not have. Run 3 must settle which.
+
+Findings 1 and 2 are documentation defects in the crate's **public** surface, aimed at the
+adapter-author persona the project exists to serve; both were recorded as *passing* ACs, which
+is the part that matters more than either defect.
+
+### What run 2 got right, worth keeping
+
+The slice's self-heal commit `cc0f158` found a real gate blind spot: `cargo doc -p
+happenstance-core` on the **default** feature set was a hard error, because
+`projection_memory.rs` linked `ProjectionProbe::READS_THROUGH_BATCH` — a `conformance` item —
+from a page that renders under `memory`. `--all-features` resolved the link and
+`--no-default-features` never rendered it, so **both existing doc steps were green over a
+broken consumer build**. It added a third gate step (`documentation (default features)`),
+recorded it in `CLAUDE.md:276-283`, and re-pointed nineteen constitution citations plus five
+`SPECIFICATION.md` ones after ADR-0017's `live_handle.rs` move — retiring two rules at their
+own stated PS-5 trigger rather than by fresh editorial judgement.
+
+### Orchestrator error, corrected
+
+`record-links` was given the slice-wide commits (`fb4161c`, `cc0f158`) against every story in
+their slice, not just the stories that own those files. `fb4161c` carries
+`references/evaluation/**` (`ps-clause-pairing-sweep`'s mount point) and `cc0f158` carries
+`standards/rust/**` and `CLAUDE.md`, so the boundary check — which reads `links.commits` —
+failed HS-S0002 correctly. Removed with `record-links --remove` from HS-S0002, HS-S0003,
+HS-S0004, HS-S0005 and HS-S0006; each story now records only its own checkpoint, which is what
+`_slices.md` attributes. **Rule for later runs: `links.commits` is boundary-checked, so a
+slice-wide fix commit belongs only on the stories whose declared boundary covers its files.**

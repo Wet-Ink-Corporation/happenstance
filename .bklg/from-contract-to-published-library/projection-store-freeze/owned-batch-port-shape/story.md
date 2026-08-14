@@ -23,10 +23,11 @@ archetype: foundation
 slice: projection-port-and-probe
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:08:51.067Z
+updated: 2026-08-14T13:30:45.286Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 2eade38
   kb: []
 gate_open: false
 schema: 1
