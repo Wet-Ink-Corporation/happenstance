@@ -253,6 +253,120 @@ pub enum ResetError<E> {
 /// As with [`EventStore`](crate::EventStore), this is the `!Send` flavour and
 /// the one to use in bounds; adapters that can be `Send` should implement
 /// [`SendProjectionStore`] and get this for free.
+///
+/// # Implementing it
+///
+/// The whole port, on a store small enough to read at a glance. Note what is
+/// *absent*: there is no `Self::Batch<'_>` anywhere, because there is no
+/// lifetime to spell. An implementer writes `type Batch = MyBatch;` and then
+/// `async fn commit(&self, batch: MyBatch, …)`, and it compiles.
+///
+/// That used to be the trap that explained why this port had no adapters. While
+/// `Batch` was a generic associated type, the trait declared
+/// `batch: Self::Batch<'_>`, so naming the concrete type in the impl declared a
+/// different set of lifetime generics and rustc answered
+/// `error[E0195]: lifetime parameters or bounds on method 'commit' do not match
+/// the trait declaration` — with nothing in the workspace saying the literal
+/// `Self::Batch<'_>` was required, and nothing to copy. This example is the
+/// disposition of that trap: it compiles on every CI run, so it cannot rot back.
+///
+/// ```
+/// use happenstance_core::{
+///     Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError,
+///     SequencePosition,
+/// };
+///
+/// /// The adapter's own batch. Owned, and not a live transaction.
+/// #[derive(Debug, Default)]
+/// struct ToyBatch {
+///     rows: Vec<(String, u64)>,
+/// }
+///
+/// #[derive(Debug, Default)]
+/// struct ToyStore {
+///     committed: std::cell::RefCell<Vec<(String, u64)>>,
+///     checkpoint: std::cell::Cell<Option<SequencePosition>>,
+/// }
+///
+/// impl ProjectionStore for ToyStore {
+///     type Error = ToyError;
+///
+///     // No lifetime, and no `where Self: 'a`.
+///     type Batch = ToyBatch;
+///
+///     // Not `async`, and not fallible: opening a buffer cannot fail.
+///     fn begin(&self) -> ToyBatch {
+///         ToyBatch::default()
+///     }
+///
+///     async fn checkpoint(&self, _id: &ProjectionId) -> Result<Checkpoint, ToyError> {
+///         Ok(match self.checkpoint.get() {
+///             None => Checkpoint::NeverRun,
+///             Some(through) => Checkpoint::Live { through },
+///         })
+///     }
+///
+///     // The concrete type, spelled straight out. This is the line that used
+///     // to be `error[E0195]`.
+///     async fn commit(
+///         &self,
+///         batch: ToyBatch,
+///         _id: &ProjectionId,
+///         position: SequencePosition,
+///         _authority: Authority,
+///     ) -> Result<(), CommitError<ToyError>> {
+///         // The rows and the checkpoint, or neither.
+///         self.committed.borrow_mut().extend(batch.rows);
+///         self.checkpoint.set(Some(position));
+///         Ok(())
+///     }
+///
+///     async fn reset(
+///         &self,
+///         batch: ToyBatch,
+///         _id: &ProjectionId,
+///     ) -> Result<(), ResetError<ToyError>> {
+///         // The caller's batch carries the deletes; this store's whole read
+///         // model is the vector, so clearing it is the same unit of work.
+///         drop(batch);
+///         self.committed.borrow_mut().clear();
+///         self.checkpoint.set(None);
+///         Ok(())
+///     }
+///
+///     async fn rollback(&self, batch: ToyBatch) -> Result<(), ToyError> {
+///         drop(batch);
+///         Ok(())
+///     }
+/// }
+///
+/// #[derive(Debug)]
+/// struct ToyError;
+/// impl core::fmt::Display for ToyError {
+///     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+///         f.write_str("the toy store failed")
+///     }
+/// }
+/// impl core::error::Error for ToyError {}
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
+/// let store = ToyStore::default();
+/// let id = ProjectionId::new("toy");
+///
+/// let mut batch = store.begin();
+/// batch.rows.push(("depot-7".to_owned(), 12));
+/// store
+///     .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+///     .await?;
+///
+/// assert_eq!(
+///     store.checkpoint(&id).await?,
+///     Checkpoint::Live { through: SequencePosition::FIRST },
+/// );
+/// # Ok(())
+/// # }
+/// ```
 #[trait_variant::make(SendProjectionStore: Send)]
 pub trait ProjectionStore {
     /// How this adapter fails.

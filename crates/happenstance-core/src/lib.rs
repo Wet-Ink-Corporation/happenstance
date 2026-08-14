@@ -67,6 +67,8 @@
 //!
 //! Enable the `memory` feature (on by default) and use `MemoryEventStore` — see
 //! its documentation for a runnable walkthrough of the read-decide-append loop.
+//! `MemoryProjectionStore` is its projection-side twin, and its page carries a
+//! runnable `begin` → write → `commit` → read-back walkthrough of its own.
 //!
 //! The name is deliberately not a link here. It would be a broken one whenever
 //! the feature is off, and `cargo doc --no-default-features` treats a broken
@@ -75,8 +77,8 @@
 //! # Feature flags
 //!
 //! * **`std`** *(default)* — standard library support.
-//! * **`memory`** *(default)* — the `MemoryEventStore` reference
-//!   implementation. Implies `std`.
+//! * **`memory`** *(default)* — the `MemoryEventStore` and
+//!   `MemoryProjectionStore` reference implementations. Implies `std`.
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by
 //!   replication adapters that need one.
@@ -111,6 +113,10 @@ pub mod store;
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 mod memory;
 
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+mod projection_memory;
+
 pub use append::{AppendCondition, Guard};
 pub use error::{AppendError, ConditionViolated, InvalidEventType, InvalidQuery, InvalidTag};
 pub use event::{
@@ -136,6 +142,12 @@ pub use projection::ProjectionProbe;
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryEventStore, MemoryStoreError};
+
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use projection_memory::{
+    MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
+};
 
 /// Re-exported so adapters and callers can name payload types without adding a
 /// direct dependency on a specific `bytes` version.

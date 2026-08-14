@@ -85,7 +85,7 @@ allow was not taken. Semantics are identical; see `## Notes`.
 
 ## Commits
 
-`9d4a19f` — `feat(projection-store-freeze): ProjectionProbe behind a conformance feature`
+`cb495ee` — `feat(projection-store-freeze): ProjectionProbe behind a conformance feature`
 
 ## Changes
 

@@ -25,6 +25,24 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`MemoryProjectionStore`, behind the existing `memory` feature** — the
+  projection port's answer to `MemoryEventStore`, and the first implementation of
+  that port anywhere that actually runs. It is the oracle a failing adapter is
+  measured against, the target of a runnable `begin` → write → `commit` →
+  read-back walkthrough on its own page, and the fix for the port's cold start:
+  an adapter author now has something to copy. Costs no new dependency, and
+  `MemoryProjectionBatch` and `MemoryProjectionStoreError` are exported beside it.
+  With `conformance` also on, it implements `ProjectionProbe` and declares
+  `READS_THROUGH_BATCH = true` — the apply-on-write end of the batch-shape axis
+  the projection suite has to span.
+- **`ProjectionProbe`, behind a new off-by-default `conformance` feature** on
+  `happenstance-core` — the write seam the projection conformance suite drives an
+  adapter's read model through. It lives beside the port rather than in
+  `happenstance-testkit` because an adapter's own `tests/` directory is a third
+  crate, where the orphan rule rejects the impl; here it costs an adapter author
+  one feature flag on a dependency they already have and **no new edge in their
+  dependency graph**. The feature is `[]`: no dependency, and it implies neither
+  `std` nor `memory`.
 - **Six adapter skeletons, as instruments rather than as adapters.**
   `happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon` are
   new; `happenstance-sqlite`, `happenstance-ladybug` and `happenstance-sync` grew
