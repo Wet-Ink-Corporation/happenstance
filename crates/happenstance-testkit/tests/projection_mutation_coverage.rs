@@ -263,7 +263,17 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "CheckpointOnlyStore",
         kind: Kind::Mutant,
-        fails: &["commit_is_atomic_with_the_read_model"],
+        // Three rules, and two of them arrived when `commit-rollback-and-drop-rules`
+        // landed. That growth is the exactness meta-test working rather than a
+        // widening: a store that applies no rows fails any rule that reads one
+        // back, and the alternative — weakening the new rule so the old
+        // declaration survived — is the repair to refuse. Neither of the two is
+        // covered by this store alone.
+        fails: &[
+            "commit_is_atomic_with_the_read_model",
+            "dropped_batch_leaves_store_usable",
+            "distinct_projections_advance_independently",
+        ],
         provenance: "an adapter whose read model does not live in the same store as its \
                      checkpoint — a Redis or search-index projection with its checkpoint \
                      in Postgres, or a batch handed to a client the adapter forgot to \
@@ -272,15 +282,38 @@ const REGISTRY: &[Declared] = &[
                      specification itself (§4.11) as one of the three stores the \
                      projection suite owes",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "commit_is_atomic_with_the_read_model",
-            "must become durable together or not at all",
-        )],
+        expect: &[
+            (
+                "commit_is_atomic_with_the_read_model",
+                "must become durable together or not at all",
+            ),
+            (
+                "dropped_batch_leaves_store_usable",
+                "must leave the store **usable**",
+            ),
+            (
+                "distinct_projections_advance_independently",
+                "may disturb the other's rows, and the row the first commit wrote",
+            ),
+        ],
     },
     Declared {
         name: "UncommittedTransactionStore",
         kind: Kind::Mutant,
-        fails: &["commit_advances_the_checkpoint"],
+        // Five of the eight, and that is inflation rather than vacuity: a store
+        // that makes nothing durable trips every rule whose *anchor* is a
+        // committed state, at that anchor rather than at the property the rule is
+        // named for. The bar the event-store registry sets for tolerating it is
+        // met — no rule here is covered by this store alone except
+        // `commit_advances_the_checkpoint`, which is the one it was written for
+        // and the one §4.11's table leaves an em-dash against.
+        fails: &[
+            "commit_advances_the_checkpoint",
+            "dropped_batch_leaves_store_usable",
+            "commit_accepts_a_position_the_batch_did_not_write",
+            "commit_rejects_a_regressing_position",
+            "distinct_projections_advance_independently",
+        ],
         provenance: "an adapter whose `commit` executes the batch inside a transaction it \
                      never commits — the statements go out, the connection returns to the \
                      pool, the driver's implicit rollback discards both halves and the \
@@ -294,9 +327,123 @@ const REGISTRY: &[Declared] = &[
                      about it, because PS-1 is [FROZEN] and its repair is \
                      `ps-clause-pairing-sweep`'s",
         mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "commit_advances_the_checkpoint",
+                "must move this projection's checkpoint to the position it was given",
+            ),
+            (
+                "dropped_batch_leaves_store_usable",
+                "must leave the store **usable**",
+            ),
+            (
+                "commit_accepts_a_position_the_batch_did_not_write",
+                "high-water mark of *consideration*, not of application",
+            ),
+            (
+                "commit_rejects_a_regressing_position",
+                "must be refused as `CommitError::CheckpointRegression`",
+            ),
+            (
+                "distinct_projections_advance_independently",
+                "one commit advances exactly one projection",
+            ),
+        ],
+    },
+    Declared {
+        name: "UnrolledBackStore",
+        kind: Kind::Mutant,
+        fails: &["rollback_leaves_both_unchanged"],
+        provenance: "an adapter whose batch is a live transaction and whose `rollback` \
+                     clears its own statement buffer, drops the guard and hands the \
+                     connection back — without ever sending `ROLLBACK`. Every driver with \
+                     implicit transaction handling makes it available, `Ok` comes back, \
+                     and a test asserting only that `rollback` returned `Ok` certifies it",
+        mode: FailureMode::Assertion,
         expect: &[(
-            "commit_advances_the_checkpoint",
-            "must move this projection's checkpoint to the position it was given",
+            "rollback_leaves_both_unchanged",
+            "must leave the read model as it was",
+        )],
+    },
+    Declared {
+        name: "PooledConnectionStore",
+        kind: Kind::Mutant,
+        fails: &["dropped_batch_leaves_store_usable"],
+        provenance: "an adapter whose `begin` checks a connection out of a pool and whose \
+                     batch `Drop` returns it to nothing. `commit` and `rollback` both \
+                     return it, so only the path nobody writes a test for leaks — and the \
+                     store answers `Busy` for ever after. This is not hypothetical: a \
+                     reviewer's probe found exactly this store, which is why PS-7 carries \
+                     a second half at all (`spec/SPECIFICATION.md:4898-4910`)",
+        mode: FailureMode::Assertion,
+        expect: &[("dropped_batch_leaves_store_usable", "commit should succeed")],
+    },
+    Declared {
+        name: "TypeStampedBatchStore",
+        kind: Kind::Mutant,
+        fails: &["commit_rejects_a_foreign_batch"],
+        provenance: "an adapter that reads \"stamp the batch\" as \"tag it with which \
+                     store *kind* made it\" — a `const`, a `Default`, a hash of the \
+                     connection string — so every instance accepts every other instance's \
+                     batch. §4.11's Rejects column calls this \"every adapter writable \
+                     today\", and it is indistinguishable from correct in any test that \
+                     holds one store: what it permits is a runner with two stores \
+                     committing one projection's rows into the other's database",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "commit_rejects_a_foreign_batch",
+            "must be rejected as `CommitError::ForeignBatch`",
+        )],
+    },
+    Declared {
+        name: "ValidatingCommitStore",
+        kind: Kind::Mutant,
+        fails: &["commit_accepts_a_position_the_batch_did_not_write"],
+        provenance: "an adapter that validates `position` against what the batch wrote — \
+                     named by the specification itself for this rule \
+                     (`spec/SPECIFICATION.md:5680-5685`). The point of registering it is \
+                     that the misreading is *reasonable*: \"advances `id`'s checkpoint to \
+                     `position`\" reads like a claim about applied work, and without \
+                     PS-21's rule this store would be exactly as conformant as the oracle. \
+                     What it costs is a narrow projection re-scanning the same range for \
+                     ever on every restart",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "commit_accepts_a_position_the_batch_did_not_write",
+            "commit should succeed",
+        )],
+    },
+    Declared {
+        name: "UnconditionalCheckpointStore",
+        kind: Kind::Mutant,
+        fails: &["commit_rejects_a_regressing_position"],
+        provenance: "the adapter that issues `UPDATE checkpoint SET position = ?` \
+                     unconditionally, which is what everyone writes and which is correct \
+                     until two runners share an id. Under a redeploy where an old pod has \
+                     not yet exited, the stale runner drags the checkpoint backwards and \
+                     every event between the two positions is applied twice — harmless \
+                     only for projections that happen to be idempotent, which this port \
+                     offers as an escape hatch rather than requiring",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "commit_rejects_a_regressing_position",
+            "must be refused as `CommitError::CheckpointRegression`",
+        )],
+    },
+    Declared {
+        name: "SingleRowCheckpointStore",
+        kind: Kind::Mutant,
+        fails: &["distinct_projections_advance_independently"],
+        provenance: "a checkpoint table with one row, one position column and no key — \
+                     what a store that has only ever run one projection will write. Every \
+                     projection shares the row, so the fastest one drags the others \
+                     forward and the slower ones skip every event between the two \
+                     positions, permanently and with nothing reported. §4.11 names it, and \
+                     its own Rejects note observes that it passes every other rule",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "distinct_projections_advance_independently",
+            "one commit advances exactly one projection",
         )],
     },
 ];
@@ -310,6 +457,13 @@ macro_rules! for_each_projection_mutant {
         $($callback)+! {
             crate::correct::MutantFixture<crate::mutants::CheckpointOnlyStore>,
             crate::correct::MutantFixture<crate::mutants::UncommittedTransactionStore>,
+
+            crate::correct::MutantFixture<crate::mutants::UnrolledBackStore>,
+            crate::correct::MutantFixture<crate::mutants::PooledConnectionStore>,
+            crate::correct::MutantFixture<crate::mutants::TypeStampedBatchStore>,
+            crate::correct::MutantFixture<crate::mutants::ValidatingCommitStore>,
+            crate::correct::MutantFixture<crate::mutants::UnconditionalCheckpointStore>,
+            crate::correct::MutantFixture<crate::mutants::SingleRowCheckpointStore>,
         }
     };
 }

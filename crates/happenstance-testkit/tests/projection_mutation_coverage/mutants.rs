@@ -20,9 +20,11 @@
 //! about it are the two lists that can drift, and
 //! `projection_mutant_registry_is_exhaustive` exists to hold them together.
 
-use happenstance_core::Checkpoint;
+use core::cell::Cell;
 
-use crate::correct::{Defect, MutantBatch, State};
+use happenstance_core::{Checkpoint, CommitError, ProjectionId, SequencePosition};
+
+use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
 
 /// Commits the checkpoint and discards the write set.
 ///
@@ -97,5 +99,143 @@ impl Defect for UncommittedTransactionStore {
         // over all four arguments rather than an empty body, so that what the
         // correct step consumes is visibly *not* consumed here.
         let _ = (state, batch, key, checkpoint);
+    }
+}
+
+/// A `rollback` that releases its connection without issuing `ROLLBACK`.
+///
+/// The adapter whose batch is a live transaction and whose `rollback` clears the
+/// Rust-side buffer, drops the guard and hands the connection back — never
+/// sending the one statement that matters. `Ok` comes back, the caller believes
+/// the work is undone, and the rows are still there. Every driver with implicit
+/// transaction handling makes this available, and a test asserting only that
+/// `rollback` returned `Ok` certifies it.
+///
+/// Modelled here as a `rollback` that **applies** the batch, because the correct
+/// core buffers and therefore has no earlier moment at which the statements could
+/// have gone out. The observable consequence is identical — rows durable after a
+/// rollback that reported success — which is the only thing a conformance rule
+/// can see.
+pub(crate) struct UnrolledBackStore;
+
+impl Defect for UnrolledBackStore {
+    const NAME: &'static str = "UnrolledBackStore";
+
+    fn rollback(state: &mut State, batch: &mut MutantBatch<Self>) {
+        apply(state, batch);
+    }
+}
+
+/// A batch whose `Drop` returns its pooled connection to nothing.
+///
+/// The defect a reviewer's probe actually found
+/// (`spec/SPECIFICATION.md:4898-4910`): `begin` checks a connection out of the
+/// pool, `commit` and `rollback` both return it, and the path nobody wrote a test
+/// for — dropping the batch bare — leaks it. The store answers `Busy` from then
+/// on. It is the store that makes PS-7's *second* half enforceable, because it
+/// rolls the abandoned write back perfectly well and is still ruined.
+pub(crate) struct PooledConnectionStore;
+
+impl Defect for PooledConnectionStore {
+    const NAME: &'static str = "PooledConnectionStore";
+
+    fn release_the_connection(connection: &Cell<bool>) {
+        // Returned to nothing.
+        let _ = connection;
+    }
+}
+
+/// A batch stamped per *type* rather than per instance.
+///
+/// The identity is a constant, so every store of this type accepts every other
+/// one's batch. It is what an adapter author writes when they read "stamp the
+/// batch" as "tag it with which store *kind* made it" — a `const`, a `Default`, a
+/// hash of the connection string — and it is indistinguishable from correct in
+/// any test that holds one store.
+///
+/// The corruption it permits is silent and cross-instance: a runner holding two
+/// stores commits a batch of one projection's rows into the other's database.
+pub(crate) struct TypeStampedBatchStore;
+
+impl Defect for TypeStampedBatchStore {
+    const NAME: &'static str = "TypeStampedBatchStore";
+
+    fn mint_stamp() -> u64 {
+        // A per-type identity. Note that it compares *equal* across instances,
+        // which is the whole defect; the value itself is arbitrary.
+        0
+    }
+}
+
+/// A `commit` that validates `position` against what the batch wrote.
+///
+/// Named by the specification for this rule
+/// (`spec/SPECIFICATION.md:5680-5685`), and the reason it is worth registering is
+/// that it is **reasonable**: "advances `id`'s checkpoint to `position`" reads
+/// like a claim about applied work, and without PS-21's rule an adapter that
+/// enforced it would be exactly as conformant as one that did not. Two stores
+/// could disagree and both pass, which is a silent interoperability difference
+/// between two backends an application might swap.
+///
+/// What it costs in the field: a narrow projection — forty matches in
+/// thirty-seven thousand events a day — can never move its checkpoint past a
+/// range it applied nothing from, so it re-scans that range forever on every
+/// restart.
+pub(crate) struct ValidatingCommitStore;
+
+impl Defect for ValidatingCommitStore {
+    const NAME: &'static str = "ValidatingCommitStore";
+
+    fn validate_position(batch: &MutantBatch<Self>) -> Option<CommitError<MutantError>> {
+        if batch.writes.is_empty() {
+            return Some(CommitError::Store(MutantError::PositionNotApplied));
+        }
+        None
+    }
+}
+
+/// `UPDATE checkpoint SET position = ?`, unconditionally.
+///
+/// What everyone writes, and it is correct until two runners share an id. Under a
+/// redeploy where an old pod has not yet exited, the stale runner drags the
+/// checkpoint backwards and every event between the two positions is applied a
+/// second time — harmless only for projections that happen to be idempotent,
+/// which the port offers as an escape hatch rather than requiring.
+///
+/// The guard this store is missing is what converts that silent double-apply into
+/// a reported `CheckpointRegression`.
+pub(crate) struct UnconditionalCheckpointStore;
+
+impl Defect for UnconditionalCheckpointStore {
+    const NAME: &'static str = "UnconditionalCheckpointStore";
+
+    fn regression(
+        recorded: Checkpoint,
+        position: SequencePosition,
+    ) -> Option<CommitError<MutantError>> {
+        // No comparison at all: the write below will overwrite whatever is there.
+        let _ = (recorded, position);
+        None
+    }
+}
+
+/// A single-row checkpoint table.
+///
+/// What a store that has only ever run one projection will write: one row, one
+/// position column, no key. Every projection shares it, so the fastest one drags
+/// every other one's checkpoint forward and the slower ones skip every event
+/// between the two positions — permanently, and with nothing reported.
+///
+/// It passes every other rule in this family, which is precisely why PS-23 needs
+/// a rule of its own.
+pub(crate) struct SingleRowCheckpointStore;
+
+impl Defect for SingleRowCheckpointStore {
+    const NAME: &'static str = "SingleRowCheckpointStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The schema has one row and no key column, so the id never reaches it.
+        let _ = id;
+        "checkpoint".to_owned()
     }
 }

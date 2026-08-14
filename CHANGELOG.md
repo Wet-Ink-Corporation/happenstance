@@ -83,9 +83,84 @@ not the same as what a user needed to be told.
   no error anywhere and nothing in the log to find afterwards. It asserts the
   coupling and deliberately nothing else, so a failure here means one half
   landed without the other rather than something the baseline rule already owns.
-  Its wrong implementation, `CheckpointOnlyStore`, lands with the projection
-  mutant registry; until then this rule is documented as a carried debt rather
-  than a demonstrated rejection.
+  Its wrong implementation, `CheckpointOnlyStore`, is registered in the
+  projection mutant registry and fails this rule by name, so the rejection is
+  demonstrated rather than documented.
+- **A projection mutant registry, and eight wrong stores in it.** The projection
+  suite can now be shown to *fail* something, which is a different claim from
+  passing against the oracle and is the only one worth anything to an adapter
+  author. `tests/projection_mutation_coverage.rs` carries a hand-written
+  `REGISTRY` of stores and the exact rules each fails, four meta-tests over it —
+  every rule has a mutant, the registry and the store enumeration agree, each
+  mutant fails **exactly** what it declares, and every row states the adapter
+  shape that makes it plausible — and a `Defect` seam in which each hostile store
+  overrides one step of a correct core. No pass rate is quoted anywhere over the
+  set: the denominator is an author's choice, so a fraction reports how
+  representative the author was while reading as though it reported how good the
+  suite is. CF-5's conformant variant is named as an open hole rather than
+  asserted over an empty set.
+- **`rollback_leaves_both_unchanged`** — PS-8, and the reason `rollback` stays on
+  the port even though a buffered batch could just be dropped: Rust has no
+  `async Drop`, so an adapter holding a real transaction has no way to issue
+  `ROLLBACK` and await it from a destructor. The defect it detects is an adapter
+  whose `rollback` clears its own statement buffer, drops the guard and hands the
+  connection back **without ever sending `ROLLBACK`** — every driver with
+  implicit transaction handling makes that available, `Ok` comes back, and the
+  rows the batch carried are still there afterwards. A test asserting only that
+  `rollback` returned `Ok` certifies it. The rule reads both halves back through
+  a *fresh* handle and compares the checkpoint against what it was before the
+  rollback rather than against a position, so it asserts preservation and makes
+  no claim about progress.
+- **`dropped_batch_leaves_store_usable`** — PS-7, and the half of it that is
+  actually the rule. "A dropped batch rolls back" alone certifies a store that
+  has permanently lost its only writer, so this rule drops a batch **bare** — no
+  `commit`, no `rollback` — and then opens and commits a *second* batch on the
+  same handle and requires that second row to read back. The defect is an adapter
+  whose `begin` checks a connection out of a pool and whose `Drop` returns it to
+  nothing: `commit` and `rollback` both give it back, so only the path nobody
+  writes a test for leaks, and the store answers `Busy` for ever after. A
+  reviewer's probe found exactly that store, which is why the clause has a second
+  half at all.
+- **`commit_rejects_a_foreign_batch`** — PS-15. A batch begun on one store
+  instance and committed on another must be refused as
+  `CommitError::ForeignBatch`, and **neither store may move**. The defect is an
+  adapter that stamps the batch per *type* rather than per instance — a `const`,
+  a `Default`, a hash of the connection string — which is indistinguishable from
+  correct in any test holding one store and lets a runner with two stores commit
+  one projection's rows into the other's database. The check is at run time
+  because the type-level fix was compiled and refuted: a lifetime names a region
+  rather than an instance. This is the one rule in the family that does **not**
+  want a second handle onto one store; it wants two isolated stores, which two
+  `open()` calls already produce.
+- **`commit_accepts_a_position_the_batch_did_not_write`** — PS-21, and the clause
+  that makes a checkpoint a high-water mark of *consideration* rather than of
+  application. The defect is an adapter that validates `position` against what
+  the batch wrote, and registering it matters precisely because the misreading is
+  **reasonable**: "advances `id`'s checkpoint to `position`" reads like a claim
+  about applied work, and without this rule a validating store would be exactly
+  as conformant as one that accepts. Two backends could disagree and both pass,
+  which is a silent interoperability difference rather than a capability gap.
+  What it costs in the field is a narrow projection — forty matches in
+  thirty-seven thousand events — re-scanning the same range for ever on every
+  restart.
+- **`commit_rejects_a_regressing_position`** — PS-22. A commit naming a position
+  strictly below the current checkpoint is refused as
+  `CheckpointRegression { current, attempted }`, carrying both values so a caller
+  can log the gap rather than re-derive it, and neither half moves. The defect is
+  `UPDATE checkpoint SET position = ?` issued unconditionally, which is what
+  everyone writes and which is correct until two runners share an id: under a
+  redeploy where an old pod has not yet exited, the stale runner drags the
+  checkpoint backwards and every event between the two positions is applied
+  twice. The rule deliberately asserts nothing about an **equal** position,
+  because the clause permits accepting one.
+- **`distinct_projections_advance_independently`** — PS-23. Two projections in
+  one store advance at their own rates, and neither one's commit may disturb the
+  other's checkpoint or its rows. The defect is a checkpoint table with one row,
+  one position column and no key — what a store that has only ever run one
+  projection will write. The fastest projection drags every other one's
+  checkpoint forward, and the slower ones skip every event between the two
+  positions permanently, with nothing reported. It passes every other rule in the
+  family, which is why this one has to exist separately.
 - **`MemoryProjectionStore`, behind the existing `memory` feature** — the
   projection port's answer to `MemoryEventStore`, and the first implementation of
   that port anywhere that actually runs. It is the oracle a failing adapter is

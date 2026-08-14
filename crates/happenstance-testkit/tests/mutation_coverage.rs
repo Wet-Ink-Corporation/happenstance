@@ -3336,18 +3336,33 @@ mod mutation_coverage {
     /// The projection family's [`MUST_REJECT`]: every projection rule that
     /// spells `must!` rather than `require!`.
     ///
-    /// Both baseline rules are on it, and both belong there rather than being
-    /// gated with `require!`, because both read the checkpoint back through a
-    /// **fresh handle**. A projection fixture that cannot open a second handle
-    /// cannot observe PS-1 — the coupling the whole port exists for — at all, so
-    /// declining it is a fixture that does not meet the contract rather than a
-    /// trade the suite may record and move past.
+    /// Seven of the family's eight rules are on it, and every one belongs there
+    /// rather than being gated with `require!`, because every one reads the read
+    /// model or the checkpoint back through a **fresh handle**. A projection
+    /// fixture that cannot open a second handle cannot observe PS-1 — the
+    /// coupling the whole port exists for — at all, so declining it is a fixture
+    /// that does not meet the contract rather than a trade the suite may record
+    /// and move past.
     ///
-    /// A slice rather than a constant for [`MUST_REJECT`]'s reason, and here it
-    /// is already carrying two entries rather than anticipating a second.
+    /// **The eighth is absent on purpose, and the absence is the interesting
+    /// part.** `commit_rejects_a_foreign_batch` wants two *isolated stores*, not
+    /// two handles onto one, and two `open()` calls on the `impl AsyncFn() -> F`
+    /// every rule is handed already produce them (PS-15 says so in as many
+    /// words). It therefore spells no gate at all, runs against a fixture
+    /// declining everything, and **passes** — which is what this list asserts by
+    /// omission, through the `Verdict::Passed` arm of
+    /// [`assert_projection_declension`]. A rule added to this list "for safety"
+    /// would make that assertion unreachable.
+    ///
+    /// A slice rather than a constant for [`MUST_REJECT`]'s reason.
     const PROJECTION_MUST_REJECT: &[&str] = &[
         "commit_advances_the_checkpoint",
         "commit_is_atomic_with_the_read_model",
+        "rollback_leaves_both_unchanged",
+        "dropped_batch_leaves_store_usable",
+        "commit_accepts_a_position_the_batch_did_not_write",
+        "commit_rejects_a_regressing_position",
+        "distinct_projections_advance_independently",
     ];
 
     /// [`PROJECTION_MUST_REJECT`]'s mirror, and **it is empty on purpose**.

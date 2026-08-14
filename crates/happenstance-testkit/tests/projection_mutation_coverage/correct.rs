@@ -25,13 +25,19 @@
 //!   mutant set that only ever exercised the `Send` flavour would leave the
 //!   flavour the port was split for untested by the instrument that proves the
 //!   suite discriminates.
-//! * **An uninhabited error.** Nothing in the correct core can fail, exactly as
-//!   `MemoryProjectionStoreError` cannot, so `Self::Error`'s bound is discharged
-//!   by a type with no values. A defect that needs a *store* failure is the
-//!   signal to inhabit it, and the type going from empty to non-empty is a
-//!   visible event in review rather than a silent one.
+//! * **An error only a mutant can produce.** `MutantError` began uninhabited,
+//!   exactly as `MemoryProjectionStoreError` is, and grew two variants when two
+//!   defects needed a store failure the port's own error variants could not
+//!   express. The correct core still returns neither of them, so the claim
+//!   "nothing here fails on its own" is preserved by the *bodies* rather than by
+//!   the type — and inhabiting the type was a visible event in review rather
+//!   than a silent one.
+//! * **One connection, modelled.** The store holds an `Rc<Cell<bool>>` and a
+//!   batch holds a share in it. Without a resource a batch can fail to give
+//!   back, PS-7's second half — *and the store is still usable afterwards* — is
+//!   true by construction, and the rule that asserts it is decorative.
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::fmt;
 use core::future::Future;
 use core::marker::PhantomData;
@@ -66,22 +72,45 @@ pub(crate) struct State {
     pub(crate) checkpoints: BTreeMap<String, Checkpoint>,
 }
 
-/// How every store in this binary fails.
+/// How a store in this binary fails for reasons of its own.
 ///
-/// **Uninhabited**, for `MemoryProjectionStoreError`'s reason: it proves the
-/// contract does not *require* a fallible read path, and it documents at the type
-/// level that the correct core has no failure modes of its own.
-/// [`CommitError`] and [`ResetError`] are still meaningfully fallible — a foreign
-/// batch and a regressing position are both reachable — so a rule that needs a
-/// rejection has one without this type carrying a value.
+/// It was **uninhabited** when this file was written, exactly as
+/// `MemoryProjectionStoreError` is, and it stopped being so the moment a defect
+/// needed a store failure the port's own variants could not express. That
+/// transition is deliberately visible in review rather than silent: an
+/// uninhabited error is a claim that the correct core cannot fail, and inhabiting
+/// it withdraws that claim.
+///
+/// Both variants are reachable only from a *mutant*. The correct core returns
+/// neither: it always holds its connection when it commits, and it never
+/// validates a position (PS-21 forbids it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MutantError {}
+pub(crate) enum MutantError {
+    /// The store's one connection is checked out and was never returned.
+    ///
+    /// What a pooled adapter answers after a `Drop` that returned its connection
+    /// to nothing — the defect a reviewer's probe actually found
+    /// (`spec/SPECIFICATION.md:4898-4910`).
+    Busy,
+
+    /// The commit named a position nothing in the batch applied.
+    ///
+    /// What an adapter that *validates* `position` answers. PS-21 forbids the
+    /// validation; this variant exists so a store can be written that does it
+    /// anyway.
+    PositionNotApplied,
+}
 
 impl fmt::Display for MutantError {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Uninhabited: there is no value to render, and `match *self {}` is how
-        // the compiler is told so.
-        match *self {}
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Busy => {
+                f.write_str("this store's one connection is checked out and was never returned")
+            }
+            Self::PositionNotApplied => {
+                f.write_str("the commit named a position this batch did not write")
+            }
+        }
     }
 }
 
@@ -112,11 +141,10 @@ const fn considered_through(checkpoint: Checkpoint) -> Option<SequencePosition> 
 
 /// Applies a batch's queued writes to the read model.
 ///
-/// Takes the batch by `&mut` and drains it rather than consuming it, because
-/// [`MutantBatch`] will grow a `Drop` impl the moment a defect needs one and a
-/// type with `Drop` cannot be destructured field by field. Draining now costs
-/// nothing and removes a refactor that would otherwise arrive as a compile error
-/// in eight places at once.
+/// Takes the batch by `&mut` and drains it rather than consuming it, and that is
+/// now load-bearing rather than merely forward-looking: [`MutantBatch`] has a
+/// `Drop` impl — it is what returns the store's one connection — and a type with
+/// `Drop` cannot be destructured field by field.
 pub(crate) fn apply<D: Defect>(state: &mut State, batch: &mut MutantBatch<D>) {
     if batch.clear_all {
         state.rows.clear();
@@ -143,18 +171,79 @@ pub(crate) fn apply<D: Defect>(state: &mut State, batch: &mut MutantBatch<D>) {
 /// [`UnwindSafe`](std::panic::UnwindSafe), which `harness.rs` is built to avoid
 /// needing to assert away.
 ///
-/// # Why the step set is small, and how it grows
+/// # Why the step set is what it is, and how it grew
 ///
-/// One step, because one defect needs it. The event-store family's `Defect` grew
-/// from three steps to nine, each time because *a rule acquired the ability to
-/// see a defect there* — `head_of` and `contains` say so in their own doc
-/// comments. The same rule applies here: a step earns its place when a
-/// conformance rule can observe the difference, and not before. Adding a seam for
-/// a defect no rule can see is how a mutant registry starts describing the
-/// instrument instead of the port.
+/// It started at one step, because one defect needed it. It is seven now, and
+/// every one of the six added arrived the same way the event-store family's
+/// ninth did: *a rule acquired the ability to see a defect there*. A step earns
+/// its place when a conformance rule can observe the difference, and not before —
+/// adding a seam for a defect no rule can see is how a mutant registry starts
+/// describing the instrument instead of the port.
+///
+/// Read that as a map. There is one step per commit-path obligation the suite now
+/// enforces: identity ([`mint_stamp`](Self::mint_stamp), PS-15), scope
+/// ([`checkpoint_key`](Self::checkpoint_key), PS-23), monotonicity
+/// ([`regression`](Self::regression), PS-22), the forbidden validation
+/// ([`validate_position`](Self::validate_position), PS-21), durability
+/// ([`commit_writes`](Self::commit_writes), PS-1), undo
+/// ([`rollback`](Self::rollback), PS-8) and resource release
+/// ([`release_the_connection`](Self::release_the_connection), PS-7).
 pub(crate) trait Defect: 'static + Sized {
     /// The registry key, which names the *store*.
     const NAME: &'static str;
+
+    /// The identity a fresh store instance is minted with.
+    ///
+    /// PS-15's seam. The correct answer is a value from a process-local counter,
+    /// so that two instances never compare equal and `commit` can reject a batch
+    /// begun on the other one. A store that mints per *type* instead — a `const`,
+    /// a `Default`, a hash of the connection string — compiles, passes every
+    /// single-store rule, and corrupts silently.
+    fn mint_stamp() -> u64 {
+        next_stamp()
+    }
+
+    /// The key this store files a projection's checkpoint under.
+    ///
+    /// PS-23's seam, and it is *one* step read by both `commit` and `checkpoint`
+    /// rather than a write step and a read step. A store that recorded under one
+    /// key and read under another would be two defects wearing one name, and no
+    /// adapter is written that way: the single-row checkpoint table this exists
+    /// to model gets the key wrong in exactly one place, its schema.
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        id.as_str().to_owned()
+    }
+
+    /// Whether a commit at `position` regresses against `recorded`.
+    ///
+    /// PS-22's seam. `None` accepts. The correct answer refuses a position
+    /// strictly below the recorded one and **accepts an equal one**, which the
+    /// clause permits and no rule may assert against.
+    fn regression(
+        recorded: Checkpoint,
+        position: SequencePosition,
+    ) -> Option<CommitError<MutantError>> {
+        match considered_through(recorded) {
+            Some(current) if position < current => Some(CommitError::CheckpointRegression {
+                current,
+                attempted: position,
+            }),
+            _ => None,
+        }
+    }
+
+    /// Whether this store refuses a commit whose position names nothing the batch
+    /// applied.
+    ///
+    /// PS-21's seam, and **the correct answer is always `None`** — the clause
+    /// forbids the validation outright. It is a step at all because "validate the
+    /// position" is a *reasonable* reading of the port that would be equally
+    /// conformant without the rule, which is what makes
+    /// `commit_accepts_a_position_the_batch_did_not_write` worth having.
+    fn validate_position(batch: &MutantBatch<Self>) -> Option<CommitError<MutantError>> {
+        let _ = batch;
+        None
+    }
 
     /// Both halves of a commit, made durable as one unit.
     ///
@@ -179,6 +268,26 @@ pub(crate) trait Defect: 'static + Sized {
         apply(state, batch);
         state.checkpoints.insert(key.to_owned(), checkpoint);
     }
+
+    /// What a `rollback` does with the batch it was handed.
+    ///
+    /// PS-8's seam. The correct answer is *nothing*: the batch is a buffer, and
+    /// discarding it is the whole of the undo. The defect this exists to model is
+    /// a `rollback` that releases its connection without issuing `ROLLBACK`, so
+    /// the rows stay durable and the call still reports success.
+    fn rollback(state: &mut State, batch: &mut MutantBatch<Self>) {
+        let _ = (state, batch);
+    }
+
+    /// Returns the store's one connection when a batch is dropped **bare**.
+    ///
+    /// PS-7's seam, and the only step reached from a `Drop` impl rather than from
+    /// a port method — which is exactly why the defect it models is so easy to
+    /// ship. `commit` and `rollback` release the connection explicitly; a bare
+    /// drop is the path nobody writes a test for.
+    fn release_the_connection(connection: &Cell<bool>) {
+        connection.set(false);
+    }
 }
 
 // =====================================================================
@@ -187,10 +296,12 @@ pub(crate) trait Defect: 'static + Sized {
 
 /// An in-flight write against a [`MutantStore`].
 ///
-/// Owned, and not a live transaction: it holds a materialised delta plus the
-/// stamp of the store instance that minted it. Nothing it holds is visible
-/// through the store until [`commit`](ProjectionStore::commit) or
-/// [`reset`](ProjectionStore::reset) takes it.
+/// Owned, and not a live transaction: it holds a materialised delta, the stamp of
+/// the store instance that minted it, and — because the whole point of PS-7 is
+/// that a batch can hold a *resource* — a share in that store's one connection.
+/// Nothing it holds is visible through the store until
+/// [`commit`](ProjectionStore::commit) or [`reset`](ProjectionStore::reset) takes
+/// it.
 pub(crate) struct MutantBatch<D: Defect> {
     /// The identity of the store instance that minted this batch.
     pub(crate) stamp: u64,
@@ -198,8 +309,30 @@ pub(crate) struct MutantBatch<D: Defect> {
     pub(crate) writes: BTreeMap<String, u64>,
     /// Whether this batch clears the read model before applying its writes.
     pub(crate) clear_all: bool,
+    /// The minting store's connection: `true` while it is checked out.
+    connection: Rc<Cell<bool>>,
+    /// Whether *this* batch is the one holding that connection.
+    ///
+    /// `false` for a batch begun while the connection was already out — which
+    /// the correct store never produces, because it always gets its connection
+    /// back.
+    pub(crate) holds_the_connection: bool,
     /// The defect this batch's store carries. Never a value.
     defect: PhantomData<D>,
+}
+
+impl<D: Defect> Drop for MutantBatch<D> {
+    /// Returns the store's connection, if this batch had it.
+    ///
+    /// This is the **bare drop** path PS-7 is about, and it is also what runs
+    /// after `commit` and `rollback` have already released it explicitly — which
+    /// is harmless, because releasing a connection twice is idempotent and
+    /// modelling it otherwise would invent a defect no adapter has.
+    fn drop(&mut self) {
+        if self.holds_the_connection {
+            D::release_the_connection(&self.connection);
+        }
+    }
 }
 
 impl<D: Defect> fmt::Debug for MutantBatch<D> {
@@ -212,7 +345,10 @@ impl<D: Defect> fmt::Debug for MutantBatch<D> {
             .field("stamp", &self.stamp)
             .field("writes", &self.writes)
             .field("clear_all", &self.clear_all)
-            .finish()
+            .field("holds_the_connection", &self.holds_the_connection)
+            // The `Rc<Cell<bool>>` itself is the store's, not this batch's, and
+            // rendering it would print the same shared value under two names.
+            .finish_non_exhaustive()
     }
 }
 
@@ -227,6 +363,14 @@ impl<D: Defect> fmt::Debug for MutantBatch<D> {
 /// (`crates/happenstance-testkit/src/contract.rs:108-122`).
 pub(crate) struct MutantStore<D: Defect> {
     state: Rc<RefCell<State>>,
+    /// This store's one connection: `true` while a batch has it checked out.
+    ///
+    /// Shared by every handle, because a pooled adapter's handles share a pool.
+    /// It is the smallest thing that makes PS-7's second half — *and the store
+    /// is still usable afterwards* — observable at all: without a resource a
+    /// batch can fail to give back, "dropping a batch leaves the store usable"
+    /// is true by construction and the rule is decorative.
+    connection: Rc<Cell<bool>>,
     stamp: u64,
     defect: PhantomData<D>,
 }
@@ -246,6 +390,7 @@ impl<D: Defect> Clone for MutantStore<D> {
     fn clone(&self) -> Self {
         Self {
             state: Rc::clone(&self.state),
+            connection: Rc::clone(&self.connection),
             stamp: self.stamp,
             defect: PhantomData,
         }
@@ -257,7 +402,8 @@ impl<D: Defect> MutantStore<D> {
     fn new() -> Self {
         Self {
             state: Rc::new(RefCell::new(State::default())),
-            stamp: next_stamp(),
+            connection: Rc::new(Cell::new(false)),
+            stamp: D::mint_stamp(),
             defect: PhantomData,
         }
     }
@@ -273,10 +419,19 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
     type Batch = MutantBatch<D>;
 
     fn begin(&self) -> Self::Batch {
+        // Checking the connection out. A batch begun while it is already out
+        // does not hold it, and every write path below refuses such a batch —
+        // which is how a store that never gives its connection back answers
+        // `Busy` forever rather than merely losing one write.
+        let free = !self.connection.get();
+        self.connection.set(true);
+
         MutantBatch {
             stamp: self.stamp,
             writes: BTreeMap::new(),
             clear_all: false,
+            connection: Rc::clone(&self.connection),
+            holds_the_connection: free,
             defect: PhantomData,
         }
     }
@@ -286,7 +441,7 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             .state
             .borrow()
             .checkpoints
-            .get(id.as_str())
+            .get(&D::checkpoint_key(id))
             .copied()
             .unwrap_or(Checkpoint::NeverRun))
     }
@@ -298,24 +453,30 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
         position: SequencePosition,
         authority: Authority,
     ) -> Result<(), CommitError<Self::Error>> {
+        // Order matters and is the oracle's: identity, then the resource, then
+        // the port-level refusals, then the write. A store that checked the
+        // position before the stamp would answer the wrong error for a batch that
+        // is both foreign and regressing.
         if batch.stamp != self.stamp {
             return Err(CommitError::ForeignBatch);
         }
+        if !batch.holds_the_connection {
+            return Err(CommitError::Store(MutantError::Busy));
+        }
 
+        let key = D::checkpoint_key(id);
         let mut state = self.state.borrow_mut();
 
         let recorded = state
             .checkpoints
-            .get(id.as_str())
+            .get(&key)
             .copied()
             .unwrap_or(Checkpoint::NeverRun);
-        if let Some(current) = considered_through(recorded)
-            && position < current
-        {
-            return Err(CommitError::CheckpointRegression {
-                current,
-                attempted: position,
-            });
+        if let Some(refusal) = D::regression(recorded, position) {
+            return Err(refusal);
+        }
+        if let Some(refusal) = D::validate_position(&batch) {
+            return Err(refusal);
         }
 
         let checkpoint = match authority {
@@ -325,7 +486,12 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             _ => Checkpoint::Live { through: position },
         };
 
-        D::commit_writes(&mut state, &mut batch, id.as_str(), checkpoint);
+        D::commit_writes(&mut state, &mut batch, &key, checkpoint);
+        drop(state);
+
+        // `COMMIT` returns the connection to the pool. This is the *explicit*
+        // release, and it is not the one PS-7 is about — the batch's `Drop` is.
+        self.connection.set(false);
         Ok(())
     }
 
@@ -337,16 +503,31 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
         if batch.stamp != self.stamp {
             return Err(ResetError::ForeignBatch);
         }
+        if !batch.holds_the_connection {
+            return Err(ResetError::Store(MutantError::Busy));
+        }
 
+        let key = D::checkpoint_key(id);
         let mut state = self.state.borrow_mut();
         apply(&mut state, &mut batch);
         // *Removing* the key is what returns the projection to `NeverRun`.
-        state.checkpoints.remove(id.as_str());
+        state.checkpoints.remove(&key);
+        drop(state);
+
+        self.connection.set(false);
         Ok(())
     }
 
-    async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error> {
-        drop(batch);
+    async fn rollback(&self, mut batch: Self::Batch) -> Result<(), Self::Error> {
+        if !batch.holds_the_connection {
+            return Err(MutantError::Busy);
+        }
+
+        let mut state = self.state.borrow_mut();
+        D::rollback(&mut state, &mut batch);
+        drop(state);
+
+        self.connection.set(false);
         Ok(())
     }
 }

@@ -29,14 +29,20 @@
 //!
 //! # What a green run here does and does not prove
 //!
-//! Both rules below pass against `MemoryProjectionStore`, which is the oracle
+//! Every rule below passes against `MemoryProjectionStore`, which is the oracle
 //! and is *supposed* to pass. That the suite can **fail** a wrong store is a
-//! different claim, and the store that carries it —`CheckpointOnlyStore`, which
-//! commits the checkpoint and discards the write set — arrives with
-//! `projection-mutant-registry`. Until it does, each rule's own documentation
-//! names the defect it rejects and this paragraph says the debt is carried
-//! rather than discharged
+//! different claim, and it is now discharged rather than carried: each rule
+//! names the defect it rejects, and the store carrying that defect is registered
+//! as data in `tests/projection_mutation_coverage.rs`, driven through this
+//! enumeration, and asserted to fail **exactly** the rules it declares
 //! ([ADR-0010](../../../.kb/decisions/0010-the-suite-must-prove-itself.md)).
+//! `every_projection_rule_has_a_mutant` is what makes that true of the *next*
+//! rule as well: a rule added here without a store that fails it turns the
+//! workspace red, and there is no exemption list.
+//!
+//! What a green run still does **not** prove is that this family is complete.
+//! Nine of §4.11's seventeen rules are unwritten, and the reset and read-through
+//! families are where they land.
 
 /// Panics unless the projection fixture supports the named capability.
 ///
@@ -104,23 +110,47 @@ pub mod rules {
     #![allow(clippy::missing_panics_doc)]
 
     use happenstance_core::{
-        Authority, Checkpoint, ProjectionId, ProjectionProbe, ProjectionStore, SequencePosition,
+        Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore,
+        SequencePosition,
     };
 
     use crate::{ProjectionFixture, RuleOutcome};
 
-    /// The probe key both rules write through.
+    /// The probe key every rule writes through.
     ///
     /// One constant rather than a literal per rule, so that a rule reading back
     /// a key it never wrote is a compile-time impossibility rather than a typo
     /// nobody notices for a phase.
     const PROBE_KEY: &str = "depot-7";
 
-    /// The probe value both rules write.
+    /// The probe value every rule writes.
     ///
     /// Deliberately not `0` or `1`: a store that returns a default rather than
     /// the value it was handed passes a read-back asserting either of those.
     const PROBE_VALUE: u64 = 12;
+
+    /// A second probe key, for the rules that must tell two writes apart.
+    ///
+    /// `dropped_batch_leaves_store_usable` and
+    /// `distinct_projections_advance_independently` both assert about *two*
+    /// rows, and asserting about two rows under one key cannot distinguish "the
+    /// second write landed" from "the first one did".
+    const SECOND_KEY: &str = "depot-11";
+
+    /// The value written under [`SECOND_KEY`].
+    ///
+    /// Distinct from [`PROBE_VALUE`] for the same reason the keys are distinct:
+    /// a store that writes the right key with the wrong value is a defect a
+    /// shared value would hide.
+    const SECOND_VALUE: u64 = 37;
+
+    /// The key an *anchoring* commit writes.
+    ///
+    /// Separate from both of the above because the rules that anchor — commit
+    /// something first so that the state a rejection must leave alone is a
+    /// recorded state rather than `NeverRun` — must not have their anchor
+    /// confused with the write under test.
+    const ANCHOR_KEY: &str = "depot-3";
 
     // ---------------------------------------------------------------------
     // Helpers
@@ -161,12 +191,43 @@ pub mod rules {
         }
     }
 
+    /// Rolls a batch back and unwraps, failing the test with context on error.
+    async fn rollback_ok<S: ProjectionStore>(store: &S, batch: S::Batch) {
+        if let Err(err) = store.rollback(batch).await {
+            panic!("rolling a batch back should succeed, got {err:?}");
+        }
+    }
+
+    /// The position immediately after `position`.
+    ///
+    /// [`SequencePosition::next`] returns `Option<Self>` deliberately, so that a
+    /// consumer at the top of the key space is *told* rather than looping. A rule
+    /// takes the `None` arm as a panic with a message rather than a silent
+    /// `unwrap`, because a rule that fell over there would otherwise read as an
+    /// adapter failure.
+    ///
+    /// No literal appears anywhere in this file: every position a rule uses is
+    /// [`SequencePosition::FIRST`] or something this function derived from it.
+    /// The specification permits gaps, and a rule that assumes density passes
+    /// against the reference store and fails a conformant adapter in the field
+    /// (CF-6).
+    fn after(position: SequencePosition) -> SequencePosition {
+        match position.next() {
+            Some(next) => next,
+            None => panic!(
+                "this rule needs the position after {position}, and there is \
+                 none: the store is at the top of the key space. That is a real \
+                 answer from `SequencePosition::next`, not a rule failure — but \
+                 no rule in this family can run against a store there"
+            ),
+        }
+    }
+
     // ---------------------------------------------------------------------
     // The baseline pair
     //
-    // Two rules, not seventeen. The rest of §4.11 is *differential* against
-    // these two, so they land first and alone; a third rule here would be a
-    // third rule with no mutant behind it.
+    // The rest of §4.11 is *differential* against these two: neither of the
+    // other rules re-asserts the coupling, and none of them asserts progress.
     // ---------------------------------------------------------------------
 
     /// A commit moves the projection's checkpoint to the position it was given.
@@ -175,20 +236,18 @@ pub mod rules {
     /// rule in it that is not about coupling: it asserts that a commit reported
     /// as successful actually *advanced* something.
     ///
-    /// **Rejects:** a `commit` that returns `Ok` and makes neither the
-    /// read-model row nor the checkpoint durable. That implementation is not a
-    /// straw man — PS-1's MUST is a *coupling* rather than a progress
-    /// obligation, so "neither" satisfies the clause through its "or not at all"
-    /// arm and passes [`commit_is_atomic_with_the_read_model`]
-    /// as one of the two states that rule permits. This is the rule that fails
-    /// it. Whether the progress obligation joins PS-1 or earns a clause of its
-    /// own is open and owned elsewhere
+    /// **Rejects:** `UncommittedTransactionStore` — a `commit` that returns `Ok`
+    /// and makes neither the read-model row nor the checkpoint durable, which is
+    /// what an adapter does when it executes the batch inside a transaction it
+    /// never commits. That implementation is not a straw man — PS-1's MUST is a
+    /// *coupling* rather than a progress obligation, so "neither" satisfies the
+    /// clause through its "or not at all" arm and passes
+    /// [`commit_is_atomic_with_the_read_model`] as one of the two states that
+    /// rule permits. This is the rule that fails it, and it is the only rule
+    /// §4.11's table leaves an em-dash against. Whether the progress obligation
+    /// joins PS-1 or earns a clause of its own is open and owned elsewhere
     /// (`.kb/open-questions/ps-1-states-no-progress-obligation.md`); the rule is
     /// written as §4.11's table specifies and settles nothing.
-    ///
-    /// The store that embodies the defect is `projection-mutant-registry`'s and
-    /// is not in the tree yet, which is a knowingly-carried one-story debt with
-    /// a named discharger rather than an exemption.
     ///
     /// The checkpoint is read back through a **fresh handle**, so a store whose
     /// commit is only visible to the connection that made it fails here rather
@@ -243,11 +302,10 @@ pub mod rules {
     /// **Rejects:** `CheckpointOnlyStore` — a store that commits the checkpoint
     /// and discards the write set, which is the natural shape for any adapter
     /// whose read model lives somewhere other than its checkpoint table. It is
-    /// named by the specification (§4.11) and lands with
-    /// `projection-mutant-registry` (HS-S0008), the story that discharges this
-    /// rule's carried debt. Two further stores fail this rule for unrelated
-    /// reasons and arrive with it: `TruncatingResetStore` and
-    /// `ValidatingCommitStore`.
+    /// named by the specification (§4.11) and registered in
+    /// `tests/projection_mutation_coverage.rs`, where its declaration also
+    /// records the two further rules it fails — a store that applies no rows
+    /// fails any rule that reads one back.
     ///
     /// **What it deliberately does not assert.** Only the *coupling*. "Both
     /// absent" is a legal outcome here — PS-1's MUST is a coupling rather than a
@@ -300,6 +358,394 @@ pub mod rules {
 
         RuleOutcome::Ran
     }
+
+    // ---------------------------------------------------------------------
+    // The commit path, differentially
+    //
+    // Six rules, each written against exactly one clause and each with a
+    // registered store that fails it and nothing else. They are *differential*
+    // against the pair above: none of them re-asserts the coupling, and none
+    // asserts progress, because a rule that fails in two places for two reasons
+    // tells an adapter author neither.
+    // ---------------------------------------------------------------------
+
+    /// An explicit `rollback` leaves the read model and the checkpoint exactly
+    /// as the last successful commit left them.
+    ///
+    /// PS-8, and the reason `rollback` stays on the port at all: Rust has no
+    /// `async Drop`, so an adapter holding a real transaction has no way to issue
+    /// `ROLLBACK` and await its completion from a destructor.
+    ///
+    /// **Rejects:** `UnrolledBackStore` — a `rollback` that releases its
+    /// connection without issuing `ROLLBACK`, so the rows the batch carried stay
+    /// durable while the call reports success. An adapter author who tests only
+    /// that `rollback` returned `Ok` cannot see it.
+    ///
+    /// **What it deliberately does not assert.** *Progress.* The checkpoint is
+    /// compared against what a fresh handle saw **before** the rollback, not
+    /// against `Live { through: P }` — so a store that committed nothing has an
+    /// unchanged checkpoint here and is rejected by
+    /// [`commit_advances_the_checkpoint`] instead, which is the rule that owns
+    /// that defect.
+    ///
+    /// The anchoring commit exists so the state being preserved is a *recorded*
+    /// state: a rollback that preserves `NeverRun` preserves nothing anybody
+    /// could have broken.
+    pub async fn rollback_leaves_both_unchanged<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!`, not `require!`: the read-back below goes through a second
+        // handle, and a fixture that cannot open one cannot observe the
+        // invariant at all.
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("rollback_leaves_both_unchanged");
+        let position = SequencePosition::FIRST;
+
+        let mut anchor = writer.begin();
+        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        commit_ok(&writer, anchor, &id, position, Authority::Live).await;
+
+        let before = checkpoint_ok(&fixture.connect().await, &id).await;
+
+        let mut discarded = writer.begin();
+        writer.probe_write(&mut discarded, PROBE_KEY, SECOND_VALUE);
+        rollback_ok(&writer, discarded).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            None,
+            "an explicit rollback must leave the read model as it was, and a \
+             fresh handle can still see a row the rolled-back batch carried. A \
+             `rollback` that discards its own buffer while the statements it \
+             already sent stay durable returns `Ok` and loses nothing an adapter \
+             author would notice"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            before,
+            "an explicit rollback must leave the checkpoint exactly as the last \
+             successful commit left it"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A batch dropped bare rolls back **and** leaves the store usable.
+    ///
+    /// PS-7, and the second half is the rule. "Rolls back" alone certifies a
+    /// store that has permanently lost its only writer, which is why this rule
+    /// opens and commits a *second* batch on the same handle and asserts that
+    /// second batch's row is readable.
+    ///
+    /// **Rejects:** `PooledConnectionStore` — an adapter whose `begin` checks out
+    /// a pooled connection that `Drop` returns to nothing. A reviewer's probe
+    /// already found exactly this: the store answered `Busy` forever afterwards
+    /// (`spec/SPECIFICATION.md:4898-4910`). Two further stores fail it at the
+    /// second row for unrelated reasons — `CheckpointOnlyStore`, which applies no
+    /// rows at all, and `UncommittedTransactionStore`, which makes nothing
+    /// durable — and their registry rows say so.
+    ///
+    /// The non-vacuity anchor is the assertion that the **second** batch's row is
+    /// present. A "rolls back" -only rule cannot make it.
+    pub async fn dropped_batch_leaves_store_usable<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("dropped_batch_leaves_store_usable");
+        let position = SequencePosition::FIRST;
+
+        let mut abandoned = writer.begin();
+        writer.probe_write(&mut abandoned, PROBE_KEY, PROBE_VALUE);
+        // Bare: no `commit`, no `rollback`. This is the line the rule is about.
+        drop(abandoned);
+
+        let mut second = writer.begin();
+        writer.probe_write(&mut second, SECOND_KEY, SECOND_VALUE);
+        commit_ok(&writer, second, &id, position, Authority::Live).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            None,
+            "dropping a batch without `commit` or `reset` must roll it back, and \
+             a fresh handle saw a row the dropped batch carried"
+        );
+        assert_eq!(
+            probe_read_ok(&observer, SECOND_KEY).await,
+            Some(SECOND_VALUE),
+            "dropping a batch must leave the store **usable**: a second batch \
+             opened on the same handle committed, and its row is not there. An \
+             adapter whose `begin` checks out a pooled connection that `Drop` \
+             returns to nothing answers `Busy` from here on, and a rule asserting \
+             only that the first write rolled back would certify it"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            Checkpoint::Live { through: position },
+            "the second batch's commit must have moved the checkpoint, or the \
+             store is not usable after a dropped batch"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A batch begun on one store instance is rejected by another, and neither
+    /// store moves.
+    ///
+    /// PS-15. The check is at run time by a stamp minted per store *instance*,
+    /// because the type-level fix was compiled and refuted: a lifetime names a
+    /// region rather than an instance, so two `&Store` references unify and
+    /// `b.commit(a.begin(), …)` still type-checks. The only construction that
+    /// names an instance is a generative brand, which forbids the batch escaping
+    /// the closure that began it — defeating the caller the hazard is about.
+    ///
+    /// **Rejects:** `TypeStampedBatchStore` — an adapter whose batch carries an
+    /// identity minted per *type* rather than per instance, so every store of
+    /// that type accepts every other's batch and corrupts silently.
+    ///
+    /// # Why this rule does not spell `must!(F: SECOND_HANDLE)`
+    ///
+    /// It does not want a second handle. It wants two **isolated stores**, which
+    /// is what two `open()` calls on the `impl AsyncFn() -> F` every rule is
+    /// handed already produce — and that is exactly the affordance the fixture
+    /// contract bought (`crates/happenstance-testkit/src/registry.rs:45-49`).
+    /// A fixture that declines `SECOND_HANDLE` still runs this rule and still
+    /// passes it, which is correct: the capability it declined is not the one
+    /// this rule spends.
+    pub async fn commit_rejects_a_foreign_batch<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let first = open().await;
+        let second = open().await;
+        let origin = first.connect().await;
+        let stranger = second.connect().await;
+
+        let id = ProjectionId::new("commit_rejects_a_foreign_batch");
+        let position = SequencePosition::FIRST;
+
+        let mut batch = origin.begin();
+        origin.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+
+        match stranger.commit(batch, &id, position, Authority::Live).await {
+            Err(CommitError::ForeignBatch) => {}
+            outcome => panic!(
+                "a batch begun on a different store instance must be rejected as \
+                 `CommitError::ForeignBatch`, and this store accepted it: \
+                 {outcome:?}. The check is one integer comparison on a path that \
+                 is already doing I/O — `begin` stamps an identity minted per \
+                 store instance and `commit` compares it"
+            ),
+        }
+
+        for (store, which) in [
+            (&origin, "the store the batch was begun on"),
+            (&stranger, "the store it was offered to"),
+        ] {
+            assert_eq!(
+                checkpoint_ok(store, &id).await,
+                Checkpoint::NeverRun,
+                "a rejected commit must leave **both** stores unchanged, and \
+                 {which} moved its checkpoint"
+            );
+            assert_eq!(
+                probe_read_ok(store, PROBE_KEY).await,
+                None,
+                "a rejected commit must leave **both** stores unchanged, and \
+                 {which} kept a row the rejected batch carried"
+            );
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// A commit may name a position no applied write occupies.
+    ///
+    /// PS-21, and the clause that makes the checkpoint a high-water mark of
+    /// **consideration** rather than of application. That is what makes it a
+    /// resume point rather than a progress report.
+    ///
+    /// **Rejects:** `ValidatingCommitStore` — an adapter that validates
+    /// `position` against what the batch wrote, which the specification names for
+    /// this rule (`spec/SPECIFICATION.md:5680-5685`). It is the sharper hazard
+    /// rather than a capability gap: validating is a *reasonable* reading of
+    /// "advances `id`'s checkpoint to `position`", it would be equally conformant
+    /// without this rule, and it makes a narrow projection re-scan the same range
+    /// forever on every restart. Two adapters could disagree and both pass.
+    /// `UncommittedTransactionStore` also fails it, at the same assertion and for
+    /// its own reason, and its registry row says so.
+    pub async fn commit_accepts_a_position_the_batch_did_not_write<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("commit_accepts_a_position_the_batch_did_not_write");
+        let position = SequencePosition::FIRST;
+
+        // Empty on purpose: this projection considered the range and applied
+        // nothing from it, which is the ordinary case for a narrow projection.
+        let considered_nothing = writer.begin();
+        commit_ok(&writer, considered_nothing, &id, position, Authority::Live).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            Checkpoint::Live { through: position },
+            "the checkpoint is a high-water mark of *consideration*, not of \
+             application: a commit MAY name a position no applied write occupies, \
+             and an adapter MUST NOT validate `position` against what the batch \
+             wrote. A projection that matches forty events in thirty-seven \
+             thousand must be able to move past the rest"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A commit naming a position strictly below the current checkpoint is
+    /// refused, and neither half moves.
+    ///
+    /// PS-22. Under a redeploy where an old runner pod has not yet exited, two
+    /// runners share an id and the stale one drags the checkpoint backwards;
+    /// every event between the two positions is then applied twice, which is
+    /// harmless only for projections that happen to be idempotent. The guard
+    /// converts a silent double-apply into a reported error.
+    ///
+    /// **Rejects:** `UnconditionalCheckpointStore` — the adapter that issues
+    /// `UPDATE checkpoint SET position = ?` unconditionally, which is what
+    /// everyone writes. `UncommittedTransactionStore` also fails it, because a
+    /// store that recorded no checkpoint has nothing to regress against.
+    ///
+    /// **What it deliberately does not assert.** Anything about an **equal**
+    /// position. PS-22 permits accepting one, so a rule that rejected it would
+    /// forbid a conformant adapter; no commit in this body names a position the
+    /// store already holds.
+    pub async fn commit_rejects_a_regressing_position<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("commit_rejects_a_regressing_position");
+
+        let earlier = SequencePosition::FIRST;
+        let later = after(earlier);
+
+        let mut anchor = writer.begin();
+        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        commit_ok(&writer, anchor, &id, later, Authority::Live).await;
+
+        let mut regressing = writer.begin();
+        writer.probe_write(&mut regressing, PROBE_KEY, SECOND_VALUE);
+        match writer
+            .commit(regressing, &id, earlier, Authority::Live)
+            .await
+        {
+            Err(CommitError::CheckpointRegression { current, attempted }) => {
+                assert_eq!(
+                    (current, attempted),
+                    (later, earlier),
+                    "`CheckpointRegression` must carry the checkpoint the store \
+                     already holds and the position it was actually given, so a \
+                     caller can log the gap rather than re-derive it with a \
+                     second round trip"
+                );
+            }
+            outcome => panic!(
+                "a commit naming a position strictly below the current checkpoint \
+                 must be refused as `CommitError::CheckpointRegression`, and this \
+                 store answered {outcome:?}. An unconditional `UPDATE checkpoint \
+                 SET position = ?` turns a stale runner into a silent \
+                 double-apply"
+            ),
+        }
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            None,
+            "a refused commit must leave the read model unchanged, and a fresh \
+             handle saw a row the refused batch carried"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            Checkpoint::Live { through: later },
+            "a refused commit must leave the checkpoint unchanged"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// One `commit` advances exactly one [`ProjectionId`].
+    ///
+    /// PS-23. Two projections over one store advance at their own rates, and
+    /// neither one's commit may disturb the other's checkpoint or its rows.
+    ///
+    /// **Rejects:** `SingleRowCheckpointStore` — an adapter with a single-row
+    /// checkpoint table, which is what a store that has only ever run one
+    /// projection will write. It passes every other rule in this family, which is
+    /// exactly why this one has to exist. `CheckpointOnlyStore` and
+    /// `UncommittedTransactionStore` also fail it, at the row half and the
+    /// checkpoint half respectively, and their registry rows say so.
+    pub async fn distinct_projections_advance_independently<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+
+        let slower = ProjectionId::new("distinct_projections_advance_independently.slower");
+        let faster = ProjectionId::new("distinct_projections_advance_independently.faster");
+
+        let earlier = SequencePosition::FIRST;
+        let later = after(earlier);
+
+        let mut first = writer.begin();
+        writer.probe_write(&mut first, PROBE_KEY, PROBE_VALUE);
+        commit_ok(&writer, first, &slower, earlier, Authority::Live).await;
+
+        let mut second = writer.begin();
+        writer.probe_write(&mut second, SECOND_KEY, SECOND_VALUE);
+        commit_ok(&writer, second, &faster, later, Authority::Live).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            checkpoint_ok(&observer, &slower).await,
+            Checkpoint::Live { through: earlier },
+            "one commit advances exactly one projection, and committing the \
+             second one moved the first one's checkpoint. A single-row checkpoint \
+             table does this silently, and the projection that lost the race \
+             skips every event between the two positions forever"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &faster).await,
+            Checkpoint::Live { through: later },
+            "each projection must read back its own checkpoint"
+        );
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            Some(PROBE_VALUE),
+            "neither projection's commit may disturb the other's rows, and the \
+             row the first commit wrote is not readable"
+        );
+        assert_eq!(
+            probe_read_ok(&observer, SECOND_KEY).await,
+            Some(SECOND_VALUE),
+            "neither projection's commit may disturb the other's rows, and the \
+             row the second commit wrote is not readable"
+        );
+
+        RuleOutcome::Ran
+    }
 }
 
 // =====================================================================
@@ -330,8 +776,17 @@ macro_rules! for_each_projection_store_rule {
     // `let names = …` form the example above and the orphan meta-test both need.
     ($($callback:tt)+) => {
         $($callback)+! {
+            // --- The baseline pair -----------------------------------------
             commit_advances_the_checkpoint,
             commit_is_atomic_with_the_read_model,
+
+            // --- The commit path, differentially ---------------------------
+            rollback_leaves_both_unchanged,
+            dropped_batch_leaves_store_usable,
+            commit_rejects_a_foreign_batch,
+            commit_accepts_a_position_the_batch_did_not_write,
+            commit_rejects_a_regressing_position,
+            distinct_projections_advance_independently,
         }
     };
 }

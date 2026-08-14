@@ -8633,23 +8633,23 @@ between them because its *shape* does not wait on a transport but its
 | PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-24 |
 | PS-5 | PROVISIONAL | `MemoryProjectionStore` and one real adapter compiling without the `where Self… | E2E-19, E2E-24 |
 | PS-6 | PROVISIONAL | the signature; no runtime rule. Enforced by the compiler on every implementer. | E2E-24 |
-| PS-7 | FROZEN | `dropped_batch_leaves_store_usable` † | E2E-24 |
-| PS-8 | FROZEN | `rollback_leaves_both_unchanged` † | E2E-24, E2E-28 |
+| PS-7 | FROZEN | `dropped_batch_leaves_store_usable` | E2E-24 |
+| PS-8 | FROZEN | `rollback_leaves_both_unchanged` | E2E-24, E2E-28 |
 | PS-9 | PROVISIONAL | *(none — see clause)* | E2E-20, E2E-29 |
 | PS-10 | FROZEN | `compile_fail` † | E2E-20, E2E-29 |
 | PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-20, E2E-21, E2E-22, E2E-17 |
 | PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` † | E2E-21, E2E-22 |
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-22 |
-| PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` † | E2E-19 |
+| PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` | E2E-19 |
 | PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` †, `probe_delete_all` † | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` † | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` † | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first` †, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` † | E2E-16, E2E-23 |
-| PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` † | E2E-23 |
-| PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` † | E2E-23, E2E-25 |
-| PS-23 | PROVISIONAL | `distinct_projections_advance_independently` † | E2E-28, E2E-32 |
+| PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` | E2E-23 |
+| PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` | E2E-23, E2E-25 |
+| PS-23 | PROVISIONAL | `distinct_projections_advance_independently` | E2E-28, E2E-32 |
 | PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` † | E2E-25 |
 | PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
 | PS-26 | FROZEN | `failure_policy_is_per_projection` † | E2E-27 |
