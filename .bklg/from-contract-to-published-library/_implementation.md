@@ -22,7 +22,7 @@ attributable to the initiative rather than inherited.
 
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
-| 1 | `projection-store-freeze` | HS-P0010 | — | **in-progress** | blocked: needs one human `/redkiln:kb-ingest` wave |
+| 1 | `projection-store-freeze` | HS-P0010 | — | **in-progress** | run 1 halted; blocker cleared 2026-08-13, run 2 dispatched |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | pending | |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
@@ -77,3 +77,41 @@ story agents writing an ephemeral AC-check `.sh` into the session scratchpad, ou
 the worktree. No declared artifact is missing (`missingArtifacts` is empty; all 22
 declared files are on disk). It is a real isolation trip and is recorded as one, but it
 did not cost a deliverable.
+
+### Blocker cleared — wave `2026-08-13-projection-adrs`, 2026-08-13
+
+The `/redkiln:kb-ingest` wave run 1 was waiting on is merged at `d05d2b3`. Three
+decision atoms now exist at `status: accepted` — `kb-decision-0017`, `-0018`, `-0019`
+— plus three amended open questions, three synced maps and six reciprocal backlinks.
+`.kb/_intake/` holds only `README.md`. `redkiln validate --kb` passes.
+
+The wave was branched from the **initiative branch** rather than `main`, against the
+command's stated default. That put the three long-form `references/adr/` records in the
+wave worktree so the atoms' `source_paths` resolved, and made the return trip one merge
+instead of two — `main` stays untouched until closeout, which is closeout's job.
+
+Two things the wave left open, neither blocking:
+
+- **A superseding atom correcting one sentence of ADR-0007's Context (PS-32) is owed
+  and was not written.** ADR-0017's record says the correction belongs to a superseding
+  atom rather than an edit; the wave honoured both halves and refused to author it,
+  because doing so would be an ingest taking a decision nobody signed. It is a human's
+  to place — now, or at HS-P0011.
+- **`redkiln doctor` exits 1** on nine `.bklg` story-wiring errors of the form
+  *"foundation story `HS-S####` is consumed by no capability slice"* — `HS-S0002`,
+  `-0034`, `-0035`, `-0067`, `-0074`, `-0075`, `-0100`, `-0108`, `-0120`. Confirmed
+  pre-existing twice: once by the workflow at bare `HEAD`, once independently in a
+  second worktree at the same commit carrying none of the wave's changes. It is
+  planning-artifact debt in this initiative, unrelated to `.kb/`, and it blocked the
+  wave's own commit gate — the wave was finished by hand under an explicit decision to
+  treat it as out of scope. **Unrouted; it needs an owner.**
+
+### HS-P0010 `projection-store-freeze` — run 2, 2026-08-13
+
+Re-launched fresh at the **same baseRef `2136ddeb`** — not `resumeFromRunId`, no
+cache-buster. Preflight reads both resume axes from git: the three `Story:`-trailered
+commits are skipped, and `decisions-and-design-record` is committed but sealed by no
+`Slice-Verdict` row, so the run re-enters it at Review rather than dispatching an
+implementer. The full-suite gate is skipped against `entry_baseline`;
+`cargo xtask affected --base main` was green beforehand ("no package affected" — the
+merge touched only `.kb/`, `.bklg/` and `references/`).
