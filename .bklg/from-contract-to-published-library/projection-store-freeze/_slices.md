@@ -24,6 +24,7 @@ human-readable record, the trailer is what resume greps.
 | decisions-and-design-record | approved | ps-clause-pairing-sweep f77f183, projection-decision-atoms 9520b28, projection-api-design-record 0df2c1c | (this commit) |
 | projection-port-and-probe | approved | owned-batch-port-shape 2eade38, projection-probe-conformance-feature cb495ee, memory-projection-store 5fd62c6 | (this commit) |
 | projection-conformance-suite | approved | projection-suite-entry-point 79df6b7, projection-capability-skips 7fcb378 | (this commit) |
+| commit-atomicity-and-mutants | approved | projection-mutant-registry c385e40, commit-rollback-and-drop-rules 5d9b4fd | (this commit) |
 
 ## Surviving findings
 
