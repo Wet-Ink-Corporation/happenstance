@@ -54,6 +54,28 @@ directory's own failure mode: six `file:line` citations in `SPECIFICATION.md` an
 records that it has already recurred since phase 2 closed it, and names the
 forty-line check that now catches the same class in `standards/rust/`.
 
+[`ps-clause-pairing-sweep.md`](ps-clause-pairing-sweep.md) (2026-08-13, pinned to
+`2136dde`) is the second of these, and carries the same lifecycle — dated,
+pinned, **immutable, superseded rather than edited**. It is a byproduct of phase 6
+rather than one of the fourteen: a census of every clause PS-1 – PS-37 in
+[`spec/SPECIFICATION.md`](../../spec/SPECIFICATION.md) §4, asking of each whether
+an implementation exists that satisfies the clause's `MUST` verbatim and fails a
+conformance rule the tables assign to it — the question
+[`xtask/src/spec_trace.rs`](../../xtask/src/spec_trace.rs) states in its own
+header that it cannot answer. It **decides nothing**: seven clauses come out of it
+carrying a defect and none is repaired there, because the pass that discovers and
+the pass that decides were deliberately kept apart
+([`repairing-a-frozen-clause-without-amending-it.md`](../../.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md)).
+
+Its verdict is **isolated** — the hypothesis that §4.11's rule table was populated
+from a systematic assumption is not supported — and its headline is that one
+supporting sentence of `.kb/open-questions/ps-1-states-no-progress-obligation.md`
+does not survive re-derivation. The knowledge-base side of that is **staged, not
+written**: it sits in `.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` for the
+next `/redkiln:kb-ingest` wave, so until that wave runs the two open-question
+atoms still point at unanswered sub-questions whose answer is in the document
+above.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
