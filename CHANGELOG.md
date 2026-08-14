@@ -25,6 +25,49 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`projection_store_conformance!` — a fourth rule family, and the first line
+  an adapter author can write against `ProjectionStore`.** One line in your own
+  `tests/` expands to one test per projection rule, named after the rule, on any
+  of three runtimes: `__emit_projection_tokio` (the default),
+  `__emit_projection_blocking` (no async runtime at all) and
+  `__emit_projection_wasm`, which routes a skipped rule's stated reason to
+  `console_log!` because `println!` writes nowhere on
+  `wasm32-unknown-unknown`. The set is written in
+  `for_each_projection_store_rule!` and nowhere else, and
+  `no_orphan_projection_rules` fails by name if a rule is declared without being
+  registered. It takes a `ProjectionFixture` — a new trait beside `Fixture`,
+  whose `Store` is bound on `ProjectionProbe` rather than on `ProjectionStore`,
+  so an adapter that cannot be observed cannot invoke the suite.
+  `fixtures::MemoryProjectionFixture` and `fixtures::MemoryProjectionHandle` are
+  the reference implementation to read first. `happenstance-testkit` now enables
+  `happenstance-core`'s `conformance` feature unconditionally; that adds no
+  dependency and no feature of its own.
+- **`commit_advances_the_checkpoint`** — the first of the projection family's
+  rules, and the baseline the rest of §4.11 is differential against. It detects
+  a `commit` that returns `Ok` and makes **neither** the read-model row nor the
+  checkpoint durable — an adapter that reports success and advances nothing, so
+  a runner re-reads the same events forever and the read model never moves.
+  That defect is not a straw man: PS-1's MUST is a *coupling* rather than a
+  progress obligation, so "neither durable" satisfies the clause through its "or
+  not at all" arm and passes the atomicity rule below. This is the rule that
+  fails it. The checkpoint is read back through a **fresh handle**, which also
+  catches a store whose commit is visible only to the connection that made it,
+  and it is compared against the position the commit was given rather than
+  against any literal, because the specification permits gaps.
+- **`commit_is_atomic_with_the_read_model`** — PS-1 itself, and the invariant
+  the projection port exists for. It writes a probe row into a batch, commits at
+  a position, then reads the row **and** the checkpoint back through fresh
+  handles and requires both present or both absent, never one. The defect it
+  detects is a store that advances the checkpoint and silently drops the
+  read-model write — the natural shape for any adapter whose read model lives
+  somewhere other than its checkpoint table, and one whose consequence is a
+  projection that skips every event the discarded batch would have applied, with
+  no error anywhere and nothing in the log to find afterwards. It asserts the
+  coupling and deliberately nothing else, so a failure here means one half
+  landed without the other rather than something the baseline rule already owns.
+  Its wrong implementation, `CheckpointOnlyStore`, lands with the projection
+  mutant registry; until then this rule is documented as a carried debt rather
+  than a demonstrated rejection.
 - **`MemoryProjectionStore`, behind the existing `memory` feature** — the
   projection port's answer to `MemoryEventStore`, and the first implementation of
   that port anywhere that actually runs. It is the oracle a failing adapter is

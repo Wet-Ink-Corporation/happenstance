@@ -9,11 +9,13 @@ use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, EventType, MemoryEventStore, Query, QueryItem,
-    ReadOptions, SendEventStore, SequencePosition, SequencedEvent, Tags,
+    AppendCondition, AppendError, Authority, Checkpoint, CommitError, Event, EventId, EventType,
+    MemoryEventStore, MemoryProjectionStore, ProjectionId, ProjectionProbe, Query, QueryItem,
+    ReadOptions, ResetError, SendEventStore, SendProjectionStore, SequencePosition, SequencedEvent,
+    Tags,
 };
 
-use crate::contract::{Capability, Fixture};
+use crate::contract::{Capability, Fixture, ProjectionFixture};
 
 /// Builds an event of `event_type` with no tags.
 ///
@@ -288,6 +290,156 @@ impl Fixture for MemoryFixture {
         // bump, and pretending otherwise would hide that a real fixture's
         // `connect` does I/O and this one does not.
         core::future::ready(MemoryHandle(Arc::clone(&self.0)))
+    }
+}
+
+// -------------------------------------------------------------------------
+// The reference projection fixture
+// -------------------------------------------------------------------------
+
+/// One handle onto a [`MemoryProjectionFixture`]'s store.
+///
+/// [`MemoryHandle`]'s counterpart, and a newtype for the same coherence reason:
+/// `impl ProjectionStore for Arc<S>` is very likely `error[E0119]` against the
+/// blanket impl `trait_variant` emits, so a shared handle has to be a distinct
+/// type that delegates.
+///
+/// It implements [`SendProjectionStore`] rather than merely `ProjectionStore`,
+/// because [`MemoryProjectionStore`] is a native, thread-safe store and a handle
+/// that quietly weakened that would stop exercising the flavour the reference
+/// implementation claims. The suite still binds the weaker flavour: the blanket
+/// impl is what carries this handle into it.
+#[derive(Debug, Clone)]
+pub struct MemoryProjectionHandle(Arc<MemoryProjectionStore>);
+
+impl MemoryProjectionHandle {
+    /// Wraps a shared store as one handle onto it.
+    ///
+    /// Public so that an adapter author writing their own fixture has the whole
+    /// reference implementation in front of them rather than most of it: the
+    /// doctest on [`ProjectionFixture`] builds one.
+    #[must_use]
+    pub fn new(store: Arc<MemoryProjectionStore>) -> Self {
+        Self(store)
+    }
+}
+
+impl SendProjectionStore for MemoryProjectionHandle {
+    type Error = <MemoryProjectionStore as SendProjectionStore>::Error;
+
+    type Batch = <MemoryProjectionStore as SendProjectionStore>::Batch;
+
+    fn begin(&self) -> Self::Batch {
+        self.0.begin()
+    }
+
+    async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
+        self.0.checkpoint(id).await
+    }
+
+    async fn commit(
+        &self,
+        batch: Self::Batch,
+        id: &ProjectionId,
+        position: SequencePosition,
+        authority: Authority,
+    ) -> Result<(), CommitError<Self::Error>> {
+        self.0.commit(batch, id, position, authority).await
+    }
+
+    async fn reset(
+        &self,
+        batch: Self::Batch,
+        id: &ProjectionId,
+    ) -> Result<(), ResetError<Self::Error>> {
+        self.0.reset(batch, id).await
+    }
+
+    async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error> {
+        self.0.rollback(batch).await
+    }
+}
+
+impl ProjectionProbe for MemoryProjectionHandle {
+    /// `true`, delegated in spirit from the store: `MemoryProjectionStore`
+    /// applies on write, so a batch can be read back through before it commits.
+    ///
+    /// Spelled as a literal rather than as
+    /// `<MemoryProjectionStore as ProjectionProbe>::READS_THROUGH_BATCH`
+    /// because an associated const cannot be delegated in a way a reader can
+    /// check at a glance, and the two are one line apart in the same workspace.
+    const READS_THROUGH_BATCH: bool = true;
+
+    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+        self.0.probe_write(batch, key, value);
+    }
+
+    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+        self.0.probe_delete_all(batch);
+    }
+
+    async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
+        self.0.probe_read(key).await
+    }
+
+    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
+        self.0.probe_read_through(batch, key)
+    }
+}
+
+/// The reference [`ProjectionFixture`]: one [`MemoryProjectionStore`], any
+/// number of handles.
+///
+/// This is the oracle the projection suite is validated against, and it is also
+/// the worked example an adapter author reads before writing their own fixture.
+/// It is a **published item**, not a test helper, for exactly that reason: a
+/// reference implementation reachable only from inside this crate's own `tests/`
+/// is documentation nobody outside can read.
+///
+/// One fixture instance is one `MemoryProjectionStore` behind an `Arc`; each
+/// [`connect`](crate::ProjectionFixture::connect) is a refcount clone, so two
+/// handles observe one store and two *fixtures* share nothing. Two things in it
+/// are worth copying:
+///
+/// * `connect` is an `Arc` clone returned through [`core::future::ready`], not
+///   an `async move` block. A handle **owns a refcount** into the backing store
+///   rather than borrowing a lifetime from the fixture, which is what lets
+///   [`ProjectionFixture::Store`] be an ordinary associated type instead of a
+///   GAT. A pool-backed fixture does the
+///   same thing with a pool; a `!Send` fixture does it with an `Rc`.
+/// * the handle is a delegating newtype rather than a bare `Arc`, which is what
+///   coherence leaves available.
+///
+/// # Examples
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// use happenstance_testkit::fixtures::MemoryProjectionFixture;
+///
+/// happenstance_testkit::projection_store_conformance!(MemoryProjectionFixture::new());
+/// # }
+/// ```
+#[derive(Debug, Default)]
+pub struct MemoryProjectionFixture(Arc<MemoryProjectionStore>);
+
+impl MemoryProjectionFixture {
+    /// Creates a fixture over a new, empty [`MemoryProjectionStore`].
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl ProjectionFixture for MemoryProjectionFixture {
+    type Store = MemoryProjectionHandle;
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        // Ready rather than `async move`, for `MemoryFixture::connect`'s reason:
+        // acquiring this handle is a refcount bump, and pretending otherwise
+        // would hide that a real fixture's `connect` does I/O and this one does
+        // not.
+        core::future::ready(MemoryProjectionHandle(Arc::clone(&self.0)))
     }
 }
 

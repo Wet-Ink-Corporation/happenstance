@@ -328,7 +328,7 @@ discriminates would be gone, and the suite would keep certifying adapters.
 
 **Evidence.** `xtask/src/proof.rs:15 (running 0 tests)` ·
 `xtask/src/package.rs:20 (not hypothetical)` ·
-`xtask/src/spec_trace.rs:437 (hand count against what this run computed)`
+`xtask/src/spec_trace.rs:451 (hand count against what this run computed)`
 
 ---
 

@@ -74,8 +74,8 @@ type. The local paste turns that into one line of `E0477` naming the lifetime,
 and it is the difference between a five-minute diagnosis and a lost afternoon.
 
 **Evidence.** `references/adapter-shapes.md:325 (rustc crashes **while diagnosing a region error**)` ·
-`crates/happenstance-testkit/src/contract.rs:97 (owned associated type and not a GAT)` ·
-`crates/happenstance-testkit/src/contract.rs:110 (refcount instead of borrowing a lifetime)`
+`crates/happenstance-testkit/src/contract.rs:108 (owned associated type and not a GAT)` ·
+`crates/happenstance-testkit/src/contract.rs:121 (refcount instead of borrowing a lifetime)`
 
 ---
 

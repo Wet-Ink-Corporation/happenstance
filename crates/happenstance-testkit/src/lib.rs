@@ -88,7 +88,24 @@
 //! [`rules`] without appearing there is a rule nothing runs, which is the
 //! failure the meta-test is for.
 //!
-//! "Exactly one place" is per rule **family** (CF-22), and there are three.
+//! "Exactly one place" is per rule **family** (CF-22), and there are four.
+//!
+//! `projection_store_conformance!` is the fourth, and the only one that checks a
+//! different port. It takes a [`ProjectionFixture`] rather than a [`Fixture`] —
+//! one isolated projection store per instance — and expands to one
+//! `#[tokio::test]` per projection rule through its own enumeration,
+//! [`for_each_projection_store_rule!`], beside the rules it names. Pick a
+//! harness exactly as you would for the event-store family: the default arm is
+//! tokio, `__emit_projection_blocking` needs no runtime at all, and
+//! `__emit_projection_wasm` routes a skipped rule's stated reason to
+//! `console_log!` rather than to stdout, which does not exist on
+//! `wasm32-unknown-unknown`. The default module name differs from
+//! `dcb_conformance`, so one file may invoke both suites.
+//!
+//! An adapter reaches it by implementing `ProjectionProbe` beside its
+//! `ProjectionStore` impl — the write seam a suite that has never heard of the
+//! adapter drives its read model through, in `happenstance-core` behind the
+//! off-by-default `conformance` feature.
 //!
 //! `event_store_model_conformance!` generates operation sequences and checks the
 //! store against a model of the log rather than against a worked example. It
@@ -109,7 +126,8 @@
 //! check-and-write. There is deliberately no timeout anywhere in it; the
 //! `concurrency` module says why, and the answer is CF-33.
 //!
-//! **Neither family's names are intra-doc links**, and both paragraphs above
+//! **Neither the model nor the concurrency family's names are intra-doc
+//! links**, and both paragraphs above
 //! spell them plainly on purpose. Each module is absent on some configuration
 //! this crate is documented under, and rustdoc treats an unresolved link as a
 //! hard error: `model` is behind the off-by-default `proptest` feature, so a
@@ -131,6 +149,12 @@
 //! green — adding it is a candidate for phase 4, and until then this discipline
 //! is the whole of the protection.
 //!
+//! The projection family's names *are* links, and the difference is the whole
+//! of the rule rather than an inconsistency: `projection` is declared
+//! unconditionally — no feature, no target gate — so there is no configuration
+//! this crate is documented under in which the target is absent. A link is safe
+//! exactly when the item cannot disappear.
+//!
 //! # What is checked
 //!
 //! Every rule traces to a MUST in the [specification][spec], plus the
@@ -148,6 +172,7 @@
 //! | Concurrency | racing appends with overlapping conditions — exactly one wins. The **opt-in** third family adds contention on real threads: one winner of N contenders, K disjoint boundaries admitting exactly K commits, positions unique under concurrent appends, `append` returning the caller's own last position rather than the head, and a reader that never sees a partial batch |
 //! | Re-entrancy | two `append` futures on one handle both complete and exactly one wins; a live read stream does not block an append |
 //! | Position visibility | two `append` futures interleaved by hand on one thread: nothing becomes visible below a position a reader has already observed |
+//! | Projections (a second port, a fourth family) | a commit advances the projection's checkpoint to the position it was given, read back through a fresh handle; and the read-model write and the checkpoint write become durable **together or not at all**, never one — the invariant `ProjectionStore` exists for. Two rules today, of the seventeen §4.11 names |
 //!
 //! [spec]: https://dcb.events/specification/
 //!
@@ -181,10 +206,18 @@ pub mod fixtures;
 #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "proptest")))]
 pub mod model;
+// Unconditional, unlike its two nearest templates. `concurrency` is
+// `#[cfg(not(target_arch = "wasm32"))]` and `model` is behind an optional
+// dependency; a projection module gated either way would make the wasm32 harness
+// unbuildable by construction, and the mandatory wasm32 `--tests` step would
+// then pass while proving nothing about the family it was added for.
+pub mod projection;
 mod registry;
 mod suite;
 
-pub use contract::{Capability, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
+pub use contract::{
+    Capability, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, ProjectionFixture, RuleOutcome,
+};
 pub use registry::block_on;
 pub use suite::rules;
 
@@ -356,9 +389,97 @@ macro_rules! event_store_conformance {
     };
 }
 
+/// Generates the projection conformance suite for a `ProjectionStore` adapter.
+///
+/// Takes an expression that produces a [`ProjectionFixture`] — one isolated
+/// backing projection store per instance, each `connect()` one handle onto it.
+/// See the [crate documentation](crate) for what is checked and what the adapter
+/// must provide.
+///
+/// The rule list is not written here; it comes from
+/// [`for_each_projection_store_rule!`](crate::for_each_projection_store_rule),
+/// which is the only place it is written at all. A caller writes one line and
+/// names no rule, so a failure names the rule that broke rather than reporting
+/// "conformance failed".
+///
+/// # What your adapter needs first
+///
+/// `ProjectionFixture::Store` is bound on `ProjectionProbe`, so an adapter
+/// implements that beside its `ProjectionStore` impl. It lives in
+/// `happenstance-core` behind the off-by-default `conformance` feature — one
+/// flag on a dependency you already have, and no new edge in your dependency
+/// graph.
+///
+/// # Examples
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// use happenstance_testkit::fixtures::MemoryProjectionFixture;
+///
+/// happenstance_testkit::projection_store_conformance!(MemoryProjectionFixture::new());
+/// # }
+/// ```
+///
+/// Choosing a different harness — the emitter is a parameter here for the same
+/// reason it is on the event-store family, and the default module name differs
+/// from `dcb_conformance` so both suites can be invoked from one file:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_testkit::projection_store_conformance!(
+///     mod_name = projection_conformance_blocking,
+///     emit = happenstance_testkit::__emit_projection_blocking,
+///     fixture = MyProjectionFixture::new()
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! projection_store_conformance {
+    // The general form. Listed first so that arm matching never has to back out
+    // of `fixture = $fixture:expr` to reach it.
+    (mod_name = $mod_name:ident, emit = $emit:path, fixture = $fixture:expr) => {
+        mod $mod_name {
+            #![allow(clippy::unwrap_used, unused_imports)]
+
+            use super::*;
+
+            // Named exactly as `event_store_conformance!`'s is, so a
+            // caller-supplied emitter — CF-23's extension point — drives any
+            // family without knowing which one it was handed. `macro_rules!`
+            // hygiene applies to local variables rather than items, which is
+            // what lets one macro's expansion define this function and another's
+            // refer to it.
+            async fn __conformance_fixture() -> impl $crate::__private::ProjectionFixture {
+                $fixture
+            }
+
+            // `$emit` is `$crate::`-qualified by the caller. A bare name here
+            // would be substituted verbatim and resolve in the *adapter's*
+            // crate, where the testkit's emitters do not exist.
+            $crate::for_each_projection_store_rule!($emit);
+        }
+    };
+    (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
+        $crate::projection_store_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::__emit_projection_tokio,
+            fixture = $fixture
+        );
+    };
+    ($fixture:expr) => {
+        $crate::projection_store_conformance!(
+            mod_name = projection_conformance,
+            emit = $crate::__emit_projection_tokio,
+            fixture = $fixture
+        );
+    };
+}
+
 /// Re-exports the macro expansions need to name, so an adapter is not required
 /// to have this crate in scope under that exact name.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::contract::Fixture;
+    pub use crate::contract::{Fixture, ProjectionFixture};
 }

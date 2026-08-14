@@ -70,22 +70,26 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 
 /// Every file a conformance rule may be defined in.
 ///
-/// Three, not one. Since stage 5 rules live in three files: the event-store
-/// family in `suite.rs`, the proptest family in `model.rs` and the threaded
-/// family in `concurrency.rs`. [`run`]'s clause checks stay scoped to [`SUITE`]
-/// on purpose — only that family's rules are claimed by clauses today — but
-/// anything asking *does this rule exist* must ask all three, or it answers a
-/// narrower question than its own message claims. Both callers of [`all_rules`]
-/// were doing exactly that until stage 6's review: `retired_rules` printed "none
-/// naming a rule still in the suite" having looked in one file of three, and
-/// CF-29 let a model or concurrency rule land with no changelog entry at all.
+/// **Four, not one.** Rules live in four files: the event-store family in
+/// `suite.rs`, the proptest family in `model.rs`, the threaded family in
+/// `concurrency.rs` and the projection family in `projection.rs`. [`run`]'s
+/// clause checks stay scoped to [`SUITE`] on purpose — only that family's rules
+/// are claimed by *event-store* clauses — but anything asking *does this rule
+/// exist* must ask all four, or it answers a narrower question than its own
+/// message claims. Both callers of [`all_rules`] were doing exactly that until
+/// stage 6's review: `retired_rules` printed "none naming a rule still in the
+/// suite" having looked in one file of three, and CF-29 let a model or
+/// concurrency rule land with no changelog entry at all. A fourth family absent
+/// from this array reproduces that defect one family later, which is why
+/// `projection.rs` joins it in the same change that creates it.
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 3] = [
+pub(crate) const RULE_FILES: [&str; 4] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
+    "crates/happenstance-testkit/src/projection.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -2044,11 +2048,25 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 /// backstop for this table being wrong: if a citation mapped here to `core`
 /// really meant `sync`, the anchor it names will not be found in the file this
 /// sends it to.
-const BARE_NAME_MAP: [(&str, &str); 5] = [
+const BARE_NAME_MAP: [(&str, &str); 6] = [
     ("memory.rs", "crates/happenstance-core/src/memory.rs"),
     ("error.rs", "crates/happenstance-core/src/error.rs"),
     ("identity.rs", "crates/happenstance-core/src/identity.rs"),
     ("lib.rs", "crates/happenstance-sync/src/lib.rs"),
+    // The collision the projection rule family created, and the entry the
+    // paragraph above promises: `crates/happenstance-testkit/src/projection.rs`
+    // is the fourth rule file, so the basename stopped resolving uniquely the
+    // day it landed and thirteen citations failed at once. Every one of them
+    // predates that file and names the **port**: they cite the GAT that used to
+    // be at `:97-99`, the module doc's batch paragraph, `ProjectionId`, and
+    // `rollback`'s declaration — items that exist only in the contract crate.
+    // The anchor check is the backstop, and it is a real one here rather than a
+    // formality: the two files overlap in length, so a citation that meant the
+    // suite would be sent to the port and its anchor would not be found.
+    (
+        "projection.rs",
+        "crates/happenstance-core/src/projection.rs",
+    ),
     // Fourteen manifests carry this name and the root's own relative path *is*
     // the bare name, so qualifying the two citations would not have changed the
     // string they contain. Both mean the workspace root, and §8036 says so in

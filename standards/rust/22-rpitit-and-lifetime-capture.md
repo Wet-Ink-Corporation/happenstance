@@ -53,7 +53,7 @@ failure in CI, and the fix that first suggests itself is
 `#[allow(async_fn_in_trait)]`, which silences the one line where a reader could
 have seen that the future has no `Send` bound and never will have one.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:86 (Why the methods are spelled)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:97 (Why the methods are spelled)` ·
 `crates/happenstance-neon/src/transport.rs:40 (async_fn_in_trait)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) *(why `Fixture` is
 hand-written and un-derived, and so is subject to the lint)* ·

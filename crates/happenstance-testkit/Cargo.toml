@@ -25,8 +25,16 @@ readme = "README.md"
 # testkit's own `MemoryFixture` is a *published* item in `fixtures`, not a test
 # helper, because it is the reference implementation of `Fixture` an adapter
 # author reads before writing their own.
+#
+# `conformance` arrived with the projection family and is on unconditionally
+# rather than behind a feature of this crate's own. It gates `ProjectionProbe`,
+# which `ProjectionFixture::Store` is bound on — so a testkit that made it
+# optional would have a fixture trait that exists on some feature
+# configurations and not others, and every projection item would need a `cfg`
+# and a doc gate. It adds no dependency: the feature is `[]` in
+# `happenstance-core`.
 [dependencies]
-happenstance-core = { workspace = true, features = ["std", "memory"] }
+happenstance-core = { workspace = true, features = ["std", "memory", "conformance"] }
 # Needed to spell `MemoryHandle`'s delegating `read` — the return type is
 # `impl Stream<…> + Send`, and the trait it satisfies is defined in terms of
 # `futures_core::Stream`.

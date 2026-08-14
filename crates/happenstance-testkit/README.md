@@ -15,8 +15,10 @@ pass.
 >
 > What is still early is everything around that. **No adapter has run this
 > suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
-> port has no suite at all, and several axes of the instrument portfolio have
-> no implementation at their far end — see
+> suite exists but is two rules of seventeen, and neither has been shown to
+> reject a wrong store yet — the hostile stores that will are named in the
+> specification and not yet written. Several axes of the instrument portfolio
+> also have no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > §6.2 and §6.5, which name them rather than summarising them.
 
@@ -93,6 +95,39 @@ rule. If a run stops with no output, that is what happened.
 Two contenders' `Result`s never meet, either. `EventStore::Error` carries no
 `Send` bound, so each contender collapses its outcome to *committed*, *rejected*
 or *failed, here is the message* before its thread ends.
+
+### The projection suite
+
+```rust,ignore
+happenstance_testkit::projection_store_conformance!(MyProjectionFixture::new());
+```
+
+A fourth family, and the only one that checks a **different port**. It takes a
+`ProjectionFixture` rather than a `Fixture` — one isolated projection store per
+instance, each `connect()` one handle onto it — and expands to one test per
+projection rule through its own single enumeration.
+
+`ProjectionFixture::Store` is bound on `ProjectionProbe`, not on
+`ProjectionStore`, and that is the load-bearing part. The probe is the write seam
+the suite drives your read model through; without it, generic code holding your
+batch can only commit it or roll it back, and the rule carrying this port's whole
+reason for existing degenerates into a checkpoint test that a store writing
+*only* checkpoints passes. Implement it beside your `ProjectionStore` impl —
+it lives in `happenstance-core` behind the off-by-default `conformance` feature,
+so it costs one flag on a dependency you already have and no new edge in your
+dependency graph.
+
+Pick a harness exactly as you would for the event-store family: the default arm
+is `#[tokio::test]`, `__emit_projection_blocking` needs no runtime at all, and
+`__emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
+rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
+default module name differs from the event-store family's, so one file may invoke
+both. `fixtures::MemoryProjectionFixture` is the worked example.
+
+**Two rules of the seventeen the specification names, today.** The port is
+`[PROVISIONAL]` and this suite is what will freeze it; treat both it and the port
+as moving until §4.11's table is complete and its hostile stores are in this
+crate's own `tests/`.
 
 ## Why this exists as a published crate
 

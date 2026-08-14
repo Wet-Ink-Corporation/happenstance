@@ -8627,17 +8627,17 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| PS-1 | FROZEN | `commit_is_atomic_with_the_read_model` †, `commit_advances_the_checkpoint` †, … | E2E-17, E2E-21, E2E-23 |
-| PS-2 | FROZEN | `commit_is_atomic_with_the_read_model` † | E2E-17, E2E-24 |
+| PS-1 | FROZEN | `commit_is_atomic_with_the_read_model`, `commit_advances_the_checkpoint`, `fai… | E2E-17, E2E-21, E2E-23 |
+| PS-2 | FROZEN | `commit_is_atomic_with_the_read_model` | E2E-17, E2E-24 |
 | PS-3 | PROVISIONAL | `cargo hack --feature-powerset` in `cargo xtask ci`, which already runs; the e… | *(none directly; cites E2E-15, E2E-25)* |
-| PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` † | E2E-24 |
+| PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-24 |
 | PS-5 | PROVISIONAL | `MemoryProjectionStore` and one real adapter compiling without the `where Self… | E2E-19, E2E-24 |
 | PS-6 | PROVISIONAL | the signature; no runtime rule. Enforced by the compiler on every implementer. | E2E-24 |
 | PS-7 | FROZEN | `dropped_batch_leaves_store_usable` † | E2E-24 |
 | PS-8 | FROZEN | `rollback_leaves_both_unchanged` † | E2E-24, E2E-28 |
 | PS-9 | PROVISIONAL | *(none — see clause)* | E2E-20, E2E-29 |
 | PS-10 | FROZEN | `compile_fail` † | E2E-20, E2E-29 |
-| PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` † | E2E-20, E2E-21, E2E-22, E2E-17 |
+| PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-20, E2E-21, E2E-22, E2E-17 |
 | PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` † | E2E-21, E2E-22 |
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` † | E2E-22 |

@@ -14,6 +14,17 @@
 //! backing store; each [`connect`](Fixture::connect) returns a handle onto that
 //! store; two fixture instances share nothing.
 //!
+//! # Two fixture traits, one contract
+//!
+//! [`ProjectionFixture`] says the same three things about a **projection**
+//! store. It is a separate trait rather than a second associated type on
+//! [`Fixture`] because the associated type is where the port is named:
+//! `Fixture::Store: EventStore` binds the wrong one, and an adapter that
+//! implements only one of the two ports would otherwise have to invent the
+//! other. Everything below the two traits — [`Capability`], [`RuleOutcome`],
+//! the one-line skip shape — is shared unchanged, so an author reading one CI
+//! log never has to learn two vocabularies.
+//!
 //! # A rule is handed how to make a fixture, not a made one
 //!
 //! Every rule takes `impl AsyncFn() -> F`. That is deliberate, and it is what
@@ -64,7 +75,7 @@
 
 use core::future::Future;
 
-use happenstance_core::EventStore;
+use happenstance_core::{EventStore, ProjectionProbe};
 
 /// One isolated backing store, plus the ways a rule is allowed to reach it.
 ///
@@ -350,6 +361,110 @@ pub trait Fixture {
             );
         }
     }
+}
+
+/// One isolated **projection** store, plus the ways a projection rule is
+/// allowed to reach it.
+///
+/// [`Fixture`]'s sibling, and a second trait rather than a second associated
+/// type on the first, because [`Fixture::Store`] binds [`EventStore`] — the
+/// wrong port. An adapter may implement one of the two ports and not the other,
+/// and a single trait would oblige a projection-only adapter to invent an event
+/// store to satisfy a bound no projection rule reads.
+///
+/// Implement it for whatever a rule should be given a fresh instance of: a
+/// temporary directory holding a SQLite file, a connection pool aimed at a
+/// throwaway schema, a `MemoryProjectionStore` behind an `Arc`. Each instance is
+/// one store. Each [`connect`](Self::connect) is one handle onto it.
+///
+/// # Why `Store` is bound on the **probe** rather than on the port
+///
+/// [`ProjectionProbe`] is the write seam the suite drives an adapter's read
+/// model through, and it is a supertrait of `ProjectionStore` — so one bound
+/// buys both. Binding the port instead would compile and would quietly buy a
+/// suite that cannot see a read model at all: with `ProjectionStore` alone, the
+/// only things generic code can do with a batch are commit it and roll it back,
+/// and the rule carrying this port's entire reason for existing degenerates into
+/// a checkpoint test that a store writing *only* checkpoints passes.
+///
+/// Binding the probe here is what turns "your store must be observable" from a
+/// convention into a compile error: an adapter that has not implemented
+/// [`ProjectionProbe`] cannot name a type that satisfies this trait, so it
+/// cannot invoke the suite, and by CLAUDE.md's rule it does not exist.
+///
+/// # No `Send` bound, and no `trait_variant`
+///
+/// The bare flavour, never `SendProjectionStore`: it is the weaker requirement
+/// and accepts both kinds of adapter, and only one of the two names may be in
+/// scope per module. Nothing ever spawns a fixture — the harness owns the
+/// executor — so the argument that gives the *port* two flavours (ADR-0001) does
+/// not reach here, and a second flavour would double the surface to buy a
+/// property no caller wants.
+///
+/// # Why the methods are spelled `-> impl Future` rather than `async fn`
+///
+/// [`Fixture`]'s reason, unchanged: `async fn` in a *public* trait fires rustc's
+/// `async_fn_in_trait` lint and the gate runs `-D warnings`. The desugared form
+/// also puts the **absence** of `+ Send` at the declaration, where a reader can
+/// see it. An implementation may still write `async fn` — the two are the same
+/// signature after desugaring, and the lint fires only on the declaration.
+///
+/// # Why `Store` is an owned associated type and not a GAT
+///
+/// The same rustc ICE [`Fixture`] records, for the same five ingredients, still
+/// reproducing on 1.97.1 (`experiments/rustc-ice-gat-foreign-trait/`). Hand back
+/// an owned handle holding a refcount;
+/// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture) is the
+/// worked example.
+///
+/// # Examples
+///
+/// The whole trait, over the reference store — this is what
+/// [`projection_store_conformance!`](crate::projection_store_conformance) is
+/// handed:
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::ProjectionFixture;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+///
+/// struct MyFixture(Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for MyFixture {
+///     type Store = MemoryProjectionHandle;
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(Arc::clone(&self.0)))
+///     }
+/// }
+/// ```
+pub trait ProjectionFixture {
+    /// A handle onto this fixture's backing projection store.
+    ///
+    /// Bound on [`ProjectionProbe`], which implies `ProjectionStore` — see the
+    /// trait documentation for why the *probe* is the bound that earns its keep
+    /// and the port is the one that does not.
+    type Store: ProjectionProbe;
+
+    /// Opens a handle onto this fixture's backing store.
+    ///
+    /// Async because a real fixture acquires its handle over I/O — a pool
+    /// checkout, a connection, an HTTP client's first request. A fixture whose
+    /// `connect` is a refcount bump should return [`core::future::ready`]
+    /// rather than an `async move` block, so it does not pretend to do I/O it
+    /// does not do.
+    ///
+    /// # Panics
+    ///
+    /// Implementations panic rather than returning `Result`, for
+    /// [`Fixture::connect`]'s reason and it is worth restating here rather than
+    /// linking: a fixture that cannot connect is a broken **test environment**,
+    /// not a non-conformant adapter, and a `Result` would put "the database is
+    /// down" into the same channel as "the adapter is wrong" — where the suite's
+    /// own messages would then have to guess which one they were reading.
+    fn connect(&self) -> impl Future<Output = Self::Store>;
 }
 
 /// Whether a fixture supports one optional operation, and if not, why not.
