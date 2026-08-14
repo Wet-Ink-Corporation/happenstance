@@ -8,7 +8,9 @@ summary: >-
   One row per decision atom in .kb/decisions/, its ADR number, status, phase, and what it
   supersedes or is superseded by. First populated by the 2026-08-10 ADR import (ADR-0001 through
   ADR-0016 and ADR-0029, seventeen atoms), which is also this map's first wave. Updated by the
-  Maps phase of every kb-ingest wave that lands a new or superseded decision atom.
+  Maps phase of every kb-ingest wave that lands a new or superseded decision atom. The 2026-08-13
+  wave added ADR-0017 through ADR-0019 (kb-decision-0017/0018/0019), phase 6's ProjectionStore
+  freeze — no existing row's status or supersession cell changed.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -16,7 +18,8 @@ related:
 source_paths:
   - .kb/decisions/README.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
-last_reviewed: 2026-08-10
+  - .kb/_governance/integration-waves/2026-08-13-projection-adrs
+last_reviewed: 2026-08-13
 ---
 
 # Decision map
@@ -63,6 +66,22 @@ strength.
 | ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
 | ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004` |
+
+## 2026-08-13 projection-store ADRs (ADR-0017–0019)
+
+Three decision atoms, phase 6, `.kb/decisions/`. None supersedes an existing row: ADR-0017
+settles what `ProjectionStore::Batch` owns, ADR-0018 settles resetting a checkpoint to
+`NeverRun`, and ADR-0019 settles what the port does — nothing — when a projection's `apply`
+fails. All three `depends_on: [kb-decision-0007]`, ADR-0007's runner/decode split; ADR-0018 and
+ADR-0019 additionally `depends_on: [kb-decision-0017]`, since both use the `ProjectionProbe` and
+owned-`Batch` shape ADR-0017 mints. Each carries two provisional halves with a named falsifier —
+see the atom's own `## Provisional` section, not this row.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0017 | [`kb-decision-0017`](../decisions/0017-what-a-projection-batch-owns.md) | What a projection batch owns, and the seam that is not a write vocabulary | accepted (provisional) | 6 | — |
+| ADR-0018 | [`kb-decision-0018`](../decisions/0018-returning-a-projection-to-never-run.md) | Returning a projection to never run — scope, atomicity, and refusal | accepted (provisional) | 6 | — |
+| ADR-0019 | [`kb-decision-0019`](../decisions/0019-what-happens-when-apply-fails.md) | What happens when apply fails — the port grows nothing | accepted (provisional) | 6 | — |
 
 ### Reading the partial-supersession chain
 

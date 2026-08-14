@@ -9,7 +9,9 @@ summary: >-
   within a section, atoms are grouped by kind (reference, playbook, open_question, ...) with a
   one-line orientation and a link. Updated by the Maps phase of every kb-ingest wave that adds a
   new canonical concept or domain path; entries are not removed when an atom is superseded, only
-  annotated.
+  annotated. The 2026-08-13 wave added ADR-0017–0019 (phase 6, ProjectionStore) to the existing
+  "Contract ports, conformance, and the ADR corpus" domain and annotated one open question there
+  as superseded.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -18,7 +20,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake/01-claims-and-classification.md
   - .kb/_governance/integration-waves/2026-08-10-intake/02-placement-and-adjudication.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
-last_reviewed: 2026-08-10
+  - .kb/_governance/integration-waves/2026-08-13-projection-adrs
+last_reviewed: 2026-08-13
 ---
 
 # Domain map
@@ -86,8 +89,11 @@ The area concerned with `happenstance-core`'s async port design (`EventStore`,
 seventeen-ADR decision record — async port flavours through the wire format — that this
 project's early phases rest on. Established by the 2026-08-10 ADR import, which brought
 `.kb/decisions/0001` through `.kb/decisions/0016` and `.kb/decisions/0029` into `.kb/decisions/` as one wave.
-The full decision list, including status and supersession, is
-[`decision-map.md`](decision-map.md) rather than repeated here.
+The 2026-08-13 wave added three more to this same domain — `.kb/decisions/0017`, `0018` and
+`0019` — settling `ProjectionStore::Batch`'s ownership, checkpoint reset, and the port's
+no-op-on-`apply`-failure stance, phase 6's `ProjectionStore` freeze. The full decision list,
+including status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated
+here.
 
 **Reference**
 
@@ -129,7 +135,8 @@ The full decision list, including status and supersession, is
 **Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
 self-contained list. The ones this domain owns:
 `kb-open-question-adr-status-vocabulary-001`,
-`kb-open-question-projection-batch-no-apply-001`,
+`kb-open-question-projection-batch-no-apply-001` (**superseded** 2026-08-13 by
+`kb-decision-0017`; sub-question 3 stays open, with the typed layer),
 `kb-open-question-query-union-rule-unowned-001`,
 `kb-open-question-global-vs-boundary-visibility-001`,
 `kb-open-question-postgres-arm-c-cost-001`,

@@ -23,6 +23,7 @@ related:
   - kb-decision-0009
   - kb-decision-0010
   - kb-decision-0011
+  - kb-decision-0017
   - kb-open-question-es-6-unwritable-rule-001
   - kb-open-question-provisional-falsifiers-001
 source_paths:
@@ -40,7 +41,7 @@ source_paths:
   - crates/happenstance-core/src/projection.rs
   - crates/happenstance-testkit/src/fixtures.rs
   - references/evaluation/phase-4-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # What the compiler said about the two port flavours
