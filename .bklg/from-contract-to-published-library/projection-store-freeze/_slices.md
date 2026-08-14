@@ -25,12 +25,82 @@ human-readable record, the trailer is what resume greps.
 | projection-port-and-probe | approved | owned-batch-port-shape 2eade38, projection-probe-conformance-feature cb495ee, memory-projection-store 5fd62c6 | (this commit) |
 | projection-conformance-suite | approved | projection-suite-entry-point 79df6b7, projection-capability-skips 7fcb378 | (this commit) |
 | commit-atomicity-and-mutants | approved | projection-mutant-registry c385e40, commit-rollback-and-drop-rules 5d9b4fd | (this commit) |
+| reset-and-rebuild-rules | changes-requested | reset-rules 10ace94, read-through-and-rebuild-rules 5be22ab | (this commit) |
 
 ## Surviving findings
 
 For each slice whose verdict is `changes-requested`, the findings that survived the in-slice fix
 pass, with the `file:line` evidence the reviewer cited. These are the prescription a resumed run —
 or a human — starts from. They are hypotheses for the next reviewer to verify, not facts to trust.
+
+### reset-and-rebuild-rules
+
+1. **Issue:** BLOCKING — reset-rules AC-005 is not satisfied, and the slice cannot be sealed with it
+   open. `fresh_projection_has_no_checkpoint` is absent from
+   `crates/happenstance-testkit/src/projection.rs` (the HELD block occupies :1422-1448), from the
+   enumeration (:1868-1872), and `PresumedLiveCheckpointStore` is out of
+   `tests/projection_mutation_coverage/mutants.rs` and the REGISTRY
+   (`projection_mutation_coverage.rs:688-697`). The hold is CORRECT — EC-001 fired, no atom under
+   `.kb/decisions/` widens PS-19, and writing the rule would convict adapters of an obligation the
+   frozen MUST does not state — but EC-001's handling is "halt and report at the story boundary",
+   which is a story that has not finished, not a story that has passed. The projection family lands
+   at eleven of §4.11's seventeen adapter rules where the spec's PR boundary said twelve.
+   **Fix:** Do NOT restore the rule to clear this review — that is the frozen-clause widening EC-001
+   forbids and the reason the last review bounced. Escalate to the human with the two paths already
+   written up at `_slices.md:200-234`, and take whichever they authorise: (a) route the repair
+   upstream — a new accepted decision atom widening PS-19 or minting the never-seen-id clause, under
+   `.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md`, owned by
+   `projection-decision-atoms` / `unstable-projection-gate-and-clause-disposition` — and re-plan this
+   story to land after it, so AC-005 has a clause behind it; or (b) record a named human decision to
+   proceed on the unmet precondition, discharging every obligation `_slices.md:214-228` already
+   enumerates, including naming who authorised it and stating in the same place what the suite then
+   asserts that no clause states.
+
+2. **Issue:** Stale docs created by this slice, contradicted by an assertion the same slice landed —
+   the fourth occurrence of the class the fix pass itself escalated as "the third occurrence in three
+   slices". `assert_reference_projection_declensions`
+   (`crates/happenstance-testkit/tests/mutation_coverage.rs:3560-3576`) pins the reference run's skip
+   set to exactly two rules, yet: `crates/happenstance-testkit/tests/projection_conformance.rs:24`
+   still says "One rule in this run is answered by a `SKIP`" and names only
+   `failed_commit_leaves_both_unchanged`; `crates/happenstance-testkit/src/fixtures.rs:460-462` still
+   says the suite "prints one `SKIP` line for `failed_commit_leaves_both_unchanged`";
+   `crates/happenstance-testkit/src/projection.rs:2029-2032` says
+   "`refused_reset_changes_nothing` is the ONLY thing it can answer with a skip"; and
+   `fixtures.rs:441-442` keeps the future tense "would fail `refused_reset_changes_nothing` the day
+   that rule lands" for a rule that landed at `10ace94`. All four files are inside this slice's
+   declared boundary.
+   **Fix:** Correct all four to the two-skip reality and name both declined capabilities
+   (`COMMIT_FAULT` and `RESET_REFUSAL`) wherever the count is stated; put `fixtures.rs:441` into the
+   present tense citing the landed rule. Since this is now the fourth recurrence, also stop counting
+   in prose where a test already counts: have each of these docs point at
+   `assert_reference_projection_declensions` as the authority for the set instead of restating a
+   number nothing in the gate reads.
+
+3. **Issue:** read-through AC-006's ledger row is marked `satisfied: true` while its own evidence
+   field opens "PARTIAL" and states "NOT SATISFIED, literally"
+   (`read-through-and-rebuild-rules/_ledger.md:52-53`). The implementation is right — `_design.md`'s
+   capability table named the TESTKIT as the reason-writer for `READS_THROUGH_BATCH` at sign-off
+   (`0df2c1c:241`, note 1 at :245-248) — so the defect is in the criterion's wording, not the code.
+   But a true row whose evidence says false is a record a later reader cannot act on.
+   **Fix:** Resolve the conflict in the record rather than in the flag: state in the ledger row (and
+   in `_slices.md`'s fix-pass entry) that the AC text contradicts the binding design record, cite
+   `_design.md`'s capability table row for `READS_THROUGH_BATCH` as the authority the implementation
+   followed, and keep the routed question — should the probe const carry a reason at all — attached
+   to the port disposition story. Do not change the code to chase the AC's wording; that would mint
+   the projection-local reason DT-3's one stated exception exists to avoid.
+
+4. **Issue:** reset-rules AC-010 requires `git diff` over `spec/SPECIFICATION.md` to be EMPTY, and it
+   is not: 18 lines changed across the slice, all `†` markers inside §7.1–§7.2's BEGIN/END GENERATED
+   block. Every hunk is generated by `cargo xtask spec-trace --write` and stale-checked by a gate
+   step, so the criterion as written cannot be met by any story that adds or removes a rule name.
+   This is the same unsettled structural issue as the `standards/rust/**` citation re-pointing, now
+   at its fifth instance across three slices (`_slices.md:288-301`).
+   **Fix:** Settle it once instead of ratifying it per slice, as `_slices.md` itself argues. Either
+   amend the criterion's premise to "no clause text, maturity marker or rule citation outside the
+   BEGIN/END GENERATED block changed" — which is what AC-010 actually means and what is verifiably
+   true here — or teach the boundary check that a generated-region regeneration and a compelled
+   citation repair are not scope breaches. Record whichever is chosen where the next story reads it,
+   not in a commit message.
 
 ## Fix passes
 
