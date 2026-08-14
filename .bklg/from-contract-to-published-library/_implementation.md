@@ -22,7 +22,7 @@ attributable to the initiative rather than inherited.
 
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
-| 1 | `projection-store-freeze` | HS-P0010 | — | pending | |
+| 1 | `projection-store-freeze` | HS-P0010 | — | **in-progress** | blocked: needs one human `/redkiln:kb-ingest` wave |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | pending | |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
@@ -38,4 +38,42 @@ Positions 4, 5 and 6 are mutually unordered; the serial trunk is
 
 ## Run log
 
-_No project runs yet._
+### HS-P0010 `projection-store-freeze` — run 1, 2026-08-13 (`wf_c27a4fc1-63c`)
+
+baseRef `2136ddeb`. Halted at `stories`, verdict `changes-requested`, 3 of 17 stories
+committed. **Keep baseRef stable across re-launches of this project.**
+
+| Story | Commit | State |
+|-------|--------|-------|
+| `ps-clause-pairing-sweep` | `f77f183` | complete — 37 clauses verdicted, ISOLATED against a threshold declared before the count |
+| `projection-decision-atoms` | `9520b28` | **blocked** — 8 of 10 ACs need three *accepted* `.kb/decisions/` atoms |
+| `projection-api-design-record` | `0df2c1c` | complete — DT-3 and DT-8 resolved in `_design.md` |
+
+**The blocker is a correct refusal, not a failure.** The three ADR atoms may only be
+authored by a human-invoked `/redkiln:kb-ingest` wave: CLAUDE.md reserves atom
+authorship to that wave (hand-writing them was reverted at `0269720`), and this
+story's own AC-007 requires the atoms to *arrive as the output of one such wave* —
+so hand-writing them would fail AC-007 in the act of appearing to satisfy AC-001–003.
+Its spec's implementation notes say the same thing directly: *"Do not run
+`/redkiln:kb-ingest` from inside the implementation."*
+
+Everything the wave needs is staged and committed: three long-form records under
+`references/adr/` (0017, 0018, 0019) and three `.kb/_intake/2026-08-13-adr-00{17,18,19}-*.md`
+documents carrying the frontmatter conventions, the claims, the rejected alternatives,
+the provisional halves with falsifiers, the resolve-not-delete protocol for
+`kb-open-question-projection-batch-no-apply-001`, and the `.kb/maps/decision-map.md` rows.
+Suggested wave id: **`2026-08-13-projection-adrs`** (`2026-08-10-intake` and `-2` are taken).
+
+The slice `decisions-and-design-record` was **never sealed** — `_slices.md` has no row,
+because the run halted before the adversarial slice review. So no story here has been
+reviewed by anything, and none was advanced past `plan`.
+
+AC-010's ordering guarantee is not at risk: `crates/happenstance-core/src/projection.rs`
+is byte-identical to `main`, and `owned-batch-port-shape` is blocked on this story, so
+the port cannot move ahead of the decisions.
+
+**Degraded: 3 × fatal**, all one kind — the isolation audit caught each of the three
+story agents writing an ephemeral AC-check `.sh` into the session scratchpad, outside
+the worktree. No declared artifact is missing (`missingArtifacts` is empty; all 22
+declared files are on disk). It is a real isolation trip and is recorded as one, but it
+did not cost a deliverable.
