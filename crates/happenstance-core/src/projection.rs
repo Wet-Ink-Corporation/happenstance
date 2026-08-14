@@ -75,6 +75,8 @@
 
 use alloc::boxed::Box;
 use alloc::string::String;
+#[cfg(feature = "conformance")]
+use core::future::Future;
 
 use crate::event::SequencePosition;
 
@@ -347,6 +349,108 @@ pub trait ProjectionStore {
     ///
     /// Returns the adapter's error if the rollback fails.
     async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error>;
+}
+
+/// The write seam the projection conformance suite runs through.
+///
+/// Without it, generic code holding an adapter's batch can do exactly two things
+/// with it — commit it or roll it back. There is no way to put a row *into* the
+/// batch and no way to look at the read model afterwards, so the rule carrying
+/// this port's entire reason for existing — the read-model write and the
+/// checkpoint write become durable together or not at all — cannot be written,
+/// and a suite built on [`ProjectionStore`] alone degenerates into a checkpoint
+/// test that a store writing *only* checkpoints passes.
+///
+/// An adapter that wants to be certified implements this beside its
+/// [`ProjectionStore`] impl. It is not part of the runtime surface: it exists so
+/// a suite that has never heard of the adapter can drive its read model.
+///
+/// # Why this lives in the contract crate rather than the testkit
+///
+/// It looks like a testing utility and belongs beside the port anyway, and the
+/// reason is coherence rather than taste. An adapter crate implementing a
+/// *testkit* trait for its own type is legal — the type is local, so the orphan
+/// rule is satisfied. But the natural place to write such an impl is the
+/// adapter's own `tests/` directory, and **that is a different crate**. There,
+/// neither the trait nor the type is local, `impl ProjectionProbe for MyStore`
+/// is rejected by the orphan rule, and the only way out is a **non-dev**
+/// dependency on the testkit, feature-gated. Putting the trait here costs an
+/// adapter author one flag on a dependency they already have and no new edge in
+/// their dependency graph:
+///
+/// ```toml
+/// [dev-dependencies]
+/// happenstance-core = { version = "…", features = ["conformance"] }
+/// happenstance-testkit = "…"
+/// ```
+///
+/// **Nothing inside this workspace can fail the wrong version of that
+/// decision.** Every fixture here already lives in a crate that depends on the
+/// testkit, so the trait would be local, the impls local, the orphan rule
+/// silent, and the whole gate green. The falsifier is the story that builds an
+/// outside author's fixture from the documentation alone, and it is named here
+/// so the placement is not "simplified" into the testkit on grounds of diff
+/// size in the meantime.
+///
+/// # Both flavours, one trait
+///
+/// The bound is bare [`ProjectionStore`], and there is deliberately no
+/// `SendProjectionProbe`. `trait_variant` emits a blanket impl, so
+/// [`SendProjectionStore`] implies [`ProjectionStore`] and a `Send` adapter
+/// already satisfies this supertrait bound. A second trait would collide with
+/// that blanket impl — `error[E0275]` — which is the shape ADR-0008 records.
+#[cfg(feature = "conformance")]
+pub trait ProjectionProbe: ProjectionStore {
+    /// Whether this adapter offers any read path on an open batch.
+    ///
+    /// Declaring `false` is a conformant answer, not a failure: many adapters
+    /// buffer their writes and cannot read them back before commit. A store
+    /// declaring `false` still has the read-through rule **emitted as a
+    /// reported skip carrying its reason** — never omitted — because a rule
+    /// absent from the binary is indistinguishable in CI output from a rule
+    /// that passed.
+    const READS_THROUGH_BATCH: bool;
+
+    /// Writes one probe row into an open batch.
+    ///
+    /// Infallible and synchronous: it mutates a batch the caller owns, which
+    /// cannot fail. Nothing becomes durable until the batch reaches
+    /// [`commit`](ProjectionStore::commit).
+    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64);
+
+    /// Queues deletion of every probe row into an open batch.
+    ///
+    /// Exists so [`reset`](ProjectionStore::reset) is checkable *without the
+    /// suite knowing what a read model is*. `reset` takes the caller's own
+    /// deletes, so a suite with no way to express "delete everything" cannot
+    /// exercise it at all.
+    fn probe_delete_all(&self, batch: &mut Self::Batch);
+
+    /// Reads one probe row from the **committed** read model.
+    ///
+    /// The one asynchronous member, and not arbitrarily so: the other three
+    /// mutate a batch the caller already holds, while this is real I/O against
+    /// the store.
+    ///
+    /// Spelled `-> impl Future<…>` rather than `async fn`, and with **no
+    /// `+ Send`**. This trait is not under `#[trait_variant::make]`, so `async
+    /// fn` here would fire `async_fn_in_trait` under the gate's `-D warnings`;
+    /// writing the desugaring by hand also puts the *absence* of the `Send`
+    /// bound at the declaration, where a reader can see it. A `Send` bound
+    /// would break `wasm32` and could not be relaxed later without a breaking
+    /// change — and it is not needed, because suite code binds the weaker
+    /// flavour and takes its per-test wrapper as a parameter.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if the read model cannot be read.
+    fn probe_read(&self, key: &str) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
+
+    /// Reads one probe row through an **open** batch, committed state included.
+    ///
+    /// Only called when [`READS_THROUGH_BATCH`](Self::READS_THROUGH_BATCH) is
+    /// `true`; may be `unimplemented!()` otherwise.
+    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
 }
 
 #[cfg(test)]

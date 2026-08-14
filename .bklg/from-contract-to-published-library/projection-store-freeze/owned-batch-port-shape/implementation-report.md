@@ -90,7 +90,7 @@ None of the three was deleted, so EC-007 did not fire.
 
 ## Commits
 
-`98e0298` — `feat(projection-store-freeze): The owned-batch port shape`
+`2eade38` — `feat(projection-store-freeze): The owned-batch port shape`
 
 One commit, staged so the port edit and the five restatements are readable
 separately in the diff (NF-006). `LiveHandleProjectionStore` is recorded as a

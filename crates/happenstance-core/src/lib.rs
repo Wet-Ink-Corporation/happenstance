@@ -80,6 +80,15 @@
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by
 //!   replication adapters that need one.
+//! * **`conformance`** — `ProjectionProbe`, the write seam the projection
+//!   conformance suite drives an adapter's read model through. For adapter
+//!   authors running that suite against their own store; nothing in the runtime
+//!   path needs it. Off by default, pulls in no dependency, and implies
+//!   nothing — not `std`, not `memory`.
+//!
+//!   The name is deliberately not a link here, for the reason given under
+//!   *Getting started*: a link into a `cfg`-gated item is a hard error when the
+//!   feature is off, and `cargo doc --no-default-features` is a gate step.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -119,6 +128,10 @@ pub use projection::{
 pub use query::{Query, QueryItem, ReadOptions};
 pub use store::{EventStore, SendEventStore, collect, read_decision_model};
 pub use tag::{MAX_TAG_LEN, Tag, Tags};
+
+#[cfg(feature = "conformance")]
+#[cfg_attr(docsrs, doc(cfg(feature = "conformance")))]
+pub use projection::ProjectionProbe;
 
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]

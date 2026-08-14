@@ -50,6 +50,25 @@ serde = ["dep:serde", "dep:base64", "base64/alloc", "bytes/serde", "serde/alloc"
 # The in-memory reference event store. Costs no extra dependencies and backs
 # every doctest in this crate, so the docs cannot drift from the API.
 memory = ["std"]
+# `ProjectionProbe`, the write seam the projection conformance suite runs
+# through. Deliberately `[]` — no `dep:` entry, and it implies neither `std` nor
+# `memory`.
+#
+# The empty list is the whole economic argument for the trait living beside the
+# port rather than in `happenstance-testkit`. An adapter's own `tests/` directory
+# is a separate crate, where neither a testkit trait nor the adapter's type is
+# local, so the orphan rule rejects `impl ProjectionProbe for MyStore` there and
+# the only way out would be a **non-dev** dependency on the testkit. Here it
+# costs one flag on a dependency the adapter already has and no new edge in its
+# graph. If this line ever acquires a `dep:` or an implied feature, that argument
+# is void and the placement is owed a new ADR.
+#
+# It also implies nothing on purpose: `conformance` without `memory`, and
+# `conformance` under `--no-default-features` (which is `no_std`), are both
+# combinations the feature powersets compile. A `conformance` surface that only
+# works alongside `memory` is green on default features and on `--all-features`
+# and is caught nowhere else.
+conformance = []
 
 [package.metadata.docs.rs]
 all-features = true
