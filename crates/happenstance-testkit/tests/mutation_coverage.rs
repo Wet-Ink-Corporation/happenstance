@@ -197,8 +197,11 @@ struct Declared {
 /// **Scope: the event-store port only.** Every store here implements
 /// `EventStore`, and every rule it is driven through comes from
 /// `for_each_event_store_rule!`. The projection store port owes its own CF-1 –
-/// CF-5 obligation and has neither a suite nor a mutant yet; `SPECIFICATION.md`
-/// §4 is where that is tracked, and nothing below says anything about it.
+/// CF-5 obligation and now discharges it in a registry of its own,
+/// `tests/projection_mutation_coverage.rs` — same six `Declared` fields, same
+/// semantics, its own rule universe taken from `for_each_projection_store_rule!`.
+/// CF-5's projection half is still open there and is named in that file rather
+/// than tracked here. Nothing below says anything about either.
 ///
 /// ADR-0010 requires both halves of that sentence and forbids the third thing
 /// anyone would write instead. **Never quote a pass rate over this table.** The
