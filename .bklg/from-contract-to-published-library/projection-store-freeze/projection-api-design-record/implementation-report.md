@@ -34,7 +34,7 @@ Green: 53/53.
 | AC-006 | `(None, true)`, the two-enums sentence, the `one-shot` reason, *no idea what the read model is* | **red** 4 `FAIL` → **green** 4 `PASS`. Four rationale sentences, four items, each once, each with a rustdoc home. |
 | AC-007 | `ResetError::Refused` named with a decision, not only a signature | **red** `FAIL` → **green** `PASS`. Decided bare, with where the reason lives instead, the cost, and the reversal path. |
 | AC-008 | `#[non_exhaustive]`, `lib.rs:98-124`, `[features]`, `doc(cfg(`, `unstable-projection`, `intra-doc` | **red** 6 `FAIL` → **green** 6 `PASS`. Three lines per item for all eight; both halves of the mount; the rustdoc hazard stated. |
-| AC-009 | `## The doctest` names `crates/happenstance-core/src/projection.rs`, `cargo test --doc`, and the bare-`compile_fail` rule | **red** 2 `FAIL` (2 already passed on the heading and the path in the Surfaces prose) → **green** all pass. |
+| AC-009 | `## The doctest` names a real home, `cargo test --doc`, and the bare-`compile_fail` rule | **red** 2 `FAIL` (2 already passed on the heading and the path in the Surfaces prose) → **green** all pass. **Amended after review:** the home is the **`MemoryProjectionStore` module page**, not the ungated `ProjectionStore` trait doc — the example calls `ProjectionProbe` methods, and that trait is behind `conformance`. See *The doctest was respecified* below. |
 | AC-010 | `async_trait`, `type Batch: Send`, `ICE`, `ProjectionId::new` | **red** 4 `FAIL` → **green** 4 `PASS`. Ten entries, every one with a path or an atom id. |
 | AC-011 | `surfaces: []` and the prior sign-off intact; an appended block that says `Unsigned`; only `N/A` lines removed; lines 1–50 byte-identical | **red** 2 `FAIL` (no amendment block) with the three non-regression guards already green → **green** all pass. Exactly **ten** deletions in the whole file, all the placeholder line. |
 | AC-012 | empty `git diff --stat main...HEAD` under `crates/`, `spec/`, and `.kb/` outside `_intake/` | **green** at red and at green — a non-regression guard for a boundary this story must not cross, stated as such rather than dressed up as red-then-green. |
@@ -118,16 +118,61 @@ cannot validate, localise or synchronise it. The record states the decision, whe
 the reason lives instead, what it costs an operator (one more hop), and the reversal
 path (`#[non_exhaustive]`, so a payload is additive later).
 
-**One dependency is honest rather than hidden.** This story's spec says accepted
-ADR-0017 / 0018 / 0019 atoms are immutable before this record is written and that
-the atom wins on conflict. The atoms are **staged, not yet accepted** — the upstream
-story `projection-decision-atoms` is blocked on a human-invoked
-`/redkiln:kb-ingest` wave. The record was therefore written against the long-form
-records in `references/adr/` and against `spec/SPECIFICATION.md`, agrees with both,
-and says so in `## Signatures`: **no sentence has had to yield**, and if the wave's
-atoms differ from a record on any point this block yields and the sentence that
-yielded is named there rather than the atom being edited. That is the authority
-order preserved, not bypassed.
+**The doctest was respecified, because as first written it could not compile.**
+Found at slice review and fixed in the record rather than left for
+`memory-projection-store`'s implementer to discover — the whole point of a
+`_design.md` that carries *a doctest in place of a mock* is that the doctest is
+right. Four defects, each now stated in the record beside the block:
+
+1. `probe_write` and `probe_delete_all` are `ProjectionProbe` methods and the
+   trait was absent from the `use` list — `error[E0599]`, since a trait's
+   methods are not callable without the trait in scope.
+2. The stated home was the **ungated** `ProjectionStore` trait doc while
+   `ProjectionProbe` is behind `conformance` (off by default) and
+   `MemoryProjectionStore` behind `memory`. The example now lives on the
+   `MemoryProjectionStore` module page, which is also where
+   `memory-projection-store`'s own AC-010 puts the runnable walkthrough, and the
+   port page keeps the toy-store impl doctest that names no gated item.
+3. `assert_eq!` on a `Checkpoint` needs `PartialEq` + `Debug`, and `.await?` on
+   `commit` needs `CommitError<E>: core::error::Error`; neither derive was in
+   `## Signatures`. Both are now, with `AppendError`'s derive set cited as the
+   model.
+4. The harness was `# async fn example()`, which nobody polls — every
+   `assert_eq!` in it would have been dead code that compiles. It is now
+   `#[tokio::main(flavor = "current_thread")]`, the crate's own idiom at
+   `crates/happenstance-core/src/memory.rs:45-46`, wrapped in a hidden
+   `#[cfg(feature = "conformance")]` with a `#[cfg(not(…))] fn main() {}` arm so
+   a bare `cargo test -p happenstance-core --doc` stays green while
+   `cargo xtask ci`'s `--all-features` run actually executes it.
+
+No AC text moved and no evidence was weakened: AC-009 asks for the example text,
+its home and the gate step, and it now has a home the example can compile in.
+
+**One dependency was honest rather than hidden, and it has since closed.** This
+story's spec says accepted ADR-0017 / 0018 / 0019 atoms are immutable before this
+record is written and that the atom wins on conflict. At the checkpoint the atoms
+were **staged, not yet accepted** — the upstream story `projection-decision-atoms`
+was blocked on a human-invoked `/redkiln:kb-ingest` wave — so the record was
+written against the long-form records in `references/adr/` and against
+`spec/SPECIFICATION.md`, agreeing with both.
+
+**The wave has now run** (`2026-08-13-projection-adrs`, `493a194`, merged at
+`d05d2b3`), and `## Signatures` has been **re-read against the accepted atoms
+clause by clause** rather than left resting on the records: `type Batch;` owned
+with no lifetime and no universal write vocabulary, `ProjectionProbe` in the
+contract crate behind `feature = "conformance"`
+(`.kb/decisions/0017-…:65-88`); `reset(batch, id)` as one unit carrying the
+caller's deletes, scope cited to ADR-0007, refusal as a port mechanism, and the
+three-variant `Checkpoint` (`0018-…:60-86`); the port growing nothing for apply
+failure and `rollback` surviving on PS-30's `AssertUnwindSafe`
+(`0019-…:59-77`). **No sentence has had to yield** — now a claim checked against
+the atoms, not only against the records. Two questions an atom deliberately
+hands to this record are answered here and nowhere else: whether
+`ResetError::Refused` carries a reason (`0018-…:108-110`, decided **bare**), and
+what the probe's `conformance` gate costs an outside author (DT-8). If a later
+*superseding* atom differs, this block yields and the sentence that yielded is
+named there rather than the atom being edited — an accepted atom is immutable.
+That is the authority order preserved, not bypassed.
 
 **No re-plan is raised, and the escalation path is left open.** If the design
 reviewer holds that the `N/A` determination was meant to cover the type surface as

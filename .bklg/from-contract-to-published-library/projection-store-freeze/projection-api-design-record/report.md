@@ -27,9 +27,9 @@ constructed-but-unmounted.
 | **Four unusual shapes each name the alternative that lost, once, at the call site.** The tuple that can spell `(None, true)`; two error enums so `commit`'s caller never matches `Refused`; `begin` infallible because async + fallible implies a round trip Neon's one-shot transport cannot afford; `reset` taking the caller's deletes because the port has no idea what the read model is. Each is assigned the item's own rustdoc as its home, not only an ADR. | `_design.md` § *What it costs a caller*; RS-70-5 at `standards/rust/70-rustdoc-obligations.md:243` | The rustdoc itself is `owned-batch-port-shape`'s. |
 | **`ResetError::Refused` is decided out loud: it stays bare.** With where the reason lives instead, the argument (a `&'static str` would push a domain sentence through a port type that cannot validate, localise or synchronise it), the cost to an operator (one more hop), and the reversal path (`#[non_exhaustive]`). Silence would have been the failure. | `_design.md` § *The states the API must express*, final paragraph; `spec/SPECIFICATION.md:4676-4682`, `:5210-5216` | Behaviour is `reset-rules` (HS-S0012)'s `refused_reset_changes_nothing`. |
 | **`## Visibility and stability` is specific enough to be violated.** Three lines per item for all eight; `#[non_exhaustive]` on all four new types; both halves of the mount named — the `lib.rs:98-124` export block **and** the feature table — because an item mounted at one and not the other is an item no adapter can name; `unstable-projection` recorded as AC-A04's arm; and the intra-doc-link-into-a-feature-gated-module hazard stated with the shape that survives it. | `_design.md` §§ *Placement and re-export*, *Visibility and stability*; Architecture brief Notes 1 and 9; `crates/happenstance-testkit/src/lib.rs:112-132` | Compile-time proof deferred to HS-S0004 and `projection-probe-conformance-feature`. |
-| **The doctest is written and assigned a compiling home.** Example text in full, home named (`crates/happenstance-core/src/projection.rs` plus the `MemoryProjectionStore` module), gate step named (`cargo test --doc` inside `cargo xtask ci`), and the record says plainly that it cannot compile it. The owed `compile_fail` is specified **bare**, never `compile_fail,E0080`, with where an associated const's check actually fires. | `_design.md` § *The doctest*; `crates/happenstance-testkit/src/contract.rs:400-419` | Compilation is `memory-projection-store`'s (Testing brief row AC-012). |
+| **The doctest is written and assigned a home it can actually compile in.** Example text in full, gate step named (`cargo test --doc` inside `cargo xtask ci`'s `--all-features` `tests` step), and the record says plainly that it cannot compile it itself. The owed `compile_fail` is specified **bare**, never `compile_fail,E0080`, with where an associated const's check actually fires. **Corrected at slice review:** the home is the `MemoryProjectionStore` module page, not the ungated `ProjectionStore` trait doc — the example calls `ProjectionProbe` methods, `ProjectionProbe` was missing from the `use` list (`error[E0599]`) and is behind `conformance`, off by default. `## Signatures` gained the derives the assertions need, and the harness became `#[tokio::main]` rather than an unpolled `async fn` whose `assert_eq!`s would never have run. | `_design.md` § *The doctest*, *Four things in that block are load-bearing*; `crates/happenstance-core/src/memory.rs:45-46`; `crates/happenstance-testkit/src/contract.rs:400-419` | Compilation is `memory-projection-store`'s (Testing brief row AC-012), whose AC-010 divides the two pages the same way. |
 | **Ten anti-patterns, every one with a path or an atom id.** Including the two that most need writing down because they compile: `type Batch: Send;` (which `trait_variant` copies into the `!Send` flavour and breaks wasm32) and any borrowing GAT on the fixture (one of five ingredients of a rustc ICE still reproducing on 1.97.1). | `_design.md` § *Anti-patterns* | None. Flagged to the reviewer as an addition inside a section the prior sign-off referenced while it read `N/A`. |
-| **The amendment is additive and re-gated, never a rewrite.** Exactly **ten** deletions in the whole file, all the placeholder `N/A — no user-facing surface.`; lines 1–50 byte-identical to HEAD; `## Sign-off` untouched; a new `## Amendment sign-off` appended and explicitly **unsigned**. | `git diff -U0` over `_design.md`; `cmp` over lines 1–50 | Back to the human at the design gate as an amendment. Declining it costs nothing already banked. |
+| **The amendment is additive and re-gated, never a rewrite.** Against `main` the whole file is **759 insertions, 0 deletions**; the earliest hunk starts at `:86`, so lines 1–85 — the `surfaces: []` fence, the no-screen determination and the 2026-08-12 `Approved.` block — are byte-identical; `## Sign-off` untouched; a new `## Amendment sign-off` appended and explicitly **unsigned**. The slice review's three corrections rewrote only lines this story itself added, and are listed inside that still-unsigned block. | `git diff main --numstat` over `_design.md`; `git diff -U0` hunk offsets | Back to the human at the design gate as an amendment. Declining it costs nothing already banked. |
 | **Scope discipline is observable in the diff.** Empty `git diff --stat main...HEAD` under `crates/`, `spec/`, and `.kb/` outside `_intake/`. No atom hand-written, no open question's status changed, no ADR minted, no clause or maturity marker edited. | `design-checks.sh` AC-012 assertions | None. |
 
 **Mount point:** `.bklg/from-contract-to-published-library/projection-store-freeze/_design.md`
@@ -44,13 +44,20 @@ harness (HS-S0008, `projection-suite-entry-point`), the compiled doctest
 (`memory-projection-store`), the documentation-only fixture (HS-S0015), and
 compile-time proof of the signature and visibility blocks (HS-S0004).
 
-**One dependency handled rather than hidden:** ADR-0017 / 0018 / 0019 exist as
-long-form records but their `.kb/decisions/` atoms are **staged, not yet accepted**
-— `projection-decision-atoms` is blocked on a human-invoked `/redkiln:kb-ingest`
-wave. `## Signatures` states the authority order explicitly: the record was written
-against the records and the specification, agrees with both, **no sentence has had
-to yield**, and if the wave's atoms differ this block yields and the yielding
-sentence is named rather than the atom edited.
+**One dependency handled rather than hidden, and now closed:** at the checkpoint
+ADR-0017 / 0018 / 0019 existed as long-form records whose `.kb/decisions/` atoms
+were staged, because `projection-decision-atoms` was blocked on a human-invoked
+`/redkiln:kb-ingest` wave. **That wave has run** — `2026-08-13-projection-adrs`,
+`493a194`, merged at `d05d2b3` — so all three are now `status: accepted` atoms,
+and `## Signatures` has been re-read against them clause by clause rather than
+against the records alone. **No sentence has had to yield**: `type Batch;`, the
+probe's home behind `conformance`, `reset` taking the caller's deletes, refusal as
+a port mechanism, the three-variant `Checkpoint` and the port growing nothing for
+apply failure all agree, and the two questions ADR-0018 hands to this record
+(`Refused`'s payload) and DT-8 (the outside-author cost of the `conformance` gate)
+are answered here and nowhere else. Should a later *superseding* atom differ, this
+block yields and the yielding sentence is named rather than the atom edited — an
+accepted atom is immutable.
 
 ## Acceptance
 
@@ -64,10 +71,10 @@ sentence is named rather than the atom edited.
 | AC-006 | satisfied | Static: four rationale markers present (`(None, true)`, the two-enums sentence, `one-shot`, *no idea what the read model is*); four items, each stated once, each with a rustdoc home. |
 | AC-007 | satisfied | Static: `ResetError::Refused` carries a decision sentence, not only a signature — bare, with where the reason lives instead and what it costs. |
 | AC-008 | satisfied | Static: `#[non_exhaustive]`, `lib.rs:98-124`, `[features]`, `doc(cfg(`, `unstable-projection`, `intra-doc` all present; three lines per item for all eight; both halves of the mount named. |
-| AC-009 | satisfied | Static: `## The doctest` names `crates/happenstance-core/src/projection.rs` and `cargo test --doc`, and states the bare-`compile_fail` rule. Compilation is `memory-projection-store`'s. |
+| AC-009 | satisfied | Static: `## The doctest` names its home — the `MemoryProjectionStore` module page, corrected at slice review from the ungated `ProjectionStore` trait doc, which cannot host a `ProjectionProbe`-calling example — and `cargo test --doc`, and states the bare-`compile_fail` rule. The block now compiles as written: `ProjectionProbe` in the `use` list, the required derives added to `## Signatures`, and a polled `#[tokio::main]` harness. Compilation is `memory-projection-store`'s. |
 | AC-010 | satisfied | Static: `async_trait`, `type Batch: Send`, the ICE, `ProjectionId::new` all present; ten entries, each with a path or atom id. |
-| AC-011 | satisfied | `git diff -U0`: exactly ten deletions, all the `N/A` placeholder; `cmp` over lines 1–50 identical; `## Sign-off` untouched; new block appended and marked `**Unsigned.**`. |
-| AC-012 | satisfied | `git diff --stat main...HEAD` empty under `crates/`, `spec/`, `.kb/` outside `_intake/`; every changed path inside the PR boundary; `redkiln validate` green on this item. |
+| AC-011 | satisfied | `git diff main --numstat` over `_design.md`: 759 insertions, **0 deletions**; earliest hunk at `:86`, so lines 1–85 are byte-identical and `## Sign-off` is untouched; new block appended and marked `**Unsigned.**`, now also listing the three post-review corrections it covers. |
+| AC-012 | satisfied | At this story's commit, `git diff --stat main...HEAD` empty under `crates/`, `spec/` and `.kb/` outside `_intake/`; every changed path inside the PR boundary; `redkiln validate` green on this item. `crates/` and `spec/` are still empty at HEAD; `.kb/` has since changed at `493a194`, which is the ingest wave and a **different** story's AC — this story hand-wrote no atom, then or now. |
 
 ## Knowledge Harvest
 
@@ -89,7 +96,22 @@ sentence is named rather than the atom edited.
   gated-module hard error belongs with it.
 - **A process observation, not yet an atom.** This record had to be written while
   its upstream ADR atoms were staged rather than accepted, and the authority order
-  held only because the record said in writing which way it would yield. Whether a
-  design record should be allowed to precede the atoms it defers to — or whether the
-  dependency should be on the *records* rather than the atoms — is a candidate open
-  question for closeout.
+  held only because the record said in writing which way it would yield. When the
+  wave landed, the reconciliation had to be *re-run* against the accepted atoms —
+  it found no disagreement, but nothing in the pipeline scheduled that re-run, and
+  the record read "staged, not yet accepted" for three commits after it stopped
+  being true. Whether a design record should be allowed to precede the atoms it
+  defers to — or whether the dependency should be on the *records* rather than the
+  atoms, with a mandatory re-read at the wave gate — is a candidate open question
+  for closeout.
+- **A `playbook` candidate: a specified doctest is a compiled artefact's
+  specification, and needs the same scrutiny.** The first draft of `## The doctest`
+  named a home that could not host it, omitted the trait whose methods it called,
+  assumed derives the signature block did not declare, and used an async harness
+  nobody polls. Every one of those would have compiled *as prose* and failed as
+  Rust, in a downstream story, against a signed-off record. The transferable check
+  is four questions — is every trait whose method is called in scope; is every
+  feature the example needs on in the configuration the gate runs; does every type
+  an `assert_eq!` touches derive `PartialEq` and `Debug`; and is the future
+  actually polled — and it is cheap enough to run on any example a record
+  specifies but does not compile.

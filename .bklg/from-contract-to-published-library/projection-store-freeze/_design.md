@@ -84,6 +84,13 @@ clause that binds it.
 
 ```rust
 /// PS-19, PS-20, PS-24. Three variants, not `(Option<SequencePosition>, bool)`.
+///
+/// `PartialEq` + `Debug` are **load-bearing, not habit**: every rule that
+/// observes a checkpoint — and the doctest below — spells it `assert_eq!`, and
+/// neither compiles without both. `Copy` because the type is two words at most
+/// (`SequencePosition` is a `NonZeroU64` and is itself `Copy`,
+/// `crates/happenstance-core/src/event.rs:239`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Checkpoint {
     /// PS-19: never run, or reset, or rebuilding with nothing committed yet.
@@ -95,26 +102,42 @@ pub enum Checkpoint {
 }
 
 /// PS-24. What a commit claims about the rows it leaves behind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Authority { Live, Rebuilding }
 
 /// PS-15, PS-22. Generic over the adapter's error — never a `String`.
+///
+/// The derive set is `AppendError`'s, item for item
+/// (`crates/happenstance-core/src/error.rs:212`), including
+/// `thiserror::Error` — without it `commit(…).await?` cannot rise through a
+/// `Box<dyn core::error::Error>`, which is what every doctest and every rule
+/// body does. `#[error(transparent)]` on `Store` is the same choice made there:
+/// the adapter's own message, unwrapped.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum CommitError<E> {
     /// PS-15: the batch was begun on a different store instance.
+    #[error("the batch was begun on a different store instance")]
     ForeignBatch,
     /// PS-22: `position` is below the checkpoint already recorded.
+    #[error("checkpoint regression: {current} is recorded, {attempted} was attempted")]
     CheckpointRegression { current: SequencePosition, attempted: SequencePosition },
+    #[error(transparent)]
     Store(E),
 }
 
 /// PS-15, PS-18. A separate enum, so `commit`'s caller never matches `Refused`.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ResetError<E> {
     /// PS-15.
+    #[error("the batch was begun on a different store instance")]
     ForeignBatch,
     /// PS-18: this store declines to reset this projection.
+    #[error("this store declines to reset this projection")]
     Refused,
+    #[error(transparent)]
     Store(E),
 }
 
@@ -176,15 +199,31 @@ pub trait ProjectionProbe: ProjectionStore {
 ```
 
 **Where this block and an accepted ADR disagree, the atom wins.** ADR-0017,
-ADR-0018 and ADR-0019 exist as long-form records at
-`references/adr/0017-what-a-projection-batch-owns.md`,
-`…/0018-returning-a-projection-to-never-run.md` and
-`…/0019-what-happens-when-apply-fails.md`; their `.kb/decisions/` atoms are staged
-for the next `/redkiln:kb-ingest` wave and are not yet accepted. This block was
-written against those records and against `spec/SPECIFICATION.md`, and it agrees
-with both. **No sentence has had to yield**; if the wave's atoms differ from a
-record on any point, this block yields and the sentence that yielded is named here
-rather than the atom being edited.
+ADR-0018 and ADR-0019 are **accepted atoms** — `status: accepted`, phase 6, at
+[`.kb/decisions/0017-what-a-projection-batch-owns.md`](../../../.kb/decisions/0017-what-a-projection-batch-owns.md),
+[`…/0018-returning-a-projection-to-never-run.md`](../../../.kb/decisions/0018-returning-a-projection-to-never-run.md)
+and [`…/0019-what-happens-when-apply-fails.md`](../../../.kb/decisions/0019-what-happens-when-apply-fails.md),
+ingested by the `2026-08-13-projection-adrs` wave at `493a194`; the long-form
+records they were folded from remain at `references/adr/0017-*.md`, `0018-*.md`
+and `0019-*.md`, and hold the transcripts a ~100-line atom cannot.
+
+This block was first written against those records and has since been **re-read
+against the accepted atoms, clause by clause**: `type Batch;` owned with no
+lifetime and no universal write vocabulary, `ProjectionProbe` in the contract
+crate behind `feature = "conformance"` (ADR-0017); `reset(batch, id)` as one unit
+with the caller's own deletes, scope cited to ADR-0007, refusal as a port
+mechanism, and the three-variant `Checkpoint` over `(Option<SequencePosition>,
+bool)` (ADR-0018); the port growing nothing for apply failure, and `rollback`
+surviving because PS-30's `AssertUnwindSafe` promise rests on it (ADR-0019).
+**No sentence has had to yield** — that is now a claim checked against the atoms
+rather than against the records alone. Two points where an atom deliberately
+hands a question here are answered here and nowhere else: whether
+`ResetError::Refused` carries a reason (`0018-…:108-110` — it stays bare, see
+*The states the API must express*), and what the probe's `conformance` gate costs
+an outside author (DT-8 below). If a later superseding atom differs from this
+block on any point, this block yields and the sentence that yielded is named
+here rather than the atom being edited — an accepted atom is immutable
+(`.kb/decisions/README.md`).
 
 ## Shape decision
 
@@ -329,9 +368,11 @@ failure DT-8 names, and this record takes the other arm precisely to avoid it.
 `type Batch;` with no lifetime, the refusal of a universal write vocabulary, the
 probe's home, `reset` taking the caller's deletes, refusal as a port mechanism, and
 the port growing nothing for apply failure are ADR-0017's, ADR-0018's and
-ADR-0019's. Their long-form records are in `references/adr/`; the atoms are staged
-for the next ingest wave. Nothing in this record re-argues them, and where one of
-them is quoted it is quoted as settled.
+ADR-0019's. All three are **accepted atoms** under `.kb/decisions/` as of the
+`2026-08-13-projection-adrs` wave (`493a194`), with their long-form records still
+in `references/adr/`. Nothing in this record re-argues them, and where one of them
+is quoted it is quoted as settled — which it now is in the schema as well as in
+the prose.
 
 ## Placement and re-export
 
@@ -512,52 +553,112 @@ so the reviewer can see it is an addition, not a re-reading of what they approve
 The example, its home, and the gate step that compiles it. **This record cannot
 compile it** — a described example is not a checked one — so it names who does.
 
-- **Home:** the `ProjectionStore` trait doc in
-  `crates/happenstance-core/src/projection.rs`, with the working copy of the same
-  example on the `MemoryProjectionStore` module. Those are the two pages an
-  implementer already has open.
-- **Gate step:** `cargo test --doc`, inside `cargo xtask ci`. It runs today and
-  needs no new step.
-- **Compiled by:** `memory-projection-store` (Testing brief row AC-012). It cannot
-  compile until `MemoryProjectionStore` exists, which is why it is specified here
-  and run there.
+- **Home:** the **`MemoryProjectionStore` module page**, in the new
+  `memory`-gated module under `crates/happenstance-core/src/`. **Not** the
+  ungated `ProjectionStore` trait doc, and that is a correction rather than a
+  preference — see *Why the port's own page does not carry this example* below.
+- **Gate step:** `cargo test --doc`, inside `cargo xtask ci`'s `tests` step,
+  which runs `cargo test --locked --workspace --all-features`
+  (`xtask/src/main.rs:143-152`). It runs today and needs no new step. The
+  `--all-features` there is what turns `conformance` on, and the hidden `cfg`
+  in the example is what keeps a bare `cargo test -p happenstance-core --doc`
+  green as well.
+- **Compiled by:** `memory-projection-store` (Testing brief row AC-012), whose
+  own AC-010 already owes this page a *"runnable `begin` → write → `commit` →
+  read-back walkthrough"*. It cannot compile until `MemoryProjectionStore` and
+  `ProjectionProbe` exist, which is why it is specified here and run there.
 
 ```rust
-use happenstance_core::{
-    Authority, Checkpoint, MemoryProjectionStore, ProjectionId, ProjectionStore,
-    SequencePosition,
-};
-
-# async fn example() -> Result<(), Box<dyn core::error::Error>> {
-let store = MemoryProjectionStore::new();
-let id = ProjectionId::new("van_stock");
-
-// Never run: the enum says so, and no `Option` is involved.
-assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
-
-// `begin` is neither async nor fallible: opening a buffer cannot fail.
-let mut batch = store.begin();
-store.probe_write(&mut batch, "depot-7", 12);
-
-// One unit of work: the row and the checkpoint, or neither.
-store
-    .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
-    .await?;
-
-assert_eq!(
-    store.checkpoint(&id).await?,
-    Checkpoint::Live { through: SequencePosition::FIRST },
-);
-
-// The dual: the caller's own batch carries the deletes.
-let mut clearing = store.begin();
-store.probe_delete_all(&mut clearing);
-store.reset(clearing, &id).await?;
-
-assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
-# Ok(())
-# }
+/// ```
+/// # #[cfg(feature = "conformance")]
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
+/// use happenstance_core::{
+///     Authority, Checkpoint, MemoryProjectionStore, ProjectionId, ProjectionProbe,
+///     ProjectionStore, SequencePosition,
+/// };
+///
+/// let store = MemoryProjectionStore::new();
+/// let id = ProjectionId::new("van_stock");
+///
+/// // Never run: the enum says so, and no `Option` is involved.
+/// assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
+///
+/// // `begin` is neither async nor fallible: opening a buffer cannot fail.
+/// let mut batch = store.begin();
+/// store.probe_write(&mut batch, "depot-7", 12);
+///
+/// // One unit of work: the row and the checkpoint, or neither.
+/// store
+///     .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+///     .await?;
+///
+/// assert_eq!(store.probe_read("depot-7").await?, Some(12));
+/// assert_eq!(
+///     store.checkpoint(&id).await?,
+///     Checkpoint::Live { through: SequencePosition::FIRST },
+/// );
+///
+/// // The dual: the caller's own batch carries the deletes.
+/// let mut clearing = store.begin();
+/// store.probe_delete_all(&mut clearing);
+/// store.reset(clearing, &id).await?;
+///
+/// assert_eq!(store.probe_read("depot-7").await?, None);
+/// assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
+/// # Ok(())
+/// # }
+/// # #[cfg(not(feature = "conformance"))]
+/// # fn main() {}
+/// ```
 ```
+
+**Four things in that block are load-bearing, and each was wrong in the first
+draft of this record.** They are written out because `memory-projection-store` is
+told to compile this example verbatim, and a specification that cannot compile is
+worse than none — it is the one thing this repurposed `_design.md` exists to
+supply (`CLAUDE.md`, *a doctest in place of a mock*).
+
+1. **`ProjectionProbe` is in the `use` list.** `probe_write` and
+   `probe_delete_all` are its methods, not `ProjectionStore`'s
+   (`## Signatures` above; `spec/SPECIFICATION.md:4998-5013`), and a trait's
+   methods are not callable without the trait in scope — `error[E0599]`, with
+   rustc's *"items from traits can only be used if the trait is in scope"* note.
+2. **The whole example is `cfg`-gated on `conformance`, in hidden lines.**
+   `ProjectionProbe` is behind `feature = "conformance"`, off by default
+   (*Visibility and stability* above), so an ungated example naming it breaks
+   `cargo test -p happenstance-core --doc` for anyone who has not passed
+   `--all-features`. The `#[cfg(not(…))] fn main() {}` arm is what keeps the
+   block a compiling no-op in that configuration rather than a failure; an
+   explicit `fn main` suppresses rustdoc's implicit wrapper, so both arms must
+   be spelled.
+3. **The harness is `#[tokio::main(flavor = "current_thread")]`, not a bare
+   `async fn example()`.** An async fn that nobody polls compiles and **runs
+   nothing**: every `assert_eq!` inside it would be dead. This is the crate's own
+   idiom, at `crates/happenstance-core/src/memory.rs:45-46`, and it is what makes
+   `memory-projection-store`'s AC-010 — *"both execute; neither is a `no_run` or
+   `ignore` sketch"* — true rather than nominal.
+4. **The assertions need derives that the port's types must carry.**
+   `assert_eq!` on a `Checkpoint` requires `PartialEq` **and** `Debug`, and
+   `.await?` on `commit` requires `CommitError<E>: core::error::Error` to rise
+   through `Box<dyn core::error::Error>`. Both are now stated in
+   `## Signatures`, where a later story can be held to them.
+
+**Why the port's own page does not carry this example.** Two rules already in
+this record forbid it, and they were in tension with the earlier draft's stated
+home:
+
+- The `ProjectionStore` trait doc renders **ungated**, while
+  `MemoryProjectionStore` is behind `memory` and `ProjectionProbe` behind
+  `conformance`. *The rustdoc hazard* above is about intra-doc links, but the
+  same page carrying a doctest that names two feature-gated items is the same
+  mistake one layer down.
+- `memory-projection-store`'s AC-010 fixes the division independently: the port's
+  page carries a **toy-store impl** doctest *"with no dependency on the `memory`
+  feature"* (PS-34's stated rule, `spec/SPECIFICATION.md:5546-5553`) and the
+  store's page carries this walkthrough. Two doctests, two jobs — the port page
+  answers *"what do I implement"* and this one answers *"what does it do when I
+  run it"*.
 
 Two things the example is deliberately shaped to teach, beyond compiling:
 
@@ -616,6 +717,30 @@ nothing in lines 1–50 or in `## Sign-off` was edited, and no heading was renam
 reordered or dropped. The only lines removed anywhere in this file are the ten
 reading `N/A — no user-facing surface.` beneath the section headings this
 amendment fills.
+
+**What changed after the slice review, before this block was ever signed.** Three
+corrections inside the material above, all of them defects in the amendment rather
+than changes of position, listed so the reviewer is signing what is here now:
+
+1. **`## The doctest` was respecified.** As first written the example could not
+   have compiled — `ProjectionProbe` was missing from the `use` list though the
+   example calls its methods; its stated home was the **ungated** `ProjectionStore`
+   trait doc although both `MemoryProjectionStore` and `ProjectionProbe` are
+   feature-gated; and its harness was an `async fn` nobody polls, so every
+   assertion in it would have been dead. The home is now the
+   `MemoryProjectionStore` module page — which is where `memory-projection-store`'s
+   own AC-010 already puts a runnable walkthrough — and the four load-bearing
+   points are written out beside the block.
+2. **`## Signatures` gained the derives the block always needed** — `Debug`,
+   `Clone`, `Copy`, `PartialEq`, `Eq` on `Checkpoint` and `Authority`;
+   `AppendError`'s set including `thiserror::Error` on `CommitError` and
+   `ResetError` — because `assert_eq!` and `?` do not work without them. No
+   signature changed shape.
+3. **The ADR relationship was re-read against the *accepted* atoms.** ADR-0017,
+   ADR-0018 and ADR-0019 were staged when this amendment was drafted and are
+   accepted now (`493a194`). The reconciliation was re-run clause by clause and
+   **no sentence had to yield**; the passages that said "staged for the next wave"
+   say so no longer.
 
 **One thing to look at first.** The prior approval covered *"the anti-patterns
 recorded above"* at a moment when `## Anti-patterns` read `N/A`. That section now

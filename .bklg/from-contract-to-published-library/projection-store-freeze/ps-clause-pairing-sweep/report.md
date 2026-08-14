@@ -34,11 +34,32 @@ immutable dated-and-pinned lifecycle. A document in that directory without a
 README row is reachable only by `ls`, and the README claims to enumerate the
 directory; the registration is the mount, not decoration.
 
-**Deferred:** nothing. **Blocked:** nothing. The only handoff is the one the spec
-requires — the KB-side amendments are staged for `/redkiln:kb-ingest`, a
-human-invoked wave, because `CLAUDE.md` reserves atom authorship to it. Both the
-document and the README row say so, so the answer is findable from `.kb/` before
-the wave runs.
+**Deferred:** nothing. **Blocked:** nothing. The only handoff was the one the spec
+requires — the KB-side amendments staged for `/redkiln:kb-ingest`, a human-invoked
+wave, because `CLAUDE.md` reserves atom authorship to it. **That wave has since
+run**: `2026-08-13-projection-adrs` at `493a194` consumed
+`.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` and amended
+`ps-1-states-no-progress-obligation.md` and `ps-19-scope-narrower-than-its-rule.md`,
+each keeping its prior body byte-for-byte under one appended dated section, each
+keeping `status: accepted` and its owner. So the answer is now findable from
+`.kb/` directly, and the README row has been updated to say so rather than to
+say it is staged.
+
+**One erratum, recorded rather than applied silently.** Slice review found the
+census's **Src** column inconsistent exactly where the verdict turns: PS-26, PS-27,
+PS-28 and PS-30 carried `T` — *"§4.11's table"* — for rules that live in §4.11's
+six-rule **prose** list (`spec/SPECIFICATION.md:5694-5700`) rather than in its
+seventeen-rule table (`:5658-5675`), while PS-29, whose rule sits in the same
+paragraph, correctly carried `C X`. Since PS-29 is the third `independent` S1
+defect, a reader re-deriving the verdict from that column alone would have fired
+arm (b) and reached `systematic` where *The tally* derives `isolated`. The four
+rows now read `C X`, PS-20 (which the table *does* name) now reads `C T X`, the
+Src legend defines `T` as the seventeen-rule table specifically, and an **Erratum
+2026-08-13** section at the foot of the document records all of it. **No verdict,
+tally, shape or strength changed** — still 37 rows, 29/7/1, three `independent` S1
+defects, two inside the table, still **ISOLATED**. The document's *immutable,
+superseded rather than edited* lifecycle is why the correction is written down in
+the document instead of being made quietly.
 
 ## Acceptance
 
@@ -55,10 +76,11 @@ the wave runs.
 
 ## Knowledge Harvest
 
-Candidates for `.kb/` at closeout. **None is promoted here** — the KB-side
-material this story produced is staged at
-`.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` for the ingest wave, and
-`CLAUDE.md` reserves atom authorship to it.
+Candidates for `.kb/` at closeout. **None was promoted by this story** — the
+KB-side material it produced went to `.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md`
+for the ingest wave, which `CLAUDE.md` reserves atom authorship to; that wave ran
+at `493a194` and took the two open-question amendments, leaving the candidates
+below for closeout to adjudicate.
 
 - **A `reference` pointer atom for this sweep**, if the closeout wave wants one —
   carrying the verdict, the threshold and the tally, not the census. Exactly the

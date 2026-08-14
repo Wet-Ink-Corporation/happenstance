@@ -77,11 +77,20 @@ ADR-0019 additionally `depends_on: [kb-decision-0017]`, since both use the `Proj
 owned-`Batch` shape ADR-0017 mints. Each carries two provisional halves with a named falsifier —
 see the atom's own `## Provisional` section, not this row.
 
+The Status column reads `accepted` for all three, exactly as the seventeen rows above it and
+exactly as each atom's `status:` field. It deliberately does **not** read "accepted
+(provisional)": that value exists in no `KbFrontmatter` enum, and printing it here would be this
+map quietly answering
+[`kb-open-question-adr-status-vocabulary-001`](../open-questions/adr-status-vocabulary-exceeds-the-schema.md)
+by acting on it. The convention that question records is the one followed — the qualification and
+its falsifier live in the first clause of each atom's `summary`, and at length under its
+`## Provisional` heading.
+
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0017 | [`kb-decision-0017`](../decisions/0017-what-a-projection-batch-owns.md) | What a projection batch owns, and the seam that is not a write vocabulary | accepted (provisional) | 6 | — |
-| ADR-0018 | [`kb-decision-0018`](../decisions/0018-returning-a-projection-to-never-run.md) | Returning a projection to never run — scope, atomicity, and refusal | accepted (provisional) | 6 | — |
-| ADR-0019 | [`kb-decision-0019`](../decisions/0019-what-happens-when-apply-fails.md) | What happens when apply fails — the port grows nothing | accepted (provisional) | 6 | — |
+| ADR-0017 | [`kb-decision-0017`](../decisions/0017-what-a-projection-batch-owns.md) | What a projection batch owns, and the seam that is not a write vocabulary | accepted | 6 | — |
+| ADR-0018 | [`kb-decision-0018`](../decisions/0018-returning-a-projection-to-never-run.md) | Returning a projection to never run — scope, atomicity, and refusal | accepted | 6 | — |
+| ADR-0019 | [`kb-decision-0019`](../decisions/0019-what-happens-when-apply-fails.md) | What happens when apply fails — the port grows nothing | accepted | 6 | — |
 
 ### Reading the partial-supersession chain
 

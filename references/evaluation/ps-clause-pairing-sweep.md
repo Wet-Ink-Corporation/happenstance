@@ -239,6 +239,20 @@ body's `**Rule:**` field, `T` §4.11's table, `X` §7.2's index. **Shape** is `�
 on a sound row. **Exposing implementation / why sound** carries the store,
 projection or runner on a `defective` row and the reason on a `sound` one.
 
+**What `T` means, precisely, because [arm (b)](#the-threshold-declared-before-the-count)
+counts it.** `T` is *§4.11's seventeen-rule table* — the rows at
+`spec/SPECIFICATION.md:5658-5675`, and nothing else in that section. §4.11 names
+six further rules in **prose** at `:5694-5700` — `failure_policy_is_per_projection`,
+`skip_and_record_is_atomic`, `pump_reports_the_failing_position`,
+`one_poisoned_projection_does_not_stall_the_others`, `panicking_apply_rolls_back`
+and `checkpoint_lag_is_not_a_position_difference` — as integration-level rules
+that belong in the workspace e2e crate rather than the adapter suite. Those six
+are **not** `T`: they are not rows in the table, the table is what the hypothesis
+under test is about, and a rule the clause body already names is not evidence
+that a *table* was populated from an assumption. So PS-26, PS-27, PS-28, PS-29
+and PS-30 all read `C X`, and they read it for one reason rather than five.
+See the [erratum](#erratum-2026-08-13-the-src-column-for-the-integration-level-rules).
+
 | Clause | Maturity | Rule(s) under test · Src | Verdict | Shape · strength | Exposing implementation / why sound | Owner |
 |---|---|---|---|---|---|---|
 | PS-1 | FROZEN | `commit_is_atomic_with_the_read_model`, `commit_advances_the_checkpoint`, `failed_commit_leaves_both_unchanged` · C T X | defective | S1 · independent | A store whose backing state lives per **handle** rather than per store: `connect()` mints a fresh map instead of a fresh handle onto a shared one. Nothing survives a handle, so `commit` returns `Ok`, both the row and the checkpoint are absent through the fresh handles `commit_is_atomic_with_the_read_model` reads with — the *"or not at all"* arm, satisfied verbatim — and `commit_advances_the_checkpoint` fails. **Plausible first cut**, and the workspace already knows it: it is the fixture bug `CLAUDE.md`'s *"one fixture instance is one isolated backing store; each `connect()` on it is one handle onto that store"* exists to forbid. Every other `PS` `MUST` is satisfiable inside one handle, so nothing else rejects it. | **new decision** — the progress obligation is outside all three ADR ranges (PS-1 is §4.1). Repair at `unstable-projection-gate-and-clause-disposition`. |
@@ -260,17 +274,17 @@ projection or runner on a `defective` row and the reason on a `sound` one.
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` · C T X | sound | — | Subject **A**. Two ids in one store, reset one, assert the other untouched: an exact falsifier for both sentences of the `MUST` (`:5188-5199`). | — |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` · C T X | sound | — | Subject **A**. An adapter that *is able to* refuse, and whose refusal leaves both halves intact and is not reported as success, passes. An adapter with no protection policy declines the fixture capability the rule needs and takes a reported skip. Neither satisfies the `MUST` and fails. Observation: the rule as written names *"a testkit fixture store configured to protect one id"*, which in an adapter suite must mean the adapter's own fixture — a wording ambiguity for `reset-rules` and `projection-capability-skips` to close. | — |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` · C T X | defective | S1 · independent | Re-derived from `spec/SPECIFICATION.md:5218-5223` rather than from the prior. The `MUST` is scoped *"After a successful `reset`"*; `fresh_projection_has_no_checkpoint` asks about an id never seen — a different point in the lifecycle. A SQLite adapter whose `checkpoint` is `SELECT position, authority FROM checkpoints WHERE id = ?` and whose Rust resolves the missing row with `.unwrap_or(Checkpoint::Live { through: FIRST })` — the cheapest default, since `SequencePosition` is `NonZeroU64` and `FIRST` is its minimum — and whose `reset` writes an explicit `NeverRun` sentinel row, answers `NeverRun` post-reset (satisfying the `MUST`, and distinguishable from a commit at `FIRST` exactly as required) and `Live` for an unseen id. **Plausible first cut**. **Independent**: it satisfies every other `PS` `MUST`, including PS-22, since `FIRST` is the minimum position and nothing can regress below it. | **ADR-0018** names it (PS-16 – PS-20) and defers; the repair is a **new decision** at `unstable-projection-gate-and-clause-disposition`. |
-| PS-20 | FROZEN | `reset_is_not_commit_at_first`, second half · C X | sound | — | Subject **R**; borrowed instrument, **stated**: *"covered by `reset_is_not_commit_at_first`'s second half; no separate rule, because the property is only observable through a replay"* (`:5254-5256`). The replay is the suite's own, so no adapter can make it violate the `MUST` — and the clause says it has no rule of its own. | — |
+| PS-20 | FROZEN | `reset_is_not_commit_at_first`, second half · C T X | sound | — | Subject **R**; borrowed instrument, **stated**: *"covered by `reset_is_not_commit_at_first`'s second half; no separate rule, because the property is only observable through a replay"* (`:5254-5256`). The replay is the suite's own, so no adapter can make it violate the `MUST` — and the clause says it has no rule of its own. | — |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` · C T X | defective | S3 · dependent | The `MUST` forbids validating the position against what the batch wrote; the rule additionally asserts *"the checkpoint advanced"*. A store that skips the checkpoint write when the batch is empty — a natural optimisation, and this rule commits an **empty** batch by design — validates nothing, satisfies the `MUST` verbatim, and fails the rule. **Plausible first cut**. **Dependent on PS-1**: this is the same missing progress obligation, surfacing under a second clause, and PS-1's per-handle store fails this rule for the same reason. Recorded because it shows the gap is not local to PS-1's own rule. | **new decision** — same repair as PS-1's; PS-21 is outside all three ADR ranges (§4.7). |
 | PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` · C T X | defective | S3 · dependent | The `MUST` requires rejecting a position *"strictly below the current checkpoint"*. Under PS-1's per-handle store there is never a current checkpoint, so nothing is strictly below it and the `MUST` is vacuously satisfied — while the rule, which commits at *P* and then attempts *Q* < *P* expecting `CheckpointRegression`, fails. **Plausible first cut** (the same store). **Dependent on PS-1**. Cheaper to fix than the others: PS-22 is `[PROVISIONAL]`, so if the progress obligation lands elsewhere this row closes with it. | **new decision** — same repair as PS-1's. |
 | PS-23 | PROVISIONAL | `distinct_projections_advance_independently` · C T X | sound | — | Subject **A**. A store satisfying *"One `commit` advances exactly one `ProjectionId`"* passes a rule that commits two ids and reads each back. Read literally, **this is the only `PS` `MUST` that entails progress at all** — see the [headline finding](#the-headline-finding-a-prior-is-partly-refuted). | — |
 | PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` · C T X | sound | — | Subject **A**. A store that distinguishes an authoritative read model from one being rebuilt reports `Rebuilding` after each rebuilding commit and `Live` after the live one, which is the rule verbatim. A store that never records authority does not distinguish and so violates the `MUST` first. | — |
 | PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` · C X | sound | — | Subject **R**. A runner deriving its `ProjectionId` from name + query digest passes. Observation: run at contract level the rule degenerates into an id-independence check already covered by PS-23, which is why the clause pins it as *"a typed-layer rule"* until `Query` has a canonical encoding (`:5372-5374`) — the limitation is stated. | — |
-| PS-26 | FROZEN | `failure_policy_is_per_projection` · C T X | sound | — | Subject **R**; home **stated**: *"Integration-level; it needs a runner, so it belongs in the workspace e2e crate rather than the adapter suite"* (`:5403-5406`). A runner declaring policy per projection passes it. | — |
-| PS-27 | PROVISIONAL | `skip_and_record_is_atomic` · C T X | sound | — | Subject **R**. A policy that offers skip-and-record and writes the record into the same batch that advances the checkpoint passes the crash-injected assertion, which is the `MUST`'s second conjunct restated. §7.2 additionally lists `on_error`, which is a projection method rather than a rule — a [tooling observation](#tooling-observations). | — |
-| PS-28 | FROZEN | `pump_reports_the_failing_position` · C T X | undetermined | S1 (unresolved) · — | The `MUST` requires a failing `apply` to report the position it failed at and to carry an application error type distinct from the store's. The rule adds a second assertion — *"that `checkpoint` sits at the last good position"* — which the `MUST` does not state. Whether that is over-reach turns entirely on what *"the last good position"* means, and the rule does not say. Under *last successfully applied event*, every chunked runner fails it while satisfying the `MUST`, because a chunked runner's checkpoint sits at the previous **chunk** boundary after a mid-chunk failure — a `defective` pairing. Under *last successfully committed position*, the two coincide and the pairing is `sound`. Both readings are available from the text and the sweep will not pick one; the reasoning stalls there. **What resolves it:** defining the phrase when the rule is written. It is integration-level and its home is HS-P0011. | — (recorded; resolution belongs with the rule's author) |
+| PS-26 | FROZEN | `failure_policy_is_per_projection` · C X | sound | — | Subject **R**; home **stated**: *"Integration-level; it needs a runner, so it belongs in the workspace e2e crate rather than the adapter suite"* (`:5403-5406`). A runner declaring policy per projection passes it. | — |
+| PS-27 | PROVISIONAL | `skip_and_record_is_atomic` · C X | sound | — | Subject **R**. A policy that offers skip-and-record and writes the record into the same batch that advances the checkpoint passes the crash-injected assertion, which is the `MUST`'s second conjunct restated. §7.2 additionally lists `on_error`, which is a projection method rather than a rule — a [tooling observation](#tooling-observations). | — |
+| PS-28 | FROZEN | `pump_reports_the_failing_position` · C X | undetermined | S1 (unresolved) · — | The `MUST` requires a failing `apply` to report the position it failed at and to carry an application error type distinct from the store's. The rule adds a second assertion — *"that `checkpoint` sits at the last good position"* — which the `MUST` does not state. Whether that is over-reach turns entirely on what *"the last good position"* means, and the rule does not say. Under *last successfully applied event*, every chunked runner fails it while satisfying the `MUST`, because a chunked runner's checkpoint sits at the previous **chunk** boundary after a mid-chunk failure — a `defective` pairing. Under *last successfully committed position*, the two coincide and the pairing is `sound`. Both readings are available from the text and the sweep will not pick one; the reasoning stalls there. **What resolves it:** defining the phrase when the rule is written. It is integration-level and its home is HS-P0011. | — (recorded; resolution belongs with the rule's author) |
 | PS-29 | FROZEN | `one_poisoned_projection_does_not_stall_the_others` · C X | defective | S1 · independent | The `MUST` is *"One poisoned projection MUST NOT stall the others, and its terminal state MUST be observable through the API."* The rule asserts the other nineteen advance **and** *"that the supervisor reports the failure without being polled for it"* (`:5449-5453`). A supervisor exposing `fn failures(&self) -> Vec<Poisoned>` makes the terminal state observable through the API — satisfying the `MUST` verbatim — and requires polling, so it fails the rule. **Plausible first cut**: a query method is the obvious API, and it is what the clause's own `Rejects` field describes losing (*"the `JoinHandle` went into a set nobody drained"*). **Independent**: it violates no other `PS` `MUST`. Note the locus — this rule is **not** one of §4.11's seventeen; it exists only in the clause body. | **ADR-0019** names it (PS-26 – PS-30) and defers the observability design to HS-P0011; the clause repair is a **new decision**, PS-29 being `[FROZEN]`. |
-| PS-30 | PROVISIONAL | `panicking_apply_rolls_back` · C T X | sound | — | Subject **R**. Given a PS-1-conformant store — one whose `commit` is atomic, which forces the batch to be buffered or transactional and its `rollback` to undo — a runner that rolls back after catching a panic leaves no partial rows and does not move the checkpoint, which is the rule verbatim. The store-side half of that is PS-8's finding, recorded there rather than counted twice here. | — |
+| PS-30 | PROVISIONAL | `panicking_apply_rolls_back` · C X | sound | — | Subject **R**. Given a PS-1-conformant store — one whose `commit` is atomic, which forces the batch to be buffered or transactional and its `rollback` to undo — a runner that rolls back after catching a panic leaves no partial rows and does not move the checkpoint, which is the rule verbatim. The store-side half of that is PS-8's finding, recorded there rather than counted twice here. | — |
 | PS-31 | FROZEN | *(none — see clause)* · C X | sound | — | Subject **D**. No-rule pairing, dispositioned in-clause: *"none; a documented exclusion is not adapter-checkable. Stated as a clause rather than as prose because silence here is what produces the wrong implementation"* (`:5504-5507`). The second conjunct — *"the port MUST say so"* — is a documentation obligation with no assigned instrument; see [inverse-shape observations](#inverse-shape-observations). | — |
 | PS-32 | FROZEN | *(none — see clause)* · C X | sound | — | Subject **D**. No-rule pairing, dispositioned in-clause with a named artefact: *"this is a correction to a document, and the artefact that proves it is the compiled pump recorded in PRESSURE-TEST §3.4"* (`:5518-5520`). Observation: the correction itself is not yet made, and ADR-0007 is an accepted, immutable atom — so "correcting" it is a superseding atom, never an edit. Routed to `projection-decision-atoms`, whose ADR-0017 already owes the sentence that ADR-0007's Context overstates itself. | — |
 | PS-33 | DEFERRED | *(none — see clause)* · C X | sound | — | Subject **P**. No-rule pairing, dispositioned in-clause: *"it is a phase gate, not an adapter obligation, and no adapter can fail it. Recorded as a clause because `0007:119-121` sets the falsifier, no phase evaluates it, and an unevaluated falsifier is indistinguishable from none"* (`:5537-5541`). The ownership hole is the clause's own recorded finding and is HS-P0011's. | — |
@@ -495,3 +509,46 @@ reason, which is
 referent, not the address*. This directory's own recorded failure mode is
 citations that resolve, pass `spec-trace`, and point at the wrong line
 (`README.md:50-55`).
+
+---
+
+## Erratum 2026-08-13: the Src column for the integration-level rules
+
+Recorded rather than applied silently, because [`README.md`](README.md) puts this
+document under the *dated, pinned, immutable, superseded rather than edited*
+lifecycle. This entry is the only change made after the census was written, it
+was made before the document was merged, and it changes **no verdict, no tally
+and no strength**. The rule it follows is the directory's own: a correction a
+reader would otherwise have to re-derive is written down where they will find it.
+
+**What was wrong.** Five clauses' rules — PS-26 through PS-30 — live in §4.11's
+**prose** list of six integration-level rules (`spec/SPECIFICATION.md:5694-5700`),
+not in its seventeen-rule **table** (`:5658-5675`). Four of the five nevertheless
+carried `T` in the Src column (PS-26, PS-27, PS-28, PS-30) while PS-29 carried
+`C X`. Separately PS-20 carried `C X`, although the table's
+`reset_is_not_commit_at_first` row names PS-19 **and** PS-20.
+
+**Why it mattered enough to fix.** PS-29 is the third `independent` S1 defect. If
+`T` on its neighbours meant *"inside the table"*, a reader re-deriving the verdict
+from the Src column alone would count three inside the table, fire arm (b)'s
+threshold, and reach `systematic` — the opposite answer. *The tally* already
+derives it correctly, in the sentence beginning *"which is **not** one of §4.11's
+seventeen"*, and `one_poisoned_projection_does_not_stall_the_others` is verifiably
+absent from the seventeen rows at `spec/SPECIFICATION.md:5658-5675`. The column
+was the only thing saying otherwise.
+
+**What changed.** PS-26, PS-27, PS-28 and PS-30 now read `C X`, matching PS-29.
+PS-20 now reads `C T X`. The Src legend above now defines `T` as the
+seventeen-rule table specifically, with the six prose-listed rules named. Every
+verdict, shape, strength and owner is untouched: still 37 rows, 29 `sound`, 7
+`defective`, 1 `undetermined`; still three `independent` S1 defects; still two of
+them inside the table; still **ISOLATED**.
+
+**What this does not do.** It does not amend the threshold, which was declared
+before the count and stays as declared — arm (b) always read *"inside §4.11's
+seventeen-rule table … on rules that table introduced rather than rules the clause
+bodies name"*, and this erratum makes the column agree with that sentence rather
+than the sentence agree with the column. No `.kb/` atom repeats the Src values, so
+nothing downstream needs restating: the two open-question atoms the
+`2026-08-13-projection-adrs` wave amended cite the verdict and the exposing
+implementations, both unchanged.

@@ -70,11 +70,23 @@ the pass that decides were deliberately kept apart
 Its verdict is **isolated** — the hypothesis that §4.11's rule table was populated
 from a systematic assumption is not supported — and its headline is that one
 supporting sentence of `.kb/open-questions/ps-1-states-no-progress-obligation.md`
-does not survive re-derivation. The knowledge-base side of that is **staged, not
-written**: it sits in `.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` for the
-next `/redkiln:kb-ingest` wave, so until that wave runs the two open-question
-atoms still point at unanswered sub-questions whose answer is in the document
-above.
+does not survive re-derivation. The knowledge-base side of that is now **written**:
+the `2026-08-13-projection-adrs` ingest wave consumed
+`.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` and amended both
+[`ps-1-states-no-progress-obligation.md`](../../.kb/open-questions/ps-1-states-no-progress-obligation.md)
+and [`ps-19-scope-narrower-than-its-rule.md`](../../.kb/open-questions/ps-19-scope-narrower-than-its-rule.md),
+each keeping its prior body byte-for-byte and gaining one dated section. Both
+questions stay `status: accepted` with their owners unchanged: the sweep answered
+the *"check the other 35 for the same shape"* sub-question of each and settled
+neither question.
+
+One correction has been made to the document since, and it is the exception the
+immutable lifecycle above allows only because it is written down: an **erratum**
+at the foot of the document, dated 2026-08-13, correcting the Src column for the
+five integration-level rules (PS-26 – PS-30) and for PS-20. It changes no verdict,
+no tally and no strength; it exists because a reader re-deriving the verdict from
+that column alone would have reached `systematic` where the prose derives
+`isolated`.
 
 ## Every crate name in here is one rename out of date
 
