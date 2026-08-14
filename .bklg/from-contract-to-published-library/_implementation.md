@@ -187,3 +187,63 @@ failed HS-S0002 correctly. Removed with `record-links --remove` from HS-S0002, H
 HS-S0004, HS-S0005 and HS-S0006; each story now records only its own checkpoint, which is what
 `_slices.md` attributes. **Rule for later runs: `links.commits` is boundary-checked, so a
 slice-wide fix commit belongs only on the stories whose declared boundary covers its files.**
+
+### HS-P0010 `projection-store-freeze` — run 3, 2026-08-14 (`wf_2f6669c4-fd8`)
+
+baseRef `2136ddeb` (unchanged). `degradedSummary: none`, no `baselineRepairs`.
+**10 of 17 stories committed; three slices sealed `approved`.** Halted mid-slice 4 at
+`commit-rollback-and-drop-rules`, `blocked-dependency`.
+
+| Slice | Verdict |
+|-------|---------|
+| `decisions-and-design-record` | approved |
+| `projection-port-and-probe` | **approved** — was `changes-requested`; flipped by `b7c1600` |
+| `projection-conformance-suite` | approved |
+| `commit-atomicity-and-mutants` | **unsealed** — `c385e40`, `5d9b4fd` committed, review never ran |
+
+The re-review found **six** findings, not the three carried in. Both rustdoc defects fixed — the
+snippet is `[dependencies]` with a forwarding feature and a comment *refuting* the wrong form
+rather than merely omitting it; the falsifier names `documented-extension-surface`. The false
+AC-006 ledger row was **withdrawn with both wrong descriptions quoted**, not silently overwritten.
+Two nobody had flagged: four adapter `//!` module docs still described the deleted GAT port in the
+present tense while the non-rendered `//` comments beside them had been updated, and the `E0195`
+narrative was duplicated across two rendered pages.
+
+Finding 3 (the boundary) was settled the right way — a deliberate widening with the reason in the
+spec, since `broken_intra_doc_links` at `deny` made the edit compelled. It also went further than
+asked and ratified `cc0f158`'s own widening in `_slices.md`, observing that *"a commit message
+asserting its own authorisation was the only record"*.
+
+**Eight stories now approved** (HS-S0001–HS-S0008), all at `report`/`in-review`.
+
+### The boundary problem is structural, not three accidents
+
+`projection-suite-entry-point` and `projection-capability-skips` both failed their own boundary
+check on `standards/rust/**` — eleven and eight atoms — **after their slice had already sealed
+`approved`**. Every hunk was line-number re-pointing (`lib.rs:370` → `lib.rs:384`), 23/23 and
+17/17 insertions to deletions. Compelled work: the constitution cites the testkit sources these
+stories own, editing them moves the cited lines, and `lint-constitution` is a gate step.
+
+Both boundaries were widened at `aef8990` with the argument stated and **scoped to line-number
+repair only** — rule text, evidence selection, retirement and new atoms stay out, so the widening
+cannot be reused to justify editing a rule. Third instance of this shape.
+
+Two observations that outlive this project:
+
+- **This repo has two deny-level cross-reference checkers** (`broken_intra_doc_links`,
+  `lint-constitution`) whose targets sit outside any story's natural boundary. Any story touching
+  a cited file is forced across its own boundary or into a red gate. Expect it again.
+- **The slice reviewer has now sealed `approved` twice over work the deterministic per-story gate
+  rejects.** The two instruments disagree in a consistent direction, and the slice review is the
+  one that does not run `verify --grain story`. Worth raising where the loop is maintained.
+- **A sealed-`approved` slice is skipped by a re-launch**, so a defect found in one after sealing
+  cannot fix itself. That is why these two were settled by hand rather than deferred to run 4.
+
+### DT-3 — human decision recorded
+
+Amend DT-3 and **add the commit-fault capability**, rather than record PS-1's second conjunct as
+unenforceable. Written into `_slices.md` for run 4 with what it obliges: amend the `_design.md`
+enumeration in place with date and reason, grow `contract.rs`'s set to match, and write a **mutant
+that fails the new rule and passes the others** — without it the rule is the decorative rule
+ADR-0010 exists to make unwriteable, which was escape (2)'s defect and is not cured by arriving via
+a capability. PS-1's second conjunct is unenforced by any rule until this lands.
