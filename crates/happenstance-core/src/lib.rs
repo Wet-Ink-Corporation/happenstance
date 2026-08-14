@@ -112,7 +112,10 @@ pub use limits::{
     MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
     MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
 };
-pub use projection::{ProjectionId, ProjectionStore, SendProjectionStore};
+pub use projection::{
+    Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError,
+    SendProjectionStore,
+};
 pub use query::{Query, QueryItem, ReadOptions};
 pub use store::{EventStore, SendEventStore, collect, read_decision_model};
 pub use tag::{MAX_TAG_LEN, Tag, Tags};

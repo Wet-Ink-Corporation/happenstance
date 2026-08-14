@@ -145,23 +145,41 @@ mod projection_store {
         assert_error::<SqliteProjectionStoreError>();
     }
 
-    /// The `Send` impl satisfies the weaker bare bound, and the GAT normalises
-    /// to the owned batch through it — at `'static`, which is the observation
-    /// that an owned batch makes available and a borrowed one does not.
+    /// The `Send` impl satisfies the weaker bare bound, and the associated type
+    /// normalises to this adapter's own owned batch through it.
+    ///
+    /// # What this test used to cost, and what it costs now
+    ///
+    /// The `where` clause below was
+    /// `P: ProjectionStore<Batch<'static> = SqliteBatch> + 'static`, and the
+    /// `+ 'static` was not decoration: naming `P::Batch<'static>` at all
+    /// required it, because the port declared `type Batch<'a> where Self: 'a`
+    /// and that obligation propagated into every generic consumer — without it,
+    /// `error[E0310]: the parameter type 'P' may not live long enough`. The
+    /// clause was optional on an *impl* binding an owned type and mandatory
+    /// here, which was the demonstration that the GAT cost callers something
+    /// even though no adapter in the workspace used the lifetime.
+    ///
+    /// ADR-0017 removed the lifetime, so the bound is now
+    /// `P: ProjectionStore<Batch = SqliteBatch>` and the `+ 'static` is gone
+    /// with the obligation that forced it. That deletion is the measurement.
+    ///
+    /// # Why it can still fail
+    ///
+    /// The associated-type equality is the assertion. Rebinding
+    /// `SqliteProjectionStore::Batch` to anything other than `SqliteBatch` —
+    /// including "improving" it to a `rusqlite::Transaction`, the shape the two
+    /// findings above reject — makes this instantiation
+    /// `error[E0271]: type mismatch resolving <SqliteProjectionStore as
+    /// ProjectionStore>::Batch == SqliteBatch`. That is the AC-013 claim, that
+    /// this adapter keeps the batch type its author chose, checked by the
+    /// compiler rather than read off a diff.
     #[test]
     fn send_impl_satisfies_the_bare_bound() {
         fn takes_any_projection_store<P: ProjectionStore>() {}
-        fn batch_normalises_to_the_owned_type<P>(batch: SqliteBatch) -> P::Batch<'static>
+        fn batch_normalises_to_the_owned_type<P>(batch: SqliteBatch) -> P::Batch
         where
-            // `+ 'static` is not decoration. Naming `P::Batch<'static>` at all
-            // requires it, because the port declares `type Batch<'a> where Self: 'a`
-            // and that obligation propagates to every generic consumer:
-            // without it this is
-            // `error[E0310]: the parameter type 'P' may not live long enough`.
-            // The clause is optional on an *impl* that binds an owned type, but
-            // it is mandatory here — so the GAT costs callers something even
-            // when no adapter uses the lifetime.
-            P: ProjectionStore<Batch<'static> = SqliteBatch> + 'static,
+            P: ProjectionStore<Batch = SqliteBatch>,
         {
             batch
         }

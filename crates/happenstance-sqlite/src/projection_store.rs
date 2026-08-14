@@ -45,7 +45,10 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
+use happenstance_core::{
+    Authority, Checkpoint, CommitError, ProjectionId, ResetError, SendProjectionStore,
+    SequencePosition,
+};
 use rusqlite::Connection;
 use rusqlite::types::Value;
 use tokio::runtime::TryCurrentError;
@@ -208,43 +211,39 @@ pub enum SqliteProjectionStoreError {
 impl SendProjectionStore for SqliteProjectionStore {
     type Error = SqliteProjectionStoreError;
 
-    // The GAT's lifetime is bound to an **owned** type. That is the working
-    // hypothesis the runbook asks phase 2 to adopt without pre-empting phase 6:
-    // the port keeps `Batch<'a>`, this adapter simply declines to use it.
+    // The same owned type as before; what left is the GAT's lifetime.
     //
-    // Two compiled results are worth recording against this line. The
-    // `where Self: 'a` clause the trait declares is *not* forced onto the impl
-    // when the bound type is owned — rustc accepts it present or absent. But
-    // binding an owned type does **not** buy the E0195 relief that PS-5 promises:
-    // the trait method still declares `batch: Self::Batch<'_>`, so writing
-    // `batch: SqliteBatch` in the impl is
+    // The `E0195` transcript this line used to carry is now discharged rather
+    // than recorded. It read: binding an owned type does *not* buy the relief
+    // PS-5 promises, because the trait method still declares
+    // `batch: Self::Batch<'_>`, so writing `batch: SqliteBatch` in the impl is
     // `error[E0195]: lifetime parameters or bounds on method 'commit' do not
-    // match the trait declaration`. The literal `Self::Batch<'_>` below is
-    // mandatory, exactly as PS-34 says, and it stays mandatory until the GAT
-    // leaves the port itself.
-    type Batch<'a> = SqliteBatch;
+    // match the trait declaration` — the literal `Self::Batch<'_>` was
+    // mandatory, "and it stays mandatory until the GAT leaves the port itself".
+    // The GAT has left the port. `Self::Batch` below names an owned type with
+    // no lifetime to mismatch, which is what PS-5 claimed and what this impl
+    // compiling is the evidence for.
+    type Batch = SqliteBatch;
 
-    async fn checkpoint(
-        &self,
-        _id: &ProjectionId,
-    ) -> Result<Option<SequencePosition>, Self::Error> {
+    // Neither `async` nor fallible — which is what this adapter said it wanted:
+    // opening the batch allocates a `Vec` and the port's old `async` + `Result`
+    // was a round trip it did not need. PS-6 settled it in that direction.
+    fn begin(&self) -> Self::Batch {
+        SqliteBatch::new()
+    }
+
+    async fn checkpoint(&self, _id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
         let _connection = self.handle();
         todo!("SQLite projection store: read checkpoint")
     }
 
-    async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
-        // Infallible and instant in reality — this adapter allocates a `Vec`.
-        // The port's `async` + `Result` here is a round trip it does not need,
-        // which is PS-6's open question and not this crate's to settle.
-        Ok(SqliteBatch::new())
-    }
-
     async fn commit(
         &self,
-        _batch: Self::Batch<'_>,
+        _batch: Self::Batch,
         _id: &ProjectionId,
         _position: SequencePosition,
-    ) -> Result<(), Self::Error> {
+        _authority: Authority,
+    ) -> Result<(), CommitError<Self::Error>> {
         // The real body opens one transaction, replays every statement, writes
         // the checkpoint row, and commits — which is how an owned batch keeps
         // the invariant the port cares about.
@@ -252,7 +251,19 @@ impl SendProjectionStore for SqliteProjectionStore {
         todo!("SQLite projection store: replay batch and advance checkpoint")
     }
 
-    async fn rollback(&self, _batch: Self::Batch<'_>) -> Result<(), Self::Error> {
+    async fn reset(
+        &self,
+        _batch: Self::Batch,
+        _id: &ProjectionId,
+    ) -> Result<(), ResetError<Self::Error>> {
+        // `commit`'s dual, and the same single transaction: replay the caller's
+        // own deletes, then remove the checkpoint row rather than writing a
+        // sentinel into it.
+        let _connection = self.handle();
+        todo!("SQLite projection store: replay the caller's deletes and clear the checkpoint")
+    }
+
+    async fn rollback(&self, _batch: Self::Batch) -> Result<(), Self::Error> {
         // Nothing was ever sent to SQLite, so this is a drop. Recorded rather
         // than elided: it is evidence for PS-7, which asks whether dropping a
         // batch must roll back — for a buffering adapter that is free.

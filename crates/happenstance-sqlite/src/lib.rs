@@ -37,12 +37,15 @@
 //!
 //! Two results, both compiled rather than reasoned:
 //!
-//! * `type Batch<'a> = rusqlite::Transaction<'a>` is **not available** on the
-//!   `Send` flavour, for two independent reasons that each fire on their own.
-//!   See [`projection_store`] for both, and for the owned batch that replaces it.
-//! * Binding an owned type to today's GAT does **not** free an implementer from
-//!   spelling the parameter `Self::Batch<'_>` literally; writing the concrete
-//!   type is still `error[E0195]`.
+//! * A `rusqlite::Transaction<'a>` batch is **not available** on the `Send`
+//!   flavour, for two independent reasons that each fire on their own. See
+//!   [`projection_store`] for both, and for the owned batch that replaces it.
+//! * While the port declared a generic associated type, binding an owned type
+//!   to it did **not** free an implementer from spelling the parameter
+//!   `Self::Batch<'_>` literally; writing the concrete type was still
+//!   `error[E0195]`. ADR-0017 removed the lifetime, so `type Batch =
+//!   SqliteBatch;` and `commit(&self, batch: Self::Batch, …)` now compile —
+//!   this crate is one of the impls that shows it.
 //!
 //! # Open decisions
 //!

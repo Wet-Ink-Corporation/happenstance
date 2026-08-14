@@ -17,8 +17,10 @@
 //! Cypher statements, replayed inside one `BEGIN TRANSACTION` … `COMMIT` in
 //! [`commit`](happenstance_core::ProjectionStore::commit), with the checkpoint
 //! write as the last statement before the commit. See
-//! [`crate::live_handle`] for the shape this crate deliberately *also* builds,
-//! and [What this does not settle](#what-this-does-not-settle) for the half of
+//! `experiments/live-handle-projection-batch/` for the live borrowed shape this
+//! crate deliberately *also* built — ADR-0017 moved it there when the port's
+//! owned `type Batch;` stopped admitting it — and
+//! [What this does not settle](#what-this-does-not-settle) for the half of
 //! PS-4 that no skeleton can close.
 //!
 //! # Why the store owns its `Database` and opens connections per call
@@ -27,8 +29,9 @@
 //! `Database` and a long-lived `Connection` into it is self-referential and
 //! will not compile. The alternative — giving the *store* a lifetime and
 //! letting the caller own the `Database` — compiles as a struct and then
-//! **crashes the compiler** when it implements this port; see
-//! [`crate::live_handle`] for the transcript and the reason.
+//! **crashed the compiler** when it implemented the GAT-era port; see
+//! `experiments/live-handle-projection-batch/` for the transcript and the
+//! reason.
 //!
 //! So the store owns the `Database` and builds a connection inside each method.
 //! That is also LadybugDB's own documented pattern — "each Ti obtains a
@@ -63,7 +66,10 @@
 //!   run-time capability limit, not a compile error. Phase 11 closes it by
 //!   writing a projection that needs read-your-own-writes.
 
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
+use happenstance_core::{
+    Authority, Checkpoint, CommitError, ProjectionId, ResetError, SendProjectionStore,
+    SequencePosition,
+};
 
 use crate::stand_in::{self, Connection, Database, Value};
 
@@ -151,10 +157,11 @@ impl GraphWriteSet {
 
 /// How the LadybugDB projection stores fail.
 ///
-/// Shared by [`LadybugProjectionStore`] and
-/// [`LiveHandleProjectionStore`](crate::live_handle::LiveHandleProjectionStore)
-/// because both fail in exactly the same ways — which is itself evidence that
-/// an error enum is not sensitive to the batch shape.
+/// Shared by [`LadybugProjectionStore`] and, while it was still in this crate,
+/// by the live borrowed-handle store now kept at
+/// `experiments/live-handle-projection-batch/` — because both failed in exactly
+/// the same ways, which is itself evidence that an error enum is not sensitive
+/// to the batch shape.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum LadybugProjectionStoreError {
@@ -229,8 +236,9 @@ impl LadybugProjectionStore {
     /// Wraps an open database.
     ///
     /// Takes the `Database` by value rather than by reference: a borrowed
-    /// database makes the store non-`'static`, and a non-`'static` store cannot
-    /// implement this port at all on rustc 1.97.1 — see [`crate::live_handle`].
+    /// database makes the store non-`'static`, and a non-`'static` store could
+    /// not implement the GAT-era port at all on rustc 1.97.1 — see
+    /// `experiments/live-handle-projection-batch/`.
     pub fn new(database: Database) -> Self {
         Self { database }
     }
@@ -258,35 +266,42 @@ impl LadybugProjectionStore {
 impl SendProjectionStore for LadybugProjectionStore {
     type Error = LadybugProjectionStoreError;
 
-    // Today's port declares `type Batch<'a> where Self: 'a`. Binding an *owned*
-    // type to it adopts phase 6's hypothesis without pre-empting the decision:
-    // the lifetime is accepted and then unused, so dropping the GAT later is a
-    // deletion here rather than a redesign.
-    type Batch<'a>
-        = GraphWriteSet
-    where
-        Self: 'a;
+    // The port used to declare `type Batch<'a> where Self: 'a`, and this
+    // adapter bound an *owned* type to it so that dropping the GAT would be a
+    // deletion here rather than a redesign. It was: the batch type is the same
+    // `GraphWriteSet`, and what left is the lifetime and its `where` clause.
+    type Batch = GraphWriteSet;
 
-    async fn checkpoint(&self, id: &ProjectionId) -> Result<Option<SequencePosition>, Self::Error> {
-        let _ = id;
+    fn begin(&self) -> Self::Batch {
         todo!("phase 11 implements this")
     }
 
-    async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
+    async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
+        let _ = id;
         todo!("phase 11 implements this")
     }
 
     async fn commit(
         &self,
-        batch: Self::Batch<'_>,
+        batch: Self::Batch,
         id: &ProjectionId,
         position: SequencePosition,
-    ) -> Result<(), Self::Error> {
-        let _ = (batch, id, position);
+        authority: Authority,
+    ) -> Result<(), CommitError<Self::Error>> {
+        let _ = (batch, id, position, authority);
         todo!("phase 11 implements this")
     }
 
-    async fn rollback(&self, batch: Self::Batch<'_>) -> Result<(), Self::Error> {
+    async fn reset(
+        &self,
+        batch: Self::Batch,
+        id: &ProjectionId,
+    ) -> Result<(), ResetError<Self::Error>> {
+        let _ = (batch, id);
+        todo!("phase 11 implements this")
+    }
+
+    async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error> {
         let _ = batch;
         todo!("phase 11 implements this")
     }

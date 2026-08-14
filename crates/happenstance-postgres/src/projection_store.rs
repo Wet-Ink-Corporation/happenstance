@@ -28,18 +28,18 @@
 //! back an owned one — and it is a *pooled, networked* driver, which is the case
 //! the borrowed shape was supposed to serve best.
 //!
-//! So this adapter binds an **owned** type to today's GAT:
+//! This adapter bound an **owned** type to that GAT — `type Batch<'a> =
+//! sqlx::Transaction<'static, Postgres> where Self: 'a` — accepting the
+//! lifetime parameter and then ignoring it. `PS-5` has since removed the
+//! parameter from the port, so the binding is now simply:
 //!
 //! ```text
-//! type Batch<'a> = sqlx::Transaction<'static, Postgres> where Self: 'a;
+//! type Batch = sqlx::Transaction<'static, Postgres>;
 //! ```
 //!
-//! The lifetime parameter is accepted and then ignored. That is the whole
-//! working hypothesis of `PS-5` (*`Batch` must not carry a lifetime parameter*)
-//! stated in the only way phase 2 is allowed to state it — as an adapter that
-//! does not need the parameter, rather than as a change to the port, which is
-//! phase 6's decision. What it costs to write it this way is one `where Self:
-//! 'a` clause per impl for a lifetime nothing reads.
+//! The batch type, the error type and the storage strategy are unchanged: what
+//! the port's shape change cost this adapter is the deletion of a `where Self:
+//! 'a` clause for a lifetime nothing read.
 //!
 //! # The invariant
 //!
@@ -61,7 +61,10 @@
 //! Read-model tables are the application's business; this adapter owns the
 //! checkpoint and the transaction that carries it.
 
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
+use happenstance_core::{
+    Authority, Checkpoint, CommitError, ProjectionId, ResetError, SendProjectionStore,
+    SequencePosition,
+};
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::error::PostgresProjectionStoreError;
@@ -94,35 +97,42 @@ impl PostgresProjectionStore {
 impl SendProjectionStore for PostgresProjectionStore {
     type Error = PostgresProjectionStoreError;
 
-    // An owned type bound to a generic associated type. See the module
-    // documentation: the lifetime is satisfiable and unused, which is the
-    // evidence phase 6 needs and not a change to the port.
-    type Batch<'a>
-        = Transaction<'static, Postgres>
-    where
-        Self: 'a;
+    // The same owned type as before, with the port's lifetime parameter — and
+    // the `where Self: 'a` clause it forced — deleted rather than rebound. See
+    // the module documentation.
+    type Batch = Transaction<'static, Postgres>;
 
-    async fn checkpoint(
-        &self,
-        _id: &ProjectionId,
-    ) -> Result<Option<SequencePosition>, Self::Error> {
-        todo!("postgres projection store: read a checkpoint")
+    // Neither `async` nor fallible now. `PgPool::begin` is both, so this
+    // adapter's real body will acquire the pooled connection at the first
+    // statement rather than here — which is PS-6's stated arrangement, not a
+    // problem it creates.
+    fn begin(&self) -> Self::Batch {
+        todo!("postgres projection store: begin")
     }
 
-    async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
-        todo!("postgres projection store: begin")
+    async fn checkpoint(&self, _id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
+        todo!("postgres projection store: read a checkpoint")
     }
 
     async fn commit(
         &self,
-        _batch: Self::Batch<'_>,
+        _batch: Self::Batch,
         _id: &ProjectionId,
         _position: SequencePosition,
-    ) -> Result<(), Self::Error> {
+        _authority: Authority,
+    ) -> Result<(), CommitError<Self::Error>> {
         todo!("postgres projection store: upsert the checkpoint and commit")
     }
 
-    async fn rollback(&self, _batch: Self::Batch<'_>) -> Result<(), Self::Error> {
+    async fn reset(
+        &self,
+        _batch: Self::Batch,
+        _id: &ProjectionId,
+    ) -> Result<(), ResetError<Self::Error>> {
+        todo!("postgres projection store: apply the caller's deletes and clear the checkpoint")
+    }
+
+    async fn rollback(&self, _batch: Self::Batch) -> Result<(), Self::Error> {
         todo!("postgres projection store: rollback")
     }
 }
@@ -140,41 +150,44 @@ mod tests {
         assert_projection_store::<PostgresProjectionStore>();
     }
 
-    /// The substantive half of the owned-batch hypothesis, written so that it
-    /// can actually fail.
+    /// The substantive half of the owned-batch hypothesis, restated for
+    /// `type Batch;` and still able to fail.
     ///
-    /// The obvious spelling — `assert_static::<Batch<'_>>()` — proves nothing:
-    /// the elided lifetime is inferred, the compiler picks `'static`, and the
-    /// assertion passes even when `type Batch<'a> = Transaction<'a, Postgres>`.
-    /// It was written that way first and it certified the shape it was meant to
-    /// reject.
+    /// # What the old spelling was about, and why it is gone
     ///
-    /// This form works because `'_` **in argument position** elides to a fresh
-    /// universally-quantified lifetime parameter, so the assertion holds only if
-    /// the batch type genuinely does not mention it. That is the opposite of
-    /// `'_` in a turbofish, which is merely *inferred* — the same two characters
-    /// mean different things in the two positions, and that difference is the
-    /// whole reason the first version of this test was vacuous. Swapping the
-    /// binding to
-    /// `type Batch<'a> = Transaction<'a, Postgres>` makes it fail:
+    /// Against the GAT this test had to be written in argument position:
+    /// `assert_static::<Batch<'_>>()` proved nothing, because `'_` in a
+    /// turbofish is merely *inferred* and the compiler simply picked
+    /// `'static` — so the assertion passed even against
+    /// `type Batch<'a> = Transaction<'a, Postgres>`, the exact shape it existed
+    /// to reject. It was written that way first. Argument position was the fix,
+    /// because `'_` there elides to a fresh universally-quantified lifetime.
     ///
-    /// ```text
-    /// error: lifetime may not live long enough
-    ///     |
-    /// 155 |     fn the_batch_does_not_borrow_the_store<'a>(
-    ///     |                                            -- lifetime `'a` defined here
-    /// ...
-    /// 158 |         batch
-    ///     |         ^^^^^ returning this value requires that `'a` must outlive `'static`
-    /// ```
+    /// The port no longer has a lifetime to elide, so that hazard cannot
+    /// recur — but the test is not therefore vacuous, and it is not deleted.
+    /// Two wrong shapes remain for it to reject, and it rejects both:
+    ///
+    /// 1. **A batch that is not this adapter's own owned type.** Rebinding
+    ///    `type Batch` to anything but `Transaction<'static, Postgres>` makes
+    ///    this function `error[E0308]`. That is the AC-013 claim — the adapter
+    ///    keeps the batch type its author chose — checked rather than asserted.
+    /// 2. **A batch that borrows.** `type Batch;` is still bindable to a
+    ///    borrowing type by a store that carries a lifetime of its own
+    ///    (`impl ProjectionStore for Store<'db> { type Batch = Handle<'db>; }`),
+    ///    which is precisely what the workspace's live-handle instrument did.
+    ///    [`the_batch_is_owned`] asserts `'static` on the *normalised* type,
+    ///    with no lifetime anywhere for inference to paper over.
     fn the_batch_does_not_borrow_the_store(
-        batch: <PostgresProjectionStore as ProjectionStore>::Batch<'_>,
+        batch: <PostgresProjectionStore as ProjectionStore>::Batch,
     ) -> Transaction<'static, Postgres> {
         batch
     }
 
     #[test]
     fn the_batch_is_owned() {
+        fn assert_static<T: 'static>() {}
+
+        assert_static::<<PostgresProjectionStore as ProjectionStore>::Batch>();
         let _ = the_batch_does_not_borrow_the_store;
     }
 }

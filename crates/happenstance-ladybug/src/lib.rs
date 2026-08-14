@@ -37,13 +37,19 @@
 //!    statements on a connection, so PS-4's "a `Batch` MUST NOT be required to
 //!    be a live transaction" is not a concession here — a deferred write set is
 //!    the shape the driver actually offers.
-//! 2. **A live borrowed handle is nevertheless expressible on the `Send`
-//!    flavour**, because `lbug`'s `Connection` is `Send + Sync`. This
-//!    contradicts §4.2's stated reason for dropping the GAT, which generalises
-//!    from `rusqlite` alone. See [`live_handle`].
-//! 3. **Today's port cannot be implemented by a store that carries a
-//!    lifetime.** The GAT's `where Self: 'a` makes it a region error, and
-//!    rustc 1.97.1 **ICEs** while reporting it. Transcript in [`live_handle`].
+//! 2. **A live borrowed handle was nevertheless expressible on the `Send`
+//!    flavour**, because `lbug`'s `Connection` is `Send + Sync`. That
+//!    contradicted §4.2's stated reason for dropping the GAT, which generalises
+//!    from `rusqlite` alone — so ADR-0017 rested the clause on the two
+//!    transcripts below instead. The counter-example is preserved outside the
+//!    gate at `experiments/live-handle-projection-batch/`, because the port's
+//!    owned `type Batch;` no longer admits it and deleting the only compiled
+//!    evidence against a decision is not how this workspace takes one.
+//! 3. **The GAT port could not be implemented by a store that carries a
+//!    lifetime.** Its `where Self: 'a` made that a region error, and
+//!    rustc 1.97.1 **ICEs** while reporting it. Transcripts in the same
+//!    experiment directory, and minimised in
+//!    `experiments/rustc-ice-gat-foreign-trait/`.
 //! 4. `Database` and `Connection` are both `Send + Sync`, so this adapter
 //!    implements the
 //!    [`SendProjectionStore`](happenstance_core::SendProjectionStore) flavour.
@@ -71,11 +77,9 @@
 // the last `todo!()`. Phase 11 removes both the bodies and this line.
 #![allow(clippy::todo)]
 
-pub mod live_handle;
 pub mod projection_store;
 pub mod stand_in;
 
-pub use live_handle::{GraphWriteHandle, LiveHandleProjectionStore};
 pub use projection_store::{
     GraphStatement, GraphWriteSet, LadybugProjectionStore, LadybugProjectionStoreError,
 };
