@@ -7,9 +7,9 @@ title: The owned-batch port shape, mounted and with the skeletons restated
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,13 +23,13 @@ archetype: foundation
 slice: projection-port-and-probe
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T13:30:45.286Z
+updated: 2026-08-14T16:59:16.711Z
 links:
   pr: null
   commits:
     - 2eade38
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
