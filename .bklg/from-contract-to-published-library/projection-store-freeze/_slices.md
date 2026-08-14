@@ -57,3 +57,18 @@ or a human — starts from. They are hypotheses for the next reviewer to verify,
   outside author's fixture from the documentation alone" — or, if naming an internal backlog slug in
   published rustdoc is judged wrong, drop the "it is named here" clause, record the deviation and its
   reason in the ledger's AC-006 row rather than reporting the AC as met.
+
+- **Added by the orchestrator after the run, not by the slice reviewer.**
+  `owned-batch-port-shape`'s checkpoint `2eade38` writes
+  `crates/happenstance-ladybug/src/stand_in.rs`, which is outside the boundary its own `spec.md`
+  declares. Found by `redkiln verify --item HS-S0004 --grain story`, whose `boundary` check reads
+  `links.commits`; the slice review did not report it. The consequence is not cosmetic:
+  `redkiln advance HS-S0004 --to report` runs `implement`'s command gate on the way out, the gate is
+  red, and the story cannot reach its `report` review gate at all — so **HS-S0004 is held at `plan`
+  and no human verdict could be recorded against it**, unlike its two slice-mates.
+  Settle which of the two it is, and do not paper over it: either the `spec.md` boundary is too
+  narrow for work `owned-batch-port-shape` legitimately owns — in which case widen it deliberately
+  and say why, as `cc0f158` did for its own widening — or the implementer reached into the ladybug
+  skeleton it should not have, in which case the `stand_in.rs` change belongs to a story that owns
+  that file. Widening a boundary to match what was written, with no reason given, converts the check
+  into a rubber stamp for whatever the implementer happened to touch.
