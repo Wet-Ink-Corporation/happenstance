@@ -7,9 +7,9 @@ title: From Contract to Published Library
 parent: null
 initiative: from-contract-to-published-library
 project: null
-status: planning
+status: implementing
 process: initiative
-stage: storymap
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 tier: standard
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-12T03:22:55.113Z
+updated: 2026-08-14T01:25:15.902Z
 links:
   pr: null
   commits: []
