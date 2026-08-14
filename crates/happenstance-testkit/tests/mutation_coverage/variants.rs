@@ -29,17 +29,19 @@ use core::cell::{Cell, RefCell};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, MIN_SUPPORTED_EVENT_DATA_LEN,
-    MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT, Query, ReadOptions,
-    SequencePosition, SequencedEvent, StoreLimit,
+    MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT, MemoryProjectionStore, Query,
+    ReadOptions, SequencePosition, SequencedEvent, StoreLimit,
 };
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::fixtures::{MemoryProjectionFixture, MemoryProjectionHandle};
+use happenstance_testkit::{Capability, Fixture, ProjectionFixture};
 
 use crate::correct::{Log, LogError, LogStore, Snapshot, dense};
-use crate::harness::Subject;
+use crate::harness::{ProjectionSubject, Subject};
 
 // =====================================================================
 // CF-5, CF-6 — the gapped conformant variant
@@ -557,6 +559,109 @@ impl Fixture for DecliningFixture {
 
 impl Subject for DecliningFixture {
     const NAME: &'static str = "DecliningFixture";
+
+    fn open() -> Self {
+        Self::new()
+    }
+}
+
+// =====================================================================
+// CF-18 — the projection family's declining instrument
+// =====================================================================
+
+/// A **projection** fixture that declines every capability, including the one
+/// that is a MUST.
+///
+/// [`DecliningFixture`]'s counterpart, and it is registered nowhere for the same
+/// reason: it is neither a mutant nor a conformant variant. Its store is
+/// [`MemoryProjectionStore`] — correct in every respect — so the *only* thing
+/// wrong with it is what it says about itself. That is what makes it an
+/// instrument for CF-18 rather than a wrong store: whatever a rule does against
+/// it, it did because of a declared capability and nothing else.
+///
+/// It is what makes the projection `SECOND_HANDLE` MUST demonstrable **today**.
+/// Both baseline projection rules read the checkpoint back through a *fresh*
+/// handle, so both spell `must!(F: SECOND_HANDLE)`, and against this fixture
+/// both **fail**, quoting
+/// [`SECOND_HANDLE_REASON`](Self::SECOND_HANDLE_REASON). Without it, CF-18's
+/// projection instance would be a claim about code nothing in this binary
+/// executes.
+///
+/// # `connect` panics on the second call, on purpose
+///
+/// Declining `SECOND_HANDLE` is a claim, and a claim a rule could ignore. A rule
+/// that reached a second `connect()` anyway — because someone deleted its gate,
+/// or because the gate stopped reading the right const — would *pass quietly*
+/// here, since a second handle onto a `MemoryProjectionStore` is perfectly
+/// correct. The panic converts that silent pass into a loud `Verdict::Panicked`
+/// the meta-test rejects, and its message is deliberately distinguishable from
+/// the gate's.
+#[derive(Debug)]
+pub(crate) struct DecliningProjectionFixture {
+    store: Arc<MemoryProjectionStore>,
+    connects: Cell<usize>,
+}
+
+impl DecliningProjectionFixture {
+    /// The reason this fixture gives for declining `SECOND_HANDLE`.
+    ///
+    /// A `const` rather than a literal repeated in the test, for
+    /// [`DecliningFixture::SECOND_HANDLE_REASON`]'s reason: the point of the
+    /// assertion is that the *fixture's own* words reach the report, and two
+    /// copies of the string would let the report carry someone else's.
+    pub(crate) const SECOND_HANDLE_REASON: &'static str = "this instrument declines everything so that a declension has something \
+         to be reported about; it is not a conformant fixture";
+
+    /// The reason this fixture gives for declining `RESET_REFUSAL`.
+    pub(crate) const RESET_REFUSAL_REASON: &'static str = "this instrument declines everything, and the store under it has no \
+         protection policy to refuse a reset with in any case";
+
+    /// A fresh instrument over a completely correct projection store.
+    pub(crate) fn new() -> Self {
+        Self {
+            store: Arc::new(MemoryProjectionStore::new()),
+            connects: Cell::new(0),
+        }
+    }
+}
+
+impl ProjectionFixture for DecliningProjectionFixture {
+    type Store = MemoryProjectionHandle;
+
+    const SECOND_HANDLE: Capability = Capability::declined(Self::SECOND_HANDLE_REASON);
+    const RESET_REFUSAL: Capability = Capability::declined(Self::RESET_REFUSAL_REASON);
+
+    async fn connect(&self) -> Self::Store {
+        let taken = self.connects.get() + 1;
+        self.connects.set(taken);
+        assert!(
+            taken == 1,
+            "`DecliningProjectionFixture` declines SECOND_HANDLE, so a rule that \
+             opened a second handle ignored the capability gate"
+        );
+        MemoryProjectionHandle::new(Arc::clone(&self.store))
+    }
+}
+
+impl ProjectionSubject for DecliningProjectionFixture {
+    const NAME: &'static str = "DecliningProjectionFixture";
+
+    fn open() -> Self {
+        Self::new()
+    }
+}
+
+/// The mirror instrument: the reference projection fixture, driven through the
+/// same enumeration.
+///
+/// It supports everything the two baseline rules ask for, so **nothing may be
+/// skipped against it** — a skip there means a gate reads the wrong const. It
+/// declines `RESET_REFUSAL` honestly, because `MemoryProjectionStore` has no
+/// protection policy to refuse a reset with, and no rule reads that constant
+/// yet; the day one does, this fixture starts reporting a skip and the
+/// projection `MUST_SKIP` list is what will have to be told about it.
+impl ProjectionSubject for MemoryProjectionFixture {
+    const NAME: &'static str = "MemoryProjectionFixture";
 
     fn open() -> Self {
         Self::new()

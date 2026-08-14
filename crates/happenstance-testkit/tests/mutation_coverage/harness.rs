@@ -39,7 +39,7 @@ use std::cell::{Cell, RefCell};
 use std::panic;
 use std::sync::Once;
 
-use happenstance_testkit::{Capability, Fixture, RuleOutcome};
+use happenstance_testkit::{Capability, Fixture, ProjectionFixture, RuleOutcome};
 
 // =====================================================================
 // What a store must supply to be driven
@@ -518,6 +518,102 @@ pub(crate) fn run_subject<S: Subject>() -> SubjectReport {
         outcomes,
         declines: declines::<S>(),
     }
+}
+
+// =====================================================================
+// The same three things, for the projection family
+// =====================================================================
+
+/// A [`ProjectionFixture`] this binary can open by name, with no arguments.
+///
+/// [`Subject`]'s sibling, and a second trait for the reason
+/// [`ProjectionFixture`] is a second trait: `Subject: Fixture` binds the
+/// event-store port in its own supertrait, so a projection instrument cannot
+/// satisfy it and inventing an `EventStore` for one would be a fixture written
+/// to satisfy a bound no projection rule reads.
+pub(crate) trait ProjectionSubject: ProjectionFixture + Sized {
+    /// The name this instrument is reported under.
+    const NAME: &'static str;
+
+    /// A fresh, isolated backing projection store.
+    ///
+    /// Called **inside** the caught closure, never hoisted out of it — see
+    /// [`run_probe`].
+    fn open() -> Self;
+}
+
+/// The opener every projection rule is handed.
+///
+/// A free `async fn` for [`open_subject`]'s reason: an `async fn` *item*
+/// satisfies `impl AsyncFn() -> F` as a zero-sized value, so it passes by value
+/// into every rule with no borrow and no higher-ranked obligation.
+async fn open_projection_subject<S: ProjectionSubject>() -> S {
+    S::open()
+}
+
+/// Every registered projection rule, bound to `S`.
+///
+/// [`probes`] one enumeration over, and a second function rather than a
+/// parameter of the first for the reason [`model_probes`] and
+/// [`concurrency_probes`] are: the two families' rules live in two modules and a
+/// `macro_rules!` expansion cannot take a module path from a `$rule:ident`
+/// fragment.
+pub(crate) fn projection_probes<S: ProjectionSubject>() -> Vec<Probe> {
+    macro_rules! probe {
+        ($($rule:ident),* $(,)?) => {
+            ::std::vec![ $(
+                Probe {
+                    name: ::core::stringify!($rule),
+                    run: || happenstance_testkit::block_on(
+                        happenstance_testkit::projection::rules::$rule(
+                            open_projection_subject::<S>
+                        )
+                    ),
+                }
+            ),* ]
+        };
+    }
+
+    happenstance_testkit::for_each_projection_store_rule!(probe)
+}
+
+/// Drives every projection rule against `S` and collects the verdicts.
+pub(crate) fn run_projection_subject<S: ProjectionSubject>() -> SubjectReport {
+    let outcomes = projection_probes::<S>()
+        .into_iter()
+        .map(|probe| (probe.name, run_probe(probe)))
+        .collect();
+
+    SubjectReport {
+        name: S::NAME,
+        outcomes,
+        declines: projection_declines::<S>(),
+    }
+}
+
+/// Every projection capability `S` declines, with the reason it gave.
+///
+/// [`declines`]'s sibling, and it carries the same warning: the names are
+/// written out because a trait's associated items cannot be enumerated from
+/// outside it, so a constant that arrives on `ProjectionFixture` without a line
+/// here shows up as a skip the meta-tests cannot account for.
+///
+/// There is no projection counterpart to the `NO_STORE_LIMITS` branch below,
+/// and that is a property of the port rather than an omission: `CommitError` and
+/// `ResetError` carry no capacity variant, so the projection family declares no
+/// numeric-limit constants and never reaches the surface CF-40 is about.
+fn projection_declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static str)> {
+    [
+        S::SECOND_HANDLE
+            .reason()
+            .map(|reason| ("SECOND_HANDLE", reason)),
+        S::RESET_REFUSAL
+            .reason()
+            .map(|reason| ("RESET_REFUSAL", reason)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// Every capability `S` declines, with the reason it gave.

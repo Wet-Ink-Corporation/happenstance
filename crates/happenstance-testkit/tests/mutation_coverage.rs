@@ -2193,6 +2193,18 @@ fn all_rules() -> Vec<&'static str> {
         .to_vec()
 }
 
+/// Every projection rule name, from the projection family's own single
+/// enumeration.
+///
+/// [`all_rules`] one enumeration over, and the same discipline: the projection
+/// meta-tests resolve every membership check against this and never against a
+/// list of their own, so a rule added to the family arrives in them without an
+/// edit here.
+fn all_projection_rules() -> Vec<&'static str> {
+    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__emit_rule_names)
+        .to_vec()
+}
+
 /// The registry row for `name`, if there is one.
 fn declared(name: &str) -> Option<&'static Declared> {
     REGISTRY.iter().find(|entry| entry.name == name)
@@ -2700,13 +2712,15 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 mod mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, Origin, RACERS, REGISTRY, RUNTIME_PANICS, RacerOutcome,
-        Verdict, all_concurrency_rules, all_rules, declared, racer_names, racer_reports,
-        registered_names, registered_second_handle, reports,
+        Verdict, all_concurrency_rules, all_projection_rules, all_rules, declared, racer_names,
+        racer_reports, registered_names, registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
     use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
-    use crate::harness::run_subject;
-    use crate::variants::{DecliningFixture, GappedPositionFixture};
+    use happenstance_testkit::fixtures::MemoryProjectionFixture;
+
+    use crate::harness::{run_projection_subject, run_subject};
+    use crate::variants::{DecliningFixture, DecliningProjectionFixture, GappedPositionFixture};
 
     /// Every rule the registry claims a mutant for.
     fn covered() -> Vec<&'static str> {
@@ -3313,6 +3327,262 @@ mod mutation_coverage {
              const: {:?}",
             capable.name,
             capable.skipped()
+        );
+    }
+
+    /// The projection family's [`MUST_REJECT`]: every projection rule that
+    /// spells `must!` rather than `require!`.
+    ///
+    /// Both baseline rules are on it, and both belong there rather than being
+    /// gated with `require!`, because both read the checkpoint back through a
+    /// **fresh handle**. A projection fixture that cannot open a second handle
+    /// cannot observe PS-1 — the coupling the whole port exists for — at all, so
+    /// declining it is a fixture that does not meet the contract rather than a
+    /// trade the suite may record and move past.
+    ///
+    /// A slice rather than a constant for [`MUST_REJECT`]'s reason, and here it
+    /// is already carrying two entries rather than anticipating a second.
+    const PROJECTION_MUST_REJECT: &[&str] = &[
+        "commit_advances_the_checkpoint",
+        "commit_is_atomic_with_the_read_model",
+    ];
+
+    /// [`PROJECTION_MUST_REJECT`]'s mirror, and **it is empty on purpose**.
+    ///
+    /// No projection rule spells `require!` yet. `RESET_REFUSAL` is the
+    /// projection port's one genuinely declinable capability, and the rule that
+    /// reads it — `refused_reset_changes_nothing`, PS-18's — is `reset-rules`'s
+    /// (HS-S0012), not this story's; every one of §4.11's seventeen rules is
+    /// claimed by a sibling story, so taking one here to make this list
+    /// non-empty would be scope theft dressed as evidence.
+    ///
+    /// **So the skip half below is a guard on future registrations and nothing
+    /// more, and it is worth saying so rather than letting it read as a
+    /// demonstrated skip** — the same admission
+    /// `capability_skips_are_reported` makes in the same words about its own
+    /// `SECOND_HANDLE` loop. What *is* demonstrated here, on real values and not
+    /// vacuously, is the MUST arm: [`PROJECTION_MUST_REJECT`]'s two rules
+    /// genuinely panic against a fixture that declines `SECOND_HANDLE`, carrying
+    /// that fixture's own stated reason.
+    ///
+    /// The forcing function is named and in-project:
+    /// `read-through-and-rebuild-rules` (HS-S0013) lands the
+    /// `READS_THROUGH_BATCH = false` instance, and `reset-rules` lands
+    /// `RESET_REFUSAL`'s. On the day either arrives, the two-direction check
+    /// below fails until this list is told about it — which is the whole reason
+    /// an empty list is written down rather than the loop being omitted.
+    const PROJECTION_MUST_SKIP: &[&str] = &[];
+
+    /// Every outcome against the declining instrument is one that instrument's
+    /// own declarations explain.
+    ///
+    /// A free function rather than a block inside
+    /// [`projection_capability_skips_are_reported`] for the reason
+    /// [`assert_undeclared_outcome`] is one: with it inlined the test body
+    /// crossed `clippy::too_many_lines`, and a lint suppression there would be
+    /// the wrong trade — the arms below are the content of CF-18 and each of
+    /// them names what a green build would otherwise have hidden.
+    fn assert_projection_declension(rule: &str, verdict: &Verdict) {
+        match verdict {
+            Verdict::Passed => assert!(
+                !PROJECTION_MUST_REJECT.contains(&rule),
+                "`{rule}` is listed in `PROJECTION_MUST_REJECT` and passed \
+                 against a fixture declining `SECOND_HANDLE`, so its `must!` \
+                 gate has been deleted or reads the wrong const"
+            ),
+            Verdict::Skipped { reason, .. } => {
+                assert!(
+                    PROJECTION_MUST_SKIP.contains(&rule),
+                    "`{rule}` reported a skip and is not in \
+                     `PROJECTION_MUST_SKIP`. A rule that gains a `require!` gate \
+                     has to be listed there, or the list rots into decoration as \
+                     later stories add rules"
+                );
+                assert!(
+                    *reason == DecliningProjectionFixture::SECOND_HANDLE_REASON
+                        || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON,
+                    "`{rule}` skipped with a reason the fixture never gave: \
+                     {reason:?}. The reason is the only record of the trade, so \
+                     it has to be the adapter's own words"
+                );
+            }
+            Verdict::Panicked { message, .. } => {
+                assert!(
+                    PROJECTION_MUST_REJECT.contains(&rule),
+                    "`{rule}` panicked against a fixture that is correct in every \
+                     respect except its declared capabilities. If it opened a \
+                     second handle, it ignored its gate. Message: {message}"
+                );
+                assert!(
+                    message.contains(DecliningProjectionFixture::SECOND_HANDLE_REASON),
+                    "`{rule}` must reject a projection fixture declining the \
+                     `SECOND_HANDLE` MUST *and carry the fixture's own stated \
+                     reason*, so the failing build says why. Message: {message}"
+                );
+            }
+        }
+    }
+
+    /// CF-18, on the projection family. A capability-gated rule is still
+    /// emitted, still answered, and reports the fixture's own reason.
+    ///
+    /// The projection sibling of [`capability_skips_are_reported`], and it
+    /// proves and fails to prove exactly the same halves: libtest exposes
+    /// nothing programmatically, so this drives the enumeration itself and
+    /// asserts on [`Verdict`] **values**. That covers the *answering* half —
+    /// every registered projection rule produces an outcome against a fixture
+    /// that declines everything, and none of them silently passes. It does not
+    /// cover the *emission* half, which is only checkable from outside the
+    /// process via `cargo test -- --list`.
+    #[test]
+    fn projection_capability_skips_are_reported() {
+        let rules = all_projection_rules();
+
+        // ---- A fixture that declines everything still answers everything ----
+        let declining = run_projection_subject::<DecliningProjectionFixture>();
+
+        let answered: Vec<&str> = declining.outcomes.iter().map(|(rule, _)| *rule).collect();
+        assert_eq!(
+            answered.len(),
+            rules.len(),
+            "a projection fixture declining every capability must still produce \
+             an outcome for every registered rule; `#[cfg]`-ing one out would \
+             make it indistinguishable in CI output from a rule that passed"
+        );
+        for rule in &rules {
+            assert!(
+                answered.contains(rule),
+                "`{rule}` produced no outcome against a projection fixture that \
+                 declines everything"
+            );
+        }
+
+        // ---- Every outcome is one this fixture's own declarations explain ----
+        for (rule, verdict) in &declining.outcomes {
+            assert_projection_declension(rule, verdict);
+        }
+
+        // The demonstrated half. Every rule in the list, not just the first: a
+        // second `must!` that quietly skipped would be a MUST enforced on one
+        // rule and stated on the other.
+        for rule in PROJECTION_MUST_REJECT {
+            assert!(
+                matches!(declining.verdict(rule), Some(Verdict::Panicked { .. })),
+                "`{rule}` must *fail* a projection fixture that declines \
+                 `SECOND_HANDLE`, not skip it. A skip there is the outcome CF-18 \
+                 names as the thing to prevent: a green suite plus one SKIP line \
+                 for an adapter nothing reached through two connections, and for \
+                 a projection that means PS-1 was never observed at all. Saw: \
+                 {:?}",
+                declining.verdict(rule)
+            );
+        }
+
+        let skipped = declining.skipped();
+        for rule in PROJECTION_MUST_SKIP {
+            assert!(
+                skipped.contains(rule),
+                "`{rule}` is gated on a capability this fixture declines, so it \
+                 must report a skip rather than pass. Saw {skipped:?}"
+            );
+        }
+        for rule in PROJECTION_MUST_REJECT {
+            assert!(
+                !skipped.contains(rule),
+                "`{rule}` reported a skip, so `must!` has been downgraded back \
+                 to `require!` and the MUST is unenforced again"
+            );
+        }
+
+        // ---- And the reference fixture skips nothing -----------------------
+        let capable = run_projection_subject::<MemoryProjectionFixture>();
+        assert!(
+            capable.skipped().is_empty(),
+            "`{}` supports every capability the registered rules ask for, so \
+             nothing may be skipped against it — a skip here means a gate reads \
+             the wrong const: {:?}",
+            capable.name,
+            capable.skipped()
+        );
+        for (rule, verdict) in &capable.outcomes {
+            assert!(
+                matches!(verdict, Verdict::Passed),
+                "`{rule}` did not pass against the reference projection fixture, \
+                 which is the oracle: {}",
+                verdict.describe()
+            );
+        }
+    }
+
+    /// Every projection capability reason is written by whoever DT-3 said writes
+    /// it, and is not empty.
+    ///
+    /// The projection family's capability set is
+    /// `RESET_REFUSAL` and `SECOND_HANDLE` on the fixture, both with
+    /// **fixture-written** reasons, plus `READS_THROUGH_BATCH` on
+    /// `ProjectionProbe` rather than on the fixture — which is why no assertion
+    /// here mentions it. The family therefore adds **no** testkit-written
+    /// reason: there is no projection counterpart to `NO_CEILING_REASON`,
+    /// because the projection port declares no numeric limits and never reaches
+    /// the surface that constant exists for.
+    ///
+    /// What this can and cannot check. `Capability::declined("")` is rejected by
+    /// a `const fn` `assert!`, but on an *associated* const that fires at
+    /// **codegen** — so `cargo test` catches it and `cargo check` and
+    /// `cargo clippy` do not. This test runs in a built binary, which is
+    /// precisely why it is a `#[test]` rather than a review note: it forces
+    /// every constant below to be evaluated.
+    #[test]
+    fn projection_capability_reasons_are_authored_once() {
+        let declining = run_projection_subject::<DecliningProjectionFixture>();
+        let capable = run_projection_subject::<MemoryProjectionFixture>();
+
+        for report in [&declining, &capable] {
+            for (capability, reason) in &report.declines {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "`{}` declines `{capability}` with an empty reason, and the \
+                     reason is the only record of the trade",
+                    report.name
+                );
+            }
+        }
+
+        // The fixture's own words reach the report, rather than a copy of them.
+        // Compared against the fixture's `const` — never against a literal
+        // repeated here, which is what would let the report carry someone
+        // else's sentence while this test stayed green.
+        assert_eq!(
+            declining.declines,
+            vec![
+                (
+                    "SECOND_HANDLE",
+                    DecliningProjectionFixture::SECOND_HANDLE_REASON
+                ),
+                (
+                    "RESET_REFUSAL",
+                    DecliningProjectionFixture::RESET_REFUSAL_REASON
+                ),
+            ],
+            "the declining instrument's reported declensions must be its own \
+             two constants, in the order `projection_declines` lists them"
+        );
+
+        // The reference fixture declines exactly one thing and supports the
+        // MUST. A `RESET_REFUSAL` that started reading as supported would mean
+        // `MemoryProjectionStore` had grown a protection policy, which is a
+        // change to the oracle rather than to this test.
+        let names: Vec<&str> = capable
+            .declines
+            .iter()
+            .map(|(capability, _)| *capability)
+            .collect();
+        assert_eq!(
+            names,
+            ["RESET_REFUSAL"],
+            "`MemoryProjectionFixture` must support `SECOND_HANDLE` — it is a \
+             MUST — and decline `RESET_REFUSAL`, because the store under it has \
+             no protection policy and cannot honestly claim one"
         );
     }
 

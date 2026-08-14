@@ -434,6 +434,21 @@ impl MemoryProjectionFixture {
 impl ProjectionFixture for MemoryProjectionFixture {
     type Store = MemoryProjectionHandle;
 
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+    // The reason is the real one, taken from the store rather than invented for
+    // the fixture: `MemoryProjectionStore::reset` has no protection policy and
+    // therefore no path that returns `ResetError::Refused`. A fixture that
+    // claimed the capability would fail `refused_reset_changes_nothing` the day
+    // that rule lands, and one that declined without saying why would put a
+    // shrug in every CI log that runs this suite.
+    const RESET_REFUSAL: Capability = Capability::declined(
+        "MemoryProjectionStore holds no protection policy, so there is no \
+         projection it could decline to reset: `reset` returns `Refused` on no \
+         path at all, and a store that refused arbitrarily would be a worse \
+         oracle",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`, for `MemoryFixture::connect`'s reason:
         // acquiring this handle is a refcount bump, and pretending otherwise

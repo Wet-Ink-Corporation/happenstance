@@ -107,6 +107,20 @@
 //! adapter drives its read model through, in `happenstance-core` behind the
 //! off-by-default `conformance` feature.
 //!
+//! **It declares what it can do in the same vocabulary**, and there is
+//! deliberately no second one: [`ProjectionFixture`] carries
+//! [`Capability`] constants, a rule it declines returns the same
+//! [`RuleOutcome::Skipped`] and prints the same one-line `SKIP` shape, so an
+//! author reading one CI log never has to learn two. Two constants, both
+//! answered deliberately —
+//! [`SECOND_HANDLE`](ProjectionFixture::SECOND_HANDLE), which is a **MUST**
+//! because every rule in the family reads back through a fresh handle, and
+//! [`RESET_REFUSAL`](ProjectionFixture::RESET_REFUSAL), which a store with no
+//! protection policy declines honestly. A third switch, `READS_THROUGH_BATCH`,
+//! is on the *probe* rather than on the fixture, because whether a batch can be
+//! read through is a property of the batch type rather than of the fixture's
+//! environment.
+//!
 //! `event_store_model_conformance!` generates operation sequences and checks the
 //! store against a model of the log rather than against a worked example. It
 //! carries its own enumeration, `for_each_model_rule!`, beside the rules it

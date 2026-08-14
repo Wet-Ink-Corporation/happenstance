@@ -38,6 +38,55 @@
 //! rather than discharged
 //! ([ADR-0010](../../../.kb/decisions/0010-the-suite-must-prove-itself.md)).
 
+/// Panics unless the projection fixture supports the named capability.
+///
+/// `suite.rs`'s `must!` in every respect that matters — the same two-variant
+/// vocabulary, the same rule that the branch lives in the rule body and never in
+/// an emitter — and a second definition rather than a shared one because the
+/// only thing that differs is the thing a `macro_rules!` cannot abstract over
+/// here: the trait the capability is looked up on
+/// ([`ProjectionFixture`](crate::ProjectionFixture), not
+/// [`Fixture`](crate::Fixture)). Parameterising the event-store macro over a
+/// trait path would mean exporting a private macro to the crate root and
+/// rewriting thirty call sites to buy four lines; restating four lines beside
+/// the family that uses them is the cheaper half of that trade, and it is the
+/// same choice this family made about its emitters.
+///
+/// The **message** is the other half, and it is not shared prose: the
+/// event-store `must!` cites CF-16 and sends the reader to `MemoryFixture`, and
+/// neither sentence is true for a projection adapter. What is true here is
+/// sharper — PS-1 is only observable from outside the connection that made the
+/// commit — and that is what this one says.
+///
+/// # Why there is no `require!` beside it yet
+///
+/// Nothing gates on a declinable capability yet: `RESET_REFUSAL`'s rule is
+/// PS-18's and arrives with the reset family. A `require!` defined now would be
+/// an unused macro — a `-D warnings` failure under `unused_macros` — and, worse,
+/// a gate nothing calls, which is the decorative shape this repository's own
+/// corollary names. It lands with the first rule that needs it.
+macro_rules! must {
+    ($fixture:ident : $capability:ident) => {
+        if let Some(reason) = <$fixture as $crate::ProjectionFixture>::$capability.reason() {
+            panic!(
+                "this projection fixture declines `{}`, which is a MUST and not \
+                 a trade the suite can record as a skip. Every rule in this \
+                 family reads the read model and the checkpoint back through a \
+                 *fresh* handle, because PS-1's coupling is only observable from \
+                 outside the connection that made the commit: a store whose \
+                 commit is visible to its own session alone satisfies every \
+                 single-handle assertion and loses a half the moment anything \
+                 else looks. A fixture that cannot open a second handle cannot \
+                 observe the invariant this port exists for at all. Hold the \
+                 backing store behind an `Arc` or an `Rc` and return a fresh \
+                 handle from each `connect` — `fixtures::MemoryProjectionFixture` \
+                 is the reference implementation. Reason given: {reason}",
+                ::core::stringify!($capability),
+            );
+        }
+    };
+}
+
 /// The projection conformance rules.
 ///
 /// Each rule is an independent async function taking `impl AsyncFn() -> F`: not
@@ -152,6 +201,12 @@ pub mod rules {
     pub async fn commit_advances_the_checkpoint<F: ProjectionFixture>(
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
+        // `must!`, not `require!`: the read-back below goes through a second
+        // handle, and a fixture that cannot open one cannot observe PS-1 at all.
+        // That is a fixture failing the contract rather than a trade the suite
+        // may record and move past.
+        must!(F: SECOND_HANDLE);
+
         let fixture = open().await;
         let writer = fixture.connect().await;
         let id = ProjectionId::new("commit_advances_the_checkpoint");
@@ -207,6 +262,11 @@ pub mod rules {
     pub async fn commit_is_atomic_with_the_read_model<F: ProjectionFixture>(
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
+        // `must!` for the same reason as the rule above, and here it is the
+        // clause's own reason: PS-1's coupling is a claim about what a *second*
+        // observer sees.
+        must!(F: SECOND_HANDLE);
+
         let fixture = open().await;
         let writer = fixture.connect().await;
         let id = ProjectionId::new("commit_is_atomic_with_the_read_model");

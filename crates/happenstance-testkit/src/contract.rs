@@ -417,6 +417,83 @@ pub trait Fixture {
 /// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture) is the
 /// worked example.
 ///
+/// # Capability constants, and where an empty reason fires
+///
+/// Two constants, both required and both answered deliberately:
+/// [`SECOND_HANDLE`](Self::SECOND_HANDLE) is a MUST, and
+/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) is the port's one genuinely
+/// declinable capability. A declined one must name a reason —
+/// [`Capability::declined`] rejects the empty string in a `const fn` `assert!`
+/// — but on an **associated** const that rejection arrives later than one would
+/// like. An associated const is evaluated lazily, only when monomorphised code
+/// reads it, which is *after* `cargo check` and `cargo clippy` have both
+/// stopped. **It fails at codegen, so `cargo build` and `cargo test` catch it
+/// and `cargo check` and `cargo clippy` do not** — a green `check` is not
+/// evidence here.
+///
+/// This is that failure, and reading the constant is the load-bearing line: a
+/// fixture nobody ever looks at compiles perfectly well.
+///
+/// ```compile_fail
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
+///
+/// struct Reasonless(std::sync::Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for Reasonless {
+///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     // The whole difference from the block below.
+///     const RESET_REFUSAL: Capability = Capability::declined("");
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
+///     }
+/// }
+///
+/// fn main() {
+///     let _ = <Reasonless as ProjectionFixture>::RESET_REFUSAL;
+/// }
+/// ```
+///
+/// The doctest above is spelled bare `compile_fail`, never
+/// `compile_fail,E0080`: rustdoc on 1.97.1 silently ignores an error-code
+/// annotation it cannot match, so the stricter-looking spelling is the weaker
+/// check (`Capability::declined` records the measurement).
+///
+/// Bare `compile_fail` passes when the snippet fails to compile for *any*
+/// reason, so the **twin** below is what makes the pair sound. It is the same
+/// snippet with one expression changed — the empty string becomes a sentence —
+/// and it must compile. A typo, a renamed item or a wrong path breaks the twin,
+/// and a broken twin is a hard test failure, so the only thing the pair can be
+/// reporting is the one expression that differs between them.
+///
+/// ```
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
+///
+/// struct Reasoned(std::sync::Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for Reasoned {
+///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     const RESET_REFUSAL: Capability = Capability::declined(
+///         "this store holds no protection policy, so there is no projection it \
+///          could decline to reset",
+///     );
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
+///     }
+/// }
+///
+/// let _ = <Reasoned as ProjectionFixture>::RESET_REFUSAL;
+/// ```
+///
 /// # Examples
 ///
 /// The whole trait, over the reference store — this is what
@@ -427,13 +504,18 @@ pub trait Fixture {
 /// use std::sync::Arc;
 ///
 /// use happenstance_core::MemoryProjectionStore;
-/// use happenstance_testkit::ProjectionFixture;
 /// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
 ///
 /// struct MyFixture(Arc<MemoryProjectionStore>);
 ///
 /// impl ProjectionFixture for MyFixture {
 ///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     const RESET_REFUSAL: Capability = Capability::declined(
+///         "this store protects nothing, so it has no reset to refuse",
+///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
 ///         core::future::ready(MemoryProjectionHandle::new(Arc::clone(&self.0)))
@@ -447,6 +529,67 @@ pub trait ProjectionFixture {
     /// trait documentation for why the *probe* is the bound that earns its keep
     /// and the port is the one that does not.
     type Store: ProjectionProbe;
+
+    /// Whether this fixture can hand out a **second, independent handle** onto
+    /// the one backing projection store.
+    ///
+    /// **This one is a MUST**, as it is on [`Fixture`], and for a sharper
+    /// reason. PS-1 — the read-model write and the checkpoint write become
+    /// durable together or not at all — is only observable from *outside* the
+    /// connection that made the commit: a store whose commit is visible only to
+    /// its own session satisfies every single-handle assertion and loses the
+    /// row, or the checkpoint, or both, the moment anything else looks. So
+    /// every rule in this family reads back through a fresh
+    /// [`connect`](Self::connect), and a fixture that cannot open one cannot
+    /// observe the invariant this port exists for at all.
+    ///
+    /// Declining it is therefore **not a trade** the suite may record as a skip
+    /// — it is a fixture that does not meet the contract — and the type cannot
+    /// tell the two apart, because both spell [`Capability`].
+    ///
+    /// # What enforces it
+    ///
+    /// The rules themselves, through `must!` rather than `require!`, so the
+    /// enforcement is on the path an adapter's own CI executes. An adapter
+    /// author who meets a red rule, writes
+    /// `const SECOND_HANDLE: Capability = Capability::declined("…")` and re-runs
+    /// gets a red rule again, quoting their own stated reason back at them — not
+    /// a green suite and one `SKIP` line. The second line is
+    /// `mutation_coverage::projection_capability_skips_are_reported`, which
+    /// drives the whole enumeration against a fixture declining everything and
+    /// asserts each of those rules *rejects* it.
+    ///
+    /// It stays spelled as a [`Capability`] rather than as a `bool` so the
+    /// failure carries the fixture's own words.
+    const SECOND_HANDLE: Capability;
+
+    /// Whether this fixture's store can be made to **refuse** a reset for a
+    /// projection it protects.
+    ///
+    /// The projection port's one genuinely declinable capability, and a real
+    /// trade rather than a fact: PS-18 makes refusal a *mechanism* the port
+    /// supplies and leaves what to protect to the domain, so a store with no
+    /// protection policy has nothing to refuse and declining is the honest
+    /// answer. `MemoryProjectionStore` is exactly that store, and
+    /// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture)
+    /// declines with the real reason.
+    ///
+    /// It is **required rather than defaulted**, unlike
+    /// [`Fixture::MID_BATCH_FAULT`], and that is a deliberate difference of one
+    /// line per fixture. A default would have to carry a *testkit-written*
+    /// reason, and the projection family's declension policy is that the fixture
+    /// writes the reason — a store's account of a trade only it can describe.
+    /// The one standing exception to that policy on the event-store side
+    /// ([`NO_CEILING_REASON`]) exists because "this store has no ceiling" is the
+    /// same sentence for every store that says it; "this store refuses no reset"
+    /// is not, because *why* it refuses none is the interesting half.
+    ///
+    /// No rule reads this constant yet: `refused_reset_changes_nothing` is
+    /// PS-18's rule and arrives with the reset family. It is declared here
+    /// rather than then because the capability *set* is a recorded design
+    /// decision, and a fixture that has to grow a constant later is a fixture
+    /// whose author was never asked the question.
+    const RESET_REFUSAL: Capability;
 
     /// Opens a handle onto this fixture's backing store.
     ///

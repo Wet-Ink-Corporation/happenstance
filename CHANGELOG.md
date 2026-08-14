@@ -42,6 +42,24 @@ not the same as what a user needed to be told.
   the reference implementation to read first. `happenstance-testkit` now enables
   `happenstance-core`'s `conformance` feature unconditionally; that adds no
   dependency and no feature of its own.
+- **A declined projection capability is a reported skip, never a silent
+  absence.** `ProjectionFixture` gains two `Capability` constants —
+  `SECOND_HANDLE`, which is a **MUST**, and `RESET_REFUSAL`, which a store with
+  no protection policy declines honestly — in the vocabulary the event-store
+  family already uses, with no projection-local skip type and no second line
+  shape. The defect this machinery detects is the one CF-18 names by hand: a
+  capability-gated rule `#[cfg]`-ed out of the expansion, so that an adapter
+  author who declares a capability unsupported to turn a red build green gets a
+  green build and **no record of the trade** — a rule absent from the binary
+  being indistinguishable, in CI output, from a rule that passed. The check is
+  `mutation_coverage::projection_capability_skips_are_reported`, which drives
+  the whole projection enumeration against a fixture that declines everything
+  and asserts on `RuleOutcome` values rather than on stdout, because libtest
+  exposes nothing programmatically. Declining `SECOND_HANDLE` **fails** rather
+  than skips, carrying the fixture's own stated reason: a projection store whose
+  commit is visible only to the connection that made it cannot be observed to
+  keep PS-1 at all, so treating that as a recordable trade would certify an
+  adapter nothing ever looked at twice.
 - **`commit_advances_the_checkpoint`** — the first of the projection family's
   rules, and the baseline the rest of §4.11 is differential against. It detects
   a `commit` that returns `Ok` and makes **neither** the read-model row nor the
