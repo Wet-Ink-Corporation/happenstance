@@ -7,9 +7,9 @@ title: Freeze ProjectionStore behind a suite that can fail
 parent: HS-I0006
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: in-review
+status: implementing
 process: project
-stage: design
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-12T12:57:05.164Z
+updated: 2026-08-14T01:25:19.009Z
 links:
   pr: null
   commits: []
