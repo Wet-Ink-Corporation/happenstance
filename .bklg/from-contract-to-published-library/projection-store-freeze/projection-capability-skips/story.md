@@ -22,10 +22,11 @@ archetype: capability
 slice: projection-conformance-suite
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:00.725Z
+updated: 2026-08-14T16:58:08.425Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 7fcb378
   kb: []
 gate_open: false
 schema: 1

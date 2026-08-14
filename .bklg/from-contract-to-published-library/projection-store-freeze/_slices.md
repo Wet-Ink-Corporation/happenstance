@@ -94,3 +94,56 @@ them. A commit message asserting its own authorisation is not an authorisation r
   ADR-0017 landed. RS-21-1 was amended, not retired, because only its spelling died. Ratified here
   on 2026-08-14; the remaining exposure is that it was ratified *after* the fact, which is what this
   section exists to stop happening twice.
+
+### commit-atomicity-and-mutants — human decision, 2026-08-14
+
+**AC-001 `failed_commit_leaves_both_unchanged`: the human chose to AMEND DT-3 and add the
+commit-fault capability.** The three escapes the halting implementer enumerated were all
+correctly refused; this is the fourth path and it is a deliberate design change, not a
+workaround. Add a capability constant that arms a commit fault, in `MID_BATCH_FAULT`'s mould,
+so the rule can be written and gated rather than skipped or duplicated.
+
+What that obliges, and none of it may be skipped:
+
+- `_design.md`'s DT-3 resolution (`:276-280`) currently enumerates the capability set as
+  exactly three constants. Amend it in place with the date and the reason, and do not silently
+  grow the set — the enumeration is the signed-off artefact and its amendment is the record.
+- `crates/happenstance-testkit/src/contract.rs:519-596` implements exactly that three-constant
+  set and must grow with it.
+- The rule needs a **mutant that fails it and passes the others** — a store whose `commit`
+  reports failure and leaves one half written. Without that it is the decorative rule ADR-0010
+  exists to make unwriteable, which was escape (2)'s defect and is not cured by arriving via a
+  capability.
+- `cf-40-fixture-limits-ownership.md` and `project.md`'s risk register both forbid minting a
+  *second declension policy*. Adding a fourth capability under the existing policy is not that;
+  inventing a new way for a fixture to decline would be. Stay on the near side of that line.
+
+PS-1's second conjunct is unenforced by any conformance rule until this lands.
+
+### projection-conformance-suite — boundary, found after the slice sealed
+
+**Both stories in this slice write outside their declared boundaries, and the slice sealed
+`approved` without noticing.** `redkiln verify --grain story` rejects both:
+
+- `projection-suite-entry-point` (`79df6b7`) — eleven `standards/rust/**` atoms, 23 insertions
+  and 23 deletions.
+- `projection-capability-skips` (`7fcb378`) — eight of the same atoms, 17 and 17.
+
+**Every hunk is a citation line-number re-pointing** (`lib.rs:370` → `lib.rs:384`,
+`fixtures.rs:369` → `fixtures.rs:521`). Both stories legitimately own
+`crates/happenstance-testkit/src/**`; editing it shifts the lines the constitution cites into
+it; `cargo xtask lint-constitution` checks those citations and is a gate step. The work is
+**compelled, not discretionary** — the same shape run 3 ratified for `owned-batch-port-shape`'s
+`stand_in.rs` edit, where `broken_intra_doc_links` at `deny` forced an edit the boundary already
+implied.
+
+This is now the **third** instance, so treat it as structural rather than as three accidents:
+this repository has two deny-level cross-reference checkers whose targets sit outside any
+story's natural boundary, so any story touching a cited file is forced across its own boundary
+or into a red gate. Settle it once — either each such spec's boundary admits the corpora its own
+edits compel, with the reason stated as run 3 stated it, or the boundary check learns that a
+compelled citation repair is not a scope breach.
+
+**Do not widen a boundary to match what was written without saying why.** That converts the
+check into a rubber stamp for whatever the implementer happened to touch, which is the failure
+mode the check exists to prevent.
