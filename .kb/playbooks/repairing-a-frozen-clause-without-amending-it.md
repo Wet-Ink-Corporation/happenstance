@@ -23,6 +23,9 @@ related:
   - kb-decision-0010
   - kb-decision-0012
   - kb-decision-0015
+  - kb-decision-0017
+  - kb-decision-0018
+  - kb-decision-0019
   - kb-governance-referent-not-reasoning-001
   - kb-open-question-es-6-unwritable-rule-001
 source_paths:
@@ -32,7 +35,7 @@ source_paths:
   - RUNBOOK.md
   - xtask/src/spec_trace.rs
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # Repairing a frozen clause without amending it

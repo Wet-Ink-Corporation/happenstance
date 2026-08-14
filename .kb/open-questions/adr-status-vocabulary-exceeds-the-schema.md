@@ -24,6 +24,9 @@ related:
   - kb-decision-0003
   - kb-decision-0005
   - kb-decision-0006
+  - kb-decision-0017
+  - kb-decision-0018
+  - kb-decision-0019
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
   - .kb/_intake/0004-edition-and-msrv.md
@@ -33,7 +36,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake-2/02-placement-and-adjudication.md
   - .kb/README.md
   - .kb/decisions/README.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # An accepted-but-provisional ADR has no status the KB can express

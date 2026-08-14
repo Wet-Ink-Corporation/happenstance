@@ -22,13 +22,15 @@ related:
   - kb-decision-0005
   - kb-decision-0006
   - kb-decision-0007
+  - kb-decision-0017
+  - kb-decision-0018
   - kb-governance-referent-not-reasoning-001
 source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
   - .kb/_intake/0007-projection-runner-decodes.md
   - references/adr/0007-projection-runner-decodes.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # An "and" in a decision's title is usually a second, weaker decision

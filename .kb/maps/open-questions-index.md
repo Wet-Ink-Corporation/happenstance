@@ -10,7 +10,10 @@ summary: >-
   directory listing. Updated whenever a defer_open_question disposition lands a new atom, per
   open-questions/README.md's instruction to add a bullet "on the map atom that indexes its area."
   A withdrawn or superseded question stays listed, annotated, rather than removed — the record
-  that it was once open is itself worth keeping.
+  that it was once open is itself worth keeping. The 2026-08-13 wave flipped
+  kb-open-question-projection-batch-no-apply-001 to Superseded (by ADR-0017) and annotated the
+  PS-1 and PS-19 gaps with the clause-pairing sweep's findings and ADR-0018/ADR-0019's attribution
+  of the same defect shape; all three stayed listed rather than being replaced.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -19,7 +22,8 @@ source_paths:
   - .kb/open-questions/README.md
   - .kb/_governance/integration-waves/2026-08-10-intake/02-placement-and-adjudication.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
-last_reviewed: 2026-08-10
+  - .kb/_governance/integration-waves/2026-08-13-projection-adrs
+last_reviewed: 2026-08-13
 ---
 
 # Open-questions index
@@ -48,11 +52,18 @@ what the question is, not its evidence.
 - **Open** — [`ps-1-states-no-progress-obligation.md`](../open-questions/ps-1-states-no-progress-obligation.md)
   (`kb-open-question-ps-1-no-progress-obligation-001`) — PS-1's `MUST` is a
   coupling, not a progress obligation; the third rule assigned to it does
-  not follow from the sentence. Owned by phase 6.
+  not follow from the sentence. Owned by phase 6. Amended 2026-08-13: the
+  clause-pairing sweep confirmed the defect isolated (29 sound / 7 defective
+  / 1 undetermined) and ADR-0019 (`kb-decision-0019`) named the same
+  intent-not-sentence habit recurring on PS-29; sub-questions 1, 2 and 4
+  stay open.
 - **Open** — [`ps-19-scope-narrower-than-its-rule.md`](../open-questions/ps-19-scope-narrower-than-its-rule.md)
   (`kb-open-question-ps-19-scope-narrower-001`) — PS-19's `MUST` is scoped
   to after a reset; its second assigned rule asks about an id never seen.
-  Owned by phase 6; interacts with the PS-1 question above.
+  Owned by phase 6; interacts with the PS-1 question above. Amended
+  2026-08-13: the same sweep confirmed this finding too, and ADR-0018
+  (`kb-decision-0018`) scoped the defect out of its own clause range by
+  name without repairing it; sub-questions 1 and 3 stay open.
 - **Open** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
   (`kb-open-question-es-6-unwritable-rule-001`) — ES-6 is `[FROZEN]` and
   names a conformance rule that cannot be written against today's port.
@@ -85,10 +96,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-adr-status-vocabulary-001`) — `KbFrontmatter`'s status
   enum has no value for "accepted, provisional" or "partly superseded," both
   load-bearing in the imported ADR corpus.
-- **Open** — [`projection-store-batch-has-no-apply-seam.md`](../open-questions/projection-store-batch-has-no-apply-seam.md)
+- **Superseded** — [`projection-store-batch-has-no-apply-seam.md`](../open-questions/projection-store-batch-has-no-apply-seam.md)
   (`kb-open-question-projection-batch-no-apply-001`) — `ProjectionStore::Batch`
   carries no trait bounds, so generic code can open and commit a batch and
-  cannot write anything into it. Owned by phase 6.
+  cannot write anything into it. Answered 2026-08-13 by ADR-0017
+  (`kb-decision-0017`): `Batch` becomes an owned type with no lifetime
+  parameter and no universal write vocabulary; sub-question 3 — whether this
+  retroactively validates ADR-0006's discriminator — stays open, with the
+  typed layer.
 - **Open** — [`query-union-rule-is-owed-and-unowned.md`](../open-questions/query-union-rule-is-owed-and-unowned.md)
   (`kb-open-question-query-union-rule-unowned-001`) — `query_union_is_item_concatenation`
   is named as owed and declined by ADR-0011, which flags it as the one
