@@ -21,7 +21,7 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| decisions-and-design-record | approved | ps-clause-pairing-sweep f77f183, projection-decision-atoms 9520b28, projection-api-design-record 0df2c1c | (this commit) |
 
 ## Surviving findings
 
