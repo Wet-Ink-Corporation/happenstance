@@ -8645,7 +8645,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together`, `probe_delete_all` † | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` | E2E-18 |
-| PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |
+| PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` | E2E-23 |
 | PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` | E2E-23, E2E-25 |

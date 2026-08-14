@@ -169,3 +169,112 @@ compelled citation repair is not a scope breach.
 **Do not widen a boundary to match what was written without saying why.** That converts the
 check into a rubber stamp for whatever the implementer happened to touch, which is the failure
 mode the check exists to prevent.
+
+### reset-and-rebuild-rules — fix pass 2026-08-14
+
+The slice review returned four findings against `10ace94` and `5be22ab`. All four
+are answered below; the first is a **halt**, not a repair, and it leaves an AC
+blocked rather than satisfied.
+
+**BLOCKING — AC-005's ordering gate was unmet, and the recorded evidence
+contradicted the repository's own KB.** `reset-rules`' AC-005 makes
+`fresh_projection_has_no_checkpoint` legitimate *only* once the PS-19 repair atom
+from `projection-decision-atoms` is `status: accepted` under `.kb/decisions/`;
+EC-001 requires the story to **halt and report** otherwise, because writing the
+rule anyway "widens a `[FROZEN]` clause by test". **No repair atom exists** —
+`.kb/decisions/` holds 0001–0019 and 0029, and none widens PS-19.
+`reset-rules/_ledger.md` and `report.md` both claimed the precondition was met,
+citing ADR-0018's own `status: accepted`; that is a different atom answering a
+different question, and ADR-0018 says so about itself
+(`.kb/decisions/0018-returning-a-projection-to-never-run.md:113-116`: the pairing
+defect "sits inside this clause range and is named here as a gap, not repaired").
+`.kb/open-questions/ps-19-scope-narrower-than-its-rule.md:122-129` and
+`projection-decision-atoms/spec.md:72` agree, and so does the specification about
+itself (`spec/SPECIFICATION.md:5238-5239`).
+
+The consequence was substantive rather than procedural: the suite convicted
+adapters of an obligation PS-19's frozen MUST does not state, and
+`PresumedLiveCheckpointStore` — registered as a *mutant* — is **conformant** with
+PS-19 as written today. CF-5's positive control could not have caught it, because
+no conformant variant in the projection registry models the legal
+`.unwrap_or(Checkpoint::Live { through: FIRST })` store.
+
+**Path (a) taken — EC-001 as written.** `fresh_projection_has_no_checkpoint` and
+`PresumedLiveCheckpointStore` are **held**: removed from the rules module, the
+`for_each_projection_store_rule!` enumeration, `mutants.rs`, the projection
+`REGISTRY` and `for_each_projection_mutant!`, with the reason stated in full at
+each point they would sit. PS-19 was **not** line-edited and the rule was **not**
+dropped silently — `CHANGELOG.md` carries the non-delivery as an entry naming
+why, and `cargo xtask spec-trace --write` restored `†` ("does not exist yet") on
+§7.2's PS-19 row, which is the gate stating the hold out loud. The ledger row is
+`satisfied: false` with the citations above; the report's summary reads nine of
+ten.
+
+**Path (b) remains open to a human and was not taken.** The reviewer's
+alternative was a recorded decision to proceed, in the shape this ledger already
+carries for the DT-3 amendment above. No human authorised it, and this run
+declined to invent an authorisation. If a human takes path (b), what it obliges,
+and none of it may be skipped:
+
+- Restore the rule, its mutant, its registry row, its enumeration entries and its
+  `CHANGELOG.md` entry, and re-run `spec-trace --write` to clear the `†`.
+- Correct `reset-rules/_ledger.md` AC-005 and `report.md` to state that the
+  precondition was **not** met, cite `.kb/decisions/0018-…:113-116` and
+  `.kb/open-questions/ps-19-scope-narrower-than-its-rule.md:122-129`, and **name
+  who authorised proceeding**. Proceeding on an unmet precondition is a decision;
+  it is not a green run.
+- Say in the same place what the suite is then asserting that no clause states,
+  so `unstable-projection-gate-and-clause-disposition` inherits a debt it can see
+  rather than a rule it will assume was always owed.
+
+Either way the repair itself is still owed and is still that story's: a **new
+accepted decision atom** widening PS-19 or minting the clause, under
+`.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md` — never a line
+edit.
+
+**Stale rustdoc created by this slice** — the class the previous slice review
+escalated (`d9eb8de` items 5–6), recurring.
+`crates/happenstance-testkit/tests/mutation_coverage/variants.rs:660-673` said of
+`RESET_REFUSAL` that "no rule reads that constant yet" (it is read by
+`refused_reset_changes_nothing`) and that the reference fixture "reports exactly
+one skip"; it reports two, and the assertion that landed in the same commit pins
+two. Rewritten to state both declensions, both now read by a rule, and the
+two-skip set `assert_reference_projection_declensions` pins.
+`tests/mutation_coverage.rs`'s `PROJECTION_MUST_REJECT` doc said "the four
+absentees"; holding one rule made it three, and it now says three. **This is the
+third occurrence in three slices, and the pattern is worth naming:** a doc
+comment that counts something goes stale in the next commit, and nothing in the
+gate reads a prose count.
+
+**Misattached doc comment** in `crates/happenstance-testkit/src/projection.rs`.
+The new unit test's doc had been appended to the *existing* block above
+`two_opens_make_two_isolated_stores`, so
+`a_declined_reset_refusal_is_reported_with_the_fixtures_reason` carried a summary
+line describing a different test and `two_opens_make_two_isolated_stores` carried
+none. The block is split back; while restoring it, "will depend on it directly
+one slice later" was corrected to the present tense, that slice having landed at
+`5d9b4fd`.
+
+**`read-through-and-rebuild-rules` AC-006 recorded as a boundary finding rather
+than as satisfaction.** The criterion asks for "the fixture's **own** non-empty
+stated reason"; the reason a skip actually carries is the testkit-written
+`NO_BATCH_READ_PATH_REASON`, because the landed probe const is a `bool`
+(`crates/happenstance-core/src/projection.rs:536`) and carries no reason. That
+follows the `NO_CEILING_REASON` / `NO_STORE_LIMITS` exception the story's own D1
+points at, and the PR boundary forbids the alternative — "a rule that cannot be
+written against the landed port is a finding, not a licence to edit the port".
+The ledger row now says so, and routes the open question — should the probe const
+carry a reason? — to `owned-batch-port-shape` / the port disposition story.
+
+**Scope drift, examined and kept.** `spec/SPECIFICATION.md`'s changes across both
+commits sit between the `BEGIN/END GENERATED` markers of §7.1–§7.2, are produced
+by `cargo xtask spec-trace --write`, and are stale-checked by a gate step
+(`xtask/src/spec_trace.rs:747,1034-1051`) — leaving them would fail CI. Every
+hunk is a `†` added or removed as a rule name started or stopped existing; no
+clause text, maturity marker or rule citation moved. The
+`standards/rust/{11,13,40,41}-*.md` hunks are `file:line` citation anchors
+re-pointed because `contract.rs` grew inside the boundary and
+`cargo xtask lint-constitution` is a gate step. Both are compelled, and both are
+the pattern ratified at `d9eb8de` and at run 3 — which makes this the **fourth
+and fifth** instance, and is the standing argument for settling it once rather
+than ratifying it per slice.

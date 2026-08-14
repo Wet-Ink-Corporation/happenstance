@@ -216,17 +216,21 @@ not the same as what a user needed to be told.
   the new `ProjectionFixture::protect_from_reset`; `MemoryProjectionStore` holds
   no protection policy and declines, so the reference run prints a second `SKIP`
   line carrying that store's own words.
-- **`fresh_projection_has_no_checkpoint`** — §4.11's rule for PS-19, asked before
-  any reset has happened. The defect it detects is a `checkpoint` that resolves a
-  missing row with `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is
-  what an author writes when the position column is `NOT NULL DEFAULT 1`. Such a
-  store satisfies PS-19's MUST verbatim — after a successful reset the row is
-  there and says `NeverRun` — and still tells a runner that a read model nobody
-  has ever built is authoritative and already considered through the first
-  position, so the first event of every projection the store has never seen is
-  skipped. The assertion is on the **variant**: comparing a checkpoint against a
-  position is both a CF-6 violation and the exact value the defective store
-  writes, so a rule written that way could not tell the two apart.
+- **`fresh_projection_has_no_checkpoint` is NOT in this release, and the reason
+  is a finding rather than an omission.** §4.11's rule table assigns PS-19 a
+  second rule — an id the store has never seen must read back as
+  `Checkpoint::NeverRun` — and **no clause's MUST obliges it.** PS-19 is
+  `[FROZEN]` and its sentence is scoped *after a successful `reset`*; the clause
+  says this about itself, naming the exposing store as the natural implementation
+  rather than a contrivance: a `checkpoint` resolving a missing row with
+  `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author
+  writes when the position column is `NOT NULL DEFAULT 1`, satisfies PS-19
+  verbatim and answers `Live` for an unseen id. Writing the rule now would widen
+  a frozen clause **by test**, convicting adapters of an obligation the contract
+  does not state, so the rule and `PresumedLiveCheckpointStore` — the store that
+  fails it — are held until the widening lands as an accepted decision atom, not
+  as a line edit. `cargo xtask spec-trace` marks the row `†` meanwhile, which is
+  the gate saying out loud that the rule does not exist yet.
 - **`reset_is_not_commit_at_first`** — PS-19 and PS-20, and the rule that turns
   RUNBOOK's observation into an enforced rejection. The defect it detects is
   `commit(empty_batch, id, SequencePosition::FIRST, Live)` used as a substitute
@@ -289,19 +293,21 @@ not the same as what a user needed to be told.
   `NO_BATCH_READ_PATH_REASON` are exported beside `NO_STORE_LIMITS` and
   `NO_CEILING_REASON` and are the second and last instance of the
   testkit-written-reason exception.
-- **Six more wrong projection stores, and three declarations grown.**
+- **Five more wrong projection stores, and three declarations grown.**
   `TwoStatementResetStore` (the 02:46:31 truncate whose second statement never
   ran), `TruncatingResetStore` (`DELETE FROM projection_checkpoints`, no
   `WHERE`), `CommitAtFirstResetStore` (the substitute six scenarios reached for),
-  `RefusalAsSuccessStore` and `RefusalAfterTheFactStore` (the two halves of a
-  protection policy that is not in the write path), and
-  `PresumedLiveCheckpointStore` (a missing checkpoint row read as `Live`) are
-  registered in the projection mutant registry, each failing exactly what it
-  declares at a pinned assertion. Three existing rows grew rather than the new
-  rules being weakened to preserve them, which is the exactness meta-test
-  working: a store that makes nothing durable, one that stamps its batches per
-  type, and one that validates a commit's position are each visible to a reset
-  rule as well. Still no pass rate anywhere over the set.
+  and `RefusalAsSuccessStore` and `RefusalAfterTheFactStore` (the two halves of a
+  protection policy that is not in the write path) are registered in the
+  projection mutant registry, each failing exactly what it declares at a pinned
+  assertion. Three existing rows grew rather than the new rules being weakened to
+  preserve them, which is the exactness meta-test working: a store that makes
+  nothing durable, one that stamps its batches per type, and one that validates a
+  commit's position are each visible to a reset rule as well. Still no pass rate
+  anywhere over the set. A sixth store — `PresumedLiveCheckpointStore`, a missing
+  checkpoint row read as `Live` — is **held** with the rule it fails, for the
+  reason stated above: it is conformant with PS-19 as the clause is written
+  today.
 - **`MemoryProjectionStore`, behind the existing `memory` feature** — the
   projection port's answer to `MemoryEventStore`, and the first implementation of
   that port anywhere that actually runs. It is the oracle a failing adapter is

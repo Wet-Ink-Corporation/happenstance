@@ -250,11 +250,16 @@ struct Declared {
 ///   this binary proves the harness can report a *pass* it did not have to
 ///   report. See this file's module documentation for why an empty positive
 ///   control is worse than none.
-/// * **Every rule §4.11 lists that has not landed yet.** Eight of the seventeen
-///   are still owed at the time of writing, and CF-1 is what forces a mutant to
-///   arrive with each of them rather than after them. The uncovered *axes* are
-///   therefore the rules themselves, and they are enumerated in
-///   `spec/SPECIFICATION.md:5658-5671` rather than restated here.
+/// * **The one rule §4.11 lists that has not landed.**
+///   `fresh_projection_has_no_checkpoint` is **held**, not merely unwritten: no
+///   clause's `MUST` reaches it, PS-19 is `[FROZEN]`, and the store that would
+///   fail it — `PresumedLiveCheckpointStore`, a missing row resolved as
+///   `Live { through: FIRST }` — is *conformant* with the clause as written. It
+///   is held with the rule for that reason, and `src/projection.rs` carries the
+///   argument at the point the rule would sit. CF-1 is what forces a mutant to
+///   arrive **with** a rule rather than after it, and it is also why the two
+///   were held together: shipping either alone breaks a meta-test, which is the
+///   registry refusing to record a half-truth.
 /// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
 ///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
 ///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
@@ -684,37 +689,15 @@ const REGISTRY: &[Declared] = &[
             "must leave the read model exactly as it was",
         )],
     },
-    Declared {
-        name: "PresumedLiveCheckpointStore",
-        kind: Kind::Mutant,
-        // Two rules from one `unwrap_or` argument, and the second is not
-        // inflation: `commit_rejects_a_foreign_batch` asserts that a rejected
-        // commit left both stores at `NeverRun`, which is a question about an id
-        // neither store has ever seen. A store that answers `Live` there answers
-        // `Live` there. Narrowing the defect further would mean inventing a
-        // store that resolves a missing row differently depending on who asks,
-        // which is not an adapter anybody writes.
-        fails: &[
-            "fresh_projection_has_no_checkpoint",
-            "commit_rejects_a_foreign_batch",
-        ],
-        provenance: "an adapter whose `checkpoint` resolves a missing row with \
-                     `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author \
-                     writes when the position column is `NOT NULL DEFAULT 1`. The specification \
-                     names this shape itself and names it as the natural one rather than a \
-                     contrivance (`spec/SPECIFICATION.md:5232-5243`): paired with a `reset` that \
-                     records an explicit `NeverRun`, it satisfies PS-19's MUST verbatim and \
-                     still tells a runner that a read model nobody has ever built is \
-                     authoritative",
-        mode: FailureMode::Assertion,
-        expect: &[
-            (
-                "fresh_projection_has_no_checkpoint",
-                "a projection this store has never seen must read back as",
-            ),
-            ("commit_rejects_a_foreign_batch", "moved its checkpoint"),
-        ],
-    },
+    // HELD, not omitted: `PresumedLiveCheckpointStore`'s row. See
+    // `tests/projection_mutation_coverage/mutants.rs` at the point the store
+    // would sit, and `src/projection.rs` at the point its rule would sit. The
+    // short of it: the store is conformant with PS-19 as written, so declaring
+    // it a mutant convicts it of an obligation no clause states.
+    //
+    // `commit_rejects_a_foreign_batch`, the second rule it also failed, keeps
+    // its own mutant in `TypeStampedBatchStore` above, so holding this row
+    // leaves no rule without one.
     Declared {
         name: "CommittedReadBatchStore",
         kind: Kind::Mutant,
@@ -824,7 +807,6 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::CommitAtFirstResetStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAsSuccessStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAfterTheFactStore>,
-            crate::correct::MutantFixture<crate::mutants::PresumedLiveCheckpointStore>,
 
             crate::correct::MutantFixture<crate::mutants::CommittedReadBatchStore>,
             crate::correct::MutantFixture<crate::mutants::FirstWriteWinsBatchStore>,

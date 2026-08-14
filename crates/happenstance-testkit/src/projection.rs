@@ -41,11 +41,18 @@
 //! workspace red, and there is no exemption list.
 //!
 //! What a green run still does **not** prove is that this family is complete.
-//! Every rule §4.11 assigns to an adapter's own suite is now written; what is
-//! still owed is the **six runner-dependent** ones, which CF-36 moves to the
-//! workspace e2e crate because they need a runner rather than a store
-//! (`spec/SPECIFICATION.md:5694-5703`). A store that passes everything here has
-//! not been observed under replay.
+//! Sixteen of §4.11's seventeen adapter-suite rules are written; what is still
+//! owed is the **six runner-dependent** ones, which CF-36 moves to the workspace
+//! e2e crate because they need a runner rather than a store
+//! (`spec/SPECIFICATION.md:5694-5703`), and — for a different reason —
+//! `fresh_projection_has_no_checkpoint`, which is **held**. §4.11's table assigns
+//! it to PS-19 and PS-19's `MUST` does not reach it: the clause is scoped *after
+//! a successful `reset`* and says so about itself
+//! (`spec/SPECIFICATION.md:5230-5239`). Writing it would widen a `[FROZEN]`
+//! clause by test, so it waits on an accepted decision atom from
+//! `unstable-projection-gate-and-clause-disposition`. The reason is restated in
+//! full at the point in [`rules`] the rule would sit. A store that passes
+//! everything here has not been observed under replay.
 //!
 //! # Two rules here are answered by a skip against the reference fixture
 //!
@@ -76,9 +83,10 @@
 //! `MemoryProjectionStore` declares `true`, so a reference run does not print
 //! those two.
 //!
-//! Read that as the answer to "does a green run mean anything here": for fifteen
-//! of the seventeen landed rules it means the store was driven and asserted
-//! about; for these two it means what the `SKIP` lines say. Neither rule is
+//! Read that as the answer to "does a green run mean anything here": for
+//! fourteen of the sixteen landed rules it means the store was driven and
+//! asserted about; for these two it means what the `SKIP` lines say. Neither
+//! rule is
 //! decorative — `PartialCommitStore`, `RefusalAsSuccessStore` and
 //! `RefusalAfterTheFactStore` fail them by name in
 //! `tests/projection_mutation_coverage.rs` — but the demonstration lives against
@@ -1411,60 +1419,33 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
-    /// A projection the store has **never seen** reads back as
-    /// [`Checkpoint::NeverRun`].
-    ///
-    /// §4.11 assigns this rule to PS-19, and it is the same distinction that
-    /// clause is about — *never run* told apart from *committed at the first
-    /// position* — asked before any `reset` has happened. A store that has
-    /// already collapsed the two states for an unseen id has collapsed them
-    /// everywhere.
-    ///
-    /// **Rejects:** `PresumedLiveCheckpointStore` — a store that resolves a
-    /// missing checkpoint row with `.unwrap_or(Checkpoint::Live { through: FIRST })`.
-    /// The specification names that shape by name, because it is the natural one
-    /// rather than a contrivance: an adapter whose `reset` writes an explicit
-    /// `NeverRun` row satisfies PS-19's MUST verbatim and still answers `Live`
-    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5232-5243`).
-    ///
-    /// # The assertion is on the **variant**
-    ///
-    /// Comparing a checkpoint against any [`SequencePosition`] is
-    /// simultaneously a CF-6 violation and the exact value the defective store
-    /// writes, so a rule written that way cannot tell the two mutants of this
-    /// family apart and both walk free. [`Checkpoint`] is a three-variant enum
-    /// precisely so this assertion can be made without naming a position
-    /// (`spec/SPECIFICATION.md:4643-4658`).
-    ///
-    /// # Why it spells no capability gate at all
-    ///
-    /// It reads one checkpoint through one handle and writes nothing, so it
-    /// needs neither a second handle nor a protected projection. A fixture
-    /// declining every capability still runs it and still passes it, which is
-    /// correct: the capabilities it declined are not the ones this rule spends.
-    pub async fn fresh_projection_has_no_checkpoint<F: ProjectionFixture>(
-        open: impl AsyncFn() -> F,
-    ) -> RuleOutcome {
-        let fixture = open().await;
-        let store = fixture.connect().await;
-
-        // Committed to by nothing, in this rule or any other: every rule in this
-        // family names its ids after itself.
-        let unseen = ProjectionId::new("fresh_projection_has_no_checkpoint.never-committed-to");
-
-        assert_eq!(
-            checkpoint_ok(&store, &unseen).await,
-            Checkpoint::NeverRun,
-            "a projection this store has never seen must read back as \
-             `Checkpoint::NeverRun`. A store that resolves a missing checkpoint \
-             row to `Live` has told a runner that a read model nobody has ever \
-             built is authoritative and already considered through a position — \
-             so the runner resumes past the events it has never applied, and \
-             they are skipped permanently and silently"
-        );
-
-        RuleOutcome::Ran
-    }
+    // ------------------------------------------------------------------------
+    // HELD, not omitted: `fresh_projection_has_no_checkpoint`.
+    //
+    // §4.11's rule table assigns PS-19 a second rule — "a projection the store
+    // has never seen reads back as `Checkpoint::NeverRun`", rejecting a store
+    // that resolves a missing row with `.unwrap_or(Live { through: FIRST })`.
+    // **No clause's MUST obliges that.** PS-19 is `[FROZEN]` and its sentence is
+    // scoped *after a successful `reset`*; the specification says so about
+    // itself, in the clause's own body: "No clause's MUST obliges an unseen id
+    // to read as `NeverRun`. Phase 6 owns whether this clause widens or a new
+    // one says it" (`spec/SPECIFICATION.md:5230-5239`).
+    //
+    // Writing the rule here would widen a frozen clause **by test**: the suite
+    // would convict adapters of an obligation the contract does not state, and
+    // the store that exposes the gap is the natural implementation rather than a
+    // contrivance (`.kb/open-questions/ps-19-scope-narrower-than-its-rule.md`;
+    // `.kb/decisions/0018-returning-a-projection-to-never-run.md:113-116`, which
+    // met this defect inside its own clause range, named it, and repaired
+    // nothing).
+    //
+    // The repair is a **new accepted decision atom**, never a line edit, and it
+    // lands at `unstable-projection-gate-and-clause-disposition` under
+    // `.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md`. This
+    // rule and `PresumedLiveCheckpointStore`, the mutant that fails it, are held
+    // until it does. `cargo xtask spec-trace` marks the row `†` in the meantime,
+    // which is the gate saying out loud that the rule does not exist yet.
+    // ------------------------------------------------------------------------
 
     /// `reset` is distinguishable from `commit(empty_batch, id, FIRST, Live)`,
     /// in the checkpoint **and** in the replay that follows it.
@@ -1485,8 +1466,12 @@ pub mod rules {
     /// # Both halves, and neither is sufficient alone
     ///
     /// The **state** half compares the two checkpoints by variant —
-    /// `NeverRun` against `Live { .. }` — never by position, for
-    /// [`fresh_projection_has_no_checkpoint`]'s reason. The **consequence** half
+    /// `NeverRun` against `Live { .. }` — never by position: comparing a
+    /// checkpoint against any [`SequencePosition`] is simultaneously a CF-6
+    /// violation and the exact value the defective store writes, so a rule
+    /// written that way could not tell the two apart. [`Checkpoint`] is a
+    /// three-variant enum precisely so this assertion can be made without naming
+    /// a position (`spec/SPECIFICATION.md:4643-4658`). The **consequence** half
     /// derives a resume point from each under the port's own rule — in one
     /// private helper shared by both arms, so the derivation is stated once —
     /// and asserts the event at the store's first position is applied in the
@@ -1881,7 +1866,10 @@ macro_rules! for_each_projection_store_rule {
             reset_clears_rows_and_checkpoint_together,
             reset_is_scoped_to_one_projection,
             refused_reset_changes_nothing,
-            fresh_projection_has_no_checkpoint,
+            // `fresh_projection_has_no_checkpoint` belongs here and is HELD: it
+            // has no clause behind it until PS-19 widens by decision rather than
+            // by test. The `rules` module carries the reason at the point the
+            // rule would sit.
             reset_is_not_commit_at_first,
 
             // --- Reading, and rebuilding -----------------------------------
@@ -2035,19 +2023,6 @@ fn no_orphan_projection_rules() {
     );
 }
 
-/// Two `open()` calls make two isolated backing stores, not two handles onto
-/// one.
-///
-/// The property every rule taking `impl AsyncFn() -> F` rests on, checked
-/// against the reference fixture. `commit_rejects_a_foreign_batch` will depend
-/// on it directly one slice later: a batch begun on one store and committed to
-/// another must be rejected, and a fixture handing back one shared store makes
-/// that rule unwritable rather than failing.
-///
-/// Driven by [`block_on`](crate::block_on) rather than `#[tokio::test]`, because
-/// `tokio` is a dev-dependency of the *non-wasm32* target table only and this
-/// file's unit tests are type-checked for `wasm32-unknown-unknown` by the
-/// mandatory conformance-harness step.
 /// A declined `RESET_REFUSAL` reaches the author as a **reported skip carrying
 /// the fixture's own reason**, not as a pass and not as an absence.
 ///
@@ -2097,6 +2072,19 @@ fn a_declined_reset_refusal_is_reported_with_the_fixtures_reason() {
     );
 }
 
+/// Two `open()` calls make two isolated backing stores, not two handles onto
+/// one.
+///
+/// The property every rule taking `impl AsyncFn() -> F` rests on, checked
+/// against the reference fixture. `commit_rejects_a_foreign_batch` depends on it
+/// directly: a batch begun on one store and committed to another must be
+/// rejected, and a fixture handing back one shared store makes that rule
+/// unwritable rather than failing.
+///
+/// Driven by [`block_on`](crate::block_on) rather than `#[tokio::test]`, because
+/// `tokio` is a dev-dependency of the *non-wasm32* target table only and this
+/// file's unit tests are type-checked for `wasm32-unknown-unknown` by the
+/// mandatory conformance-harness step.
 #[cfg(test)]
 #[test]
 fn two_opens_make_two_isolated_stores() {

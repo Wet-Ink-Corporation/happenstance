@@ -666,11 +666,12 @@ impl ProjectionSubject for DecliningProjectionFixture {
 ///
 /// It declines two, for reasons that are the store's rather than the fixture's.
 /// `RESET_REFUSAL`, because `MemoryProjectionStore` has no protection policy to
-/// refuse a reset with, and no rule reads that constant yet. And `COMMIT_FAULT`,
-/// because that store applies both halves of a commit under one write lock and
-/// has no write that can be made to fail — which *is* read, by
-/// `failed_commit_leaves_both_unchanged`, so this fixture reports exactly one
-/// skip and `projection_capability_skips_are_reported` asserts on it by name.
+/// refuse a reset with. And `COMMIT_FAULT`, because that store applies both
+/// halves of a commit under one write lock and has no write that can be made to
+/// fail. **Both are now read by a rule** — `refused_reset_changes_nothing` and
+/// `failed_commit_leaves_both_unchanged` respectively — so this fixture reports
+/// exactly two skips, and `assert_reference_projection_declensions` pins that
+/// set by name and checks each skip's capability and stated reason.
 impl ProjectionSubject for MemoryProjectionFixture {
     const NAME: &'static str = "MemoryProjectionFixture";
 
