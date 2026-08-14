@@ -159,10 +159,13 @@ crates/happenstance-testkit/README.md
 xtask/src/spec_trace.rs
 CHANGELOG.md
 spec/SPECIFICATION.md
+standards/rust/**
 .bklg/from-contract-to-published-library/projection-store-freeze/projection-suite-entry-point/**
 ```
 
-`spec/SPECIFICATION.md` is in the boundary for **one** reason and it is mechanical: `cargo xtask spec-trace --write` regenerates §7.1–§7.2, and two rules starting to exist changes what that region renders. Any other hunk in that file is out of boundary — clause text, maturity markers and rule citations are `unstable-projection-gate-and-clause-disposition`'s. `crates/happenstance-testkit/tests/**` is deliberately **not** globbed: the three new files are named individually, because `mutation_coverage*` under the same directory is the next story's and a wide glob would hide a boundary violation rather than prevent one.
+`spec/SPECIFICATION.md` is in the boundary for **one** reason and it is mechanical: `cargo xtask spec-trace --write` regenerates §7.1–§7.2, and two rules starting to exist changes what that region renders. Any other hunk in that file is out of boundary — clause text, maturity markers and rule citations are `unstable-projection-gate-and-clause-disposition`'s.
+
+`standards/rust/**` is in the boundary for **one** reason and it is the same mechanical one, widened deliberately on **2026-08-14** after `redkiln verify --grain story` rejected `79df6b7` for writing eleven atoms this list did not admit. The constitution cites `crates/happenstance-testkit/src/**` by `file:line`; this story adds to those files; the cited lines therefore move; and `cargo xtask lint-constitution` — a gate step — fails on a stale citation. The repair is **compelled by an entry the boundary already admits**, exactly as `owned-batch-port-shape`'s `stand_in.rs` edit was compelled by `broken_intra_doc_links` at `deny` (settled in `b7c1600`, ratified in `_slices.md`). Only **line-number re-pointing** is admitted, and the diff must show equal insertions and deletions per atom: `79df6b7` is 23 and 23. **Rule text, evidence selection, a `## Retired` section or a new atom are out of boundary** and belong to the story that changes the rule, not to whichever story happened to move a line. Widening this list to match what an implementer wrote, without that argument, would make the check a rubber stamp for anything it touched. `crates/happenstance-testkit/tests/**` is deliberately **not** globbed: the three new files are named individually, because `mutation_coverage*` under the same directory is the next story's and a wide glob would hide a boundary violation rather than prevent one.
 
 **In this PR**
 

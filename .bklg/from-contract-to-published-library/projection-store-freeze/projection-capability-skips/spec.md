@@ -296,8 +296,21 @@ this story did not choose would fail for a reason that has nothing to do with sc
 crates/happenstance-testkit/src/**
 crates/happenstance-testkit/tests/**
 CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/projection-store-freeze/projection-capability-skips/**
 ```
+
+`standards/rust/**` was added on **2026-08-14**, after `redkiln verify --grain story` rejected
+`7fcb378` for writing eight atoms this list did not admit, and it is admitted for one mechanical
+reason only. The constitution cites `crates/happenstance-testkit/src/**` by `file:line`; this story
+edits those files; the cited lines move; and `cargo xtask lint-constitution` — a gate step — fails on
+a stale citation. The repair is **compelled by an entry the boundary already admits**, the same shape
+`owned-batch-port-shape`'s `stand_in.rs` edit had under `broken_intra_doc_links` at `deny`. Only
+**line-number re-pointing** is in boundary, and the diff must show equal insertions and deletions per
+atom: `7fcb378` is 17 and 17. **Rule text, evidence selection, retirement or a new atom are out of
+boundary** — those belong to the story that changes the rule, not to whichever story moved a line.
+Widening this list to match what was written, without that argument, would turn the check into a
+rubber stamp.
 
 **In this PR**
 
