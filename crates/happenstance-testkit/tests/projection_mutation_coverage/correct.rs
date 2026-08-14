@@ -25,13 +25,17 @@
 //!   mutant set that only ever exercised the `Send` flavour would leave the
 //!   flavour the port was split for untested by the instrument that proves the
 //!   suite discriminates.
-//! * **An error only a mutant can produce.** `MutantError` began uninhabited,
-//!   exactly as `MemoryProjectionStoreError` is, and grew two variants when two
-//!   defects needed a store failure the port's own error variants could not
-//!   express. The correct core still returns neither of them, so the claim
-//!   "nothing here fails on its own" is preserved by the *bodies* rather than by
-//!   the type — and inhabiting the type was a visible event in review rather
-//!   than a silent one.
+//! * **An error only a mutant, or an armed fault, can produce.** `MutantError`
+//!   began uninhabited, exactly as `MemoryProjectionStoreError` is, and grew two
+//!   variants when two defects needed a store failure the port's own error
+//!   variants could not express. It has three now, and the third is the one
+//!   exception to the sentence above: [`MutantError::CommitFault`] is returned by
+//!   the *correct* core, and only after
+//!   [`ProjectionFixture::arm_commit_fault`](happenstance_testkit::ProjectionFixture::arm_commit_fault)
+//!   has been called. That is what a fixture declaring `COMMIT_FAULT` promises
+//!   to be able to do, so a store that could not produce it would be lying in its
+//!   capability declaration. Unarmed, the correct core still fails on no path at
+//!   all.
 //! * **One connection, modelled.** The store holds an `Rc<Cell<bool>>` and a
 //!   batch holds a share in it. Without a resource a batch can fail to give
 //!   back, PS-7's second half — *and the store is still usable afterwards* — is
@@ -81,9 +85,10 @@ pub(crate) struct State {
 /// uninhabited error is a claim that the correct core cannot fail, and inhabiting
 /// it withdraws that claim.
 ///
-/// Both variants are reachable only from a *mutant*. The correct core returns
-/// neither: it always holds its connection when it commits, and it never
-/// validates a position (PS-21 forbids it).
+/// The first two variants are reachable only from a *mutant*. The correct core
+/// returns neither: it always holds its connection when it commits, and it never
+/// validates a position (PS-21 forbids it). The third is different and is
+/// documented on its own variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MutantError {
     /// The store's one connection is checked out and was never returned.
@@ -99,6 +104,18 @@ pub(crate) enum MutantError {
     /// validation; this variant exists so a store can be written that does it
     /// anyway.
     PositionNotApplied,
+
+    /// The fault the fixture armed fired during this commit.
+    ///
+    /// The one variant the **correct** core returns, and only when
+    /// `arm_commit_fault` has been called — which no rule does except
+    /// `failed_commit_leaves_both_unchanged`, the one gated on `COMMIT_FAULT`.
+    /// It stands for the write that raised: a trigger, a `CHECK`, a connection
+    /// killed between the read-model write and the checkpoint write. A store
+    /// that could not produce it would be a fixture declaring a capability its
+    /// store does not have, which is the vacuity that rule's `Err` assertion
+    /// exists to reject.
+    CommitFault,
 }
 
 impl fmt::Display for MutantError {
@@ -110,6 +127,7 @@ impl fmt::Display for MutantError {
             Self::PositionNotApplied => {
                 f.write_str("the commit named a position this batch did not write")
             }
+            Self::CommitFault => f.write_str("the armed fault fired while this commit was writing"),
         }
     }
 }
@@ -173,8 +191,8 @@ pub(crate) fn apply<D: Defect>(state: &mut State, batch: &mut MutantBatch<D>) {
 ///
 /// # Why the step set is what it is, and how it grew
 ///
-/// It started at one step, because one defect needed it. It is seven now, and
-/// every one of the six added arrived the same way the event-store family's
+/// It started at one step, because one defect needed it. It is eight now, and
+/// every one of the seven added arrived the same way the event-store family's
 /// ninth did: *a rule acquired the ability to see a defect there*. A step earns
 /// its place when a conformance rule can observe the difference, and not before —
 /// adding a seam for a defect no rule can see is how a mutant registry starts
@@ -185,7 +203,9 @@ pub(crate) fn apply<D: Defect>(state: &mut State, batch: &mut MutantBatch<D>) {
 /// ([`checkpoint_key`](Self::checkpoint_key), PS-23), monotonicity
 /// ([`regression`](Self::regression), PS-22), the forbidden validation
 /// ([`validate_position`](Self::validate_position), PS-21), durability
-/// ([`commit_writes`](Self::commit_writes), PS-1), undo
+/// ([`commit_writes`](Self::commit_writes), PS-1's first conjunct), what a
+/// *failed* commit leaves behind
+/// ([`commit_under_fault`](Self::commit_under_fault), PS-1's second), undo
 /// ([`rollback`](Self::rollback), PS-8) and resource release
 /// ([`release_the_connection`](Self::release_the_connection), PS-7).
 pub(crate) trait Defect: 'static + Sized {
@@ -267,6 +287,33 @@ pub(crate) trait Defect: 'static + Sized {
     ) {
         apply(state, batch);
         state.checkpoints.insert(key.to_owned(), checkpoint);
+    }
+
+    /// What a commit does when the fixture has armed a fault.
+    ///
+    /// PS-1's **second** conjunct's seam, and the mirror of
+    /// [`commit_writes`](Self::commit_writes): that step is what a successful
+    /// commit makes durable, this one is what a failed commit leaves behind. The
+    /// correct answer writes **neither** half and returns the error — which is
+    /// what a store whose fault aborts its transaction does, because the abort
+    /// undoes both halves together.
+    ///
+    /// It is a step rather than a branch inside `commit_writes` because the two
+    /// return different things: this one must produce a `CommitError`, and
+    /// folding it in would make every mutant that overrides durability also have
+    /// to decide what a fault does, which breaks "one defect per store" for
+    /// stores that have nothing to say about faults.
+    fn commit_under_fault(
+        state: &mut State,
+        batch: &mut MutantBatch<Self>,
+        key: &str,
+        checkpoint: Checkpoint,
+    ) -> CommitError<MutantError> {
+        // Nothing is written. The `let _` names all four arguments rather than
+        // leaving an empty body, so that what the correct step declines to
+        // consume is visible.
+        let _ = (state, batch, key, checkpoint);
+        CommitError::Store(MutantError::CommitFault)
     }
 
     /// What a `rollback` does with the batch it was handed.
@@ -371,6 +418,14 @@ pub(crate) struct MutantStore<D: Defect> {
     /// batch can fail to give back, "dropping a batch leaves the store usable"
     /// is true by construction and the rule is decorative.
     connection: Rc<Cell<bool>>,
+    /// Whether the fixture has armed a fault for the next commit.
+    ///
+    /// Shared by every handle, for the connection's reason: an adapter's fault
+    /// is armed in its *store*, not in one session's view of it, and a rule arms
+    /// through the fixture and commits through a handle. Consumed by the commit
+    /// that fires it, so the fault happens once — the same one-shot contract
+    /// `Fixture::arm_mid_batch_fault` states.
+    fault: Rc<Cell<bool>>,
     stamp: u64,
     defect: PhantomData<D>,
 }
@@ -391,6 +446,7 @@ impl<D: Defect> Clone for MutantStore<D> {
         Self {
             state: Rc::clone(&self.state),
             connection: Rc::clone(&self.connection),
+            fault: Rc::clone(&self.fault),
             stamp: self.stamp,
             defect: PhantomData,
         }
@@ -403,9 +459,18 @@ impl<D: Defect> MutantStore<D> {
         Self {
             state: Rc::new(RefCell::new(State::default())),
             connection: Rc::new(Cell::new(false)),
+            fault: Rc::new(Cell::new(false)),
             stamp: D::mint_stamp(),
             defect: PhantomData,
         }
+    }
+
+    /// Arms the fault the next `commit` will fire.
+    ///
+    /// The store's own method rather than the fixture's, because every handle
+    /// shares the flag and the fixture holds one of those handles.
+    fn arm(&self) {
+        self.fault.set(true);
     }
 }
 
@@ -485,6 +550,18 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             // rebuild is claiming the rows are authoritative.
             _ => Checkpoint::Live { through: position },
         };
+
+        // The armed fault fires *here*, after every port-level refusal and in
+        // place of the write, because that is where a real one fires: a trigger
+        // or a `CHECK` raises while the statements are going out, not while the
+        // adapter is deciding whether to send them. `replace` consumes it, so it
+        // fires once.
+        if self.fault.replace(false) {
+            let refusal = D::commit_under_fault(&mut state, &mut batch, &key, checkpoint);
+            // The connection is returned by the batch's `Drop`, exactly as it is
+            // on every other error path out of `commit`.
+            return Err(refusal);
+        }
 
         D::commit_writes(&mut state, &mut batch, &key, checkpoint);
         drop(state);
@@ -589,6 +666,25 @@ impl<D: Defect> ProjectionFixture for MutantFixture<D> {
         "a projection mutant is a BTreeMap behind an Rc and holds no protection \
          policy, so there is no projection it could decline to reset",
     );
+
+    // Supported, and it has to be for the same reason `SECOND_HANDLE` does: a
+    // fixture that declined it would make `failed_commit_leaves_both_unchanged`
+    // *skip* against every store in this binary, and a skip is neither a pass nor
+    // a failure — so the rule's mutant could never be shown to fail it, and CF-1
+    // would be satisfied by a declaration nothing evaluates.
+    //
+    // This is the one fixture in the workspace that supports it. It can, because
+    // unlike the reference store it is an instrument: `MutantStore` carries a
+    // flag `commit` consults in place of its write, which is this binary's model
+    // of the trigger or `CHECK` a real adapter would arm.
+    const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    fn arm_commit_fault(&self) -> impl Future<Output = ()> {
+        self.0.arm();
+        // Ready rather than `async move`, for `connect`'s reason: setting a
+        // `Cell` is not I/O and should not pretend to be.
+        core::future::ready(())
+    }
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`, for `MemoryProjectionFixture::connect`'s

@@ -278,8 +278,30 @@ this record deliberately does not create a second instance of it.
 | `RESET_REFUSAL` | the projection **fixture** trait | **No** — declinable. A store with no protection policy has nothing to refuse, and PS-18 is `[PROVISIONAL]` on exactly that count. | the fixture (`Capability::declined`) | `refused_reset_changes_nothing` (PS-18, `spec/SPECIFICATION.md:5200-5217`) |
 | `SECOND_HANDLE` | the projection **fixture** trait | **Yes — a MUST**, as on the event-store fixture. `commit_is_atomic_with_the_read_model` reads the row and the checkpoint *through fresh handles*; a fixture that cannot open a second handle cannot observe PS-1 at all, and PS-1 is the invariant the port exists for. | n/a — supported or the adapter cannot be certified | `commit_is_atomic_with_the_read_model`, `failed_commit_leaves_both_unchanged`, `commit_advances_the_checkpoint` (PS-1, PS-2) |
 | `READS_THROUGH_BATCH` | **`ProjectionProbe`**, *not* the fixture | **No** — declinable, and declining is a conformant answer: it is PS-12's second arm. | the **testkit**, because "this batch exposes no read path" is the same sentence for every store that says it — the `NO_CEILING_REASON` precedent applied to its second case | `batch_reads_reflect_pending_writes` (PS-12, `:5052-5074`) |
+| `COMMIT_FAULT` **(amended in 2026-08-14)** | the projection **fixture** trait | **No** — declinable, and declining is the honest answer for any store that applies both halves of a commit under one lock. | the fixture (`Capability::declined`), **required rather than defaulted** — see amendment note 4 | `failed_commit_leaves_both_unchanged` (PS-1's second conjunct, `spec/SPECIFICATION.md:4736-4740`) |
 
-Three notes on that table, each load-bearing:
+**Amendment, 2026-08-14 — the fourth row.** This table was signed off with three
+rows and is amended in place rather than silently grown, because the enumeration
+*is* the signed-off artefact and its amendment is the record.
+
+*What forced it.* `commit-rollback-and-drop-rules` (HS-S0010) halted on AC-001:
+`failed_commit_leaves_both_unchanged` is a claim about a commit that **reported
+failure**, nothing a caller holds can make a conformant `commit` fail, and the
+three-constant set above contains nothing that can arm one — the row for
+`SECOND_HANDLE` listed the rule and `SECOND_HANDLE` cannot arm anything. The
+story reported it (EC-002) rather than minting a capability inside a rules story,
+and the human decision recorded at `_slices.md` — *"the human chose to AMEND DT-3
+and add the commit-fault capability"* — is what this row executes.
+
+*Why this is not the second declension policy `cf-40-fixture-limits-ownership.md`
+forbids.* That prohibition is on inventing a new **way** for a fixture to
+decline. This is a fourth constant under the existing one: a `Capability` whose
+reason is written by the fixture, reported through the same `RuleOutcome::Skipped`
+and rendered by the same `skip_line`. No new skip type, no new line shape, and
+**no new testkit-written reason** — which is why it is required rather than
+defaulted, note 4 below.
+
+Four notes on that table, each load-bearing:
 
 1. **`READS_THROUGH_BATCH` is a probe const, not a fixture const.** The decline is
    a property of the batch *type*, not of the fixture's environment, and PS-12
@@ -293,9 +315,26 @@ Three notes on that table, each load-bearing:
 3. **The set is not empty, and that matters.** The UX brief's *"what would make
    this brief wrong"* names the failure: a projection fixture with **no declinable
    capability at all** would make the reporting discipline decorative on this port,
-   and a suite with nothing to decline cannot demonstrate initiative AC-05. Two of
-   the three rows above are declinable, so the failure does not obtain — recorded
-   here as the finding it would have been, rather than left to be noticed later.
+   and a suite with nothing to decline cannot demonstrate initiative AC-05. Three
+   of the four rows above are declinable, so the failure does not obtain —
+   recorded here as the finding it would have been, rather than left to be noticed
+   later. As of the amendment it is more than not-empty: `COMMIT_FAULT` is the
+   first projection capability a *landed rule* reads and the reference fixture
+   declines, so the reporting discipline is demonstrated on real values rather
+   than reserved for a later story. The suite run against `MemoryProjectionFixture`
+   prints exactly one `SKIP` line.
+4. **`COMMIT_FAULT` is required, not defaulted, and that is the whole of why it
+   stays inside one policy.** `Fixture::MID_BATCH_FAULT` — the event-store
+   constant this one is modelled on — carries a default declension, and a default
+   has to carry a **testkit-written** reason. DT-3 permits exactly one such
+   reason (`NO_CEILING_REASON`) and permits it because *"this store has no
+   ceiling"* is the same sentence for every store that says it. *Why a particular
+   store cannot make a commit fail* is not: an in-memory map applies both halves
+   under one lock, a one-shot HTTP backend has no interactive transaction to
+   abort, and a pooled adapter usually can. So the constant is required, the
+   fixture writes the reason, and the family still adds no second reason-writer.
+   The cost is one line per fixture; the return is that no fixture author is left
+   un-asked.
 
 **DT-3's answer survives the constrained target, and this is the half a plausible
 resolution gets wrong.** `RuleOutcome::report` is a **no-op on

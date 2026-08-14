@@ -111,15 +111,18 @@
 //! deliberately no second one: [`ProjectionFixture`] carries
 //! [`Capability`] constants, a rule it declines returns the same
 //! [`RuleOutcome::Skipped`] and prints the same one-line `SKIP` shape, so an
-//! author reading one CI log never has to learn two. Two constants, both
+//! author reading one CI log never has to learn two. Three constants, all
 //! answered deliberately —
 //! [`SECOND_HANDLE`](ProjectionFixture::SECOND_HANDLE), which is a **MUST**
-//! because every rule in the family reads back through a fresh handle, and
+//! because every rule in the family reads back through a fresh handle;
 //! [`RESET_REFUSAL`](ProjectionFixture::RESET_REFUSAL), which a store with no
-//! protection policy declines honestly. A third switch, `READS_THROUGH_BATCH`,
-//! is on the *probe* rather than on the fixture, because whether a batch can be
-//! read through is a property of the batch type rather than of the fixture's
-//! environment.
+//! protection policy declines honestly; and
+//! [`COMMIT_FAULT`](ProjectionFixture::COMMIT_FAULT), which is how a store says
+//! whether it can make a `commit` report failure — the only way to observe PS-1's
+//! second conjunct, and something no caller can do from outside. A fourth
+//! switch, `READS_THROUGH_BATCH`, is on the *probe* rather than on the fixture,
+//! because whether a batch can be read through is a property of the batch type
+//! rather than of the fixture's environment.
 //!
 //! `event_store_model_conformance!` generates operation sequences and checks the
 //! store against a model of the log rather than against a worked example. It

@@ -41,8 +41,39 @@
 //! workspace red, and there is no exemption list.
 //!
 //! What a green run still does **not** prove is that this family is complete.
-//! Nine of §4.11's seventeen rules are unwritten, and the reset and read-through
-//! families are where they land.
+//! Eight of §4.11's seventeen rules are unwritten: `fresh_projection_has_no_checkpoint`
+//! and the four `reset_*` rules land with the reset family, and the three
+//! read-through and rebuild rules with theirs.
+//!
+//! # One rule here is answered by a skip against every fixture in this workspace
+//!
+//! [`failed_commit_leaves_both_unchanged`](rules::failed_commit_leaves_both_unchanged)
+//! is PS-1's second conjunct — the arm about a commit that *reported failure* —
+//! and it is gated on
+//! [`COMMIT_FAULT`](crate::ProjectionFixture::COMMIT_FAULT), which no fixture
+//! outside the mutant harness supports. `MemoryProjectionFixture` declines it,
+//! honestly and for a reason it states: the reference store applies both halves
+//! under one write lock and has no write that can be made to fail. So a run
+//! against the oracle prints one `SKIP` line for that rule, and an adapter that
+//! wants the conjunct checked has to supply the fault its own store can inject.
+//!
+//! Read that as the answer to "does a green run mean anything here": for seven
+//! of the eight landed rules it means the store was driven and asserted about;
+//! for this one it means what the `SKIP` line says. The rule is not decorative —
+//! `PartialCommitStore` fails it by name in
+//! `tests/projection_mutation_coverage.rs` — but the demonstration lives against
+//! a fixture that can arm a fault, and the reference fixture is not one.
+//!
+//! One stale sentence, named here because it cannot be repaired here. PS-1's
+//! **Rejects:** prose says *"Today no rule can fail it"*
+//! (`spec/SPECIFICATION.md:4756-4758`), which stopped being true when
+//! `CheckpointOnlyStore` landed and is further from true now. PS-1 is
+//! `[FROZEN]`, so the repair is a new decision atom under the repair-frozen-clause
+//! discipline rather than a line edit, and it belongs to
+//! `unstable-projection-gate-and-clause-disposition` along with the rest of the
+//! PS-1 – PS-37 maturity sweep. Nothing in this crate may edit that sentence;
+//! this paragraph exists so an adapter author reading the code is not the last
+//! person to find out it is stale.
 
 /// Panics unless the projection fixture supports the named capability.
 ///
@@ -64,13 +95,13 @@
 /// sharper — PS-1 is only observable from outside the connection that made the
 /// commit — and that is what this one says.
 ///
-/// # Why there is no `require!` beside it yet
+/// # Its sibling
 ///
-/// Nothing gates on a declinable capability yet: `RESET_REFUSAL`'s rule is
-/// PS-18's and arrives with the reset family. A `require!` defined now would be
-/// an unused macro — a `-D warnings` failure under `unused_macros` — and, worse,
-/// a gate nothing calls, which is the decorative shape this repository's own
-/// corollary names. It lands with the first rule that needs it.
+/// `require!` below is the declinable half, and it landed with the first rule
+/// that needed it — `failed_commit_leaves_both_unchanged`, gated on
+/// `COMMIT_FAULT`. Until that rule existed there was nothing for it to gate, and
+/// a `require!` defined earlier would have been an unused macro (a `-D warnings`
+/// failure under `unused_macros`) and, worse, a gate nothing calls.
 macro_rules! must {
     ($fixture:ident : $capability:ident) => {
         if let Some(reason) = <$fixture as $crate::ProjectionFixture>::$capability.reason() {
@@ -89,6 +120,43 @@ macro_rules! must {
                  is the reference implementation. Reason given: {reason}",
                 ::core::stringify!($capability),
             );
+        }
+    };
+}
+
+/// Returns a reported skip unless the projection fixture supports the named
+/// capability.
+///
+/// `must!`'s declinable sibling, and the same second definition rather than a
+/// shared one for the same single reason: the trait the capability is looked up
+/// on is [`ProjectionFixture`](crate::ProjectionFixture), and `suite.rs`'s
+/// `require!` resolves `<$fixture as $crate::Fixture>::$capability`, which a
+/// projection fixture does not implement.
+///
+/// Everything else is the event-store macro's, deliberately unchanged: the same
+/// [`RuleOutcome::Skipped`](crate::RuleOutcome::Skipped) return, carrying
+/// `stringify!` of the associated const's own identifier so the author is told
+/// the name of the thing they can change, and the fixture's own stated reason so
+/// the CI log carries the adapter's words rather than the testkit's. There is no
+/// projection-local skip type and no second line shape, because an author
+/// reading one CI log must not have to learn two.
+///
+/// # Where it may be used, and where `must!` is required instead
+///
+/// Only when the rule's **entire** content needs the capability, and only for a
+/// capability a fixture may honestly decline. `SECOND_HANDLE` is not one — a
+/// fixture that cannot open a second handle cannot observe PS-1 at all — so
+/// every rule in this family spells `must!` for it, and the one rule that also
+/// spells `require!` spells the `must!` **first**: a fixture that declines both
+/// is failing the contract, and reporting that as a skip would hide it behind
+/// the trade.
+macro_rules! require {
+    ($fixture:ident : $capability:ident) => {
+        if let Some(reason) = <$fixture as $crate::ProjectionFixture>::$capability.reason() {
+            return $crate::RuleOutcome::Skipped {
+                capability: ::core::stringify!($capability),
+                reason,
+            };
         }
     };
 }
@@ -354,6 +422,138 @@ pub mod rules {
              other: row {row:?}, checkpoint {checkpoint:?}. A store that \
              commits the checkpoint and discards the write set replays nothing \
              and skips everything the discarded batch would have written"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // PS-1's second conjunct
+    //
+    // The pair above observes a commit that succeeded. This one is the only rule
+    // in the family that observes a commit that *failed*, which is the other arm
+    // of the same clause and needs the store's co-operation to reach at all —
+    // hence the one capability gate in the family.
+    // ---------------------------------------------------------------------
+
+    /// A `commit` that reported failure left the read model and the checkpoint
+    /// exactly as they were.
+    ///
+    /// PS-1's **second conjunct**, on its own: the clause's "or not at all" arm
+    /// is a claim about the failed commit, and no other rule in this family ever
+    /// sees one. [`commit_is_atomic_with_the_read_model`] observes the coupling
+    /// after a commit that *succeeded*, which is the first conjunct; a store can
+    /// keep that one perfectly and still leave a half-applied batch behind
+    /// whenever a write fails, and every rule above it would stay green.
+    ///
+    /// **Rejects:** `PartialCommitStore` — an adapter that applies its
+    /// read-model writes row by row and writes the checkpoint last, so a failure
+    /// on the checkpoint write leaves the rows durable while `commit` reports the
+    /// error honestly. It is the same adapter family `CheckpointOnlyStore` comes
+    /// from — a read model that does not live in the store the checkpoint lives
+    /// in — with the failure arriving one statement later, and it is what any
+    /// adapter that forgot the transaction does the first time a write fails.
+    ///
+    /// # Why this rule is capability-gated, and the capability is the fixture's
+    ///
+    /// Nothing a caller holds can make a conformant `commit` fail; that is the
+    /// property under test. So the injection belongs to the adapter — a trigger
+    /// that raises on the third row, a `CHECK` armed for one write, a connection
+    /// killed between the two halves — and
+    /// [`COMMIT_FAULT`](crate::ProjectionFixture::COMMIT_FAULT) is where a store
+    /// says whether it has one. A store with no way to fail a commit declines and
+    /// this rule reports a skip, which is an honest hole rather than a silent
+    /// pass. `MemoryProjectionFixture` is exactly such a store, so the reference
+    /// run prints that skip: the oracle cannot demonstrate this conjunct, and
+    /// saying so is the whole of CF-18.
+    ///
+    /// # Why the armed commit is *required* to fail
+    ///
+    /// The `Err` assertion below is a demand on the **fixture**, not on the
+    /// store, and the distinction is what keeps the rule inside PS-1. A store is
+    /// free to absorb a fault and commit anyway; what it may not do is have a
+    /// fixture that declares `COMMIT_FAULT` and arms something the store shrugs
+    /// off, because "no fault fired" and "the fault fired and everything landed"
+    /// are the same `Ok` over the same full state, and a rule that accepted both
+    /// would be a green result about a store nothing had ever faulted. That is
+    /// CF-39's argument on the event-store side, where it is a second rule
+    /// (`arming_a_mid_batch_fault_makes_the_append_fail`) because ES-18 states
+    /// the swallow permission in the clause itself and the two claims had to be
+    /// separable. PS-1 states no such permission, so the demand is folded in here
+    /// as this rule's precondition rather than split into a rule of its own — and
+    /// the residue that split would have bought is named rather than hidden: a
+    /// fixture whose `arm_commit_fault` has an *empty body* is caught by this
+    /// assertion, but no fixture-level mutant is registered for it, because
+    /// nothing in the workspace declares the capability yet except the mutant
+    /// harness. The trait's provided body panics, which is what catches the
+    /// commoner mistake of declaring the capability and forgetting the override.
+    ///
+    /// **What it deliberately does not assert.** *Progress.* The checkpoint is
+    /// compared against what a fresh handle saw **before** the faulted commit,
+    /// exactly as [`rollback_leaves_both_unchanged`] does, so a store that
+    /// committed nothing has an unchanged checkpoint here and is rejected by
+    /// [`commit_advances_the_checkpoint`] instead, which is the rule that owns
+    /// that defect.
+    pub async fn failed_commit_leaves_both_unchanged<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!` first, and the order is load-bearing: a fixture that declines
+        // both is failing the contract, and reporting that as a skip would hide
+        // a fixture nothing can observe PS-1 through behind a trade it is
+        // entitled to make.
+        must!(F: SECOND_HANDLE);
+        require!(F: COMMIT_FAULT);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("failed_commit_leaves_both_unchanged");
+
+        let anchored = SequencePosition::FIRST;
+
+        // The anchor, so that "unchanged" is a *recorded* state rather than the
+        // empty one: a store that preserved `NeverRun` and no rows preserved
+        // nothing anybody could have broken.
+        let mut anchor = writer.begin();
+        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        commit_ok(&writer, anchor, &id, anchored, Authority::Live).await;
+
+        let before = checkpoint_ok(&fixture.connect().await, &id).await;
+
+        fixture.arm_commit_fault().await;
+
+        let mut faulted = writer.begin();
+        writer.probe_write(&mut faulted, PROBE_KEY, SECOND_VALUE);
+        let outcome = writer
+            .commit(faulted, &id, after(anchored), Authority::Live)
+            .await;
+
+        assert!(
+            outcome.is_err(),
+            "a fixture declaring `COMMIT_FAULT` supported MUST arm a fault its \
+             store cannot absorb, so that the next `commit` answers `Err`. This \
+             one armed a fault and the commit succeeded, which is what a fixture \
+             whose `arm_commit_fault` has an empty body does — and it turns this \
+             rule into a green result about a store nothing has faulted. A store \
+             that can absorb every fault its fixture is able to arm must DECLINE \
+             the capability with that as its stated reason. Got {outcome:?}"
+        );
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            None,
+            "a commit that reported failure must leave the read model as it \
+             was, and a fresh handle saw a row the failed batch carried. An \
+             adapter that applies its rows one statement at a time and writes \
+             the checkpoint last keeps those rows when the checkpoint write \
+             fails, reports the error honestly, and has silently applied part \
+             of a batch its caller believes was refused"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            before,
+            "a commit that reported failure must leave the checkpoint exactly \
+             as the last successful commit left it"
         );
 
         RuleOutcome::Ran
@@ -779,6 +979,9 @@ macro_rules! for_each_projection_store_rule {
             // --- The baseline pair -----------------------------------------
             commit_advances_the_checkpoint,
             commit_is_atomic_with_the_read_model,
+
+            // --- PS-1's second conjunct ------------------------------------
+            failed_commit_leaves_both_unchanged,
 
             // --- The commit path, differentially ---------------------------
             rollback_leaves_both_unchanged,

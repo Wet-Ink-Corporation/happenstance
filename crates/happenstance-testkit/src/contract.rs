@@ -419,10 +419,11 @@ pub trait Fixture {
 ///
 /// # Capability constants, and where an empty reason fires
 ///
-/// Two constants, both required and both answered deliberately:
+/// Three constants, all required and all answered deliberately:
 /// [`SECOND_HANDLE`](Self::SECOND_HANDLE) is a MUST, and
-/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) is the port's one genuinely
-/// declinable capability. A declined one must name a reason —
+/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) and
+/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) are the port's two genuinely
+/// declinable capabilities. A declined one must name a reason —
 /// [`Capability::declined`] rejects the empty string in a `const fn` `assert!`
 /// — but on an **associated** const that rejection arrives later than one would
 /// like. An associated const is evaluated lazily, only when monomorphised code
@@ -447,6 +448,9 @@ pub trait Fixture {
 ///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 ///     // The whole difference from the block below.
 ///     const RESET_REFUSAL: Capability = Capability::declined("");
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store cannot make a commit fail once it has been accepted",
+///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
 ///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
@@ -485,6 +489,9 @@ pub trait Fixture {
 ///         "this store holds no protection policy, so there is no projection it \
 ///          could decline to reset",
 ///     );
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store cannot make a commit fail once it has been accepted",
+///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
 ///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
@@ -515,6 +522,10 @@ pub trait Fixture {
 ///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 ///     const RESET_REFUSAL: Capability = Capability::declined(
 ///         "this store protects nothing, so it has no reset to refuse",
+///     );
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store applies both halves of a commit under one lock and has \
+///          no write it can be made to fail between them",
 ///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
@@ -590,6 +601,69 @@ pub trait ProjectionFixture {
     /// decision, and a fixture that has to grow a constant later is a fixture
     /// whose author was never asked the question.
     const RESET_REFUSAL: Capability;
+
+    /// Whether this fixture can make a `commit` **report failure**.
+    ///
+    /// PS-1's second conjunct is a claim about a commit that failed: the read
+    /// model and the checkpoint must be exactly as they were. Nothing a caller
+    /// holds can make a conformant `commit` fail — that is the property under
+    /// test — so, exactly as with [`Fixture::MID_BATCH_FAULT`], the injection
+    /// belongs to the adapter: a trigger that raises on the third row, a `CHECK`
+    /// armed for one write, a connection killed between the read-model write and
+    /// the checkpoint write. Every store that can do it does it differently,
+    /// which is what makes it a capability rather than testkit machinery.
+    ///
+    /// # Why it is *required* rather than defaulted
+    ///
+    /// [`Fixture::MID_BATCH_FAULT`] carries a default declension and this one
+    /// deliberately does not, for [`RESET_REFUSAL`](Self::RESET_REFUSAL)'s
+    /// reason: a default has to carry a *testkit-written* reason, and this
+    /// family's declension policy is that the fixture writes it. "This store has
+    /// no ceiling" is the same sentence for every store that says it, which is
+    /// why [`NO_CEILING_REASON`] exists; *why a particular store cannot make a
+    /// commit fail* is not — an in-memory map applies both halves under one lock,
+    /// a one-shot HTTP backend has no interactive transaction to abort, and a
+    /// pooled adapter usually can. The cost is one line per fixture and the
+    /// return is that no fixture author is left un-asked.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// [`failed_commit_leaves_both_unchanged`](crate::projection::rules::failed_commit_leaves_both_unchanged)
+    /// arms the fault and requires the next `commit` to answer `Err`. A fixture
+    /// whose [`arm_commit_fault`](Self::arm_commit_fault) does nothing would
+    /// otherwise turn that rule into a green result about a store nothing ever
+    /// faulted, which is CF-39's argument one port over. So a store that can
+    /// absorb every fault its fixture is able to arm MUST **decline** this
+    /// capability with that as its stated reason, rather than declare it and
+    /// contribute an `Ok`.
+    const COMMIT_FAULT: Capability;
+
+    /// Arms the store so that the **next** `commit` fails.
+    ///
+    /// The fault fires once, and where inside the commit it fires is the
+    /// adapter's business: what PS-1's second conjunct requires is that a commit
+    /// which reported failure left the read model and the checkpoint exactly as
+    /// they were, whichever half the store had got to.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for
+    /// [`Fixture::arm_mid_batch_fault`]'s reason and with the same two ways of
+    /// reaching it: a fixture that declares [`COMMIT_FAULT`](Self::COMMIT_FAULT)
+    /// supported and forgets the override, or a rule that reached here without a
+    /// gate. That is what stops "declared and never implemented" from passing
+    /// vacuously — it aborts loudly instead.
+    fn arm_commit_fault(&self) -> impl Future<Output = ()> {
+        let _ = self;
+        async move {
+            panic!(
+                "`ProjectionFixture::arm_commit_fault` was called but not \
+                 implemented: either this fixture declares COMMIT_FAULT \
+                 supported and does not override it, or a rule reached it \
+                 without a `require!(F: COMMIT_FAULT)` gate"
+            );
+        }
+    }
 
     /// Opens a handle onto this fixture's backing store.
     ///

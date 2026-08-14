@@ -616,6 +616,11 @@ impl DecliningProjectionFixture {
     pub(crate) const RESET_REFUSAL_REASON: &'static str = "this instrument declines everything, and the store under it has no \
          protection policy to refuse a reset with in any case";
 
+    /// The reason this fixture gives for declining `COMMIT_FAULT`.
+    pub(crate) const COMMIT_FAULT_REASON: &'static str = "this instrument declines everything, and the store under it applies both \
+         halves of a commit under one lock, so it has no write that could be \
+         made to fail in any case";
+
     /// A fresh instrument over a completely correct projection store.
     pub(crate) fn new() -> Self {
         Self {
@@ -630,6 +635,7 @@ impl ProjectionFixture for DecliningProjectionFixture {
 
     const SECOND_HANDLE: Capability = Capability::declined(Self::SECOND_HANDLE_REASON);
     const RESET_REFUSAL: Capability = Capability::declined(Self::RESET_REFUSAL_REASON);
+    const COMMIT_FAULT: Capability = Capability::declined(Self::COMMIT_FAULT_REASON);
 
     async fn connect(&self) -> Self::Store {
         let taken = self.connects.get() + 1;
@@ -654,12 +660,17 @@ impl ProjectionSubject for DecliningProjectionFixture {
 /// The mirror instrument: the reference projection fixture, driven through the
 /// same enumeration.
 ///
-/// It supports everything the two baseline rules ask for, so **nothing may be
-/// skipped against it** — a skip there means a gate reads the wrong const. It
-/// declines `RESET_REFUSAL` honestly, because `MemoryProjectionStore` has no
-/// protection policy to refuse a reset with, and no rule reads that constant
-/// yet; the day one does, this fixture starts reporting a skip and the
-/// projection `MUST_SKIP` list is what will have to be told about it.
+/// It supports `SECOND_HANDLE`, which every rule in the family needs, so a skip
+/// against it can only ever be one of the capabilities it honestly declines —
+/// anything else means a gate reads the wrong const.
+///
+/// It declines two, for reasons that are the store's rather than the fixture's.
+/// `RESET_REFUSAL`, because `MemoryProjectionStore` has no protection policy to
+/// refuse a reset with, and no rule reads that constant yet. And `COMMIT_FAULT`,
+/// because that store applies both halves of a commit under one write lock and
+/// has no write that can be made to fail — which *is* read, by
+/// `failed_commit_leaves_both_unchanged`, so this fixture reports exactly one
+/// skip and `projection_capability_skips_are_reported` asserts on it by name.
 impl ProjectionSubject for MemoryProjectionFixture {
     const NAME: &'static str = "MemoryProjectionFixture";
 

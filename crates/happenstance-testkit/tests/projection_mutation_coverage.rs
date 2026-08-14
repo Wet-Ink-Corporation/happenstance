@@ -238,8 +238,9 @@ struct Declared {
 /// denominator is an author's choice, so a fraction says how representative the
 /// author was while reading as though it said how good the suite is.
 ///
-/// *Covered:* the two ways a commit's halves come apart — the checkpoint written
-/// without the read model, and a commit that returns `Ok` having written neither.
+/// *Covered:* the three ways a commit's halves come apart — the checkpoint
+/// written without the read model, a commit that returns `Ok` having written
+/// neither, and a commit that returns `Err` having written one.
 ///
 /// *Not covered, and each of these is a real axis rather than an oversight:*
 ///
@@ -248,11 +249,18 @@ struct Declared {
 ///   this binary proves the harness can report a *pass* it did not have to
 ///   report. See this file's module documentation for why an empty positive
 ///   control is worse than none.
-/// * **Every rule §4.11 lists that has not landed yet.** Nine of the seventeen
+/// * **Every rule §4.11 lists that has not landed yet.** Eight of the seventeen
 ///   are still owed at the time of writing, and CF-1 is what forces a mutant to
 ///   arrive with each of them rather than after them. The uncovered *axes* are
 ///   therefore the rules themselves, and they are enumerated in
 ///   `spec/SPECIFICATION.md:5658-5671` rather than restated here.
+/// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
+///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
+///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
+///   commit that never failed — is what the event-store family registers as
+///   `NoopFaultFixture` and this binary does not. The rule's first assertion
+///   rejects it, so the hole is in the *demonstration* rather than in the suite,
+///   and it is named here rather than left to be inferred from an absence.
 /// * **A store with a medium outside the process.** Every store here is a
 ///   `BTreeMap` behind an `Rc`, so nothing in this binary can model a defect
 ///   whose observation needs a real restart, a real connection pool or a real
@@ -349,6 +357,35 @@ const REGISTRY: &[Declared] = &[
                 "one commit advances exactly one projection",
             ),
         ],
+    },
+    Declared {
+        name: "PartialCommitStore",
+        kind: Kind::Mutant,
+        // Exactly one, and by construction rather than by luck: its defect lives
+        // in `commit_under_fault`, which the correct core reaches only after
+        // `arm_commit_fault` has been called — and the only rule that arms one is
+        // the rule this store is written for. Every other rule drives the correct
+        // core unchanged.
+        fails: &["failed_commit_leaves_both_unchanged"],
+        provenance: "an adapter that writes its read-model rows one statement at a time and \
+                     writes the checkpoint last, with no transaction around the pair. When \
+                     the checkpoint write raises — a constraint, a lost connection, a \
+                     deadlock victim — it reports the failure honestly, and the rows it \
+                     already wrote stay. It is `CheckpointOnlyStore`'s adapter family with \
+                     the failure one statement later, and it is what every adapter that \
+                     forgot the transaction does the first time a write fails. §4.11 names \
+                     the shape for this rule: \"a partial apply that reports failure\"",
+        mode: FailureMode::Assertion,
+        // Pinned at the read-model half specifically. The rule carries three
+        // assertions — the fixture's armed fault must fire, the read model must
+        // be unchanged, the checkpoint must be — and this store is supposed to
+        // trip the middle one. Were it ever to start failing at the first, the
+        // row would be certifying that the *fixture* is broken while reading as
+        // proof that the rule catches a partial apply.
+        expect: &[(
+            "failed_commit_leaves_both_unchanged",
+            "a commit that reported failure must leave the read model as it was",
+        )],
     },
     Declared {
         name: "UnrolledBackStore",
@@ -457,6 +494,7 @@ macro_rules! for_each_projection_mutant {
         $($callback)+! {
             crate::correct::MutantFixture<crate::mutants::CheckpointOnlyStore>,
             crate::correct::MutantFixture<crate::mutants::UncommittedTransactionStore>,
+            crate::correct::MutantFixture<crate::mutants::PartialCommitStore>,
 
             crate::correct::MutantFixture<crate::mutants::UnrolledBackStore>,
             crate::correct::MutantFixture<crate::mutants::PooledConnectionStore>,

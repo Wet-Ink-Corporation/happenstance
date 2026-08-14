@@ -43,9 +43,10 @@ not the same as what a user needed to be told.
   `happenstance-core`'s `conformance` feature unconditionally; that adds no
   dependency and no feature of its own.
 - **A declined projection capability is a reported skip, never a silent
-  absence.** `ProjectionFixture` gains two `Capability` constants —
-  `SECOND_HANDLE`, which is a **MUST**, and `RESET_REFUSAL`, which a store with
-  no protection policy declines honestly — in the vocabulary the event-store
+  absence.** `ProjectionFixture` gains three `Capability` constants —
+  `SECOND_HANDLE`, which is a **MUST**; `RESET_REFUSAL`, which a store with
+  no protection policy declines honestly; and `COMMIT_FAULT`, which says
+  whether the store can be made to fail a `commit` — in the vocabulary the event-store
   family already uses, with no projection-local skip type and no second line
   shape. The defect this machinery detects is the one CF-18 names by hand: a
   capability-gated rule `#[cfg]`-ed out of the expansion, so that an adapter
@@ -86,7 +87,24 @@ not the same as what a user needed to be told.
   Its wrong implementation, `CheckpointOnlyStore`, is registered in the
   projection mutant registry and fails this rule by name, so the rejection is
   demonstrated rather than documented.
-- **A projection mutant registry, and eight wrong stores in it.** The projection
+- **`failed_commit_leaves_both_unchanged`** — PS-1's *second* conjunct, the arm
+  about a commit that reported failure, and the first projection rule gated on a
+  capability. The defect it detects is a partial apply: an adapter that writes
+  its read-model rows one statement at a time and writes the checkpoint last,
+  with no transaction around the pair, so a failure on the checkpoint write
+  leaves the rows durable while `commit` reports the error honestly. The caller
+  is told the batch was refused; part of it has silently been applied, and the
+  checkpoint that would have recorded it is not there. Every other rule in the
+  family only ever sees a commit *succeed*, so a store can keep the first
+  conjunct perfectly and still leak half of every failed batch. Reaching the
+  failure needs the store's co-operation — nothing a caller holds can make a
+  conformant `commit` fail — so the rule is gated on the new
+  `ProjectionFixture::COMMIT_FAULT` and reports a skip carrying the fixture's own
+  reason where the store has no fault to arm. `MemoryProjectionFixture` is such a
+  store and declines, so the reference run prints exactly one `SKIP` line;
+  `PartialCommitStore` is the registered wrong implementation that fails the rule
+  by name.
+- **A projection mutant registry, and nine wrong stores in it.** The projection
   suite can now be shown to *fail* something, which is a different claim from
   passing against the oracle and is the only one worth anything to an adapter
   author. `tests/projection_mutation_coverage.rs` carries a hand-written

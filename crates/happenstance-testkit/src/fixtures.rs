@@ -449,6 +449,25 @@ impl ProjectionFixture for MemoryProjectionFixture {
          oracle",
     );
 
+    // Declined, and this is the honest answer rather than a gap: the reference
+    // store's `commit` takes one write lock and applies the read-model rows and
+    // the checkpoint under it, so there is no moment between the two halves for
+    // anything to reach into and no write that can be made to fail. A fixture
+    // that claimed the capability would owe an `arm_commit_fault` that made the
+    // next commit return `Err`, and the only way to build one here would be to
+    // put fault injection into the *shipped* store to satisfy a test.
+    //
+    // The consequence is visible rather than hidden: the projection suite run
+    // against this fixture prints one `SKIP` line for
+    // `failed_commit_leaves_both_unchanged`, which is CF-18's whole point — the
+    // oracle cannot demonstrate PS-1's second conjunct, and the run says so.
+    const COMMIT_FAULT: Capability = Capability::declined(
+        "MemoryProjectionStore applies the read-model writes and the checkpoint \
+         under one write lock, so it has no write that can be made to fail and \
+         no moment between the two halves to fail in; arming a fault would mean \
+         building fault injection into a shipped store to satisfy a test",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`, for `MemoryFixture::connect`'s reason:
         // acquiring this handle is a refcount bump, and pretending otherwise

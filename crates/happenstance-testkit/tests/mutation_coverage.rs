@@ -3336,13 +3336,23 @@ mod mutation_coverage {
     /// The projection family's [`MUST_REJECT`]: every projection rule that
     /// spells `must!` rather than `require!`.
     ///
-    /// Seven of the family's eight rules are on it, and every one belongs there
+    /// Eight of the family's nine rules are on it, and every one belongs there
     /// rather than being gated with `require!`, because every one reads the read
     /// model or the checkpoint back through a **fresh handle**. A projection
     /// fixture that cannot open a second handle cannot observe PS-1 — the
     /// coupling the whole port exists for — at all, so declining it is a fixture
     /// that does not meet the contract rather than a trade the suite may record
     /// and move past.
+    ///
+    /// `failed_commit_leaves_both_unchanged` is on it *and* spells
+    /// `require!(F: COMMIT_FAULT)` — the family's one declinable gate. It is
+    /// here rather than in [`PROJECTION_MUST_SKIP`] because the rule spells the
+    /// `must!` **first**, deliberately: a fixture declining both is failing the
+    /// contract, and reporting that as a skip would file a broken fixture under
+    /// a trade it was entitled to make. The skip path is therefore demonstrated
+    /// against the *reference* fixture, which supports `SECOND_HANDLE` and
+    /// declines `COMMIT_FAULT` — see the tail of
+    /// [`projection_capability_skips_are_reported`].
     ///
     /// **The eighth is absent on purpose, and the absence is the interesting
     /// part.** `commit_rejects_a_foreign_batch` wants two *isolated stores*, not
@@ -3358,6 +3368,7 @@ mod mutation_coverage {
     const PROJECTION_MUST_REJECT: &[&str] = &[
         "commit_advances_the_checkpoint",
         "commit_is_atomic_with_the_read_model",
+        "failed_commit_leaves_both_unchanged",
         "rollback_leaves_both_unchanged",
         "dropped_batch_leaves_store_usable",
         "commit_accepts_a_position_the_batch_did_not_write",
@@ -3365,30 +3376,30 @@ mod mutation_coverage {
         "distinct_projections_advance_independently",
     ];
 
-    /// [`PROJECTION_MUST_REJECT`]'s mirror, and **it is empty on purpose**.
+    /// [`PROJECTION_MUST_REJECT`]'s mirror **against this instrument**, and it
+    /// is empty for a reason that is now about ordering rather than about
+    /// absence.
     ///
-    /// No projection rule spells `require!` yet. `RESET_REFUSAL` is the
-    /// projection port's one genuinely declinable capability, and the rule that
-    /// reads it — `refused_reset_changes_nothing`, PS-18's — is `reset-rules`'s
-    /// (HS-S0012), not this story's; every one of §4.11's seventeen rules is
-    /// claimed by a sibling story, so taking one here to make this list
-    /// non-empty would be scope theft dressed as evidence.
+    /// One projection rule spells `require!` —
+    /// `failed_commit_leaves_both_unchanged`, gated on `COMMIT_FAULT` — and it
+    /// does *not* skip here, because it spells `must!(F: SECOND_HANDLE)` first
+    /// and this instrument declines that too. So against a fixture that declines
+    /// everything it panics, which is the correct answer and why it is in
+    /// [`PROJECTION_MUST_REJECT`] instead.
     ///
-    /// **So the skip half below is a guard on future registrations and nothing
-    /// more, and it is worth saying so rather than letting it read as a
-    /// demonstrated skip** — the same admission
-    /// `capability_skips_are_reported` makes in the same words about its own
-    /// `SECOND_HANDLE` loop. What *is* demonstrated here, on real values and not
-    /// vacuously, is the MUST arm: [`PROJECTION_MUST_REJECT`]'s two rules
-    /// genuinely panic against a fixture that declines `SECOND_HANDLE`, carrying
-    /// that fixture's own stated reason.
+    /// **The skip arm is therefore demonstrated at the other end of this test,
+    /// against the reference fixture**, on real values: `MemoryProjectionFixture`
+    /// supports `SECOND_HANDLE`, declines `COMMIT_FAULT` with its own stated
+    /// reason, and reports exactly one skip. That is a change from the state this
+    /// list was written in, when nothing in the workspace could demonstrate a
+    /// projection skip at all.
     ///
-    /// The forcing function is named and in-project:
-    /// `read-through-and-rebuild-rules` (HS-S0013) lands the
-    /// `READS_THROUGH_BATCH = false` instance, and `reset-rules` lands
-    /// `RESET_REFUSAL`'s. On the day either arrives, the two-direction check
-    /// below fails until this list is told about it — which is the whole reason
-    /// an empty list is written down rather than the loop being omitted.
+    /// This list stays, and stays empty, as the guard on the *next* gate: a rule
+    /// gated on a declinable capability the declining instrument is the only
+    /// fixture to decline — `RESET_REFUSAL`'s
+    /// `refused_reset_changes_nothing` (`reset-rules`, HS-S0012) is the nearest —
+    /// starts skipping here and fails the two-direction check below until it is
+    /// listed.
     const PROJECTION_MUST_SKIP: &[&str] = &[];
 
     /// Every outcome against the declining instrument is one that instrument's
@@ -3418,7 +3429,8 @@ mod mutation_coverage {
                 );
                 assert!(
                     *reason == DecliningProjectionFixture::SECOND_HANDLE_REASON
-                        || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON,
+                        || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON
+                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON,
                     "`{rule}` skipped with a reason the fixture never gave: \
                      {reason:?}. The reason is the only record of the trade, so \
                      it has to be the adapter's own words"
@@ -3512,19 +3524,55 @@ mod mutation_coverage {
             );
         }
 
-        // ---- And the reference fixture skips nothing -----------------------
+        // ---- And the reference fixture skips exactly what it declines ------
+        //
+        // This is the skip arm demonstrated on real values, and it is an
+        // *equality* rather than an emptiness check on purpose. "Skips nothing"
+        // was the assertion while every capability a rule read was supported;
+        // relaxing it to "may skip" the moment one rule acquired a gate would
+        // have turned it into a check that passes however many rules quietly
+        // stop running. So the set is pinned: exactly the rules gated on a
+        // capability this fixture declines, and nothing else.
         let capable = run_projection_subject::<MemoryProjectionFixture>();
-        assert!(
-            capable.skipped().is_empty(),
-            "`{}` supports every capability the registered rules ask for, so \
-             nothing may be skipped against it — a skip here means a gate reads \
-             the wrong const: {:?}",
-            capable.name,
-            capable.skipped()
+        assert_eq!(
+            capable.skipped(),
+            vec!["failed_commit_leaves_both_unchanged"],
+            "`{}` supports every capability the registered rules ask for except \
+             `COMMIT_FAULT`, which the reference store cannot offer — it applies \
+             both halves of a commit under one write lock. So exactly one rule \
+             may skip against it. A rule that joined this set means a gate reads \
+             the wrong const or a capability was declined to turn a red build \
+             green; a rule that left it means the gate went away",
+            capable.name
         );
+
+        // And the skip carries the capability an author can change and the
+        // fixture's own words, rather than a testkit paraphrase.
+        let stated =
+            <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
+                .reason()
+                .expect("the reference fixture declines COMMIT_FAULT");
+        assert_eq!(
+            capable
+                .verdict("failed_commit_leaves_both_unchanged")
+                .map(Verdict::describe),
+            Some(
+                Verdict::Skipped {
+                    capability: "COMMIT_FAULT",
+                    reason: stated,
+                }
+                .describe()
+            ),
+            "the skip must name the associated const an adapter author can \
+             actually change and carry the fixture's own stated reason — \
+             compared against the fixture's own `const`, never against a literal \
+             repeated here, which is what would let the report carry someone \
+             else's sentence while this test stayed green"
+        );
+
         for (rule, verdict) in &capable.outcomes {
             assert!(
-                matches!(verdict, Verdict::Passed),
+                matches!(verdict, Verdict::Passed | Verdict::Skipped { .. }),
                 "`{rule}` did not pass against the reference projection fixture, \
                  which is the oracle: {}",
                 verdict.describe()
@@ -3536,13 +3584,16 @@ mod mutation_coverage {
     /// it, and is not empty.
     ///
     /// The projection family's capability set is
-    /// `RESET_REFUSAL` and `SECOND_HANDLE` on the fixture, both with
-    /// **fixture-written** reasons, plus `READS_THROUGH_BATCH` on
+    /// `SECOND_HANDLE`, `RESET_REFUSAL` and `COMMIT_FAULT` on the fixture, all
+    /// three with **fixture-written** reasons, plus `READS_THROUGH_BATCH` on
     /// `ProjectionProbe` rather than on the fixture — which is why no assertion
     /// here mentions it. The family therefore adds **no** testkit-written
     /// reason: there is no projection counterpart to `NO_CEILING_REASON`,
     /// because the projection port declares no numeric limits and never reaches
-    /// the surface that constant exists for.
+    /// the surface that constant exists for. `COMMIT_FAULT` is the amendment
+    /// DT-3 took on 2026-08-14, and it arrived under the same one policy — it is
+    /// required rather than defaulted precisely so no testkit sentence has to
+    /// stand in for a store's own account of why it cannot fail a commit.
     ///
     /// What this can and cannot check. `Capability::declined("")` is rejected by
     /// a `const fn` `assert!`, but on an *associated* const that fires at
@@ -3581,15 +3632,20 @@ mod mutation_coverage {
                     "RESET_REFUSAL",
                     DecliningProjectionFixture::RESET_REFUSAL_REASON
                 ),
+                (
+                    "COMMIT_FAULT",
+                    DecliningProjectionFixture::COMMIT_FAULT_REASON
+                ),
             ],
             "the declining instrument's reported declensions must be its own \
-             two constants, in the order `projection_declines` lists them"
+             three constants, in the order `projection_declines` lists them"
         );
 
-        // The reference fixture declines exactly one thing and supports the
+        // The reference fixture declines exactly two things and supports the
         // MUST. A `RESET_REFUSAL` that started reading as supported would mean
-        // `MemoryProjectionStore` had grown a protection policy, which is a
-        // change to the oracle rather than to this test.
+        // `MemoryProjectionStore` had grown a protection policy, and a
+        // `COMMIT_FAULT` that did would mean it had grown fault injection —
+        // either is a change to the oracle rather than to this test.
         let names: Vec<&str> = capable
             .declines
             .iter()
@@ -3597,10 +3653,12 @@ mod mutation_coverage {
             .collect();
         assert_eq!(
             names,
-            ["RESET_REFUSAL"],
+            ["RESET_REFUSAL", "COMMIT_FAULT"],
             "`MemoryProjectionFixture` must support `SECOND_HANDLE` — it is a \
              MUST — and decline `RESET_REFUSAL`, because the store under it has \
-             no protection policy and cannot honestly claim one"
+             no protection policy and cannot honestly claim one, and \
+             `COMMIT_FAULT`, because that store applies both halves of a commit \
+             under one write lock and has no write that can be made to fail"
         );
     }
 

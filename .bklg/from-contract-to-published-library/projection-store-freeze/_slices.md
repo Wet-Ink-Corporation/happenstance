@@ -120,6 +120,27 @@ What that obliges, and none of it may be skipped:
 
 PS-1's second conjunct is unenforced by any conformance rule until this lands.
 
+**Executed 2026-08-14, and every obligation above discharged.** `_design.md`'s
+DT-3 table carries a fourth row with the date, what forced it and why a fourth
+constant under the existing policy is not a second declension policy;
+`crates/happenstance-testkit/src/contract.rs` grew with it, `COMMIT_FAULT`
+required rather than defaulted so no testkit-written reason had to be minted;
+`failed_commit_leaves_both_unchanged` landed gated on it; and
+`PartialCommitStore` — rows applied, checkpoint not, error returned honestly —
+fails that rule and nothing else, demonstrated by deleting its one line and
+watching the exactness meta-test go red by name. Three fixtures answer the new
+constant: the mutant harness supports it, the reference fixture and the declining
+instrument decline it with their own words, and the reference run therefore
+prints exactly one `SKIP` line — which is the first time this port has
+demonstrated CF-18's reporting discipline on real values rather than reserved it
+for a later story.
+
+The residue, named rather than left to be found: no fixture-level mutant is
+registered for an `arm_commit_fault` with an empty body. The rule's first
+assertion rejects it and the trait's provided body panics for the commoner
+mistake, so the hole is in the demonstration rather than in the suite, and
+`projection_mutation_coverage.rs`'s scope note says so.
+
 ### projection-conformance-suite — boundary, found after the slice sealed
 
 **Both stories in this slice write outside their declared boundaries, and the slice sealed

@@ -102,6 +102,47 @@ impl Defect for UncommittedTransactionStore {
     }
 }
 
+/// A commit that applies the rows, fails on the checkpoint, and says so.
+///
+/// The partial apply §4.11 names for `failed_commit_leaves_both_unchanged`, and
+/// the same adapter family `CheckpointOnlyStore` comes from with the failure
+/// arriving one statement later: the read model is written row by row on one
+/// connection, the checkpoint goes last, and when *that* write raises the adapter
+/// reports the error honestly. Nothing is dishonest about the `Err` — the caller
+/// is told the commit failed, and believes the batch was refused — but the rows
+/// are already durable, so the projection has silently applied part of a batch
+/// nobody will ever re-apply, and the checkpoint that would have recorded them is
+/// not there.
+///
+/// It is what any adapter that forgot the transaction does the first time a write
+/// fails, and it is invisible to every rule that only ever sees a commit succeed:
+/// this store passes all seven of those, because its defect is reachable only
+/// once a fault has been armed.
+///
+/// Modelled as the *rows* surviving rather than the checkpoint, because that is
+/// the order a real adapter writes in — the read model is the bulk of the work
+/// and the checkpoint is the last statement — and because the rule reads the row
+/// back first, so the assertion that fires names the half that actually leaked.
+pub(crate) struct PartialCommitStore;
+
+impl Defect for PartialCommitStore {
+    const NAME: &'static str = "PartialCommitStore";
+
+    fn commit_under_fault(
+        state: &mut State,
+        batch: &mut MutantBatch<Self>,
+        key: &str,
+        checkpoint: Checkpoint,
+    ) -> CommitError<MutantError> {
+        // The whole defect: the rows go down and the checkpoint does not, and
+        // the error is returned anyway. **Delete this method and the rule goes
+        // green** — the correct step writes neither half.
+        let _ = (key, checkpoint);
+        apply(state, batch);
+        CommitError::Store(MutantError::CommitFault)
+    }
+}
+
 /// A `rollback` that releases its connection without issuing `ROLLBACK`.
 ///
 /// The adapter whose batch is a live transaction and whose `rollback` clears the

@@ -10,11 +10,24 @@
 //! rule at all.
 //!
 //! What a green run here does **not** prove is that the suite discriminates.
-//! `MemoryProjectionStore` is the oracle: it is *supposed* to pass. The store
-//! that must fail `commit_is_atomic_with_the_read_model` — `CheckpointOnlyStore`
-//! — is `projection-mutant-registry`'s, and until it lands, this file proves the
-//! machinery runs rather than that it can fail
+//! `MemoryProjectionStore` is the oracle: it is *supposed* to pass, so this file
+//! can only ever report that the machinery ran. The discrimination claim is
+//! discharged elsewhere and by name: `CheckpointOnlyStore` is registered in
+//! `tests/projection_mutation_coverage.rs` and fails
+//! `commit_is_atomic_with_the_read_model` there, `PartialCommitStore` fails
+//! `failed_commit_leaves_both_unchanged`, and every other rule in the family has
+//! a registered store that fails exactly it
 //! ([ADR-0010](../../../.kb/decisions/0010-the-suite-must-prove-itself.md)).
+//! Read the two files together: a green run *here* plus a green run *there* is
+//! the pair that means something.
+//!
+//! One rule in this run is answered by a `SKIP` rather than a pass.
+//! `failed_commit_leaves_both_unchanged` is gated on `COMMIT_FAULT`, and the
+//! reference fixture declines it with a reason the line carries — the reference
+//! store applies both halves of a commit under one write lock and has no write
+//! that can be made to fail. That is CF-18 working rather than a gap in this
+//! file: the rule is emitted, answered and reported, and the adapter that can
+//! arm a fault is the one that gets it checked.
 //!
 //! The tokio harness, so: native only. The `wasm32` build of this same suite is
 //! `projection_conformance_wasm.rs`, and the runtime-free one is

@@ -9,38 +9,55 @@ updated: "2026-08-14"
 
 ## Findings Ledger
 
-**Nine of ten ACs satisfied. AC-001 is BLOCKED, and it is blocked on a decision
-this story is not entitled to make.** Six conformance rules landed, each with a
-registered wrong implementation that fails **exactly** it, each green against the
-oracle on both host emitters and type-checked on `wasm32`. The seventh rule,
-`failed_commit_leaves_both_unchanged`, is not in the tree.
+**Amended 2026-08-14 — ten of ten ACs satisfied.** This report first read *nine of
+ten; AC-001 is BLOCKED, and it is blocked on a decision this story is not entitled
+to make.* That was the correct answer at the time and the escalation worked: the
+decision came back (`_slices.md`, *commit-atomicity-and-mutants — human decision*),
+DT-3 was **amended** to add a commit-fault capability rather than the rule being
+descoped, and the seventh rule landed with the capability, the gate and the mutant
+the amendment obliged. The block is kept in the row below rather than erased,
+because the record of *how* the rule arrived is the point: it arrived by a scope
+decision, not by an implementer deciding a signed-off enumeration was one constant
+short.
+
+Seven conformance rules landed, each with a registered wrong implementation that
+fails **exactly** it, each green against the oracle on both host emitters and
+type-checked on `wasm32`. One of the seven —
+`failed_commit_leaves_both_unchanged` — is answered by a **reported skip** against
+the reference fixture rather than by a pass, because the oracle has no fault to
+arm and says so in the line it prints.
 
 **The delta this story is.** Before it the projection suite proved one thing: a
 store that drops the read-model write is caught. After it the whole commit path is
 differential — an explicit rollback, a batch dropped bare, a batch begun on the
 wrong store, a position the batch never wrote, a position that goes backwards, and
-two projections that must not share a checkpoint row. Two rules became eight; two
-hostile stores became eight.
+two projections that must not share a checkpoint row — plus, after the amendment,
+a commit that reported failure and left a half behind. Two rules became nine; two
+hostile stores became nine.
 
-**The claim this story does not make.** The projection port is not frozen. Nine of
-§4.11's seventeen rules are still owed (the reset and read-through families),
-CF-5's conformant variant is still deferred, and — the new one — **PS-1's second
-conjunct is unenforced**, because the rule that would enforce it cannot be gated
-honestly against the capability set DT-3 signed off. That is stated here rather
-than left for the freeze verdict to discover.
+**The claim this story does not make.** The projection port is not frozen. Eight of
+§4.11's seventeen rules are still owed (`fresh_projection_has_no_checkpoint` and
+the four reset rules to `reset-rules`, the three read-through and rebuild rules to
+theirs), and CF-5's conformant variant is still deferred. **PS-1's second conjunct
+is now enforced** — that sentence replaces this paragraph's original *"is
+unenforced"* — but with one honest qualification a freeze verdict must carry: no
+fixture in this workspace except the mutant harness can arm a commit fault, so the
+rule is *demonstrated* against `PartialCommitStore` and *skipped* against the
+oracle. It becomes a rule an adapter actually runs when the first adapter that can
+inject a fault declares the capability, which is `happenstance-sqlite`'s to do.
 
 | Finding | Evidence | Follow-up |
 | ------- | -------- | --------- |
-| **AC-001 — BLOCKED. `failed_commit_leaves_both_unchanged` is not landed.** The rule must be gated on a fixture capability that can arm a commit fault, in `MID_BATCH_FAULT`'s mould; the projection fixture has none, and that is a signed-off decision rather than an omission. | DT-3's resolution enumerates the projection capability set as exactly `RESET_REFUSAL`, `SECOND_HANDLE` and `READS_THROUGH_BATCH` (`.bklg/from-contract-to-published-library/projection-store-freeze/_design.md:276-280`), and `crates/happenstance-testkit/src/contract.rs:519-596` implements exactly that set. The same table lists this rule as gated by `SECOND_HANDLE`, which cannot arm anything. | **Owed: a decision.** Either DT-3 is amended to add a commit-fault capability (`projection-api-design-record`'s ground), or PS-1's second conjunct is recorded as unenforceable by the suite and its maturity marker reconsidered by `unstable-projection-gate-and-clause-disposition`. **Not** to be closed by minting a capability inside a rules story — that is the second declension policy `.kb/open-questions/cf-40-fixture-limits-ownership.md` and `project.md`'s risk register both forbid. |
+| **AC-001 — was BLOCKED, now SATISFIED by amendment.** The block was real: the rule must be gated on a fixture capability that can arm a commit fault, in `MID_BATCH_FAULT`'s mould, and the signed-off capability set had none. It was reported (EC-002) rather than closed locally, the human took the fourth path — **amend DT-3** — and the rule landed under it. | The amendment is recorded in the artefact it amends: `_design.md`'s DT-3 table gains a fourth row, dated, with what forced it and why a fourth constant under the existing policy is not the second declension policy `cf-40-fixture-limits-ownership.md` forbids. `ProjectionFixture::COMMIT_FAULT` + `arm_commit_fault` at `crates/happenstance-testkit/src/contract.rs:605-666`; the rule at `crates/happenstance-testkit/src/projection.rs:440-560`; `PartialCommitStore` at `tests/projection_mutation_coverage/mutants.rs:105-144`, registered at `projection_mutation_coverage.rs:361-389`; the reported skip asserted as a `RuleOutcome::Skipped` **value** at `tests/mutation_coverage.rs:3527-3577`. | **Two things a later reader should know.** (1) The capability is **required, not defaulted**, deliberately: a default would carry a testkit-written reason, and DT-3 permits exactly one of those. (2) The rule folds CF-39's anti-vacuity demand in as its own precondition rather than splitting it into a second rule; the residue — a fixture whose `arm_commit_fault` has an empty body — is caught by the rule's first assertion but has no registered *fixture*-level mutant, which the registry's own scope note names. |
 | **AC-002 — an explicit rollback preserves both halves.** | `crates/happenstance-testkit/src/projection.rs:394-448`; green on both host emitters; red against `UnrolledBackStore` at `"must leave the read model as it was"`. | None. The checkpoint is compared against what a fresh handle saw *before* the rollback, so the rule asserts preservation and claims nothing about progress. |
 | **AC-003 — a dropped batch rolls back AND leaves the store usable.** | `projection.rs:454-505`, non-vacuity anchor at `:480-491`; red against `PooledConnectionStore` at `"commit should succeed"`. The connection is genuinely modelled (`correct.rs:305-336`, `:364-380`), not asserted about. | None. Project AC-010 discharged. |
 | **AC-004 — a foreign batch is refused and neither store moves.** | `projection.rs:522-577`, two `open()` calls and deliberately no `SECOND_HANDLE` gate; red against `TypeStampedBatchStore`. | **Worth a reviewer's eye:** this is the one projection rule absent from `PROJECTION_MUST_REJECT`, which makes its *pass* against a fixture declining everything an assertion rather than an accident. Adding it there "for safety" would make that assertion unreachable. |
 | **AC-005 — a commit may name a position the batch did not write.** | `projection.rs:583-624`; red against `ValidatingCommitStore`, the store the specification itself names for this rule. | None. |
 | **AC-006 — a regressing position is refused with both fields, and nothing moves.** | `projection.rs:630-692`; red against `UnconditionalCheckpointStore`. Positions from `SequencePosition::FIRST` and `after` (`:214-227`); CF-6 lint green over 4 rule files. | **Review check discharged:** no assertion anywhere about an *equal* position — PS-22 permits accepting one. |
 | **AC-007 — projections advance independently.** | `projection.rs:698-756`; red against `SingleRowCheckpointStore`. | None. |
-| **AC-008 — six of seven rules have a mutant that fails exactly them; no pass rate anywhere.** | The four projection exactness meta-tests green over the widened 8×8 matrix, plus the event-store family's four beside them. RED first: CF-1 named all six new rules as decorative before any mutant landed. | **EC-003 obtained and was honoured.** `CheckpointOnlyStore`'s declaration grew to three rules and `UncommittedTransactionStore`'s to five, **in this PR**, each with a comment naming the refused repair. The five-rule row is inflation rather than vacuity, and it meets the event-store registry's stated bar: no rule is covered by that store alone except `commit_advances_the_checkpoint`, which is the one it exists for. |
-| **AC-009 — every rule present on every runtime, reported at its own name.** | Single enumeration + `no_orphan_projection_rules`; `8 passed` on each host emitter; `cargo check -p happenstance-testkit --tests --target wasm32-unknown-unknown` run explicitly and clean. | **Stated cost, restated so the gate is not over-read:** the wasm step covers the *rules* on that target and none of the eight mutants — the mutant binary is gated off `wasm32` because `catch_unwind` cannot catch without an unwinder. |
-| **AC-010 — one skip vocabulary, one enumeration, one registry, and a human-readable record.** | `RuleOutcome` reused unchanged (no diff to `contract.rs`); **+6** rule names (2 → 8, not 9 — AC-001 is blocked), **+6** registry rows (2 → **8 stores**, the planned end state), **+0** skip vocabularies, **+0** harness files, **+0** gate steps, **+0** dependencies, **+0** public items. `CF-29: all 103 rules in 4 file(s) have a changelog entry`. `spec-trace` green after `--write`: 6 insertions, 6 deletions, all inside the generated region. | **EC-005 checked, not assumed:** `RULE_FILES` is `[&str; 4]` and already contained the projection rules module, so no edit was needed. The gate counting **4 rule files and 103 rules** is what proves the four sweeps reach it rather than printing green over nothing. |
+| **AC-008 — all seven rules have a mutant that fails exactly them; no pass rate anywhere.** (Amended: six at first report, seven after the DT-3 amendment landed `failed_commit_leaves_both_unchanged` with `PartialCommitStore`.) | The four projection exactness meta-tests green over the widened 9×9 matrix, plus the event-store family's four beside them. RED first: CF-1 named all six new rules as decorative before any mutant landed. | **EC-003 obtained and was honoured.** `CheckpointOnlyStore`'s declaration grew to three rules and `UncommittedTransactionStore`'s to five, **in this PR**, each with a comment naming the refused repair. The five-rule row is inflation rather than vacuity, and it meets the event-store registry's stated bar: no rule is covered by that store alone except `commit_advances_the_checkpoint`, which is the one it exists for. |
+| **AC-009 — every rule present on every runtime, reported at its own name.** | Single enumeration + `no_orphan_projection_rules`; `9 passed` on each host emitter (8 at first report); `cargo check -p happenstance-testkit --tests --target wasm32-unknown-unknown` run explicitly and clean. | **Stated cost, restated so the gate is not over-read:** the wasm step covers the *rules* on that target and none of the nine mutants — the mutant binary is gated off `wasm32` because `catch_unwind` cannot catch without an unwinder. |
+| **AC-010 — one skip vocabulary, one enumeration, one registry, and a human-readable record.** | `RuleOutcome` and `skip_line` reused unchanged — the `contract.rs` diff adds the new capability constant and its arming method and touches no line of either; **+7** rule names (2 → 9, the planned end state), **+7** registry rows (2 → **9 stores**, the planned end state), **+1** fixture capability constant — the DT-3 amendment itself, **+0** skip vocabularies, **+0** harness files, **+0** gate steps, **+0** dependencies, **+0** public items. `CF-29: all 104 rules in 4 file(s) have a changelog entry`. `spec-trace` green after `--write`: 6 insertions, 6 deletions, all inside the generated region. | **EC-005 checked, not assumed:** `RULE_FILES` is `[&str; 4]` and already contained the projection rules module, so no edit was needed. The gate counting **4 rule files and 104 rules** is what proves the four sweeps reach it rather than printing green over nothing. |
 
 **One correction of an inherited claim.** The `CHANGELOG.md` entry for
 `commit_is_atomic_with_the_read_model`, and two rustdoc paragraphs in
