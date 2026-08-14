@@ -7,9 +7,9 @@ title: ProjectionProbe behind happenstance-core's conformance feature
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: in-review
+status: in-progress
 process: story
-stage: report
+stage: implement
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: foundation
 slice: projection-port-and-probe
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T13:33:39.487Z
+updated: 2026-08-14T13:33:45.997Z
 links:
   pr: null
   commits:
     - cb495ee
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
