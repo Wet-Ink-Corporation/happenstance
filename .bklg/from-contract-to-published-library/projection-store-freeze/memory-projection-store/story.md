@@ -7,9 +7,9 @@ title: MemoryProjectionStore as oracle, doctest target and cold-start fix
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: in-review
+status: in-progress
 process: story
-stage: report
+stage: implement
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: foundation
 slice: projection-port-and-probe
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T13:34:21.601Z
+updated: 2026-08-14T13:34:25.905Z
 links:
   pr: null
   commits:
     - 5fd62c6
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
