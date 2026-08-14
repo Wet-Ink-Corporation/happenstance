@@ -75,7 +75,7 @@
 
 use core::future::Future;
 
-use happenstance_core::{EventStore, ProjectionProbe};
+use happenstance_core::{EventStore, ProjectionId, ProjectionProbe};
 
 /// One isolated backing store, plus the ways a rule is allowed to reach it.
 ///
@@ -595,11 +595,12 @@ pub trait ProjectionFixture {
     /// same sentence for every store that says it; "this store refuses no reset"
     /// is not, because *why* it refuses none is the interesting half.
     ///
-    /// No rule reads this constant yet: `refused_reset_changes_nothing` is
-    /// PS-18's rule and arrives with the reset family. It is declared here
-    /// rather than then because the capability *set* is a recorded design
-    /// decision, and a fixture that has to grow a constant later is a fixture
-    /// whose author was never asked the question.
+    /// It is read by exactly one rule,
+    /// [`refused_reset_changes_nothing`](crate::projection::rules::refused_reset_changes_nothing),
+    /// which is PS-18's; a fixture that declines it gets that rule as a reported
+    /// skip carrying its own stated reason, and a fixture that declares it must
+    /// also override [`protect_from_reset`](Self::protect_from_reset), which is
+    /// the mechanism this constant gates.
     const RESET_REFUSAL: Capability;
 
     /// Whether this fixture can make a `commit` **report failure**.
@@ -661,6 +662,54 @@ pub trait ProjectionFixture {
                  implemented: either this fixture declares COMMIT_FAULT \
                  supported and does not override it, or a rule reached it \
                  without a `require!(F: COMMIT_FAULT)` gate"
+            );
+        }
+    }
+
+    /// Puts `id` under this store's protection, so the next
+    /// [`reset`](happenstance_core::ProjectionStore::reset) of it is refused.
+    ///
+    /// [`arm_commit_fault`](Self::arm_commit_fault)'s sibling, and it exists for
+    /// the same reason: the capability above is a claim, and a rule cannot
+    /// *exercise* the claim without telling the store which projection to
+    /// protect. Nothing a caller holds can make a conformant `reset` answer
+    /// [`ResetError::Refused`](happenstance_core::ResetError::Refused) —
+    /// PS-18's own words are that the port supplies the mechanism and the domain
+    /// decides what to protect, so the domain is where the choice lives and a
+    /// fixture is how a suite reaches it.
+    ///
+    /// It takes the [`ProjectionId`] rather than declaring a protected one,
+    /// which is the difference between a rule that can name its own subject and
+    /// a rule that has to share one id with every other rule in the family. An
+    /// adapter implements it however its policy is spelled: a row in a
+    /// protected-projections table, a `CHECK`, a `beforeDelete` trigger, a
+    /// hard-coded list.
+    ///
+    /// **This is not a fourth capability**, and deliberately so. The projection
+    /// family's declension set is the three constants above; this is the
+    /// *mechanism* the second of them gates, exactly as `arm_commit_fault` is
+    /// the mechanism the third gates. A fixture that declines
+    /// [`RESET_REFUSAL`](Self::RESET_REFUSAL) never has it called.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for
+    /// [`arm_commit_fault`](Self::arm_commit_fault)'s reason and with the same
+    /// two ways of reaching it: a fixture that declares `RESET_REFUSAL`
+    /// supported and forgets the override, or a rule that reached here without a
+    /// `require!(F: RESET_REFUSAL)` gate. "Declared and never implemented" then
+    /// aborts loudly rather than passing vacuously — a fixture whose body did
+    /// nothing would leave
+    /// [`refused_reset_changes_nothing`](crate::projection::rules::refused_reset_changes_nothing)
+    /// asserting about a store nothing had ever asked to protect anything.
+    fn protect_from_reset(&self, id: &ProjectionId) -> impl Future<Output = ()> {
+        let _ = (self, id);
+        async move {
+            panic!(
+                "`ProjectionFixture::protect_from_reset` was called but not \
+                 implemented: either this fixture declares RESET_REFUSAL \
+                 supported and does not override it, or a rule reached it \
+                 without a `require!(F: RESET_REFUSAL)` gate"
             );
         }
     }

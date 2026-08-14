@@ -41,28 +41,37 @@
 //! workspace red, and there is no exemption list.
 //!
 //! What a green run still does **not** prove is that this family is complete.
-//! Eight of §4.11's seventeen rules are unwritten: `fresh_projection_has_no_checkpoint`
-//! and the four `reset_*` rules land with the reset family, and the three
-//! read-through and rebuild rules with theirs.
+//! Three of §4.11's seventeen rules are unwritten — `batch_reads_reflect_pending_writes`,
+//! `rebuild_is_chunk_size_invariant` and `rebuilding_is_distinguishable_from_live`,
+//! which land with the read-through and rebuild family — and six more are
+//! runner-dependent and belong to the workspace e2e crate under CF-36
+//! (`spec/SPECIFICATION.md:5694-5703`).
 //!
-//! # One rule here is answered by a skip against every fixture in this workspace
+//! # Two rules here are answered by a skip against the reference fixture
 //!
 //! [`failed_commit_leaves_both_unchanged`](rules::failed_commit_leaves_both_unchanged)
 //! is PS-1's second conjunct — the arm about a commit that *reported failure* —
 //! and it is gated on
-//! [`COMMIT_FAULT`](crate::ProjectionFixture::COMMIT_FAULT), which no fixture
-//! outside the mutant harness supports. `MemoryProjectionFixture` declines it,
-//! honestly and for a reason it states: the reference store applies both halves
-//! under one write lock and has no write that can be made to fail. So a run
-//! against the oracle prints one `SKIP` line for that rule, and an adapter that
-//! wants the conjunct checked has to supply the fault its own store can inject.
+//! [`COMMIT_FAULT`](crate::ProjectionFixture::COMMIT_FAULT).
+//! [`refused_reset_changes_nothing`](rules::refused_reset_changes_nothing) is
+//! PS-18, and it is gated on
+//! [`RESET_REFUSAL`](crate::ProjectionFixture::RESET_REFUSAL). Neither
+//! capability is supported by any fixture outside the mutant harness, and
+//! `MemoryProjectionFixture` declines both honestly and for reasons it states:
+//! the reference store applies both halves of a commit under one write lock and
+//! has no write that can be made to fail, and it holds no protection policy, so
+//! there is no projection it could decline to reset. A run against the oracle
+//! therefore prints two `SKIP` lines, and an adapter that wants either conjunct
+//! checked has to supply what its own store can do.
 //!
-//! Read that as the answer to "does a green run mean anything here": for seven
-//! of the eight landed rules it means the store was driven and asserted about;
-//! for this one it means what the `SKIP` line says. The rule is not decorative —
-//! `PartialCommitStore` fails it by name in
+//! Read that as the answer to "does a green run mean anything here": for eleven
+//! of the thirteen landed rules it means the store was driven and asserted
+//! about; for these two it means what the `SKIP` lines say. Neither rule is
+//! decorative — `PartialCommitStore`, `RefusalAsSuccessStore` and
+//! `RefusalAfterTheFactStore` fail them by name in
 //! `tests/projection_mutation_coverage.rs` — but the demonstration lives against
-//! a fixture that can arm a fault, and the reference fixture is not one.
+//! a fixture that can arm a fault and protect a projection, and the reference
+//! fixture is neither.
 //!
 //! One stale sentence, named here because it cannot be repaired here. PS-1's
 //! **Rejects:** prose says *"Today no rule can fail it"*
@@ -179,7 +188,7 @@ pub mod rules {
 
     use happenstance_core::{
         Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore,
-        SequencePosition,
+        ResetError, SequencePosition,
     };
 
     use crate::{ProjectionFixture, RuleOutcome};
@@ -263,6 +272,50 @@ pub mod rules {
     async fn rollback_ok<S: ProjectionStore>(store: &S, batch: S::Batch) {
         if let Err(err) = store.rollback(batch).await {
             panic!("rolling a batch back should succeed, got {err:?}");
+        }
+    }
+
+    /// Resets and unwraps, failing the test with context on error.
+    ///
+    /// `commit_ok`'s dual, and a separate helper rather than a generic one over
+    /// both because the two operations fail differently on purpose:
+    /// [`ResetError`] carries `Refused`, which `commit` cannot produce, and a
+    /// shared helper would have to erase one of the two error types to say so.
+    async fn reset_ok<S: ProjectionStore>(store: &S, batch: S::Batch, id: &ProjectionId) {
+        if let Err(err) = store.reset(batch, id).await {
+            panic!("reset should succeed, got {err:?}");
+        }
+    }
+
+    /// Whether a runner resuming from `checkpoint` would still apply the event
+    /// at `position`.
+    ///
+    /// PS-20's derivation, written once and shared by the two arms of
+    /// [`reset_is_not_commit_at_first`] so that *"strictly after a recorded
+    /// position, inclusive from the store's first position when `NeverRun`"* is
+    /// stated in one place rather than twice with a chance of disagreeing.
+    ///
+    /// **It is not a runner and must not grow into one.** It decides one thing —
+    /// whether one position is still in front of a checkpoint — which is the
+    /// whole of what PS-20 constrains and the only part a rule can observe
+    /// without a replay driver. The runner belongs to the typed layer.
+    fn resumes_over(checkpoint: Checkpoint, position: SequencePosition) -> bool {
+        match checkpoint {
+            // Nothing has been considered, so the replay starts at the store's
+            // first position *inclusive* and this event is in front of it.
+            Checkpoint::NeverRun => true,
+            // A recorded position has been considered, so a resume is strictly
+            // after it. `Rebuilding` answers the same question the same way: it
+            // carries a position that has been considered.
+            Checkpoint::Live { through } | Checkpoint::Rebuilding { through } => position > through,
+            // `Checkpoint` is `#[non_exhaustive]`, so this arm is required. A
+            // fourth variant is a resume rule this helper has not been told, and
+            // guessing at it would be a rule certifying a state nobody defined.
+            _ => panic!(
+                "this store reported a checkpoint variant this rule has never \
+                 been taught to resume from: {checkpoint:?}. `Checkpoint` grew a \
+                 variant and PS-20's derivation has not been extended to cover it"
+            ),
         }
     }
 
@@ -946,6 +999,522 @@ pub mod rules {
 
         RuleOutcome::Ran
     }
+
+    // ---------------------------------------------------------------------
+    // Reset
+    //
+    // `reset` is `commit`'s dual and the port's own undo, and until these five
+    // rules landed nothing in the workspace could tell "returned to never run"
+    // from "committed at the first position" — the substitute six deployment
+    // scenarios out of six reached for, and the one that skips event 1
+    // permanently and silently (`RUNBOOK.md:3904-3907`).
+    // ---------------------------------------------------------------------
+
+    /// A `reset` applies the caller's batch and returns the checkpoint to
+    /// [`Checkpoint::NeverRun`] as **one** unit of work.
+    ///
+    /// PS-16. The pairing is the claim: both halves, or neither. A store that
+    /// clears the rows and leaves the checkpoint is the runbook procedure — two
+    /// statements on two connections — and it is what Norvant's night desk ran
+    /// at 02:46:31 before the pod died at 02:46:33: the runner restarted, read
+    /// the old checkpoint, resumed past it, applied sixty-one events into an
+    /// empty table and **reported healthy**
+    /// (`spec/E2E-CASES.md:458-481`).
+    ///
+    /// **Rejects:** `TwoStatementResetStore` — a `reset` that applies the
+    /// caller's deletes and never touches the checkpoint. `CommitAtFirstResetStore`
+    /// fails it too, at the same assertion and for its own reason, and its
+    /// registry row says so.
+    ///
+    /// # PS-16's failure-injecting half, and why it needs no new capability
+    ///
+    /// The clause pairs its rule with *"a failure-injecting variant asserting
+    /// that a `reset` that errors leaves both halves as they were"*, and the
+    /// projection fixture's capability set — `SECOND_HANDLE`, `RESET_REFUSAL`,
+    /// `COMMIT_FAULT` — contains nothing that arms a failing **reset**. Minting
+    /// a fourth constant inside a rule-writing story is what
+    /// `commit-rollback-and-drop-rules` refused to do and what the design
+    /// record's 2026-08-14 amendment exists for, so this rule reaches the same
+    /// observation through the port's own error path instead: a batch begun on a
+    /// **different store instance** is rejected as
+    /// [`ResetError::ForeignBatch`], and that is a `reset` that errored, which
+    /// any conformant store can produce and no fixture has to arm.
+    ///
+    /// The two halves are asserted in that order — errored first, successful
+    /// second — so "unchanged" is a *recorded* state rather than the empty one.
+    /// Both are read through **fresh handles**.
+    ///
+    /// **What it deliberately does not assert.** That the committed rows were
+    /// there to begin with. The before-state is read back and compared against,
+    /// rather than asserted to be `Some`, so a store that committed no rows
+    /// fails [`commit_is_atomic_with_the_read_model`] — the rule that owns that
+    /// defect — instead of failing here for a reason this rule is not about.
+    pub async fn reset_clears_rows_and_checkpoint_together<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!`, not `require!`: both halves are read back through a second
+        // handle, and a fixture that cannot open one cannot observe the
+        // invariant at all.
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("reset_clears_rows_and_checkpoint_together");
+        let position = SequencePosition::FIRST;
+
+        let mut batch = writer.begin();
+        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        writer.probe_write(&mut batch, SECOND_KEY, SECOND_VALUE);
+        commit_ok(&writer, batch, &id, position, Authority::Live).await;
+
+        // ---- the half PS-16 pairs its rule with: a `reset` that errors ----
+        let before = fixture.connect().await;
+        let rows_before = (
+            probe_read_ok(&before, PROBE_KEY).await,
+            probe_read_ok(&before, SECOND_KEY).await,
+        );
+        let checkpoint_before = checkpoint_ok(&before, &id).await;
+
+        let stranger_fixture = open().await;
+        let stranger = stranger_fixture.connect().await;
+        let mut foreign = stranger.begin();
+        stranger.probe_delete_all(&mut foreign);
+
+        match writer.reset(foreign, &id).await {
+            Err(ResetError::ForeignBatch) => {}
+            outcome => panic!(
+                "a `reset` handed a batch begun on a different store instance \
+                 must be refused as `ResetError::ForeignBatch`, and this store \
+                 answered {outcome:?}. The refusal is what makes PS-16's \
+                 failure-injecting half reachable without a fixture that can arm \
+                 a fault"
+            ),
+        }
+
+        let after_failure = fixture.connect().await;
+        assert_eq!(
+            (
+                probe_read_ok(&after_failure, PROBE_KEY).await,
+                probe_read_ok(&after_failure, SECOND_KEY).await,
+            ),
+            rows_before,
+            "a `reset` that reported failure must leave the read model exactly \
+             as it was, and a fresh handle saw it change. The deletes the \
+             refused batch carried are the caller's, and a store that applied \
+             them anyway has cleared a read model whose caller was told the \
+             operation failed"
+        );
+        assert_eq!(
+            checkpoint_ok(&after_failure, &id).await,
+            checkpoint_before,
+            "a `reset` that reported failure must leave the checkpoint exactly \
+             as the last successful commit left it"
+        );
+
+        // ---- and the successful one: both halves, together ----
+        let mut clearing = writer.begin();
+        writer.probe_delete_all(&mut clearing);
+        reset_ok(&writer, clearing, &id).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            (
+                probe_read_ok(&observer, PROBE_KEY).await,
+                probe_read_ok(&observer, SECOND_KEY).await,
+            ),
+            (None, None),
+            "a successful `reset` must apply the caller's deletes, and a fresh \
+             handle can still read a row the reset batch asked to remove"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            Checkpoint::NeverRun,
+            "a successful `reset` must return this projection's checkpoint to \
+             `NeverRun` in the **same** unit of work as the deletes it applied, \
+             and the rows went while the checkpoint stayed. That is the runbook \
+             procedure — two statements on two connections — and a runner that \
+             restarts between them reads the old checkpoint, resumes past it, \
+             and applies the rest of the log into an empty table while reporting \
+             healthy"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A `reset` moves exactly one `(store, ProjectionId)` pair.
+    ///
+    /// PS-17, `[FROZEN]`, and it is [ADR-0007](../../../.kb/decisions/0007-projection-runner-decodes.md)'s
+    /// per-`(store, ProjectionId)` checkpoint applied to the operation that
+    /// *removes* one. Kestrel Cold Chain's one projection store holds
+    /// `van_stock`, rebuilt several times a day across 138 devices, and
+    /// `fgas_ledger`, a hash chain a regulator already holds
+    /// (`spec/E2E-CASES.md:482-497`).
+    ///
+    /// **Rejects:** `TruncatingResetStore` — a `SqliteProjectionStore::reset()`
+    /// that truncates the checkpoint table. Cheap, obvious, and it destroys the
+    /// append-only ledger sharing the file. `SingleRowCheckpointStore` fails it
+    /// too, at the same assertion: one checkpoint row shared by every projection
+    /// is the same disaster reached by a different route, and its registry row
+    /// says so.
+    ///
+    /// # Why the reset batch is **empty**, and why that is the sharp version
+    ///
+    /// [`ProjectionProbe::probe_delete_all`] queues removal of every probe row —
+    /// the whole read model, because the port has no idea which rows belong to
+    /// which projection and PS-11's seam deliberately does not teach it. A rule
+    /// that reset one id with a `probe_delete_all` batch would therefore delete
+    /// the sibling's rows *by the caller's own instruction*, and would fail the
+    /// oracle for something PS-17 does not constrain.
+    ///
+    /// Handing `reset` an empty batch is what makes the claim attributable: the
+    /// caller asked for **no** deletes, so every row that disappears and every
+    /// checkpoint other than this one that moves is the store's own doing.
+    ///
+    /// The assertion that the reset id's checkpoint did return to `NeverRun` is
+    /// this rule's non-vacuity anchor — the same role the second row plays in
+    /// [`dropped_batch_leaves_store_usable`]. Without it a `reset` that did
+    /// nothing whatever would pass a rule about scoping.
+    pub async fn reset_is_scoped_to_one_projection<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+
+        // Named after the deployment rather than `a` / `b`: the failure message
+        // below is read by someone who has never seen this file.
+        let van_stock = ProjectionId::new("reset_is_scoped_to_one_projection.van_stock");
+        let fgas_ledger = ProjectionId::new("reset_is_scoped_to_one_projection.fgas_ledger");
+
+        let rebuilt_through = SequencePosition::FIRST;
+        let protected_through = after(rebuilt_through);
+
+        let mut rebuildable = writer.begin();
+        writer.probe_write(&mut rebuildable, PROBE_KEY, PROBE_VALUE);
+        commit_ok(
+            &writer,
+            rebuildable,
+            &van_stock,
+            rebuilt_through,
+            Authority::Live,
+        )
+        .await;
+
+        let mut protected = writer.begin();
+        writer.probe_write(&mut protected, SECOND_KEY, SECOND_VALUE);
+        commit_ok(
+            &writer,
+            protected,
+            &fgas_ledger,
+            protected_through,
+            Authority::Live,
+        )
+        .await;
+
+        // What the protected projection looked like before, through a fresh
+        // handle and compared against rather than asserted to be present: a
+        // store that committed nothing at all is rejected by
+        // `commit_is_atomic_with_the_read_model` and
+        // `commit_advances_the_checkpoint`, which own that defect, rather than
+        // failing here for a reason this rule is not about.
+        let before = fixture.connect().await;
+        let protected_row_before = probe_read_ok(&before, SECOND_KEY).await;
+        let protected_checkpoint_before = checkpoint_ok(&before, &fgas_ledger).await;
+
+        // Empty: the caller asked for no deletes at all, so anything that goes
+        // missing below went missing because the store removed it.
+        reset_ok(&writer, writer.begin(), &van_stock).await;
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            checkpoint_ok(&observer, &fgas_ledger).await,
+            protected_checkpoint_before,
+            "a `reset` must be scoped to one `(store, ProjectionId)` pair, and \
+             resetting one projection moved another one's checkpoint. A `reset` \
+             that truncates the checkpoint table is one statement and it returns \
+             every projection in the store to `NeverRun` — including the \
+             append-only ledger that must never be rebuilt, which is then \
+             rebuilt from an event log that no longer holds the events it was \
+             built from"
+        );
+        assert_eq!(
+            probe_read_ok(&observer, SECOND_KEY).await,
+            protected_row_before,
+            "a `reset` must be scoped to one `(store, ProjectionId)` pair, and \
+             resetting one projection removed another one's rows — which this \
+             reset's batch did not ask for, because it carried no deletes at all"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &van_stock).await,
+            Checkpoint::NeverRun,
+            "the reset projection's own checkpoint must have returned to \
+             `NeverRun`, or this rule is asserting scoping about an operation \
+             that did nothing"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A refused `reset` leaves the read model and the checkpoint exactly as
+    /// they were, and is never reported as success.
+    ///
+    /// PS-18. The refusal *mechanism* is the port's and the *policy* is the
+    /// domain's — the projection knows that `fgas_ledger` is a hash chain a
+    /// regulator already holds, and the store does not — but a policy with no
+    /// port-level mechanism is bypassed by anyone holding the store, which is
+    /// every operator with a runbook.
+    ///
+    /// **The operative half is "changes nothing", not the error variant.** A
+    /// rule that stopped at `matches!(err, ResetError::Refused)` would certify
+    /// the mirror-image defect: a refusal reported perfectly, *after* the rows
+    /// have gone.
+    ///
+    /// **Rejects:** `RefusalAsSuccessStore` — a store whose protection policy is
+    /// consulted somewhere other than the write path, so `reset` returns `Ok`
+    /// and does the work; and `RefusalAfterTheFactStore` — a store that issues
+    /// its deletes and *then* checks the policy, reporting the refusal honestly
+    /// over a read model that is already gone.
+    ///
+    /// # Why this rule is capability-gated, and the gate is the fixture's
+    ///
+    /// Nothing a caller holds can make a conformant `reset` answer `Refused`;
+    /// that is the property under test. So the protection belongs to the store,
+    /// [`RESET_REFUSAL`](crate::ProjectionFixture::RESET_REFUSAL) is where a
+    /// fixture says whether it has any, and
+    /// [`protect_from_reset`](crate::ProjectionFixture::protect_from_reset) is
+    /// how this rule names the projection to protect. A store with no protection
+    /// policy declines and this rule reports a skip carrying its own stated
+    /// reason — which is what `MemoryProjectionStore` does, so the reference run
+    /// prints that line rather than a pass nobody earned.
+    pub async fn refused_reset_changes_nothing<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!` first, and the order is load-bearing for
+        // `failed_commit_leaves_both_unchanged`'s reason: a fixture that
+        // declines both is failing the contract, and reporting that as a skip
+        // would hide it behind a trade it was entitled to make.
+        must!(F: SECOND_HANDLE);
+        require!(F: RESET_REFUSAL);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+        let id = ProjectionId::new("refused_reset_changes_nothing");
+        let position = SequencePosition::FIRST;
+
+        let mut batch = writer.begin();
+        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        commit_ok(&writer, batch, &id, position, Authority::Live).await;
+
+        fixture.protect_from_reset(&id).await;
+
+        // The before-state, through a fresh handle and compared against rather
+        // than asserted to be present: a store that committed nothing is
+        // rejected by the rule that owns that defect, not by this one.
+        let before = fixture.connect().await;
+        let row_before = probe_read_ok(&before, PROBE_KEY).await;
+        let checkpoint_before = checkpoint_ok(&before, &id).await;
+
+        let mut clearing = writer.begin();
+        writer.probe_delete_all(&mut clearing);
+
+        match writer.reset(clearing, &id).await {
+            Err(ResetError::Refused) => {}
+            outcome => panic!(
+                "this fixture declares `RESET_REFUSAL` supported and asked its \
+                 store to protect this projection, so `reset` must answer \
+                 `Err(ResetError::Refused)` — and it answered {outcome:?}. A \
+                 refusal reported as success is the operator's runbook \
+                 succeeding against the one projection the domain protects"
+            ),
+        }
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            row_before,
+            "a refused `reset` must leave the read model exactly as it was, and \
+             a fresh handle saw it change. A store that issues its deletes and \
+             checks its protection policy afterwards reports the refusal \
+             perfectly honestly over a read model that is already gone, and \
+             every rule asserting only the error variant certifies it"
+        );
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            checkpoint_before,
+            "a refused `reset` must leave the checkpoint exactly as it was: a \
+             refusal is not success, and a projection whose rows survived while \
+             its checkpoint went to `NeverRun` is rebuilt from the top over rows \
+             that are still there"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A projection the store has **never seen** reads back as
+    /// [`Checkpoint::NeverRun`].
+    ///
+    /// §4.11 assigns this rule to PS-19, and it is the same distinction that
+    /// clause is about — *never run* told apart from *committed at the first
+    /// position* — asked before any `reset` has happened. A store that has
+    /// already collapsed the two states for an unseen id has collapsed them
+    /// everywhere.
+    ///
+    /// **Rejects:** `PresumedLiveCheckpointStore` — a store that resolves a
+    /// missing checkpoint row with `.unwrap_or(Checkpoint::Live { through: FIRST })`.
+    /// The specification names that shape by name, because it is the natural one
+    /// rather than a contrivance: an adapter whose `reset` writes an explicit
+    /// `NeverRun` row satisfies PS-19's MUST verbatim and still answers `Live`
+    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5232-5243`).
+    ///
+    /// # The assertion is on the **variant**
+    ///
+    /// Comparing a checkpoint against any [`SequencePosition`] is
+    /// simultaneously a CF-6 violation and the exact value the defective store
+    /// writes, so a rule written that way cannot tell the two mutants of this
+    /// family apart and both walk free. [`Checkpoint`] is a three-variant enum
+    /// precisely so this assertion can be made without naming a position
+    /// (`spec/SPECIFICATION.md:4643-4658`).
+    ///
+    /// # Why it spells no capability gate at all
+    ///
+    /// It reads one checkpoint through one handle and writes nothing, so it
+    /// needs neither a second handle nor a protected projection. A fixture
+    /// declining every capability still runs it and still passes it, which is
+    /// correct: the capabilities it declined are not the ones this rule spends.
+    pub async fn fresh_projection_has_no_checkpoint<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Committed to by nothing, in this rule or any other: every rule in this
+        // family names its ids after itself.
+        let unseen = ProjectionId::new("fresh_projection_has_no_checkpoint.never-committed-to");
+
+        assert_eq!(
+            checkpoint_ok(&store, &unseen).await,
+            Checkpoint::NeverRun,
+            "a projection this store has never seen must read back as \
+             `Checkpoint::NeverRun`. A store that resolves a missing checkpoint \
+             row to `Live` has told a runner that a read model nobody has ever \
+             built is authoritative and already considered through a position — \
+             so the runner resumes past the events it has never applied, and \
+             they are skipped permanently and silently"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// `reset` is distinguishable from `commit(empty_batch, id, FIRST, Live)`,
+    /// in the checkpoint **and** in the replay that follows it.
+    ///
+    /// PS-19 and PS-20. The substitute is the one every deployment reaches for —
+    /// **six scenarios out of six reached for it and all six got it wrong**
+    /// (`RUNBOOK.md:3904-3907`) — and it is wrong in the way nobody ever finds:
+    /// the checkpoint reads back as a position, the runner resumes *strictly
+    /// after* it, and event 1 is skipped permanently and silently
+    /// (`spec/E2E-CASES.md:437-456`).
+    ///
+    /// **Rejects:** `CommitAtFirstResetStore` — a `reset` implemented as
+    /// `commit(batch, id, FIRST, Live)`. It compiles, it returns `Ok`, and the
+    /// checkpoint moves, so every rule asserting only that *something changed*
+    /// passes it. `TwoStatementResetStore` fails it too, at the same assertion:
+    /// a checkpoint that never moved is `Live` as well.
+    ///
+    /// # Both halves, and neither is sufficient alone
+    ///
+    /// The **state** half compares the two checkpoints by variant —
+    /// `NeverRun` against `Live { .. }` — never by position, for
+    /// [`fresh_projection_has_no_checkpoint`]'s reason. The **consequence** half
+    /// derives a resume point from each under the port's own rule — in one
+    /// private helper shared by both arms, so the derivation is stated once —
+    /// and asserts the event at the store's first position is applied in the
+    /// reset case and *not* in the substitute's. The variant
+    /// check alone would not see the consequence; the resume check alone would
+    /// not see the state.
+    ///
+    /// No runner is built. PS-20's property is a claim about how a resume point
+    /// is derived from a checkpoint, and that derivation is four lines the rule
+    /// owns — the runner itself belongs to a later phase and a different crate.
+    ///
+    /// # Why each checkpoint is read immediately after its own operation
+    ///
+    /// So that a store which shares one checkpoint row between projections fails
+    /// [`reset_is_scoped_to_one_projection`] and
+    /// [`distinct_projections_advance_independently`] — the rules that own that
+    /// defect — rather than this one, which is about a *single* projection's
+    /// state being told apart from another single projection's.
+    pub async fn reset_is_not_commit_at_first<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+
+        let rebuilt = ProjectionId::new("reset_is_not_commit_at_first.reset");
+        let substituted = ProjectionId::new("reset_is_not_commit_at_first.commit_at_first");
+
+        // The store's first position, and the only position this rule names: it
+        // is the one the substitute commits at and the one a replay must decide
+        // about.
+        let first = SequencePosition::FIRST;
+
+        let mut applied = writer.begin();
+        writer.probe_write(&mut applied, PROBE_KEY, PROBE_VALUE);
+        commit_ok(&writer, applied, &rebuilt, first, Authority::Live).await;
+
+        let mut clearing = writer.begin();
+        writer.probe_delete_all(&mut clearing);
+        reset_ok(&writer, clearing, &rebuilt).await;
+
+        let after_reset = checkpoint_ok(&fixture.connect().await, &rebuilt).await;
+
+        // The operator's substitute, on a sibling id in the same store: an empty
+        // batch committed at the first position, which is what "reset it
+        // properly" means to everyone who has not got a `reset`.
+        commit_ok(
+            &writer,
+            writer.begin(),
+            &substituted,
+            first,
+            Authority::Live,
+        )
+        .await;
+
+        let after_substitute = checkpoint_ok(&fixture.connect().await, &substituted).await;
+
+        assert_ne!(
+            core::mem::discriminant(&after_reset),
+            core::mem::discriminant(&after_substitute),
+            "a projection that was `reset` and one that was committed at the \
+             first position must be **distinguishable by variant**, and this \
+             store reported {after_reset:?} for the reset one and \
+             {after_substitute:?} for the substitute. Collapsing the two is the \
+             defect this rule exists for: `commit(empty, id, FIRST)` reads back \
+             as a position, so a runner resumes after it"
+        );
+
+        assert!(
+            resumes_over(after_reset, first),
+            "a runner resuming from {after_reset:?} must start at the store's \
+             first position **inclusive**, so the event at {first} is applied \
+             after a reset. A reset that leaves any position behind makes the \
+             rebuild it exists for start one event late"
+        );
+        assert!(
+            !resumes_over(after_substitute, first),
+            "a runner resuming from {after_substitute:?} resumes **strictly \
+             after** the recorded position, so the event at {first} is not \
+             applied — which is exactly why `commit(empty, id, FIRST)` is not a \
+             reset. This store answered {after_substitute:?} and a replay would \
+             still apply event 1, so the two states are the same state and the \
+             rule above only appeared to hold"
+        );
+
+        RuleOutcome::Ran
+    }
 }
 
 // =====================================================================
@@ -990,6 +1559,13 @@ macro_rules! for_each_projection_store_rule {
             commit_accepts_a_position_the_batch_did_not_write,
             commit_rejects_a_regressing_position,
             distinct_projections_advance_independently,
+
+            // --- Reset -----------------------------------------------------
+            reset_clears_rows_and_checkpoint_together,
+            reset_is_scoped_to_one_projection,
+            refused_reset_changes_nothing,
+            fresh_projection_has_no_checkpoint,
+            reset_is_not_commit_at_first,
         }
     };
 }
@@ -1150,6 +1726,55 @@ fn no_orphan_projection_rules() {
 /// `tokio` is a dev-dependency of the *non-wasm32* target table only and this
 /// file's unit tests are type-checked for `wasm32-unknown-unknown` by the
 /// mandatory conformance-harness step.
+/// A declined `RESET_REFUSAL` reaches the author as a **reported skip carrying
+/// the fixture's own reason**, not as a pass and not as an absence.
+///
+/// CF-18 for the family's one genuinely declinable projection capability, on
+/// real values: `MemoryProjectionFixture` supports `SECOND_HANDLE` and declines
+/// `RESET_REFUSAL`, so `refused_reset_changes_nothing` is the only thing it can
+/// answer with a skip, and this is what a reference run prints.
+///
+/// # Why the assertion is on the value and never on stdout
+///
+/// [`RuleOutcome::report`](crate::RuleOutcome::report) writes to stdout, which
+/// libtest suppresses for a *passing* test unless `--show-output` is passed, and
+/// which does not exist at all on `wasm32-unknown-unknown`
+/// (`crates/happenstance-testkit/src/contract.rs:515-531`). A test that scraped
+/// the printed line would therefore assert nothing on the one target the
+/// two-flavour design exists for. The machine-checked half is this equality; the
+/// human-facing half is the line `skip_line` renders from the same two fields.
+///
+/// The expected reason is read back from the fixture's own `const` rather than
+/// repeated here as a literal, for the reason the event-store family's version
+/// gives: two copies of the sentence would let the report carry someone else's
+/// words while this test stayed green.
+#[cfg(test)]
+#[test]
+fn a_declined_reset_refusal_is_reported_with_the_fixtures_reason() {
+    use crate::fixtures::MemoryProjectionFixture;
+    use crate::{ProjectionFixture, RuleOutcome};
+
+    let stated = <MemoryProjectionFixture as ProjectionFixture>::RESET_REFUSAL
+        .reason()
+        .expect("the reference projection fixture declines `RESET_REFUSAL`");
+
+    let outcome = crate::block_on(rules::refused_reset_changes_nothing(async || {
+        MemoryProjectionFixture::new()
+    }));
+
+    assert_eq!(
+        outcome,
+        RuleOutcome::Skipped {
+            capability: "RESET_REFUSAL",
+            reason: stated,
+        },
+        "a fixture whose store holds no protection policy must get \
+         `refused_reset_changes_nothing` as a skip naming the associated const \
+         it can change and carrying its own stated reason — never a silent pass, \
+         and never a rule `#[cfg]`-ed out of the binary"
+    );
+}
+
 #[cfg(test)]
 #[test]
 fn two_opens_make_two_isolated_stores() {

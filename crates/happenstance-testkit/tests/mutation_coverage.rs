@@ -3336,33 +3336,35 @@ mod mutation_coverage {
     /// The projection family's [`MUST_REJECT`]: every projection rule that
     /// spells `must!` rather than `require!`.
     ///
-    /// Eight of the family's nine rules are on it, and every one belongs there
-    /// rather than being gated with `require!`, because every one reads the read
-    /// model or the checkpoint back through a **fresh handle**. A projection
-    /// fixture that cannot open a second handle cannot observe PS-1 — the
-    /// coupling the whole port exists for — at all, so declining it is a fixture
-    /// that does not meet the contract rather than a trade the suite may record
-    /// and move past.
+    /// Twelve of the family's fourteen rules are on it, and every one belongs
+    /// there rather than being gated with `require!`, because every one reads
+    /// the read model or the checkpoint back through a **fresh handle**. A
+    /// projection fixture that cannot open a second handle cannot observe PS-1 —
+    /// the coupling the whole port exists for — at all, so declining it is a
+    /// fixture that does not meet the contract rather than a trade the suite may
+    /// record and move past.
     ///
-    /// `failed_commit_leaves_both_unchanged` is on it *and* spells
-    /// `require!(F: COMMIT_FAULT)` — the family's one declinable gate. It is
-    /// here rather than in [`PROJECTION_MUST_SKIP`] because the rule spells the
+    /// Two rules on it *also* spell a `require!` — `failed_commit_leaves_both_unchanged`
+    /// on `COMMIT_FAULT`, and `refused_reset_changes_nothing` on
+    /// `RESET_REFUSAL`, which are the family's two declinable gates. Both are
+    /// here rather than in [`PROJECTION_MUST_SKIP`] because both spell the
     /// `must!` **first**, deliberately: a fixture declining both is failing the
     /// contract, and reporting that as a skip would file a broken fixture under
     /// a trade it was entitled to make. The skip path is therefore demonstrated
     /// against the *reference* fixture, which supports `SECOND_HANDLE` and
-    /// declines `COMMIT_FAULT` — see the tail of
+    /// declines both of the others — see the tail of
     /// [`projection_capability_skips_are_reported`].
     ///
-    /// **The eighth is absent on purpose, and the absence is the interesting
-    /// part.** `commit_rejects_a_foreign_batch` wants two *isolated stores*, not
-    /// two handles onto one, and two `open()` calls on the `impl AsyncFn() -> F`
-    /// every rule is handed already produce them (PS-15 says so in as many
-    /// words). It therefore spells no gate at all, runs against a fixture
-    /// declining everything, and **passes** — which is what this list asserts by
-    /// omission, through the `Verdict::Passed` arm of
-    /// [`assert_projection_declension`]. A rule added to this list "for safety"
-    /// would make that assertion unreachable.
+    /// **The two absentees are absent on purpose, and the absence is the
+    /// interesting part.** `commit_rejects_a_foreign_batch` wants two *isolated
+    /// stores*, not two handles onto one, and two `open()` calls on the
+    /// `impl AsyncFn() -> F` every rule is handed already produce them (PS-15
+    /// says so in as many words). `fresh_projection_has_no_checkpoint` reads one
+    /// checkpoint through one handle and writes nothing at all. Both therefore
+    /// spell no gate, run against a fixture declining everything, and **pass** —
+    /// which is what this list asserts by omission, through the
+    /// `Verdict::Passed` arm of [`assert_projection_declension`]. A rule added
+    /// to this list "for safety" would make that assertion unreachable.
     ///
     /// A slice rather than a constant for [`MUST_REJECT`]'s reason.
     const PROJECTION_MUST_REJECT: &[&str] = &[
@@ -3374,32 +3376,40 @@ mod mutation_coverage {
         "commit_accepts_a_position_the_batch_did_not_write",
         "commit_rejects_a_regressing_position",
         "distinct_projections_advance_independently",
+        "reset_clears_rows_and_checkpoint_together",
+        "reset_is_scoped_to_one_projection",
+        "refused_reset_changes_nothing",
+        "reset_is_not_commit_at_first",
     ];
 
     /// [`PROJECTION_MUST_REJECT`]'s mirror **against this instrument**, and it
     /// is empty for a reason that is now about ordering rather than about
     /// absence.
     ///
-    /// One projection rule spells `require!` —
-    /// `failed_commit_leaves_both_unchanged`, gated on `COMMIT_FAULT` — and it
-    /// does *not* skip here, because it spells `must!(F: SECOND_HANDLE)` first
-    /// and this instrument declines that too. So against a fixture that declines
-    /// everything it panics, which is the correct answer and why it is in
+    /// Two projection rules spell `require!` —
+    /// `failed_commit_leaves_both_unchanged`, gated on `COMMIT_FAULT`, and
+    /// `refused_reset_changes_nothing`, gated on `RESET_REFUSAL` — and neither
+    /// skips here, because both spell `must!(F: SECOND_HANDLE)` first and this
+    /// instrument declines that too. So against a fixture that declines
+    /// everything they panic, which is the correct answer and why they are in
     /// [`PROJECTION_MUST_REJECT`] instead.
     ///
     /// **The skip arm is therefore demonstrated at the other end of this test,
     /// against the reference fixture**, on real values: `MemoryProjectionFixture`
-    /// supports `SECOND_HANDLE`, declines `COMMIT_FAULT` with its own stated
-    /// reason, and reports exactly one skip. That is a change from the state this
-    /// list was written in, when nothing in the workspace could demonstrate a
-    /// projection skip at all.
+    /// supports `SECOND_HANDLE`, declines `COMMIT_FAULT` and `RESET_REFUSAL`
+    /// with its own stated reasons, and reports exactly two skips. That is a
+    /// change from the state this list was written in, when nothing in the
+    /// workspace could demonstrate a projection skip at all.
     ///
-    /// This list stays, and stays empty, as the guard on the *next* gate: a rule
-    /// gated on a declinable capability the declining instrument is the only
-    /// fixture to decline — `RESET_REFUSAL`'s
-    /// `refused_reset_changes_nothing` (`reset-rules`, HS-S0012) is the nearest —
-    /// starts skipping here and fails the two-direction check below until it is
-    /// listed.
+    /// This list stays, and stays empty, as the guard on the *next* gate. It was
+    /// written expecting `RESET_REFUSAL`'s rule to be the first entry, and that
+    /// prediction was wrong for a reason worth keeping: the rule that arrived
+    /// spells the MUST first, so it rejects this instrument rather than skipping
+    /// against it. The next candidate is a rule gated on a declinable capability
+    /// **without** a `must!` above it — `ProjectionProbe::READS_THROUGH_BATCH`'s
+    /// `batch_reads_reflect_pending_writes` (`read-through-and-rebuild-rules`)
+    /// is the nearest — which starts skipping here and fails the two-direction
+    /// check below until it is listed.
     const PROJECTION_MUST_SKIP: &[&str] = &[];
 
     /// Every outcome against the declining instrument is one that instrument's
@@ -3525,50 +3535,77 @@ mod mutation_coverage {
         }
 
         // ---- And the reference fixture skips exactly what it declines ------
-        //
-        // This is the skip arm demonstrated on real values, and it is an
-        // *equality* rather than an emptiness check on purpose. "Skips nothing"
-        // was the assertion while every capability a rule read was supported;
-        // relaxing it to "may skip" the moment one rule acquired a gate would
-        // have turned it into a check that passes however many rules quietly
-        // stop running. So the set is pinned: exactly the rules gated on a
-        // capability this fixture declines, and nothing else.
+        assert_reference_projection_declensions();
+    }
+
+    /// The skip arm of [`projection_capability_skips_are_reported`],
+    /// demonstrated against the reference fixture on real values.
+    ///
+    /// A free function rather than the tail of that test for
+    /// [`assert_projection_declension`]'s reason, and it crossed
+    /// `clippy::too_many_lines` at the same place: the second declinable
+    /// capability's rule arrived and the body grew past a hundred lines. A lint
+    /// suppression there would be the wrong trade — every assertion below names
+    /// something a green build would otherwise have hidden.
+    fn assert_reference_projection_declensions() {
+        // An *equality* rather than an emptiness check on purpose. "Skips
+        // nothing" was the assertion while every capability a rule read was
+        // supported; relaxing it to "may skip" the moment a rule acquired a gate
+        // would have turned it into a check that passes however many rules
+        // quietly stop running. So the set is pinned: exactly the rules gated on
+        // a capability this fixture declines, and nothing else.
         let capable = run_projection_subject::<MemoryProjectionFixture>();
         assert_eq!(
             capable.skipped(),
-            vec!["failed_commit_leaves_both_unchanged"],
+            vec![
+                "failed_commit_leaves_both_unchanged",
+                "refused_reset_changes_nothing",
+            ],
             "`{}` supports every capability the registered rules ask for except \
              `COMMIT_FAULT`, which the reference store cannot offer — it applies \
-             both halves of a commit under one write lock. So exactly one rule \
-             may skip against it. A rule that joined this set means a gate reads \
-             the wrong const or a capability was declined to turn a red build \
-             green; a rule that left it means the gate went away",
+             both halves of a commit under one write lock — and `RESET_REFUSAL`, \
+             which it cannot offer either, because it holds no protection policy. \
+             So exactly two rules may skip against it, in enumeration order. A \
+             rule that joined this set means a gate reads the wrong const or a \
+             capability was declined to turn a red build green; a rule that left \
+             it means the gate went away",
             capable.name
         );
 
-        // And the skip carries the capability an author can change and the
+        // And each skip carries the capability an author can change and the
         // fixture's own words, rather than a testkit paraphrase.
-        let stated =
-            <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
-                .reason()
-                .expect("the reference fixture declines COMMIT_FAULT");
-        assert_eq!(
-            capable
-                .verdict("failed_commit_leaves_both_unchanged")
-                .map(Verdict::describe),
-            Some(
-                Verdict::Skipped {
-                    capability: "COMMIT_FAULT",
-                    reason: stated,
-                }
-                .describe()
+        for (rule, capability, stated) in [
+            (
+                "failed_commit_leaves_both_unchanged",
+                "COMMIT_FAULT",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
+                    .reason()
+                    .expect("the reference fixture declines COMMIT_FAULT"),
             ),
-            "the skip must name the associated const an adapter author can \
-             actually change and carry the fixture's own stated reason — \
-             compared against the fixture's own `const`, never against a literal \
-             repeated here, which is what would let the report carry someone \
-             else's sentence while this test stayed green"
-        );
+            (
+                "refused_reset_changes_nothing",
+                "RESET_REFUSAL",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::RESET_REFUSAL
+                    .reason()
+                    .expect("the reference fixture declines RESET_REFUSAL"),
+            ),
+        ] {
+            assert_eq!(
+                capable.verdict(rule).map(Verdict::describe),
+                Some(
+                    Verdict::Skipped {
+                        capability,
+                        reason: stated,
+                    }
+                    .describe()
+                ),
+                "the skip must name the associated const an adapter author can \
+                 actually change and carry the fixture's own stated reason — \
+                 compared against the fixture's own `const`, never against a \
+                 literal repeated here, which is what would let the report carry \
+                 someone else's sentence while this test stayed green"
+            );
+        }
 
         for (rule, verdict) in &capable.outcomes {
             assert!(

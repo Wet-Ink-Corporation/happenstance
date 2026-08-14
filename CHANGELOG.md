@@ -179,6 +179,80 @@ not the same as what a user needed to be told.
   checkpoint forward, and the slower ones skip every event between the two
   positions permanently, with nothing reported. It passes every other rule in the
   family, which is why this one has to exist separately.
+- **`reset_clears_rows_and_checkpoint_together`** — PS-16, and the rule that
+  makes `reset` one unit of work rather than two statements that usually both
+  run. The defect it detects is the runbook procedure: clear the read model on
+  one connection, update the checkpoint on another. That is what Norvant's night
+  desk executed at 02:46:31, and the pod died at 02:46:33 before the second
+  statement — so the runner restarted, read the *old* checkpoint, resumed past
+  it, applied sixty-one events into an empty table and reported healthy. Both
+  halves are read back through a **fresh handle** and asserted together, because
+  the pairing is the claim and neither half alone is one. The rule also carries
+  PS-16's failure-injecting arm without needing a fixture that can arm a fault:
+  a batch begun on a different store instance is refused as
+  `ResetError::ForeignBatch`, and a `reset` that errored must leave both halves
+  exactly as they were.
+- **`reset_is_scoped_to_one_projection`** — PS-17. The defect it detects is a
+  `reset` that truncates the checkpoint table — one statement, no `WHERE`,
+  obviously correct until a second projection shares the file. Kestrel Cold
+  Chain's does: `van_stock` is rebuilt several times a day across 138 devices,
+  and `fgas_ledger` is a hash chain a regulator already holds and must never be
+  rebuilt at all. The rule commits rows and a checkpoint under **two** ids in one
+  store and asserts the sibling's rows and checkpoint are untouched, which is
+  what makes it non-decorative: without the sibling the same code passes and the
+  ledger is destroyed in the field. It hands `reset` an **empty** batch on
+  purpose, so that every row that disappears is the store's own doing rather than
+  the caller's `probe_delete_all`.
+- **`refused_reset_changes_nothing`** — PS-18, and the family's second
+  capability-gated rule. An adapter must be able to refuse a reset for a
+  projection its domain protects, and the operative half is that a refusal
+  **changes nothing**: the defects it detects are a policy enforced anywhere
+  except inside `reset`, so the call returns `Ok` and does the work, and a policy
+  checked *after* the deletes have gone out, so the refusal is reported perfectly
+  honestly over a read model that is already gone. A rule stopping at
+  `matches!(err, ResetError::Refused)` certifies the second. Reaching a refusal
+  needs the store's own policy, so the rule is gated on
+  `ProjectionFixture::RESET_REFUSAL` and names the projection to protect through
+  the new `ProjectionFixture::protect_from_reset`; `MemoryProjectionStore` holds
+  no protection policy and declines, so the reference run prints a second `SKIP`
+  line carrying that store's own words.
+- **`fresh_projection_has_no_checkpoint`** — §4.11's rule for PS-19, asked before
+  any reset has happened. The defect it detects is a `checkpoint` that resolves a
+  missing row with `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is
+  what an author writes when the position column is `NOT NULL DEFAULT 1`. Such a
+  store satisfies PS-19's MUST verbatim — after a successful reset the row is
+  there and says `NeverRun` — and still tells a runner that a read model nobody
+  has ever built is authoritative and already considered through the first
+  position, so the first event of every projection the store has never seen is
+  skipped. The assertion is on the **variant**: comparing a checkpoint against a
+  position is both a CF-6 violation and the exact value the defective store
+  writes, so a rule written that way could not tell the two apart.
+- **`reset_is_not_commit_at_first`** — PS-19 and PS-20, and the rule that turns
+  RUNBOOK's observation into an enforced rejection. The defect it detects is
+  `commit(empty_batch, id, SequencePosition::FIRST, Live)` used as a substitute
+  for a reset — **six deployment scenarios out of six reached for it and all six
+  got it wrong**. It compiles, it returns `Ok` and the checkpoint moves, so
+  everything anybody checks afterwards looks right; what it costs is event 1,
+  permanently and silently, because a runner resumes strictly after the position
+  it reads. The rule performs both operations on two ids in one store, asserts
+  the checkpoints differ **by variant**, and then derives a resume point from
+  each under the port's own rule — strictly after a recorded position, inclusive
+  from the store's first position when the checkpoint is `NeverRun` — asserting
+  the event at the first position is applied in the reset case and not in the
+  substitute's. No runner is built: the derivation is four lines the rule owns.
+- **Six more wrong projection stores, and three declarations grown.**
+  `TwoStatementResetStore` (the 02:46:31 truncate whose second statement never
+  ran), `TruncatingResetStore` (`DELETE FROM projection_checkpoints`, no
+  `WHERE`), `CommitAtFirstResetStore` (the substitute six scenarios reached for),
+  `RefusalAsSuccessStore` and `RefusalAfterTheFactStore` (the two halves of a
+  protection policy that is not in the write path), and
+  `PresumedLiveCheckpointStore` (a missing checkpoint row read as `Live`) are
+  registered in the projection mutant registry, each failing exactly what it
+  declares at a pinned assertion. Three existing rows grew rather than the new
+  rules being weakened to preserve them, which is the exactness meta-test
+  working: a store that makes nothing durable, one that stamps its batches per
+  type, and one that validates a commit's position are each visible to a reset
+  rule as well. Still no pass rate anywhere over the set.
 - **`MemoryProjectionStore`, behind the existing `memory` feature** — the
   projection port's answer to `MemoryEventStore`, and the first implementation of
   that port anywhere that actually runs. It is the oracle a failing adapter is

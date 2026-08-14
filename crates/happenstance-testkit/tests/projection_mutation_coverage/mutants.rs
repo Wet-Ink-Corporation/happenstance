@@ -22,7 +22,7 @@
 
 use core::cell::Cell;
 
-use happenstance_core::{Checkpoint, CommitError, ProjectionId, SequencePosition};
+use happenstance_core::{Checkpoint, CommitError, ProjectionId, ResetError, SequencePosition};
 
 use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
 
@@ -278,5 +278,184 @@ impl Defect for SingleRowCheckpointStore {
         // The schema has one row and no key column, so the id never reaches it.
         let _ = id;
         "checkpoint".to_owned()
+    }
+}
+
+/// The runbook procedure: clear the table, then update the checkpoint — two
+/// statements, and only the first one ran.
+///
+/// This is what Norvant's night desk executed at 02:46:31 and what the pod's
+/// death at 02:46:33 turned into an outage: the rows went, the checkpoint
+/// stayed, the runner restarted, read the old checkpoint, resumed *past* it and
+/// applied sixty-one events into an empty table while **reporting healthy**
+/// (`spec/E2E-CASES.md:458-481`). Nothing about it looks wrong from inside the
+/// process that ran it — the deletes committed, the operator saw no error, and
+/// the second statement is the one nobody watches.
+///
+/// It is the shape any adapter reaches for when `reset` is written as two
+/// round trips rather than as one unit of work, and it is the reason PS-16's
+/// obligation is a *pairing* rather than two obligations that happen to sit
+/// beside each other.
+pub(crate) struct TwoStatementResetStore;
+
+impl Defect for TwoStatementResetStore {
+    const NAME: &'static str = "TwoStatementResetStore";
+
+    fn reset_writes(state: &mut State, batch: &mut MutantBatch<Self>, key: &str) {
+        // The whole defect, and it is one line short of the correct step: the
+        // caller's deletes are applied and the checkpoint is left exactly where
+        // it was. **Delete this method and the rules go green.**
+        let _ = key;
+        apply(state, batch);
+    }
+}
+
+/// `DELETE FROM projection_checkpoints` — no `WHERE`.
+///
+/// The `SqliteProjectionStore::reset()` §4.11 names: truncating the checkpoint
+/// table is one statement, it is obviously correct while a store runs one
+/// projection, and it stays obviously correct right up to the day a second
+/// projection shares the file. Kestrel Cold Chain's does: `van_stock` is rebuilt
+/// several times a day across 138 devices, and `fgas_ledger` is a hash chain a
+/// regulator already holds and must never be rebuilt at all
+/// (`spec/E2E-CASES.md:482-497`).
+///
+/// It applies the caller's deletes correctly and returns the projection it was
+/// asked about to `NeverRun` correctly, so every rule that holds one projection
+/// passes it. What it also does is return every *other* projection in the store
+/// to `NeverRun`, which the next runner reads as "never built" and rebuilds from
+/// an event log that no longer holds the events the ledger was built from.
+pub(crate) struct TruncatingResetStore;
+
+impl Defect for TruncatingResetStore {
+    const NAME: &'static str = "TruncatingResetStore";
+
+    fn reset_writes(state: &mut State, batch: &mut MutantBatch<Self>, key: &str) {
+        apply(state, batch);
+        // The whole defect: the statement has no `WHERE`, so the key it was
+        // given never reaches it.
+        let _ = key;
+        state.checkpoints.clear();
+    }
+}
+
+/// `reset` implemented as `commit(batch, id, FIRST, Live)`.
+///
+/// The substitute **all six deployment scenarios reached for and all six got
+/// wrong** (`RUNBOOK.md:3904-3907`), written into a store rather than typed at a
+/// 03:18 prompt. It compiles, it returns `Ok`, the checkpoint moves and the rows
+/// go — so every rule asserting that a reset *changed something* passes it, and
+/// so does every operator who checks afterwards that the read model is empty.
+///
+/// What it costs is event 1, permanently and silently: the checkpoint reads back
+/// as a position, a runner resumes **strictly after** the position it reads, and
+/// nothing anywhere reports that the first event of the rebuild was never
+/// applied (`spec/E2E-CASES.md:437-456`).
+pub(crate) struct CommitAtFirstResetStore;
+
+impl Defect for CommitAtFirstResetStore {
+    const NAME: &'static str = "CommitAtFirstResetStore";
+
+    fn reset_writes(state: &mut State, batch: &mut MutantBatch<Self>, key: &str) {
+        apply(state, batch);
+        // The whole defect, and it is the *same* line the correct `commit` step
+        // writes — which is the point. `reset` here is a commit at the first
+        // position wearing another name.
+        state.checkpoints.insert(
+            key.to_owned(),
+            Checkpoint::Live {
+                through: SequencePosition::FIRST,
+            },
+        );
+    }
+}
+
+/// A protection policy consulted somewhere other than the write path.
+///
+/// The adapter whose "protected projections" list is enforced in the admin UI,
+/// in a wrapper the application calls, or in a code review convention — anywhere
+/// except inside `reset`. Its `reset` does the work and reports success, which
+/// is what every runbook, migration script and operator holding the store gets.
+///
+/// PS-18 exists because a policy with no port-level mechanism is bypassed by
+/// anyone holding the store, and this is that store: the policy is real,
+/// documented and completely absent from the one code path that could enforce
+/// it.
+pub(crate) struct RefusalAsSuccessStore;
+
+impl Defect for RefusalAsSuccessStore {
+    const NAME: &'static str = "RefusalAsSuccessStore";
+
+    fn refusal(
+        state: &mut State,
+        batch: &mut MutantBatch<Self>,
+        protected: bool,
+    ) -> Option<ResetError<MutantError>> {
+        // The whole defect: the flag is read and discarded, so the reset below
+        // proceeds and answers `Ok`.
+        let _ = (state, batch, protected);
+        None
+    }
+}
+
+/// A refusal issued **after** the deletes have gone out.
+///
+/// The mirror-image defect, and the one a rule that stopped at
+/// `matches!(err, ResetError::Refused)` would certify: this store deletes first
+/// and checks its policy second, so the error it returns is perfectly honest and
+/// the read model it returns it over is already gone. An adapter reaches this
+/// shape by putting the policy check at the end of a method that begins with the
+/// work, or by enforcing it in a trigger that fires after the statement it was
+/// meant to prevent.
+///
+/// The caller is told the reset was refused, believes the ledger is intact, and
+/// finds out otherwise the next time anybody reads it.
+pub(crate) struct RefusalAfterTheFactStore;
+
+impl Defect for RefusalAfterTheFactStore {
+    const NAME: &'static str = "RefusalAfterTheFactStore";
+
+    fn refusal(
+        state: &mut State,
+        batch: &mut MutantBatch<Self>,
+        protected: bool,
+    ) -> Option<ResetError<MutantError>> {
+        if protected {
+            // The whole defect: the caller's deletes are applied and *then* the
+            // refusal is returned. The checkpoint is left alone, which is what
+            // makes this the honest-looking half — the store really did decline
+            // to move it.
+            apply(state, batch);
+            return Some(ResetError::Refused);
+        }
+        None
+    }
+}
+
+/// A missing checkpoint row resolved as `Live { through: FIRST }`.
+///
+/// The specification names this shape itself, and names it as the *natural* one
+/// rather than a contrivance (`spec/SPECIFICATION.md:5232-5243`): an adapter
+/// whose `reset` records an explicit `NeverRun` and whose `checkpoint` resolves a
+/// missing row with `.unwrap_or(…)` has to put *something* in the `unwrap_or`,
+/// and `Live { through: FIRST }` is what an author writes when the checkpoint
+/// column is `NOT NULL DEFAULT 1`.
+///
+/// It satisfies PS-19's MUST verbatim — after a successful reset the row is
+/// there and says `NeverRun` — and tells a runner that a read model nobody has
+/// ever built is authoritative and already considered through the first
+/// position. Every event at that position is then skipped on the first run of
+/// every projection the store has never seen.
+pub(crate) struct PresumedLiveCheckpointStore;
+
+impl Defect for PresumedLiveCheckpointStore {
+    const NAME: &'static str = "PresumedLiveCheckpointStore";
+
+    fn missing_checkpoint() -> Checkpoint {
+        // The whole defect, and it is the `unwrap_or` argument: a row that is
+        // not there is read as a projection that has been run.
+        Checkpoint::Live {
+            through: SequencePosition::FIRST,
+        }
     }
 }

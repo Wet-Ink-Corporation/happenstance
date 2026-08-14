@@ -326,6 +326,63 @@ pub(crate) trait Defect: 'static + Sized {
         let _ = (state, batch);
     }
 
+    /// How a checkpoint row that is **not there** resolves.
+    ///
+    /// PS-19's seam, and the correct answer is [`Checkpoint::NeverRun`]: a
+    /// projection the store has never seen has never run. It is a step because
+    /// the natural wrong answer — `.unwrap_or(Checkpoint::Live { through: FIRST })`
+    /// — is the one the specification itself names
+    /// (`spec/SPECIFICATION.md:5232-5243`), and a store that resolves it that way
+    /// still satisfies PS-19's MUST verbatim so long as `reset` records an
+    /// explicit `NeverRun`. Which [`reset_writes`](Self::reset_writes) does, one
+    /// step below, precisely so that *what an unseen id reads* and *what a reset
+    /// leaves behind* are two seams rather than one entangled one.
+    fn missing_checkpoint() -> Checkpoint {
+        Checkpoint::NeverRun
+    }
+
+    /// Whether this store refuses to reset the projection it was handed.
+    ///
+    /// PS-18's seam. `protected` is `true` when the fixture has put this
+    /// projection under the store's protection through
+    /// [`ProjectionFixture::protect_from_reset`](happenstance_testkit::ProjectionFixture::protect_from_reset),
+    /// which is the only way a suite can reach a policy the *domain* owns. The
+    /// correct answer refuses and **writes nothing**: PS-18's operative half is
+    /// that a refusal leaves both the read model and the checkpoint exactly as
+    /// they were, and a store that deletes first and refuses afterwards reports
+    /// the refusal perfectly honestly over a read model that is already gone.
+    fn refusal(
+        state: &mut State,
+        batch: &mut MutantBatch<Self>,
+        protected: bool,
+    ) -> Option<ResetError<MutantError>> {
+        // Named rather than left out, so that what the correct step declines to
+        // touch is visible: neither half is written on this path.
+        let _ = (state, batch);
+        protected.then_some(ResetError::Refused)
+    }
+
+    /// Both halves of a reset, made durable as one unit.
+    ///
+    /// PS-16's seam, and [`commit_writes`](Self::commit_writes)'s dual: one step
+    /// for the same reason, because the interesting defects are the ways the two
+    /// halves come apart. The correct answer applies the caller's own deletes —
+    /// the port has no idea what the read model is — and records this
+    /// projection's checkpoint as an explicit [`Checkpoint::NeverRun`].
+    ///
+    /// **Recording rather than removing** is a deliberate divergence from
+    /// `MemoryProjectionStore`, which removes the key and documents why. Both are
+    /// conformant, and this one keeps the seam above honest: with a removal, a
+    /// store whose *missing* row resolves to `Live` would fail four rules
+    /// instead of the one its defect is about, and the exactness meta-test would
+    /// be reporting the entanglement rather than the defect.
+    fn reset_writes(state: &mut State, batch: &mut MutantBatch<Self>, key: &str) {
+        apply(state, batch);
+        state
+            .checkpoints
+            .insert(key.to_owned(), Checkpoint::NeverRun);
+    }
+
     /// Returns the store's one connection when a batch is dropped **bare**.
     ///
     /// PS-7's seam, and the only step reached from a `Drop` impl rather than from
@@ -426,6 +483,15 @@ pub(crate) struct MutantStore<D: Defect> {
     /// that fires it, so the fault happens once — the same one-shot contract
     /// `Fixture::arm_mid_batch_fault` states.
     fault: Rc<Cell<bool>>,
+    /// The one projection this store's policy protects from `reset`, if any.
+    ///
+    /// Shared by every handle for the fault flag's reason: a protection policy
+    /// belongs to the *store* rather than to one session's view of it, and a
+    /// rule declares it through the fixture and then resets through a handle.
+    /// Unlike the fault it is **not** one-shot — a policy that evaporated after
+    /// refusing once would protect a regulatory ledger from the first operator
+    /// and not from the second.
+    protected: Rc<RefCell<Option<String>>>,
     stamp: u64,
     defect: PhantomData<D>,
 }
@@ -447,6 +513,7 @@ impl<D: Defect> Clone for MutantStore<D> {
             state: Rc::clone(&self.state),
             connection: Rc::clone(&self.connection),
             fault: Rc::clone(&self.fault),
+            protected: Rc::clone(&self.protected),
             stamp: self.stamp,
             defect: PhantomData,
         }
@@ -460,6 +527,7 @@ impl<D: Defect> MutantStore<D> {
             state: Rc::new(RefCell::new(State::default())),
             connection: Rc::new(Cell::new(false)),
             fault: Rc::new(Cell::new(false)),
+            protected: Rc::new(RefCell::new(None)),
             stamp: D::mint_stamp(),
             defect: PhantomData,
         }
@@ -471,6 +539,21 @@ impl<D: Defect> MutantStore<D> {
     /// shares the flag and the fixture holds one of those handles.
     fn arm(&self) {
         self.fault.set(true);
+    }
+
+    /// Puts `id` under this store's protection policy.
+    ///
+    /// The store's own method for [`arm`](Self::arm)'s reason. This *is* the
+    /// policy — one id, held in a cell — and it is as much of one as a
+    /// conformance rule can observe: PS-18 leaves what to protect to the domain
+    /// and asks the port only for the mechanism.
+    fn protect(&self, id: &ProjectionId) {
+        *self.protected.borrow_mut() = Some(id.as_str().to_owned());
+    }
+
+    /// Whether this store's policy protects `id`.
+    fn protects(&self, id: &ProjectionId) -> bool {
+        self.protected.borrow().as_deref() == Some(id.as_str())
     }
 }
 
@@ -508,7 +591,7 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             .checkpoints
             .get(&D::checkpoint_key(id))
             .copied()
-            .unwrap_or(Checkpoint::NeverRun))
+            .unwrap_or_else(D::missing_checkpoint))
     }
 
     async fn commit(
@@ -536,7 +619,7 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
             .checkpoints
             .get(&key)
             .copied()
-            .unwrap_or(Checkpoint::NeverRun);
+            .unwrap_or_else(D::missing_checkpoint);
         if let Some(refusal) = D::regression(recorded, position) {
             return Err(refusal);
         }
@@ -585,10 +668,19 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
         }
 
         let key = D::checkpoint_key(id);
+        // Read before the state is borrowed: the policy and the read model are
+        // two cells, and a store that took both borrows at once would be
+        // modelling a lock this port does not require.
+        let protected = self.protects(id);
         let mut state = self.state.borrow_mut();
-        apply(&mut state, &mut batch);
-        // *Removing* the key is what returns the projection to `NeverRun`.
-        state.checkpoints.remove(&key);
+
+        if let Some(refusal) = D::refusal(&mut state, &mut batch, protected) {
+            // The connection is returned by the batch's `Drop`, exactly as it is
+            // on every other error path out of `reset`.
+            return Err(refusal);
+        }
+
+        D::reset_writes(&mut state, &mut batch, &key);
         drop(state);
 
         self.connection.set(false);
@@ -658,14 +750,19 @@ impl<D: Defect> ProjectionFixture for MutantFixture<D> {
     // binary indistinguishable from every other.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    // The same honest answer `MemoryProjectionFixture` gives, and for the same
-    // reason rather than a copied sentence: the correct core holds no protection
-    // policy, so `reset` returns `Refused` on no path at all and there is no
-    // projection any of these stores could decline to reset.
-    const RESET_REFUSAL: Capability = Capability::declined(
-        "a projection mutant is a BTreeMap behind an Rc and holds no protection \
-         policy, so there is no projection it could decline to reset",
-    );
+    // Supported, and it has to be for `COMMIT_FAULT`'s reason: a fixture that
+    // declined it would make `refused_reset_changes_nothing` *skip* against
+    // every store in this binary, and a skip is neither a pass nor a failure —
+    // so the two stores written to fail that rule could never be shown to, and
+    // CF-1 would be satisfied by a declaration nothing evaluates.
+    //
+    // It is the second capability this fixture supports and the reference one
+    // declines, and for the same reason: unlike a shipped store, this one is an
+    // *instrument*. `MutantStore` holds one protected id in a cell, which is as
+    // much of a protection policy as a conformance rule can observe — PS-18
+    // leaves *what* to protect to the domain and asks the port only for the
+    // mechanism.
+    const RESET_REFUSAL: Capability = Capability::SUPPORTED;
 
     // Supported, and it has to be for the same reason `SECOND_HANDLE` does: a
     // fixture that declined it would make `failed_commit_leaves_both_unchanged`
@@ -683,6 +780,11 @@ impl<D: Defect> ProjectionFixture for MutantFixture<D> {
         self.0.arm();
         // Ready rather than `async move`, for `connect`'s reason: setting a
         // `Cell` is not I/O and should not pretend to be.
+        core::future::ready(())
+    }
+
+    fn protect_from_reset(&self, id: &ProjectionId) -> impl Future<Output = ()> {
+        self.0.protect(id);
         core::future::ready(())
     }
 

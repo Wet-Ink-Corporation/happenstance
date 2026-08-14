@@ -321,6 +321,13 @@ const REGISTRY: &[Declared] = &[
             "commit_accepts_a_position_the_batch_did_not_write",
             "commit_rejects_a_regressing_position",
             "distinct_projections_advance_independently",
+            // The sixth arrived with `reset-rules`, at the same anchor and for
+            // the same reason: the substitute's `commit(empty, id, FIRST)` makes
+            // nothing durable, so the checkpoint that was supposed to be
+            // *distinguishable* from a reset one reads `NeverRun` as well. The
+            // repair to refuse would be weakening the new rule so this
+            // declaration survived.
+            "reset_is_not_commit_at_first",
         ],
         provenance: "an adapter whose `commit` executes the batch inside a transaction it \
                      never commits — the statements go out, the connection returns to the \
@@ -355,6 +362,10 @@ const REGISTRY: &[Declared] = &[
             (
                 "distinct_projections_advance_independently",
                 "one commit advances exactly one projection",
+            ),
+            (
+                "reset_is_not_commit_at_first",
+                "must be **distinguishable by variant**",
             ),
         ],
     },
@@ -418,7 +429,18 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "TypeStampedBatchStore",
         kind: Kind::Mutant,
-        fails: &["commit_rejects_a_foreign_batch"],
+        // Two rules, one defect, and the second one is `reset`'s half of the
+        // first: PS-15's stamp is checked by `commit` *and* by `reset`, and
+        // `reset_clears_rows_and_checkpoint_together` reaches PS-16's
+        // failure-injecting half through exactly that refusal — a batch begun on
+        // another store instance is the one `reset` failure a caller can produce
+        // without a fixture that can arm a fault. A store that accepts every
+        // instance's batch answers `Ok` there and clears a read model whose
+        // owner was never asked.
+        fails: &[
+            "commit_rejects_a_foreign_batch",
+            "reset_clears_rows_and_checkpoint_together",
+        ],
         provenance: "an adapter that reads \"stamp the batch\" as \"tag it with which \
                      store *kind* made it\" — a `const`, a `Default`, a hash of the \
                      connection string — so every instance accepts every other instance's \
@@ -427,15 +449,31 @@ const REGISTRY: &[Declared] = &[
                      holds one store: what it permits is a runner with two stores \
                      committing one projection's rows into the other's database",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "commit_rejects_a_foreign_batch",
-            "must be rejected as `CommitError::ForeignBatch`",
-        )],
+        expect: &[
+            (
+                "commit_rejects_a_foreign_batch",
+                "must be rejected as `CommitError::ForeignBatch`",
+            ),
+            (
+                "reset_clears_rows_and_checkpoint_together",
+                "must be refused as `ResetError::ForeignBatch`",
+            ),
+        ],
     },
     Declared {
         name: "ValidatingCommitStore",
         kind: Kind::Mutant,
-        fails: &["commit_accepts_a_position_the_batch_did_not_write"],
+        // The second arrived with `reset-rules` and is the same defect seen from
+        // the other side: the operator's substitute *is*
+        // `commit(empty_batch, id, FIRST)`, so a store that refuses a commit
+        // whose batch applied nothing refuses the substitute itself. Modelling
+        // the substitute with a non-empty batch would have kept this
+        // declaration at one rule and stopped modelling what six deployment
+        // scenarios actually typed.
+        fails: &[
+            "commit_accepts_a_position_the_batch_did_not_write",
+            "reset_is_not_commit_at_first",
+        ],
         provenance: "an adapter that validates `position` against what the batch wrote — \
                      named by the specification itself for this rule \
                      (`spec/SPECIFICATION.md:5680-5685`). The point of registering it is \
@@ -445,10 +483,13 @@ const REGISTRY: &[Declared] = &[
                      What it costs is a narrow projection re-scanning the same range for \
                      ever on every restart",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "commit_accepts_a_position_the_batch_did_not_write",
-            "commit should succeed",
-        )],
+        expect: &[
+            (
+                "commit_accepts_a_position_the_batch_did_not_write",
+                "commit should succeed",
+            ),
+            ("reset_is_not_commit_at_first", "commit should succeed"),
+        ],
     },
     Declared {
         name: "UnconditionalCheckpointStore",
@@ -470,7 +511,17 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "SingleRowCheckpointStore",
         kind: Kind::Mutant,
-        fails: &["distinct_projections_advance_independently"],
+        // Two rules, and the second arrived with `reset-rules` for the reason
+        // the first one is here: one checkpoint row shared by every projection
+        // is a *scoping* defect, and `reset` is the second operation that is
+        // scoped to one `(store, ProjectionId)` pair. Resetting one projection
+        // returns the shared row to `NeverRun` and every other projection in the
+        // store reads as never built. Neither rule is covered by this store
+        // alone.
+        fails: &[
+            "distinct_projections_advance_independently",
+            "reset_is_scoped_to_one_projection",
+        ],
         provenance: "a checkpoint table with one row, one position column and no key — \
                      what a store that has only ever run one projection will write. Every \
                      projection shares the row, so the fastest one drags the others \
@@ -478,10 +529,181 @@ const REGISTRY: &[Declared] = &[
                      positions, permanently and with nothing reported. §4.11 names it, and \
                      its own Rejects note observes that it passes every other rule",
         mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "distinct_projections_advance_independently",
+                "one commit advances exactly one projection",
+            ),
+            (
+                "reset_is_scoped_to_one_projection",
+                "resetting one projection moved another one's checkpoint",
+            ),
+        ],
+    },
+    Declared {
+        name: "TwoStatementResetStore",
+        kind: Kind::Mutant,
+        // Three rules from one overridden step, and the inflation is the defect
+        // being *visible* rather than the store being broken in three ways: a
+        // `reset` that never touches the checkpoint leaves it `Live`, and the
+        // three rules that look at a checkpoint after a reset all see it. It is
+        // the only store covering `reset_clears_rows_and_checkpoint_together`'s
+        // checkpoint half, which is the half PS-16 is about.
+        fails: &[
+            "reset_clears_rows_and_checkpoint_together",
+            "reset_is_scoped_to_one_projection",
+            "reset_is_not_commit_at_first",
+        ],
+        provenance: "the runbook procedure: `DELETE FROM read_model` on one connection and \
+                     `UPDATE checkpoints SET …` on another, which is what Norvant's night desk \
+                     executed. The truncate committed at 02:46:31 and the pod died at 02:46:33, \
+                     so the second statement never ran; the runner restarted, read the old \
+                     checkpoint, resumed past it, applied sixty-one events into an empty table \
+                     and reported healthy (`spec/E2E-CASES.md:458-481`). §4.11 names it for this \
+                     rule",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "reset_clears_rows_and_checkpoint_together",
+                "must return this projection's checkpoint to",
+            ),
+            (
+                "reset_is_scoped_to_one_projection",
+                "own checkpoint must have returned to",
+            ),
+            (
+                "reset_is_not_commit_at_first",
+                "must be **distinguishable by variant**",
+            ),
+        ],
+    },
+    Declared {
+        name: "TruncatingResetStore",
+        kind: Kind::Mutant,
+        // Exactly one, and it is the rule that needs a sibling id to be
+        // failable at all: this store resets the projection it was asked about
+        // perfectly, so every rule holding one projection passes it.
+        fails: &["reset_is_scoped_to_one_projection"],
+        provenance: "a `SqliteProjectionStore::reset()` that truncates the checkpoint table — \
+                     one statement, no `WHERE`, and obviously correct until a second projection \
+                     shares the file. §4.11 names it. What it destroys in the field is the \
+                     append-only ledger sharing that file: Kestrel Cold Chain rebuilds \
+                     `van_stock` several times a day across 138 devices, and `fgas_ledger` is a \
+                     hash chain a regulator already holds and must never be rebuilt \
+                     (`spec/E2E-CASES.md:482-497`)",
+        mode: FailureMode::Assertion,
         expect: &[(
-            "distinct_projections_advance_independently",
-            "one commit advances exactly one projection",
+            "reset_is_scoped_to_one_projection",
+            "resetting one projection moved another one's checkpoint",
         )],
+    },
+    Declared {
+        name: "CommitAtFirstResetStore",
+        kind: Kind::Mutant,
+        // Three rules, for `TwoStatementResetStore`'s reason and with the same
+        // reading: a `reset` that leaves a *position* behind is seen by every
+        // rule that looks at a checkpoint after a reset. What separates the two
+        // stores is not which rules they fail but what they model — one is the
+        // statement that never ran, the other is the statement someone wrote on
+        // purpose.
+        fails: &[
+            "reset_clears_rows_and_checkpoint_together",
+            "reset_is_scoped_to_one_projection",
+            "reset_is_not_commit_at_first",
+        ],
+        provenance: "`reset` implemented as `commit(batch, id, FIRST, Live)` — the substitute \
+                     **all six deployment scenarios reached for and all six got wrong** \
+                     (`RUNBOOK.md:3904-3907`), and the one an operator types at 03:18 because it \
+                     is the only thing the port used to offer. It compiles, it returns `Ok`, the \
+                     rows go and the checkpoint moves, so everything anybody checks afterwards \
+                     looks right. Event 1 is then skipped permanently and silently, because a \
+                     runner resumes strictly after the position it reads \
+                     (`spec/E2E-CASES.md:437-456`)",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "reset_clears_rows_and_checkpoint_together",
+                "must return this projection's checkpoint to",
+            ),
+            (
+                "reset_is_scoped_to_one_projection",
+                "own checkpoint must have returned to",
+            ),
+            (
+                "reset_is_not_commit_at_first",
+                "must be **distinguishable by variant**",
+            ),
+        ],
+    },
+    Declared {
+        name: "RefusalAsSuccessStore",
+        kind: Kind::Mutant,
+        fails: &["refused_reset_changes_nothing"],
+        provenance: "an adapter whose protected-projections policy is enforced anywhere except \
+                     inside `reset` — in the admin UI, in an application-side wrapper, in a code \
+                     review convention. The policy is real and documented, and every runbook, \
+                     migration script and operator holding the store goes straight past it. \
+                     PS-18 exists for exactly this: the port supplies the mechanism, because a \
+                     policy with no port-level mechanism is bypassed by anyone holding the store",
+        mode: FailureMode::Assertion,
+        // Pinned at the first of the rule's three assertions: this store is
+        // supposed to be caught by *answering `Ok`*, and if it ever started
+        // failing at one of the state assertions instead, the row would be
+        // certifying something its provenance does not describe.
+        expect: &[(
+            "refused_reset_changes_nothing",
+            "must answer `Err(ResetError::Refused)`",
+        )],
+    },
+    Declared {
+        name: "RefusalAfterTheFactStore",
+        kind: Kind::Mutant,
+        fails: &["refused_reset_changes_nothing"],
+        provenance: "an adapter that issues the caller's deletes and checks its protection \
+                     policy afterwards — the policy check at the end of a method that begins \
+                     with the work, or a trigger that fires after the statement it was meant to \
+                     prevent. The `Err` it returns is honest, the caller believes the ledger is \
+                     intact, and it is not. It is the mirror-image defect a rule stopping at \
+                     `matches!(err, ResetError::Refused)` would certify, which is why PS-18's \
+                     operative half is *changes nothing*",
+        mode: FailureMode::Assertion,
+        // Pinned at the read-model half specifically, because this store's whole
+        // claim is that the error variant is right and the state is not.
+        expect: &[(
+            "refused_reset_changes_nothing",
+            "must leave the read model exactly as it was",
+        )],
+    },
+    Declared {
+        name: "PresumedLiveCheckpointStore",
+        kind: Kind::Mutant,
+        // Two rules from one `unwrap_or` argument, and the second is not
+        // inflation: `commit_rejects_a_foreign_batch` asserts that a rejected
+        // commit left both stores at `NeverRun`, which is a question about an id
+        // neither store has ever seen. A store that answers `Live` there answers
+        // `Live` there. Narrowing the defect further would mean inventing a
+        // store that resolves a missing row differently depending on who asks,
+        // which is not an adapter anybody writes.
+        fails: &[
+            "fresh_projection_has_no_checkpoint",
+            "commit_rejects_a_foreign_batch",
+        ],
+        provenance: "an adapter whose `checkpoint` resolves a missing row with \
+                     `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author \
+                     writes when the position column is `NOT NULL DEFAULT 1`. The specification \
+                     names this shape itself and names it as the natural one rather than a \
+                     contrivance (`spec/SPECIFICATION.md:5232-5243`): paired with a `reset` that \
+                     records an explicit `NeverRun`, it satisfies PS-19's MUST verbatim and \
+                     still tells a runner that a read model nobody has ever built is \
+                     authoritative",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "fresh_projection_has_no_checkpoint",
+                "a projection this store has never seen must read back as",
+            ),
+            ("commit_rejects_a_foreign_batch", "moved its checkpoint"),
+        ],
     },
 ];
 
@@ -502,6 +724,13 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::ValidatingCommitStore>,
             crate::correct::MutantFixture<crate::mutants::UnconditionalCheckpointStore>,
             crate::correct::MutantFixture<crate::mutants::SingleRowCheckpointStore>,
+
+            crate::correct::MutantFixture<crate::mutants::TwoStatementResetStore>,
+            crate::correct::MutantFixture<crate::mutants::TruncatingResetStore>,
+            crate::correct::MutantFixture<crate::mutants::CommitAtFirstResetStore>,
+            crate::correct::MutantFixture<crate::mutants::RefusalAsSuccessStore>,
+            crate::correct::MutantFixture<crate::mutants::RefusalAfterTheFactStore>,
+            crate::correct::MutantFixture<crate::mutants::PresumedLiveCheckpointStore>,
         }
     };
 }
