@@ -513,6 +513,35 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The configuration the two steps above cannot see, and the one every
+        // consumer who types `cargo add happenstance-core` builds: `memory` on,
+        // `conformance` off. `--all-features` resolves a link into a
+        // `cfg`-gated item because the gate is open; `--no-default-features`
+        // never renders the page that carries the link. So a link from
+        // `MemoryProjectionStore`'s page to `ProjectionProbe` — a `conformance`
+        // item — was a hard error on the default feature set and green on both
+        // sides of it. That is the same D13 defect one axis over, and the fix
+        // for the defect is not a gate step; this is.
+        //
+        // `--document-private-items` for parity with the workspace step above:
+        // `rustdoc::redundant_explicit_links` fires only when both ends of a
+        // link are documented destinations, which private items are what makes
+        // true — so without the flag this step would render the right feature
+        // set through a narrower lint surface than the gate already runs.
+        name: "documentation (default features)",
+        program: "cargo",
+        args: &[
+            "doc",
+            "--locked",
+            "-p",
+            "happenstance-core",
+            "--no-deps",
+            "--document-private-items",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // D11. Manifest metadata promising two licences is not the same thing as
         // an artifact containing them, and only the second is what a consumer
         // unpacks. See `package`'s module docs.

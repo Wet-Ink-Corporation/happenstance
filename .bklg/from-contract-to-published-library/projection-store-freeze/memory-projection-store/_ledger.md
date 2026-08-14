@@ -70,6 +70,24 @@ Two notes specific to this story, so a row is not flipped on the wrong evidence:
   satisfied: true
   evidence: |
     `begin` stamps the store instance's identity into the batch (crates/happenstance-core/src/projection_memory.rs:126-132, from `next_stamp()` at :382); `commit` compares it at :278-280 and `reset` at :318-320, before taking any guard. Verified by crates/happenstance-core/tests/projection_memory.rs::commit_rejects_a_foreign_batch and ::reset_rejects_a_foreign_batch (both passing), each constructing two stores, beginning a batch on one, handing it to the other, and asserting **both** the error arm (`CommitError::ForeignBatch` / `ResetError::ForeignBatch`) and that the receiving store's rows and checkpoint are untouched. The stamp is per *instance* rather than per type — a per-type stamp would compare equal everywhere and make the test unwritable.
+    CORRECTION, 2026-08-13 (slice review). The evidence above was true through `new()` and
+    **false through `Default`**, which is a public constructor of the same store. The struct
+    carried `#[derive(Debug, Default)]`, and the derive fills `stamp` with `0` while
+    `next_stamp()`'s counter starts at `1` — so two `MemoryProjectionStore::default()` instances
+    shared identity `0`, `b.commit(a.begin(), ..)` was *accepted*, and rows and checkpoint were
+    mutated by a batch `b` never opened. `reset` had the identical hole. The two tests cited
+    above both construct with `new()`, so neither could see it.
+
+    Fixed: `Default` is hand-written as `Self::new()`
+    (crates/happenstance-core/src/projection_memory.rs:108-121), mirroring
+    `MemoryEventStore` at crates/happenstance-core/src/memory.rs:78-82, which is hand-written for
+    this exact reason. Two regression tests were added and were confirmed **red against the
+    derive** before the fix — `a batch begun by another `default()` store is refused: ()` on both
+    — and green after:
+    crates/happenstance-core/tests/projection_memory.rs::commit_rejects_a_foreign_batch_from_default_stores
+    and ::reset_rejects_a_foreign_batch_from_default_stores. Both assert the error arm *and* an
+    unchanged receiver, matching the `new()` pair.
+    `cargo test --locked -p happenstance-core --test projection_memory`: 19 passed, 0 failed.
   mount_point: "crates/happenstance-core/src/lib.rs:98-124 (export block) + crates/happenstance-core/Cargo.toml [features]"
   verifying_test: "crates/happenstance-core/tests/projection_memory.rs::commit_rejects_a_foreign_batch; ::reset_rejects_a_foreign_batch"
 
@@ -124,6 +142,32 @@ Two notes specific to this story, so a row is not flipped on the wrong evidence:
   satisfied: true
   evidence: |
     Host powerset `cargo hack check -p happenstance-core --feature-powerset --no-dev-deps`: 16/16 green, including `memory` without `conformance`, `conformance` without `memory`, and `--no-default-features` (`no_std`). wasm32 powerset over `happenstance-core`, `happenstance-neon` and `happenstance-testkit`: 25/25 green. `cargo xtask wasm`: all four steps green, including the mandatory plain `wasm32` build of the contract crate — the new module uses `std::sync::RwLock` and `std::collections::BTreeMap` only, no threads, no clock. `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-core --no-default-features` green, which is the **hard error** an intra-doc link into a `cfg`-absent module would produce; `--all-features` doc build green. No page that renders without `memory` links the store or its module — crates/happenstance-core/src/lib.rs:68-75 names it in the *Getting started* prose with the link deliberately absent and the reason stated inline, and :80-81 in the feature-flags list — and no page that renders without `conformance` links the probe impl. `[package.metadata.docs.rs]` already sets `all-features = true` and `--cfg docsrs`, and both new gates carry `#[cfg_attr(docsrs, doc(cfg(…)))]` so the badges render.
+    CORRECTION, 2026-08-13 (slice review). The sentence above — "no page that renders
+    without `conformance` links the probe impl" — was **false when written**, and the two doc
+    configurations cited are exactly the two that cannot see it.
+    crates/happenstance-core/src/projection_memory.rs:38 carried
+    `[`ProjectionProbe::READS_THROUGH_BATCH`](crate::ProjectionProbe::READS_THROUGH_BATCH)`
+    inside `MemoryProjectionStore`'s rustdoc: that page renders whenever `memory` is on,
+    `ProjectionProbe` exists only under `conformance`, and `rustdoc::broken_intra_doc_links` is
+    `deny` — so `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-core --no-deps` on the
+    **default** feature set was `error: unresolved link ... error: could not document
+    happenstance-core`. `--all-features` resolved it (the gate is open) and
+    `--no-default-features` never rendered the page (no `memory`), which is why both cited runs
+    were green over a hard error.
+
+    Fixed: the probe's name is now spelled plainly with the reason inline
+    (crates/happenstance-core/src/projection_memory.rs:38-49), exactly as
+    crates/happenstance-core/src/lib.rs:70-75 and :91-93 already do. A pre-existing
+    `redundant_explicit_links` hard error on the same page (`[`CommitError`](crate::CommitError)`,
+    which only fires under `--document-private-items`) was fixed with it. The blind spot is
+    closed by a third gate step, `documentation (default features)`
+    (xtask/src/main.rs:515-540), so the claim is now checked rather than asserted.
+
+    Re-verified green, all three configurations, 2026-08-13:
+    `RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps --document-private-items`;
+    `... cargo doc --locked -p happenstance-core --no-default-features --no-deps`;
+    `... cargo doc --locked -p happenstance-core --no-deps --document-private-items`.
+    `cargo xtask ci --fast` green whole, with the new step running.
   mount_point: "crates/happenstance-core/src/lib.rs:66-83 (crate-root prose and feature list) + :98-124 (cfg/cfg_attr(docsrs) gate pair) + crates/happenstance-core/Cargo.toml [features]"
   verifying_test: "cargo doc -p happenstance-core --no-default-features; cargo hack check --workspace --feature-powerset --no-dev-deps (xtask/src/main.rs:546-556); cargo hack check -p happenstance-core -p happenstance-neon -p happenstance-testkit --target wasm32-unknown-unknown --feature-powerset --no-dev-deps (:558-591); nightly --cfg docsrs rustdoc build"
 ```

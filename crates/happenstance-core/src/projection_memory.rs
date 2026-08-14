@@ -35,11 +35,17 @@ use crate::projection::{
 ///
 /// This store **applies on write**: a batch is a materialised delta layered over
 /// committed state, so it can be read back through before it commits, and
-/// [`ProjectionProbe::READS_THROUGH_BATCH`](crate::ProjectionProbe::READS_THROUGH_BATCH)
-/// is `true` here. The other end of that axis — a batch that buffers and
-/// replays at commit, where read-through is impossible and declining it is the
-/// conformant answer — is a separate implementation. Nothing a conformance rule
-/// needs may assume read-through beyond that constant.
+/// `ProjectionProbe::READS_THROUGH_BATCH` is `true` here. The other end of that
+/// axis — a batch that buffers and replays at commit, where read-through is
+/// impossible and declining it is the conformant answer — is a separate
+/// implementation. Nothing a conformance rule needs may assume read-through
+/// beyond that constant.
+///
+/// The probe's name is deliberately not a link, for the reason the crate root
+/// gives twice: this page renders whenever `memory` is on, `ProjectionProbe`
+/// exists only under `conformance`, and `rustdoc::broken_intra_doc_links` is
+/// `deny` — so a link here is a hard error on the crate's **default** feature
+/// set, which is what a consumer builds.
 ///
 /// # Examples
 ///
@@ -91,12 +97,27 @@ use crate::projection::{
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemoryProjectionStore {
     state: RwLock<State>,
     /// Minted per store *instance*, which is what makes the foreign-batch check
     /// possible at all — a per-type stamp would compare equal everywhere.
     stamp: u64,
+}
+
+/// Hand-written, and **not** `#[derive(Default)]`, for the same reason
+/// [`MemoryEventStore`](crate::MemoryEventStore)'s is hand-written: `stamp` is
+/// this instance's identity, and the derive would fill it with `0` without ever
+/// calling the counter, which starts at `1`. Two `default()` stores would then
+/// share identity `0`, each would accept the other's batch, and
+/// [`CommitError::ForeignBatch`] — the check the oracle exists to be *right*
+/// about — would be unreachable through that constructor.
+/// `commit_rejects_a_foreign_batch_from_default_stores` and its `reset` twin in
+/// `tests/projection_memory.rs` are what keep the derive from coming back.
+impl Default for MemoryProjectionStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The read model and the checkpoints, behind **one** lock.
@@ -235,10 +256,10 @@ impl MemoryProjectionBatch {
 /// store has no failure modes of its own. Populating it would delete that claim.
 ///
 /// Nothing the conformance suite needs is lost.
-/// [`CommitError`](crate::CommitError) and [`ResetError`](crate::ResetError) are
-/// still meaningfully fallible here — a foreign batch and a regressing position
-/// are both reachable — and the adapter-failure paths a suite must also exercise
-/// come from hostile stores written for that purpose, never from the oracle.
+/// [`CommitError`] and [`ResetError`] are still meaningfully fallible here — a
+/// foreign batch and a regressing position are both reachable — and the
+/// adapter-failure paths a suite must also exercise come from hostile stores
+/// written for that purpose, never from the oracle.
 ///
 /// Distinct from [`MemoryStoreError`](crate::MemoryStoreError), whose `Display`
 /// names the event store.

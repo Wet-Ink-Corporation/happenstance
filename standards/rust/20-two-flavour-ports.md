@@ -144,7 +144,7 @@ signature they cannot change without a breaking release.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:88 (async fn count_all<S: EventStore>)` ·
 `crates/happenstance-core/src/memory.rs:601 (async fn count<S: EventStore>)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:23 (pub(crate) async fn advance<S: ProjectionStore>)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:43 (pub(crate) async fn advance<S: ProjectionStore>)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
@@ -194,7 +194,7 @@ changing, which is exactly the shape a reviewer scrolls past.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:37 (error[E0034]: multiple applicable items in scope)` ·
 `crates/happenstance-core/tests/frozen_signatures.rs:43 (multiple applicable items in scope)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:14 (makes every method call ambiguous)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:28 (makes every method call ambiguous)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(one name per module)* ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 

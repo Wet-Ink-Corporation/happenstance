@@ -1046,6 +1046,29 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **`MemoryProjectionStore::default()` handed every instance the same identity,
+  which disabled the foreign-batch check.** The struct derived `Default`, and the
+  derive fills the per-instance `stamp` with `0` while the counter starts at `1`
+  — so two stores built with `default()` compared equal, `b.commit(a.begin(), ..)`
+  and `b.reset(a.begin(), ..)` were both *accepted*, and rows and checkpoint were
+  mutated by a batch the receiving store never opened. `CommitError::ForeignBatch`
+  and `ResetError::ForeignBatch` were unreachable through that constructor while
+  the tests, which all used `new()`, stayed green. `Default` is now hand-written
+  as `Self::new()`, mirroring `MemoryEventStore`, and
+  `commit_rejects_a_foreign_batch_from_default_stores` plus its `reset` twin fail
+  on the derive. This matters more than an ordinary bug: this store is the oracle
+  a failing adapter is presumed wrong against.
+
+- **`cargo doc -p happenstance-core` failed on the crate's *default* feature set
+  while both existing doc steps passed.** `MemoryProjectionStore`'s page linked
+  `ProjectionProbe::READS_THROUGH_BATCH`, an item gated on `conformance`, and
+  `rustdoc::broken_intra_doc_links` is `deny` — so the configuration a consumer
+  gets from `cargo add` was a hard error, invisible to `--all-features` (the gate
+  is open, the link resolves) and to `--no-default-features` (the page is never
+  rendered). The link is now spelled plainly, and a third gate step,
+  `documentation (default features)`, builds that configuration so the blind spot
+  cannot reopen. Same defect class as D13, one feature axis over.
+
 - **`happenstance` and `happenstance-core`'s READMEs promised "MSRV 1.85,
   checked in CI".** Phase 2 raised the floor to 1.97.1
   ([ADR-0029](.kb/decisions/0029-msrv-raised-to-1-97-1.md)) and neither README moved

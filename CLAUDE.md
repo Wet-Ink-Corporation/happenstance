@@ -276,7 +276,11 @@ names the contract crate on purpose, a check of the conformance harnesses, and
 builds of `happenstance-cloudflare` and `happenstance-neon`, both of which claim
 that target in their own documentation and neither of which was checked by
 anything until phase 2 — docs, `cargo xtask spec-trace` over
-`SPECIFICATION.md`, a `--no-default-features` doc build of `happenstance-core`,
+`SPECIFICATION.md`, a `--no-default-features` **and** a default-features doc
+build of `happenstance-core` (three configurations in all with the workspace
+`--all-features` one, because a link from a `memory` page into a `conformance`
+item is broken at neither end of that range and only in the middle, which is
+where a consumer stands),
 and a `cargo package --list` assertion that each of the three publishable crates
 carries both licence files and a README. Then, where the tool or toolchain is
 present: `cargo hack` feature-powerset, `cargo deny`, a wasm32 feature-powerset

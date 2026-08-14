@@ -1,117 +1,18 @@
 # 92 — Toolchain limits and dead ends
 
-> **Load when:** `thread 'rustc' panicked` on an adapter impl · a store that
-> carries a lifetime will not implement a port · `error[E0658]: return type
-> notation is experimental` · designing around a feature that "will land soon"
-> **See also:** 21 (`Send` bounds by hand) · 22 (`E0195` and RPITIT) · 62
-> (doctest annotations, and why an error code is not a pin) · 90 (skeletons) ·
+> **Load when:** `thread 'rustc' panicked` on an adapter impl · a panic naming
+> `compare_impl_item` and a `DefId` you did not write · `error[E0658]: return
+> type notation is experimental` · designing around a feature that "will land
+> soon"
+> **See also:** 21 (`Send` bounds by hand) · 22 (RPITIT and lifetime capture) ·
+> 62 (doctest annotations, and why an error code is not a pin) · 90 (skeletons) ·
 > 01 (the standard of evidence)
 
 Every rule here is a dead end plus the check that says when it has opened up.
 Without that check the atom becomes folklore, which is the failure it exists to
-prevent.
-
----
-
-## RS-92-1. A type implementing a port with a batch GAT MUST be `'static`; a lifetime on it ICEs rustc 1.97.1.
-
-**Why.** Five ingredients, each independently necessary: the trait in a **foreign
-crate**, a GAT with `where Self: 'a`, an **RPITIT** return, `Self::Batch<'_>` in
-that method's signature, and a **non-`'static`** impl self type. `ProjectionStore`
-supplies the first four — it is the only port in the workspace that does, and
-`impl EventStore for Store<'db>` compiles, because that port has no GAT — so on
-the projection side the store's own lifetime is the only ingredient you control.
-rustc finds a genuine region error and then crashes in the path that explains a
-bound for an item in another crate.
-
-**Do** — hold the database by refcount, not by reference:
-
-```rust
-use std::sync::Arc;
-
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
-# #[derive(Debug)]
-# struct GraphError;
-# impl core::fmt::Display for GraphError {
-#     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { f.write_str("graph") }
-# }
-# impl core::error::Error for GraphError {}
-struct Database;
-
-/// `'static`, because the connection owns an `Arc` instead of borrowing a
-/// `&'db Database`. That refcount is the difference between an impl and an ICE.
-struct GraphStore { database: Arc<Database> }
-
-struct WriteSet { statements: Vec<String> }
-
-impl SendProjectionStore for GraphStore {
-    type Error = GraphError;
-    type Batch<'a> = WriteSet where Self: 'a;
-
-    async fn checkpoint(
-        &self,
-        _id: &ProjectionId,
-    ) -> Result<Option<SequencePosition>, Self::Error> {
-        Ok(None)
-    }
-    async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
-        let _ = Arc::clone(&self.database);
-        Ok(WriteSet { statements: Vec::new() })
-    }
-    async fn commit(
-        &self,
-        mut batch: Self::Batch<'_>,
-        id: &ProjectionId,
-        position: SequencePosition,
-    ) -> Result<(), Self::Error> {
-        batch.statements.push(format!("MERGE {id} = {}", position.get()));
-        Ok(())
-    }
-    async fn rollback(&self, _batch: Self::Batch<'_>) -> Result<(), Self::Error> { Ok(()) }
-}
-
-fn main() { let _ = GraphStore { database: Arc::new(Database) }; }
-```
-
-**Not** — the obvious layout for a driver whose connection borrows its database.
-This cannot be a compiled fence and never will be: a file that crashes the
-compiler fails the gate, so the reproduction lives in `experiments/`.
-
-<!-- ignore: this source ICEs rustc 1.97.1; a fence that crashes the compiler fails the gate -->
-```rust,ignore
-struct GraphStore<'db> { connection: Connection<'db> }
-
-impl SendProjectionStore for GraphStore<'_> {
-    type Batch<'a> = WriteSet where Self: 'a;
-    async fn commit(&self, batch: Self::Batch<'_>, /* … */) -> Result<(), Self::Error> { /* … */ }
-}
-
-// thread 'rustc' panicked at
-//   compiler\rustc_trait_selection\src\errors\note_and_explain.rs:27:22:
-// DefId::expect_local: `DefId(… SendProjectionStore::commit)` isn't local
-// #0 [compare_impl_item] checking assoc item `<impl …>::commit::{anon_assoc#0}`
-```
-
-**What would open it up.** `rust-lang/rust#158983` closing, or PS-5 landing —
-`type Batch;` deletes ingredient two and the whole exposure with it, and the
-clause is provisional today. Re-check with
-`experiments/rustc-ice-gat-foreign-trait/bisect.sh`; the recorded answer is
-that it reproduces on 1.85.1, 1.97.1 and 1.99.0-nightly, on editions 2018, 2021
-and 2024, so this is neither a regression nor fixed on nightly.
-
-**Rejects.** An adapter for an embedded database whose `Connection<'db>` borrows
-an open `Database` — the natural layout, and the one LadybugDB's API invites. The
-author writes `struct Store<'db>`, gets a compiler crash with no line of their
-own code named, and reads it as a broken toolchain or a corrupt incremental
-cache. The fix is a refcount in a field, and nothing in the diagnostic points
-there.
-
-**Evidence.** `crates/happenstance-ladybug/src/live_handle.rs:38 (store crashes the compiler)` ·
-`crates/happenstance-ladybug/src/live_handle.rs:63 (only by stores that outlive every batch)` ·
-`references/adapter-shapes.md:346 (Five ingredients)` ·
-[SPECIFICATION PS-5](../../spec/SPECIFICATION.md) ·
-[adapter-shapes §6](../../references/adapter-shapes.md) ·
-[rust-lang/rust#158983](https://github.com/rust-lang/rust/issues/158983) *(checked 2026-08-09, rustc 1.97.1)*
+prevent. The check has now fired once — see **Retired**, at the foot of this
+atom — which is the evidence that the discipline is load-bearing rather than
+ceremonial.
 
 ---
 
@@ -238,3 +139,29 @@ collapse was never a refactor waiting on a toolchain — it is a new ADR.
 [rust-lang/rust#109417](https://github.com/rust-lang/rust/issues/109417), which
 is the issue rustc's own note names *(checked 2026-08-09, rustc 1.97.1)*
 
+---
+
+## Retired
+
+**RS-92-1 — "A type implementing a port with a batch GAT MUST be `'static`; a
+lifetime on it ICEs rustc 1.97.1."** Retired 2026-08-13 by its own opening
+condition, which read: *"`rust-lang/rust#158983` closing, or PS-5 landing —
+`type Batch;` deletes ingredient two and the whole exposure with it."* PS-5
+landed with ADR-0017. The ICE needed five ingredients together — a trait in a
+foreign crate, a GAT with `where Self: 'a`, an RPITIT return, `Self::Batch<'_>`
+in that method's signature, and a non-`'static` impl self type — and
+`ProjectionStore` was the only port in the workspace supplying the first four.
+It now declares `type Batch;`, so no port here can supply ingredient two and no
+store in this workspace can reach the crash by writing a lifetime.
+
+**The upstream bug is not fixed, and this is not a claim that it is.**
+`rust-lang/rust#158983` is open; `experiments/rustc-ice-gat-foreign-trait/` and
+its `bisect.sh` still reproduce on 1.85.1, 1.97.1 and 1.99.0-nightly across
+editions 2018, 2021 and 2024. What changed is the *reach*: the workspace no
+longer has a port that can be hit this way, so the rule constrains nothing an
+author of this repository could write, and RS-01-1 is what retires it. RS-92-2
+above stays, because reading an ICE by pasting the trait locally is technique
+that outlives this particular crash.
+
+If a GAT ever returns to a port here, this rule comes back with it — as a new
+id, not this one. The id is spent.

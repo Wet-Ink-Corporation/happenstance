@@ -306,6 +306,73 @@ async fn reset_rejects_a_foreign_batch() {
     );
 }
 
+/// The same rejection, through `Default` rather than `new`.
+///
+/// Worth its own test because the two constructors are two chances to mint the
+/// instance stamp and `#[derive(Default)]` takes neither: it fills `stamp` with
+/// `0`, the counter starts at `1`, and every `default()` store therefore shares
+/// identity `0` with every other. `b.commit(a.begin(), ..)` is then *accepted*
+/// — rows and checkpoint mutated by a batch `b` never opened — while
+/// `commit_rejects_a_foreign_batch` above stays green, because it constructs
+/// with `new`. This is the store the suite presumes right whenever a rule fails
+/// an adapter, so a hole reachable through a public constructor is a hole in
+/// every verdict it hands down.
+#[tokio::test]
+async fn commit_rejects_a_foreign_batch_from_default_stores() {
+    let a = MemoryProjectionStore::default();
+    let b = MemoryProjectionStore::default();
+    let id = ProjectionId::new("van_stock");
+
+    let mut foreign = a.begin();
+    foreign.write("depot-7", 12);
+
+    let error = b
+        .commit(foreign, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .expect_err("a batch begun by another `default()` store is refused");
+
+    assert_eq!(error, CommitError::ForeignBatch);
+    assert_eq!(b.get("depot-7"), None, "the receiving store is unchanged");
+    assert_eq!(
+        b.checkpoint(&id).await.expect("checkpoint reads"),
+        Checkpoint::NeverRun,
+        "a refused commit advances no checkpoint"
+    );
+}
+
+/// `reset`'s half of the same hole — it carries its own stamp comparison, so a
+/// derived `Default` opens both doors and closing one proves nothing about the
+/// other.
+#[tokio::test]
+async fn reset_rejects_a_foreign_batch_from_default_stores() {
+    let a = MemoryProjectionStore::default();
+    let b = MemoryProjectionStore::default();
+    let id = ProjectionId::new("van_stock");
+    let position = SequencePosition::FIRST;
+
+    let mut seeded = b.begin();
+    seeded.write("depot-7", 12);
+    b.commit(seeded, &id, position, Authority::Live)
+        .await
+        .expect("commit succeeds");
+
+    let mut foreign = a.begin();
+    foreign.delete_all();
+
+    let error = b
+        .reset(foreign, &id)
+        .await
+        .expect_err("a batch begun by another `default()` store is refused");
+
+    assert_eq!(error, ResetError::ForeignBatch);
+    assert_eq!(b.get("depot-7"), Some(12), "the read model is unchanged");
+    assert_eq!(
+        b.checkpoint(&id).await.expect("checkpoint reads"),
+        Checkpoint::Live { through: position },
+        "a refused reset leaves the checkpoint where it was"
+    );
+}
+
 // =====================================================================
 // AC-006 — rollback, and the half a store actually fails
 // =====================================================================

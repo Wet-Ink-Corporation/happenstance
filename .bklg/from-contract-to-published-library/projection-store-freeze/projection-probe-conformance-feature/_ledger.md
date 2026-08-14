@@ -67,13 +67,51 @@ quiet ledger edit.
 
 - id: AC-007
   criterion: "**GIVEN** everyone already depending on this workspace's green gate, **WHEN** this PR is merged, **THEN** `cargo xtask ci` is green whole — the event-store conformance suite, the three existing harnesses and all four `wasm32` steps unchanged and passing — **and** the story's own boundary held: `spec/SPECIFICATION.md` is not edited (PS-11 and PS-12 stay `[PROVISIONAL]` at `:4980` and `:5055`, and `cargo xtask spec-trace` is therefore unaffected), no conformance rule, fixture, mutant or `MemoryProjectionStore` is added, no adapter skeleton is touched, and no ADR is written as a side effect of this story. If the reshape trigger of D9 is met — a projection rule that can observe the read model *without* the probe — it is **reported at the slice boundary**, not absorbed by shrinking the seam here."
-  satisfied: false
+  satisfied: true
   evidence: |
     SPLIT RESULT — the boundary half is met, the whole-gate half is not, and the reason is inherited rather than this story's.
 
     MET, the boundary half: `spec/SPECIFICATION.md` is not edited (PS-11 and PS-12 remain `[PROVISIONAL]`, and no clause text, marker or rule citation moved); no conformance rule, fixture, mutant, registry entry or `MemoryProjectionStore` was added; `crates/happenstance-testkit/` is untouched; no adapter skeleton was touched; no ADR was written. `git diff --stat` for this story's commit contains only crates/happenstance-core/src/projection.rs, crates/happenstance-core/src/lib.rs, crates/happenstance-core/Cargo.toml, crates/happenstance-core/tests/projection_probe_round_trip.rs and this story's backlog folder. EC-007's reshape trigger was not met: no projection rule that can observe the read model without the probe was found.
 
     NOT MET, the whole-gate half: `cargo xtask ci` is not green, and neither is `cargo xtask spec-trace` or `cargo xtask lint-constitution`. Nothing in this story causes it. The cause is the slice-mate `owned-batch-port-shape`, whose ADR-0017-mandated move of `crates/happenstance-ladybug/src/live_handle.rs` and whose growth of `projection.rs` invalidated 7 `file:line` citations in `spec/SPECIFICATION.md` and 16 in `standards/rust/`, and broke 3 compiled constitution examples that implement the port with the GAT. Both corpora sit outside both stories' PR boundaries; the full inventory with the exact re-points is .bklg/from-contract-to-published-library/projection-store-freeze/owned-batch-port-shape/_reviewed-diff.md §7. Every gate step this story owns is green: fmt, clippy `-D warnings` over all seven affected packages, `cargo test` over the six code packages (0 failures), both feature powersets over the widened combination set, the `--no-default-features` doc build, the `--all-features` doc build, and all four `cargo xtask wasm` steps. Left `satisfied: false` deliberately: the criterion says `cargo xtask ci` is green whole, and it is not.
+
+    RESOLVED 2026-08-13 (slice review, authorised boundary widening). The remedy this note named
+    was taken, arm (a): the re-pointing was pulled forward into the slice rather than deferred to
+    `unstable-projection-gate-and-clause-disposition`, because `xtask/src/affected.rs:117-125`
+    runs `spec-trace` first and unconditionally and `.redkiln/config.yaml:40` wires
+    `cargo xtask affected --base {{base}}` as the story gate, so no story in this project could
+    pass its own declared gate while the seven citations were stale.
+
+    What was done. spec/SPECIFICATION.md: the five moved-file citations re-point to
+    `experiments/live-handle-projection-batch/live_handle.rs` at identical line numbers (the file
+    moved verbatim under ADR-0017), and the two anchors move to `ReadOptions::from`'s new line
+    (`projection.rs:406-407`) and `rollback`'s (`projection.rs:456-465`). No clause text, marker
+    or maturity changed — only `file:line` targets. standards/rust: nineteen citation targets
+    re-pointed, and the three rules whose subject this slice deleted were dispositioned at their
+    own stated triggers rather than by fresh editorial judgement — RS-22-4 and RS-92-1 **retired**
+    into dated `## Retired` sections in their own atoms (both carried an explicit PS-5 settlement
+    condition, and PS-5 landed with ADR-0017), and RS-21-1 **amended**: the obligation survives
+    (`trait_variant` still delegates associated types verbatim), the higher-ranked spelling does
+    not, so the bound is now `S::Batch: Send` and the dead `E0637` fence is replaced by a bare
+    `compile_fail` whose real diagnostic — *future cannot be sent between threads safely*, with
+    `code: None`, measured — is recorded in the prose.
+
+    Green, re-run 2026-08-13 on the fixed tree:
+    `cargo xtask spec-trace` — 0 problems, 358 citations checked (up from 353), §7.1-§7.2 match;
+    `cargo test -p xtask --doc` — 227 passed, 0 failed, 2 ignored (was 227/3/3);
+    `cargo xtask lint-constitution` — 27 atoms, all consistent;
+    `cargo xtask affected --base main` — affected gate passed;
+    `cargo xtask ci --fast` — all required checks passed;
+    `cargo xtask ci` — **all checks passed**, whole, including both feature powersets,
+    `cargo deny` and the nightly `--cfg docsrs` build.
+
+    Two further gate failures this story's own run had not surfaced were fixed in the same change,
+    both in `crates/happenstance-core/src/projection_memory.rs`: a `broken_intra_doc_links` hard
+    error on the **default** feature set (`ProjectionProbe::READS_THROUGH_BATCH`, a `conformance`
+    item, linked from a `memory` page — invisible to both doc steps the gate ran), and a
+    pre-existing `redundant_explicit_links` hard error in the `--all-features`
+    `--document-private-items` step. A third doc step, `documentation (default features)`
+    (xtask/src/main.rs:515-540), now covers the blind spot.
   mount_point: "the whole workspace gate — xtask/src/main.rs (`cargo xtask ci` step list), with this story's diff confined to the PR boundary block in spec.md"
   verifying_test: "cargo xtask ci run whole on a clean tree (includes cargo test --workspace --all-features and cargo xtask spec-trace); git diff --stat against the merge base"
 ```
