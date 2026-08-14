@@ -21,13 +21,13 @@ archetype: foundation
 slice: decisions-and-design-record
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T13:31:21.644Z
+updated: 2026-08-14T13:31:26.136Z
 links:
   pr: null
   commits:
     - 9520b28
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
