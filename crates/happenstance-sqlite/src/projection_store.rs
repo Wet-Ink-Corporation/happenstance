@@ -8,12 +8,14 @@
 //!
 //! # Why the batch is a buffer and not a `rusqlite::Transaction`
 //!
-//! The port's own documentation says a batch *is* a live transaction, and
-//! justifies the lifetime on `type Batch<'a>` with "a transaction cannot outlive
-//! its connection". For this adapter, on the flavour this adapter must
-//! implement, that is not available. `type Batch<'a> = rusqlite::Transaction<'a>`
-//! fails on [`SendProjectionStore`] for
-//! two independent reasons, each confirmed against this crate:
+//! The port's documentation *used to* say a batch is a live transaction, and
+//! justified the lifetime on `type Batch<'a>` with "a transaction cannot outlive
+//! its connection". ADR-0017 removed the lifetime and PS-4 now says the reverse
+//! — a `Batch` MUST NOT be required to be a live transaction — with this crate
+//! as one of the reasons why. Even while the lifetime existed,
+//! `type Batch<'a> = rusqlite::Transaction<'a>` failed on
+//! [`SendProjectionStore`] for two independent reasons, each confirmed against
+//! this crate:
 //!
 //! 1. [`rusqlite::Connection`] is [`Send`] and **not** [`Sync`] — it holds a
 //!    `RefCell<InnerConnection>` — so a store that owns one directly is not
@@ -27,8 +29,8 @@
 //! Reason 1 is fixed here by [`Mutex`]; reason 2 cannot be fixed at all without
 //! giving up the live handle. So the batch is an owned, `Send`, replayable write
 //! set — [`SqliteBatch`] — opened into a real transaction inside `commit`. That
-//! satisfies the port's actual obligation (read model and checkpoint move
-//! together) without the port's suggested mechanism.
+//! satisfies the port's obligation (read model and checkpoint move together),
+//! and it is now the shape the port asks for rather than a departure from it.
 //!
 //! # Intended schema
 //!

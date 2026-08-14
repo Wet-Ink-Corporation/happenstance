@@ -166,6 +166,7 @@ crates/happenstance-postgres/src/projection_store.rs
 crates/happenstance-ladybug/src/projection_store.rs
 crates/happenstance-ladybug/src/live_handle.rs
 crates/happenstance-ladybug/src/lib.rs
+crates/happenstance-ladybug/src/stand_in.rs
 crates/happenstance-ladybug/tests/port_shape.rs
 crates/happenstance-sqlite/src/projection_store.rs
 crates/happenstance-sqlite/src/lib.rs
@@ -177,6 +178,8 @@ experiments/**
 ```
 
 Two entries are deliberate and narrow. The three adapter-crate `src/lib.rs` files are there only because their module docs discuss the port's batch by name — `type Batch<'a> = rusqlite::Transaction<'a>` at `crates/happenstance-sqlite/src/lib.rs:40`, the bare-flavour narration at `crates/happenstance-neon/src/lib.rs:83-84`, PS-4's `Batch` argument at `crates/happenstance-ladybug/src/lib.rs:37,65` — and a module doc that quotes a signature the crate no longer has is a rustdoc lie the gate will not catch. `experiments/**` is there **only** for ADR-0017's "move `LiveHandleProjectionStore` to `experiments/`" arm; if the atom chose deletion or retention, nothing under it is touched. `spec/SPECIFICATION.md` is deliberately **absent** — see the Behavior table's last row for the single circumstance that would force it, which is a stop-and-report, not a quiet widening.
+
+**Widened 2026-08-14, after implementation, and deliberately.** `crates/happenstance-ladybug/src/stand_in.rs` is in the list above and was not in the list this story was implemented against. Checkpoint `2eade38` wrote one hunk of it (`:152-156`), so `redkiln verify --item HS-S0004 --grain story`'s boundary check was red and HS-S0004 could not reach its report gate at all — unlike its two slice-mates. This is not the boundary being fitted to what the implementer happened to touch, and the test of that is whether the edit was *avoidable*: it was not. `stand_in.rs`'s `SystemConfig` doc carried `[`live_handle`](crate::live_handle)`, and `crates/happenstance-ladybug/src/lib.rs` — already in the list, at the line above — is where ADR-0017's move arm deleted that module declaration. `broken_intra_doc_links` is `deny` workspace-wide (`Cargo.toml:133-134`), so an intra-doc link into a removed module is a **hard error**: the choice was never "leave `stand_in.rs` alone", it was "do not execute ADR-0017". The hunk changes that link and nothing else, spelling the experiment's new path plainly. It is admitted under exactly the rule the paragraph above already states — a doc comment naming a thing the crate no longer has is a rustdoc lie no gate step catches — and the rule is now written where the machine reads it rather than only in a commit message.
 
 **Merge DoD one-liner**: the contract crate exports four new types and a lifetime-free `Batch`, five impls and three shape-tests across four adapter crates compile against it with their own type choices intact, and `cargo xtask affected --base main` plus the mandatory `wasm32` build of `happenstance-core` are green.
 

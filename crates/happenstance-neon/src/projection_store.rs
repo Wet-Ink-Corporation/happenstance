@@ -1,26 +1,25 @@
 //! The Neon-backed [`ProjectionStore`], and the batch that is not a transaction.
 //!
-//! # What this is here to falsify
+//! # What this falsified, and what the port did about it
 //!
-//! [`ProjectionStore`]'s `Batch` is a generic associated type,
+//! [`ProjectionStore`]'s `Batch` **used to be** a generic associated type,
 //! `type Batch<'a> where Self: 'a`, because "a transaction cannot outlive the
 //! connection that opened it". Neon has no connection and no transaction, so the
-//! lifetime has nothing to borrow from. Binding an **owned** type to the GAT —
-//! `type Batch<'a> = NeonWriteBatch;` — is what this crate does, and it compiles:
-//! a GAT is free to ignore its parameter.
+//! lifetime had nothing to borrow from. This crate bound an **owned** type to
+//! the GAT — `type Batch<'a> = NeonWriteBatch;` — and it compiled, because a GAT
+//! is free to ignore its parameter. ADR-0017 has since removed the parameter,
+//! and the binding below is plainly `type Batch = NeonWriteBatch;`.
 //!
-//! That makes this adapter evidence for the owned `type Batch;` hypothesis from
-//! the far end of the transport axis. It also surfaces two places where today's
-//! port asks for something this adapter has no way to mean, both recorded as
-//! findings rather than fixed here:
-//!
-//! * [`ProjectionStore::begin`] is `async` and fallible. There is nothing to
-//!   open and nothing to fail; `begin` is a `Vec::new()`. The `Result` is
-//!   uninhabitable in practice and the `async` is a future that is ready on
-//!   first poll.
-//! * [`ProjectionStore::rollback`] is `async` and fallible. Dropping the
-//!   statement list is the rollback, and it cannot fail either — because
-//!   nothing was ever sent.
+//! That made this adapter the owned-batch evidence from the far end of the
+//! transport axis, and it surfaced two places where the port asked for something
+//! this adapter had no way to mean. Both have since been answered rather than
+//! left standing. [`ProjectionStore::begin`] is no longer `async` and no longer
+//! fallible: there is nothing here to open and nothing that can fail — `begin`
+//! is a `Vec::new()` — and this adapter is the one PS-6 was written for.
+//! [`ProjectionStore::rollback`] is still both, deliberately, because `Drop`
+//! cannot await and an adapter holding a real resource needs somewhere to
+//! release it; this one holds none, so dropping the statement list is the whole
+//! of its rollback and the `Result` is always `Ok`.
 //!
 //! # Where the atomicity actually comes from
 //!
@@ -49,8 +48,9 @@ use crate::transport::{HttpResponse, SqlRequest, SqlStatement, SqlTransport};
 /// non-interactive transaction at
 /// [`commit`](ProjectionStore::commit) time and is otherwise inert.
 ///
-/// This is what `type Batch<'a>`'s lifetime is bound to in the impl below: an
-/// owned type that ignores the parameter entirely.
+/// This is what `type Batch` is bound to in the impl below, and it was what the
+/// GAT's `'a` was bound to before ADR-0017 removed it: an owned type that never
+/// had a use for the parameter.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct NeonWriteBatch {

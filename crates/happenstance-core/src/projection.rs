@@ -27,13 +27,13 @@
 //! [`ProjectionStore::Batch`] is a plain associated type with **no lifetime
 //! parameter**. It used to be a generic associated type borrowing from the
 //! store, on the reasoning that a transaction cannot outlive its connection.
-//! Two compiled results retired that shape and neither is about `Send`:
-//! every impl attempted against the GAT hit `error[E0195]` unless it spelled
-//! `Self::Batch<'_>` literally in a position where the lifetime meant nothing
-//! to it, and a store that itself carries a lifetime made rustc 1.97.1 *ICE*
-//! while reporting the region error the GAT's own `where Self: 'a` produced.
-//! A batch may still *be* a live transaction — the port simply stops requiring
-//! one, which is what lets an adapter with no connection at all implement it.
+//! Two compiled results retired that shape and neither is about `Send`: the
+//! `error[E0195]` every impl hit, written out once beside the doctest that
+//! disposes of it in [`# Implementing it`](ProjectionStore#implementing-it),
+//! and a store carrying a lifetime of its own, which made rustc 1.97.1 *ICE*
+//! while reporting the region error the GAT's `where Self: 'a` produced. A
+//! batch may still *be* a live transaction — the port stops requiring one,
+//! which is what lets an adapter with no connection at all implement it.
 //!
 //! # The `Send` flavour's extra requirement is documented, not declared
 //!
@@ -488,23 +488,33 @@ pub trait ProjectionStore {
 /// adapter's own `tests/` directory, and **that is a different crate**. There,
 /// neither the trait nor the type is local, `impl ProjectionProbe for MyStore`
 /// is rejected by the orphan rule, and the only way out is a **non-dev**
-/// dependency on the testkit, feature-gated. Putting the trait here costs an
-/// adapter author one flag on a dependency they already have and no new edge in
-/// their dependency graph:
+/// dependency on the testkit, feature-gated. Putting the trait here keeps the
+/// impl in the adapter's own `src/`, beside the store and behind the adapter's
+/// own feature, and costs one flag on a dependency it already has rather than a
+/// new edge in its graph:
 ///
 /// ```toml
+/// [dependencies]
+/// happenstance-core = "…"
+///
+/// [features]
+/// # Forwards to the contract crate. The `impl ProjectionProbe` lives in `src/`
+/// # under `#[cfg(feature = "conformance")]`, because a crate cannot `cfg` on a
+/// # dependency's feature — which is also why a `[dev-dependencies]` entry
+/// # would not work: it does not exist for the lib build the impl compiles in.
+/// conformance = ["happenstance-core/conformance"]
+///
 /// [dev-dependencies]
-/// happenstance-core = { version = "…", features = ["conformance"] }
 /// happenstance-testkit = "…"
 /// ```
 ///
 /// **Nothing inside this workspace can fail the wrong version of that
 /// decision.** Every fixture here already lives in a crate that depends on the
 /// testkit, so the trait would be local, the impls local, the orphan rule
-/// silent, and the whole gate green. The falsifier is the story that builds an
-/// outside author's fixture from the documentation alone, and it is named here
-/// so the placement is not "simplified" into the testkit on grounds of diff
-/// size in the meantime.
+/// silent, and the whole gate green. The falsifier is
+/// `documented-extension-surface` (HS-S0015), which builds an outside author's
+/// fixture from this documentation alone — named here so the placement is not
+/// "simplified" into the testkit on grounds of diff size before it runs.
 ///
 /// # Both flavours, one trait
 ///

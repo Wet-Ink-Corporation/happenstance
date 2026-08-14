@@ -61,7 +61,42 @@ quiet ledger edit.
   criterion: "**GIVEN** an author (or the evaluator, Persona 4) who meets this trait *only* through its rendered documentation, **WHEN** they read `ProjectionProbe`'s page, **THEN** every member carries a doc comment, `probe_read` carries `# Errors` naming the *conditions* rather than the error type, `probe_read_through`'s doc reproduces the specification's `unimplemented!()` guidance verbatim (the spelling is enforceable: `clippy::todo` is `deny` workspace-wide, `unimplemented` is not linted), and the trait's own doc restates why it lives in the contract crate rather than the testkit — the orphan-rule argument of D1 — naming `documented-extension-surface` as the story that can falsify it. **AND** no ungated doc comment anywhere in the crate links to `ProjectionProbe` or its members: the name is spelled plainly where mentioned, as `lib.rs:71-73` already does for `MemoryEventStore`, because a link into a `cfg`-gated item is a **hard error** under the gate's `--no-default-features` doc build."
   satisfied: true
   evidence: |
-    Every member documented at crates/happenstance-core/src/projection.rs:352-453, under `missing_docs = "warn"` with `-D warnings` (clippy green over all seven affected packages). `probe_read`'s `# Errors` names the condition — "if the read model cannot be read" — not the error type (:443-445). `probe_read_through`'s doc reproduces the specification's `unimplemented!()` spelling verbatim (:449-452); the spelling is enforceable rather than stylistic, because `clippy::todo` is `deny` workspace-wide and `unimplemented` is not linted. The trait's own doc carries D1's orphan-rule placement argument in full (:368-401) with the `[dev-dependencies]` cost stated, and names its own falsifier — the story that builds an outside author's fixture from documentation alone — so the placement cannot be "simplified" into the testkit on diff-size grounds. No inbound intra-doc link: `ProjectionProbe` is spelled plainly in lib.rs's feature-flags list with the reason inline, and `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-core --no-default-features` is green — the step where an inbound link is a hard error.
+    WITHDRAWN 2026-08-13 and RE-ASSERTED 2026-08-14 against corrected text. The row was recorded
+    `satisfied: true` on evidence that misdescribed the artefact in two places, and the slice review
+    found both. It was flipped back to `satisfied: false`, the rustdoc was corrected, and the
+    evidence below is written against what the file now says rather than against what the row
+    previously claimed. What the withdrawn evidence asserted, and why each half was false:
+
+    * *"with the `[dev-dependencies]` cost stated"* — the snippet published a `[dev-dependencies]`
+      block carrying `happenstance-core = { features = ["conformance"] }`. That contradicts the
+      paragraph three lines above it, which argues the impl **cannot** live in the adapter's
+      `tests/` crate (orphan rule) and must therefore live in the adapter's `src/`: a dev-dependency
+      does not exist for the lib build the impl compiles in, and Rust cannot `#[cfg]` on a
+      dependency's feature. It also contradicted the snippet's own "one flag on a dependency they
+      already have" by adding a second entry. The story spec anticipated it verbatim — AC-002 reads
+      "`[dependencies]` (not `[dev-dependencies]`)".
+    * *"names its own falsifier"* — the sentence read "the falsifier is the story that builds an
+      outside author's fixture from the documentation alone, and it is named here", and no name
+      followed. Self-refuting, and this criterion requires the name.
+
+    NOW MET. Every member is documented at crates/happenstance-core/src/projection.rs:527-577, under
+    `missing_docs = "warn"` with `-D warnings` (clippy green over all seven affected packages).
+    `probe_read`'s `# Errors` names the condition — "if the read model cannot be read" — not the
+    error type (:568-570). `probe_read_through`'s doc reproduces the specification's
+    `unimplemented!()` spelling verbatim (:575-576); the spelling is enforceable rather than
+    stylistic, because `clippy::todo` is `deny` workspace-wide and `unimplemented` is not linted.
+    The trait's own doc carries D1's orphan-rule placement argument in full at :482-517, and the
+    manifest snippet at :496-509 is now the shape that compiles and still demonstrates the argument:
+    `[dependencies] happenstance-core = "…"`, `[features] conformance =
+    ["happenstance-core/conformance"]`, `[dev-dependencies] happenstance-testkit = "…"` — with the
+    comment stating why the `[dev-dependencies]` spelling of the first entry cannot work. The
+    falsifier is named at :514-517: `documented-extension-surface` (HS-S0015). No inbound intra-doc
+    link: `ProjectionProbe` is spelled plainly in lib.rs's feature-flags list with the reason inline,
+    and all three doc steps are green — `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-core`
+    at `--no-default-features` (where an inbound link into the gated item is a hard error), at
+    default features, and at `--all-features` (where the new
+    `[`# Implementing it`](ProjectionStore#implementing-it)` link resolves to
+    `trait.ProjectionStore.html#implementing-it`, an anchor that exists in the rendered page).
   mount_point: "crates/happenstance-core/src/projection.rs (the trait's own rustdoc) and crates/happenstance-core/src/lib.rs:71-82 (plain-spelling comment + `# Feature flags` list)"
   verifying_test: "cargo doc -p happenstance-core --no-default-features with RUSTDOCFLAGS=-D warnings (xtask/src/main.rs:494-514); cargo clippy --workspace --all-targets --all-features -- -D warnings (missing_docs, missing_errors_doc, clippy::todo)"
 

@@ -4,10 +4,12 @@
 //!
 //! # The `Batch` question, and why this adapter is the one that answers it
 //!
-//! The port declares `type Batch<'a> where Self: 'a`, and the module
-//! documentation on it justifies the lifetime with *"a transaction cannot
+//! The port used to declare `type Batch<'a> where Self: 'a`, and the module
+//! documentation on it justified the lifetime with *"a transaction cannot
 //! outlive its connection"*. That is true of `rusqlite::Transaction<'a>`, which
-//! borrows its `Connection`. It is **not** true here, and that is the finding.
+//! borrows its `Connection`. It was **not** true here, and that was the finding
+//! — PS-5 has since removed the parameter, and the disposition is at the end of
+//! this section.
 //!
 //! [`PgPool::begin`](sqlx::PgPool::begin) is declared, in sqlx 0.8.6's own
 //! source:
