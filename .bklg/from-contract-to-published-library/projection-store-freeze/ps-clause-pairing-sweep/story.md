@@ -7,9 +7,9 @@ title: Sweep PS-1 – PS-37 for the pairing defect before any repair is scoped
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -20,12 +20,14 @@ archetype: foundation
 slice: decisions-and-design-record
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:08:42.883Z
+updated: 2026-08-14T13:27:34.792Z
 links:
   pr: null
-  commits: []
+  commits:
+    - f77f183
+    - fb4161c
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
