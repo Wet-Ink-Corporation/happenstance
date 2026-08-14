@@ -7,9 +7,9 @@ title: A declined capability is a reported skip, never a silent absence
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,13 +22,13 @@ archetype: capability
 slice: projection-conformance-suite
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T16:58:08.425Z
+updated: 2026-08-14T17:22:38.618Z
 links:
   pr: null
   commits:
     - 7fcb378
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
