@@ -2,7 +2,7 @@
 id: kb-open-question-ps-19-scope-narrower-001
 title: PS-19's MUST is scoped after a reset; its second rule asks about an unseen id
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   PS-19 is FROZEN and scoped to what checkpoint(id) returns after a successful reset, while §4.11
@@ -19,6 +19,12 @@ summary: >-
   itself reproduces against a sharper exposing store, so the atom is confirmed rather than
   corrected. ADR-0018 (kb-decision-0018) scoped this defect out of its own range by name and
   repaired nothing; sub-questions 1 and 3 stay open, owner unchanged.
+  Resolved 2026-08-15 by ADR-0030 (kb-decision-0030): PS-19 keeps its post-reset scope and the
+  never-seen-id obligation becomes PS-38's second sentence, a ProjectionId no successful commit has
+  named MUST read as Checkpoint::NeverRun. Sub-question 1 is answered a new clause, sub-question 3 by
+  section 4.7 rather than adjacency to PS-19; fresh_projection_has_no_checkpoint is now listed
+  against both clauses and still does not exist, so it renders †. Sub-question 2's isolated verdict
+  from 2026-08-13 stands untouched.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -27,15 +33,18 @@ related:
   - kb-open-question-post-phase-reconciliation-001
   - kb-open-question-projection-batch-no-apply-001
   - kb-decision-0018
+  - kb-decision-0030
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/2026-08-13-adr-0018-reset.md
   - .kb/_intake/2026-08-13-ps-clause-pairing-sweep.md
+  - .kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md
   - references/evaluation/ps-clause-pairing-sweep.md
   - references/adr/0018-returning-a-projection-to-never-run.md
+  - references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md
   - spec/SPECIFICATION.md
   - RUNBOOK.md
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-15
 ---
 
 # PS-19's MUST is scoped after a reset; its second rule asks about an unseen id
@@ -127,3 +136,38 @@ discipline.
 
 Nothing here resolves the question. Sub-questions 1 and 3 stay open, `status` stays `accepted`, and
 the owner is unchanged.
+
+## Resolved 2026-08-15 — a new clause, in §4.7; `status` superseded
+
+Everything above is the state of knowledge on 2026-08-10 and 2026-08-13 and is left exactly as
+written, per this layer's README. ADR-0030, "The checkpoint reports the commits that happened"
+(`kb-decision-0030`; full record at
+`references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md`), now holds the answer, so
+this atom moves to `superseded` rather than `withdrawn` — the question was worth asking, and a
+reader arriving here needs sending on.
+
+**Sub-question 1 is answered: a new clause, not a widening.** PS-19 keeps its scope, *after a
+successful `reset`*, and its `MUST` is byte-identical across the decision
+(`spec/SPECIFICATION.md:5288-5290`, with phase 6's answer recorded beneath it at `:5311-5317`). The
+never-seen-id half becomes PS-38's **second** sentence — *a `ProjectionId` no successful `commit`
+has named MUST read as `Checkpoint::NeverRun`* (`:5447-5449`) — which is why the
+`.unwrap_or(Checkpoint::Live { through: FIRST })` store this atom named is now rejected by a clause
+rather than only by a rule reaching past one. Widening PS-19 lost for the reason *What is not
+decided* anticipated: it changes the set of implementations a `[FROZEN]` clause admits, which is a
+gap and a decision's rather than an edit's.
+
+**Sub-question 3 is answered by §4.7, not by adjacency.** The new clause does not sit beside PS-19.
+It sits in §4.7 with the progress obligation from the PS-1 gap
+(`kb-open-question-ps-1-no-progress-obligation-001`) — the second of the two outcomes sub-question 3
+offered, and one clause rather than two, because *a commit is visible in the checkpoint* and
+*nothing else is* are one proposition about what a fresh projection is owed.
+
+**`fresh_projection_has_no_checkpoint` is now listed against both clauses and still does not
+exist.** §4.11's table reads it against `PS-19, PS-38` (`:5845`), and it is daggered on both rows in
+§7.2 (`:8833`, `:8852`) because nobody has written it yet. The rule this atom was about is
+therefore correctly attributed and still unimplemented; writing it is the projection suite's, not
+this question's.
+
+**Sub-question 2 is untouched.** The 2026-08-13 verdict — *isolated*, from the 37-clause sweep —
+stands as recorded above. Nothing in ADR-0030 reopens it; the decision fixes four of the sweep's
+rows and routes PS-8, PS-13, PS-28 and PS-29 to their own owners rather than folding them in.

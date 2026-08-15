@@ -2,7 +2,7 @@
 id: kb-open-question-ps-1-no-progress-obligation-001
 title: PS-1's MUST is a coupling, not a progress obligation
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   PS-1 is FROZEN and says the read-model write and the checkpoint write MUST become durable
@@ -22,6 +22,10 @@ summary: >-
   PS-22) rest on the missing obligation, and the same intent-not-sentence habit recurs outside the
   table on PS-29, which ADR-0019 (kb-decision-0019) names in its own range. Sub-questions 1, 2 and
   4 stay open, owner unchanged.
+  Resolved 2026-08-15 by ADR-0030 (kb-decision-0030), which mints PS-38 rather than widening PS-1:
+  a successful commit MUST advance id's checkpoint to position. Sub-question 1 is answered a clause
+  of its own, sub-question 2 by reattributing commit_advances_the_checkpoint to PS-38, and
+  sub-question 4 by the decision itself; PS-1's own text is byte-identical across it.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -31,15 +35,18 @@ related:
   - kb-open-question-projection-batch-no-apply-001
   - kb-decision-0017
   - kb-decision-0019
+  - kb-decision-0030
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/2026-08-13-ps-clause-pairing-sweep.md
   - .kb/_intake/2026-08-13-adr-0019-apply-failure.md
+  - .kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md
   - references/evaluation/ps-clause-pairing-sweep.md
   - references/adr/0019-what-happens-when-apply-fails.md
+  - references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md
   - spec/SPECIFICATION.md
   - RUNBOOK.md
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-15
 ---
 
 # PS-1's MUST is a coupling, not a progress obligation
@@ -148,3 +155,44 @@ Nothing here resolves the question. Sub-questions 1, 2 and 4 stay open, `status`
 and the owner is unchanged — phase 6, with the repair itself
 `unstable-projection-gate-and-clause-disposition`'s under
 `kb-playbook-repair-frozen-clause-001`'s discipline.
+
+## Resolved 2026-08-15 — a clause of its own; `status` superseded
+
+Everything above is the state of knowledge on 2026-08-10 and 2026-08-13 and is left exactly as
+written, per this layer's README. ADR-0030, "The checkpoint reports the commits that happened"
+(`kb-decision-0030`; full record at
+`references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md`), now holds the answer, so
+this atom moves to `superseded` rather than `withdrawn`: the question was worth asking, a later atom
+answers it, and a reader arriving here needs sending there.
+
+**Sub-question 1 is answered: a clause of its own.** PS-38 is minted `[PROVISIONAL]` in §4.7
+(`spec/SPECIFICATION.md:5447-5449`) — *a successful `commit(batch, id, position, authority)` MUST
+advance `id`'s checkpoint to `position`, and a `ProjectionId` no successful `commit` has named MUST
+read as `Checkpoint::NeverRun`*. PS-1's own `MUST` is **byte-identical** across it (`:4755-4757`),
+which is what makes this a repair rather than a widening: no implementation gains or loses
+conformance by anything the decision writes. Widening PS-1 lost on two counts — it changes the set of
+implementations a `[FROZEN]` clause admits, which is a gap and a decision's rather than an edit's
+(`.kb/decisions/README.md:20-22`), and it would put two independently falsifiable propositions,
+coupling and progress, in one sentence. Splitting PS-23's *"exactly one"* — the third candidate the
+2026-08-13 amendment raised — lost because that clause is `[PROVISIONAL]` on an unrelated fan-out
+falsifier, and an obligation three rules rest on cannot live where something else is scheduled to
+rewrite it.
+
+**Sub-question 2 is answered: yes, and independently of where the prose lives.**
+`commit_advances_the_checkpoint` now reads against `PS-1, PS-38` in §4.11's table
+(`spec/SPECIFICATION.md:5846`) — the progress half rests on PS-38, the coupling half still on PS-1
+(`:4758-4759`). `fresh_projection_has_no_checkpoint` moves the same way, to `PS-19, PS-38`
+(`:5845`), and renders `†` because it is still unwritten. Of the three further rules the amendment
+named, PS-21 and PS-22 now have a clause to cite; **PS-8 does not** — its row is recorded in its own
+clause and routed to ADR-0017's range, not repaired here.
+
+**Sub-question 4 is answered by the decision itself.** ADR-0030 depends on `kb-decision-0007`,
+`kb-decision-0017` and `kb-decision-0018` and names `kb-decision-0019` as related, but settles none
+of them; the PS-29 row ADR-0019 met inside its own range stays with ADR-0019's typed-layer deferral.
+The 2026-08-13 correction above travels with the repair and is *stated* in PS-1's clause rather than
+edited into it (`spec/SPECIFICATION.md:4762-4769`), which is the same discipline that kept the
+sentence refuted-in-place here.
+
+**What is open is PS-38's, not this atom's.** PS-38 is provisional against a store answering
+`checkpoint` from a replica that may lag its own `commit`, owned by the first projection adapter
+over storage this workspace does not control. That is a new question in the decision's keeping.

@@ -11,7 +11,10 @@ summary: >-
   new canonical concept or domain path; entries are not removed when an atom is superseded, only
   annotated. The 2026-08-13 wave added ADR-0017–0019 (phase 6, ProjectionStore) to the existing
   "Contract ports, conformance, and the ADR corpus" domain and annotated one open question there
-  as superseded.
+  as superseded. The 2026-08-15 wave added ADR-0030 and a new open question (PS-32) to that same
+  domain, and a new reference atom on spec-trace's per-family suite switch to "Specification
+  governance & conformance," annotating the PS-1 and PS-19 open questions in both places as
+  superseded by ADR-0030.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -21,7 +24,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake/02-placement-and-adjudication.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
-last_reviewed: 2026-08-13
+  - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
+last_reviewed: 2026-08-15
 ---
 
 # Domain map
@@ -52,6 +56,11 @@ back against the tree phases 4 and 5 had already changed.
   what the pass found, counted by defect class, and where the full evidence
   lives. Everything else in this domain cites this atom rather than
   restating its counts.
+- [`spec-trace-has-suite-family-switch.md`](../reference/spec-trace-has-suite-family-switch.md)
+  (`kb-reference-spec-trace-has-suite-001`) — `cargo xtask spec-trace`'s
+  citation check runs only against clause families `has_suite` admits; `PS`
+  sat outside that switch for two slices after its conformance suite was
+  written, with every gate green throughout. Added 2026-08-15.
 
 **Playbooks** — transferable practice this pass extracted
 
@@ -76,8 +85,12 @@ back against the tree phases 4 and 5 had already changed.
 for the full, self-contained list. The ones this domain owns:
 `kb-open-question-disjoint-boundaries-no-clause-001`,
 `kb-open-question-model-family-rule-no-clause-001`,
-`kb-open-question-ps-1-no-progress-obligation-001`,
-`kb-open-question-ps-19-scope-narrower-001`,
+`kb-open-question-ps-1-no-progress-obligation-001` (**superseded** 2026-08-15
+by `kb-decision-0030`; sub-questions 1, 2 and 4 answered, PS-1's own text
+byte-identical),
+`kb-open-question-ps-19-scope-narrower-001` (**superseded** 2026-08-15 by
+`kb-decision-0030`; sub-questions 1 and 3 answered, sub-question 2's
+2026-08-13 verdict stands),
 `kb-open-question-es-6-unwritable-rule-001`,
 `kb-open-question-provisional-falsifiers-001`,
 `kb-open-question-post-phase-reconciliation-001`.
@@ -91,7 +104,10 @@ project's early phases rest on. Established by the 2026-08-10 ADR import, which 
 `.kb/decisions/0001` through `.kb/decisions/0016` and `.kb/decisions/0029` into `.kb/decisions/` as one wave.
 The 2026-08-13 wave added three more to this same domain — `.kb/decisions/0017`, `0018` and
 `0019` — settling `ProjectionStore::Batch`'s ownership, checkpoint reset, and the port's
-no-op-on-`apply`-failure stance, phase 6's `ProjectionStore` freeze. The full decision list,
+no-op-on-`apply`-failure stance, phase 6's `ProjectionStore` freeze. The 2026-08-15 wave added a
+fourth, `.kb/decisions/0030`, minting `[PROVISIONAL]` clause PS-38 — a successful `commit` MUST
+advance its `ProjectionId`'s checkpoint, and an id no successful `commit` has named MUST read as
+`Checkpoint::NeverRun` — the progress obligation section 4 never stated. The full decision list,
 including status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated
 here.
 
@@ -146,7 +162,9 @@ self-contained list. The ones this domain owns:
 `kb-open-question-cf-40-ownership-001`,
 `kb-open-question-dcb-no-published-format-001`,
 `kb-open-question-human-readable-encoding-limits-001`,
-`kb-open-question-sync-message-set-undesigned-001`.
+`kb-open-question-sync-message-set-undesigned-001`,
+`kb-open-question-ps-32-adr-0007-correction-owed-001` (added 2026-08-15 — ADR-0007's Context
+overstates what cannot be written against the port; only a superseding atom may correct it).
 
 ## Adding a domain
 
