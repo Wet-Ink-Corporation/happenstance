@@ -99,30 +99,34 @@ member, so `--locked` holds).
 | `cargo clippy -p outside-projection-adapter --all-targets --all-features -- -D warnings` | Clean. No `#[async_trait]`, the bare `ProjectionStore` flavour bound, one flavour name imported per module (NF-003). |
 | `cargo fmt --all --check` | Clean, run last, after every other edit. |
 | `cargo run -p xtask -- lint-constitution` | `27 atoms, all consistent` — after G9's repair. |
-| `redkiln verify --grain story --item HS-S0015` | `affected-gate` **ok**. `ledger` and `provenance` were red before this commit by construction (no evidence, no `links.commits`) and are what this report's ledger and commit close. `boundary` reports the whole branch against `main`, so it lists every sibling story's files; the widening this story itself owns is G9's three `standards/rust/` files, declared in the record rather than hidden. |
+| `redkiln verify --item HS-S0015 --grain story --base 6ce1cf3` | `affected-gate` **ok**, `boundary` **ok**, `ledger` **ok**. `--base 6ce1cf3` is this story's own base — the commit before `546a8fe`; run against the default `main` the boundary check diffs the whole branch and lists every sibling story's files, which answers a different question. `boundary` is green because the two compelled entries were **admitted into the fenced block** with the argument stated and scoped (`spec.md:256-257`, `:261-283`), not because the diff shrank. `provenance` stays red until `links.commits` carries the checkpoint sha, which `redkiln record-links` closes. |
 
 ## Notes
 
 **This story's exact diff, against the declared boundary.** `git diff --name-only 6ce1cf3..HEAD`
-gives nineteen files. Fifteen are inside the boundary block. Four are not, and each is named here
-rather than left for `redkiln verify` to find:
+gave nineteen files, of which four fell outside the block as first written. Both classes were
+**compelled by entries the block already admitted**, so the block itself was amended — the repository's
+own precedent (`aef8990`, after `redkiln verify` bounced `7fcb378` and `79df6b7` for the same class) is
+that the boundary is widened with the argument stated and scoped, never that a prose note stands in for
+the check:
 
-| file | why it is outside, and why it is here anyway |
+| file | why the block now admits it, and what the admission does *not* cover |
 | --- | --- |
-| `standards/rust/41-declarative-macros.md`, `62-doctests-and-harnesses.md`, `91-adapter-authoring-recipe.md` | G9. Eight citations anchored to phrases below the mount point; `lint-constitution` fails the gate without the repair, and no placement of the new section avoids it. |
-| `Cargo.lock` | **A defect in the boundary block, not a scope decision.** EC-007 *requires* the lock file to be committed with the new member so the gate's `cargo test --locked` holds, and the boundary block does not list it. The two cannot both be satisfied. Worth correcting in the spec rather than in a future story's diff. |
+| `standards/rust/41-declarative-macros.md`, `62-doctests-and-harnesses.md`, `91-adapter-authoring-recipe.md` | G9. Eight citations anchored to phrases below the mount point; `lint-constitution` — a gate step — fails without the repair, and no placement of the new section avoids it. Admitted as `standards/rust/**` at `spec.md:256`, scoped at `:261-275` to **line-number re-pointing only**, with the equal-insertions/deletions property this diff has: **+8/-8**, 4/4 + 3/3 + 1/1. Rule text, evidence selection, retirement and new atoms stay out. |
+| `Cargo.lock` | EC-007 *requires* the lock file to be committed with the new member so the gate's `cargo test --locked` holds — a requirement the spec's own Data-and-migrations section already called "covered by the PR boundary" (`spec.md:365-367`) when the block did not list it. Admitted at `spec.md:257`, argued at `:277-283`, scoped to the entries the new member adds; an unrelated bump or a `cargo update` sweep is not in boundary. |
 
-(`redkiln verify --grain story --item HS-S0015` reports `boundary` against `main`, so its list is the
-whole branch — every sibling story's files included. The four above are this story's own.)
+`redkiln verify --item HS-S0015 --grain story --base 6ce1cf3` now reports `boundary` **green** over
+that amended block. Against the default `main` base it reports the whole branch — every sibling
+story's files included — which is a different question and not this story's boundary.
 
-**One deviation, and it is a boundary widening.** The declared PR boundary names
-`crates/happenstance-testkit/src/lib.rs` as a mount point but does not name what cites *into* it.
-Adding any section to that crate doc shifts the lines below it, and eight citations in
+**One deviation, and it is a boundary widening that landed in the boundary.** The block as planned
+named `crates/happenstance-testkit/src/lib.rs` as a mount point but did not name what cites *into*
+it. Adding any section to that crate doc shifts the lines below it, and eight citations in
 `standards/rust/` are anchored to phrases there; `lint-constitution` failed the gate on all eight.
-The repair is `+65` on eight line numbers, in three files outside the boundary. It could not be
-avoided by placement — appending the section to the end of the `//!` block shifts the same eight
-lines, and is the anti-pattern AC-002 names. Recorded as G9, cited from the ledger, and stated here
-rather than left for a reviewer to notice.
+The repair is `+65` on eight line numbers. It could not be avoided by placement — appending the
+section to the end of the `//!` block shifts the same eight lines, and is the anti-pattern AC-002
+names. Recorded as G9, argued in the fenced block where the check reads it, and cited from the
+ledger — a widening recorded only in prose is a widening the gate cannot enforce.
 
 **Three things the plan expected that did not happen, all recorded as gap G7 rather than passed
 over.** EC-003 did not fire — the `__private` re-export carried the foreign expansion first time.

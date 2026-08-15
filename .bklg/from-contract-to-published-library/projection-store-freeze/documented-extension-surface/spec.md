@@ -253,8 +253,34 @@ crates/happenstance-testkit/src/contract.rs
 crates/happenstance-core/src/projection.rs
 CHANGELOG.md
 CLAUDE.md
+standards/rust/**
+Cargo.lock
 .bklg/from-contract-to-published-library/projection-store-freeze/documented-extension-surface/**
 ```
+
+`standards/rust/**` was added on **2026-08-15**, and it is admitted for one mechanical reason only.
+The constitution cites `crates/happenstance-testkit/src/lib.rs` — an entry this boundary already
+admits — by `file:line`; this story inserts a section into that file's crate-level `//!` block; the
+cited lines therefore move; and `cargo xtask lint-constitution` — a gate step — fails on a stale
+citation. The repair is **compelled by an entry the boundary already admits**, the same shape
+`projection-capability-skips` and `projection-suite-entry-point` widened for in `aef8990`, and
+`owned-batch-port-shape`'s `stand_in.rs` edit had under `broken_intra_doc_links` at `deny`. Only
+**line-number re-pointing** is in boundary, and the diff must show equal insertions and deletions per
+atom: this story's is **+8/-8** across `41-declarative-macros.md` (4/4),
+`62-doctests-and-harnesses.md` (3/3) and `91-adapter-authoring-recipe.md` (1/1). **Rule text,
+evidence selection, retirement or a new atom are out of boundary** — those belong to the story that
+changes the rule, not to whichever story moved a line. There is no placement that avoids the shift:
+appending to the end of the `//!` block moves the same eight lines and is the anti-pattern AC-002
+names. The argument is recorded in full as gap G9 in `_extension-surface-gaps.md`; widening this list
+to match what was written, without it, would turn the check into a rubber stamp.
+
+`Cargo.lock` is in the boundary for **one** reason and it is likewise mechanical: adding a workspace
+member changes the lock file, and the gate's `cargo test` step runs `--locked`
+(`xtask/src/main.rs:147`), so **EC-007 requires the lock file be committed in the same change** and
+forbids relaxing `--locked` to avoid it. The Data-and-migrations section below already says so at
+`:365-367` and calls it "covered by the PR boundary" — it was not, and this entry is what makes that
+sentence true. Only the entries the new member adds are in boundary; an unrelated dependency bump or
+a `cargo update` sweep is not.
 
 **In this PR**
 

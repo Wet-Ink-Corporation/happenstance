@@ -372,11 +372,17 @@ standards/rust/41-declarative-macros.md:48 — `crates/happenstance-testkit/src/
 `62-doctests-and-harnesses.md` and `91-adapter-authoring-recipe.md`; `lint-constitution` back to
 *"27 atoms, all consistent"*.
 
-*Stated rather than hidden: those three files are **outside this story's declared PR boundary**.* The
-boundary names the mount point but not what cites into it, and there is no way to add a section to
-that page without moving them — appending to the end of the `//!` block, the only placement that
-avoids nothing, is the anti-pattern AC-002 names and would have shifted the same eight lines anyway.
-The change is mechanical, is entirely line numbers, and is cited from here.
+*Admitted rather than merely stated: those three files were **outside this story's PR boundary as
+first written**, and the block was amended rather than argued past.* The boundary named the mount
+point but not what cites into it, and there is no way to add a section to that page without moving
+them — appending to the end of the `//!` block, the only placement that avoids nothing, is the
+anti-pattern AC-002 names and would have shifted the same eight lines anyway. So `standards/rust/**`
+is now an entry in the fenced block at `spec.md:256`, with the argument at `:261-275` scoping it to
+**line-number re-pointing only** — rule text, evidence selection, retirement and new atoms stay out —
+and asserting the equal-insertions/deletions property this diff has: **+8/-8**, 4/4 + 3/3 + 1/1. That
+is the shape `aef8990` set for the same class of compelled repair, after `redkiln verify` bounced two
+sibling stories for it. A widening recorded only here would be a widening the gate cannot read; the
+change is mechanical, is entirely line numbers, and is now checkable rather than merely disclosed.
 
 *Why this is the record's most useful pair.* **Two citation checkers run over this repository against
 the same kind of claim, and only one of them works.** `lint-constitution` anchors every citation to a
@@ -434,9 +440,15 @@ proof.
 For `unstable-projection-gate-and-clause-disposition` (HS-S0016) and the runbook's ADR pass. No `.kb/`
 atom is minted here; a decision record is never a side effect of a story.
 
+One row carries a `D` rather than a `G`. The `G` series is reserved for AC-007's question — points at
+which the **allowlist** was insufficient — and D1 is not one of those: it is an error found *in the
+signed-off record this story reads*, while conforming to it. Numbering it `G10` would have made the
+nine-gap count answer a different question than the one it was asked.
+
 | # | finding | owner |
 | --- | --- | --- |
 | G1 | The port module's first paragraph says the conformance suite does not cover it. False since merge position 6, and coupled to `spec/SPECIFICATION.md:4566-4569`, which quotes it | HS-S0016 |
 | G2 | `spec-trace` existence-checks 290 of its 359 citations, so documentation inserted above a cited line rots the citation silently. Two measured instances, one of them pre-existing (`SPECIFICATION.md:7807` → `testkit/src/lib.rs:238`). **The fix already exists in the tree**: `lint-constitution`'s ±10-line phrase anchor, which caught all eight of G9 | HS-S0016 / runbook ADR pass |
 | G5 | The mutant-registry exactness discipline is internal-only and is not part of the documented extension surface. Either that is stated on the page as a limit, or the machinery is published | HS-S0016 |
 | G4 | The page's compiled examples are compiled trivially by a hidden-line idiom used three times. Worth a decision rather than a habit | runbook ADR pass |
+| D1 | `_design.md:379-383`'s cost snippet puts `happenstance-core` with `features = ["conformance"]` under **`[dev-dependencies]`**, which contradicts the argument the same section makes six lines above (`:369-375`): the orphan rule forces `impl ProjectionProbe for MyStore` into `src/`, and `src/` cannot see a dev-dependency — the `error[E0432]` transcript quoted above is that fact measured. The correct section is `[dependencies]`, which is what `examples/outside-projection-adapter/Cargo.toml:20-22` does and what AC-003 and AC-006 specify; the decision is right and only the snippet is wrong. `_design.md` is signed off and **explicitly out of this story's PR boundary** (AC-001, AC-008), so it is reported rather than repaired — but an uncorrected snippet in a signed-off record is the copy the next author pays for | HS-S0016 / runbook ADR pass |
