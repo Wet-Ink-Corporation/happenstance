@@ -65,7 +65,11 @@ skip count quoted; AC-009 and AC-010 are diff review. Inventing a test that read
 | SHA | What |
 | --- | --- |
 | `7620481` | The mechanism: `ARTEFACTS`' two phase-6 rows, `Artefact::registry` and the keying fix, the parity guard, and the `[Unreleased]` changelog entry. **This is the commit the recorded gate run was made on**, and it is why the mechanism landed first: the run has to be on a clean tree, and a document that records a run cannot be in the tree the run was made on without describing itself. |
-| `__STORY2_SHA__` | The evidence: the artefact, its README registration, the four document-reading assertions in `xtask/src/proof.rs`, the ledger and these reports. |
+| `674c459` | The evidence: the artefact, its README registration, the four document-reading assertions in `xtask/src/proof.rs`, the ledger and these reports. |
+
+The second SHA is filled in by a one-file `docs(projection-store-freeze)` commit
+on top of it, because a checkpoint cannot cite itself — the same shape the
+slice-mate used at `2a7ae8a`.
 
 ## Changes
 
