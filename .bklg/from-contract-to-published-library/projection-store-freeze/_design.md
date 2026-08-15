@@ -381,16 +381,38 @@ forces every adapter into a **non-dev** dependency on `happenstance-testkit` and
 feature to gate it. Putting it in the contract crate costs the flag and nothing
 else.
 
-Concretely, what an outside author pays:
+Concretely, what an outside author pays — and **which section each line goes in
+is the whole point of the argument above**, so the two are not interchangeable:
 
 ```toml
-[dev-dependencies]
+[dependencies]
 happenstance-core = { version = "…", features = ["conformance"] }
+
+[dev-dependencies]
 happenstance-testkit = "…"
 ```
 
-— and one `impl ProjectionProbe for MyStore` beside their `impl ProjectionStore`.
-No new crate in their graph that was not already there.
+— and one `impl ProjectionProbe for MyStore` beside their `impl ProjectionStore`,
+in `src/`. No new crate in their graph that was not already there.
+
+`happenstance-core` is a **normal** dependency and gains a feature; the testkit
+is a dev-dependency and stays one. Spelling `happenstance-core` under
+`[dev-dependencies]` is the one arrangement that cannot work, and it is the
+arrangement this record showed until the shipped surface corrected it: the
+`ProjectionProbe` impl lives in `src/` beside the `ProjectionStore` impl,
+because putting it in `tests/` is a different crate where neither the trait nor
+the type is local — which is the orphan-rule argument two paragraphs up, and the
+reason the trait is in the contract crate at all. A `src/` impl cannot name a
+dev-dependency, so that spelling does not compile.
+
+Corrected here on 2026-08-15, after the project review found this block
+disagreeing with both instruments that had since measured it: the landed
+manifest (`examples/outside-projection-adapter/Cargo.toml:20-23`) and the
+rendered documentation an outside author actually reads
+(`crates/happenstance-testkit/src/lib.rs:184-191`). Both were right and this
+record was the outlier. The resolution, its cost bound and the obligation below
+are unchanged — this was the wrong spelling of a decision, never a different
+decision.
 
 **The obligation this arm creates, named so it cannot be quietly dropped.**
 `documented-extension-surface` (HS-S0015) must build a projection fixture **from
