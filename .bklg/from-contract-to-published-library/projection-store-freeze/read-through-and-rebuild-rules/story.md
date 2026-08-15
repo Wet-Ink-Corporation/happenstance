@@ -7,9 +7,9 @@ title: Read-your-writes, chunk-size invariance and rebuild authority
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: reset-and-rebuild-rules
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T19:02:13.343Z
+updated: 2026-08-15T19:07:16.460Z
 links:
   pr: null
   commits:
     - 5be22ab
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
