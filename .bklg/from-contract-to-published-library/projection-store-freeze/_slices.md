@@ -26,6 +26,7 @@ human-readable record, the trailer is what resume greps.
 | projection-conformance-suite | approved | projection-suite-entry-point 79df6b7, projection-capability-skips 7fcb378 | (this commit) |
 | commit-atomicity-and-mutants | approved | projection-mutant-registry c385e40, commit-rollback-and-drop-rules 5d9b4fd | (this commit) |
 | reset-and-rebuild-rules | changes-requested | reset-rules 10ace94, read-through-and-rebuild-rules 5be22ab | (this commit) |
+| second-batch-shape-and-evidence | approved | buffering-conformant-variant cfd9231, ps3-batch-shape-finding d9cfb0e | (this commit) |
 
 ## Surviving findings
 
