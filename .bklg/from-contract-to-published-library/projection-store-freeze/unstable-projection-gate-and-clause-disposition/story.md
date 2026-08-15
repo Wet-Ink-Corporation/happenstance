@@ -7,9 +7,9 @@ title: The module stops lying about its own maturity
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,13 @@ archetype: capability
 slice: port-disposition-and-freeze-record
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:07.618Z
+updated: 2026-08-15T13:57:16.061Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 984e7fd
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
