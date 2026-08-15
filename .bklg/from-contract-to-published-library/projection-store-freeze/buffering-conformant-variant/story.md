@@ -23,13 +23,13 @@ archetype: capability
 slice: second-batch-shape-and-evidence
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T13:54:47.913Z
+updated: 2026-08-15T13:54:54.357Z
 links:
   pr: null
   commits:
     - cfd9231
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
