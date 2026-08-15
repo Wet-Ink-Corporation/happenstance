@@ -17,7 +17,9 @@
 //! family split them for the same reason
 //! (`crates/happenstance-testkit/tests/mutation_coverage/variants.rs`).
 
+use crate::buffering::BufferingProjectionFixture;
 use crate::correct::{Defect, MutantBatch, State};
+use crate::harness::ProjectionSubject;
 
 /// A batch with **no read path at all**.
 ///
@@ -43,11 +45,13 @@ use crate::correct::{Defect, MutantBatch, State};
 ///
 /// It is **not** the buffering, replay-at-commit conformant variant, which is a
 /// different and larger instrument at the far end of §6's batch-shape axis
-/// (`spec/SPECIFICATION.md:5686-5691`) and belongs to `buffering-conformant-variant`.
-/// Keeping this one minimal — one const and one `unimplemented!()` over the
-/// correct core — is what stops it being presented as the second batch shape a
-/// later story owes. If that variant also declares `false` when it lands, it is a
-/// second instance rather than a duplicate to delete.
+/// (`spec/SPECIFICATION.md:5686-5691`). That one has since landed as
+/// [`BufferingProjectionStore`](crate::buffering::BufferingProjectionStore), and
+/// it declares `READS_THROUGH_BATCH` **`true`** — so the two are opposite arms of
+/// the same gate rather than duplicates, and neither can be deleted without
+/// leaving one arm with no fixture behind it. Keeping this one minimal — one
+/// const and one `unimplemented!()` over the correct core — is what stopped it
+/// being presented as the second batch shape.
 ///
 /// The pair of overrides *is* the single property. A store that declared `false`
 /// and kept a working read path would be lying in the harmless direction, and one
@@ -72,5 +76,34 @@ impl Defect for NoBatchReadStore {
              `probe_read_through` is never called: a rule that reached it \
              ignored the gate"
         )
+    }
+}
+
+/// The second conformant variant, wired into *this* binary.
+///
+/// The store itself is `projection_mutation_coverage/buffering.rs`, which is
+/// deliberately not this file: it is also included by
+/// `tests/projection_conformance_buffering.rs`, and everything else in this
+/// module depends on the `Defect` seam that target cannot see. What belongs here
+/// is the **registration** — the trait that makes a fixture enumerable by the
+/// mutant harness, which is this binary's and only this binary's.
+///
+/// [`BufferingProjectionStore`](crate::buffering::BufferingProjectionStore) is a
+/// standalone store rather than a `Defect` over the correct core for the same
+/// reason it is a variant at all: a `Defect` is the correct store with **one
+/// step** replaced, and this one differs in what a batch *is*. Expressing that as
+/// a step override would need either a seam per method or a store whose "one
+/// defect" is the whole of it, and the registry would then be describing the
+/// instrument instead of the shape.
+///
+/// It is [`NoBatchReadStore`]'s opposite in the one property that matters to
+/// CF-5's control: it declares `READS_THROUGH_BATCH = true`, so the two rules
+/// gated on that switch **execute** against a conformant variant rather than
+/// skipping against the only one there was.
+impl ProjectionSubject for BufferingProjectionFixture {
+    const NAME: &'static str = "BufferingProjectionStore";
+
+    fn open() -> Self {
+        Self::new()
     }
 }

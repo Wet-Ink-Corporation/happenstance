@@ -31,16 +31,22 @@
 //! nothing in this binary computes or prints a fraction over it. (ADR-0010 §1;
 //! `SPECIFICATION.md` §6.1's closing note.)
 //!
-//! # CF-5's half is deferred by name, and deliberately not landed empty
+//! # CF-5's half, and the two rows it took to make it a control
 //!
-//! [`Kind::ConformantVariant`] exists in the shape and **no row uses it yet**. The
-//! projection family's conformant variant is the buffering, replay-at-commit
-//! store, and it belongs to `buffering-conformant-variant` (HS-S0014). So neither
-//! the event-store family's "at least one conformant variant is registered"
-//! assertion nor its `conformant_variants_pass_everything` positive control is
-//! landed here: over an empty set, both would pass while asserting nothing, which
-//! is the vacuity CF-5 exists to prevent reintroduced one level up. The hole is
-//! named rather than filled.
+//! [`Kind::ConformantVariant`] has two rows, and neither is redundant.
+//! `NoBatchReadStore` declares `READS_THROUGH_BATCH = false` and is PS-12's
+//! second arm; `BufferingProjectionStore` is the buffering, replay-at-commit
+//! shape PS-4 permits and §4.11 assigns to this family, and it declares the
+//! switch `true`.
+//!
+//! The pair is what turned `projection_conformant_variants_pass_everything` from
+//! a control over *part* of the suite into a control over all of it. With the
+//! first row alone, two rules skipped against every variant there was — so
+//! nothing said those rules **accept** a legal store, which is the only claim
+//! CF-5 exists to make. The section this replaced named the hole rather than
+//! filling it with an empty control, and it was right to: over an empty set both
+//! assertions pass while asserting nothing, which is the vacuity CF-5 prevents
+//! reintroduced one level up.
 //!
 //! # Why the whole file is gated off `wasm32`, and what that costs
 //!
@@ -69,6 +75,14 @@
 // harness;` looks for `tests/harness.rs`, which would put three support files in
 // the same directory as the test targets and invite cargo to compile them as
 // targets of their own.
+// The buffering variant is the one support module `tests/projection_conformance_buffering.rs`
+// also includes, by the same attribute and from the same path: one definition,
+// two consumers, so the registry below describes the same code that harness ran.
+// It is self-contained on purpose — it names nothing from `correct.rs` — because
+// pulling the `Defect` seam into that target would drag this whole binary with
+// it.
+#[path = "projection_mutation_coverage/buffering.rs"]
+mod buffering;
 #[path = "projection_mutation_coverage/correct.rs"]
 mod correct;
 #[path = "projection_mutation_coverage/harness.rs"]
@@ -96,10 +110,11 @@ enum Kind {
     /// pass everything (CF-5).
     ///
     /// The `#[expect(dead_code)]` this arm carried came off with
-    /// `read-through-and-rebuild-rules`: `NoBatchReadStore` is the first row to
-    /// use it, which is the day the deferral the attribute named ended. The
-    /// buffering replay-at-commit variant is still owed and is a *second*
-    /// instance rather than this one arriving late.
+    /// `read-through-and-rebuild-rules`: `NoBatchReadStore` was the first row to
+    /// use it, which is the day the deferral the attribute named ended.
+    /// `BufferingProjectionStore` is the second, and it is a *second instance*
+    /// rather than the first arriving late — the two differ on opposite arms of
+    /// PS-12's gate, and the control needs both.
     ConformantVariant,
 }
 
@@ -245,11 +260,13 @@ struct Declared {
 ///
 /// *Not covered, and each of these is a real axis rather than an oversight:*
 ///
-/// * **A conformant variant.** CF-5's projection half is
-///   `buffering-conformant-variant` (HS-S0014), and until it lands nothing in
-///   this binary proves the harness can report a *pass* it did not have to
-///   report. See this file's module documentation for why an empty positive
-///   control is worse than none.
+/// * **A third batch shape.** Both ends of §6's batch-shape axis now have a row
+///   — the materialised delta the reference store uses and
+///   `BufferingProjectionStore`'s replayable journal — but every store here is
+///   still *in this process*. What no row models is a batch whose commit crosses
+///   a real boundary: a transaction manager, a connection pool under contention,
+///   or a server that can refuse half a request. That axis belongs to an adapter,
+///   and PS-2's `[FROZEN]` bar asks for two of them for exactly this reason.
 /// * **The one rule §4.11 lists that has not landed.**
 ///   `fresh_projection_has_no_checkpoint` is **held**, not merely unwritten: no
 ///   clause's `MUST` reaches it, PS-19 is `[FROZEN]`, and the store that would
@@ -782,6 +799,36 @@ const REGISTRY: &[Declared] = &[
         mode: FailureMode::Assertion,
         expect: &[],
     },
+    Declared {
+        name: "BufferingProjectionStore",
+        kind: Kind::ConformantVariant,
+        // CF-5's second projection row, and `fails` is empty because the store is
+        // *correct*: PS-4 permits this shape in as many words. It is also the row
+        // that makes `projection_conformant_variants_pass_everything`'s second
+        // assertion satisfiable — it declares `READS_THROUGH_BATCH = true` and
+        // supports every fixture capability, so no projection rule is left
+        // unexecuted against a legal store.
+        //
+        // Hand-written, like every row above it and for the same reason: a table
+        // generated from what the run happened to do asserts nothing at all. If
+        // this store ever fails a rule, the repair is to the *rule* (CF-6), never
+        // to this row and never to the store.
+        fails: &[],
+        provenance: "the adapter that holds nothing across an await — a Cloudflare Workers \
+                     `SqlStorage` projection, or Neon over one-shot HTTP, whose batch is a \
+                     statement list queued for a server it has no connection to and whose \
+                     `commit` is the single request that sends it \
+                     (`references/adapter-shapes.md`). PS-4 names the shape and permits it \
+                     outright — PS-1 *\"is satisfiable by opening the transaction inside \
+                     `commit` around a buffered write set\"* \
+                     (`spec/SPECIFICATION.md:4849-4856`) — and §4.11 assigns the projection \
+                     family's CF-5 variant to exactly it (`:5686-5691`). It is the far end of \
+                     §6's batch-shape axis from the reference store's materialised delta, and \
+                     the reason a green projection run is evidence about the port rather than \
+                     about one store",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
 ];
 
 /// Hands every registered projection mutant type to `$callback`.
@@ -813,6 +860,7 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::LiveOnlyCheckpointStore>,
 
             crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
+            crate::buffering::BufferingProjectionFixture,
         }
     };
 }
@@ -864,6 +912,14 @@ fn run_no_batch_read_store() -> SubjectReport {
     harness::run_subject::<correct::MutantFixture<variants::NoBatchReadStore>>()
 }
 
+/// Drives the second batch shape.
+///
+/// Named beside its sibling above and for its reason: the assertion it feeds is
+/// about the outcome, not about the type.
+fn run_buffering_store() -> SubjectReport {
+    harness::run_subject::<buffering::BufferingProjectionFixture>()
+}
+
 // =====================================================================
 // The meta-tests
 // =====================================================================
@@ -876,7 +932,8 @@ fn run_no_batch_read_store() -> SubjectReport {
 mod projection_mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, Origin, REGISTRY, RUNTIME_PANICS, Verdict,
-        all_projection_rules, declared, registered_names, reports, run_no_batch_read_store,
+        all_projection_rules, declared, registered_names, reports, run_buffering_store,
+        run_no_batch_read_store,
     };
 
     /// Every rule the registry claims a mutant for.
@@ -1231,19 +1288,41 @@ mod projection_mutation_coverage {
     /// subject itself declares the switch — the `(capability, reason)` pair has
     /// to be one `harness::declines` collected from the store. A skip from
     /// anywhere else means a rule stopped running and nothing noticed.
+    ///
+    /// # Two assertions, and the second is what `buffering-conformant-variant`
+    /// added
+    ///
+    /// The first says *no variant was rejected*. On its own it is satisfied by a
+    /// family whose only variant skips half the suite — a control over half the
+    /// suite, which reads exactly like a control over all of it. The second says
+    /// **every projection rule executed against at least one variant**, which is
+    /// the event-store family's shape (`tests/mutation_coverage.rs:3128-3137`)
+    /// and could not be met here until a variant declaring
+    /// `READS_THROUGH_BATCH = true` was registered: with `NoBatchReadStore`
+    /// alone, `batch_reads_reflect_pending_writes` and
+    /// `rebuild_is_chunk_size_invariant` had never been *accepted* by anything
+    /// legally different from the reference store.
     #[test]
     fn projection_conformant_variants_pass_everything() {
-        let mut variants = 0_usize;
+        let variants: Vec<_> = reports()
+            .into_iter()
+            .filter(|report| {
+                // `projection_mutant_registry_is_exhaustive` owns an enumerated
+                // store with no row; here an unregistered store is simply not a
+                // declared variant.
+                declared(report.name).is_some_and(|entry| entry.kind == Kind::ConformantVariant)
+            })
+            .collect();
 
-        for report in reports() {
-            let Some(entry) = declared(report.name) else {
-                continue; // `projection_mutant_registry_is_exhaustive` owns this.
-            };
-            if entry.kind != Kind::ConformantVariant {
-                continue;
-            }
-            variants += 1;
+        assert!(
+            !variants.is_empty(),
+            "no conformant variant was driven, so this test passed over an empty \
+             set and asserted nothing — which is the vacuity CF-5 exists to \
+             prevent, one level up. At least one `Kind::ConformantVariant` row \
+             must be registered and enumerated"
+        );
 
+        for report in &variants {
             for (rule, verdict) in &report.outcomes {
                 match verdict {
                     Verdict::Passed => {}
@@ -1253,7 +1332,7 @@ mod projection_mutation_coverage {
                          `{capability}`, which it does not declare — so a rule \
                          stopped running for a reason nothing accounts for. \
                          Declares: {:?}",
-                        entry.name,
+                        report.name,
                         report.declines
                     ),
                     Verdict::Panicked { .. } => panic!(
@@ -1262,20 +1341,25 @@ mod projection_mutation_coverage {
                          is a mutant and its row is wrong — or the rule is \
                          over-specified beyond what its clause requires, which is \
                          the defect no other test in this binary can see. Saw: {}",
-                        entry.name,
+                        report.name,
                         verdict.describe()
                     ),
                 }
             }
         }
 
-        assert!(
-            variants > 0,
-            "no conformant variant was driven, so this test passed over an empty \
-             set and asserted nothing — which is the vacuity CF-5 exists to \
-             prevent, one level up. At least one `Kind::ConformantVariant` row \
-             must be registered and enumerated"
-        );
+        for rule in all_projection_rules() {
+            assert!(
+                variants.iter().any(|report| report
+                    .outcomes
+                    .iter()
+                    .any(|(name, verdict)| *name == rule && matches!(verdict, Verdict::Passed))),
+                "`{rule}` never ran against a conformant variant — every variant \
+                 skipped it — so nothing here says the rule **accepts** a legal \
+                 store. A control that skipped part of the suite is a control \
+                 over that part only"
+            );
+        }
     }
 
     /// A store with no read path on its batch is told so **by name**, in the
@@ -1334,6 +1418,69 @@ mod projection_mutation_coverage {
                  than against literals repeated here"
             );
         }
+    }
+
+    /// The second batch shape answers **every** projection rule, and answers all
+    /// of them with a pass.
+    ///
+    /// [`a_batch_with_no_read_path_is_reported_as_a_skip`]'s mirror, and the
+    /// reason both exist: a skip is neither a pass nor a failure, so "the suite
+    /// is green against this store" is two different claims depending on how much
+    /// of it ran. `NoBatchReadStore` answers two rules with a reported skip and it
+    /// is right to; this store answers none that way, and *that* is what makes
+    /// the buffering run evidence about the whole rule set rather than about the
+    /// part of it a fixture happened to reach.
+    ///
+    /// Asserted on the [`Verdict`] values the harness collected from each rule's
+    /// [`RuleOutcome`](happenstance_testkit::RuleOutcome), never on stdout —
+    /// libtest suppresses a passing test's output without `--show-output`, and a
+    /// claim read off a printed line is a claim about a terminal.
+    ///
+    /// Both directions, because either alone is satisfiable by an accident: the
+    /// **outcome set** must be exactly the enumerated rule set in enumeration
+    /// order (so a rule cannot be silently absent from the run, and none is
+    /// emitted twice), and every outcome must be `Passed` (so none is absent from
+    /// the *assertions* either). A fixture declining a capability would show up
+    /// here as a `Skipped` with a stated reason rather than as a gap.
+    #[test]
+    fn the_second_batch_shape_answers_every_rule_with_a_pass() {
+        let report = run_buffering_store();
+
+        let answered: Vec<&str> = report.outcomes.iter().map(|(rule, _)| *rule).collect();
+        assert_eq!(
+            answered,
+            all_projection_rules(),
+            "the buffering variant must be driven through every rule in \
+             `for_each_projection_store_rule!`, in enumeration order and exactly \
+             once each. A rule missing here never met the second batch shape, and \
+             a rule twice over is one whose green is counted twice"
+        );
+
+        let unpassed: Vec<String> = report
+            .outcomes
+            .iter()
+            .filter(|(_, verdict)| !matches!(verdict, Verdict::Passed))
+            .map(|(rule, verdict)| format!("{rule}: {}", verdict.describe()))
+            .collect();
+        assert!(
+            unpassed.is_empty(),
+            "every projection rule must **run** against the second batch shape \
+             and pass. A `Skipped` here is a rule that did not run — which is not \
+             a failure, but is also not the evidence this store was registered to \
+             supply — and a `Panicked` is CF-6: the finding is about the rule, not \
+             about the store. Saw {unpassed:?}"
+        );
+
+        assert!(
+            report.declines.is_empty(),
+            "this fixture declines no capability, and the reason is not \
+             ambition: `COMMIT_FAULT` and `RESET_REFUSAL` gate one rule each, and \
+             a variant declining either would leave that rule unexecuted against \
+             every conformant variant this family has — which is the hole \
+             `projection_conformant_variants_pass_everything`'s second assertion \
+             exists to refuse. Declares: {:?}",
+            report.declines
+        );
     }
 
     /// CF-4. Every registered store names the real shape that makes it plausible.

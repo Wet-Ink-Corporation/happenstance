@@ -29,6 +29,13 @@
 //! file: the rule is emitted, answered and reported, and the adapter that can
 //! arm a fault is the one that gets it checked.
 //!
+//! It is also only **one** of the two batch shapes this suite is now run
+//! against. `projection_conformance_buffering.rs` drives the same rules,
+//! unchanged, against a store whose batch is a replayable op journal and which
+//! holds nothing between `begin` and `commit` — PS-4's shape. Both run inside
+//! one `cargo xtask ci`, and it is the pair that lets a green projection run be
+//! read as evidence about the *port* rather than about this store.
+//!
 //! The tokio harness, so: native only. The `wasm32` build of this same suite is
 //! `projection_conformance_wasm.rs`, and the runtime-free one is
 //! `projection_conformance_blocking.rs`. **No rule name appears in this file**,
