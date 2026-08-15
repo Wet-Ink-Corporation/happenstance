@@ -35,7 +35,13 @@
 //! | Where it sits in the log | [`SequencePosition`], [`SequencedEvent`] |
 //! | What to read | [`Query`], [`QueryItem`], [`ReadOptions`] |
 //! | What must not have changed | [`AppendCondition`] |
-//! | Storage seams | [`EventStore`], [`ProjectionStore`] |
+//! | Storage seams | [`EventStore`], `ProjectionStore` |
+//!
+//! `ProjectionStore` is deliberately not a link, for the reason given under
+//! *Getting started* below: it is behind the off-by-default `unstable-projection`
+//! feature, and an intra-doc link into a `cfg`-gated item is a hard rustdoc error
+//! on every configuration where the gate is closed — which includes the default
+//! one this page is rendered on. (D13)
 //!
 //! # Design notes
 //!
@@ -68,11 +74,13 @@
 //! Enable the `memory` feature (on by default) and use `MemoryEventStore` — see
 //! its documentation for a runnable walkthrough of the read-decide-append loop.
 //! `MemoryProjectionStore` is its projection-side twin, and its page carries a
-//! runnable `begin` → write → `commit` → read-back walkthrough of its own.
+//! runnable `begin` → write → `commit` → read-back walkthrough of its own; it
+//! needs `unstable-projection` as well, because it implements the port that
+//! feature gates.
 //!
-//! The name is deliberately not a link here. It would be a broken one whenever
-//! the feature is off, and `cargo doc --no-default-features` treats a broken
-//! intra-doc link as a hard error rather than a warning (D13).
+//! Neither name is a link here. It would be a broken one whenever the feature is
+//! off, and `cargo doc --no-default-features` treats a broken intra-doc link as a
+//! hard error rather than a warning (D13).
 //!
 //! # Feature flags
 //!
@@ -82,11 +90,20 @@
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by
 //!   replication adapters that need one.
+//! * **`unstable-projection`** — the `ProjectionStore` port, its value types and
+//!   `MemoryProjectionStore`. **Off by default and exempt from semver**, and the
+//!   reason is not that nothing tests it: seventeen conformance rules do. It is
+//!   that PS-2's bar for freezing the port is *two adapters at opposite ends of
+//!   the batch-shape axis*, and both shapes that clear the suite today are
+//!   testkit-side instruments. The `projection` module's own header states what
+//!   would clear the bar and who decides whether 0.1 ships with the gate on.
+//!   Pulls in no dependency and implies neither `std` nor `memory`.
 //! * **`conformance`** — `ProjectionProbe`, the write seam the projection
 //!   conformance suite drives an adapter's read model through. For adapter
 //!   authors running that suite against their own store; nothing in the runtime
-//!   path needs it. Off by default, pulls in no dependency, and implies
-//!   nothing — not `std`, not `memory`.
+//!   path needs it. Off by default, pulls in no dependency, and implies exactly
+//!   one thing — `unstable-projection`, because the probe is defined inside the
+//!   module that feature gates. Not `std`, not `memory`.
 //!
 //!   The name is deliberately not a link here, for the reason given under
 //!   *Getting started*: a link into a `cfg`-gated item is a hard error when the
@@ -106,15 +123,24 @@ mod query;
 mod tag;
 mod validate;
 
-pub mod projection;
 pub mod store;
+
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub mod projection;
 
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 mod memory;
 
-#[cfg(feature = "memory")]
-#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+// Both features, because this is the projection port's reference implementation
+// and the port is what it implements. `memory` alone cannot render it and
+// `unstable-projection` alone does not ask for it.
+#[cfg(all(feature = "memory", feature = "unstable-projection"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
+)]
 mod projection_memory;
 
 pub use append::{AppendCondition, Guard};
@@ -127,13 +153,16 @@ pub use limits::{
     MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
     MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
 };
+pub use query::{Query, QueryItem, ReadOptions};
+pub use store::{EventStore, SendEventStore, collect, read_decision_model};
+pub use tag::{MAX_TAG_LEN, Tag, Tags};
+
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use projection::{
     Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError,
     SendProjectionStore,
 };
-pub use query::{Query, QueryItem, ReadOptions};
-pub use store::{EventStore, SendEventStore, collect, read_decision_model};
-pub use tag::{MAX_TAG_LEN, Tag, Tags};
 
 #[cfg(feature = "conformance")]
 #[cfg_attr(docsrs, doc(cfg(feature = "conformance")))]
@@ -143,8 +172,11 @@ pub use projection::ProjectionProbe;
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryEventStore, MemoryStoreError};
 
-#[cfg(feature = "memory")]
-#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+#[cfg(all(feature = "memory", feature = "unstable-projection"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
+)]
 pub use projection_memory::{
     MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
 };

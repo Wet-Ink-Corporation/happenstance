@@ -12,7 +12,10 @@ categories.workspace = true
 publish = false
 
 [dependencies]
-happenstance-core = { workspace = true, features = ["std"] }
+# `unstable-projection` is named rather than inherited. Feature unification is
+# per build, and the `-p` doc step and every `cargo hack` combination build this
+# crate on its own.
+happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
 futures-core.workspace = true
 thiserror.workspace = true
 # `postgres` is the driver; `runtime-tokio` is the reactor. Nothing else — no

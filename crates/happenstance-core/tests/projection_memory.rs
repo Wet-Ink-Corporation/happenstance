@@ -20,7 +20,12 @@
 //! `error[E0034]`, because the store implements both and neither is more
 //! specific.
 
-#![cfg(feature = "memory")]
+// Both, and for the reason the module doc gives above: this file compiling is
+// the proof the store is *mounted*, and the store is mounted on the pair. The
+// port is behind `unstable-projection`, its reference implementation is behind
+// that and `memory`, and a test target gated on only one of them fails to
+// compile in every configuration that has the other.
+#![cfg(all(feature = "memory", feature = "unstable-projection"))]
 
 use happenstance_core::{
     Authority, Checkpoint, CommitError, MemoryProjectionStore, ProjectionId, ProjectionStore,

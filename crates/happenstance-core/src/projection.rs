@@ -1,14 +1,45 @@
 //! The projection store port.
 //!
-//! # Status: provisional
+//! # Status: behind `unstable-projection`, and this is why
 //!
-//! Unlike [`EventStore`](crate::EventStore), this port is **not yet frozen**.
-//! It is defined here so the seam is visible and so adapter crates have
-//! something to compile against, but the conformance suite does not cover it
-//! yet — and a port without a conformance suite is a guess. It will be settled
-//! in the pass that lands the first real projection adapter, where the design
-//! can be checked against an actual transaction API rather than an imagined
-//! one. Treat its shape as subject to change.
+//! Unlike [`EventStore`](crate::EventStore), this port is **not yet frozen**, and
+//! naming the `unstable-projection` feature is how you say you accept that. It is
+//! exempt from this crate's semver promise for as long as the feature exists.
+//!
+//! The reason is **not** that nothing tests it. Seventeen conformance rules in
+//! `happenstance-testkit` drive this port, a deliberately wrong store that writes
+//! a checkpoint without its read model fails one of them by name, and two
+//! structurally unlike batch shapes pass all of them. What the module used to say
+//! here — *"the conformance suite does not cover it yet"* — stopped being true
+//! when that suite landed.
+//!
+//! The reason is the bar the specification set for freezing it. `spec/SPECIFICATION.md`
+//! §4's PS-2 requires the suite to be green against **two adapters at opposite
+//! ends of the batch-shape axis**, and its *Rejects* field names the alternative
+//! verbatim: the schedule that freezes this port against `MemoryProjectionStore`
+//! and one in-process transaction. Both shapes that clear the suite today —
+//! `MemoryProjectionStore`, which applies each write as it is made, and the
+//! testkit's buffering variant, which replays a buffered write set at commit —
+//! are instruments this workspace wrote. Two instruments at opposite ends of an
+//! axis are worth having and are not two adapters.
+//!
+//! (The name is not a link, for the reason the crate root gives: it is behind
+//! `memory`, and `unstable-projection` without `memory` is a configuration this
+//! module renders in.)
+//!
+//! **What would clear it:** the same suite green against a projection adapter
+//! over storage this workspace does not control — Ladybug's graph store, Neon
+//! over one-shot HTTP, or a Durable Object — where the transaction API pushes
+//! back instead of agreeing.
+//!
+//! **What is not decided here:** whether 0.1 ships with the gate still closed.
+//! That is `publication-and-positioning`'s call at phase 12 (`RUNBOOK.md:601`,
+//! *"6, decided at 12"*), and this module states the evidence rather than the
+//! verdict.
+//!
+//! Treat the shape as subject to change: a rule may be added, and a signature may
+//! move, without a major version, because the feature is what carries the
+//! exemption.
 //!
 //! # The invariant that drives the design
 //!
@@ -21,6 +52,23 @@
 //! So the port cannot offer `apply()` and `set_checkpoint()` as independent
 //! calls. It hands out an adapter-owned batch and takes it back at commit time
 //! together with the position.
+//!
+//! # What is out of scope at 0.1: a projection that writes back into the log
+//!
+//! A projection that emits events into the event store as a side effect of
+//! applying one is **out of scope for this port at 0.1**, and this paragraph is
+//! the port saying so rather than leaving it to be discovered
+//! (`spec/SPECIFICATION.md` §4's PS-31).
+//!
+//! It is a consequence of a decision already taken, not a question still open.
+//! An `EventId` is a store-assigned `(StoreId, SequencePosition)` pair minted at
+//! append (VT-5), and [`EventStore::append`](crate::EventStore::append) refuses a
+//! caller-supplied one (VT-10). An outward-writing projection needs exactly what
+//! VT-10 refuses: a write whose identity the *caller* chooses, so that a rebuild
+//! re-emitting the same event is a no-op rather than a second fact. Without that,
+//! every rebuild duplicates every emitted event, which is the wrong
+//! implementation silence here produces. Revisiting it means a deliberate
+//! idempotent-emission seam, and VT-5 is what would make one expressible.
 //!
 //! # The batch is owned, and is not required to be a live transaction
 //!

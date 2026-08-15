@@ -30,7 +30,11 @@ default = ["event-store", "projection-store"]
 # Both roles share one driver and one connection story, so they share a crate
 # and are separated by features rather than by another package.
 event-store = []
-projection-store = []
+# One capability, one switch. `happenstance-core`'s projection port is behind its
+# own off-by-default `unstable-projection` gate, and this feature *enables* it
+# rather than sitting beside it: a crate with two switches for one capability is
+# a crate where the weaker one wins silently.
+projection-store = ["happenstance-core/unstable-projection"]
 
 [lints]
 workspace = true

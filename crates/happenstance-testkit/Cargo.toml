@@ -31,10 +31,21 @@ readme = "README.md"
 # which `ProjectionFixture::Store` is bound on — so a testkit that made it
 # optional would have a fixture trait that exists on some feature
 # configurations and not others, and every projection item would need a `cfg`
-# and a doc gate. It adds no dependency: the feature is `[]` in
+# and a doc gate. It adds no dependency: the feature costs nothing in
 # `happenstance-core`.
+#
+# `unstable-projection` is stated rather than inherited through `conformance`,
+# which implies it. Restating it is the D12 lesson one crate over — a feature this
+# crate needs is named here even when today's graph happens to supply it — and it
+# is what a reader of this manifest needs to see, because `fixtures` names
+# `MemoryProjectionStore` and the projection suite names the port directly.
 [dependencies]
-happenstance-core = { workspace = true, features = ["std", "memory", "conformance"] }
+happenstance-core = { workspace = true, features = [
+  "std",
+  "memory",
+  "conformance",
+  "unstable-projection",
+] }
 # Needed to spell `MemoryHandle`'s delegating `read` — the return type is
 # `impl Stream<…> + Send`, and the trait it satisfies is defined in terms of
 # `futures_core::Stream`.

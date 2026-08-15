@@ -945,3 +945,120 @@ fn is_available(probe: &[&str]) -> bool {
         .status()
         .is_ok_and(|status| status.success())
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use std::fs;
+
+    use crate::spec_trace::workspace_root;
+
+    /// The feature gating the projection module and its re-exports.
+    const GATE: &str = "unstable-projection";
+
+    /// Every crate that names a projection item in its own `src/`, and must
+    /// therefore ask for [`GATE`] in its own manifest rather than inherit it from
+    /// whatever else the workspace build happened to turn on.
+    ///
+    /// Feature unification is per *build*. `cargo doc -p <crate>` and every
+    /// `cargo hack` combination build one crate at a time, so a manifest that
+    /// relies on a sibling's feature selection compiles in the workspace build
+    /// and nowhere else.
+    const DEPENDENTS: &[&str] = &[
+        "happenstance-sqlite",
+        "happenstance-ladybug",
+        "happenstance-postgres",
+        "happenstance-neon",
+        "happenstance-sync",
+        "happenstance-testkit",
+    ];
+
+    /// Read a workspace file with its line endings normalised.
+    ///
+    /// The tree is mixed: `core.autocrlf` is on for the Windows this repository
+    /// is developed on, so a file git has checked out carries `\r\n` and one an
+    /// editor wrote carries `\n`. rustfmt's `newline_style = "Auto"` is happy
+    /// with either, and an assertion matching `\n` on a `\r\n` file would fail
+    /// for a reason that has nothing to do with what it is asserting.
+    fn read(rel: &str) -> String {
+        let root = workspace_root().unwrap();
+        fs::read_to_string(root.join(rel))
+            .unwrap_or_else(|e| panic!("reading {rel}: {e}"))
+            .replace("\r\n", "\n")
+    }
+
+    /// The `default` line of a `[features]` table, as written.
+    fn default_features(manifest: &str) -> &str {
+        manifest
+            .lines()
+            .find(|l| l.starts_with("default = "))
+            .unwrap_or("")
+    }
+
+    /// The maturity signal an adapter author meets first is the feature table,
+    /// because that is what `cargo add` shows them — not a doc comment three
+    /// screens inside a module they have to already be reading.
+    #[test]
+    fn the_projection_port_is_behind_an_off_by_default_feature() {
+        let manifest = read("crates/happenstance-core/Cargo.toml");
+
+        assert!(
+            manifest.contains(&format!("\n{GATE} = ")),
+            "`{GATE}` is not declared in happenstance-core's `[features]`"
+        );
+        assert!(
+            !default_features(&manifest).contains(GATE),
+            "`{GATE}` is on by default, which hands the port to every caller who \
+             never asked for it: {}",
+            default_features(&manifest)
+        );
+    }
+
+    /// A feature that gates nothing is a feature table telling a story the
+    /// compiler does not: the module and the re-exports are the two places the
+    /// item is either reachable or invisible.
+    #[test]
+    fn the_gate_is_mounted_on_the_module_and_its_re_exports() {
+        let lib = read("crates/happenstance-core/src/lib.rs");
+        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
+        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
+
+        assert!(
+            lib.contains(&format!("{cfg}\n{doc_cfg}\npub mod projection;")),
+            "`pub mod projection;` is not gated the way `memory`'s module is"
+        );
+        assert!(
+            lib.contains(&format!("{cfg}\n{doc_cfg}\npub use projection::{{")),
+            "the projection re-exports are not gated, so the module is invisible \
+             and its items are not"
+        );
+    }
+
+    /// The powerset proves the combinations compile; this proves the *manifests*
+    /// are the reason, which is the half a workspace build cannot distinguish
+    /// because it unifies features across every member at once.
+    #[test]
+    fn every_crate_that_names_a_projection_item_opts_in() {
+        for package in DEPENDENTS {
+            let manifest = read(&format!("crates/{package}/Cargo.toml"));
+            assert!(
+                manifest.contains(GATE),
+                "{package} names a projection item and never asks for `{GATE}`"
+            );
+        }
+    }
+
+    /// A semver promise rather than an oversight: `happenstance` re-exports no
+    /// projection item, so a public feature there would promise a surface the
+    /// crate does not expose.
+    #[test]
+    fn the_typed_layer_makes_no_promise_it_does_not_keep() {
+        let manifest = read("crates/happenstance/Cargo.toml");
+        assert!(
+            !manifest.contains(GATE),
+            "`happenstance` gained a `{GATE}` passthrough while re-exporting \
+             nothing from `projection`"
+        );
+    }
+}

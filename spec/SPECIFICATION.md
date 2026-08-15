@@ -216,8 +216,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 200 clause IDs, of which 198 are normative:
-**139 `[FROZEN]`**, **49 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **two
+As assembled, this document carries 201 clause IDs, of which 199 are normative:
+**139 `[FROZEN]`**, **50 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **two
 `[NON-NORMATIVE]`** (CF-30, and VT-12 which is a retained pointer to ES-10).
 Section 7 breaks that out per clause.
 
@@ -4751,6 +4751,22 @@ stated by no clause's MUST in this document; PS-22 presupposes it and §4.1a's
 prose asserts it non-normatively. Phase 6 owns the repair, which is either a
 sentence in this clause or a clause of its own, and it is an ADR's rather than an
 edit's because this clause is `[FROZEN]`.
+
+**Phase 6's answer, recorded: a clause of its own, PS-38.** This clause's MUST is
+byte-identical across it, which is what makes it a repair rather than a widening
+— no implementation gains or loses conformance by anything written here. The
+progress half of `commit_advances_the_checkpoint` now rests on PS-38 and the
+coupling half still rests on this sentence; the reasoning, the two rejected
+alternatives and the exposing implementation are in
+[ADR-0030](../references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md).
+One correction to the paragraph above travels with it and is stated rather than
+edited in: *"stated by no clause's MUST"* was not quite true when it was written.
+PS-23's *"One `commit` advances exactly one `ProjectionId`"* entails it, because
+"exactly one" excludes zero — but it sits on a `[PROVISIONAL]` clause about
+fan-out scope, where the word is almost certainly incidental
+(`references/evaluation/ps-clause-pairing-sweep.md:355-395`). The obligation was
+misfiled rather than absent, which changed the repair from *add a sentence* to
+*put it where the rules can cite it*.
 **Cases:** E2E-17, E2E-21, E2E-23.
 **Rejects:** an adapter that writes read-model rows on one connection and the
 checkpoint on another, which is the natural shape for any store whose read model
@@ -4789,6 +4805,21 @@ scheduling dependency between two unrelated ports.
 What the projection suite showed when it was run against two batch shapes at
 once is recorded in `references/evaluation/projection-batch-shape-evidence.md:1`,
 which is evidence for this clause and deliberately not a verdict on it.
+
+**PS-3's SHOULD is discharged as of phase 6, and its marker does not move.** The
+feature exists: `unstable-projection` is declared in
+`crates/happenstance-core/Cargo.toml:68`, is absent from `default`, and gates
+`pub mod projection;` and its re-exports at
+`crates/happenstance-core/src/lib.rs:110`; the documented exemption is the
+module's own header (`crates/happenstance-core/src/projection.rs:3`) and the
+`[Unreleased]` entry in `CHANGELOG.md`. The gate is held by
+`the_projection_port_is_behind_an_off_by_default_feature` and
+`the_gate_is_mounted_on_the_module_and_its_re_exports` in `xtask/src/main.rs`, so
+the discharge is guarded rather than a claim about a moment in time. The
+`[PROVISIONAL]` marker stays exactly where it is: its falsifier is *PS-2's bar met
+before 0.1*, and that has not happened. A satisfied SHOULD is not a moved marker,
+and nothing here says the port ships behind the feature at 0.1 — that is phase
+12's decision (`RUNBOOK.md:601`).
 
 ---
 
@@ -4917,6 +4948,20 @@ be dropped.**
 `[FROZEN]`
 **Rule:** `rollback_leaves_both_unchanged` — write a probe row, roll back, assert
 the row and the checkpoint are both as they were.
+
+**Recorded pairing finding, and it is an attribution one.** This MUST binds the
+port's *definition* and is about the method's **existence**; the rule binds an
+adapter and is about its **behaviour**. That *"rollback undoes"* is stated by no
+`MUST` in §4, and the rule enforcing it hangs off the clause that keeps the method
+on the port. The exposing implementation is a write-through adapter whose inherent
+write API — which PS-9 explicitly blesses — hits the read model immediately and
+defers only the checkpoint: it keeps `rollback` on the port, satisfying this
+sentence verbatim, and fails the rule because the rows are already durable. The
+strength is `dependent`, because that store also violates PS-1 and PS-7, so no
+independent exposing implementation was found; ADR-0017 names the clause range and
+did not repair it, and phase 6 records it rather than widening a `[FROZEN]`
+sentence under cover of a packaging change
+(`references/evaluation/ps-clause-pairing-sweep.md:265`).
 **Cases:** E2E-24, E2E-28.
 **Rejects:** the simplification that deletes it. Rust has no async `Drop`: an
 adapter holding a real transaction has no way to issue `ROLLBACK` and await its
@@ -4968,8 +5013,13 @@ the application; a blob keyed by string is not one.
 **PS-10 — A projection MUST target exactly one store. `Projection::Store` is an
 associated type, and a projection spanning two stores MUST NOT compile.**
 `[FROZEN]` (ADR-0007:92-98, accepted)
-**Rule:** `compile_fail` doctest on the `Projection` trait, showing
+**Rule:** a compile test on the `Projection` trait — a doctest annotated
+`compile_fail,E0271` — showing
 `error[E0271]: type mismatch resolving <NetworkTopology as Projection>::Store == Pg`.
+The annotation is not a conformance rule and `spec-trace` was reading it as one;
+naming it as a compile test is what makes §7.2 render this clause's own words
+rather than dagger a name nothing ever looked for
+(`references/evaluation/ps-clause-pairing-sweep.md:466-474`).
 **Cases:** E2E-20, E2E-29.
 **Rejects:** a heterogeneous supervisor holding fourteen Postgres views and six
 Ladybug views in one collection. There is no cross-store transaction, so such a
@@ -5081,6 +5131,20 @@ batch it is writing.**
 `[FROZEN]`
 **Rule:** `rebuild_is_chunk_size_invariant`, below; a projection that reads
 out-of-band fails it for any chunk size above 1.
+
+**Recorded pairing finding, and it is the converse being asserted.** *"A projection
+that reads out of band fails it"* is true; *"a failure means a projection read out
+of band"* is not, and §7.2 prints the rule in a column headed *Conformance rule*,
+so a reader takes it as this clause's falsifier. This MUST binds a **projection**,
+and the rule runs in the **adapter** suite, where the projection is the testkit's
+own probe and is PS-13-conformant by construction — so the rule can never observe
+a violation of this sentence, and it *can* fail with a conformant projection: at
+chunk size 3, against a write-behind adapter that declines
+`ProjectionProbe::READS_THROUGH_BATCH` (which PS-4 and PS-12's second arm both
+bless), the second increment in a chunk cannot see the first's pending write. The
+strength is `dependent` — that adapter violates PS-14 — and the tension between
+those two clauses is recorded at §4.11 rather than resolved here
+(`references/evaluation/ps-clause-pairing-sweep.md:270`, `:404-421`).
 **Cases:** E2E-21, E2E-22.
 **Rejects:** the obvious implementation — `apply` takes `&self` on the store as
 well as `&mut Batch` and issues its lookup through the store. It reads pre-batch
@@ -5180,9 +5244,11 @@ expressed through the same batch that carries ordinary writes; a store whose
 `TRUNCATE` cannot participate in the checkpoint transaction is the shape to
 watch. Owned by the projection-port phase (RUNBOOK phase 2).]`
 **Rule:** `reset_clears_rows_and_checkpoint_together` — commit probe rows and a
-checkpoint, then `reset` with a batch carrying `probe_delete_all`; assert both
-gone. Paired with a failure-injecting variant asserting that a `reset` that
-errors leaves both halves as they were.
+checkpoint, then `reset` with a batch carrying `ProjectionProbe::probe_delete_all`;
+assert both gone. Paired with a failure-injecting variant asserting that a `reset`
+that errors leaves both halves as they were. (The probe method is qualified so
+that `spec-trace` reads it as the seam it is rather than as a second conformance
+rule — `references/evaluation/ps-clause-pairing-sweep.md:466-474`.)
 **Cases:** E2E-15, E2E-17.
 **Rejects:** the runbook procedure, which is two statements on two connections
 and is what Norvant's night desk executed: the truncate committed at 02:46:31,
@@ -5226,7 +5292,7 @@ sync compensation.
 **Rule:** `reset_is_not_commit_at_first` — perform both on two ids and assert
 the checkpoints differ; then drive a replay from each and assert the event at
 position 1 is applied in the first case and not in the second. §4.11 assigns
-this clause `fresh_projection_has_no_checkpoint` as well, which is the same
+this clause the new `fresh_projection_has_no_checkpoint` as well, which is the same
 distinction before any `reset` has happened: a store reporting
 `Live { through: FIRST }` for an id it has never seen has already collapsed the
 two states this clause requires to be told apart.
@@ -5241,6 +5307,14 @@ sentinel row, and `checkpoint(id)` resolves a missing row with
 `NeverRun` and is distinguishable from a commit at `FIRST`; for an id it has
 never seen it answers `Live`. No clause's MUST obliges an unseen id to read as
 `NeverRun`. Phase 6 owns whether this clause widens or a new one says it.
+
+**Phase 6's answer, recorded: a new one says it — PS-38's second sentence.** This
+clause's MUST is byte-identical across that decision, and it stays scoped *after
+a successful `reset`*; `fresh_projection_has_no_checkpoint` is PS-38's falsifier
+and is listed against both clauses in §4.11 for that reason. The rule is still
+unwritten, which is why it is marked new above and daggered in §7.2
+([ADR-0030](../references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md);
+`references/evaluation/ps-clause-pairing-sweep.md:276`).
 **Cases:** E2E-15, E2E-16.
 **Rejects:** a runner that computes its resume point as
 `checkpoint.unwrap_or(FIRST)` and reads `ReadOptions::from` that value —
@@ -5286,7 +5360,7 @@ batch at a position the store's event log actually assigned, assert success and
 assert the checkpoint advanced.
 **Cases:** E2E-23.
 **Rejects:** an adapter that validates. That is a perfectly reasonable reading of
-"advances `id`'s checkpoint to `position`" (`projection.rs:119-131`), it would be
+"advances `id`'s checkpoint to `position`" (`projection.rs:167-179`), it would be
 equally conformant today, and it makes a narrow projection re-scan the same
 range forever on every restart —
 Norvant's `cold_chain_certificate_expiry` matches about 40 of 37,000 events a
@@ -5297,6 +5371,14 @@ application might swap.
 The checkpoint is therefore a high-water mark of **consideration**, not of
 application. That is what makes it a resume point rather than a progress report,
 and it is why PS-24 needs a separate signal for authority.
+
+**Recorded pairing finding.** `commit_accepts_a_position_the_batch_did_not_write`
+asserts a second thing this MUST does not say — *that the checkpoint advanced* —
+and the rule commits an **empty** batch by design, so a store that skips the
+checkpoint write when there is nothing to write satisfies this sentence verbatim
+and fails the rule. That obligation is PS-38's as of phase 6, not this clause's;
+this MUST is unchanged and the finding is recorded here rather than repaired here
+(`references/evaluation/ps-clause-pairing-sweep.md:278`).
 
 **PS-22 — `commit` MUST reject a position strictly below the current checkpoint,
 through `CommitError::CheckpointRegression`. Equal positions MAY be accepted.**
@@ -5317,6 +5399,14 @@ twice, which is harmless only for projections that are idempotent — and
 requiring it. The guard converts a silent double-apply into a reported error,
 and it leaves exactly two ways to go backwards: `reset`, which is atomic with
 clearing the rows, and nothing.
+
+**Recorded pairing finding.** This MUST is vacuous against a store that never
+advances a checkpoint at all: nothing is ever *strictly below* a current
+checkpoint that does not exist, so the sentence is satisfied while
+`commit_rejects_a_regressing_position` fails. The presupposition the rule needs is
+PS-38's as of phase 6. This clause is `[PROVISIONAL]` and its marker does not move
+on that account — the falsifier above is a compacting store, and no compacting
+store has appeared (`references/evaluation/ps-clause-pairing-sweep.md:279`).
 
 **PS-23 — One `commit` advances exactly one `ProjectionId`.**
 `[PROVISIONAL — falsified by a pair of read models in one store that must be
@@ -5354,6 +5444,41 @@ has committed nothing reads as `NeverRun` rather than `Rebuilding`, which is
 correct: both mean the rows are not authoritative, and the reader's decision is
 the same.
 
+**PS-38 — A successful `commit(batch, id, position, authority)` MUST advance
+`id`'s checkpoint to `position`, and a `ProjectionId` no successful `commit` has
+named MUST read as `Checkpoint::NeverRun`.**
+`[PROVISIONAL — falsified by a store that answers `checkpoint` from a replica
+that may lag its own `commit`, which is the shape a projection store over an
+eventually-consistent read model has. If that is real the obligation narrows to
+"a subsequent read through the same handle" and every rule downstream of it gains
+a handle constraint. Owned by the first projection adapter over storage this
+workspace does not control (RUNBOOK phase 7).]`
+**Rule:** `commit_advances_the_checkpoint` — the baseline the rest of §4.11's
+suite is differential against; and the new `fresh_projection_has_no_checkpoint`
+for the second sentence, which nothing checks today.
+**Cases:** E2E-15, E2E-17, E2E-23.
+**Rejects:** a store whose backing state lives per **handle** rather than per
+store — one whose `connect()` mints a fresh map instead of a fresh handle onto a
+shared one. It is a plausible first cut, and until this clause existed nothing in
+§4 forbade it: it satisfies PS-1 through the *"or not at all"* arm, satisfies
+PS-21's MUST by validating nothing, satisfies PS-22 vacuously because no
+checkpoint is ever current enough to be regressed below, and satisfies PS-19's
+MUST because a `reset` it does not remember is indistinguishable from one it
+does. Three rules rested on an obligation no sentence stated.
+
+**Why this is a new clause rather than a sentence added to PS-1.** PS-1 is
+`[FROZEN]` and its MUST is a *coupling* — both writes durable or neither — which
+a store that makes no writes durable satisfies. Adding progress to it would
+change the set of implementations it admits, which is a gap rather than a repair
+(`.kb/decisions/README.md:20-22`), and a gap is a decision's. The decision is
+[ADR-0030](../references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md),
+which took minting this clause over the two alternatives it names: widening PS-1,
+and splitting PS-23's *"exactly one"*, which is the only sentence in the document
+that entails progress today and does so as a side effect of a word chosen for a
+different purpose (`references/evaluation/ps-clause-pairing-sweep.md:355-395`).
+PS-1, PS-19, PS-21 and PS-22 are byte-identical across that decision; what
+changed is that the obligation their rules assume is now written down.
+
 **PS-25 — A checkpoint MUST NOT survive a change to the `Query` that produced
 it. The `ProjectionId` a runner uses MUST be derived from the projection's name
 and a digest of its `Query`.**
@@ -5361,10 +5486,11 @@ and a digest of its `Query`.**
 rebuild is needed and the derived id forces an expensive one anyway. If that
 case is common, the digest moves into the checkpoint record as a separate
 field and `commit` rejects a mismatch instead. Owned by the typed-layer phase.]`
-**Rule:** `changed_query_starts_a_new_checkpoint` — commit under one query's
-derived id, then read the checkpoint under a second query's derived id and
+**Rule:** the new `changed_query_starts_a_new_checkpoint` — commit under one
+query's derived id, then read the checkpoint under a second query's derived id and
 assert `NeverRun`. Contract-level only once `Query` has a canonical encoding;
-until then it is a typed-layer rule.
+until then it is a typed-layer rule, and it is unwritten for that reason rather
+than by oversight.
 **Cases:** E2E-50.
 **Rejects:** every runner that keys a checkpoint on `ProjectionId` alone, which
 is every runner the port permits. ADR-0007 pins a projection's subscription to
@@ -5402,11 +5528,11 @@ is permanent and *intended*.
 
 **PS-26 — The failure policy MUST be declared per projection, not per runner.**
 `[FROZEN]`
-**Rule:** `failure_policy_is_per_projection` — two projections in one runner
-declaring `Halt` and `SkipAndRecord`; feed both a failing event; assert the
+**Rule:** the new `failure_policy_is_per_projection` — two projections in one
+runner declaring `Halt` and `SkipAndRecord`; feed both a failing event; assert the
 first stops at that position and the second advances past it. Integration-level;
 it needs a runner, so it belongs in the workspace e2e crate rather than the
-adapter suite.
+adapter suite, and it is unwritten because that crate is the typed-layer phase's.
 **Cases:** E2E-27.
 **Rejects:** a runner-level `on_error: SkipPolicy` configuration. It is the
 obvious design, it is what a builder API invites, and it forces one wrong answer
@@ -5417,9 +5543,13 @@ into the same batch that advances the checkpoint past the poisoned position.**
 `[PROVISIONAL — falsified if no projection ever writes a skip record, i.e. if
 "record" turns out to mean "log a warning". Evaluated at the exit of the
 typed-layer phase against the Kestrel Motor shred case.]`
-**Rule:** `skip_and_record_is_atomic` — a projection whose `on_error` writes a
-probe row; feed it a failing event; assert the probe row and the advanced
-checkpoint are both present after a crash injected between them.
+**Rule:** the new `skip_and_record_is_atomic` — a projection whose
+`Projection::on_error` writes a probe row; feed it a failing event; assert the
+probe row and the advanced checkpoint are both present after a crash injected
+between them. Integration-level: it needs a runner, so §4.11 lists it apart from
+the adapter suite and its home is the workspace e2e crate. (The callback is
+qualified for the reason PS-16's probe method is —
+`references/evaluation/ps-clause-pairing-sweep.md:466-474`.)
 **Cases:** E2E-26, E2E-27.
 **Rejects:** the implementation that swallows the skip. The skip *primitive*
 already exists and nobody has noticed it: `begin()` followed immediately by
@@ -5433,8 +5563,18 @@ new port surface and no store-side knowledge of what a skip means.
 **PS-28 — A failing `apply` MUST report the position it failed at, and MUST be
 able to carry an application error type distinct from the projection store's.**
 `[FROZEN]`
-**Rule:** `pump_reports_the_failing_position` — integration-level; assert the
-returned error names *P* and that `checkpoint` sits at the last good position.
+**Rule:** the new `pump_reports_the_failing_position` — integration-level; assert
+the returned error names *P* and that `checkpoint` sits at the last good position.
+
+**Recorded pairing finding, and it is undetermined rather than sound.** The second
+assertion is not in this MUST, and whether it reaches past it turns entirely on
+what *"the last good position"* means, which the rule does not say. Under *last
+successfully applied event* a chunked runner fails it while satisfying this
+sentence, because its checkpoint sits at the previous chunk boundary after a
+mid-chunk failure; under *last successfully committed position* the two coincide
+and the pairing is sound. Both readings are available from the text. What resolves
+it is defining the phrase when the rule is written, which is the typed-layer
+phase's (`references/evaluation/ps-clause-pairing-sweep.md:285`).
 **Cases:** E2E-26.
 **Rejects:** ADR-0007's own signature. It types the callback's error as
 `P::Error` (`0007:62-67`) — a **projection store** error — so a *decode* failure
@@ -5450,10 +5590,21 @@ variant. Three type parameters is a real cost and the alternative —
 **PS-29 — One poisoned projection MUST NOT stall the others, and its terminal
 state MUST be observable through the API.**
 `[FROZEN]`
-**Rule:** `one_poisoned_projection_does_not_stall_the_others` — twenty
+**Rule:** the new `one_poisoned_projection_does_not_stall_the_others` — twenty
 projections over one log, one failing; assert the other nineteen advance *and*
 that the supervisor reports the failure without being polled for it.
-Integration-level.
+Integration-level, and unwritten because the runner is the typed-layer phase's.
+
+**Recorded pairing finding.** The rule's second assertion — *without being polled
+for it* — reaches past this MUST, which requires only that the terminal state be
+**observable through the API**. A supervisor exposing
+`fn failures(&self) -> Vec<Poisoned>` satisfies the sentence verbatim, requires
+polling, and fails the rule; a query method is the obvious API and is precisely
+what the *Rejects* field below describes losing. The gap is
+`independent` — no other `PS` MUST rejects that supervisor — and it is recorded
+here rather than repaired here: the rule does not exist yet, and the observability
+design ADR-0019 defers to the typed-layer phase is where the two sentences get
+reconciled (`references/evaluation/ps-clause-pairing-sweep.md:286`).
 **Cases:** E2E-28.
 **Rejects:** the half of this that already fails. Isolation itself works, and it
 works structurally: `Projection::Store` is an associated type and checkpoints are
@@ -5469,8 +5620,8 @@ batch before continuing.**
 by whether the poll cost of N independent reads is real. That is a benchmark,
 not an assertion, and the workspace has no benchmark harness. Owned by the
 typed-layer phase.]`
-**Rule:** `panicking_apply_rolls_back` — integration-level; a projection that
-panics; assert no partial rows survive and the checkpoint did not move.
+**Rule:** the new `panicking_apply_rolls_back` — integration-level; a projection
+that panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
 **Rejects:** a fan-out runner that wraps `&mut P::Batch` in `AssertUnwindSafe`
 and carries on. The assertion is defensible *only* because `rollback` exists:
@@ -5496,6 +5647,17 @@ of a decision already taken, not a question still open. Revisiting it in 0.2
 means a deliberate idempotent-emission seam, and VT-5 is what would make one
 expressible.
 
+**The second conjunct is discharged as of phase 6, and it was not before.** *"The
+port MUST say so"* had no instrument and, as the phase-6 disposition pass found,
+no discharge either: nothing in `projection.rs` mentioned the exclusion. It does
+now — `crates/happenstance-core/src/projection.rs:56-71`, a section of the module
+header that states the exclusion, derives it from VT-5 and VT-10, and names the
+duplicate-on-rebuild failure silence produces. The sentence above is unchanged;
+what changed is that it is true. There is still no instrument, and the shape it
+shares with PS-3 and PS-36 — *a documentation obligation with no instrument* — is
+recorded at `references/evaluation/ps-clause-pairing-sweep.md:433-454` as a
+candidate open question rather than closed here.
+
 **Rule:** none; a documented exclusion is not adapter-checkable. Stated as a
 clause rather than as prose because silence here is what produces the wrong
 implementation.
@@ -5520,6 +5682,18 @@ suite.**
 `[FROZEN]`
 **Rule:** none — this is a correction to a document, and the artefact that
 proves it is the compiled pump recorded in PRESSURE-TEST §3.4.
+
+**Phase-6 disposition: recorded as owed, and deliberately not performed.**
+ADR-0007 is an **accepted, immutable** decision atom, so correcting its Context is
+a *superseding* atom's job and never an edit — reasoning inside a decision that
+still stands is never touched
+(`.kb/governance/rewrite-the-referent-never-the-reasoning.md:50-59`).
+[ADR-0017](../references/adr/0017-what-a-projection-batch-owns.md#L356) already
+records the correction as owed and states its shape without performing it, and
+this pass changes nothing about that: performing it means writing the superseding
+atom, which is `/redkiln:kb-ingest`'s to author from `.kb/_intake/`, and the
+sentence being corrected belongs with whoever writes the runner. The staging note
+for the next wave is `.kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md`.
 **Cases:** E2E-20.
 **Rejects:** the sentence at `0007:36-38`, "The runner ADR-0006 relocated
 therefore cannot be written against the port as it stands — in either crate",
@@ -5657,12 +5831,19 @@ whoever adds the first defaulted method rather than by whoever designed it.
 
 Seventeen rules, emitted by `projection_store_conformance!` through the same
 registry macro `event_store_conformance!` uses, so it inherits the tokio,
-blocking and wasm flavours without a second mechanism. Every one is new.
+blocking and wasm flavours without a second mechanism.
+
+**Sixteen of the seventeen now exist**, in
+`crates/happenstance-testkit/src/projection.rs`, and the sentence this paragraph
+used to end with — *"Every one is new"* — was true when it was written and is not
+now. `fresh_projection_has_no_checkpoint` is the one still to be written; it is
+marked new wherever it is named and daggered in §7.2, and PS-38 is the clause it
+falsifies.
 
 | Rule | Clause | Rejects |
 |---|---|---|
-| `fresh_projection_has_no_checkpoint` | PS-19 | a store that reports `Live { through: FIRST }` for an id it has never seen |
-| `commit_advances_the_checkpoint` | PS-1 | — (the baseline the rest are differential against) |
+| `fresh_projection_has_no_checkpoint` | PS-19, PS-38 | a store that reports `Live { through: FIRST }` for an id it has never seen |
+| `commit_advances_the_checkpoint` | PS-1, PS-38 | — (the baseline the rest are differential against) |
 | `commit_is_atomic_with_the_read_model` | PS-1, PS-4, PS-11 | checkpoint on one connection, rows on another |
 | `failed_commit_leaves_both_unchanged` | PS-1 | a partial apply that reports failure |
 | `rollback_leaves_both_unchanged` | PS-8 | a rollback that only discards the buffer |
@@ -5968,7 +6149,7 @@ Cases: E2E-42.
 one by origin timestamp or by origin position, so that a replicated event lands
 where it "belongs". It is the intuitive merge and it silently destroys every
 projection on the store: `ProjectionStore::checkpoint` is one scalar that
-`ReadOptions::from` resumes at (`projection.rs:406-407`), so an event inserted
+`ReadOptions::from` resumes at (`projection.rs:454-455`), so an event inserted
 below an existing checkpoint is never read, never applied, and never reported
 missing. The port has never chosen between the two, and this is the choice.
 
@@ -8410,7 +8591,7 @@ this section's terms: three of the six projection rules the roadmap specifies �
 rollback leaves both unchanged, a dropped batch leaves both unchanged, a failed
 commit leaves the store unchanged — cannot observe the read model at all, because
 generic suite code holding a `P::Batch<'_>` can only pass it to `commit` or
-`rollback` (`projection.rs:456-465`). By CF-1 those three are decorative until
+`rollback` (`projection.rs:504-513`). By CF-1 those three are decorative until
 something can write a row. That is not an argument about ergonomics; it is the
 reason a suite that can test only the checkpoint half of a two-write invariant
 cannot reject an adapter that commits the checkpoint and silently drops the
@@ -8517,10 +8698,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 34 | 24 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 42 | 32 | 9 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 37 | 19 | 17 | 1 | 0 |
+| §4 `ProjectionStore` | `PS` | 38 | 19 | 18 | 1 | 0 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 40 | 33 | 4 | 2 | 1 |
-| **Total** | | **200** | **139** | **49** | **10** | **2** |
+| **Total** | | **201** | **139** | **50** | **10** | **2** |
 
 ### 7.2 The table
 
@@ -8640,13 +8821,13 @@ between them because its *shape* does not wait on a transport but its
 | PS-7 | FROZEN | `dropped_batch_leaves_store_usable` | E2E-24 |
 | PS-8 | FROZEN | `rollback_leaves_both_unchanged` | E2E-24, E2E-28 |
 | PS-9 | PROVISIONAL | *(none — see clause)* | E2E-20, E2E-29 |
-| PS-10 | FROZEN | `compile_fail` † | E2E-20, E2E-29 |
+| PS-10 | FROZEN | a compile test on the `Projection` trait — a doctest annotated `compile_fail,E… | E2E-20, E2E-29 |
 | PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-20, E2E-21, E2E-22, E2E-17 |
 | PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` | E2E-21, E2E-22 |
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-22 |
 | PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` | E2E-19 |
-| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together`, `probe_delete_all` † | E2E-15, E2E-17 |
+| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-16 |
@@ -8657,7 +8838,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` | E2E-25 |
 | PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
 | PS-26 | FROZEN | `failure_policy_is_per_projection` † | E2E-27 |
-| PS-27 | PROVISIONAL | `skip_and_record_is_atomic` †, `on_error` † | E2E-26, E2E-27 |
+| PS-27 | PROVISIONAL | `skip_and_record_is_atomic` † | E2E-26, E2E-27 |
 | PS-28 | FROZEN | `pump_reports_the_failing_position` † | E2E-26 |
 | PS-29 | FROZEN | `one_poisoned_projection_does_not_stall_the_others` † | E2E-28 |
 | PS-30 | PROVISIONAL | `panicking_apply_rolls_back` † | E2E-28 |
@@ -8668,6 +8849,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-35 | FROZEN | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
+| PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-17, E2E-23 |
 
 #### `SY` — the `SyncPeer` port (§5)
 

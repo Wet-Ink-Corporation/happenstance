@@ -1270,6 +1270,40 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`unstable-projection` exists, and the promise at the top of this file is now
+  true.** `ProjectionStore`, `ProjectionId`, `Checkpoint`, `Authority`,
+  `CommitError`, `ResetError`, `SendProjectionStore`, `ProjectionProbe` and
+  `MemoryProjectionStore` are behind an off-by-default feature on
+  `happenstance-core`; `cargo add happenstance-core` no longer hands you the
+  projection port, and a build that names one of those items without the flag
+  fails to compile instead. `conformance` implies it, so an adapter author running
+  the projection suite still writes one flag. `memory` does **not** — the memory
+  projection store needs both, because it implements the port the gate is on.
+  Nothing else in the crate changed shape, and opting back out is deleting the
+  flag.
+
+  **The reason is not that nothing tests it.** Seventeen conformance rules drive
+  the port, a store that writes a checkpoint without its read model fails one by
+  name, and two structurally unlike batch shapes pass all of them. The reason is
+  the bar §4's PS-2 sets for *freezing* it — two adapters at opposite ends of the
+  batch-shape axis — and both shapes that clear the suite today are instruments
+  this workspace wrote. What retires the exemption is that same suite green
+  against a projection adapter over storage this workspace does not control. The
+  module header states it where the compiler error sends you.
+
+- **Every `PS` clause's rule citation is now checked, and §4's clause count moved
+  by one.** `cargo xtask spec-trace` used to abstain on the whole `PS` family
+  because the projection suite did not exist; it does, so the exclusion went, and
+  ten citations that had never been resolved by anything were dispositioned —
+  three were parser artefacts naming a doctest annotation, a probe method and a
+  projection callback rather than rules, and seven are rules that genuinely are
+  not written yet and now say so. **PS-38** is new
+  ([ADR-0030](references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md)):
+  a successful `commit` MUST advance the checkpoint, and an id no commit has named
+  MUST read as `NeverRun`. Four rules already enforced that and no clause stated
+  it. No `[FROZEN]` sentence was edited — PS-1, PS-19, PS-21 and PS-22 are
+  byte-identical, and each gained a recorded finding instead.
+
 - **`EventStore::append`'s documentation no longer offers the returned position
   as a follow-up `AppendCondition::after`.** It never was one: positions may be
   gapped, and a second writer may hold a position below the one you were handed

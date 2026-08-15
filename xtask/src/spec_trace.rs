@@ -1732,12 +1732,26 @@ fn case_ids(text: &str) -> Vec<String> {
 
 /// Whether a clause's rules would live in a conformance suite that exists today.
 ///
-/// The event store's suite does. The projection store's and the replication
-/// port's do not, and will not until the phases that build those ports. Until
-/// then their rule names are scheduled work, and the honest answer is that
-/// nothing can check them rather than that they are all wrong.
+/// The event store's suite does, and so does the projection store's, as of the
+/// phase that built it. The replication port's does not and will not until the
+/// phase that builds it — until then `SY` rule names are scheduled work, and the
+/// honest answer is that nothing can check them rather than that they are all
+/// wrong. Checking them against the suites that *do* exist would report every one
+/// as missing, which is noise indistinguishable from a real typo.
+///
+/// `PS-` was excluded for exactly that reason and the exclusion outlived it. The
+/// projection family's rules live in
+/// `crates/happenstance-testkit/src/projection.rs`, which [`RULE_FILES`] has
+/// named since the file was created; what was missing was any clause-side check
+/// that a `PS` citation resolves to one of them. Until this line changed, a `PS`
+/// clause could cite a rule that had never existed and every gate in the
+/// repository stayed green — the seventeen `†` marks §7.2 printed against the
+/// family were an accurate statement rather than a checked one.
 fn has_suite(clause_id: &str) -> bool {
-    clause_id.starts_with("ES-") || clause_id.starts_with("VT-") || clause_id.starts_with("WF-")
+    clause_id.starts_with("ES-")
+        || clause_id.starts_with("VT-")
+        || clause_id.starts_with("WF-")
+        || clause_id.starts_with("PS-")
 }
 
 /// Every rule defined anywhere in [`RULE_FILES`].
@@ -2331,4 +2345,64 @@ pub(crate) fn workspace_root() -> Result<PathBuf> {
         .parent()
         .map(Path::to_path_buf)
         .context("xtask must live one level below the workspace root")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Check 4 abstains on any family [`has_suite`] does not know, so the set of
+    /// prefixes it names is the set of clause families whose rule citations are
+    /// checked at all. `PS` was excluded for a true reason — the projection
+    /// suite did not exist — and the exclusion outlived it.
+    ///
+    /// Asserted rather than reviewed because the failure is silence: a `PS`
+    /// clause could name `commit_is_atomik_with_the_read_model` and every gate in
+    /// the repository would stay green.
+    #[test]
+    fn the_projection_family_is_checked_against_its_suite() {
+        assert!(
+            has_suite("PS-1"),
+            "the projection suite exists in `crates/happenstance-testkit/src/projection.rs`, \
+             so check 4 must resolve `PS` rule citations rather than abstain on them"
+        );
+        assert!(has_suite("PS-37"));
+    }
+
+    /// The other half of the same constant, and the reason this test is not
+    /// merely `assert!(has_suite(..))` four times: the families that already had
+    /// a suite must keep one, and the family that still has none must keep
+    /// abstaining. Widening the prefix set to everything would make check 4
+    /// report every unwritten replication rule as a typo — noise indistinguishable
+    /// from the real thing, which is the defect the exclusion was written to avoid.
+    #[test]
+    fn the_replication_family_still_abstains_and_the_rest_do_not() {
+        for existing in ["ES-1", "VT-3", "WF-8"] {
+            assert!(
+                has_suite(existing),
+                "{existing} has had a suite since phase 3"
+            );
+        }
+        assert!(
+            !has_suite("SY-1"),
+            "`happenstance-sync-testkit` does not exist; checking `SY` rule names against \
+             the suites that do exist would report all of them as missing"
+        );
+        assert!(
+            !has_suite("CF-1"),
+            "`CF` clauses are about the suite, not checked by it"
+        );
+    }
+
+    /// [`RULE_FILES`] is what `all_rules` sweeps, and check 6 demands every rule
+    /// in it be claimed by a clause, retired by one, or on record as owing a
+    /// decision. A projection family absent from the array is a family no clause
+    /// is obliged to claim — the same hole `concurrency.rs` sat in for a phase.
+    #[test]
+    fn the_projection_rules_file_is_swept_for_ownership() {
+        assert!(
+            RULE_FILES.contains(&"crates/happenstance-testkit/src/projection.rs"),
+            "check 6 sweeps only {RULE_FILES:?}"
+        );
+    }
 }

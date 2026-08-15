@@ -204,7 +204,7 @@ fails with `error[E0277]: the trait bound … is not satisfied` naming a trait t
 author can see is implemented — a diagnostic that sends people to rewrite the
 adapter rather than to read `cargo tree -d`.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:154 (pub use bytes)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
 `crates/happenstance-core/src/store.rs:123 (impl Stream<Item =)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
 [RUNBOOK](../../RUNBOOK.md) *(`pub use futures_core;` is proposed and not landed)*

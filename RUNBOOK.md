@@ -296,6 +296,7 @@ scheduling defect.
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
 | **0019** | 6 | What happens when `apply` fails? (PS-26 – PS-30) |
+| **0030** | 6 | *(unscheduled — the queue had no number for it)* Which clause states that a successful `commit` advances the checkpoint, given that four rules already enforce it and PS-1's `MUST` is a coupling rather than a progress obligation? [ADR-0030](references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md): **a clause of its own, PS-38**, minted `[PROVISIONAL]` in §4.7. PS-1, PS-19, PS-21 and PS-22 are byte-identical across it |
 | **0020** | 7 | How does a decision model guarantee that its query and its fold cannot disagree? |
 | **0021** | 7 | How does a payload's shape evolve — codec tag, versioned event types, upcasting, and does the read path need a hook it does not have? |
 | **0022** | 8 | SQLite: driver, schema, tag storage, and the append-condition strategy. |
