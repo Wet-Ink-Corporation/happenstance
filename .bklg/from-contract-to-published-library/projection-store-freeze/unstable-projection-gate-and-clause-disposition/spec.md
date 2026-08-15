@@ -333,6 +333,40 @@ visibility invariant
    `"(unscheduled — the queue had no number for it)"` precedent (`:287`).
 10. `.bklg/from-contract-to-published-library/projection-store-freeze/unstable-projection-gate-and-clause-disposition/**`
     — this story's ledger and implementation report.
+11. `standards/rust/**` — **line-number re-pointing only**, added to this list on
+    **2026-08-15**, and see the paragraph below for why it is here rather than in
+    the implementation report.
+
+**`standards/rust/**` is admitted for one mechanical reason.** The constitution
+cites `spec/SPECIFICATION.md`, `crates/happenstance-core/src/lib.rs`,
+`src/projection.rs`, `crates/happenstance-core/Cargo.toml` and
+`crates/happenstance-testkit/Cargo.toml` — every one of them an entry items 1–6
+already admit — by `file:line`; this story inserts into all five; the cited lines
+therefore move; and `cargo xtask lint-constitution`, a gate step, fails on a stale
+citation. The repair is **compelled by entries this boundary already admits**, the
+shape `aef8990` set for `projection-capability-skips` and
+`projection-suite-entry-point` and `08a2299` re-used for this slice's mate
+`documented-extension-surface` one commit before this entry was written. Only
+line-number re-pointing is admitted, and the diff must show **equal insertions and
+deletions per atom**; this story's does — **+10/-10**, being
+`01-standard-of-evidence.md` (1/1), `30-error-taxonomy.md` (1/1),
+`40-public-surface-and-evolution.md` (1/1), `51-features-and-no-std.md` (3/3),
+`52-wasm32-and-target-cfg.md` (1/1) and `70-rustdoc-obligations.md` (3/3), the ten
+citations `implementation-report.md:251-254` records. **Rule text, evidence
+selection, retirement and new atoms are out of boundary** — they belong to the
+story that changes the rule, not to whichever story moved a line. There is no
+placement of the module header that avoids the shift: it is a `//!` block, so every
+line below it moves whatever the wording.
+
+**This boundary is enumerated, not fenced, and that is a stated limit.**
+`redkiln verify --grain story` reads a story's *first fenced block* and reports
+`boundary: no boundary declared` for this story, which is what it reported at
+implementation time — so no entry in this list, the ten atoms included, has ever
+been machine-checked here. `documented-extension-surface`'s `spec.md:250-258` is
+the fenced form the checker does read. The widening is written into the boundary
+anyway, because the alternative — leaving it in `implementation-report.md` — is a
+widening no reader of *this* file can see, and the report is not where a boundary
+is declared.
 
 **Explicitly not in this PR**
 

@@ -1300,14 +1300,17 @@ not the same as what a user needed to be told.
   Nothing else in the crate changed shape, and opting back out is deleting the
   flag.
 
-  **The reason is not that nothing tests it.** Seventeen conformance rules drive
-  the port, a store that writes a checkpoint without its read model fails one by
-  name, and two structurally unlike batch shapes pass all of them. The reason is
-  the bar §4's PS-2 sets for *freezing* it — two adapters at opposite ends of the
-  batch-shape axis — and both shapes that clear the suite today are instruments
-  this workspace wrote. What retires the exemption is that same suite green
-  against a projection adapter over storage this workspace does not control. The
-  module header states it where the compiler error sends you.
+  **The reason is not that nothing tests it.** Sixteen of the seventeen
+  conformance rules §4.11 names are written and drive the port — the seventeenth,
+  `fresh_projection_has_no_checkpoint`, is held until PS-19 widens by decision
+  rather than by test, and §7.2 daggers it — a store that writes a checkpoint
+  without its read model fails one by name, and two structurally unlike batch
+  shapes pass all of them. The reason is the bar §4's PS-2 sets for *freezing* it
+  — two adapters at opposite ends of the batch-shape axis — and both shapes that
+  clear the suite today are instruments this workspace wrote. What retires the
+  exemption is that same suite green against a projection adapter over storage
+  this workspace does not control. The module header states it where the compiler
+  error sends you.
 
 - **Every `PS` clause's rule citation is now checked, and §4's clause count moved
   by one.** `cargo xtask spec-trace` used to abstain on the whole `PS` family

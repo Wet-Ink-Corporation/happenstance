@@ -26,7 +26,9 @@ read as settled input and executed, not re-decided.
 | **AC-006** | **Met** | The thirty-eight-row disposition table in `implementation-report.md` `## Changes`, PS-1 – PS-38 with no gaps; §1.3's four figures corrected by hand at `spec/SPECIFICATION.md:219-222`; `check_stated_census` green | `spec/SPECIFICATION.md` §4 and §1.3 |
 | **AC-007** | **Met** | `git diff spec/SPECIFICATION.md` changes no bolded `MUST` sentence; PS-3's discharge at `:4809-4824` carries the playbook's three components — SHOULD verbatim, named *as* a discharge, code and tests cited | `spec/SPECIFICATION.md:4809-4824` |
 | **AC-008** | **Met** | `references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md`; atom staged at `.kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md`; number allocated at `RUNBOOK.md:299` on ADR-0029's precedent; `redkiln validate --kb` passes and no file under `.kb/decisions/` changed | `RUNBOOK.md:299` + `references/adr/` + `.kb/_intake/` |
-| **AC-009** | **Met** | The reconciliation section in `implementation-report.md` `## Notes` answers all three boxes with figures — citations **359 → 376**, the clause-range disagreement reported (16 clauses) rather than reconciled — and `CHANGELOG.md:1273-1305` carries the `[Unreleased]` entry with no pass rate | `CHANGELOG.md` `[Unreleased]` + the report |
+| **AC-009** | **Met** | The reconciliation section in `implementation-report.md` `## Notes` answers all three boxes with figures — citations **359 → 379**, each row now naming
+the commit its figure was read at (`56b17b7` and `984e7fd`; the 376 the row used to
+carry was `359 + 17` computed rather than a summary line read), the clause-range disagreement reported (16 clauses) rather than reconciled — and `CHANGELOG.md:1273-1305` carries the `[Unreleased]` entry with no pass rate | `CHANGELOG.md` `[Unreleased]` + the report |
 
 ### What the story found that its own spec did not predict
 

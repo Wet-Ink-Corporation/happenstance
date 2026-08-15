@@ -52,7 +52,7 @@ serde = ["dep:serde", "dep:base64", "base64/alloc", "bytes/serde", "serde/alloc"
 memory = ["std"]
 # The `ProjectionStore` port, its value types, `ProjectionProbe` and
 # `MemoryProjectionStore`. Off by default, and the reason is PS-2 rather than a
-# missing suite: the suite exists and seventeen rules drive it, but PS-2's bar is
+# missing suite: the suite exists and sixteen rules drive it, but PS-2's bar is
 # *two adapters at opposite ends of the batch-shape axis* and the two shapes that
 # clear the suite today are both testkit-side instruments. See
 # `src/projection.rs`'s header for the full statement.

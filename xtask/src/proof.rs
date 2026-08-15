@@ -373,16 +373,6 @@ fn registry_len(file: &str) -> Result<usize> {
 /// suffix is stripped rather than the line split on `:`, because a test name
 /// contains `::` and a split would take the wrong half; lines that do not carry
 /// the suffix are the summary and are dropped.
-/// The phase-6 evidence document, read by the assertions below.
-///
-/// Reached through [`workspace_root`] rather than `include_str!` on purpose: this
-/// file is `xtask`'s, the document is `references/`', and a compile-time include
-/// would make a `publish = false` tool's build depend on a markdown file it has
-/// no other relationship with. [`registry_len`] already reaches the tree the same
-/// way.
-#[cfg(test)]
-const PHASE_6_PROOF: &str = "references/evaluation/phase-6-projection-proof.md";
-
 fn list(artefact: &Artefact) -> Result<Vec<String>> {
     let Artefact {
         package, target, ..
@@ -417,6 +407,20 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    /// The phase-6 evidence document, read by the assertions below.
+    ///
+    /// It lives here rather than beside the gate's own items because its only
+    /// readers are in this module, and a `#[cfg(test)]` item in the middle of the
+    /// file is one an editor can drop a doc comment onto by accident — which is
+    /// exactly what happened to [`list`] when it first landed there.
+    ///
+    /// Reached through [`workspace_root`] rather than `include_str!` on purpose:
+    /// this file is `xtask`'s, the document is `references/`'s, and a
+    /// compile-time include would make a `publish = false` tool's build depend on
+    /// a markdown file it has no other relationship with. [`registry_len`] already
+    /// reaches the tree the same way.
+    const PHASE_6_PROOF: &str = "references/evaluation/phase-6-projection-proof.md";
 
     fn proof_document() -> String {
         let root = workspace_root().unwrap();
@@ -511,6 +515,79 @@ mod tests {
         }
     }
 
+    /// A ratio over a mutant set, in any spelling — or `None`.
+    ///
+    /// Shape-shaped rather than denominator-shaped, and that is the whole point.
+    /// The check this replaced named `19`, which is today's registry size: the
+    /// sentence `48 of 50 mutants caught` passed it, and a twentieth mutant would
+    /// have retired the guard without anything going red. Regex-free because
+    /// `xtask` carries no regex dependency and a digit scan is all the shape needs.
+    ///
+    /// Expects a lowercased line, because the two phrase forms are matched
+    /// literally. A count of *rules* is a statement about the enumeration and
+    /// stays allowed — only a fraction whose denominator is a choice is caught.
+    fn forbidden_ratio(line: &str) -> Option<String> {
+        for phrase in ["pass rate", "caught out of"] {
+            if line.contains(phrase) {
+                return Some(format!("the phrase `{phrase}`"));
+            }
+        }
+        let mut from = 0usize;
+        while let Some(offset) = line[from..].find(|c: char| c.is_ascii_digit()) {
+            let start = from + offset;
+            let end = line[start..]
+                .find(|c: char| !c.is_ascii_digit())
+                .map_or(line.len(), |o| start + o);
+            for sep in ["/", " of "] {
+                if let Some(rest) = line[end..].strip_prefix(sep)
+                    && rest.starts_with(|c: char| c.is_ascii_digit())
+                {
+                    let digits = rest
+                        .find(|c: char| !c.is_ascii_digit())
+                        .unwrap_or(rest.len());
+                    return Some(format!("`{}`", &line[start..end + sep.len() + digits]));
+                }
+            }
+            from = end;
+        }
+        None
+    }
+
+    /// The guard reads the shape, not the registry's current size.
+    ///
+    /// This is the test that fails against the check this one replaced: `48 of 50`
+    /// names neither `19` nor `/19`, so the old spelling-by-denominator let the
+    /// forbidden sentence straight through, and would have stopped seeing even
+    /// `19 of 19` on the day a twentieth mutant landed.
+    #[test]
+    fn the_ratio_guard_reads_the_shape_rather_than_the_registry_size() {
+        for forbidden in [
+            "48 of 50 mutants caught",
+            "19 of 19 mutants fail exactly where declared",
+            "the mutant set: 19/19",
+            "20/20 mutants",
+            "mutant pass rate: 100%",
+            "18 caught out of nineteen mutants",
+        ] {
+            assert!(
+                forbidden_ratio(forbidden).is_some(),
+                "`{forbidden}` is a ratio over the mutant set and the guard missed it"
+            );
+        }
+        for allowed in [
+            "nineteen mutants, each declared against the rules it fails",
+            "19 mutants are registered, and 19 rules name one",
+            "crates/happenstance-testkit/tests/mutation_coverage.rs:141-186 registers the mutant",
+        ] {
+            assert!(
+                forbidden_ratio(allowed).is_none(),
+                "`{allowed}` states an enumeration rather than a ratio, and the guard \
+                 flagged it: {:?}",
+                forbidden_ratio(allowed)
+            );
+        }
+    }
+
     /// ADR-0010's prohibition, enforced rather than remembered.
     ///
     /// The denominator over a mutant set is a choice, so a fraction reports how
@@ -525,12 +602,9 @@ mod tests {
                 continue;
             }
             assert!(
-                !line.contains(" of 19") && !line.contains("19 of ") && !line.contains("/19"),
-                "a ratio over the mutant set: {line}"
-            );
-            assert!(
-                !line.contains("pass rate") && !line.contains("caught out of"),
-                "a pass rate over the mutant set: {line}"
+                forbidden_ratio(line).is_none(),
+                "a ratio over the mutant set — {} — in: {line}",
+                forbidden_ratio(line).unwrap_or_default()
             );
         }
     }

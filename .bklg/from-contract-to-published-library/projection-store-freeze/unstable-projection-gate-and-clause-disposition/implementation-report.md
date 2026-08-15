@@ -243,15 +243,29 @@ the disagreement, stated.
 
 **Box 3 — `spec-trace`'s citation count has not fallen.**
 
-| | Clauses | Rules | Cases | Citations |
-| --- | --- | --- | --- | --- |
-| Before (branch point) | 200 | 111 | 58 | **359** |
-| After | 201 | 111 | 58 | **376** |
+| | Clauses | Rules | Cases | Citations | Figure taken at |
+| --- | --- | --- | --- | --- | --- |
+| Before (branch point) | 200 | 111 | 58 | **359** | `56b17b7`, this story's base |
+| After | 201 | 111 | 58 | **379** | `984e7fd`, this story's own commit |
 
-Seventeen citations gained, none lost. Three that had drifted — `projection.rs`
+**The `After` row read 376 until 2026-08-15, and 376 was never a run's output.**
+The recorded whole-gate run at `7620481` prints *379 citations checked*
+(`references/evaluation/phase-6-projection-proof.md:157`), nothing between
+`984e7fd` and `7620481` touches `spec/SPECIFICATION.md`, and the count is parsed
+out of that file alone — so 379 is also the figure at `984e7fd`, and the arithmetic
+`359 + 17` that produced 376 was a number computed rather than read. Both rows are
+now re-read from `cargo xtask spec-trace`'s summary line: the `Before` row by
+restoring `spec/SPECIFICATION.md` at `56b17b7` and running the checker against it
+(*200 clauses (139 FROZEN, 49 PROVISIONAL, 10 DEFERRED, 2 NON-NORMATIVE) … 359
+citations checked*), the `After` row on the merged tree. This is the defect
+`registry_len`'s own doc comment was written about, one level up, and the box's
+claim — the count has not fallen — survives either figure.
+
+**Twenty citations gained, none lost.** Three that had drifted — `projection.rs`
 line ranges shifted by the module header — were re-anchored to their subjects
 rather than deleted, and ten citations in `standards/rust/` were re-anchored for
-the same reason after `lint-constitution` caught them.
+the same reason after `lint-constitution` caught them. Neither re-anchoring moves
+the count: it is a count of citations *in* `spec/SPECIFICATION.md`.
 
 ### Deviations from the plan, and why
 
@@ -268,6 +282,19 @@ features stops compiling, and that file's own module doc says its whole purpose 
 to prove the store is *mounted*. And `examples/outside-projection-adapter/` was
 **not** touched, which is the point: `conformance` implying the gate is what kept
 its one-flag manifest a one-flag manifest.
+
+**The `standards/rust/**` re-pointing is now admitted into the boundary itself,
+not just disclosed here.** It was disclosed above and nowhere else until
+**2026-08-15**, which made it a widening only a reader of this report could find —
+while this slice's mate had widened its own fenced block for the identical class
+one commit earlier (`08a2299`, on the shape `aef8990` set). `spec.md` now carries
+it as boundary entry 11 with the same scoping: line-number re-pointing only,
+compelled by five files items 1–6 already admit, **+10/-10** across the six atoms
+(1/1, 1/1, 1/1, 3/3, 1/1, 3/3), with rule text, evidence selection, retirement and
+new atoms out of boundary. The same paragraph states the limit that made the
+omission possible — this spec enumerates its boundary rather than fencing it, so
+`redkiln verify --grain story` reported `boundary: no boundary declared` for this
+story and checked none of the eleven entries.
 
 **PS-31 was discharged rather than merely dispositioned.** The spec's AC-006 asked
 for PS-31 to be *"verified against §2's identity decisions as they now stand"*. It
