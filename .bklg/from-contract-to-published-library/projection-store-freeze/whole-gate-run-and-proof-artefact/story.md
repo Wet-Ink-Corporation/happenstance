@@ -20,13 +20,13 @@ archetype: capability
 slice: port-disposition-and-freeze-record
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T13:58:07.595Z
+updated: 2026-08-15T13:58:14.248Z
 links:
   pr: null
   commits:
     - 674c459
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
