@@ -22,7 +22,7 @@ attributable to the initiative rather than inherited.
 
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
-| 1 | `projection-store-freeze` | HS-P0010 | — | **in-progress** | run 1 halted; blocker cleared 2026-08-13, run 2 dispatched |
+| 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | pending | |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
