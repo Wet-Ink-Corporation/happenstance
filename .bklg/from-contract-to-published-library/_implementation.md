@@ -247,3 +247,66 @@ enumeration in place with date and reason, grow `contract.rs`'s set to match, an
 that fails the new rule and passes the others** — without it the rule is the decorative rule
 ADR-0010 exists to make unwriteable, which was escape (2)'s defect and is not cured by arriving via
 a capability. PS-1's second conjunct is unenforced by any rule until this lands.
+
+### HS-P0010 `projection-store-freeze` — runs 4 and 5, 2026-08-14/15
+
+**Run 4** (`wf_e3e04418-77c`, `degradedSummary: none`) — 12 of 17 committed. `commit-atomicity-and-mutants`
+sealed **approved**: the DT-3 amendment landed with `COMMIT_FAULT` *required* rather than defaulted,
+so no testkit-written reason had to be minted, and `PartialCommitStore` fails
+`failed_commit_leaves_both_unchanged` and nothing else — proven by deleting its one line and watching
+the exactness meta-test go red by name. **PS-1's second conjunct is no longer a hole.**
+`reset-and-rebuild-rules` sealed **changes-requested** on a correctness finding, not a procedural one.
+
+**Run 5** (`wf_e8627580-c45`, `resumeSlice: second-batch-shape-and-evidence`, `degradedSummary: none`)
+— the last three slices sealed approved, project verdict **approved**, `dodGreen`, `reachabilityOk`,
+`missingArtifacts: []`, `uncoveredAcs: []`. Rubric: ac-coverage / integration-reachability /
+test-integrity / gate-greenness **3**; brief-fidelity / intent-fidelity **2**; presentation-fidelity
+**0 — does not apply** (no `design.capture`; a library has no visual surface).
+
+`resumeSlice` was used deliberately: slice 5 is sealed `changes-requested` and no amount of work
+inside this project can seal it, so a normal re-launch would have re-entered it at Review and halted
+a third time without reaching slices 6–8.
+
+**15 of 17 stories approved** (HS-S0001–HS-S0010, HS-S0013–HS-S0017). HS-S0011 and HS-S0012 remain at
+`plan`/`ready`. **The project was NOT advanced** — see the decision below.
+
+### The PS-19 finding was the most valuable thing this project produced
+
+`fresh_projection_has_no_checkpoint` was withdrawn because it **convicted a conformant store**: a
+projection whose missing row resolves as `Live { through: FIRST }` breaks no frozen MUST, yet
+`PresumedLiveCheckpointStore` was registered as a *mutant*. CF-5's positive control could not catch
+it, because no conformant variant in the registry modelled that store. In a project whose product is
+a suite that can fail, a rule that fails conformant stores is the more expensive of the two errors —
+and it was found by refusing to satisfy an AC rather than by any check.
+
+Path (a) was chosen and path (b) explicitly refused, so there is no authorisation to cite. The repair
+is staged as **ADR-0030** (`.kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md`, long form at
+`references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md`), written but **not
+accepted** — acceptance is one human-invoked `/redkiln:kb-ingest` wave.
+
+**Standing suggestion for run 6:** add a conformant variant modelling the legal
+`.unwrap_or(Checkpoint::Live { through: FIRST })` store to the projection registry, so the positive
+control can catch the next rule that over-convicts.
+
+### Open, disclosed by the project review rather than hidden
+
+1. Slice 5 unsealed; the absence is machine-visible at `spec/SPECIFICATION.md:8833`.
+2. Four doc sites still say the reference run produces **one** skip; `assert_reference_projection_declensions`
+   pins **two**. Deliberately not fixed by run 5 — they live in the skipped slice's files, and repairing
+   them from a slice-6 commit would put slice-5 work under a slice-6 boundary.
+3. **`crates/happenstance-testkit/README.md:18,:127` — shipped by `cargo package` to crates.io** —
+   still says the suite "is two rules of seventeen, and neither has been shown to reject a wrong store
+   yet" and the hostile stores are "not yet written". All false now, in the *understating* direction.
+   Routed to `publication-and-positioning` (HS-P0016), which owns initiative DoD 10.
+4. `_design.md` shows the outside author under `[dev-dependencies]`; the landed manifest correctly uses
+   `[dependencies]`. The design record is superseded in fact by the shipped surface.
+5. **CI's `backlog` job asserts the `unconsumed-foundation` list is empty**, and it is not — nine
+   problems, verified pre-existing from planning commit `ae77ac4`. **This makes upstream issue #122 a
+   release blocker for the initiative, not tidiness.** It must be settled before the PR to `main`.
+
+### Decision — wave, then run 6, then review
+
+Advance nothing yet. Invoke `/redkiln:kb-ingest` for ADR-0030; run 6 then re-enters slice 5, lands the
+seventeenth rule with its mutant, fixes the four doc sites and read-through's AC-006 record; the
+project reaches review at 17/17. Closing now would ship the freeze at sixteen of seventeen with the
+repair staged and never accepted, which is the outcome path (a) was chosen to avoid.
