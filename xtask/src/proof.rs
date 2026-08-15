@@ -420,7 +420,15 @@ mod tests {
     /// compile-time include would make a `publish = false` tool's build depend on
     /// a markdown file it has no other relationship with. [`registry_len`] already
     /// reaches the tree the same way.
-    const PHASE_6_PROOF: &str = "references/evaluation/phase-6-projection-proof.md";
+    ///
+    /// **Repointed at every supersession, and that is the whole discipline.**
+    /// `references/evaluation/` documents are immutable and superseded rather
+    /// than edited, so the artefact this names is replaced by a later dated one
+    /// rather than corrected in place — and a constant left on the earlier file
+    /// keeps passing while holding a document nobody will read next. It named
+    /// `phase-6-projection-proof.md` until `fresh_projection_has_no_checkpoint`
+    /// landed and that document stopped describing the tree.
+    const PHASE_6_PROOF: &str = "references/evaluation/phase-6-projection-proof-at-closeout.md";
 
     fn proof_document() -> String {
         let root = workspace_root().unwrap();

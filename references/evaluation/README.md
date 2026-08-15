@@ -132,10 +132,36 @@ that pass and how each was observed, every `OPTIONAL` gate step as ran or skippe
 
 It **decides nothing**, on the same reasoning as the two documents above: no
 freeze verdict, no `unstable-projection` exposure verdict, no restatement of the
-PS-3 finding, and no ratio over the mutant set in any form (ADR-0010). Three of
-its claims are machine-held rather than reviewed — `xtask/src/proof.rs`'s own
-`#[cfg(test)]` module reads this document and fails if either test name, either
-fixture name or the limits section's two CI jobs are absent from it.
+PS-3 finding, and no ratio over the mutant set in any form (ADR-0010).
+
+**It is superseded, and it is kept.**
+[`phase-6-projection-proof-at-closeout.md`](phase-6-projection-proof-at-closeout.md)
+(2026-08-15, pinned to `04b1f4d`) is the fifth of these documents and the later
+run this one's own header asked for. The superseded document is not wrong about
+its subject — at `7620481` the enumeration held sixteen rules and §7.2 daggered
+the seventeenth, and it says so — but it stopped describing the tree at
+`dc363f4`, when `fresh_projection_has_no_checkpoint` landed against PS-38 and
+the daggers came off. Under the lifecycle above, the repair for that is a later
+dated document naming the earlier one, and never an edit; a project closing with
+its proof artefact pointing at a superseded tree is a phase whose exit condition
+is discharged by a description of something else.
+
+The later document carries the same shape and the same refusals: the seventeen
+rules in one enumeration, the two batch shapes and the outside-author fixture,
+five harnesses across three emitters, every `OPTIONAL` gate step as ran or
+skipped (four of four **ran**), and the same three limits — the MSRV, `wasm32`
+*execution*, and PS-2's bar, which no instrument this workspace wrote can clear.
+It adds one row the earlier ledger could not have: the gate step that holds a
+shipped document's rule count to the enumeration, which exists because the
+sentence the earlier document was superseded *by* had also gone stale in four
+other places at once.
+
+Three of the later document's claims are machine-held rather than reviewed —
+`xtask/src/proof.rs`'s own `#[cfg(test)]` module reads **it**, and fails if
+either test name, either fixture name or the limits section's two CI jobs are
+absent. That constant is repointed at each supersession on purpose: a guard left
+reading a superseded artefact still passes, and holds nothing anybody is going to
+read.
 
 ## Every crate name in here is one rename out of date
 
