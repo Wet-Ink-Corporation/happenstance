@@ -5292,7 +5292,7 @@ sync compensation.
 **Rule:** `reset_is_not_commit_at_first` — perform both on two ids and assert
 the checkpoints differ; then drive a replay from each and assert the event at
 position 1 is applied in the first case and not in the second. §4.11 assigns
-this clause the new `fresh_projection_has_no_checkpoint` as well, which is the same
+this clause `fresh_projection_has_no_checkpoint` as well, which is the same
 distinction before any `reset` has happened: a store reporting
 `Live { through: FIRST }` for an id it has never seen has already collapsed the
 two states this clause requires to be told apart.
@@ -5311,8 +5311,9 @@ never seen it answers `Live`. No clause's MUST obliges an unseen id to read as
 **Phase 6's answer, recorded: a new one says it — PS-38's second sentence.** This
 clause's MUST is byte-identical across that decision, and it stays scoped *after
 a successful `reset`*; `fresh_projection_has_no_checkpoint` is PS-38's falsifier
-and is listed against both clauses in §4.11 for that reason. The rule is still
-unwritten, which is why it is marked new above and daggered in §7.2
+and is listed against both clauses in §4.11 for that reason. The rule is written
+and runs — it is in the single enumeration §4.11 names, so it carries no *new*
+marker here or there, and §7.2 daggers neither of the two rows that name it
 ([ADR-0030](../references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md);
 `references/evaluation/ps-clause-pairing-sweep.md:276`).
 **Cases:** E2E-15, E2E-16.
@@ -5454,8 +5455,9 @@ eventually-consistent read model has. If that is real the obligation narrows to
 a handle constraint. Owned by the first projection adapter over storage this
 workspace does not control (RUNBOOK phase 7).]`
 **Rule:** `commit_advances_the_checkpoint` — the baseline the rest of §4.11's
-suite is differential against; and the new `fresh_projection_has_no_checkpoint`
-for the second sentence, which nothing checks today.
+suite is differential against; and `fresh_projection_has_no_checkpoint` for the
+second sentence, which asks a store for an id no `commit` has named and asserts
+the `NeverRun` variant, comparing no position anywhere.
 **Cases:** E2E-15, E2E-17, E2E-23.
 **Rejects:** a store whose backing state lives per **handle** rather than per
 store — one whose `connect()` mints a fresh map instead of a fresh handle onto a
@@ -5833,12 +5835,16 @@ Seventeen rules, emitted by `projection_store_conformance!` through the same
 registry macro `event_store_conformance!` uses, so it inherits the tokio,
 blocking and wasm flavours without a second mechanism.
 
-**Sixteen of the seventeen now exist**, in
-`crates/happenstance-testkit/src/projection.rs`, and the sentence this paragraph
-used to end with — *"Every one is new"* — was true when it was written and is not
-now. `fresh_projection_has_no_checkpoint` is the one still to be written; it is
-marked new wherever it is named and daggered in §7.2, and PS-38 is the clause it
-falsifies.
+**All seventeen now exist.** `for_each_projection_store_rule`
+(`crates/happenstance-testkit/src/projection.rs:1884-1919`) is the single
+enumeration they are emitted from, and `no_orphan_projection_rules` holds that
+list and the module's own rules to each other in both directions — so the table
+below is checkable against one place rather than counted by hand. Two sentences
+have stood here and both were true when written: *"Every one is new"*, and the
+one that said sixteen of the seventeen existed.
+`fresh_projection_has_no_checkpoint` was the last to land, and it landed against
+PS-38 rather than by widening `[FROZEN]` PS-19 — no rule in the table below is
+daggered in §7.2.
 
 | Rule | Clause | Rejects |
 |---|---|---|
