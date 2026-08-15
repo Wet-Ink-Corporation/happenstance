@@ -347,3 +347,66 @@ the right place, because `reset-and-rebuild-rules` is the only slice committed b
 `changes-requested`, and slices 6–8 are sealed `approved` so they are skipped. Run 5 needed the
 hatch only because that slice could not be cleared by any work inside the project; that is no longer
 true.
+
+### HS-P0010 `projection-store-freeze` — run 6 and CLOSE, 2026-08-15
+
+**`wf_8a4f9e52-01b`. 17/17 stories, all eight slices `approved`, `degradedSummary: none`,
+`missingArtifacts: []`, `uncoveredAcs: []`, no baseline repairs. Project verdict `approved` by the
+human at `dd559812`; the item is held at `review`/`in-review` with `--stay`, awaiting
+`/redkiln:closeout`.**
+
+Rubric: integration-reachability / test-integrity / gate-greenness **3**; ac-coverage /
+brief-fidelity / intent-fidelity **2**; presentation-fidelity **0 — does not apply**. `overall: 2`,
+and the frontmatter is **deliberately stale** — the body states the post-repair values would be 3
+and says so at `_review.md:80-86`.
+
+DoD bar ran for real: 17 scenarios, zero `fixme`, nothing unmounted. Both batch shapes pass (memory
+17/17 with two reported skips, buffering 18/18 with none); `CheckpointOnlyStore` convicted **by
+name** from inside and from outside the workspace; all 17 rules green on wasm32 under
+`wasm-bindgen-test-runner`; 21 registry rows, 7/7 exactness meta-tests. The 15 whole-initiative DoD
+journeys are deferred to their owning projects, correctly for a feature project.
+
+The reviewer verified the four prior findings **against the tree rather than the report**, and
+checked adversarially that the new `lint-rule-counts` step is not tautological: its counts derive
+from the same parse `spec-trace` uses, it **bails** if a rule file parses to zero rules and **bails**
+if no document states a count, closing both vacuous-pass routes; its first unit test is red-first
+against the shipped false sentence; and its changelog edits are all inside `[Unreleased]`, so no
+released history was rewritten to keep a check green.
+
+### The boundary class, six and seven — and one that should go upstream
+
+Both surfaced during the story gate, after the slice had sealed.
+
+**Six — `reset-rules` (`10ace94`).** Its spec reasoned that `spec/SPECIFICATION.md` was wholly out
+of boundary because *"the PS-16 – PS-20 clause rows already name these five rules, so nothing needs
+writing there"*. The premise is true and the conclusion does not follow: those rows name the rules
+**with a `†`**, and landing the rules is exactly what removes it. Falsified by a checkable fact, so
+the sentence was corrected rather than argued around.
+
+**Seven — `read-through-and-rebuild-rules` (`5be22ab`), and this one is a tooling trap.** Its fence
+read `spec/SPECIFICATION.md   # ONLY inside the BEGIN/END GENERATED region`. **`redkiln verify
+--grain story` matches fence lines literally, so a trailing `#` comment makes the entry match
+nothing.** The spec appeared to admit two paths under stated limits and admitted neither; the gate
+rejected the story for writing a file the fence looked like it allowed. Limits moved to prose,
+unchanged in substance.
+
+That second one is worth filing upstream beside **#122**: a boundary fence that silently ignores an
+entry is worse than one that rejects it, because the author reads their own spec as permitting the
+path. It fails closed here, which is the safe direction — but it fails *silently*, and the author's
+stated limit is discarded with it.
+
+### Carried into the next projects
+
+- **redkiln #122 is a release blocker.** CI's `backlog` job (`.github/workflows/ci.yml:177`) asserts
+  the `unconsumed-foundation` list is empty; nine problems persist, one this project's story and
+  eight in five unstarted projects, all from planning commit `ae77ac4`. Settle before
+  `publication-and-positioning`, not at the PR.
+- **`crates/happenstance-testkit/README.md`** understates the suite on the page `cargo package`
+  ships. Routed to HS-P0016 (owns DoD 10).
+- **Eight rustdoc citations resolve ~191 lines short**, landing in §4.9's PS-32 instead of §4.11.
+  Correct when authored, invalidated by this project's own spec growth. No AC covers them.
+- **AC-016's execution half is CI's, not the local gate's** — the local step type-checks the wasm
+  harnesses. Stated in the proof artefact rather than papered over.
+- **PS-32's correction to ADR-0007's Context is still owed** — now a findable atom
+  (`ps-32-adr-0007-context-correction-is-owed`), and narrowed: only the long-form record carries the
+  defective sentence, not `kb-decision-0007`'s atom.
