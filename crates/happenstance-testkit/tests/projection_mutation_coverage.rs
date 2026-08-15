@@ -283,7 +283,7 @@ struct Declared {
 ///   which is a statement about this registry and not about the port. The six
 ///   runner-dependent rules CF-36 moves to the workspace e2e crate have no store
 ///   to be wrong in, so nothing here says anything about them
-///   (`spec/SPECIFICATION.md:5694-5703`).
+///   (`spec/SPECIFICATION.md:5696-5705`).
 /// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
 ///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
 ///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
@@ -515,7 +515,7 @@ const REGISTRY: &[Declared] = &[
         ],
         provenance: "an adapter that validates `position` against what the batch wrote — \
                      named by the specification itself for this rule \
-                     (`spec/SPECIFICATION.md:5680-5685`). The point of registering it is \
+                     (`spec/SPECIFICATION.md:5682-5687`). The point of registering it is \
                      that the misreading is *reasonable*: \"advances `id`'s checkpoint to \
                      `position`\" reads like a claim about applied work, and without \
                      PS-21's rule this store would be exactly as conformant as the oracle. \
@@ -800,7 +800,7 @@ const REGISTRY: &[Declared] = &[
                      `commit` and is dropped, so every checkpoint claims the rows are \
                      authoritative. It is the obvious reading of the port and the only one \
                      `Option<SequencePosition>` could express before `Checkpoint` had three \
-                     variants (`spec/SPECIFICATION.md:5344-5352`). A reader asking whether the \
+                     variants (`spec/SPECIFICATION.md:5345-5353`). A reader asking whether the \
                      rows in front of it can be trusted is told yes over a half-built read model. \
                      It preserves `NeverRun` for an id it has never seen, because its defect is \
                      that `Rebuilding` is unrepresentable rather than that a missing row reads \

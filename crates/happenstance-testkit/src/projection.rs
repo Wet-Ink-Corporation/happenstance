@@ -44,7 +44,7 @@
 //! Every rule §4.11 assigns to an adapter's own suite is now written; what is
 //! still owed is the **six runner-dependent** ones, which CF-36 moves to the
 //! workspace e2e crate because they need a runner rather than a store
-//! (`spec/SPECIFICATION.md:5694-5703`). A store that passes everything here has
+//! (`spec/SPECIFICATION.md:5696-5705`). A store that passes everything here has
 //! not been observed under replay.
 //!
 //! The seventeenth landed last and did not land quietly.
@@ -896,7 +896,7 @@ pub mod rules {
     ///
     /// **Rejects:** `ValidatingCommitStore` — an adapter that validates
     /// `position` against what the batch wrote, which the specification names for
-    /// this rule (`spec/SPECIFICATION.md:5680-5685`). It is the sharper hazard
+    /// this rule (`spec/SPECIFICATION.md:5682-5687`). It is the sharper hazard
     /// rather than a capability gap: validating is a *reasonable* reading of
     /// "advances `id`'s checkpoint to `position`", it would be equally conformant
     /// without this rule, and it makes a narrow projection re-scan the same range
@@ -1426,7 +1426,7 @@ pub mod rules {
     ///
     /// **PS-38's second sentence**, which is the clause this rule is written
     /// against: *"a `ProjectionId` no successful `commit` has named MUST read as
-    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5447-5462`). §4.11 lists
+    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5448-5464`). §4.11 lists
     /// the rule against PS-19 as well, because it is the same distinction that
     /// clause is about — *never run* told apart from *committed at the first
     /// position* — asked before any `reset` has happened; but PS-19's own MUST

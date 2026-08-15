@@ -45,7 +45,7 @@ use crate::harness::ProjectionSubject;
 ///
 /// It is **not** the buffering, replay-at-commit conformant variant, which is a
 /// different and larger instrument at the far end of §6's batch-shape axis
-/// (`spec/SPECIFICATION.md:5686-5691`). That one has since landed as
+/// (`spec/SPECIFICATION.md:5688-5693`). That one has since landed as
 /// [`BufferingProjectionStore`](crate::buffering::BufferingProjectionStore), and
 /// it declares `READS_THROUGH_BATCH` **`true`** — so the two are opposite arms of
 /// the same gate rather than duplicates, and neither can be deleted without

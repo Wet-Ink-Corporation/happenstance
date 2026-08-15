@@ -3,7 +3,7 @@
 //! model.
 //!
 //! CF-5's second projection conformant variant, and the far end of §6's
-//! batch-shape axis (`spec/SPECIFICATION.md:5686-5691`). It is not a defect and
+//! batch-shape axis (`spec/SPECIFICATION.md:5688-5693`). It is not a defect and
 //! it MUST pass every projection rule: a rule that rejects it is a finding about
 //! the **rule** (CF-6), never about this store.
 //!

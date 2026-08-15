@@ -30,7 +30,7 @@ use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
 
 /// Commits the checkpoint and discards the write set.
 ///
-/// The store `spec/SPECIFICATION.md:5678-5685` names, and the natural shape for
+/// The store `spec/SPECIFICATION.md:5680-5687` names, and the natural shape for
 /// any adapter whose read model lives somewhere other than its checkpoint table:
 /// the checkpoint write goes through the adapter's own connection and the read
 /// model's writes were handed to something else — a second pool, a queue, a
@@ -73,7 +73,7 @@ impl Defect for CheckpointOnlyStore {
 /// write — which is why every rule in this family reads back through a fresh
 /// handle.
 ///
-/// It is the store `spec/SPECIFICATION.md:5659` leaves an em-dash for.
+/// It is the store `spec/SPECIFICATION.md:5661` leaves an em-dash for.
 /// `commit_advances_the_checkpoint` is the only rule that rejects it, and that is
 /// the interesting part: PS-1's MUST is a **coupling** rather than a progress
 /// obligation, so "neither" satisfies the clause through its "or not at all" arm
@@ -213,7 +213,7 @@ impl Defect for TypeStampedBatchStore {
 /// A `commit` that validates `position` against what the batch wrote.
 ///
 /// Named by the specification for this rule
-/// (`spec/SPECIFICATION.md:5680-5685`), and the reason it is worth registering is
+/// (`spec/SPECIFICATION.md:5682-5687`), and the reason it is worth registering is
 /// that it is **reasonable**: "advances `id`'s checkpoint to `position`" reads
 /// like a claim about applied work, and without PS-21's rule an adapter that
 /// enforced it would be exactly as conformant as one that did not. Two stores
@@ -457,7 +457,7 @@ impl Defect for RefusalAfterTheFactStore {
 /// the direction a mutant registry cannot see. What brought it back is a clause,
 /// not a re-reading — ADR-0030 minted PS-38, whose second sentence is *"a
 /// `ProjectionId` no successful `commit` has named MUST read as
-/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5447-5462`). This store
+/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5448-5464`). This store
 /// answers `Live { through: FIRST }` for exactly such an id, so it is
 /// non-conformant against a `MUST` that exists rather than against a rule that
 /// reached past one. Its conformant neighbour on the same seam is

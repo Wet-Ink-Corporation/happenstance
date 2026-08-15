@@ -1585,7 +1585,7 @@ ES-10 is frozen at phase 4 and an invariant nothing can afford is not an invaria
       fixture pass", and three things were wrong with that. The fixture does not
       exist: neither spelling of the rule, nor `PreCommitPositionStore`, has a
       single hit in any crate. Its ownership is disputed on the record — CF-13's
-      own deferral marker (`SPECIFICATION.md:5765-5772`) assigns it to "the
+      own deferral marker (`SPECIFICATION.md:5767-5774`) assigns it to "the
       instrument-portfolio pass", which is this phase, while the [deferred-clause
       table](#the-10-deferred-clauses) assigns it to phase 3. And it would have
       been the **wrong instrument** either way: `PreCommitPositionStore` is an
