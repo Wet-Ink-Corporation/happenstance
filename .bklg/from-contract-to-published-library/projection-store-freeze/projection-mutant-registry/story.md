@@ -7,9 +7,9 @@ title: CheckpointOnlyStore fails the suite by name
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,12 +22,13 @@ archetype: capability
 slice: commit-atomicity-and-mutants
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:01.692Z
+updated: 2026-08-15T05:07:57.423Z
 links:
   pr: null
-  commits: []
+  commits:
+    - c385e40
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
