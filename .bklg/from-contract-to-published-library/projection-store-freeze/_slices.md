@@ -398,3 +398,35 @@ them at `assert_reference_projection_declensions` as the authority** rather than
 nothing in the gate reads; and resolve read-through AC-006's `satisfied: true`-over-`NOT SATISFIED`
 row **in the record, not the code** — `_design.md`'s capability table named the testkit as
 `READS_THROUGH_BATCH`'s reason-writer at sign-off, so the AC's wording is what is wrong.
+
+### Run 5 scope — read this before starting
+
+**`reset-and-rebuild-rules` is deliberately SKIPPED this run** (`resumeSlice:
+second-batch-shape-and-evidence`). It is sealed `changes-requested` and cannot be sealed
+`approved` by any amount of work inside this project: AC-005 waits on an accepted decision atom
+that only a human-invoked `/redkiln:kb-ingest` wave can produce. Re-entering it at Review would
+halt on the same finding a third time. **Do not restore the held rule to make it seal.**
+
+**One addition to `unstable-projection-gate-and-clause-disposition` (HS-S0016), which already owns
+the PS-19 repair jointly with `projection-decision-atoms`:** stage the repair document into
+`.kb/_intake/` this run. Write it, do not accept it — hand-writing an atom under `.kb/decisions/`
+is what `0269720` was reverted for, and the wave is the human's to invoke. The document should
+specify a new `decision` atom that widens PS-19 to cover the never-seen-id case, or mints the
+clause it lacks, under `.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md` — never a
+line edit to the frozen clause — and should carry, as the `2026-08-13-projection-adrs` intake
+documents did, the frontmatter conventions, the claim, the rejected alternatives, and the
+`.kb/maps/decision-map.md` row. Give the wave id a suffix that collides with neither
+`2026-08-10-intake`, `-2` nor `2026-08-13-projection-adrs`.
+
+**Two findings from this slice stay open and are NOT this run's** — they live in the skipped
+slice's files and belong with the run that closes it after the wave: the four stale docs
+(point them at `assert_reference_projection_declensions` rather than restating a count) and
+read-through AC-006's `satisfied: true`-over-`NOT SATISFIED` row (fix the record, not the code).
+Do not fix them opportunistically from another slice; that would put slice-5 repairs in a slice-6
+commit and leave the boundary check unable to tell them apart.
+
+**What HS-S0016's disposition must state honestly**, whatever else it says: the projection family
+lands at **eleven of §4.11's seventeen** adapter rules, and the freeze carries **two named holes**
+— PS-19's never-seen-id case, unenforced pending the atom above, and the residue noted for
+`arm_commit_fault` with an empty body, which has no fixture-level mutant. PS-1's second conjunct is
+**no longer** a hole; the DT-3 amendment closed it.
