@@ -22,13 +22,13 @@ archetype: capability
 slice: commit-atomicity-and-mutants
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T05:07:57.423Z
+updated: 2026-08-15T05:08:17.773Z
 links:
   pr: null
   commits:
     - c385e40
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
