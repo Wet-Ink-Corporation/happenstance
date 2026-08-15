@@ -4786,6 +4786,10 @@ The `tokio_unstable` idiom exists for exactly this, and it decouples publishing
 `EventStore` from settling `ProjectionStore` — which is otherwise a hard
 scheduling dependency between two unrelated ports.
 
+What the projection suite showed when it was run against two batch shapes at
+once is recorded in `references/evaluation/projection-batch-shape-evidence.md:1`,
+which is evidence for this clause and deliberately not a verdict on it.
+
 ---
 
 ### 4.1a What is actually open

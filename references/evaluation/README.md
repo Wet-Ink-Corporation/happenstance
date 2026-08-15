@@ -88,6 +88,29 @@ no tally and no strength; it exists because a reader re-deriving the verdict fro
 that column alone would have reached `systematic` where the prose derives
 `isolated`.
 
+[`projection-batch-shape-evidence.md`](projection-batch-shape-evidence.md)
+(2026-08-14, pinned to `cfd9231`) is the third, and carries the same lifecycle —
+dated, pinned, **immutable, superseded rather than edited**. It is a byproduct of
+phase 6 rather than one of the fourteen, and the runbook was not derived from it:
+it answers one question, *did the two batch shapes disagree, and where?*, off a
+single `cargo xtask ci` run in which two conformance harnesses drove the same
+sixteen projection rules against `MemoryProjectionStore` and against a buffering,
+replay-at-commit store written for the comparison. It carries a disagreement
+vocabulary fixed **before** the ledger was filled, and a per-rule ledger covering
+the whole of `for_each_projection_store_rule!` rather than the rules the author
+remembered.
+
+It **decides nothing**, and that is load-bearing rather than modest: the PS-3
+exposure call belongs to `publication-and-positioning` and the freeze verdict to
+`ladybug-projection-store`, so a document here that recommended either would be
+this project authoring another's decision. Its two substantive results are that
+fourteen rules agreed and two differ only in which fixture declines a capability,
+and that the axis the pair spans is **narrower** than PS-2's — because
+`MemoryProjectionStore` is itself already a deferred write set, which §4.11's
+assignment of the CF-5 variant had assumed otherwise. It is cited from PS-3's
+clause body in [`spec/SPECIFICATION.md`](../../spec/SPECIFICATION.md), so
+`cargo xtask spec-trace` resolves it on every gate run.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
