@@ -21,13 +21,13 @@ archetype: capability
 slice: reset-and-rebuild-rules
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T19:05:19.371Z
+updated: 2026-08-15T19:05:25.362Z
 links:
   pr: null
   commits:
     - 10ace94
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
