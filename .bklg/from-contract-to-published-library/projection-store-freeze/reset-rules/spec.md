@@ -264,10 +264,19 @@ that would reopen ADR-0013's globally frozen visibility invariant
 **Explicitly not in this PR**
 
 - **No edit to any `[FROZEN]` clause text and no maturity-marker change.**
-  `spec/SPECIFICATION.md` is deliberately outside the write boundary below: the
-  PS-16 – PS-20 clause rows already name these five rules, so nothing needs
-  writing there, and the PS-19 repair is an accepted atom from slice 1.
   Marker disposition belongs to `unstable-projection-gate-and-clause-disposition`.
+
+  **Corrected 2026-08-15.** This bullet used to conclude that `spec/SPECIFICATION.md`
+  was therefore wholly outside the write boundary, *"the PS-16 – PS-20 clause rows
+  already name these five rules, so nothing needs writing there"*. The premise is
+  true and the conclusion does not follow: those rows name the rules **with a `†`**,
+  the document's convention for a rule that does not exist yet, and landing the
+  rules is exactly what removes it. `cargo xtask spec-trace --write` does that
+  mechanically and a separate gate step fails on a stale region, so the story could
+  not both land the rules and leave the file untouched. `10ace94` changed ten lines
+  there, every one a `†` inside §7's generated tables. The sentence was falsified by
+  a checkable fact rather than by a judgement call, so it is corrected here rather
+  than argued around.
 - The port itself. `reset`, `Checkpoint`, `ResetError` and the probe arrive from
   slice 2; if a signature is wrong, that is a finding reported against
   `owned-batch-port-shape`, not a fix made here.
@@ -290,8 +299,33 @@ with no `[FROZEN]` clause text changed.
 crates/happenstance-testkit/src/**
 crates/happenstance-testkit/tests/**
 CHANGELOG.md
+spec/SPECIFICATION.md
+standards/rust/**
 .bklg/from-contract-to-published-library/projection-store-freeze/reset-rules/**
 ```
+
+The last two entries were added on **2026-08-15**, after `redkiln verify --grain story`
+rejected `10ace94`, and each is admitted for one mechanical reason with a stated limit.
+
+`spec/SPECIFICATION.md` — **only the `BEGIN/END GENERATED` region of §7**, which
+`cargo xtask spec-trace --write` regenerates and a gate step stale-checks. Landing a
+rule removes its `†`; there is no way to do the story's work and leave the region
+correct. **Any hunk outside that region is out of boundary** — clause text, maturity
+markers and rule citations remain `unstable-projection-gate-and-clause-disposition`'s,
+exactly as the bullet above still says.
+
+`standards/rust/**` — **only line-number re-pointing**, and the diff must show equal
+insertions and deletions per atom: `10ace94` is 11 and 11 across four atoms, every hunk
+of the form `contract.rs:801` → `contract.rs:850`. The constitution cites
+`crates/happenstance-testkit/src/**` by `file:line`, this story edits those files, the
+cited lines move, and `cargo xtask lint-constitution` — a gate step — fails on a stale
+citation. **Rule text, evidence selection, retirement and new atoms are out of
+boundary**; they belong to the story that changes the rule, not to whichever story
+moved a line. This matches the widenings already recorded for `projection-suite-entry-point`,
+`projection-capability-skips` and `owned-batch-port-shape`.
+
+Widening either entry beyond those limits, or to match whatever an implementer happened
+to write, would turn the check into a rubber stamp for its own output.
 
 ## Behavior and interfaces
 
