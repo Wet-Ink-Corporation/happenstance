@@ -21,13 +21,13 @@ archetype: capability
 slice: outside-author-extension-surface
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-15T13:56:28.069Z
+updated: 2026-08-15T13:56:34.461Z
 links:
   pr: null
   commits:
     - d6496cd
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
