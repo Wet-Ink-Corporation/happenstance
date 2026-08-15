@@ -7,9 +7,9 @@ title: DT-8's arm discharged — the suite's bar held for the author it was chos
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,13 @@ archetype: capability
 slice: outside-author-extension-surface
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:06.810Z
+updated: 2026-08-15T13:56:28.069Z
 links:
   pr: null
-  commits: []
+  commits:
+    - d6496cd
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
