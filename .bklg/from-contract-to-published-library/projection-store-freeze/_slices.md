@@ -28,6 +28,7 @@ human-readable record, the trailer is what resume greps.
 | reset-and-rebuild-rules | changes-requested | reset-rules 10ace94, read-through-and-rebuild-rules 5be22ab | (this commit) |
 | second-batch-shape-and-evidence | approved | buffering-conformant-variant cfd9231, ps3-batch-shape-finding d9cfb0e | (this commit) |
 | outside-author-extension-surface | approved | documented-extension-surface d6496cd | (this commit) |
+| port-disposition-and-freeze-record | approved | unstable-projection-gate-and-clause-disposition 984e7fd, whole-gate-run-and-proof-artefact 674c459 | (this commit) |
 
 ## Surviving findings
 
