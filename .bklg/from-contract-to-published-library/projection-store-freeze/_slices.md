@@ -348,3 +348,53 @@ re-pointed because `contract.rs` grew inside the boundary and
 the pattern ratified at `d9eb8de` and at run 3 — which makes this the **fourth
 and fifth** instance, and is the standing argument for settling it once rather
 than ratifying it per slice.
+
+### reset-and-rebuild-rules — human decisions, 2026-08-14
+
+**AC-005 / PS-19: PATH (a). The human declined to authorise proceeding on the unmet
+precondition.** The hold stands exactly as `064687a` left it — `fresh_projection_has_no_checkpoint`
+and `PresumedLiveCheckpointStore` stay out of the rules module, the enumeration, `mutants.rs`, the
+`REGISTRY` and `for_each_projection_mutant!`; PS-19 stays un-line-edited; `CHANGELOG.md` keeps the
+non-delivery entry; §7.2's PS-19 row keeps its `†`. **Do not restore the rule.** Path (b) was
+offered and refused, so there is no authorisation to cite and inventing one is the failure this
+whole halt exists to prevent.
+
+The repair is routed upstream, and it is `projection-decision-atoms`' / `unstable-projection-gate-
+and-clause-disposition`'s, not this story's:
+
+- A **new accepted decision atom** widening PS-19, or minting the never-seen-id clause, under
+  `.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md`. **Never a line edit** to the
+  frozen clause.
+- It must reach `status: accepted` under `.kb/decisions/` through **one human-invoked
+  `/redkiln:kb-ingest` wave**, exactly as ADR-0017/0018/0019 did in `2026-08-13-projection-adrs`.
+  Staging it in `.kb/_intake/` is this project's work; accepting it is not, and no run may
+  hand-write the atom.
+- `reset-rules` then re-plans to land **after** that atom, so AC-005 has a clause behind it.
+
+Until it lands, `reset-rules` is nine of ten and the projection family is **eleven of §4.11's
+seventeen** adapter rules where the PR boundary said twelve. Say that number plainly wherever the
+freeze is reported; it is the second named hole, beside PS-1's second conjunct, and
+`unstable-projection-gate-and-clause-disposition` inherits both.
+
+**Why this is worth the delay.** The finding was not procedural. `PresumedLiveCheckpointStore` was
+registered as a *mutant* and is **conformant** with PS-19 as written — a store that answers
+`.unwrap_or(Checkpoint::Live { through: FIRST })` breaks no frozen MUST. The suite was convicting
+legal adapters, and CF-5's positive control could not catch it because no conformant variant in the
+projection registry models that store. In a project whose product is a suite that can fail, a rule
+that fails conformant stores is the more expensive error of the two. **Consider adding that
+conformant variant to the registry** when the repair lands, so the positive control can catch the
+next one.
+
+**AC-010's instrument amended, premise unchanged.** Recorded in
+`reset-rules/spec.md` beneath the AC table: the `git diff … empty` form was unmeetable by any story
+that adds or removes a rule name, because `spec-trace --write` regenerates §7.1–§7.2 and a separate
+gate step fails on a stale region — the criterion demanded a story leave stale what the gate demands
+it regenerate. It now scopes to hunks **outside** the `BEGIN/END GENERATED` region, which is what
+its own next clause always said it meant. This is a tightening: the old form was going to be
+ratified away per slice, five times so far, each ratification eroding what the criterion forbids.
+
+Findings 2 and 3 stay with run 5: correct the four stale docs to the two-skip reality **and point
+them at `assert_reference_projection_declensions` as the authority** rather than restating a count
+nothing in the gate reads; and resolve read-through AC-006's `satisfied: true`-over-`NOT SATISFIED`
+row **in the record, not the code** — `_design.md`'s capability table named the testkit as
+`READS_THROUGH_BATCH`'s reason-writer at sign-off, so the AC's wording is what is wrong.
