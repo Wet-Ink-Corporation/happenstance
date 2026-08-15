@@ -373,6 +373,16 @@ fn registry_len(file: &str) -> Result<usize> {
 /// suffix is stripped rather than the line split on `:`, because a test name
 /// contains `::` and a split would take the wrong half; lines that do not carry
 /// the suffix are the summary and are dropped.
+/// The phase-6 evidence document, read by the assertions below.
+///
+/// Reached through [`workspace_root`] rather than `include_str!` on purpose: this
+/// file is `xtask`'s, the document is `references/`', and a compile-time include
+/// would make a `publish = false` tool's build depend on a markdown file it has
+/// no other relationship with. [`registry_len`] already reaches the tree the same
+/// way.
+#[cfg(test)]
+const PHASE_6_PROOF: &str = "references/evaluation/phase-6-projection-proof.md";
+
 fn list(artefact: &Artefact) -> Result<Vec<String>> {
     let Artefact {
         package, target, ..
@@ -407,6 +417,12 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    fn proof_document() -> String {
+        let root = workspace_root().unwrap();
+        fs::read_to_string(root.join(PHASE_6_PROOF))
+            .unwrap_or_else(|e| panic!("reading {PHASE_6_PROOF}: {e}"))
+    }
 
     /// Every registry count is printed beside the target it is about.
     ///
@@ -456,6 +472,86 @@ mod tests {
                     .any(|a| a.package == REGISTRY_PACKAGE && a.target == target),
                 "`{target}` is in no `ARTEFACTS` row, so its test names can be \
                  renamed, `#[ignore]`d or emptied in silence"
+            );
+        }
+    }
+    /// The project's first Definition-of-Done item asks for a **test name**, and
+    /// there are two of them.
+    ///
+    /// The conformance rule `CheckpointOnlyStore` fails, and the meta-test that
+    /// asserts it fails exactly there. Quoting one and letting the reader assume
+    /// the other is the single easiest way to make the artefact useless, because
+    /// the gate exits zero *because* the mutant failed where it was declared to.
+    #[test]
+    fn the_artefact_names_both_tests_and_the_mutant() {
+        let doc = proof_document();
+        for name in [
+            "CheckpointOnlyStore",
+            "commit_is_atomic_with_the_read_model",
+            "projection_mutants_fail_exactly_their_declared_rules",
+        ] {
+            assert!(
+                doc.contains(name),
+                "the phase-6 proof artefact never names `{name}`"
+            );
+        }
+    }
+
+    /// The second Definition-of-Done item asks for **two fixture names**, and a
+    /// green run is consistent with a second batch shape that is the oracle
+    /// wearing a hat.
+    #[test]
+    fn the_artefact_names_both_batch_shapes() {
+        let doc = proof_document();
+        for fixture in ["MemoryProjectionFixture", "BufferingProjectionFixture"] {
+            assert!(
+                doc.contains(fixture),
+                "the phase-6 proof artefact never names `{fixture}`"
+            );
+        }
+    }
+
+    /// ADR-0010's prohibition, enforced rather than remembered.
+    ///
+    /// The denominator over a mutant set is a choice, so a fraction reports how
+    /// representative the author was while reading as though it said how good the
+    /// suite is. A count of *rules* is a statement about the enumeration and is
+    /// allowed; a ratio over mutants is not, in any spelling.
+    #[test]
+    fn the_artefact_quotes_no_pass_rate_over_the_mutant_set() {
+        let doc = proof_document().to_ascii_lowercase();
+        for line in doc.lines() {
+            if !line.contains("mutant") {
+                continue;
+            }
+            assert!(
+                !line.contains(" of 19") && !line.contains("19 of ") && !line.contains("/19"),
+                "a ratio over the mutant set: {line}"
+            );
+            assert!(
+                !line.contains("pass rate") && !line.contains("caught out of"),
+                "a pass rate over the mutant set: {line}"
+            );
+        }
+    }
+
+    /// What the run does **not** cover, stated rather than left to be assumed.
+    ///
+    /// The local gate never checks the MSRV and never *executes* a wasm test; both
+    /// are CI jobs. An artefact that claims coverage it does not have is worse
+    /// than none, because its whole value to a reader is that they do not have to
+    /// trust a summary.
+    #[test]
+    fn the_artefact_states_what_the_run_does_not_cover() {
+        let doc = proof_document();
+        for claim in [
+            "minimum supported Rust version",
+            "conformance on wasm32",
+            "PS-2",
+        ] {
+            assert!(
+                doc.contains(claim),
+                "the artefact's limits section never names `{claim}`"
             );
         }
     }

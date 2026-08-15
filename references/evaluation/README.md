@@ -111,6 +111,32 @@ assignment of the CF-5 variant had assumed otherwise. It is cited from PS-3's
 clause body in [`spec/SPECIFICATION.md`](../../spec/SPECIFICATION.md), so
 `cargo xtask spec-trace` resolves it on every gate run.
 
+[`phase-6-projection-proof.md`](phase-6-projection-proof.md) (2026-08-15, pinned to
+`7620481`) is the fourth, and carries the same lifecycle — dated, pinned,
+**immutable, superseded rather than edited**. A later run is a later document that
+names this one; a correction never lands in place. It is phase 6's **proof
+artefact**: the record of one `cargo xtask ci`, run whole rather than `--fast`, on
+a working tree with no uncommitted changes, after both of the phase's last two
+changes had landed.
+
+It records **nouns**, because the sentence it exists to refuse is
+`cargo xtask ci`: green. That sentence is true and is consistent with a
+`CheckpointOnlyStore` quietly dropped from the registry, a second batch shape that
+is the oracle wearing a hat, and a `wasm32` harness running two rules out of
+sixteen. So the document names the conformance rule the deliberately wrong store
+fails (`commit_is_atomic_with_the_read_model`) **and** the meta-test that asserts
+it fails exactly there — two names, and it says which is which — both fixtures
+that pass and how each was observed, every `OPTIONAL` gate step as ran or skipped
+(four of four **ran**), and what the run does not cover: the MSRV, `wasm32`
+*execution*, and PS-2's bar, which two testkit-side instruments do not clear.
+
+It **decides nothing**, on the same reasoning as the two documents above: no
+freeze verdict, no `unstable-projection` exposure verdict, no restatement of the
+PS-3 finding, and no ratio over the mutant set in any form (ADR-0010). Three of
+its claims are machine-held rather than reviewed — `xtask/src/proof.rs`'s own
+`#[cfg(test)]` module reads this document and fails if either test name, either
+fixture name or the limits section's two CI jobs are absent from it.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
