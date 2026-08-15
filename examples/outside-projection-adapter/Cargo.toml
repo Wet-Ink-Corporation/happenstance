@@ -1,0 +1,39 @@
+[package]
+name = "outside-projection-adapter"
+description = "An outside author's projection store adapter, written from the published documentation, so the extension surface is met by somebody who did not build it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# Deliberately **not** `workspace = true`, and this is the one manifest in the
+# repository where that is the right call. The crate exists to model what an
+# outside author's manifest looks like, and the claim under test is a claim
+# about this file: *"one feature flag on a dependency the adapter already has,
+# and no new edge in the dependency graph"*. `[workspace.dependencies]` sets
+# `default-features = false` on `happenstance-core` for reasons internal to this
+# workspace, so `workspace = true` would force `std` to be spelled here as if it
+# were a second feature an outsider had to ask for — and would report a cost
+# that a `cargo add happenstance-core` user does not pay. Written out long-hand,
+# the line is the line an outsider writes, minus the `path`.
+[dependencies]
+happenstance-core = { version = "0.2.0", path = "../../crates/happenstance-core", features = [
+  "conformance",
+] }
+
+# The whole of the testkit's cost, and it lands here rather than above. The
+# crate documentation states this pair up front: the suite, and `tokio` with
+# `macros` and `rt` for the default emitter's `#[tokio::test]`, which resolves
+# in *this* crate's scope rather than in the testkit's.
+[dev-dependencies]
+happenstance-testkit = { version = "0.2.0", path = "../../crates/happenstance-testkit" }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+# Held to the workspace's own lint bar rather than to rustc's defaults. An
+# outside author would write their own; borrowing this one is the stricter
+# choice, and it is what keeps `#[async_trait]`, a `Send`-flavour binding and an
+# ambiguous import from passing review here when they would fail anywhere else
+# in the tree.
+[lints]
+workspace = true

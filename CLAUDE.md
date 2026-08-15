@@ -37,6 +37,10 @@ crates/happenstance-postgres/    🔩 skeleton. the target that does not seriali
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example.
+examples/outside-projection-adapter/
+                                 🔬 the falsifier. a projection adapter written from the
+                                 rendered documentation alone, in a crate where the orphan
+                                 rule and the non-dev graph behave as they do for a stranger.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.

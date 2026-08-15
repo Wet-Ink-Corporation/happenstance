@@ -172,6 +172,71 @@
 //! this crate is documented under in which the target is absent. A link is safe
 //! exactly when the item cannot disappear.
 //!
+//! # Writing a projection adapter from outside this workspace
+//!
+//! The bar here is held for an author this repository did not write, and the
+//! extension surface is exactly two items: this crate's
+//! [`projection_store_conformance!`] and `happenstance-core`'s
+//! `ProjectionProbe`. Six steps, in this order.
+//!
+//! **1. Take the two dependencies, and note which is which.**
+//!
+//! ```toml
+//! [dependencies]
+//! happenstance-core = { version = "0.2", features = ["conformance"] }
+//!
+//! [dev-dependencies]
+//! happenstance-testkit = "0.2"
+//! tokio = { version = "1", features = ["macros", "rt"] }
+//! ```
+//!
+//! `conformance` is one flag on a dependency your adapter already has. It pulls
+//! in no crate and implies no other feature — not `std`, not `memory` — so your
+//! *normal* dependency graph does not grow at all. This crate is a
+//! dev-dependency and stays one.
+//!
+//! **2. Implement `ProjectionStore` for your store, in `src/`.**
+//!
+//! **3. Implement `ProjectionProbe` for the same type, in `src/` beside it** —
+//! not in `tests/`. It is the write seam a suite that has never heard of your
+//! store drives your read model through, and its home is the contract crate for
+//! a reason you meet immediately if you put the impl in the other obvious place:
+//! `tests/` is a **different crate**, where neither the trait nor your type is
+//! local, and the orphan rule answers `error[E0117]`.
+//!
+//! **4. Write a [`ProjectionFixture`] in your `tests/`.** One instance is one
+//! isolated backing store; each [`connect`](ProjectionFixture::connect) is one
+//! handle onto it. The fixture type is defined *there*, so this impl belongs
+//! exactly where the last one did not.
+//!
+//! **5. Say what your store cannot do, and why.** Its three [`Capability`]
+//! constants are required rather than defaulted, so no author is left un-asked.
+//! A rule you decline is **still emitted as a test**: it returns
+//! [`RuleOutcome::Skipped`] carrying your own sentence, because a rule absent
+//! from a binary is indistinguishable in CI output from a rule that passed.
+//!
+//! **6. Invoke the suite. One line, and you name no rule.**
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_testkit::projection_store_conformance!(MyFixture::new());
+//! # }
+//! ```
+//!
+//! That line expands in *your* crate, which is why the expansion never assumes
+//! what you have in scope: it spells the fixture trait as
+//! `$crate::__private::ProjectionFixture`, through a hidden module this crate
+//! keeps for the purpose, so the invocation works whether or not you imported
+//! the trait and whatever you renamed the dependency to. You never name that
+//! module yourself, and it is the one part of this page that is invisible until
+//! it is missing.
+//!
+//! A green run then means what the rule table below says and no more; a red one
+//! names the rule that broke. `examples/outside-projection-adapter/` in this
+//! repository is an adapter written against this page and nothing else, kept in
+//! the tree so the page cannot quietly stop being sufficient.
+//!
 //! # What is checked
 //!
 //! Every rule traces to a MUST in the [specification][spec], plus the

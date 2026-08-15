@@ -1248,6 +1248,26 @@ not the same as what a user needed to be told.
   `contains_event_id` deliberately did **not** become a step: no rule calls it,
   so a defect there would be a claim nothing evaluates.
 
+- **`happenstance-testkit`'s crate page now tells an outside author how to
+  conform, in six steps.** *Writing a projection adapter from outside this
+  workspace* names the two dependencies and which section each belongs in, says
+  where the `ProjectionProbe` impl must live and what the orphan rule answers if
+  you put it in `tests/`, and says why the expansion reaches the fixture trait
+  through a hidden `__private` module you never name. **No item became `pub` and
+  no rule changed**, so this is not a MINOR event on the bar this crate's version
+  is a promise about — the surface was already complete, and what was missing was
+  the page that says so.
+
+- **`examples/outside-projection-adapter/` — the page's falsifier, kept in the
+  tree.** A `publish = false` workspace member implementing `ProjectionStore` and
+  `ProjectionProbe` from the rendered documentation alone, passing all sixteen
+  projection rules, with a checkpoint-only sibling beside it that
+  `commit_is_atomic_with_the_read_model` rejects by name. It is the only crate in
+  the workspace where the orphan rule and the non-dev dependency graph behave as
+  they do for a stranger, which is what makes it able to fail the wrong version
+  of that placement decision: `cargo tree --edges normal` over it reaches
+  `happenstance-core` and nothing else.
+
 ### Changed
 
 - **`EventStore::append`'s documentation no longer offers the returned position

@@ -888,9 +888,20 @@ pub enum RuleOutcome {
     Ran,
     /// The rule required a capability this fixture declines, and did nothing.
     Skipped {
-        /// The name of the [`Fixture`] associated const, e.g. `"REOPEN"`.
+        /// The associated const that was declined, as its own identifier —
+        /// `"REOPEN"` on a [`Fixture`], `"RESET_REFUSAL"` on a
+        /// [`ProjectionFixture`] — so a reader is told the name of the thing
+        /// they can go and change rather than a paraphrase of it. Both fixture
+        /// traits report into this one field, and a test asserting on a skip can
+        /// therefore spell the constant's name directly.
+        ///
+        /// Two values here are **not** fixture consts and are spelled with their
+        /// path for that reason: [`NO_STORE_LIMITS`] and [`NO_BATCH_READ_PATH`].
         capability: &'static str,
-        /// The fixture's stated reason, from [`Capability::declined`].
+        /// The fixture's stated reason, from [`Capability::declined`] — except
+        /// for the two testkit-written reasons, [`NO_CEILING_REASON`] and
+        /// [`NO_BATCH_READ_PATH_REASON`], which each say on their own page why
+        /// the fixture is not asked to phrase it.
         reason: &'static str,
     },
 }
