@@ -7,9 +7,9 @@ title: The PS-3 evidence written as a finding, not a verdict
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,13 @@ archetype: capability
 slice: second-batch-shape-and-evidence
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:05.975Z
+updated: 2026-08-15T13:55:36.117Z
 links:
   pr: null
-  commits: []
+  commits:
+    - d9cfb0e
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
