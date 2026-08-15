@@ -7,9 +7,9 @@ title: Commit, rollback and dropped-batch rules, each with the store that fails 
 parent: HS-P0010
 initiative: from-contract-to-published-library
 project: projection-store-freeze
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,13 @@ archetype: capability
 slice: commit-atomicity-and-mutants
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:02.582Z
+updated: 2026-08-15T05:09:10.199Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 5d9b4fd
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
