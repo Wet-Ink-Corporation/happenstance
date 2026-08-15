@@ -449,10 +449,26 @@ both as skips carrying its stated reason.
 crates/happenstance-testkit/src/**
 crates/happenstance-testkit/tests/**
 CHANGELOG.md
-spec/SPECIFICATION.md   # ONLY inside the BEGIN/END GENERATED region of §7.1–§7.2
-standards/rust/*.md     # ONLY line-number re-pointing into the two globs above
+spec/SPECIFICATION.md
+standards/rust/*.md
 .bklg/from-contract-to-published-library/projection-store-freeze/read-through-and-rebuild-rules/**
 ```
+
+The limits on the middle two entries are stated here rather than as `#` comments inside
+the fence, and that is not cosmetic. **`redkiln verify --grain story` matches the fence's
+lines literally, so a trailing comment makes the entry match nothing.** Written as
+`spec/SPECIFICATION.md   # ONLY inside the BEGIN/END GENERATED region`, this spec appeared
+to admit the path under a limit and in fact admitted no path at all — the gate rejected
+`5be22ab` for writing a file the fence looked like it allowed. Corrected 2026-08-15; the
+limits are unchanged and are these:
+
+`spec/SPECIFICATION.md` — **only the `BEGIN/END GENERATED` region of §7.1–§7.2**, which
+`cargo xtask spec-trace --write` regenerates and a gate step stale-checks; landing a rule
+removes its `†`. Any hunk outside that region is out of boundary.
+
+`standards/rust/*.md` — **only line-number re-pointing** into the two `crates/happenstance-testkit`
+globs above, with equal insertions and deletions per atom (`5be22ab` is 6 and 6 across two
+atoms). Rule text, evidence selection, retirement and new atoms are out of boundary.
 
 The implementer **may** additionally touch the composition-root files named in
 the Integration contract to mount this slice — `registry.rs`'s enumeration, the
