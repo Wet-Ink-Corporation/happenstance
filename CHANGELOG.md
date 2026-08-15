@@ -1270,6 +1270,24 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **The gate now holds the projection family's proof-artefact names, and harness
+  parity is enforced by a test rather than by review.** `cargo xtask ci`'s *each
+  phase's proof artefacts* step asserts the projection mutant registry's
+  meta-tests and the new harness-parity target out of `cargo test -- --list`
+  **before** running them, so renaming, `#[ignore]`-ing or emptying one of them
+  fails the gate by name instead of exiting 0 with nothing to say. Each
+  `happenstance-testkit` row now prints **its own** registry's row count; it used
+  to select the count by package, so a second row in that package would have
+  printed the event-store registry's number beside the projection target.
+
+  The parity guard is `crates/happenstance-testkit/tests/projection_harness_parity.rs`.
+  It takes the rule names from `for_each_projection_store_rule!` and asserts that
+  no harness source contains one as an identifier and that each of the three
+  carries exactly one `projection_store_conformance!` invocation. A harness that
+  listed rules by hand type-checks exactly as well as a generated one, so the
+  mandatory `wasm32` check could not have seen it and a reviewed `rg` could not
+  have failed twice.
+
 - **`unstable-projection` exists, and the promise at the top of this file is now
   true.** `ProjectionStore`, `ProjectionId`, `Checkpoint`, `Authority`,
   `CommitError`, `ResetError`, `SendProjectionStore`, `ProjectionProbe` and

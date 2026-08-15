@@ -1,10 +1,12 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries three targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries five targets today: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
-//! families; [ADR-0010]), and the two `wire` targets the wire format was frozen
-//! against ([ADR-0016]).
+//! families; [ADR-0010]), the two `wire` targets the wire format was frozen
+//! against ([ADR-0016]), and the projection family's two — its mutant registry's
+//! meta-tests and the harness parity guard — which are what phase 6's proof
+//! artefact rests on and which nothing held until phase 6 closed.
 //!
 //! # Why naming the target was not enough
 //!
@@ -67,16 +69,37 @@ pub(crate) struct Artefact {
     /// pastes into `cargo test`. Every target here wraps its tests in an inner
     /// `mod` of the target's own name, which is what makes the two halves match.
     pub(crate) tests: &'static [&'static str],
+    /// The mutant registry this target declares, if it declares one.
+    ///
+    /// Per **artefact**, and that is the whole of the change. [`check`] used to
+    /// select the count by *package* — `if package == REGISTRY_PACKAGE` — and
+    /// [`registry_len`] read one hard-coded path, which was correct for exactly as
+    /// long as `happenstance-testkit` had one row. A second row in the same
+    /// package printed the event-store registry's count beside the projection
+    /// target: a number that is not about that target at all, which is the same
+    /// "a number quoted in two documents and computed nowhere" defect
+    /// [`registry_len`]'s own docs were written about, one level up.
+    pub(crate) registry: Option<&'static str>,
 }
 
-/// The package whose proof artefact also carries the mutant registry.
+/// The package whose proof artefacts also carry the mutant registries.
 ///
-/// Named once because [`registry_len`] and the [`ARTEFACTS`] row that owns it
-/// have to agree, and a second spelling is a second thing to get wrong.
+/// Named once because the [`ARTEFACTS`] rows that own a registry have to agree
+/// with it, and a second spelling is a second thing to get wrong. It no longer
+/// *selects* the count — see [`Artefact::registry`] — but it is still the answer
+/// to "whose registries are these", and both rows are its.
 const REGISTRY_PACKAGE: &str = "happenstance-testkit";
 
-/// Where the mutant registry lives.
-const REGISTRY_FILE: &str = "crates/happenstance-testkit/tests/mutation_coverage.rs";
+/// Where the event-store mutant registry lives.
+const EVENT_STORE_REGISTRY: &str = "crates/happenstance-testkit/tests/mutation_coverage.rs";
+
+/// Where the projection mutant registry lives.
+///
+/// A second file with the same `REGISTRY` shape and a different subject. It is
+/// what made the package-keyed selection above a defect rather than a
+/// simplification.
+const PROJECTION_REGISTRY: &str =
+    "crates/happenstance-testkit/tests/projection_mutation_coverage.rs";
 
 /// The line the registry opens with.
 const REGISTRY_HEAD: &str = "const REGISTRY: &[Declared] = &[";
@@ -129,22 +152,76 @@ const SYNC_WIRE_TESTS: &[&str] = &[
     "wire::version_is_readable_before_the_message",
 ];
 
+/// The projection family's meta-tests, transcribed from `-- --list`.
+///
+/// **Read out of the listing, not derived from the source.** `Artefact::tests` is
+/// what libtest prints, and the inner-`mod` shape the doc comment there describes
+/// is a convention rather than a guarantee — guessing a name the listing did not
+/// print is the one thing this row must not do. `cargo test --locked -p
+/// happenstance-testkit --all-features --test projection_mutation_coverage --
+/// --list` printed seven names and all seven are here; the target does wrap them
+/// in a `mod` of its own name, so no deviation had to be reported.
+///
+/// Two of the seven are the ones the project's Definition-of-Done items 1 and 2
+/// rest on, and neither could be renamed in silence before this row existed:
+/// `projection_mutants_fail_exactly_their_declared_rules` is what makes a green
+/// gate mean `CheckpointOnlyStore` failed **exactly** the rules it declares, and
+/// `the_second_batch_shape_answers_every_rule_with_a_pass` is what makes the
+/// second batch shape evidence rather than a second name for the oracle.
+const PROJECTION_META_TESTS: &[&str] = &[
+    "projection_mutation_coverage::every_projection_rule_has_a_mutant",
+    "projection_mutation_coverage::projection_mutant_registry_is_exhaustive",
+    "projection_mutation_coverage::projection_mutants_fail_exactly_their_declared_rules",
+    "projection_mutation_coverage::every_projection_mutant_states_its_provenance",
+    "projection_mutation_coverage::projection_conformant_variants_pass_everything",
+    "projection_mutation_coverage::a_batch_with_no_read_path_is_reported_as_a_skip",
+    "projection_mutation_coverage::the_second_batch_shape_answers_every_rule_with_a_pass",
+];
+
+/// The harness parity guard's own two tests.
+///
+/// Listed for the reason the whole file exists: the guard is what stops a
+/// projection rule from reaching two emitters instead of three, and a guard
+/// nothing holds can be `#[ignore]`d by the same change that would have failed it.
+/// It is also the answer to why the guard is a **test target** rather than a
+/// `#[cfg(test)]` unit test beside `no_orphan_rules` — [`ARTEFACTS`] can only name
+/// a target, so a unit test could not itself be held.
+const PROJECTION_PARITY_TESTS: &[&str] = &[
+    "projection_harness_parity::no_harness_lists_a_rule_by_hand",
+    "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
+];
+
 /// Every proof artefact the gate holds to its own names.
 pub(crate) const ARTEFACTS: &[Artefact] = &[
     Artefact {
         package: REGISTRY_PACKAGE,
         target: "mutation_coverage",
         tests: META_TESTS,
+        registry: Some(EVENT_STORE_REGISTRY),
+    },
+    Artefact {
+        package: REGISTRY_PACKAGE,
+        target: "projection_mutation_coverage",
+        tests: PROJECTION_META_TESTS,
+        registry: Some(PROJECTION_REGISTRY),
+    },
+    Artefact {
+        package: REGISTRY_PACKAGE,
+        target: "projection_harness_parity",
+        tests: PROJECTION_PARITY_TESTS,
+        registry: None,
     },
     Artefact {
         package: "happenstance-core",
         target: "wire",
         tests: WIRE_NEGATIVE_CONTROLS,
+        registry: None,
     },
     Artefact {
         package: "happenstance-sync",
         target: "wire",
         tests: SYNC_WIRE_TESTS,
+        registry: None,
     },
 ];
 
@@ -194,6 +271,7 @@ fn check(artefact: &Artefact) -> Result<()> {
         package,
         target,
         tests,
+        registry,
     } = *artefact;
 
     let listed = list(artefact)?;
@@ -216,12 +294,13 @@ fn check(artefact: &Artefact) -> Result<()> {
     }
 
     let present = tests.len();
-    if package == REGISTRY_PACKAGE {
-        // Reported beside its own entry rather than made a column every entry
-        // has to answer: the count comes from a file only this package has.
+    if let Some(registry) = registry {
+        // Reported beside its own entry rather than made a column every entry has
+        // to answer, and keyed to *this* artefact rather than to its package: the
+        // count is about one registry, and two targets in one package have two.
         println!(
             "{package}/{target}: {present} named tests present, {} registry rows",
-            registry_len()?
+            registry_len(registry)?
         );
     } else {
         println!("{package}/{target}: {present} named tests present");
@@ -264,14 +343,13 @@ fn check(artefact: &Artefact) -> Result<()> {
 /// Returns an error if the registry file cannot be read, if it declares no
 /// `REGISTRY`, or if the declaration is not terminated — all three of which
 /// would otherwise print a plausible `0`.
-fn registry_len() -> Result<usize> {
+fn registry_len(file: &str) -> Result<usize> {
     let root = workspace_root()?;
-    let body = fs::read_to_string(root.join(REGISTRY_FILE))
-        .with_context(|| format!("reading {REGISTRY_FILE}"))?;
+    let body = fs::read_to_string(root.join(file)).with_context(|| format!("reading {file}"))?;
 
     let mut lines = body.lines().skip_while(|l| l.trim() != REGISTRY_HEAD);
     if lines.next().is_none() {
-        bail!("{REGISTRY_FILE} has no `{REGISTRY_HEAD}` — the mutant registry has moved or gone");
+        bail!("{file} has no `{REGISTRY_HEAD}` — the mutant registry has moved or gone");
     }
 
     let mut rows = 0usize;
@@ -286,7 +364,7 @@ fn registry_len() -> Result<usize> {
         }
     }
 
-    bail!("{REGISTRY_FILE}'s `REGISTRY` declaration is never closed by a `];` at column zero")
+    bail!("{file}'s `REGISTRY` declaration is never closed by a `];` at column zero")
 }
 
 /// Every test name libtest reports for one artefact's target.
@@ -322,4 +400,63 @@ fn list(artefact: &Artefact) -> Result<Vec<String>> {
         .filter_map(|line| line.trim().strip_suffix(": test"))
         .map(str::to_owned)
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// Every registry count is printed beside the target it is about.
+    ///
+    /// `check()` used to select the count by **package** alone, and `registry_len`
+    /// read one hard-coded path. A second `happenstance-testkit` row therefore
+    /// printed the *event-store* registry's row count against the projection
+    /// target — a number that is not about that target at all, which is the very
+    /// defect `registry_len`'s own documentation was written about, one level up.
+    #[test]
+    fn a_registry_count_belongs_to_the_target_it_is_printed_beside() {
+        let mut seen: Vec<&str> = Vec::new();
+        for artefact in ARTEFACTS {
+            let Some(registry) = artefact.registry else {
+                continue;
+            };
+            assert!(
+                !seen.contains(&registry),
+                "two artefacts name `{registry}`; a count shared by two rows is a \
+                 count about neither"
+            );
+            seen.push(registry);
+            assert!(
+                registry.contains(artefact.target),
+                "`{}`'s registry is `{registry}`, which does not name that target",
+                artefact.target
+            );
+        }
+        assert!(
+            seen.len() >= 2,
+            "the defect this test exists for is only reachable with two registries; \
+             found {}",
+            seen.len()
+        );
+    }
+
+    /// The projection family is held by the gate at all.
+    ///
+    /// A test target that runs but whose names nothing asserts is the library
+    /// equivalent of a component that renders nowhere: `cargo test --workspace`
+    /// passes just as happily with one fewer target as with one more.
+    #[test]
+    fn the_phase_six_targets_are_held() {
+        for target in ["projection_mutation_coverage", "projection_harness_parity"] {
+            assert!(
+                ARTEFACTS
+                    .iter()
+                    .any(|a| a.package == REGISTRY_PACKAGE && a.target == target),
+                "`{target}` is in no `ARTEFACTS` row, so its test names can be \
+                 renamed, `#[ignore]`d or emptied in silence"
+            );
+        }
+    }
 }
