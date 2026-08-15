@@ -2,7 +2,7 @@
 item: HS-P0010
 stage: implementation
 created: 2026-08-14T01:25:19.009Z
-updated: 2026-08-14T01:25:19.009Z
+updated: 2026-08-15T07:21:56.000Z
 template_sig: 4c5f37d6
 rendered_sig: e468b480
 ---
@@ -27,6 +27,7 @@ human-readable record, the trailer is what resume greps.
 | commit-atomicity-and-mutants | approved | projection-mutant-registry c385e40, commit-rollback-and-drop-rules 5d9b4fd | (this commit) |
 | reset-and-rebuild-rules | changes-requested | reset-rules 10ace94, read-through-and-rebuild-rules 5be22ab | (this commit) |
 | second-batch-shape-and-evidence | approved | buffering-conformant-variant cfd9231, ps3-batch-shape-finding d9cfb0e | (this commit) |
+| outside-author-extension-surface | approved | documented-extension-surface d6496cd | (this commit) |
 
 ## Surviving findings
 
