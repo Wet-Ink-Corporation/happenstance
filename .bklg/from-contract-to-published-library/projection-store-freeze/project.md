@@ -9,7 +9,7 @@ initiative: from-contract-to-published-library
 project: projection-store-freeze
 status: implementing
 process: project
-stage: implementation
+stage: integration
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-14T01:25:19.009Z
+updated: 2026-08-15T19:08:31.885Z
 links:
   pr: null
   commits: []
