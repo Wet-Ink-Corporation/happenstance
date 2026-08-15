@@ -70,7 +70,11 @@ the decorative rule CLAUDE.md's corollary forbids.
 
 | SHA | What |
 | --- | --- |
-| `__STORY1_SHA__` | The whole story as one checkpoint: the gate, the six manifests, the `spec-trace` prefix flip, the PS-1 – PS-38 dispositions, ADR-0030, the intake staging, the RUNBOOK queue row and the changelog entry. |
+| `984e7fd` | The whole story as one checkpoint: the gate, the six manifests, the `spec-trace` prefix flip, the PS-1 – PS-38 dispositions, ADR-0030, the intake staging, the RUNBOOK queue row and the changelog entry. |
+
+A second, one-file `docs(projection-store-freeze)` commit follows it carrying only
+this line, because a checkpoint cannot record its own SHA. That is the same shape
+the slice-mate story `documented-extension-surface` used (`546a8fe`, `08a2299`).
 
 ## Changes
 
