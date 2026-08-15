@@ -433,3 +433,58 @@ lands at **eleven of §4.11's seventeen** adapter rules, and the freeze carries 
 — PS-19's never-seen-id case, unenforced pending the atom above, and the residue noted for
 `arm_commit_fault` with an empty body, which has no fixture-level mutant. PS-1's second conjunct is
 **no longer** a hole; the DT-3 amendment closed it.
+
+### reset-and-rebuild-rules — the precondition is now MET, 2026-08-15
+
+**This supersedes the "Do not restore the held rule" instruction above.** That instruction was
+correct when it was written and is wrong now, for exactly the reason it gave: it forbade restoring
+the rule *because no accepted atom widened PS-19*. One does.
+
+`kb-decision-0030` (ADR-0030, *The checkpoint reports the commits that happened*) is on this branch
+at `status: accepted`, merged at `9efda45` through the human-invoked
+`2026-08-15-adr-0030-checkpoint-progress` wave — path (a), completed as chosen. **AC-005's ordering
+gate is satisfied. EC-001 no longer fires.** Land the rule.
+
+What run 6 owes, in this slice:
+
+1. **Restore `fresh_projection_has_no_checkpoint`** to the rules module, the
+   `for_each_projection_store_rule!` enumeration, and §4.11's row — against **ADR-0030's clause**,
+   not against PS-19 as it stood. Read `kb-decision-0030` first: the decision is narrower than
+   "PS-19 was too small". §4 obliged `commit` to *couple* its two writes and never to *advance*
+   anything, so **three already-shipped rules** — `commit_advances_the_checkpoint`,
+   `commit_accepts_a_position_the_batch_did_not_write`, `commit_rejects_a_regressing_position` —
+   assert progress over the same gap. Check whether they now need re-citing; do not assume this is a
+   one-rule repair.
+2. **Restore `PresumedLiveCheckpointStore`** to `mutants.rs`, the projection `REGISTRY` and
+   `for_each_projection_mutant!` — **but only after** confirming against ADR-0030 that it is now
+   genuinely non-conformant. It was withdrawn because it was **conformant** under PS-19 as written;
+   if ADR-0030's clause still admits it, it is not a mutant and restoring it repeats the original
+   error in the opposite direction.
+3. **Add a conformant variant** modelling the legal `.unwrap_or(Checkpoint::Live { through: FIRST })`
+   store to the projection registry. This is the point of the whole episode: CF-5's positive control
+   could not catch the over-convicting rule because no conformant variant had that shape. Without
+   it, the next rule that over-convicts is caught the same way this one was — by a human refusing an
+   AC — rather than by the suite.
+4. `cargo xtask spec-trace --write` to clear the `†` on §7.2's PS-19/PS-38 rows, and remove the
+   `CHANGELOG.md` non-delivery entry, replacing it with the rule's own entry naming the defect it
+   detects.
+5. **Correct `reset-rules/_ledger.md` AC-005 and `report.md`** to `satisfied: true`, citing
+   `kb-decision-0030` and the wave — and **state that the precondition was unmet when the rule was
+   first attempted and is met now**. The record should show the sequence, not a row that was always
+   green.
+
+The two findings deferred from run 5 are also this slice's, as scoped then:
+
+- **Four doc sites still say the reference run produces ONE skip**;
+  `assert_reference_projection_declensions` pins **two**. Correct all four **and point them at that
+  assertion as the authority** rather than restating a count nothing in the gate reads — the count
+  has now been wrong four times.
+- **`read-through-and-rebuild-rules`' AC-006 row reads `satisfied: true` over evidence opening
+  "PARTIAL … NOT SATISFIED, literally".** Fix the **record**, not the code: `_design.md`'s capability
+  table named the testkit as `READS_THROUGH_BATCH`'s reason-writer at sign-off, so the AC's wording
+  is what is wrong. Changing the code to chase it would mint the projection-local reason DT-3's one
+  stated exception exists to avoid.
+
+Not this slice's, and not to be fixed here: `crates/happenstance-testkit/README.md:18,:127`
+understates the suite on the page `cargo package` ships to crates.io. Already routed to
+`publication-and-positioning` (HS-P0016), which owns initiative DoD 10.
