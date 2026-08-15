@@ -310,3 +310,40 @@ Advance nothing yet. Invoke `/redkiln:kb-ingest` for ADR-0030; run 6 then re-ent
 seventeenth rule with its mutant, fixes the four doc sites and read-through's AC-006 record; the
 project reaches review at 17/17. Closing now would ship the freeze at sixteen of seventeen with the
 repair staged and never accepted, which is the outcome path (a) was chosen to avoid.
+
+### Blocker cleared — wave `2026-08-15-adr-0030-checkpoint-progress`, 2026-08-15
+
+Merged at `9efda45`. **`kb-decision-0030` is on the branch at `status: accepted`**, which is the
+precondition `reset-rules` AC-005 has been waiting on since run 4: the seventeenth rule can now be
+written against a clause that exists rather than widening a `[FROZEN]` one by test. Two open
+questions (PS-1, PS-19) move to `superseded`, answered by it. `validate --kb` passes;
+`cargo xtask affected --base main` green.
+
+The decision is sharper than the "widen PS-19" framing it started as: §4 obliged `commit` to
+**couple** its two writes and never to **advance** anything, so PS-1's `MUST` is satisfied by a
+store that makes neither write durable. **Three shipped rules already sit over that gap**, not just
+the missing one.
+
+Two atoms arrived beyond the headline decision, each in a different layer:
+
+- **`ps-32-adr-0007-context-correction-is-owed`** — the obligation carried unrouted since the
+  2026-08-13 wave, now findable by the corpus instead of by memory. It narrows the debt: only
+  `references/adr/0007-projection-runner-decodes.md:36-38` carries the defective sentence;
+  `kb-decision-0007`'s **atom** never repeats it, so what is owed is a correction to the long-form
+  record, not a supersession. Still not performed.
+- **`spec-trace-has-suite-family-switch`** — `xtask/src/spec_trace.rs`'s per-family abstention.
+
+**Second consecutive wave finished by hand.** `doctor` exits 1 on the same nine pre-existing
+`.bklg` errors; confirmed independently again in a worktree carrying none of the wave's changes.
+The 2026-08-13 retrospective predicted a gate that can establish innocence but not act on it would
+be routed around every time; that came true in two days. And the severity has risen — CI's
+`backlog` job asserts the list is empty, so **upstream issue #122 is now a release blocker for the
+initiative**, to be settled before `publication-and-positioning`, not at the PR.
+
+### HS-P0010 `projection-store-freeze` — run 6, 2026-08-15
+
+Launched fresh at the same baseRef `2136ddeb`, **no `resumeSlice`** — git truth alone now points at
+the right place, because `reset-and-rebuild-rules` is the only slice committed but sealed
+`changes-requested`, and slices 6–8 are sealed `approved` so they are skipped. Run 5 needed the
+hatch only because that slice could not be cleared by any work inside the project; that is no longer
+true.
