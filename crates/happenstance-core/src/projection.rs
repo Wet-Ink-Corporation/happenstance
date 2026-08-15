@@ -7,11 +7,10 @@
 //! exempt from this crate's semver promise for as long as the feature exists.
 //!
 //! The reason is **not** that nothing tests it, which is what this header used to
-//! say. Sixteen of the seventeen conformance rules §4.11 names are written and
-//! drive this port, a deliberately wrong store that writes a checkpoint without
-//! its read model fails one of them by name, and two structurally unlike batch
-//! shapes pass all of them. The seventeenth, `fresh_projection_has_no_checkpoint`,
-//! is held until PS-19 widens by decision rather than by test; §7.2 daggers it.
+//! say. All seventeen conformance rules §4.11 assigns to an adapter's own suite
+//! are written and drive this port, a deliberately wrong store that writes a
+//! checkpoint without its read model fails one of them by name, and two
+//! structurally unlike batch shapes pass all of them.
 //!
 //! The reason is the bar the specification set for freezing it. `spec/SPECIFICATION.md`
 //! §4's PS-2 requires the suite to be green against **two adapters at opposite

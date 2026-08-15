@@ -8830,7 +8830,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
 | PS-18 | PROVISIONAL | `refused_reset_changes_nothing` | E2E-18 |
-| PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-16 |
+| PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` | E2E-23 |
 | PS-22 | PROVISIONAL | `commit_rejects_a_regressing_position` | E2E-23, E2E-25 |
@@ -8849,7 +8849,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-35 | FROZEN | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
-| PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` † | E2E-15, E2E-17, E2E-23 |
+| PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-17, E2E-23 |
 
 #### `SY` — the `SyncPeer` port (§5)
 

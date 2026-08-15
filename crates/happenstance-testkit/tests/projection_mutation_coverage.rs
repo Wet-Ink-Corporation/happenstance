@@ -31,22 +31,34 @@
 //! nothing in this binary computes or prints a fraction over it. (ADR-0010 §1;
 //! `SPECIFICATION.md` §6.1's closing note.)
 //!
-//! # CF-5's half, and the two rows it took to make it a control
+//! # CF-5's half, and the three rows it took to make it a control
 //!
-//! [`Kind::ConformantVariant`] has two rows, and neither is redundant.
+//! [`Kind::ConformantVariant`] has three rows, and none is redundant.
 //! `NoBatchReadStore` declares `READS_THROUGH_BATCH = false` and is PS-12's
 //! second arm; `BufferingProjectionStore` is the buffering, replay-at-commit
 //! shape PS-4 permits and §4.11 assigns to this family, and it declares the
-//! switch `true`.
+//! switch `true`; `AbsentAfterResetStore` is a `reset` that removes its
+//! checkpoint row rather than overwriting it with an explicit `NeverRun`.
 //!
-//! The pair is what turned `projection_conformant_variants_pass_everything` from
-//! a control over *part* of the suite into a control over all of it. With the
-//! first row alone, two rules skipped against every variant there was — so
+//! The first pair is what turned `projection_conformant_variants_pass_everything`
+//! from a control over *part* of the suite into a control over all of it. With
+//! the first row alone, two rules skipped against every variant there was — so
 //! nothing said those rules **accept** a legal store, which is the only claim
 //! CF-5 exists to make. The section this replaced named the hole rather than
 //! filling it with an empty control, and it was right to: over an empty set both
 //! assertions pass while asserting nothing, which is the vacuity CF-5 prevents
 //! reintroduced one level up.
+//!
+//! The third row was bought at full price and is worth reading as a warning.
+//! `fresh_projection_has_no_checkpoint` shipped, and a review found it convicted
+//! a store the specification permitted; the rule and its mutant were withdrawn
+//! for a day, and the repair was a new clause (PS-38, ADR-0030) rather than a
+//! line edit. **CF-5 was blind to that**, because every conformant variant left
+//! the correct core's `reset_writes` and `missing_checkpoint` in place, so no
+//! legal store exercised the seam the rule over-specified. `AbsentAfterResetStore`
+//! is the occupant that seam lacked. A control is only as good as the *spread* of
+//! what it admits — the same sentence `CLAUDE.md` writes about ports, one level
+//! down.
 //!
 //! # Why the whole file is gated off `wasm32`, and what that costs
 //!
@@ -267,16 +279,11 @@ struct Declared {
 ///   a real boundary: a transaction manager, a connection pool under contention,
 ///   or a server that can refuse half a request. That axis belongs to an adapter,
 ///   and PS-2's `[FROZEN]` bar asks for two of them for exactly this reason.
-/// * **The one rule §4.11 lists that has not landed.**
-///   `fresh_projection_has_no_checkpoint` is **held**, not merely unwritten: no
-///   clause's `MUST` reaches it, PS-19 is `[FROZEN]`, and the store that would
-///   fail it — `PresumedLiveCheckpointStore`, a missing row resolved as
-///   `Live { through: FIRST }` — is *conformant* with the clause as written. It
-///   is held with the rule for that reason, and `src/projection.rs` carries the
-///   argument at the point the rule would sit. CF-1 is what forces a mutant to
-///   arrive **with** a rule rather than after it, and it is also why the two
-///   were held together: shipping either alone breaks a meta-test, which is the
-///   registry refusing to record a half-truth.
+/// * **Every rule §4.11 assigns to an adapter's own suite now has a row here**,
+///   which is a statement about this registry and not about the port. The six
+///   runner-dependent rules CF-36 moves to the workspace e2e crate have no store
+///   to be wrong in, so nothing here says anything about them
+///   (`spec/SPECIFICATION.md:5694-5703`).
 /// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
 ///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
 ///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
@@ -706,15 +713,39 @@ const REGISTRY: &[Declared] = &[
             "must leave the read model exactly as it was",
         )],
     },
-    // HELD, not omitted: `PresumedLiveCheckpointStore`'s row. See
-    // `tests/projection_mutation_coverage/mutants.rs` at the point the store
-    // would sit, and `src/projection.rs` at the point its rule would sit. The
-    // short of it: the store is conformant with PS-19 as written, so declaring
-    // it a mutant convicts it of an obligation no clause states.
-    //
-    // `commit_rejects_a_foreign_batch`, the second rule it also failed, keeps
-    // its own mutant in `TypeStampedBatchStore` above, so holding this row
-    // leaves no rule without one.
+    Declared {
+        name: "PresumedLiveCheckpointStore",
+        kind: Kind::Mutant,
+        // Two rules from one `unwrap_or` argument, and the second is not
+        // inflation: `commit_rejects_a_foreign_batch` asserts that a rejected
+        // commit left both stores at `NeverRun`, which is a question about an id
+        // neither store has ever seen. A store that answers `Live` there answers
+        // `Live` there. Narrowing the defect further would mean inventing a
+        // store that resolves a missing row differently depending on who asks,
+        // which is not an adapter anybody writes.
+        fails: &[
+            "fresh_projection_has_no_checkpoint",
+            "commit_rejects_a_foreign_batch",
+        ],
+        provenance: "an adapter whose `checkpoint` resolves a missing row with \
+                     `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author \
+                     writes when the position column is `NOT NULL DEFAULT 1`. The specification \
+                     names this shape itself and names it as the natural one rather than a \
+                     contrivance (`spec/SPECIFICATION.md:5300-5316`): paired with a `reset` that \
+                     records an explicit `NeverRun`, it satisfies PS-19's MUST verbatim and \
+                     still tells a runner that a read model nobody has ever built is \
+                     authoritative. PS-38's second sentence is the MUST it violates, and it is a \
+                     clause rather than a rule reaching past one — this row was withdrawn for a \
+                     day, on 2026-08-14, precisely because at that moment it was not",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "fresh_projection_has_no_checkpoint",
+                "a projection this store has never seen must read back as",
+            ),
+            ("commit_rejects_a_foreign_batch", "moved its checkpoint"),
+        ],
+    },
     Declared {
         name: "CommittedReadBatchStore",
         kind: Kind::Mutant,
@@ -800,6 +831,31 @@ const REGISTRY: &[Declared] = &[
         expect: &[],
     },
     Declared {
+        name: "AbsentAfterResetStore",
+        kind: Kind::ConformantVariant,
+        // CF-5's third projection row, and the one that exists because a rule
+        // over-specified against a *legal* store and no control could see it.
+        // `fails` is empty because the store is correct: PS-19 requires
+        // `NeverRun` after a reset and PS-38 requires it for an id no commit has
+        // named, and a removed row answers both through `missing_checkpoint`.
+        //
+        // If this store ever fails a rule, the repair is to the **rule** (CF-6),
+        // never to this row and never to the store. That sentence is doing real
+        // work here rather than being boilerplate: it is exactly the repair the
+        // `fresh_projection_has_no_checkpoint` episode had to make by hand.
+        fails: &[],
+        provenance: "an adapter whose `reset` is `DELETE FROM checkpoints WHERE projection_id = \
+                     ?` rather than an overwrite with an explicit `NeverRun` sentinel — which is \
+                     what an author writes first and what `MemoryProjectionStore` itself does. \
+                     Both answers are legal: after the removal `checkpoint` finds no row and \
+                     resolves it to `NeverRun`, which is PS-19's MUST after a reset and PS-38's \
+                     for an id no commit has named. Registering it puts a conformant store on \
+                     the *removal* arm of the missing-row seam, which the registry had no \
+                     occupant for on the day a rule over-convicted a store on the other arm",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "BufferingProjectionStore",
         kind: Kind::ConformantVariant,
         // CF-5's second projection row, and `fails` is empty because the store is
@@ -854,12 +910,14 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::CommitAtFirstResetStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAsSuccessStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAfterTheFactStore>,
+            crate::correct::MutantFixture<crate::mutants::PresumedLiveCheckpointStore>,
 
             crate::correct::MutantFixture<crate::mutants::CommittedReadBatchStore>,
             crate::correct::MutantFixture<crate::mutants::FirstWriteWinsBatchStore>,
             crate::correct::MutantFixture<crate::mutants::LiveOnlyCheckpointStore>,
 
             crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
+            crate::correct::MutantFixture<crate::variants::AbsentAfterResetStore>,
             crate::buffering::BufferingProjectionFixture,
         }
     };

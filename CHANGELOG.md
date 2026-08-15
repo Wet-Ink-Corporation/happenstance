@@ -101,9 +101,11 @@ not the same as what a user needed to be told.
   conformant `commit` fail — so the rule is gated on the new
   `ProjectionFixture::COMMIT_FAULT` and reports a skip carrying the fixture's own
   reason where the store has no fault to arm. `MemoryProjectionFixture` is such a
-  store and declines, so the reference run prints exactly one `SKIP` line;
+  store and declines, so the reference run prints a `SKIP` line for this rule;
   `PartialCommitStore` is the registered wrong implementation that fails the rule
-  by name.
+  by name. (It is not the only one — `refused_reset_changes_nothing` below is
+  declined too. `assert_reference_projection_declensions` pins the whole set by
+  equality rather than any count written in prose.)
 - **A projection mutant registry, and nine wrong stores in it.** The projection
   suite can now be shown to *fail* something, which is a different claim from
   passing against the oracle and is the only one worth anything to an adapter
@@ -216,21 +218,33 @@ not the same as what a user needed to be told.
   the new `ProjectionFixture::protect_from_reset`; `MemoryProjectionStore` holds
   no protection policy and declines, so the reference run prints a second `SKIP`
   line carrying that store's own words.
-- **`fresh_projection_has_no_checkpoint` is NOT in this release, and the reason
-  is a finding rather than an omission.** §4.11's rule table assigns PS-19 a
-  second rule — an id the store has never seen must read back as
-  `Checkpoint::NeverRun` — and **no clause's MUST obliges it.** PS-19 is
-  `[FROZEN]` and its sentence is scoped *after a successful `reset`*; the clause
-  says this about itself, naming the exposing store as the natural implementation
-  rather than a contrivance: a `checkpoint` resolving a missing row with
-  `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author
-  writes when the position column is `NOT NULL DEFAULT 1`, satisfies PS-19
-  verbatim and answers `Live` for an unseen id. Writing the rule now would widen
-  a frozen clause **by test**, convicting adapters of an obligation the contract
-  does not state, so the rule and `PresumedLiveCheckpointStore` — the store that
-  fails it — are held until the widening lands as an accepted decision atom, not
-  as a line edit. `cargo xtask spec-trace` marks the row `†` meanwhile, which is
-  the gate saying out loud that the rule does not exist yet.
+- **`fresh_projection_has_no_checkpoint`** — PS-38's second sentence, and the
+  defect it detects is a checkpoint that answers for a projection nobody has ever
+  built. A `checkpoint` resolving a missing row with
+  `.unwrap_or(Checkpoint::Live { through: FIRST })` — what an author writes when
+  the position column is `NOT NULL DEFAULT 1` — tells a runner that a read model
+  that does not exist is authoritative and already considered through the first
+  position. The runner then resumes *past* the events it has never applied, and
+  every event at that position is skipped on the first run of every projection the
+  store has never seen. The rule asks for one id no commit has named and requires
+  the `Checkpoint::NeverRun` **variant**; it compares against no position, because
+  the position it would compare against is the exact value the defective store
+  writes.
+
+  **It arrived a day late, and the delay is the interesting part.** §4.11 filed
+  the rule under PS-19, whose `MUST` is scoped *after a successful `reset`* and
+  therefore says nothing about an id never seen — so the first version of this
+  rule convicted adapters of an obligation no sentence in the specification
+  stated, and `PresumedLiveCheckpointStore`, the store registered to fail it, was
+  **conformant**. The rule and its store were withdrawn rather than argued around.
+  What brought them back is a clause and not a re-reading: ADR-0030 minted PS-38,
+  whose second sentence is *"a `ProjectionId` no successful `commit` has named
+  MUST read as `Checkpoint::NeverRun`"*, and the rule now cites that. No
+  `[FROZEN]` clause was edited to make this pass; PS-19 is byte-identical across
+  the whole episode. If you are writing an adapter, the practical consequence is
+  that this obligation is `[PROVISIONAL]` — PS-38 falls to a store that answers
+  `checkpoint` from a replica that may lag its own `commit`, and the clause names
+  that falsifier itself.
 - **`reset_is_not_commit_at_first`** — PS-19 and PS-20, and the rule that turns
   RUNBOOK's observation into an enforced rejection. The defect it detects is
   `commit(empty_batch, id, SequencePosition::FIRST, Live)` used as a substitute
@@ -1300,12 +1314,10 @@ not the same as what a user needed to be told.
   Nothing else in the crate changed shape, and opting back out is deleting the
   flag.
 
-  **The reason is not that nothing tests it.** Sixteen of the seventeen
-  conformance rules §4.11 names are written and drive the port — the seventeenth,
-  `fresh_projection_has_no_checkpoint`, is held until PS-19 widens by decision
-  rather than by test, and §7.2 daggers it — a store that writes a checkpoint
-  without its read model fails one by name, and two structurally unlike batch
-  shapes pass all of them. The reason is the bar §4's PS-2 sets for *freezing* it
+  **The reason is not that nothing tests it.** All seventeen conformance rules
+  §4.11 assigns to an adapter's own suite are written and drive the port, a store
+  that writes a checkpoint without its read model fails one by name, and two
+  structurally unlike batch shapes pass all of them. The reason is the bar §4's PS-2 sets for *freezing* it
   — two adapters at opposite ends of the batch-shape axis — and both shapes that
   clear the suite today are instruments this workspace wrote. What retires the
   exemption is that same suite green against a projection adapter over storage

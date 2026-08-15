@@ -434,24 +434,47 @@ impl Defect for RefusalAfterTheFactStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// HELD, not omitted: `PresumedLiveCheckpointStore`.
-//
-// A missing checkpoint row resolved as `Live { through: FIRST }` — one override
-// of `Defect::missing_checkpoint`. It is the store §4.11 names for
-// `fresh_projection_has_no_checkpoint`, and it is **conformant with PS-19 as the
-// clause is written today**: after a successful reset it answers `NeverRun` and
-// is distinguishable from a commit at `FIRST`, which is the whole of PS-19's
-// MUST. Registering it as a mutant asserts an obligation no clause states, so it
-// is held alongside the rule it fails, until
-// `unstable-projection-gate-and-clause-disposition` lands the widening decision.
-// The reason is stated once, at the rule's own site in
-// `crates/happenstance-testkit/src/projection.rs`.
-//
-// `Defect::missing_checkpoint` stays on the trait with nothing overriding it:
-// the seam is what the held mutant is one line away from, and removing it would
-// make restoring the pair a redesign rather than an addition.
-// ---------------------------------------------------------------------------
+/// A missing checkpoint row resolved as `Live { through: FIRST }`.
+///
+/// The specification names this shape itself, and names it as the *natural* one
+/// rather than a contrivance (`spec/SPECIFICATION.md:5300-5316`): an adapter
+/// whose `reset` records an explicit `NeverRun` and whose `checkpoint` resolves a
+/// missing row with `.unwrap_or(…)` has to put *something* in the `unwrap_or`,
+/// and `Live { through: FIRST }` is what an author writes when the checkpoint
+/// column is `NOT NULL DEFAULT 1`.
+///
+/// It satisfies PS-19's MUST verbatim — after a successful reset the row is
+/// there and says `NeverRun` — and tells a runner that a read model nobody has
+/// ever built is authoritative and already considered through the first
+/// position. Every event at that position is then skipped on the first run of
+/// every projection the store has never seen.
+///
+/// # Why this row was withdrawn for a day, and what brought it back
+///
+/// It was registered, then **withdrawn on 2026-08-14**, because satisfying PS-19
+/// verbatim was the whole of what any clause obliged: convicting this store was
+/// convicting it of an obligation no sentence stated, which is CF-6's failure in
+/// the direction a mutant registry cannot see. What brought it back is a clause,
+/// not a re-reading — ADR-0030 minted PS-38, whose second sentence is *"a
+/// `ProjectionId` no successful `commit` has named MUST read as
+/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5447-5462`). This store
+/// answers `Live { through: FIRST }` for exactly such an id, so it is
+/// non-conformant against a `MUST` that exists rather than against a rule that
+/// reached past one. Its conformant neighbour on the same seam is
+/// [`AbsentAfterResetStore`](crate::variants::AbsentAfterResetStore).
+pub(crate) struct PresumedLiveCheckpointStore;
+
+impl Defect for PresumedLiveCheckpointStore {
+    const NAME: &'static str = "PresumedLiveCheckpointStore";
+
+    fn missing_checkpoint() -> Checkpoint {
+        // The whole defect, and it is the `unwrap_or` argument: a row that is
+        // not there is read as a projection that has been run.
+        Checkpoint::Live {
+            through: SequencePosition::FIRST,
+        }
+    }
+}
 
 /// A batch `get` that answers from committed state.
 ///

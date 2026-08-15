@@ -21,15 +21,26 @@
 //! Read the two files together: a green run *here* plus a green run *there* is
 //! the pair that means something.
 //!
-//! One rule in this run is answered by a `SKIP` rather than a pass.
-//! `failed_commit_leaves_both_unchanged` is gated on `COMMIT_FAULT`, and the
-//! reference fixture declines it with a reason the line carries — the reference
-//! store applies both halves of a commit under one write lock and has no write
-//! that can be made to fail. That is CF-18 working rather than a gap in this
-//! file: the rule is emitted, answered and reported, and the adapter that can
-//! arm a fault is the one that gets it checked.
+//! Some rules in this run are answered by a `SKIP` rather than a pass, because
+//! the reference fixture declines the capability they are gated on:
+//! `failed_commit_leaves_both_unchanged` is gated on `COMMIT_FAULT` — the
+//! reference store applies both halves of a commit under one write lock and has
+//! no write that can be made to fail — and `refused_reset_changes_nothing` is
+//! gated on `RESET_REFUSAL`, which the store cannot offer either, because it
+//! holds no protection policy. Each declension carries the fixture's own reason
+//! on the line. That is CF-18 working rather than a gap in this file: the rules
+//! are emitted, answered and reported, and the adapter that can arm a fault or
+//! protect a projection is the one that gets them checked.
 //!
-//! It is also only **one** of the two batch shapes this suite is now run
+//! **Which rules skip, and how many, is asserted and not described here.**
+//! `assert_reference_projection_declensions`
+//! (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) pins this
+//! fixture's skip set by equality, in enumeration order, with each skip's
+//! capability and stated reason. That assertion is the authority; a count
+//! restated in a module doc is a number nothing in the gate reads, and this one
+//! has already gone stale once.
+//!
+//! This is also only **one** of the two batch shapes this suite is now run
 //! against. `projection_conformance_buffering.rs` drives the same rules,
 //! unchanged, against a store whose batch is a replayable op journal and which
 //! holds nothing between `begin` and `commit` — PS-4's shape. Both run inside

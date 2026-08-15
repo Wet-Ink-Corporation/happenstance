@@ -488,3 +488,61 @@ The two findings deferred from run 5 are also this slice's, as scoped then:
 Not this slice's, and not to be fixed here: `crates/happenstance-testkit/README.md:18,:127`
 understates the suite on the page `cargo package` ships to crates.io. Already routed to
 `publication-and-positioning` (HS-P0016), which owns initiative DoD 10.
+
+### Run 6's record — what landed, what was routed onward, and one pattern settled
+
+**Landed.** `fresh_projection_has_no_checkpoint` is in the suite, cited to **PS-38** and not to
+PS-19, mounted at `crates/happenstance-testkit/src/projection.rs:1910` where the placeholder sat.
+`PresumedLiveCheckpointStore` is restored as a mutant only after re-checking it against ADR-0030:
+PS-38's second sentence rejects it, PS-19 alone did not, so the row is now a claim about a clause
+rather than about a rule reaching past one. `AbsentAfterResetStore` — a `reset` that removes its
+checkpoint row rather than overwriting it with a sentinel — is registered as CF-5's third conformant
+variant. The `†` is off both §7.2 rows; the `CHANGELOG.md` non-delivery notice is replaced by the
+rule's own defect-naming entry; five one-skip doc sites now point at
+`assert_reference_projection_declensions` instead of restating a count.
+
+**On item 3 of the run-6 instruction, which could not be executed as literally written.** It asked
+for a conformant variant modelling *"the legal `.unwrap_or(Checkpoint::Live { through: FIRST })`
+store"*. That shape stopped being legal between the instruction being written and this run: it was
+conformant under PS-19 alone, and **PS-38 rejects it** — which is precisely why
+`PresumedLiveCheckpointStore` is a mutant again. Registering the same shape as both a mutant and a
+conformant variant would have been the original error in a third direction. What the instruction was
+*for* — a legal occupant of the missing-checkpoint seam, so CF-5 can catch the next over-convicting
+rule — is delivered by `AbsentAfterResetStore`, which sits on the removal arm of the one choice
+PS-38 leaves free (`variants.rs:127` states this in full).
+
+**Routed onward, named rather than left inside a green ledger row.**
+
+- **To `unstable-projection-gate-and-clause-disposition` (HS-S0016), which owns port-shape questions
+  for this project:** *should `ProjectionProbe::READS_THROUGH_BATCH` carry a reason?* It is a `bool`
+  (`crates/happenstance-core/src/projection.rs:536`), so the reason a declined batch-read skip
+  carries is the testkit-written `NO_BATCH_READ_PATH_REASON` — which is what `_design.md`'s
+  capability table (`:280`) and note 1 (`:306-310`) signed off, and is therefore satisfaction rather
+  than shortfall. The open question is only whether the *port* should offer an associated-const pair
+  or a `Capability`-shaped value, so the reason could be store-written if a store ever had a better
+  sentence than the family's. `read-through-and-rebuild-rules`' AC-006 no longer carries it.
+- **To `unstable-projection-gate-and-clause-disposition` (HS-S0016), which wrote the sentence:**
+  `spec/SPECIFICATION.md` §4.11's status paragraph still reads *"Sixteen of the seventeen now
+  exist… `fresh_projection_has_no_checkpoint` is the one still to be written"*. Landing the rule
+  falsified it. It is **not** repaired here: it is authored prose outside the `BEGIN/END GENERATED`
+  region, AC-010 as amended scopes the criterion to exactly that boundary, and both stories' PR
+  boundaries route any edit to `spec/SPECIFICATION.md` to HS-S0016. Reported, not reached for.
+
+**The compelled-exit pattern, settled once at project level so a sixth instance is not
+re-litigated per story.** Three classes of edit are *compelled by the gate* rather than chosen, and
+every rule-bearing story in this project hits them:
+
+1. **The `BEGIN/END GENERATED` region of §7.1–§7.2.** `cargo xtask spec-trace --write` regenerates
+   it whenever a rule name starts or stops existing, and a *separate* gate step fails on a stale
+   region — so a boundary that forbids the hunk demands the story leave stale exactly what the gate
+   demands it regenerate. Precedent: `reset-rules/spec.md:397-415`, commit `5f2cf02`.
+2. **`CHANGELOG.md`.** CF-29's lint fails the gate unless every rule in `RULE_FILES` has an entry, so
+   a story that adds a rule cannot avoid touching it.
+3. **`standards/rust/**` line-number citations into `crates/happenstance-testkit/**`.**
+   `cargo xtask lint-constitution` fails when a cited line moves. Re-pointing only — never rule text,
+   evidence selection, retirement or new atoms. Precedent: `aef8990`, and HS-S0016 admitted it into
+   its own boundary at `08a2299`.
+
+A story that takes one of these **must disclose it in its implementation report**; it does not need a
+per-story ratification, and a boundary block that omits it is the block that is wrong. Run 6 applied
+this to `read-through-and-rebuild-rules`, which had taken all three at `5be22ab` and disclosed none.

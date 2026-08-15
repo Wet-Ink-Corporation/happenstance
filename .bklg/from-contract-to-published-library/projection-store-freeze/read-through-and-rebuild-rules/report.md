@@ -23,9 +23,32 @@ positive control.
 | **AC-005** | **satisfied** | `NoBatchReadStore` — `READS_THROUGH_BATCH = false`, `probe_read_through` `unimplemented!()` — is registered as `Kind::ConformantVariant` with `fails: &[]` and passes every projection rule. The new positive control `projection_conformant_variants_pass_everything` drives it through the whole enumeration and **asserts its own non-vacuity** (at least one variant driven), so it cannot pass over an empty set. `Kind::ConformantVariant`'s `#[expect(dead_code)]` came off in the same change — the trip-wire fired, which is the mechanism working. | `…/tests/projection_mutation_coverage/variants.rs:57`; row at `…/projection_mutation_coverage.rs:784` |
 | **AC-006** | **satisfied** | `a_batch_with_no_read_path_is_reported_as_a_skip` asserts the skip set against the declining store is **exactly two rules** in enumeration order, and that each skip's `capability` **and** `reason` equal the exported `NO_BATCH_READ_PATH` (`"ProjectionProbe::READS_THROUGH_BATCH"`) and `NO_BATCH_READ_PATH_REASON` — compared against the constants, never literals repeated in the test, and asserted on the `RuleOutcome` value rather than on stdout. | `…/projection_mutation_coverage.rs:1315`; consts at `crates/happenstance-testkit/src/contract.rs:836,852` |
 | **AC-007** | **satisfied** | All three names in the one enumeration → tokio, blocking and `wasm32` harnesses each gained three tests with no per-harness list (17 passed per host harness; the wasm harness type-checks in `cargo xtask ci`'s mandatory step). Mounted at all four points: rules module, enumeration, three harnesses, and the mutant registry's `REGISTRY` + `for_each_projection_mutant!`. `no_orphan_projection_rules` makes an unmounted rule a failure. | `…/projection.rs:1878-1880`; `…/tests/projection_conformance_wasm.rs` |
-| **AC-008** | **satisfied** | `git diff -- spec/` is the **generated §7.1–§7.2 region only** (four `†` removed for PS-12, PS-13, PS-14, PS-24 by `spec-trace --write`) — no clause text, no maturity marker, no rule citation. No `ProjectionStore` / `ProjectionProbe` / `Checkpoint` / `Authority` / `MemoryProjectionStore` definition changed. `Capability`, `RuleOutcome`, the `Declared` shape and the three emitters are unchanged; the two new constants sit beside `NO_STORE_LIMITS` and add no new skip type or line shape. No assertion compares a position or a `through` value to a literal. `cargo xtask spec-trace` green; the event-store suite including `GappedPositionFixture` still green. | `CHANGELOG.md`; `spec/SPECIFICATION.md` generated region |
+| **AC-008** | **satisfied** (criterion amended 2026-08-15; see below) | `git diff -- spec/` is the **generated §7.1–§7.2 region only** (four `†` removed for PS-12, PS-13, PS-14, PS-24 by `spec-trace --write`) — no clause text, no maturity marker, no rule citation. No `ProjectionStore` / `ProjectionProbe` / `Checkpoint` / `Authority` / `MemoryProjectionStore` definition changed. `Capability`, `RuleOutcome`, the `Declared` shape and the three emitters are unchanged; the two new constants sit beside `NO_STORE_LIMITS` and add no new skip type or line shape. No assertion compares a position or a `through` value to a literal. `cargo xtask spec-trace` green; the event-store suite including `GappedPositionFixture` still green. **The three gate-compelled exits are now disclosed** in `implementation-report.md`, *Compelled exits from the PR boundary*. | `CHANGELOG.md`; `spec/SPECIFICATION.md` generated region; `standards/rust/{11,13,40,41}-*.md` line numbers |
 
 **Deferred: nothing.** **Blocked: nothing.**
+
+**AC-006's authority, so the row is not read as a near-miss.** Who writes the
+reason a declined batch-read skip carries is decided by the signed-off
+`_design.md`, and it is decided the way the code does it: the capability table
+(`_design.md:280`) assigns `READS_THROUGH_BATCH`'s reason to the **testkit**, and
+note 1 (`:306-310`) calls it *"the one place the projection family adds a
+testkit-written reason … the same argument `NO_CEILING_REASON` already won"*.
+`NO_BATCH_READ_PATH_REASON` is that decision executed, so the AC is met rather
+than excused. The AC's phrase *"the fixture's own stated reason"* predates the
+port landing the switch as a probe-level `bool` and describes the family's other
+two capabilities. The residual **port-shape** question — should the probe const
+carry a reason at all — is routed to `unstable-projection-gate-and-clause-disposition`
+and recorded in `_slices.md`, *Run 6's record*, rather than parked inside a
+green DoD row.
+
+**Three edits landed outside this story's fenced boundary block, and this report
+was silent on all three until 2026-08-15.** Each is compelled by a gate step —
+`spec-trace --write`'s generated region, CF-29's changelog lint,
+`lint-constitution`'s line-number citations — and each is now named in the
+boundary block, in AC-008's criterion, and in the implementation report's table.
+The fault was the silence, not the exits: the pre-amendment criterion (*"`cargo
+xtask spec-trace` … unaffected"*) could not describe an exit the gate demands, so
+nothing in the record had a place to put them.
 
 **One residual, stated rather than hidden**, because a skip that reads as
 coverage is worse than a red rule. An adapter declaring

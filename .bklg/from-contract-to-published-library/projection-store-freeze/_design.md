@@ -321,8 +321,15 @@ Four notes on that table, each load-bearing:
    later. As of the amendment it is more than not-empty: `COMMIT_FAULT` is the
    first projection capability a *landed rule* reads and the reference fixture
    declines, so the reporting discipline is demonstrated on real values rather
-   than reserved for a later story. The suite run against `MemoryProjectionFixture`
-   prints exactly one `SKIP` line.
+   than reserved for a later story. **How many `SKIP` lines a reference run prints
+   is asserted, not asserted-in-prose here.** This note read "exactly one" until
+   `refused_reset_changes_nothing` landed and made it two; rather than carry a
+   number that has now been wrong once, read the set from
+   `assert_reference_projection_declensions`
+   (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`), which pins it
+   by equality, in enumeration order, with each skip's capability and stated
+   reason. As of 2026-08-15 that set is `COMMIT_FAULT`'s rule and
+   `RESET_REFUSAL`'s.
 4. **`COMMIT_FAULT` is required, not defaulted, and that is the whole of why it
    stays inside one policy.** `Fixture::MID_BATCH_FAULT` — the event-store
    constant this one is modelled on — carries a default declension, and a default

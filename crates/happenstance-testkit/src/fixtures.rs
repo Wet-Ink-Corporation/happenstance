@@ -439,8 +439,9 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // The reason is the real one, taken from the store rather than invented for
     // the fixture: `MemoryProjectionStore::reset` has no protection policy and
     // therefore no path that returns `ResetError::Refused`. A fixture that
-    // claimed the capability would fail `refused_reset_changes_nothing` the day
-    // that rule lands, and one that declined without saying why would put a
+    // claimed the capability would fail `refused_reset_changes_nothing` — which
+    // has since landed, so that is now a fact about a rule in the suite rather
+    // than a prediction — and one that declined without saying why would put a
     // shrug in every CI log that runs this suite.
     const RESET_REFUSAL: Capability = Capability::declined(
         "MemoryProjectionStore holds no protection policy, so there is no \
@@ -458,9 +459,15 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // put fault injection into the *shipped* store to satisfy a test.
     //
     // The consequence is visible rather than hidden: the projection suite run
-    // against this fixture prints one `SKIP` line for
+    // against this fixture prints a `SKIP` line for
     // `failed_commit_leaves_both_unchanged`, which is CF-18's whole point — the
-    // oracle cannot demonstrate PS-1's second conjunct, and the run says so.
+    // oracle cannot demonstrate PS-1's second conjunct, and the run says so. It
+    // is not the only one; `RESET_REFUSAL` above is declined too, so a reference
+    // run prints two. The set is pinned by equality, in enumeration order and
+    // with each stated reason, at `assert_reference_projection_declensions`
+    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) — read that
+    // assertion for how many and which, rather than a count written here that
+    // nothing in the gate reads.
     const COMMIT_FAULT: Capability = Capability::declined(
         "MemoryProjectionStore applies the read-model writes and the checkpoint \
          under one write lock, so it has no write that can be made to fail and \

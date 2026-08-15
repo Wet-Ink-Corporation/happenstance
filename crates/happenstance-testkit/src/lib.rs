@@ -254,7 +254,7 @@
 //! | Concurrency | racing appends with overlapping conditions — exactly one wins. The **opt-in** third family adds contention on real threads: one winner of N contenders, K disjoint boundaries admitting exactly K commits, positions unique under concurrent appends, `append` returning the caller's own last position rather than the head, and a reader that never sees a partial batch |
 //! | Re-entrancy | two `append` futures on one handle both complete and exactly one wins; a live read stream does not block an append |
 //! | Position visibility | two `append` futures interleaved by hand on one thread: nothing becomes visible below a position a reader has already observed |
-//! | Projections (a second port, a fourth family) | a commit advances the projection's checkpoint to the position it was given, read back through a fresh handle; and the read-model write and the checkpoint write become durable **together or not at all**, never one — the invariant `ProjectionStore` exists for. Sixteen rules today, of the seventeen §4.11 names — the seventeenth, `fresh_projection_has_no_checkpoint`, is held pending a decision that widens PS-19, and `projection.rs`'s module doc says why |
+//! | Projections (a second port, a fourth family) | a commit advances the projection's checkpoint to the position it was given, read back through a fresh handle; and the read-model write and the checkpoint write become durable **together or not at all**, never one — the invariant `ProjectionStore` exists for. All seventeen rules §4.11 assigns to an adapter's own suite, including `fresh_projection_has_no_checkpoint` — PS-38's second sentence, which ADR-0030 minted rather than widening `[FROZEN]` PS-19 to reach it |
 //!
 //! [spec]: https://dcb.events/specification/
 //!

@@ -387,7 +387,7 @@ here:
 | **Wires into** | `crates/happenstance-core/src/projection.rs` — `ProjectionStore::{begin, commit, checkpoint, reset}`, `Checkpoint`, `Authority`, `ProjectionId` (§4.0's shape, landed by `owned-batch-port-shape`). `ProjectionProbe` behind `happenstance-core`'s `conformance` feature — `READS_THROUGH_BATCH`, `probe_write`, `probe_read`, `probe_read_through` (`projection-probe-conformance-feature`). `crates/happenstance-testkit/src/contract.rs` — `Capability` and `RuleOutcome` **reused unchanged** (AC-A06, `_decomposition.md:317-319`), plus the `NO_STORE_LIMITS`-style capability-name const. The `ProjectionFixture` trait and `projection_store_conformance!` (`projection-suite-entry-point`); the projection `Declared`/`REGISTRY` shape and its three exactness meta-tests (`projection-mutant-registry`); the skip machinery and capability set (`projection-capability-skips`). `MemoryProjectionStore` as the `READS_THROUGH_BATCH = true` fixture. No borrowing GAT anywhere in a fixture (`contract.rs:97-111`, the minimised rustc ICE). |
 | **Renders surfaces** | **none.** `_design.md` declares `surfaces: []` and answers `N/A — no user-facing surface` to `## Items`, `## Signatures` and `## The doctest`; the perceptual review is a *declared* skip (`design.capture` absent from `.redkiln/config.yaml`, per `CLAUDE.md`). The binding sources for this story's shapes are therefore `spec/SPECIFICATION.md` §4.4 / §4.7 / §4.11 and the text surface `_design.md:33-38` names. |
 | **Conformance rule(s)** | Adds `batch_reads_reflect_pending_writes` (PS-12), `rebuild_is_chunk_size_invariant` (PS-13, PS-14) and `rebuilding_is_distinguishable_from_live` (PS-24) to `for_each_projection_store_rule!`, each with a registered store that fails it (D7). Re-asserts, does not change, the projection registry's three exactness meta-tests. |
-| **Clause(s)** | Discharges **PS-12** (`spec/SPECIFICATION.md:5052-5074`), **PS-13** (`:5075-5085`), **PS-14** (`:5086-5098`), **PS-24** (`:5330-5352`) and CF-18's projection instance (`:7597-7605`). **No clause text, maturity marker or rule citation is edited** — PS-13 and PS-14 are `[FROZEN]` and are implemented, not amended; the marker sweep is `unstable-projection-gate-and-clause-disposition`'s. `cargo xtask spec-trace` must be unaffected by this diff. |
+| **Clause(s)** | Discharges **PS-12** (`spec/SPECIFICATION.md:5052-5074`), **PS-13** (`:5075-5085`), **PS-14** (`:5086-5098`), **PS-24** (`:5330-5352`) and CF-18's projection instance (`:7597-7605`). **No clause text, maturity marker or rule citation is edited** — PS-13 and PS-14 are `[FROZEN]` and are implemented, not amended; the marker sweep is `unstable-projection-gate-and-clause-disposition`'s. `cargo xtask spec-trace` must be **green**, with its `BEGIN/END GENERATED` §7.1–§7.2 region **regenerated rather than left stale** — that region is machine-authored and a separate gate step fails on a stale one, so "unaffected" was never available to a story that adds a rule name (amended 2026-08-15; see AC-008). |
 | **Advances DoD scenario** | Initiative **DoD 7** — *"The projection suite discriminates… a deliberately wrong implementation… fails it, by name"* (`initiative.md:377-380`): this story adds three of the discriminating rules and the three stores that fail them. It also carries initiative **AC-05** (*"told, with a reason, where a guarantee does not apply"*, `initiative.md:320-322`) from machinery to a real instance, and contributes to **DoD 13** (`cargo xtask ci` green on the assembled whole, `initiative.md:396-397`) via the wasm32 harness step, which it must not regress. |
 
 ## PR boundary
@@ -422,8 +422,12 @@ here:
   deliberate: `NoBatchReadStore` is a minimal declining instrument and must not
   be presented as the second batch shape.
 - The PS-3 finding — `ps3-batch-shape-finding`.
-- Any edit to `spec/SPECIFICATION.md`, any maturity marker, the
+- Any **authored** edit to `spec/SPECIFICATION.md`, any maturity marker, the
   `unstable-projection` gate — `unstable-projection-gate-and-clause-disposition`.
+  The `BEGIN/END GENERATED` region of §7.1–§7.2 is the one exception and is **in**
+  this PR, because it is machine-authored by `cargo xtask spec-trace --write` and
+  a gate step fails on a stale one; the boundary block and AC-008 both scope it
+  (amended 2026-08-15).
 - Any change to `ProjectionProbe`, `ProjectionStore`, `Checkpoint`, `Authority` or
   `MemoryProjectionStore`, including flipping `READS_THROUGH_BATCH` — slice 2. A
   rule that cannot be written against the landed port is a **finding**, not a
@@ -444,6 +448,9 @@ both as skips carrying its stated reason.
 ```
 crates/happenstance-testkit/src/**
 crates/happenstance-testkit/tests/**
+CHANGELOG.md
+spec/SPECIFICATION.md   # ONLY inside the BEGIN/END GENERATED region of §7.1–§7.2
+standards/rust/*.md     # ONLY line-number re-pointing into the two globs above
 .bklg/from-contract-to-published-library/projection-store-freeze/read-through-and-rebuild-rules/**
 ```
 
@@ -452,6 +459,32 @@ the Integration contract to mount this slice — `registry.rs`'s enumeration, th
 harness files and the mutant registry, all already inside the block above — and
 that is not scope drift. Widening the block beyond it (`crates/happenstance-core/**`
 in particular) is a decision to be made here, in the spec, or a reason to stop.
+
+**The last three lines were added on 2026-08-15, and they are an admission rather
+than a widening.** Commit `5be22ab` — this story's own implementation — took all
+three and disclosed none of them, because the block above named none of them and
+the implementation report was silent. Each is **compelled by the gate**, not
+chosen:
+
+- `spec/SPECIFICATION.md`'s `BEGIN/END GENERATED` region: `cargo xtask spec-trace
+  --write` regenerates it whenever a rule name starts or stops existing, and a
+  *separate* gate step fails on a stale region. `5be22ab` removed four `†`. A
+  boundary forbidding that hunk demands the story leave stale exactly what the
+  gate demands it regenerate — which is the same argument the slice-mate's AC-010
+  settled at `5f2cf02` (`reset-rules/spec.md:397-415`) and this entry applies here.
+- `CHANGELOG.md`: CF-29's lint fails the gate unless every rule in `RULE_FILES`
+  has an entry, so a story that adds three rules cannot avoid it. `5be22ab` added
+  49 lines.
+- `standards/rust/*.md`: `cargo xtask lint-constitution` fails when a cited line
+  in `crates/happenstance-testkit/**` moves. **Line-number re-pointing only** —
+  rule text, evidence selection, retirement and new atoms stay out of boundary.
+  Precedent `aef8990`; `unstable-projection-gate-and-clause-disposition` admitted
+  the identical entry into its own boundary at `08a2299`.
+
+The pattern is settled once at project level (`_slices.md`, *Run 6's record*) so
+that the next rule-bearing story neither re-litigates it nor takes it silently.
+The standing obligation is **disclosure in the implementation report**, which is
+what was actually missing here.
 
 ## Behavior and interfaces
 
@@ -516,7 +549,22 @@ invoking one macro, or by reading one line of a gate run.
 | **AC-005** | **GIVEN** an adapter author whose storage genuinely cannot answer a read from an uncommitted batch — the write-behind or buffering shape PS-12 explicitly permits — **WHEN** they declare `READS_THROUGH_BATCH = false` and run the suite, **THEN** the whole projection suite is **green**, not red: `NoBatchReadStore` is registered as a `Kind::ConformantVariant` with `fails: &[]`, exposes no read path on the open batch (`probe_read_through` is `unimplemented!()`), and passes every projection rule — so declining a capability honestly is a supported outcome rather than a failure, and the skip arm of both gated rules has a fixture behind it in the same run that `MemoryProjectionStore` holds the `true` arm. | Integration: `projection_store_conformance!` invoked against `NoBatchReadFixture`, zero failures. Unit: its `Declared` row with `fails: &[]` under `mutant_registry_is_exhaustive`, plus the conformant-variant assertion the registry already carries (`mutation_coverage.rs:3091`). |
 | **AC-006** | **GIVEN** that same author reading a CI log, **WHEN** the two gated rules run against their declining fixture, **THEN** each returns `RuleOutcome::Skipped` whose `capability` field is the string **`ProjectionProbe::READS_THROUGH_BATCH`** — the constant they can actually go and change, not a fixture const that does not exist — and whose `reason` is the **fixture's own non-empty stated reason**, and the run reports **two** skips, not one and not silence. The assertion is on the `RuleOutcome` **value**, not on stdout. | Unit: a `#[test]` beside `capability_skips_are_reported` (`mutation_coverage.rs:3184`) driving both gated rules against `NoBatchReadFixture` and asserting **both** fields of `RuleOutcome::Skipped`. Static: `Capability::declined("")` is a `const fn` `assert!` that fires at codegen for an associated const, so an empty reason fails `cargo test`/`cargo build` (`crates/happenstance-testkit/src/contract.rs:374-419`). Discharges project **AC-005**'s real instance (`_storymap.md:83`). |
 | **AC-007** | **GIVEN** an adapter author who invokes exactly one macro and expects the whole bar, and **GIVEN** P3, who runs that same bar on `wasm32-unknown-unknown`, **WHEN** the gate runs, **THEN** all three new rules are mounted at **all four** composition points — the projection rules module, the single enumeration `for_each_projection_store_rule!`, the three harnesses (tokio / blocking / `#![cfg(target_arch = "wasm32")]`), and the mutant registry's `for_each_mutant!` + `REGISTRY` — so each rule is emitted as a **named test on every target in one run**, with no wasm-specific subset and no new gate step. A rule present in the module but absent from the enumeration is caught by the orphan meta-test. | Unit: the projection sibling of `no_orphan_rules` (`crates/happenstance-testkit/src/registry.rs:412`). Static/E2E: `cargo xtask ci`'s mandatory wasm32 conformance-harness step type-checks the wasm emitter's expansion (`xtask/src/main.rs:231-240`); the tokio and blocking harnesses run the rules by name in the `tests` step. Contributes to project **AC-016**. |
-| **AC-008** | **GIVEN** the repository owner reviewing this PR against a project whose whole point is that the port is not yet frozen, **WHEN** they read the diff, **THEN** nothing outside this story's boundary moved: no `spec/SPECIFICATION.md` clause text, maturity marker or rule citation changed (PS-13 and PS-14 are `[FROZEN]` and are **implemented, not amended**); no `ProjectionStore`, `ProjectionProbe`, `Checkpoint`, `Authority` or `MemoryProjectionStore` definition changed; `Capability`, `RuleOutcome`, the three emitters and the `Declared` shape are byte-identical; **no assertion anywhere compares a position or a checkpoint's `through` to a literal**; and `cargo xtask spec-trace` is green and unaffected. | Static: `cargo xtask spec-trace`; `git diff --stat` scoped to the PR-boundary block, reviewed against it. Unit: the existing event-store suite and `GappedPositionFixture`'s rules still green (`crates/happenstance-testkit/tests/mutation_coverage/variants.rs:110-125`), which is what convicts a rule that grew a `position == index + 1` assumption. |
+| **AC-008** | **GIVEN** the repository owner reviewing this PR against a project whose whole point is that the port is not yet frozen, **WHEN** they read the diff, **THEN** nothing outside this story's boundary moved: `git diff` over `spec/SPECIFICATION.md` touches **nothing outside the `BEGIN/END GENERATED` region of §7.1–§7.2** — no clause text, maturity marker or rule citation changed (PS-13 and PS-14 are `[FROZEN]` and are **implemented, not amended**); no `ProjectionStore`, `ProjectionProbe`, `Checkpoint`, `Authority` or `MemoryProjectionStore` definition changed; `Capability`, `RuleOutcome`, the three emitters and the `Declared` shape are byte-identical; **no assertion anywhere compares a position or a checkpoint's `through` to a literal**; `cargo xtask spec-trace` is **green** (its generated region regenerated, never left stale); and the two other gate-compelled exits — a `CHANGELOG.md` entry per new rule (CF-29) and line-number re-pointing in `standards/rust/*.md` (`lint-constitution`) — are **taken and disclosed in the implementation report**, never taken silently. | Static: `cargo xtask spec-trace`; `git diff --stat` scoped to the PR-boundary block, reviewed against it, with the three compelled exits read against the report's disclosure. Unit: the existing event-store suite and `GappedPositionFixture`'s rules still green (`crates/happenstance-testkit/tests/mutation_coverage/variants.rs:110-125`), which is what convicts a rule that grew a `position == index + 1` assumption. |
+
+**AC-008's instrument was amended on 2026-08-15; its premise was not.** It read
+*"`cargo xtask spec-trace` is green **and unaffected**"* and listed no compelled
+exit, which no story adding a rule name can satisfy — `spec-trace --write`
+regenerates §7.1–§7.2, CF-29's lint demands a changelog entry, and
+`lint-constitution` demands a citation re-point when a cited line moves. This
+story took all three at `5be22ab` and disclosed none, which is the failure the
+amendment fixes: not that the exits were taken, but that a criterion nobody could
+meet produced a report that said nothing about them. The amendment is a
+**tightening** — it replaces an unmeetable prohibition with a meetable disclosure
+obligation, and it still rejects the thing it exists to reject: a hand-edited
+clause, a moved marker, a rewritten citation, or a `standards/rust` edit that
+changes a rule instead of a line number. The same settlement is written once at
+project level in `_slices.md`, *Run 6's record*, so the sixth instance is not
+re-litigated per story.
 
 ## Interaction quality
 

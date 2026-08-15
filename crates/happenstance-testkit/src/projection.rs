@@ -41,18 +41,21 @@
 //! workspace red, and there is no exemption list.
 //!
 //! What a green run still does **not** prove is that this family is complete.
-//! Sixteen of §4.11's seventeen adapter-suite rules are written; what is still
-//! owed is the **six runner-dependent** ones, which CF-36 moves to the workspace
-//! e2e crate because they need a runner rather than a store
-//! (`spec/SPECIFICATION.md:5694-5703`), and — for a different reason —
-//! `fresh_projection_has_no_checkpoint`, which is **held**. §4.11's table assigns
-//! it to PS-19 and PS-19's `MUST` does not reach it: the clause is scoped *after
-//! a successful `reset`* and says so about itself
-//! (`spec/SPECIFICATION.md:5230-5239`). Writing it would widen a `[FROZEN]`
-//! clause by test, so it waits on an accepted decision atom from
-//! `unstable-projection-gate-and-clause-disposition`. The reason is restated in
-//! full at the point in [`rules`] the rule would sit. A store that passes
-//! everything here has not been observed under replay.
+//! Every rule §4.11 assigns to an adapter's own suite is now written; what is
+//! still owed is the **six runner-dependent** ones, which CF-36 moves to the
+//! workspace e2e crate because they need a runner rather than a store
+//! (`spec/SPECIFICATION.md:5694-5703`). A store that passes everything here has
+//! not been observed under replay.
+//!
+//! The seventeenth landed last and did not land quietly.
+//! [`fresh_projection_has_no_checkpoint`](rules::fresh_projection_has_no_checkpoint)
+//! was **held out of this module for a day**, because §4.11 assigned it to PS-19
+//! and PS-19's `MUST` is scoped *after a successful `reset`* — so writing the
+//! rule would have widened a `[FROZEN]` clause by test, convicting adapters of an
+//! obligation no sentence stated. The repair was a new clause rather than a line
+//! edit: ADR-0030 minted PS-38, whose second sentence is the obligation, and the
+//! rule cites that clause rather than the one it was filed under
+//! ([ADR-0030](../../../.kb/decisions/0030-the-checkpoint-reports-the-commits-that-happened.md)).
 //!
 //! # Two rules here are answered by a skip against the reference fixture
 //!
@@ -83,10 +86,9 @@
 //! `MemoryProjectionStore` declares `true`, so a reference run does not print
 //! those two.
 //!
-//! Read that as the answer to "does a green run mean anything here": for
-//! fourteen of the sixteen landed rules it means the store was driven and
-//! asserted about; for these two it means what the `SKIP` lines say. Neither
-//! rule is
+//! Read that as the answer to "does a green run mean anything here": for fifteen
+//! of the seventeen landed rules it means the store was driven and asserted
+//! about; for these two it means what the `SKIP` lines say. Neither rule is
 //! decorative — `PartialCommitStore`, `RefusalAsSuccessStore` and
 //! `RefusalAfterTheFactStore` fail them by name in
 //! `tests/projection_mutation_coverage.rs` — but the demonstration lives against
@@ -1419,33 +1421,72 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
-    // ------------------------------------------------------------------------
-    // HELD, not omitted: `fresh_projection_has_no_checkpoint`.
-    //
-    // §4.11's rule table assigns PS-19 a second rule — "a projection the store
-    // has never seen reads back as `Checkpoint::NeverRun`", rejecting a store
-    // that resolves a missing row with `.unwrap_or(Live { through: FIRST })`.
-    // **No clause's MUST obliges that.** PS-19 is `[FROZEN]` and its sentence is
-    // scoped *after a successful `reset`*; the specification says so about
-    // itself, in the clause's own body: "No clause's MUST obliges an unseen id
-    // to read as `NeverRun`. Phase 6 owns whether this clause widens or a new
-    // one says it" (`spec/SPECIFICATION.md:5230-5239`).
-    //
-    // Writing the rule here would widen a frozen clause **by test**: the suite
-    // would convict adapters of an obligation the contract does not state, and
-    // the store that exposes the gap is the natural implementation rather than a
-    // contrivance (`.kb/open-questions/ps-19-scope-narrower-than-its-rule.md`;
-    // `.kb/decisions/0018-returning-a-projection-to-never-run.md:113-116`, which
-    // met this defect inside its own clause range, named it, and repaired
-    // nothing).
-    //
-    // The repair is a **new accepted decision atom**, never a line edit, and it
-    // lands at `unstable-projection-gate-and-clause-disposition` under
-    // `.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md`. This
-    // rule and `PresumedLiveCheckpointStore`, the mutant that fails it, are held
-    // until it does. `cargo xtask spec-trace` marks the row `†` in the meantime,
-    // which is the gate saying out loud that the rule does not exist yet.
-    // ------------------------------------------------------------------------
+    /// A projection the store has **never seen** reads back as
+    /// [`Checkpoint::NeverRun`].
+    ///
+    /// **PS-38's second sentence**, which is the clause this rule is written
+    /// against: *"a `ProjectionId` no successful `commit` has named MUST read as
+    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5447-5462`). §4.11 lists
+    /// the rule against PS-19 as well, because it is the same distinction that
+    /// clause is about — *never run* told apart from *committed at the first
+    /// position* — asked before any `reset` has happened; but PS-19's own MUST
+    /// stays scoped *after a successful `reset`* and does not reach an unseen id,
+    /// and it says so about itself (`:5300-5316`). **Cite PS-38 here.** Between
+    /// 2026-08-14 and ADR-0030 this rule was held out of the suite for exactly
+    /// that reason: no clause's MUST obliged the read, so asserting it would have
+    /// widened a `[FROZEN]` clause by test
+    /// ([ADR-0030](../../../.kb/decisions/0030-the-checkpoint-reports-the-commits-that-happened.md)
+    /// is what minted the obligation instead of editing PS-19).
+    ///
+    /// **Rejects:** `PresumedLiveCheckpointStore` — a store that resolves a
+    /// missing checkpoint row with `.unwrap_or(Checkpoint::Live { through: FIRST })`.
+    /// The specification names that shape by name, because it is the natural one
+    /// rather than a contrivance: an adapter whose `reset` writes an explicit
+    /// `NeverRun` row satisfies PS-19's MUST verbatim and still answers `Live`
+    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5300-5316`).
+    /// PS-38 is what makes that store non-conformant rather than merely
+    /// surprising, and its `Rejects` field names the wider version of the same
+    /// defect — a store whose backing state lives per *handle* rather than per
+    /// store (`:5462-5470`).
+    ///
+    /// # The assertion is on the **variant**
+    ///
+    /// Comparing a checkpoint against any [`SequencePosition`] is
+    /// simultaneously a CF-6 violation and the exact value the defective store
+    /// writes, so a rule written that way cannot tell the two mutants of this
+    /// family apart and both walk free. [`Checkpoint`] is a three-variant enum
+    /// precisely so this assertion can be made without naming a position
+    /// (`spec/SPECIFICATION.md:4643-4658`).
+    ///
+    /// # Why it spells no capability gate at all
+    ///
+    /// It reads one checkpoint through one handle and writes nothing, so it
+    /// needs neither a second handle nor a protected projection. A fixture
+    /// declining every capability still runs it and still passes it, which is
+    /// correct: the capabilities it declined are not the ones this rule spends.
+    pub async fn fresh_projection_has_no_checkpoint<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Committed to by nothing, in this rule or any other: every rule in this
+        // family names its ids after itself.
+        let unseen = ProjectionId::new("fresh_projection_has_no_checkpoint.never-committed-to");
+
+        assert_eq!(
+            checkpoint_ok(&store, &unseen).await,
+            Checkpoint::NeverRun,
+            "a projection this store has never seen must read back as \
+             `Checkpoint::NeverRun`. A store that resolves a missing checkpoint \
+             row to `Live` has told a runner that a read model nobody has ever \
+             built is authoritative and already considered through a position — \
+             so the runner resumes past the events it has never applied, and \
+             they are skipped permanently and silently"
+        );
+
+        RuleOutcome::Ran
+    }
 
     /// `reset` is distinguishable from `commit(empty_batch, id, FIRST, Live)`,
     /// in the checkpoint **and** in the replay that follows it.
@@ -1866,10 +1907,7 @@ macro_rules! for_each_projection_store_rule {
             reset_clears_rows_and_checkpoint_together,
             reset_is_scoped_to_one_projection,
             refused_reset_changes_nothing,
-            // `fresh_projection_has_no_checkpoint` belongs here and is HELD: it
-            // has no clause behind it until PS-19 widens by decision rather than
-            // by test. The `rules` module carries the reason at the point the
-            // rule would sit.
+            fresh_projection_has_no_checkpoint,
             reset_is_not_commit_at_first,
 
             // --- Reading, and rebuilding -----------------------------------
@@ -2026,10 +2064,22 @@ fn no_orphan_projection_rules() {
 /// A declined `RESET_REFUSAL` reaches the author as a **reported skip carrying
 /// the fixture's own reason**, not as a pass and not as an absence.
 ///
-/// CF-18 for the family's one genuinely declinable projection capability, on
-/// real values: `MemoryProjectionFixture` supports `SECOND_HANDLE` and declines
-/// `RESET_REFUSAL`, so `refused_reset_changes_nothing` is the only thing it can
-/// answer with a skip, and this is what a reference run prints.
+/// CF-18 on real values for one of the two capabilities the reference fixture
+/// declines: `MemoryProjectionFixture` supports `SECOND_HANDLE`, declines
+/// `RESET_REFUSAL` because the store holds no protection policy, and declines
+/// `COMMIT_FAULT` because it applies both halves of a commit under one write
+/// lock. So a reference run answers **two** rules with a skip —
+/// `failed_commit_leaves_both_unchanged` (`COMMIT_FAULT`) and
+/// `refused_reset_changes_nothing` (`RESET_REFUSAL`) — and this test owns the
+/// second of them.
+///
+/// **The set itself is pinned elsewhere, and that is deliberate.**
+/// `assert_reference_projection_declensions`
+/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) asserts the
+/// reference fixture's skip set by *equality*, in enumeration order, with each
+/// skip's capability and stated reason. Read that assertion as the authority for
+/// which rules skip and how many: a count restated in prose is a number nothing
+/// in the gate reads, and this family has already had four of them go stale.
 ///
 /// # Why the assertion is on the value and never on stdout
 ///

@@ -18,7 +18,7 @@
 //! (`crates/happenstance-testkit/tests/mutation_coverage/variants.rs`).
 
 use crate::buffering::BufferingProjectionFixture;
-use crate::correct::{Defect, MutantBatch, State};
+use crate::correct::{Defect, MutantBatch, State, apply};
 use crate::harness::ProjectionSubject;
 
 /// A batch with **no read path at all**.
@@ -79,7 +79,69 @@ impl Defect for NoBatchReadStore {
     }
 }
 
-/// The second conformant variant, wired into *this* binary.
+/// A `reset` that **removes** its checkpoint row instead of recording an
+/// explicit `NeverRun` one.
+///
+/// `DELETE FROM checkpoints WHERE projection_id = ?`, which is what an adapter
+/// author writes first and what
+/// [`MemoryProjectionStore`](happenstance_core::MemoryProjectionStore) — the
+/// oracle every conformance harness in this workspace runs against — actually
+/// does. The correct core in this binary deliberately does the *other* legal
+/// thing (`correct.rs`'s [`Defect::reset_writes`], which inserts an explicit
+/// `Checkpoint::NeverRun`), so without this row the registry contained no store
+/// on the removal side of a seam PS-19 and PS-38 both stand on.
+///
+/// # Why it is a conformant variant and not a mutant
+///
+/// Because both answers are legal and the port says so. After the removal,
+/// `checkpoint(id)` finds no row and resolves it through
+/// [`Defect::missing_checkpoint`] to `Checkpoint::NeverRun` — which is what PS-19
+/// requires after a successful `reset` and what PS-38's second sentence requires
+/// of an id no commit has named. The store's observable behaviour is identical to
+/// the correct core's; what differs is that *"was reset"* and *"was never seen"*
+/// become the same state in storage, which is a design decision an adapter takes
+/// and not a mistake it makes.
+///
+/// # What it is here to catch, which is a defect in a **rule**
+///
+/// This row exists because of a specific failure that happened, not as
+/// symmetry. `fresh_projection_has_no_checkpoint` was written, shipped, and then
+/// withdrawn for a day when a review found it convicted
+/// [`PresumedLiveCheckpointStore`](crate::mutants::PresumedLiveCheckpointStore)
+/// of an obligation no clause stated. **CF-5's positive control could not have
+/// caught that**, because no conformant variant exercised the missing-row seam at
+/// all: every legal store in the registry left the correct core's `reset_writes`
+/// and `missing_checkpoint` in place, so a rule over-specified on either was
+/// invisible to `projection_conformant_variants_pass_everything`.
+///
+/// It occupies the legal half of the shape §4.11 named. The instruction this row
+/// answers asked for *"the legal `.unwrap_or(Checkpoint::Live { through: FIRST })`
+/// store"*, and that shape is **no longer legal**: it was conformant under PS-19
+/// alone, and PS-38 — minted after the instruction was written — rejects it, which
+/// is why `PresumedLiveCheckpointStore` is a mutant rather than the variant here.
+/// What remains legal on that seam is the removal-versus-sentinel choice, and this
+/// row is the arm the registry lacked. A future rule that asserts a reset leaves a
+/// row *behind*, or that an unseen id is distinguishable from a reset one, goes
+/// red here — against a store the specification permits — instead of being caught
+/// by a human refusing an acceptance criterion.
+pub(crate) struct AbsentAfterResetStore;
+
+impl Defect for AbsentAfterResetStore {
+    const NAME: &'static str = "AbsentAfterResetStore";
+
+    fn reset_writes(state: &mut State, batch: &mut MutantBatch<Self>, key: &str) {
+        // The caller's own deletes, exactly as the correct core applies them —
+        // the port has no idea what the read model is, and this store is not
+        // different about that.
+        apply(state, batch);
+        // The one difference, and it is one line: the row goes rather than being
+        // overwritten with a sentinel. `missing_checkpoint` is left alone, so the
+        // absence still reads as `NeverRun`.
+        state.checkpoints.remove(key);
+    }
+}
+
+/// The third conformant variant, wired into *this* binary.
 ///
 /// The store itself is `projection_mutation_coverage/buffering.rs`, which is
 /// deliberately not this file: it is also included by

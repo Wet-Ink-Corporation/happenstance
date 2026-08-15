@@ -136,3 +136,25 @@ end of §6's batch-shape axis and belongs to `buffering-conformant-variant`; if 
 also declares `false` when it lands, that is a second instance rather than a
 duplicate to delete — the skip arm must never end up with zero fixtures behind
 it.
+
+### Compelled exits from the PR boundary (disclosed 2026-08-15)
+
+**This section is a repair to this report, not to the diff.** Commit `5be22ab`
+took three edits outside the fenced boundary block as it stood, and disclosed
+none of them — the slice-mate disclosed the third
+(`reset-rules/implementation-report.md:88`) and this report was silent on all
+three. Every one is **compelled by a gate step** rather than chosen; the fault was
+the silence and a criterion (AC-008, pre-amendment) that could not describe them.
+Both the boundary block and AC-008 now name all three, and the pattern is settled
+once at project level in `_slices.md`, *Run 6's record*.
+
+| Exit | What compels it | What this story actually did |
+| ---- | --------------- | ---------------------------- |
+| `spec/SPECIFICATION.md` §7.1–§7.2, `BEGIN/END GENERATED` region | `cargo xtask spec-trace --write` regenerates it whenever a rule name starts or stops existing, and a **separate gate step fails on a stale region** — so the pre-amendment "spec-trace must be unaffected by this diff" demanded the story leave stale exactly what the gate demands it regenerate. | **4 insertions, 4 deletions**, every one a `†` removed from PS-12, PS-13, PS-14 or PS-24 as its rule started existing. No clause text, no maturity marker, no rule citation. |
+| `CHANGELOG.md` | CF-29's lint (`xtask/src/lints.rs`) fails the gate unless every rule in `RULE_FILES` carries an entry. A story that adds three rules cannot avoid it. | **+49 lines**: one entry per landed rule naming the *defect it detects*, plus one for the conformant variant and the two new constants. |
+| `standards/rust/{11,13,40,41}-*.md` | `cargo xtask lint-constitution` fails when a cited line in `crates/happenstance-testkit/**` moves, and this story moved several hundred. Precedent `aef8990`; `unstable-projection-gate-and-clause-disposition` admitted the identical entry into its own boundary at `08a2299`. | **Line-number re-pointing only.** No rule text, no evidence selection, no retirement, no new atom. Verifiable as such: every hunk is a `:NNN` changing inside an otherwise byte-identical citation. |
+
+None of the three is a licence widened by fiat. Each is a class the gate creates
+for *every* rule-bearing story in this project, which is why it is settled at
+project level rather than ratified a sixth time here; what stays per-story is the
+obligation to disclose, which this section discharges.
