@@ -15,10 +15,12 @@ pass.
 >
 > What is still early is everything around that. **No adapter has run this
 > suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
-> suite exists but is two rules of seventeen, and neither has been shown to
-> reject a wrong store yet — the hostile stores that will are named in the
-> specification and not yet written. Several axes of the instrument portfolio
-> also have no implementation at their far end — see
+> suite is now all seventeen rules the specification names, each with a wrong
+> store in this crate's `tests/` that fails it — but the port it checks is still
+> `[PROVISIONAL]` and ships behind an off-by-default feature, because both
+> fixtures that clear the suite are instruments this workspace wrote rather than
+> adapters over storage it does not control. Several axes of the instrument
+> portfolio also have no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > §6.2 and §6.5, which name them rather than summarising them.
 
@@ -124,10 +126,12 @@ rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
 default module name differs from the event-store family's, so one file may invoke
 both. `fixtures::MemoryProjectionFixture` is the worked example.
 
-**Two rules of the seventeen the specification names, today.** The port is
-`[PROVISIONAL]` and this suite is what will freeze it; treat both it and the port
-as moving until §4.11's table is complete and its hostile stores are in this
-crate's own `tests/`.
+**All seventeen rules §4.11 names, today**, each with a wrong store in this
+crate's own `tests/` that fails it and is asserted to fail *exactly* the rules its
+registry row declares. The port is still `[PROVISIONAL]` and lives behind
+`happenstance-core`'s off-by-default `unstable-projection` feature: this suite is
+what will freeze it, and what would clear that bar is an adapter over storage
+this workspace does not control — which neither fixture shipped here is.
 
 ## Why this exists as a published crate
 
@@ -144,10 +148,15 @@ wrong implementation it rejects has to be named — and written into
 `REGISTRY` declaring the exact set of rules it fails. (A *concurrency* rule's
 wrong store goes in `tests/mutation_coverage/racers.rs` and `RACERS`, because a
 store that fails only a racing rule fails none of the named rules and cannot have
-a `REGISTRY` row.) That is not a convention:
+a `REGISTRY` row. A *projection* rule's goes in the sibling registry under
+`tests/projection_mutation_coverage/`, which is a second registry rather than a
+second table in the first one — a count printed beside the wrong target is a
+number about neither.) That is not a convention:
 `mutation_coverage::every_rule_has_a_mutant` fails until the row exists, so the
-rule is demonstrated to fail before it is trusted to pass. `CONTRIBUTING.md`'s
-"Conformance rules" section is the checklist.
+rule is demonstrated to fail before it is trusted to pass, and
+`projection_mutation_coverage::every_projection_rule_has_a_mutant` says the same
+thing for the other port. `CONTRIBUTING.md`'s "Conformance rules" section is the
+checklist.
 
 **Never assert on literal position values.** The specification permits gaps, and a
 conformant adapter may leave them. Rules compare against positions the store

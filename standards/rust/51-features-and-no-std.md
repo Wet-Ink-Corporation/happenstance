@@ -124,8 +124,8 @@ release — with no commit of this workspace's behind it and no manifest line
 anywhere that changed.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:39 (stated rather than inherited)` ·
-`xtask/src/main.rs:447 (names serde/alloc and base64/alloc)` ·
-`xtask/src/lints.rs:355 (fn core_alloc_features)` ·
+`xtask/src/main.rs:477 (names serde/alloc and base64/alloc)` ·
+`xtask/src/lints.rs:378 (fn core_alloc_features)` ·
 [ADR-0016](../../.kb/decisions/0016-the-wire-format.md)
 
 ## RS-51-4. `extern crate alloc;` is the only way onto the ladder, and `core::error::Error` is the only bound worth writing.
@@ -232,5 +232,5 @@ crate makes is a build log, and the fix ships as the *next* version.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:99 (package.metadata.docs.rs)` ·
 `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
-`xtask/src/main.rs:632 (is a cfg nobody sets except docs.rs)` ·
+`xtask/src/main.rs:661 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

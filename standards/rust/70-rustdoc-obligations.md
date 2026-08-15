@@ -157,8 +157,8 @@ configuration so that the rule is checked where the consumer stands.
 **Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:77 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
-`xtask/src/main.rs:502 (no default features)` ·
-`xtask/src/main.rs:531 (documentation (default features))` ·
+`xtask/src/main.rs:531 (no default features)` ·
+`xtask/src/main.rs:560 (documentation (default features))` ·
 `Cargo.toml:134 (broken_intra_doc_links)`
 
 ---

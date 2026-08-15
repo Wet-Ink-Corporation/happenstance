@@ -1274,13 +1274,35 @@ not the same as what a user needed to be told.
 
 - **`examples/outside-projection-adapter/` — the page's falsifier, kept in the
   tree.** A `publish = false` workspace member implementing `ProjectionStore` and
-  `ProjectionProbe` from the rendered documentation alone, passing all sixteen
-  projection rules, with a checkpoint-only sibling beside it that
+  `ProjectionProbe` from the rendered documentation alone, passing every rule in
+  `for_each_projection_store_rule!` — one of them as a declared skip carrying its
+  own stated reason — with a checkpoint-only sibling beside it that
   `commit_is_atomic_with_the_read_model` rejects by name. It is the only crate in
   the workspace where the orphan rule and the non-dev dependency graph behave as
   they do for a stranger, which is what makes it able to fail the wrong version
   of that placement decision: `cargo tree --edges normal` over it reaches
   `happenstance-core` and nothing else.
+
+- **A gate step that reads the documents a consumer reads, and fails when they
+  state a rule count this workspace does not have.** `cargo xtask
+  lint-rule-counts`, mandatory in `cargo xtask ci` and in the story-grain
+  `affected` gate. Every other step in the gate holds code to a document; this
+  one runs the other way, because the failure it catches had already happened
+  four times in three file formats at once — the crates.io README, the crate
+  page's feature list, the manifest comment beside the feature, and the
+  changelog entry for the outside-author example all said the projection suite
+  was two rules of seventeen, or sixteen, through the commits that made it
+  seventeen. `cargo package --list` proves the README is *inside* the artifact
+  (D11); nothing proved it was *true*, and three consecutive audits raised it as
+  a finding rather than a red build.
+
+  It reads a cardinal — digits or words, `eighty-nine` included — qualifying
+  `rule` or `rules` inside a paragraph about the suite, and compares it against
+  the rule files themselves. `one test per rule` is a rate and is skipped;
+  `CHANGELOG.md` is excluded, because a released entry that was true when it was
+  written must not be rewritten to keep a check green. The counts come from the
+  same parse CF-29 and `spec-trace` use, so landing a rule moves the bar with no
+  edit here.
 
 ### Changed
 

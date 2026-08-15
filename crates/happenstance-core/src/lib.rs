@@ -92,7 +92,7 @@
 //!   replication adapters that need one.
 //! * **`unstable-projection`** — the `ProjectionStore` port, its value types and
 //!   `MemoryProjectionStore`. **Off by default and exempt from semver**, and the
-//!   reason is not that nothing tests it: sixteen conformance rules do. It is
+//!   reason is not that nothing tests it: seventeen conformance rules do. It is
 //!   that PS-2's bar for freezing the port is *two adapters at opposite ends of
 //!   the batch-shape axis*, and both shapes that clear the suite today are
 //!   testkit-side instruments. The `projection` module's own header states what

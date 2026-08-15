@@ -16,14 +16,14 @@
 //! holds the conformance suite to its own proof that it discriminates and the
 //! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
-//! own cross-references and regenerates its traceability table; five
-//! file-reading lints described below; a sixth manifest lint for D12, kept out
-//! of that group of five because it names no clause (ADR-0016 §14); and
+//! own cross-references and regenerates its traceability table; six
+//! file-reading lints described below; a seventh manifest lint for D12, kept out
+//! of that group because it names no clause (ADR-0016 §14); and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
 //!
-//! # The five lints, and why a grep is in a Rust gate
+//! # The six lints, and why a grep is in a Rust gate
 //!
 //! Four clauses of `SPECIFICATION.md` name a `cargo xtask ci` step, and each
 //! names one because the thing it checks cannot be expressed as a type: CF-33
@@ -34,7 +34,15 @@
 //! satisfied forever by a `Retires:` line, so a rule the specification says is
 //! gone can sit in `suite.rs` failing registered mutants with nothing to notice.
 //!
-//! Each of the five states, in its own documentation, what it does *not* verify.
+//! The sixth is not a clause's either, and it runs in the opposite direction to
+//! every other step here: `lints::stated_rule_counts` holds four *documents* to
+//! the code. `package-check` proves the testkit's README is inside the published
+//! artifact; nothing proved it was true, and it told crates.io the projection
+//! suite was two rules of seventeen through the fifteen commits that made it
+//! seventeen — as did the crate page, the feature list and the manifest comment
+//! beside the feature, in three other file formats.
+//!
+//! Each of the six states, in its own documentation, what it does *not* verify.
 //! That is not modesty. A check whose limits are undocumented is read as a
 //! guarantee, and the one that would be read hardest is CF-6's: the real
 //! enforcement is `GappedPositionStore` in the mutant registry, and the grep is
@@ -418,6 +426,28 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The only step that reads a document for content rather than reading
+        // code against one. `package-check` proves `README.md` is inside the
+        // published artifact (D11); nothing proved it was true, and the README
+        // told crates.io the projection suite was "two rules of seventeen"
+        // through the fifteen commits that made it seventeen. Three audits
+        // raised it as a finding. A finding raised three times is a missing
+        // check, so this is the check.
+        name: "every stated rule count matches the suite",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-rule-counts",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // CF-32. A manifest check, and the cheapest step in the gate: the
         // testkit's version must not be `version.workspace = true`, because
         // adding a rule is semver-MINOR for the bar and nothing at all for the
@@ -714,6 +744,7 @@ fn main() -> ExitCode {
         Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
+        Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
@@ -756,7 +787,7 @@ fn print_help() {
     println!("         the mandatory steps only, dropping that last group; it is the bar a");
     println!("         non-terminal project's integration gate runs, never the release bar.");
     println!("  affected [--base <ref>]");
-    println!("         The story-grain gate: the five file-reading lints and spec-trace,");
+    println!("         The story-grain gate: the six file-reading lints and spec-trace,");
     println!("         then fmt, clippy and tests for the packages this diff could have");
     println!("         broken and everything depending on them. Base defaults to `main`.");
     println!("         Errs toward more packages — see the module docs for the two ways it");
@@ -770,12 +801,13 @@ fn print_help() {
     println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
     println!("         what the checker computes, and fails when they differ. --write");
     println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the five file-reading checks four clauses name as gate");
-    println!("         steps: CF-33 (no clock in the suite), CF-6 (no literal position");
-    println!("         values), CF-29 (a changelog entry per rule), CF-32 (the testkit's");
-    println!("         own version key), and §7.4's disposed-rule check. Each is also");
-    println!("         available on its own as lint-clock, lint-position-literals,");
-    println!("         lint-changelog, lint-testkit-version and lint-retired-rules.");
+    println!("  lints  Run just the six file-reading checks: CF-33 (no clock in the suite),");
+    println!("         CF-6 (no literal position values), CF-29 (a changelog entry per");
+    println!("         rule), CF-32 (the testkit's own version key), §7.4's disposed-rule");
+    println!("         check, and every stated rule count against the enumeration.");
+    println!("         Each is also available on its own as lint-clock,");
+    println!("         lint-position-literals, lint-changelog, lint-testkit-version,");
+    println!("         lint-retired-rules and lint-rule-counts.");
     println!("  package-check");
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
@@ -831,6 +863,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "no conformance rule reads a clock",
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
+        "every stated rule count matches the suite",
         "the testkit carries its own version",
         "the Rust constitution is internally consistent",
     ])
