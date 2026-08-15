@@ -13,7 +13,11 @@ summary: >-
   that it was once open is itself worth keeping. The 2026-08-13 wave flipped
   kb-open-question-projection-batch-no-apply-001 to Superseded (by ADR-0017) and annotated the
   PS-1 and PS-19 gaps with the clause-pairing sweep's findings and ADR-0018/ADR-0019's attribution
-  of the same defect shape; all three stayed listed rather than being replaced.
+  of the same defect shape; all three stayed listed rather than being replaced. The 2026-08-15
+  wave flipped kb-open-question-ps-1-no-progress-obligation-001 and
+  kb-open-question-ps-19-scope-narrower-001 to Superseded (both by ADR-0030, which mints PS-38)
+  and added kb-open-question-ps-32-adr-0007-correction-owed-001 (ADR-0007's Context still
+  overstates what cannot be written against the port).
 depends_on: []
 related:
   - kb-map-domain-001
@@ -23,7 +27,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake/02-placement-and-adjudication.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
-last_reviewed: 2026-08-13
+  - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
+last_reviewed: 2026-08-15
 ---
 
 # Open-questions index
@@ -49,21 +54,28 @@ what the question is, not its evidence.
 - **Open** — [`model-family-rule-has-no-clause.md`](../open-questions/model-family-rule-has-no-clause.md)
   (`kb-open-question-model-family-rule-no-clause-001`) — the model-based
   rule checks the composition of seven clauses and belongs to none of them.
-- **Open** — [`ps-1-states-no-progress-obligation.md`](../open-questions/ps-1-states-no-progress-obligation.md)
+- **Superseded** — [`ps-1-states-no-progress-obligation.md`](../open-questions/ps-1-states-no-progress-obligation.md)
   (`kb-open-question-ps-1-no-progress-obligation-001`) — PS-1's `MUST` is a
   coupling, not a progress obligation; the third rule assigned to it does
   not follow from the sentence. Owned by phase 6. Amended 2026-08-13: the
   clause-pairing sweep confirmed the defect isolated (29 sound / 7 defective
   / 1 undetermined) and ADR-0019 (`kb-decision-0019`) named the same
   intent-not-sentence habit recurring on PS-29; sub-questions 1, 2 and 4
-  stay open.
-- **Open** — [`ps-19-scope-narrower-than-its-rule.md`](../open-questions/ps-19-scope-narrower-than-its-rule.md)
+  stayed open. Resolved 2026-08-15 by ADR-0030 (`kb-decision-0030`), which
+  mints PS-38 rather than widening PS-1: sub-question 1 answered a clause of
+  its own, sub-question 2 by reattributing `commit_advances_the_checkpoint`
+  to PS-38, sub-question 4 by the decision itself; PS-1's own text stays
+  byte-identical.
+- **Superseded** — [`ps-19-scope-narrower-than-its-rule.md`](../open-questions/ps-19-scope-narrower-than-its-rule.md)
   (`kb-open-question-ps-19-scope-narrower-001`) — PS-19's `MUST` is scoped
   to after a reset; its second assigned rule asks about an id never seen.
   Owned by phase 6; interacts with the PS-1 question above. Amended
   2026-08-13: the same sweep confirmed this finding too, and ADR-0018
   (`kb-decision-0018`) scoped the defect out of its own clause range by
-  name without repairing it; sub-questions 1 and 3 stay open.
+  name without repairing it; sub-questions 1 and 3 stayed open. Resolved
+  2026-08-15 by ADR-0030 (`kb-decision-0030`): PS-19 keeps its post-reset
+  scope and the never-seen-id obligation becomes PS-38's second sentence;
+  sub-question 2's 2026-08-13 "isolated" verdict stands untouched.
 - **Open** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
   (`kb-open-question-es-6-unwritable-rule-001`) — ES-6 is `[FROZEN]` and
   names a conformance rule that cannot be written against today's port.
@@ -147,6 +159,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-sync-message-set-undesigned-001`) — `FORMAT_VERSION = 1`
   is fully tested and names no message set yet; the vocabulary is phase 13's
   design.
+- **Open** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
+  (`kb-open-question-ps-32-adr-0007-correction-owed-001`) — PS-32 is `[FROZEN]`
+  and states ADR-0007's Context must be corrected: a callback-driven pump
+  *can* be written against the port as it stands, falsified by compilation
+  rather than argument. What is not decided is who performs the correction
+  and in which atom — ADR-0007 is accepted and immutable, so it is a
+  superseding decision's act. Added 2026-08-15; forced by whoever writes the
+  runner.
 
 ## Adding an entry
 

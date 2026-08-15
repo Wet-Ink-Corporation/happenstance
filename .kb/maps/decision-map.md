@@ -10,7 +10,10 @@ summary: >-
   ADR-0016 and ADR-0029, seventeen atoms), which is also this map's first wave. Updated by the
   Maps phase of every kb-ingest wave that lands a new or superseded decision atom. The 2026-08-13
   wave added ADR-0017 through ADR-0019 (kb-decision-0017/0018/0019), phase 6's ProjectionStore
-  freeze — no existing row's status or supersession cell changed.
+  freeze — no existing row's status or supersession cell changed. The 2026-08-15 wave added
+  ADR-0030 (kb-decision-0030), which mints PS-38 rather than superseding any row on this map;
+  `supersedes: null` on the new atom is confirmed against the ADR's own "amends nothing, edits
+  nothing" bullet.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -19,7 +22,8 @@ source_paths:
   - .kb/decisions/README.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
-last_reviewed: 2026-08-13
+  - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
+last_reviewed: 2026-08-15
 ---
 
 # Decision map
@@ -91,6 +95,23 @@ its falsifier live in the first clause of each atom's `summary`, and at length u
 | ADR-0017 | [`kb-decision-0017`](../decisions/0017-what-a-projection-batch-owns.md) | What a projection batch owns, and the seam that is not a write vocabulary | accepted | 6 | — |
 | ADR-0018 | [`kb-decision-0018`](../decisions/0018-returning-a-projection-to-never-run.md) | Returning a projection to never run — scope, atomicity, and refusal | accepted | 6 | — |
 | ADR-0019 | [`kb-decision-0019`](../decisions/0019-what-happens-when-apply-fails.md) | What happens when apply fails — the port grows nothing | accepted | 6 | — |
+
+## 2026-08-15 checkpoint-progress ADR (ADR-0030)
+
+One decision atom, phase 6, `.kb/decisions/`. ADR-0030 mints `[PROVISIONAL]` clause PS-38 in
+§4.7 — a successful `commit` MUST advance its `ProjectionId`'s checkpoint, and an id no successful
+`commit` has named MUST read as `Checkpoint::NeverRun` — closing the progress-obligation gap that
+`kb-open-question-ps-1-no-progress-obligation-001` and `kb-open-question-ps-19-scope-narrower-001`
+recorded and the 2026-08-13 clause-pairing sweep confirmed. It `depends_on` `kb-decision-0007`
+(the runner/decode split), `kb-decision-0017` (the owned-`Batch` shape) and `kb-decision-0018`
+(the `ProjectionProbe` `reset` mechanism); it does not supersede any row on this map — PS-1, PS-19,
+PS-21 and PS-22 stay byte-identical, each gaining a recorded finding rather than a changed
+sentence. Both amended open-question atoms are now `status: superseded`, annotated in place; see
+[`open-questions-index.md`](open-questions-index.md).
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0030 | [`kb-decision-0030`](../decisions/0030-the-checkpoint-reports-the-commits-that-happened.md) | The checkpoint reports the commits that happened | accepted | 6 | — |
 
 ### Reading the partial-supersession chain
 
