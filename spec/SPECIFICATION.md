@@ -216,10 +216,13 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 201 clause IDs, of which 199 are normative:
-**139 `[FROZEN]`**, **50 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **two
-`[NON-NORMATIVE]`** (CF-30, and VT-12 which is a retained pointer to ES-10).
-Section 7 breaks that out per clause.
+As assembled, this document carries 201 clause IDs, of which 196 are normative:
+**137 `[FROZEN]`**, **47 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **five
+`[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; and PS-32,
+PS-33 and PS-35, the three §4 clauses whose subject was this document's own work
+list and which left the clause space at the typed layer's phase exit, their IDs
+retained so that every citation still resolves). Section 7 breaks that out per
+clause.
 
 **One standing qualification on every `[FROZEN]` port clause.** CF-25 forbids
 declaring a port frozen while an axis of §6.5's instrument portfolio has no
@@ -5270,10 +5273,12 @@ the file — Kestrel Cold Chain's `van_stock` must reset several times a day and
 **PS-18 — An adapter MUST be able to refuse a reset, through
 `ResetError::Refused`. A refusal MUST leave both the read model and the
 checkpoint unchanged, and MUST NOT be reported as success.**
-`[PROVISIONAL — falsified if no adapter ever implements protection, in which
-case the variant is dead weight and refusal belongs solely to the typed layer.
-Evaluated at the exit of the projection-port phase by asking whether the SQLite
-adapter implemented it.]`
+`[DEFERRED — evaluated at the typed layer's phase exit and the count came back
+unavailable rather than zero: the mechanism and its rule both exist now, and no
+projection adapter has shipped to implement protection. Owned by
+`projection-store-freeze` (HS-P0010), which takes the count when the first
+adapter over storage this workspace does not control clears the projection
+suite.]`
 **Rule:** `refused_reset_changes_nothing` — run against a testkit fixture store
 configured to protect one id; assert `Refused` and assert both halves intact.
 **Cases:** E2E-18.
@@ -5284,6 +5289,26 @@ no port-level mechanism is bypassed by anyone holding the store, which is every
 operator with a runbook. The port supplies the mechanism; the domain decides
 what to protect. This is the same division of labour the specification takes for
 sync compensation.
+
+**Evaluated at the typed layer's phase exit, and two things had changed — only
+one of them expected.** The typed layer's planning pass recorded this clause's
+subject as *absent from the tree*, and that is no longer true: `reset` is a
+method on the port (`crates/happenstance-core/src/projection.rs:497`),
+`ResetError::Refused` is a variant (`:287`), and
+`refused_reset_changes_nothing` is a real rule registered in the projection
+suite (`crates/happenstance-testkit/src/projection.rs:1360`, `:1909`). The
+mechanism and its instrument are both here.
+
+**What is still absent is an adapter, and the count is therefore unavailable
+rather than zero — a distinction this marker exists to preserve.** No projection
+adapter has shipped at all, and the single fixture in the workspace *declines*
+the capability with the store's own reason: `MemoryProjectionStore` holds no
+protection policy, so `reset` returns `Refused` on no path
+(`crates/happenstance-testkit/src/fixtures.rs:446`). A fixture that claimed
+`RESET_REFUSAL` to make this count come out would fail the very rule the count
+is over. So the owner is named rather than the answer guessed, and a reader can
+tell this from a question nobody has looked at — which is what moving the marker
+buys and what leaving it `[PROVISIONAL]` would have destroyed.
 
 **PS-19 — After a successful `reset`, `checkpoint(id)` MUST return
 `Checkpoint::NeverRun`, and this MUST be distinguishable from
@@ -5542,9 +5567,12 @@ onto one of Wattline's two projections.
 
 **PS-27 — The policy MUST offer skip-and-record, and the record MUST be written
 into the same batch that advances the checkpoint past the poisoned position.**
-`[PROVISIONAL — falsified if no projection ever writes a skip record, i.e. if
-"record" turns out to mean "log a warning". Evaluated at the exit of the
-typed-layer phase against the Kestrel Motor shred case.]`
+`[DEFERRED — evaluated at the typed layer's phase exit and the count is zero:
+the alpha's runner halts on the first failure and offers no failure-policy seam
+at all, so there is no path that could write a skip record. Not withdrawn — the
+Kestrel Motor shred case still needs it. Owned by `projection-store-freeze`
+(HS-P0010), which owns both the suite rule and the port surface a skip record
+would be written through.]`
 **Rule:** the new `skip_and_record_is_atomic` — a projection whose
 `Projection::on_error` writes a probe row; feed it a failing event; assert the
 probe row and the advanced checkpoint are both present after a crash injected
@@ -5561,6 +5589,29 @@ any way to record that it happened — and in Kestrel Motor the skip is the
 Article 17 evidence, so a swallowed skip is a compliance failure rather than a
 missing log line. Routing the record through the projection's own batch means no
 new port surface and no store-side knowledge of what a skip means.
+
+**Evaluated at the typed layer's phase exit, and the count is zero — but not for
+the reason the falsifier anticipated.** The falsifier expected *"record"* to
+degrade into *"log a warning"*. It did not: `happenstance::run_projection`
+(`crates/happenstance/src/runner.rs:401`) writes nothing anywhere, logs nothing,
+and **halts** on the first failure it meets. There is no `on_error`, no
+`SkipPolicy` and no policy argument of any kind, and that absence is deliberate
+rather than unfinished — it is this clause's own *Rejects* read one layer up. A
+runner-level policy forces a single answer onto every projection an application
+runs, and two read models of different tolerance are exactly the case that makes
+one answer wrong; failure policy belongs to the projection, and the projection
+trait has no seam for it yet.
+
+**So the requirement is deferred, not discharged and not withdrawn.** The skip
+primitive is still reachable by hand — a caller who spells `begin()` and
+`commit(batch, id, poison, Live)` themselves skips atomically today — and what
+is still missing is the typed way to record that it happened.
+`projection-store-freeze` (HS-P0010) owns both halves: the suite rule
+`skip_and_record_is_atomic` and the port surface the record would ride on. The
+artefact that reopens this clause is a per-projection failure policy on
+`Projection`; until one exists, an executed test holds the count
+(`crates/happenstance/tests/projection_clauses.rs`), so the day the runner grows
+one, the clause that says it has not goes red.
 
 **PS-28 — A failing `apply` MUST report the position it failed at, and MUST be
 able to carry an application error type distinct from the projection store's.**
@@ -5618,10 +5669,12 @@ handle is a supervisor that reports nothing.
 
 **PS-30 — A fan-out runner that catches a panic in `apply` MUST `rollback` the
 batch before continuing.**
-`[PROVISIONAL — falsified if the fan-out runner is not built, which is decided
-by whether the poll cost of N independent reads is real. That is a benchmark,
-not an assertion, and the workspace has no benchmark harness. Owned by the
-typed-layer phase.]`
+`[DEFERRED — evaluated at the typed layer's phase exit and the fan-out runner is
+not built, so the MUST binds nothing today. Its contingency is a benchmark
+rather than an assertion and is deliberately outside the gate under CF-34; the
+harness now exists as `experiments/polling-cost`, which is the artefact that
+reopens this clause. Owned by `projection-store-freeze` (HS-P0010) once a
+fan-out runner is buildable at all.]`
 **Rule:** the new `panicking_apply_rolls_back` — integration-level; a projection
 that panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
@@ -5633,6 +5686,29 @@ and the workspace depends on two unwritten facts to make any of this work —
 that the release profile does not set `panic = "abort"`, and that the cheap
 runner (one read, one decode, twenty applies) and the safe runner (twenty
 `tokio::spawn`s) are opposites the port adjudicates neither way.
+
+**Evaluated at the typed layer's phase exit: the fan-out runner is not built,
+and the obstacle is now stronger than *"nobody got round to it"*.** The port's
+`Batch` stopped being a generic associated type and became a plain **owned** one
+(`crates/happenstance-core/src/projection.rs:436`), so a write set cannot be
+shared between tasks at all — and moving one into a `tokio::spawn` would
+additionally require `Send`, which the flavour that exists for `wasm32` cannot
+promise. `happenstance::run_projection`
+(`crates/happenstance/src/runner.rs:401`) therefore drives exactly one
+projection per call, catches no unwind, and spawns nothing; N read models cost N
+independent reads.
+
+**The contingency is named rather than left implicit.** This clause was made
+conditional on a benchmark the workspace did not have. It has one now —
+`experiments/polling-cost`, which records the delivery amplification N
+independent reads impose — and CF-34 keeps it outside the gate by construction,
+so a number moving does not turn a measurement into a build failure. That
+harness is the artefact that reopens this clause: if its figure makes fan-out
+worth building, the runner that results owes this MUST a rollback and
+`projection-store-freeze` (HS-P0010) owns the rule. Until then the absence is
+held by an executed test rather than by recollection
+(`crates/happenstance/tests/projection_clauses.rs`), which fails the moment the
+typed layer grows a `catch_unwind` or a spawn.
 
 **PS-31 — A projection that emits events back into the event log is out of scope
 for `ProjectionStore` at 0.1, and the port MUST say so.**
@@ -5681,7 +5757,9 @@ and today it is neither.
 **PS-32 — ADR-0007's Context MUST be corrected: a callback-driven pump *can* be
 written against the port as it stands. What cannot be written is the conformance
 suite.**
-`[FROZEN]`
+`[NON-NORMATIVE — a clause whose subject is another document's wording is a work
+item, not a constraint on any implementation. The work item now exists and is
+staged; the ID is retained so that citations resolve.]`
 **Rule:** none — this is a correction to a document, and the artefact that
 proves it is the compiled pump recorded in PRESSURE-TEST §3.4.
 
@@ -5694,8 +5772,17 @@ still stands is never touched
 records the correction as owed and states its shape without performing it, and
 this pass changes nothing about that: performing it means writing the superseding
 atom, which is `/redkiln:kb-ingest`'s to author from `.kb/_intake/`, and the
-sentence being corrected belongs with whoever writes the runner. The staging note
-for the next wave is `.kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md`.
+sentence being corrected belongs with whoever writes the runner.
+
+**The runner is written, and the staging note the correction was waiting for now
+exists.** `.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md` carries both
+halves in one document: PS-33's verdict, which supersedes ADR-0007's pump
+allocation, and this clause's correction to the Context sentence that produced
+it. The earlier staging note this paragraph pointed at was consumed by the wave
+that produced
+[ADR-0030](../.kb/decisions/0030-the-checkpoint-reports-the-commits-that-happened.md),
+and pointing at a file a successful ingest deletes is the drift the reconciliation
+above exists to catch.
 **Cases:** E2E-20.
 **Rejects:** the sentence at `0007:36-38`, "The runner ADR-0006 relocated
 therefore cannot be written against the port as it stands — in either crate",
@@ -5710,18 +5797,51 @@ is worth anything.
 the contract crate's checkpoint pump has acquired no caller other than the
 typed runner by the time the typed-layer phase exits, the pump collapses upward
 into `happenstance` and ADR-0007 is superseded.**
-`[DEFERRED — the experiment is the typed layer itself; the question is answered
-by counting callers. Owned by the typed-layer phase (RUNBOOK phase 3;
-revised-runway phase 6), whose exit criteria currently do not mention it.]`
+`[NON-NORMATIVE — the falsifier was evaluated at the typed layer's phase exit,
+the verdict is recorded below, and a phase gate no adapter can fail belongs in
+prose rather than in the clause space. The ID is retained so that citations
+resolve.]`
 **Rule:** none; it is a phase gate, not an adapter obligation, and no adapter can
-fail it. Recorded as a clause because `0007:119-121` sets the falsifier, no phase
-evaluates it, and an unevaluated falsifier is indistinguishable from none.
-**Cases:** none directly; it decides where the code E2E-26 through E2E-28 test
+fail it. It was recorded as a clause because `0007:119-121` sets the falsifier,
+no phase evaluated it, and an unevaluated falsifier is indistinguishable from
+none. That is no longer the case, which is why the clause can now leave.
+**Cases:** none directly; it decided where the code E2E-26 through E2E-28 test
 lives.
 **Rejects:** keeping a seam because it was argued for — which is ADR-0007's own
 phrasing and its own risk. The fallback is already written down and is the ADR's
 narrowly-rejected alternative: one runner, in `happenstance`, with the
 checkpoint invariant living one crate above the port that states it.
+
+**Verdict, taken at the typed layer's phase exit: the falsifier fired, and the
+pump collapses upward.** The count was taken over the tree rather than
+remembered. `happenstance-core` publishes exactly two free functions — `collect`
+(`crates/happenstance-core/src/store.rs:285`) and `read_decision_model`
+(`:321`) — and **neither is a checkpoint pump; there is no pump function in the
+contract crate at all.** So the caller count is not zero over a function that
+exists, it is unavailable over a function that never landed, and both readings
+fire the same falsifier: the pump has acquired no caller but the typed one,
+because it has acquired no caller and no body. The runner an application calls
+is `happenstance::run_projection`
+(`crates/happenstance/src/runner.rs:401`), which drives the port's `checkpoint`,
+`begin`, `commit` and `rollback` directly, one crate above the port that states
+the invariant.
+
+**The verdict is executed as ADR-0007's own narrowly-rejected alternative, and
+it is staged rather than written here.** The superseding decision — one runner,
+in `happenstance`, with `happenstance-core` keeping the port and no pump — is
+staged at `.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md` for the
+human-invoked `/redkiln:kb-ingest`. It is staged rather than authored because an
+accepted decision atom is immutable and hand-writing one produces the directory
+layout of the process without the process; ADR-0007's Context is corrected by
+supersession, never by edit
+(`.kb/governance/rewrite-the-referent-never-the-reasoning.md:50-59`), which is
+the same discipline PS-32 records for the same ADR.
+
+**Why this clause leaves the space rather than becoming `[FROZEN]`.** Its
+subject was a phase's obligation to look, and the phase has looked. There is
+nothing left for an adapter to satisfy or violate, and §7.3 has recorded since
+this document's first assembly that it *should be prose* and was kept only
+because the work list did not exist. It does now, and this is it.
 
 **PS-34 — If PS-5 is falsified and `Batch` keeps its lifetime, the port MUST
 document that an implementer has to spell the parameter `Self::Batch<'_>`
@@ -5755,7 +5875,10 @@ the omission. The *value* of the bound is section 3's and is not re-decided here
 **PS-35 — The derivation decision MUST cover both ports in one ADR.
 `EventStore` and `ProjectionStore` MUST NOT be given different flavour
 schemes.**
-`[FROZEN]`
+`[NON-NORMATIVE — the artefact is an ADR, and a clause constraining the next
+pass's paperwork is a work item rather than a constraint on any implementation.
+Both ADRs it demanded exist, so the work item is closed; the ID is retained so
+that citations resolve, and what the clause forbids survives as prose below.]`
 The experiment this clause was held open for — one skeleton per adapter shape,
 declaring its real future and stream types with `todo!()` bodies, which is the
 only way to learn whether any real adapter produces a `!Sync` future — ran at
@@ -8704,10 +8827,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 34 | 24 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 42 | 32 | 9 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 38 | 19 | 18 | 1 | 0 |
+| §4 `ProjectionStore` | `PS` | 38 | 17 | 15 | 3 | 3 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 40 | 33 | 4 | 2 | 1 |
-| **Total** | | **201** | **139** | **50** | **10** | **2** |
+| **Total** | | **201** | **137** | **47** | **12** | **5** |
 
 ### 7.2 The table
 
@@ -8835,7 +8958,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` | E2E-19 |
 | PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
-| PS-18 | PROVISIONAL | `refused_reset_changes_nothing` | E2E-18 |
+| PS-18 | DEFERRED | `refused_reset_changes_nothing` | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` | E2E-23 |
@@ -8844,15 +8967,15 @@ between them because its *shape* does not wait on a transport but its
 | PS-24 | PROVISIONAL | `rebuilding_is_distinguishable_from_live` | E2E-25 |
 | PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
 | PS-26 | FROZEN | `failure_policy_is_per_projection` † | E2E-27 |
-| PS-27 | PROVISIONAL | `skip_and_record_is_atomic` † | E2E-26, E2E-27 |
+| PS-27 | DEFERRED | `skip_and_record_is_atomic` † | E2E-26, E2E-27 |
 | PS-28 | FROZEN | `pump_reports_the_failing_position` † | E2E-26 |
 | PS-29 | FROZEN | `one_poisoned_projection_does_not_stall_the_others` † | E2E-28 |
-| PS-30 | PROVISIONAL | `panicking_apply_rolls_back` † | E2E-28 |
+| PS-30 | DEFERRED | `panicking_apply_rolls_back` † | E2E-28 |
 | PS-31 | FROZEN | *(none — see clause)* | E2E-31 |
-| PS-32 | FROZEN | *(none — see clause)* | E2E-20 |
-| PS-33 | DEFERRED | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
+| PS-32 | NON-NORMATIVE | *(none — see clause)* | E2E-20 |
+| PS-33 | NON-NORMATIVE | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
 | PS-34 | PROVISIONAL | a doctest on `ProjectionStore` implementing the port for a toy store, which ca… | E2E-24 |
-| PS-35 | FROZEN | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
+| PS-35 | NON-NORMATIVE | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-17, E2E-23 |
@@ -8946,10 +9069,12 @@ between them because its *shape* does not wait on a transport but its
 
 ### 7.3 Clauses with no conformance rule
 
-Eleven normative clauses name no rule, plus one withdrawn to prose. Under CF-35 a
+Eight normative clauses name no rule, plus four withdrawn to prose. Under CF-35 a
 clause naming no rule is either wrong or belongs in prose, and must say which.
-Each of the eleven says which, and the verdicts are not uniform — three of them
-are defects in this document rather than facts about the design.
+Each of the eight says which, and the verdicts are not uniform. Three of the
+withdrawals — PS-32, PS-33 and PS-35 — were on the normative side of that count
+until the typed layer's phase exit, and this section named them as defects in
+this document rather than facts about the design from the day it was written.
 
 | Clause | Why no rule | Verdict |
 |---|---|---|
@@ -8958,21 +9083,32 @@ are defects in this document rather than facts about the design.
 | **ES-37** — `EventStore` is closed over insertion | Same: the absence of a delete method | **Correct as a clause.** Its checkable consequences are ES-38 and ES-40 |
 | **PS-9** — `Batch` carries no universal write vocabulary | Nothing checks the absence of a supertrait bound | **Correct as a clause.** The obligation it creates, PS-11, is checkable |
 | **PS-31** — outward-writing projections are out of scope | A documented exclusion is not adapter-checkable | **Correct as a clause**, because silence here is what produces the wrong implementation |
-| **PS-32** — ADR-0007's Context must be corrected | It is an instruction to edit a document | **Should be prose.** A specification clause whose subject is another document's wording is a work item, not a constraint on any implementation. It is retained here only because deleting it would lose the correction |
-| **PS-33** — ADR-0007's falsifier must be evaluated at a named phase exit | A phase gate, not an adapter obligation | **Should be prose,** for the same reason — but its content is load-bearing: `0007:119-121` sets a falsifier that no phase currently evaluates, and an unevaluated falsifier is indistinguishable from none |
-| **PS-35** — the derivation decision must cover both ports in one ADR | The artefact is the ADR | **Should be prose.** It constrains the next pass's paperwork, not an adapter |
+| **PS-32** — ADR-0007's Context must be corrected | It is an instruction to edit a document | **Moved to prose at the typed layer's phase exit,** ID retained. The work item it was waiting for exists: the correction is staged with PS-33's verdict in `.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md`, and the clause body records where it went |
+| **PS-33** — ADR-0007's falsifier must be evaluated at a named phase exit | A phase gate, not an adapter obligation | **Moved to prose at the typed layer's phase exit,** ID retained — and only because the phase *did* evaluate it. The falsifier fired: `happenstance-core` publishes two free functions and neither is a checkpoint pump, so the pump collapses upward and ADR-0007 is superseded. An unevaluated falsifier is indistinguishable from none, which is why this row could not be written until now |
+| **PS-35** — the derivation decision must cover both ports in one ADR | The artefact is the ADR | **Moved to prose,** ID retained. It constrained the next pass's paperwork, not an adapter, and both ADRs it demanded — ADR-0008 and ADR-0009 — exist. What it forbids survives in the clause body as prose |
 | **PS-36** — the `Send` flavour transitively requires `Batch: Send` | The clause says **"none that gates"**, which is not the same as none: the `compile_fail` doctest it first named cannot be pinned, because the diagnostic carries no error code and rustdoc 1.97.1 silently ignores an unmatched `compile_fail,E0308` annotation, so the annotation asserts nothing and the bare form passes on any compile error including a typo | **Correct as a clause, and the only entry here whose absence is a *finding*.** Every other row names a rule that would be wrong to write; this one names a rule that would be right to write and cannot be, on stable, without a `trybuild`-style stderr snapshot — a dependency decision phase 6 owns (ADR-0008:234-240). The doctest is kept as documentation and must not be read as a gate |
 | **PS-37** — the `Self: Sync` rule applies to `ProjectionStore` | The obligation is on the contract crate; the artefact is a generic helper that compiles | **Correct as a clause,** and the compile *is* the check — a `cargo xtask ci` build failure is as binding as a rule. It is listed here because CF-38's checker will not find a rule name and must not treat that as a dangling reference |
 | **CF-34** — performance is measured by a separate harness, which is not the bar | The clause's content is that no conformance rule may be the check | **Correct as a clause,** and self-referentially so: a rule enforcing it would violate CF-33 |
 | **CF-30** — the testkit pin recommendation | Withdrawn: no adapter behaviour violates it | Already `[NON-NORMATIVE]`; the ID is retained so citations resolve |
 
-Three clauses — PS-32, PS-33 and PS-35 — are therefore this list's real content.
-All three are in §4, all three are instructions to the pass that lands this
-specification rather than constraints on an implementation, and all three should
-move into that pass's work list and out of the clause space when it exists. They
-are left as clauses in this revision because moving them now would lose them: the
-work list does not exist yet, and PS-33's falsifier has already survived one
-document handover by being written in an ADR that no phase reads.
+Three clauses — PS-32, PS-33 and PS-35 — were this list's real content, and all
+three have now moved. All three are in §4, all three were instructions to the
+pass that lands this specification rather than constraints on an implementation,
+and all three said here from this document's first assembly that they should move
+into that pass's work list and out of the clause space **when it exists**. It
+exists: the typed layer's phase is what wrote the runner PS-33's falsifier was
+about, and the same pass took the count, staged the superseding ADR and moved all
+three markers to `[NON-NORMATIVE]` with their IDs retained.
+
+**The rows above are kept rather than deleted, for the reason §7.5 gives about
+itself: a defect list that deletes its own entries cannot be audited.** Anyone
+following a citation to PS-32, PS-33 or PS-35 — `RUNBOOK.md` carries three —
+lands on a retained ID whose body says what happened to it. And the hazard this
+group carried is worth naming as discharged rather than as absent: PS-33's
+falsifier had already survived one document handover by being written in an ADR
+that no phase read, and a falsifier that has already fired without changing
+anything is a marker that has quietly become decoration. It fired, and something
+changed.
 
 Two further clauses name a rule that checks only part of them, and are recorded
 here so the checker does not report them as clean. **VT-3** — the contract, a
@@ -9196,8 +9332,9 @@ rule that wants one.
 
 ### 7.5 Clauses that name no case
 
-Five clauses name no E2E case at all, and two more name cases only in prose after
-declaring "none directly". CF-35 requires every clause to name the cases it
+Five clauses name no E2E case at all, and one more names cases only in prose
+after declaring "none directly" — PS-3. It was two until the typed layer's phase
+exit; PS-33 was the other, and it has left the clause space. CF-35 requires every clause to name the cases it
 serves, so this list is a defect list, not a note. Two further clauses were on it
 and have been closed; they are kept in the table with their closures recorded,
 because a defect list that deletes its own entries cannot be audited.
@@ -9222,7 +9359,7 @@ recounted it against §7.2 rather than against itself.
 | **CF-33** — no rule may read a clock | Nothing; it constrains the suite | **Acceptable**, same reason |
 | **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1671-1677`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
 | **PS-3** — ship behind `unstable-projection` | "none directly", then E2E-15 through E2E-25 | **Acceptable.** It is a packaging decision that makes a range of cases safe to answer before publication |
-| **PS-33** — evaluate ADR-0007's falsifier | "none directly", then E2E-26 through E2E-28 | Already listed in §7.3 as belonging in a work list |
+| **PS-33** — evaluate ADR-0007's falsifier | "none directly", then E2E-26 through E2E-28 | **Closed at the typed layer's phase exit.** It was listed in §7.3 as belonging in a work list, and it has gone there: the clause is `[NON-NORMATIVE]` with its ID retained, so it no longer owes this table a case. The row stays because a defect list that deletes its own entries cannot be audited |
 
 So: no genuine holes left, and five clauses where naming no case is the honest
 answer and the clause says why. VT-17 closed at phase 4 with E2E-57 and WF-12
