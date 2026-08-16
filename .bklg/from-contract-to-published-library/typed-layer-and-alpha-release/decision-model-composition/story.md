@@ -7,9 +7,9 @@ title: Consistency boundaries compose at compile time
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,14 @@ archetype: capability
 slice: typed-vocabulary
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:17.850Z
+updated: 2026-08-16T20:02:43.349Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 4dc6aeb
+    - 3fde7d1
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
