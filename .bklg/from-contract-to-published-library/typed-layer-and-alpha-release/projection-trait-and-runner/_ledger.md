@@ -124,9 +124,15 @@ throwaway in-memory `ProjectionStore`, which would freeze a fixture shape this p
     projection_runner.rs::first_run_starts_from_the_beginning, ::resume_advances_past_the_checkpoint
     (a second run over an unchanged log applies 0 and reports `through: None`),
     ::tolerates_gapped_positions against `happenstance_testkit::GappyMemoryStore` at stride 7,
-    comparing only against positions the store actually returned. All PASS.
+    comparing only against positions the store actually returned, and
+    ::a_checkpoint_at_the_last_position_reports_exhausted_key_space, added after review found EC-005
+    the only row of the EC table with a correct implementation and no executed path: the checkpoint
+    is seeded at the last representable position through the **real** `MemoryProjectionStore`, and
+    the arm, its `position()` and its empty `progress()` are all asserted. Under `saturating_add`
+    the run would return `Ok` instead of that arm, so it is the wrong implementation this test
+    rejects. All PASS.
   mount_point: "crates/happenstance/src/lib.rs (run_projection's resume arithmetic, over ProjectionStore::checkpoint and ReadOptions::from)"
-  verifying_test: "crates/happenstance/tests/projection_runner.rs::resume_advances_past_the_checkpoint + ::first_run_starts_from_the_beginning + ::tolerates_gapped_positions (against happenstance_testkit::GappyMemoryStore)"
+  verifying_test: "crates/happenstance/tests/projection_runner.rs::resume_advances_past_the_checkpoint + ::first_run_starts_from_the_beginning + ::tolerates_gapped_positions (against happenstance_testkit::GappyMemoryStore) + ::a_checkpoint_at_the_last_position_reports_exhausted_key_space (EC-005)"
 
 - id: AC-005
   criterion: >-

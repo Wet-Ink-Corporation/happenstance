@@ -74,11 +74,20 @@ gate run.
     manifest carrying `rustc`, `cargo`, `git_rev`, `git_dirty`, `profile`, `os`, `cpu`,
     `logical_cpus`, `ram_bytes`, `features` and `started_at`. The fixed ones are tabulated in
     experiments/polling-cost/README.md §1 in the sibling's shape. Tests:
-    tests/record_conditions.rs::every_record_carries_every_condition (17 fields on every record, 14
+    tests/record_conditions.rs::every_record_carries_every_condition (17 fields on every record, 15
     on the manifest, none null and no empty string), ::the_manifest_appears_exactly_once_per_pass
     (and is the first line), ::a_committed_pass_measured_a_clean_tree (`git_dirty == false`,
-    `profile == release`) and ::a_pass_is_committed_at_all. All 4 PASS. The committed pass names
-    revision `55a2370` with `git_dirty: false`.
+    `profile == release`), ::started_at_is_the_run_instant_and_not_the_commit_instant (a `Z`-shaped
+    instant, parsed and asserted strictly after the instant `git_rev` was committed),
+    ::a_committed_pass_records_the_ram_it_ran_on (non-zero on a recorded pass) and
+    ::a_pass_is_committed_at_all. All 6 PASS. The committed pass names revision `3999b5a` with
+    `git_dirty: false`. Two conditions were re-taken after review: `started_at` read
+    `git log -1 --format=%cI`, the *commit* instant under a field documented as the run's, which
+    made two passes at one revision indistinguishable in the only field that separates them; and
+    `ram_bytes` was hardcoded to 0 under a field documented as "or 0 where the OS did not say",
+    implying a query nothing made. Both are captured now — the system clock, and `/proc/meminfo` /
+    `sysctl hw.memsize` / `Get-CimInstance Win32_ComputerSystem` — and the last two tests above were
+    red against the earlier pass before it was re-taken.
   mount_point: "experiments/polling-cost/Cargo.toml"
   verifying_test: "experiments/polling-cost/tests/record_conditions.rs"
 - id: AC-004
@@ -180,16 +189,22 @@ gate run.
     README section order is fixed and asserted; the headline amplification and the conditions table
     are in §1, above any per-cell detail, and the first timing figure appears after the ratio it
     qualifies. Both long tables carry an explicit `… and 30 more` overflow marker rather than
-    reflowing. Console output is plain: experiments/polling-cost/src/progress.rs emits whole
+    reflowing, and §1's conditions table is split into *the measurement* and *the machine* so
+    neither region exceeds the eight-row budget. Console output is plain:
+    experiments/polling-cost/src/progress.rs emits whole
     `\n`-terminated lines, flattens embedded control characters, and **truncates** at 80 columns
     with an ellipsis rather than wrapping. Tests:
     tests/readme.rs::the_sections_are_present_and_in_the_declared_order,
     ::the_ratio_precedes_the_first_timing_figure,
-    ::no_table_runs_past_eight_rows_without_saying_it_was_trimmed;
+    ::no_table_runs_past_eight_rows_without_saying_it_was_trimmed — scoped after review to the prose
+    following the table that overflowed, because asking the whole document meant one marker
+    satisfied every future overflow — and
+    ::a_marker_under_a_different_table_does_not_excuse_an_overflow, the document that check used to
+    accept, written down so the rule is not decorative;
     tests/output_format.rs::a_progress_line_carries_no_control_bytes (no ANSI, no carriage return,
     no newline, no `%`), ::a_long_line_is_truncated_rather_than_wrapped,
     ::every_line_the_sweep_would_emit_fits_the_budget (all 144 real sweep lines),
-    ::embedded_control_characters_are_flattened_rather_than_forwarded. All 7 PASS.
+    ::embedded_control_characters_are_flattened_rather_than_forwarded. All 8 PASS.
   mount_point: "experiments/polling-cost/Cargo.toml"
   verifying_test: "experiments/polling-cost/tests/output_format.rs, experiments/polling-cost/tests/readme.rs"
 - id: AC-010
