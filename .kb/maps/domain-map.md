@@ -14,7 +14,11 @@ summary: >-
   as superseded. The 2026-08-15 wave added ADR-0030 and a new open question (PS-32) to that same
   domain, and a new reference atom on spec-trace's per-family suite switch to "Specification
   governance & conformance," annotating the PS-1 and PS-19 open questions in both places as
-  superseded by ADR-0030.
+  superseded by ADR-0030. A second, later 2026-08-15 wave (`2026-08-15-intake`) added a new third
+  domain, "The typed layer: decision models, codecs, and payload evolution," for ADR-0020 and
+  ADR-0021 (phase 7) — the two are a subject area neither existing domain frames itself around, and
+  the domain cites `kb-decision-0006` and `kb-decision-0007` by reference rather than moving them
+  out of the ports domain.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -25,6 +29,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
+  - .kb/_governance/integration-waves/2026-08-15-intake
 last_reviewed: 2026-08-15
 ---
 
@@ -165,6 +170,30 @@ self-contained list. The ones this domain owns:
 `kb-open-question-sync-message-set-undesigned-001`,
 `kb-open-question-ps-32-adr-0007-correction-owed-001` (added 2026-08-15 — ADR-0007's Context
 overstates what cannot be written against the port; only a superseding atom may correct it).
+
+## The typed layer: decision models, codecs, and payload evolution
+
+The area concerned with `happenstance` (the typed layer) rather than `happenstance-core`: how a
+`DecisionModel`'s query is derived instead of hand-maintained, and where a codec tag and payload
+evolution live once decoding is above the port. Established by the second 2026-08-15 wave
+(`2026-08-15-intake`), which minted ADR-0020 and ADR-0021, phase 7. This is a new subject area
+rather than an extension of "Contract ports, conformance, and the ADR corpus": that domain frames
+itself around `happenstance-core`'s async port design, and these two decisions are about the crate
+one seam above it. The domain stands on two atoms that stay in the ports domain rather than moving
+here — `kb-decision-0006` allocated the typed-layer crate these decisions live in, and
+`kb-decision-0007` drew the line that decoding sits strictly above the port, the premise ADR-0021's
+first decision consumes. See [`decision-map.md`](decision-map.md#2026-08-15-typed-layer-adrs-adr-0020-adr-0021)
+for status and supersession rather than repeated here.
+
+**Decisions**
+
+- [`0020-fold-query-agreement.md`](../decisions/0020-fold-query-agreement.md)
+  (`kb-decision-0020`) — a `DecisionModel`'s query is not hand-written; it is derived on a sealed
+  `Boundary::query`, so the query and the fold can no longer name different event sets.
+- [`0021-payload-evolution-and-codec-tag.md`](../decisions/0021-payload-evolution-and-codec-tag.md)
+  (`kb-decision-0021`) — the codec tag lives in `Event::metadata`'s framing region, `EventType`
+  carries no version suffix, and an older payload shape is tolerated at decode rather than by a
+  hook on `EventStore`.
 
 ## Adding a domain
 

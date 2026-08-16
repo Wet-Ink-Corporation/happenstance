@@ -13,7 +13,10 @@ summary: >-
   freeze — no existing row's status or supersession cell changed. The 2026-08-15 wave added
   ADR-0030 (kb-decision-0030), which mints PS-38 rather than superseding any row on this map;
   `supersedes: null` on the new atom is confirmed against the ADR's own "amends nothing, edits
-  nothing" bullet.
+  nothing" bullet. A second, later 2026-08-15 wave (`2026-08-15-intake`) added ADR-0020 and
+  ADR-0021 (kb-decision-0020, kb-decision-0021), phase 7's typed-layer decisions — the first
+  phase-7 rows on this map — in their own section rather than the ADR-0030 section, since the two
+  waves share a date but not a subject; neither atom supersedes any existing row.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -23,6 +26,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
+  - .kb/_governance/integration-waves/2026-08-15-intake
 last_reviewed: 2026-08-15
 ---
 
@@ -112,6 +116,26 @@ sentence. Both amended open-question atoms are now `status: superseded`, annotat
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0030 | [`kb-decision-0030`](../decisions/0030-the-checkpoint-reports-the-commits-that-happened.md) | The checkpoint reports the commits that happened | accepted | 6 | — |
+
+## 2026-08-15 typed-layer ADRs (ADR-0020, ADR-0021)
+
+Two decision atoms, phase 7, `.kb/decisions/` — the second `kb-ingest` wave to land on 2026-08-15
+(`2026-08-15-intake`), and given its own section rather than rows appended to the
+`## 2026-08-15 checkpoint-progress ADR (ADR-0030)` section above: the two waves share a date, not
+a subject, and the map's own *Adding a row* rule opens a new section per wave, not per day. ADR-0020
+settles how a `DecisionModel`'s query is derived rather than hand-maintained; ADR-0021 settles
+where the codec tag lives in `Event::metadata` and how payload evolution is handled at decode.
+Neither supersedes any row on this map — both `supersedes: null` — and both are phase 7, the
+first phase-7 rows the map carries; the map's ADR numbering is already non-monotonic across
+sections (ADR-0029 sits inside the 2026-08-10 import, ADR-0030 precedes these two here), which the
+*Adding a row* rule makes correct rather than untidy. The two atoms carry a mutual `related` edge
+to each other, wired by both atoms at authoring time rather than by this map: ADR-0021's per-type
+query-naming cost is the tax ADR-0020's derived `Boundary::query` already collapsed to one place.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0020 | [`kb-decision-0020`](../decisions/0020-fold-query-agreement.md) | A decision model folds a domain enum, and its query is derived on a sealed trait the caller cannot override | accepted | 7 | — |
+| ADR-0021 | [`kb-decision-0021`](../decisions/0021-payload-evolution-and-codec-tag.md) | The codec tag lives in Event::metadata, event types do not carry versions, and upcasting happens at decode | accepted | 7 | — |
 
 ### Reading the partial-supersession chain
 
