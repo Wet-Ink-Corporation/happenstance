@@ -294,6 +294,21 @@ where
 /// event to the port's single [`commit`](ProjectionStore::commit) — which is
 /// what makes the read model and the checkpoint move together or not at all.
 ///
+/// # Which flavour this binds, and what spawning it costs
+///
+/// [`EventStore`], the flavour that does **not** require `Send` — so a store
+/// held through an `Rc` on a single-threaded edge runtime runs a projection
+/// here, and a `Send` store does too, through the blanket impl.
+///
+/// Spawning the returned future onto a multi-threaded runtime asks for one
+/// thing more, and it is the caller's to supply. On a failure this runner
+/// holds the stop — which carries `S::Error` — across the port's `rollback`
+/// await, because one [`ProjectionError`] needs the error *and* what the
+/// rollback said. `Error` carries no `Send` bound by design, so add
+/// `S::Error: Send + Sync` to your own signature, or declare the marker
+/// trait ADR-0009 records and bound on that instead.
+/// `crates/happenstance/tests/flavours.rs` carries the worked shape.
+///
 /// # It streams, and that is not an implementation detail
 ///
 /// The replay is never collected. [`EventStore::read`] returns its stream at

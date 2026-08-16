@@ -170,6 +170,12 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 /// function with the codec spelled out: there is one implementation of the
 /// policy below and both doors go through it.
 ///
+/// Bound on [`EventStore`], the flavour that does **not** require `Send`, so a
+/// store held through an `Rc` on a single-threaded edge runtime is accepted
+/// here. It is the weaker requirement of the two, and the blanket impl means a
+/// `Send` store satisfies it as well — binding the other way round would have
+/// locked out `wasm32` for no gain.
+///
 /// # The retry policy
 ///
 /// On a violated condition the loop goes back to step one. It re-derives the
@@ -231,6 +237,13 @@ where
 /// `Json` already chosen, and exists beside it so that a first program names a
 /// domain before it names an encoding. One entry point always taking `&C` lost
 /// for exactly that reason.
+///
+/// Bound on [`EventStore`], the flavour that does **not** require `Send`, so an
+/// `Rc`-backed store on a single-threaded edge runtime is accepted — and a
+/// `Send` store is too, through the blanket impl. Spawning this loop onto a
+/// multi-threaded runtime works without any further bound: the store error is
+/// collapsed to a control decision before the next read's await, so nothing
+/// unbounded is alive across a suspension point.
 ///
 /// On a violated condition it re-derives the query, re-reads the store, folds
 /// a **fresh clone** of the boundary you handed it and calls your closure

@@ -445,6 +445,133 @@ fn no_contract_name_is_shadowed() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// HS-S0031 AC-007 — the flavour is stated where the reader meets it
+// ---------------------------------------------------------------------------
+
+/// The `///` block immediately above an item declaration, line by line.
+///
+/// Returns the doc lines in source order with the `/// ` prefix removed, so
+/// both the first sentence and the rendered column can be measured.
+fn item_doc(source: &str, declaration: &str) -> Vec<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let at = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(declaration))
+        .unwrap_or_else(|| panic!("no item declared `{declaration}`"));
+
+    let mut doc: Vec<String> = Vec::new();
+    for line in lines[..at].iter().rev() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("///") {
+            doc.push(rest.strip_prefix(' ').unwrap_or(rest).to_owned());
+            continue;
+        }
+        // Attributes and ordinary comments sit between the doc block and the
+        // declaration; anything else ends the block.
+        if trimmed.starts_with("#[") || trimmed.starts_with("//") || trimmed.is_empty() {
+            continue;
+        }
+        break;
+    }
+    doc.reverse();
+    assert!(!doc.is_empty(), "`{declaration}` carries no documentation");
+    doc
+}
+
+/// The first sentence of a doc block: up to the first `. ` or trailing `.`.
+fn first_sentence(doc: &[String]) -> String {
+    let joined = doc.join(" ");
+    match joined.find(". ") {
+        Some(at) => joined[..=at].trim().to_owned(),
+        None => joined.trim_end().to_owned(),
+    }
+}
+
+#[test]
+fn entry_points_state_their_flavour() {
+    // Every generic entry point this crate exposes over a caller's store. The
+    // DSL is deliberately absent: `given` builds its own `MemoryEventStore` and
+    // takes no store parameter, so it has no flavour to bind.
+    let mut entry_points: Vec<(&str, &str)> = vec![
+        ("command.rs", "pub async fn commit<"),
+        ("command.rs", "pub async fn commit_with<"),
+    ];
+    if cfg!(feature = "unstable-projection") {
+        entry_points.push(("runner.rs", "pub async fn run_projection<"));
+    }
+
+    for (file, declaration) in entry_points {
+        let source = read(file);
+        let doc = item_doc(&source, declaration);
+        let page = doc.join(" ");
+
+        // Stated on the item, not in a separate "edge notes" section a reader
+        // has to jump to.
+        assert!(
+            page.contains("EventStore") && !page.contains("SendEventStore"),
+            "{file}: `{declaration}` does not say on its own page that it binds \
+             `EventStore`, the weaker flavour that accepts both"
+        );
+        assert!(
+            page.contains("wasm32") || page.contains("!Send") || page.contains("edge"),
+            "{file}: `{declaration}` names the bound without naming what it \
+             buys — a store that is not `Send` at all"
+        );
+
+        // Density budget, in `_design.md`'s own units.
+        let opening = first_sentence(&doc);
+        assert!(
+            opening.chars().count() <= 80,
+            "{file}: `{declaration}`'s first sentence is {} characters; the \
+             budget is 80 and the item table truncates: {opening}",
+            opening.chars().count()
+        );
+        let mut fenced = false;
+        for line in &doc {
+            if line.trim_start().starts_with("```") {
+                fenced = !fenced;
+                continue;
+            }
+            if fenced || line.contains("http") {
+                continue;
+            }
+            // The rendered column is the whole authored line, `/// ` included.
+            let columns = line.chars().count() + 4;
+            assert!(
+                columns <= 80,
+                "{file}: a doc line on `{declaration}` is {columns} columns; \
+                 the budget is 80: {line}"
+            );
+        }
+    }
+}
+
+/// AC-007's second half, stated as an absence: nothing here promises an
+/// *executed* edge test. The gate step is a `cargo check`, and claiming more
+/// than it checks is the prose-guarantee failure this repository keeps finding.
+#[test]
+fn no_page_claims_an_executed_edge_test() {
+    for (path, body) in crate_sources() {
+        for line in body.lines() {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with("//") {
+                continue;
+            }
+            let lowered = trimmed.to_lowercase();
+            let claims_execution = (lowered.contains("wasm32") || lowered.contains("workers"))
+                && (lowered.contains("tests run") || lowered.contains("tested on"));
+            assert!(
+                !claims_execution,
+                "{}: a page claims the typed layer's tests execute on an edge \
+                 runtime; the gate compiles, and executing them is HS-P0013's: \
+                 {trimmed}",
+                path.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn no_local_projection_store() {
     // Assembled rather than written out, so this assertion does not find

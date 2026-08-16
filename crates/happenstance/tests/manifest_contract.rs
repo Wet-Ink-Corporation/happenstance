@@ -220,6 +220,52 @@ fn unstable_projection_is_declared_off_by_default() {
 }
 
 // ---------------------------------------------------------------------------
+// HS-S0031 AC-007 — `#[async_trait]` cannot arrive by accident
+// ---------------------------------------------------------------------------
+
+/// The workspace's `deny.toml`, read as a string.
+///
+/// `include_str!` rather than a `cargo deny` invocation on purpose: the tool is
+/// `OPTIONAL` and probed in the gate, so on a machine without it the ban would
+/// otherwise be unenforced *and* unobserved. This asserts the ban **line**
+/// exists, which is a check no missing tool can skip.
+const DENY: &str = include_str!("../../../deny.toml");
+
+#[test]
+fn async_trait_is_banned() {
+    // The `[bans]` section, from its heading to the next one. Read as a region
+    // rather than line by line, because the `deny` array is a multi-line table
+    // and a per-line scan would see only its opening bracket.
+    let bans = DENY
+        .split_once("[bans]")
+        .map(|(_, rest)| rest.split("\n[").next().unwrap_or(rest))
+        .expect("deny.toml still has a `[bans]` section");
+
+    let listed = bans
+        .split_once("deny = [")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .is_some_and(|(array, _)| array.contains("async-trait"));
+
+    assert!(
+        listed,
+        "`async-trait` is not in deny.toml's `[bans]` deny list, so nothing \
+         refuses the one attribute that makes the wasm32 target impossible"
+    );
+
+    // A ban with no reason is a line the next contributor deletes. The comment
+    // names the decision it enforces.
+    let reasoned = DENY.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with('#') && trimmed.contains("ADR-0001")
+    });
+    assert!(
+        reasoned,
+        "the `async-trait` ban names no reason: `deny.toml` must cite ADR-0001, \
+         which is why `#[async_trait]` is refused rather than merely disliked"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // The workspace pin, and the header a shipped codec moves a crate out of
 // ---------------------------------------------------------------------------
 
