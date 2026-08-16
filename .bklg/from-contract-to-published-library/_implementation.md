@@ -456,3 +456,25 @@ each story carrying only its own checkpoint, which is the rule run 2 of HS-P0010
 then re-launch the workflow fresh at the same baseRef. Git truth re-enters at slice
 `decision-records`'s Review — both stories are committed but the slice is unsealed — and the fix pass
 flips both AC-008 rows against the wave sha before the slice seals.
+
+### HS-P0011 — run 2 not launched, 2026-08-15 (preflight halt)
+
+Preflight was otherwise clean: tree clean, branch confirmed, full-suite step skipped against
+`entry_baseline`, and `cargo xtask affected --base main` green at `68a5c99` (227 tests, exit 0).
+**No workflow was launched and no transition was recorded**, by human decision at the entry gate.
+
+The wave run 1 asked for **exists but is unmerged**. `.claude/worktrees/kb-intake-2026-08-15`
+(branch `worktree-kb-intake-2026-08-15`) holds `.kb/decisions/0020-fold-query-agreement.md` and
+`-0021-payload-evolution-and-codec-tag.md` authored at `status: accepted`, with `decision-map.md`
+and `domain-map.md` freshly written — but its branch is still at `68a5c99`, identical to this one,
+so **nothing is committed**, and its `.kb/_intake/` still holds both source documents rather than
+having been cleared. The wave stopped short of its clear-and-commit step.
+
+On this branch, therefore, `.kb/decisions/0020-*` and `0021-*` do not exist, and both stories'
+AC-008 asserts an accepted atom at exactly those paths. A re-launch would re-enter slice
+`decision-records` at Review — both stories committed, slice unsealed — and find the same two rows
+`satisfied: false`, spending a run to reconfirm a block already recorded above. baseRef for the
+eventual run 2 stays **`74135b8`**, unchanged.
+
+**Precondition for run 2:** the wave commits and merges onto `initiative/from-contract-to-published-library`,
+leaving `.kb/_intake/` holding only `README.md` and `redkiln validate --kb` passing.
