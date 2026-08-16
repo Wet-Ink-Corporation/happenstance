@@ -46,6 +46,18 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 # Naming `Stream` is unavoidable in a hand-written `impl EventStore`, and the
 # command loop's recording/violating wrapper is one. Dev-only.
 futures-core = { workspace = true }
+# `FaultyStore`, for the retry demonstration that needs no database.
+#
+# Deliberately **not** `{ workspace = true }`, and this is NF-006 rather than an
+# oversight. `[workspace.dependencies]` carries `version = "0.2.0"` on this
+# crate, and a dev-dependency carrying a version has to resolve from the
+# registry at publish time — which would make `happenstance-testkit` publish
+# *before* `happenstance`, a coupling CF-32's independent version number exists
+# to avoid. Cargo strips a versionless dev-dependency from the published
+# manifest entirely, so the path-only spelling is what keeps the two crates'
+# release order free. It is a path within this workspace, so no third-party
+# version escapes the single source of truth above.
+happenstance-testkit = { path = "../happenstance-testkit" }
 
 [features]
 # `json` joins the defaults so a first program names a domain before it names an

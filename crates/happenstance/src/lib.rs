@@ -122,6 +122,19 @@
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
 //!
+//! # Testing without a database
+//!
+//! *Does the domain model work* and *pick a database* are two decisions, and
+//! only the first one is due now. [`happenstance::testing`][testing-module] is
+//! where the first is answered: `given(model).event(a)?.when(..).await?` folds
+//! your boundary over an in-memory store and hands back a `Decision` to assert
+//! on — no connection string, no fixture, one `await`.
+//!
+//! For a store that *misbehaves* on demand — an append refused without naming
+//! the conflict, positions that are not dense — add `happenstance-testkit` as a
+//! dev-dependency. A test double belongs in a second crate rather than in an
+//! application's own dependency graph.
+//!
 //! Adapter authors should depend on [`happenstance_core`] directly rather than
 //! on this crate: it is the smaller semver surface, and it is the one the
 //! conformance suite is written against.
@@ -133,6 +146,19 @@
 // design's mock caught before any of this was written.
 #![cfg_attr(feature = "json", doc = "[command-loop]: commit")]
 #![cfg_attr(not(feature = "json"), doc = "[command-loop]: commit_with")]
+// The same trick, for the same reason: the testing module exists only where
+// both features that build it are on, and an intra-doc link that resolves in
+// only some configurations is a hard rustdoc error rather than a warning. The
+// region above stays on the page either way — a region that disappeared with a
+// feature would leave a reader who turned one off wondering what they lost.
+#![cfg_attr(
+    all(feature = "memory", feature = "json"),
+    doc = "[testing-module]: testing"
+)]
+#![cfg_attr(
+    not(all(feature = "memory", feature = "json")),
+    doc = "[testing-module]: https://docs.rs/happenstance/latest/happenstance/testing/"
+)]
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -144,6 +170,21 @@ mod codec;
 mod command;
 mod domain;
 mod sealed;
+
+// The one deliberate exception to root re-export: a **named module**, not a
+// handful of `pub use`s. `given`, `Decision` and `assert_domain_event` are
+// test-time vocabulary, and mixing them into the root's item table doubles the
+// page a reader scans for the four names they actually need.
+//
+// Two features, not one. The design's item table says `memory` — the store
+// `given` builds — and that is incomplete rather than wrong: `Given::event`
+// seeds through the codec `commit` writes with, which is `Json`, which is
+// `json`'s. Both are in `default`, so the item a `cargo add happenstance` user
+// meets is the item the design signed off; what the second gate buys is a
+// feature powerset that still compiles.
+#[cfg(all(feature = "memory", feature = "json"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memory", feature = "json"))))]
+pub mod testing;
 
 #[cfg(test)]
 mod tests;

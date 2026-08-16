@@ -472,6 +472,7 @@ dependencies = [
  "ciborium",
  "futures-core",
  "happenstance-core",
+ "happenstance-testkit",
  "postcard",
  "serde",
  "serde_json",
