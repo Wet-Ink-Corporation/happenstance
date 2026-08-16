@@ -7,9 +7,9 @@ title: The worked example, rewritten on the typed layer and actually executed
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,13 +22,13 @@ archetype: capability
 slice: worked-example-and-proof
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:11.724Z
+updated: 2026-08-16T20:26:11.591Z
 links:
   pr: null
   commits:
     - 597a20e
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
