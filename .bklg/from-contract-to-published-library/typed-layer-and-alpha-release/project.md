@@ -9,7 +9,7 @@ initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
 status: implementing
 process: project
-stage: implementation
+stage: integration
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T00:19:48.476Z
+updated: 2026-08-16T23:13:25.742Z
 links:
   pr: null
   commits: []
