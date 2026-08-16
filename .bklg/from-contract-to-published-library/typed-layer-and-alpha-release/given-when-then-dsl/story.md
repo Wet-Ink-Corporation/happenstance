@@ -7,9 +7,9 @@ title: A given/when/then DSL that cannot hide its own filter
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: testing-surface
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:08.589Z
+updated: 2026-08-16T20:23:01.260Z
 links:
   pr: null
   commits:
     - bd054c0
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
