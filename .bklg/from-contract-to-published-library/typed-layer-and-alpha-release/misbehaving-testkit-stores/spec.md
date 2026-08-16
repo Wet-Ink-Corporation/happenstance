@@ -257,8 +257,22 @@ crates/happenstance-testkit/tests/**
 crates/happenstance-testkit/Cargo.toml
 crates/happenstance-testkit/README.md
 CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/misbehaving-testkit-stores/**
 ```
+
+**`standards/rust/**` was added on 2026-08-16, and it admits citation re-anchoring ONLY.**
+The constitution cites `crates/happenstance-testkit/src/lib.rs` and the mutation-coverage
+harness by `file:line`; this story adds the "Stores that misbehave on purpose" region,
+which moved every anchor below it by 41 lines, and `cargo xtask lint-constitution` is a
+gate step. The story is therefore forced across its boundary or into a red gate, with no
+third option. This entry permits **line-number repair to existing citations and nothing
+else**: rule text, evidence selection, rule retirement and new atoms all stay outside, so
+the widening cannot later be cited to justify editing a rule. This story's actual use is
+eleven citations across `41-declarative-macros.md`, `62-doctests-and-harnesses.md`,
+`91-adapter-authoring-recipe.md` and `60-what-a-test-must-prove.md`, every hunk a balanced
+insertion/deletion. Fourth instance of this class in the initiative; HS-P0010 settled the
+first three the same way and predicted the recurrence.
 
 ## Behavior and interfaces
 

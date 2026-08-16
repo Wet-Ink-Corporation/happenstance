@@ -238,8 +238,20 @@ examples/course-subscriptions/Cargo.toml
 xtask/src/proof.rs
 Cargo.toml
 Cargo.lock
+standards/rust/**
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/compile-fail-proof-artefact/**
 ```
+
+**`standards/rust/**` was added on 2026-08-16, and it admits citation re-anchoring ONLY.**
+The constitution cites this story's sources by `file:line` and `cargo xtask
+lint-constitution` is a gate step, so landing the compile-fail artefact moves cited lines
+and forces the story across its boundary or into a red gate, with no third option. This
+entry permits **line-number repair to existing citations and nothing else**: rule text,
+evidence selection, rule retirement and new atoms all stay outside, so the widening cannot
+later be cited to justify editing a rule. This story's actual use of it is a single line of
+`standards/rust/90-skeletons-and-todo.md` (`c4e36c4`, one insertion against one deletion).
+Fourth instance of this class in the initiative; HS-P0010 settled the first three the same
+way and predicted the recurrence.
 
 **In this PR**
 

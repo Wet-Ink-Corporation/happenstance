@@ -181,8 +181,19 @@ crates/happenstance/src/**
 crates/happenstance/tests/**
 crates/happenstance/Cargo.toml
 Cargo.lock
+standards/rust/**
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/command-loop/**
 ```
+
+**`standards/rust/**` was added on 2026-08-16, and it admits citation re-anchoring ONLY.**
+The constitution cites this story's own sources by `file:line`, `cargo xtask
+lint-constitution` is a gate step, and landing the command loop moves the cited lines — so
+the story is forced across its boundary or into a red gate, with no third option. This
+entry permits **line-number repair to existing citations and nothing else**: rule text,
+evidence selection, rule retirement and new atoms all stay outside, so the widening cannot
+later be cited to justify editing a rule. This story's actual use of it is one line of
+`standards/rust/90-skeletons-and-todo.md`. Fourth instance of this class in the initiative;
+HS-P0010 settled the first three the same way and predicted the recurrence.
 
 **`Cargo.lock` was added to the fence on 2026-08-16, and it is a repair rather than a
 widening.** The fence already authorises `crates/happenstance/Cargo.toml`, and cargo

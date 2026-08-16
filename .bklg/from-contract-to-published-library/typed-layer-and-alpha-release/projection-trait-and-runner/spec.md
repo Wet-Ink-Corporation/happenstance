@@ -326,8 +326,25 @@ crates/happenstance/tests/**
 crates/happenstance/Cargo.toml
 Cargo.toml
 Cargo.lock
+xtask/src/main.rs
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/projection-trait-and-runner/**
 ```
+
+**`xtask/src/main.rs` was added on 2026-08-16, and it admits ONLY assertions this story's
+own work falsified.** `xtask`'s unit tests hold the typed layer's feature table against its
+public surface, and one of them asserted that *"`happenstance` re-exports no projection
+item, so a public feature there would promise a surface the crate does not expose."*
+Landing the projection runner makes that premise false. The story therefore had three
+options and only one honest one: leave a test asserting something untrue, delete the check,
+or restate it in the direction that still has content — a passthrough **and** a surface, or
+neither, still forbidding the pair coming apart. It took the third.
+
+This is the same shape as the `standards/rust/**` widenings elsewhere in this project — a
+cross-referencing check whose target sits outside any story's natural boundary — and it is
+scoped the same narrow way. It permits **repairing assertions whose premise this story's
+own deliverable invalidated, and nothing else**: no new gate step, no change to an
+unrelated assertion, and no relaxation of a check that still holds. Adding a gate step
+belongs to `edge-flavour-and-wasm-claim` and `publish-0-2-0-alpha-1`, which own that work.
 
 **In this PR.** The `Projection` trait; `run_projection`; `Progressed` and
 `ProjectionError` with their variants and `#[non_exhaustive]` attributes; the query
