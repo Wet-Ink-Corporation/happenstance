@@ -2,7 +2,7 @@
 
 use core::marker::PhantomData;
 
-use happenstance_core::{Event, EventType, InvalidQuery, Query, QueryItem, SequencedEvent, Tags};
+use happenstance_core::{EventType, InvalidQuery, Query, QueryItem, SequencedEvent, Tags};
 
 use crate::codec::{Codec, CodecError};
 use crate::domain::{DecisionModel, DomainEvent};
@@ -23,15 +23,39 @@ use crate::domain::{DecisionModel, DomainEvent};
 /// implemented for tuples of them. A third implementation cannot be written
 /// outside this crate, because the supertrait cannot be named outside it.
 ///
+/// Every item below the seal is well-formed on purpose. `Ev` is a complete
+/// [`DomainEvent`], so `type Event` discharges its own bound and the **only**
+/// diagnostic left is the seal — one `E0277`, naming
+/// `crate::sealed::Sealed` as the bound `Divergent` does not satisfy. A fence
+/// whose associated type also failed would stay red with the supertrait
+/// deleted, and would therefore prove nothing about it (RS-62-1: do not trust
+/// the error code — measure what the fence actually rejects).
+///
 /// ```compile_fail
 /// // compile_fail: boundary_cannot_be_implemented_outside_the_crate
 /// use happenstance::{Boundary, Codec, CodecError, DomainEvent};
 /// use happenstance::{EventType, InvalidQuery, Query, SequencedEvent};
+/// use happenstance::{Tags, bytes::Bytes};
+///
+/// #[derive(serde::Serialize, serde::Deserialize)]
+/// struct Ev;
+///
+/// impl DomainEvent for Ev {
+///     const EVENT_TYPES: &'static [EventType] =
+///         &[EventType::from_static("Ev")];
+///     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
+///     fn tags(&self) -> Tags { Tags::empty() }
+///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+///         c.encode(self)
+///     }
+///     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+///         -> Result<Self, CodecError> { c.decode(d) }
+/// }
 ///
 /// struct Divergent;
 ///
 /// impl Boundary for Divergent {
-///     type Event = Divergent;
+///     type Event = Ev;
 ///     fn query(&self) -> Result<Query, InvalidQuery> {
 ///         Ok(Query::all())
 ///     }
@@ -96,9 +120,25 @@ impl<M: DecisionModel> Boundary for M {
 
     fn absorb<C: Codec>(&mut self, event: &SequencedEvent, codec: &C) -> Result<(), CodecError> {
         let () = AtLeastOneType::<M::Event>::CHECKED;
-        if !nominates(M::Event::EVENT_TYPES, self.scope(), &event.event) {
+
+        // The nomination check *is* the derived query, asked. A second
+        // predicate spelled from the same two inputs would be the second place
+        // the event set is named, which is the defect this trait removes; and
+        // `Query::matches` is the contract's only filter vocabulary — there is
+        // no other one to reach for. The cost is one derivation per event.
+        // Caching it is what NF-002 rejects: a cached query makes the
+        // composite's answer depend on when the boundary was built.
+        let Ok(query) = self.query() else {
+            // Unreachable for a well-formed model: the `const` above already
+            // made an empty `EVENT_TYPES` a compile error, and a non-empty one
+            // always yields a constrained item. Spelled as "nominated nothing,
+            // folded nothing" rather than as an `unwrap`.
+            return Ok(());
+        };
+        if !query.matches(event.event.event_type(), event.event.tags()) {
             return Ok(());
         }
+
         let decoded = M::Event::decode(codec, event.event.event_type(), event.event.data())?;
         self.apply(decoded);
         Ok(())
@@ -128,12 +168,4 @@ impl<E: DomainEvent> AtLeastOneType<E> {
 pub(crate) fn derive_query(types: &[EventType], scope: &Tags) -> Result<Query, InvalidQuery> {
     let item = QueryItem::new(types.iter().cloned(), scope.clone())?;
     Ok(Query::from_item(item))
-}
-
-/// Whether the query derived from `types` and `scope` nominates `event`.
-///
-/// Spelled from the same two inputs [`derive_query`] reads, so the fold and
-/// the query cannot disagree about what was selected.
-pub(crate) fn nominates(types: &[EventType], scope: &Tags, event: &Event) -> bool {
-    types.contains(event.event_type()) && event.tags().contains_all(scope)
 }

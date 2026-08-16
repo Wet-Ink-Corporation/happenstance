@@ -76,12 +76,13 @@ written inside a file that commit contains. `redkiln record-links <item> --sha
 | `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance --no-deps` | warning-free |
 | `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance --no-deps --no-default-features` | warning-free — AC-008's manual check, cited because the gate's own feature-off doc step covers `happenstance-core` only |
 | `cargo xtask affected --base main` | **passed** (227 passed, 0 failed) — the story grain, and this slice's merge gate |
-| `cargo xtask ci --fast` | **red, on a step this slice does not touch.** See *Notes* |
+| `cargo xtask ci --fast` | **green**, after the pre-existing citation drift was routed and repaired in its own checkpoint. See *Notes* |
 
 ## Notes
 
-**`cargo xtask ci --fast` fails on a pre-existing citation drift, outside this
-slice.** The failing step is *the Rust constitution is internally consistent*:
+**`cargo xtask ci --fast` was red on a pre-existing citation drift, outside this
+slice — now routed, repaired and green.** The failing step was *the Rust
+constitution is internally consistent*:
 
 ```
 standards/rust/60-what-a-test-must-prove.md:68 — crates/happenstance-testkit/tests/mutation_coverage/harness.rs:454 no longer has `catch_unwind(probe.run)` within 10 lines
@@ -92,11 +93,19 @@ standards/rust/60-what-a-test-must-prove.md:163 — …/harness.rs:296 no longer
 `git diff d4aedfc..HEAD --name-only` shows this slice touched **nothing** under
 `standards/` or `crates/happenstance-testkit/`; `harness.rs` was last changed by
 `90421d0 fix(typed-layer-and-alpha-release): repair contaminated baseline test`,
-which shifted the lines those three citations point at. It is `misbehaving-testkit-stores`'
-neighbourhood and outside both of this slice's declared PR boundaries, so it is
-reported rather than repaired — a three-line citation fix in a file this story is
-not licensed to touch would fail `redkiln verify --grain story` for the boundary,
-not for the code.
+which shifted the lines those three citations point at by twelve.
+
+Reporting it was not enough: `cargo xtask ci --fast` **is** this slice's declared
+merge bar (story 1's Merge DoD one-liner, project DoD 6), and a slice cannot merge
+claiming a bar it has not cleared. The repair is therefore routed to the story that
+owns both paths — `misbehaving-testkit-stores`, the `90421d0` neighbourhood — and
+landed as **its own checkpoint commit**, carrying `Story:
+typed-layer-and-alpha-release/misbehaving-testkit-stores` and `Baseline-Repair:
+typed-layer-and-alpha-release` so the attribution is in the history rather than in
+a report. Three line numbers changed and nothing else: `harness.rs:466`, `:342`,
+`:308`; the cited anchor text is untouched. `cargo xtask lint-constitution` now
+reports *27 atoms, all consistent*, and `cargo xtask ci --fast` was then run once
+for the slice.
 
 **Three implementation notes worth keeping.**
 

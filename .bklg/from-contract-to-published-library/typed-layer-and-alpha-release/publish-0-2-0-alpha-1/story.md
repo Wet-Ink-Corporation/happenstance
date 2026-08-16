@@ -40,3 +40,25 @@ process_rev: b611dd09
 > `implementation-report.md` → `report.md`), and the implement workflow reads `spec.md`, never this
 > card. Machine state (id / status / stage / archetype / slice / blocked_by) lives in the frontmatter
 > above; leaving this body as-is is expected, not a half-run pipeline.
+
+## Inbound handoffs
+
+Findings routed here by an earlier slice rather than fixed there. Each names the exact line and the
+AC of this story's `spec.md` that already covers it; none of them widens this story's scope.
+
+- **`crates/happenstance/README.md:6` contradicts the crate root, and the contradiction ships.**
+  The line reads *"**Status: early, and this crate is currently a facade.** It re-exports
+  [`happenstance-core`](https://crates.io/crates/happenstance-core) and adds nothing yet."* As of
+  the **typed-vocabulary** slice (M2 — `domain-event-and-decision-model` +
+  `decision-model-composition`) that is false: `crates/happenstance/src/lib.rs` exports
+  `DomainEvent`, `DecisionModel`, `Boundary`, `Codec` and `CodecError`, and its module doc opens
+  with a program that uses them. `crates/happenstance/src/lib.rs:10`
+  (`#![cfg_attr(doctest, doc = include_str!("../README.md"))]`) compiles this README into the
+  doctest set, so the page is both published-facing and gated — and the two surfaces currently
+  disagree about whether the typed layer exists.
+
+  Already covered by **AC-003** of this story's `spec.md`, which requires the blockquote at
+  `crates/happenstance/README.md:6-11` **deleted** rather than annotated and the word *facade*
+  absent from the page (`rg -n "facade" crates/happenstance/README.md` returning nothing). Logged
+  here so the alpha is not cut with the two pages disagreeing; `crate-readme` is M5-M7's surface
+  and was explicitly outside M2's PR globs, so M2 could not and did not touch it.

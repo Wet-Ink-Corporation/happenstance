@@ -20,19 +20,12 @@
 //! };
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
-//! enum Seat { Taken, Freed }
+//! enum Seat { Taken }
 //!
 //! impl DomainEvent for Seat {
-//!     const EVENT_TYPES: &'static [EventType] = &[
-//!         EventType::from_static("SeatTaken"),
-//!         EventType::from_static("SeatFreed"),
-//!     ];
-//!     fn event_type(&self) -> EventType {
-//!         match self {
-//!             Self::Taken => Self::EVENT_TYPES[0].clone(),
-//!             Self::Freed => Self::EVENT_TYPES[1].clone(),
-//!         }
-//!     }
+//!     const EVENT_TYPES: &'static [EventType] =
+//!         &[EventType::from_static("SeatTaken")];
+//!     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
 //!     fn tags(&self) -> Tags { Tags::empty() }
 //!     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 //!         c.encode(self)
@@ -48,10 +41,7 @@
 //!     type Event = Seat;
 //!     fn scope(&self) -> &Tags { &self.scope }
 //!     fn apply(&mut self, event: Seat) {
-//!         match event {
-//!             Seat::Taken => self.taken += 1,
-//!             Seat::Freed => self.taken -= 1,
-//!         }
+//!         match event { Seat::Taken => self.taken += 1 }
 //!     }
 //! }
 //!
@@ -82,18 +72,21 @@
 //!
 //! # The vocabulary
 //!
-//! A linked term is an item you can use today. The three still marked
+//! A linked term is an item you can use today. The two still marked
 //! *Planned, and specified in
 //! [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)*
 //! say so, and say it about themselves rather than about the page.
 //!
-//! * **`Codec`** *(planned)* — payload encoding. Events carry a codec tag so
+//! * [**`Codec`**](Codec) — payload encoding. Events carry a codec tag so
 //!   one store can hold more than one encoding at a time, which is what makes
-//!   a migration possible.
+//!   a migration possible. The concrete codecs — JSON and friends — and the
+//!   feature flags that gate them are what is still *planned*.
 //! * [**`DomainEvent`**](DomainEvent) — a Rust type's mapping to its
 //!   [`EventType`] and [`Tags`].
 //! * [**`DecisionModel`**](DecisionModel) — folds read events into decidable
-//!   state and produces the matching [`Query`], through [`Boundary`].
+//!   state and produces the matching [`Query`], through [`Boundary`]. Its
+//!   item page carries the program above over two variants, where the fold
+//!   has more than one arm to be exhaustive over.
 //!   Composing several into one query — put them in a tuple, which is a
 //!   [`Boundary`] too — is the mechanism that makes a dynamic consistency
 //!   boundary *dynamic*.

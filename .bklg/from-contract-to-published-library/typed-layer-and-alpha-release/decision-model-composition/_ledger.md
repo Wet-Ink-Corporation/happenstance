@@ -23,7 +23,7 @@ quiet ledger edit.
   evidence: >-
     `crates/happenstance/src/composition.rs:24` (the internal `macro_rules!`), invoked once per
     arity at `:95` (2) and `:161-166` (3 through 8) — seven arities, fourteen emitted impls,
-    reachable through `crates/happenstance/src/lib.rs:113-114`. No new crate-root name is added:
+    reachable through `crates/happenstance/src/lib.rs:106-107`. No new crate-root name is added:
     `git diff` shows no new `pub use` in `lib.rs`. Passing test
     `crates/happenstance/tests/composition.rs::a_tuple_is_a_boundary` builds 2-, 3- and 8-tuples
     in a **downstream** test crate, importing only `happenstance::…`, and drives both `query()`
@@ -84,7 +84,9 @@ quiet ledger edit.
   evidence: >-
     `crates/happenstance/src/composition.rs:75-92` — the composite asks each member in turn and
     each member's own `absorb` consults its own derived query (`crates/happenstance/src/
-    boundary.rs:97`, through `nominates` at `:137`). Passing tests in
+    boundary.rs:121`, which derives the query and asks `Query::matches` at `:131-140` — the
+    contract's only filter vocabulary, per AC-U04; the hand-rolled `nominates` predicate that
+    shipped in the first pass is deleted, so there is no second predicate to diverge from it). Passing tests in
     `crates/happenstance/tests/composition.rs`: `each_member_absorbs_only_what_it_nominated`, over
     two models that **share** an event type across disjoint tags plus one event inside both
     boundaries and one inside neither — each member folds exactly its own two. Paired with
@@ -95,8 +97,8 @@ quiet ledger edit.
     half is proved by the slice-mate's
     `crates/happenstance/src/tests.rs::absorb_returns_unknown_event_type_when_a_nominated_event_
     cannot_be_decoded`, and the composite propagates it by `?` at
-    `crates/happenstance/src/composition.rs:91-92`; the impl's own doc comment
-    (`:113-118`) states that earlier members have already folded and are **not** rolled back.
+    `crates/happenstance/src/composition.rs:86-87`; the impl's own doc comment
+    (`:109-112`) states that earlier members have already folded and are **not** rolled back.
   mount_point: "crates/happenstance/src/lib.rs"
   verifying_test: "crates/happenstance/tests/composition.rs::each_member_absorbs_only_what_it_nominated (paired with ::routing_by_arrival_is_rejected)"
 
@@ -129,11 +131,11 @@ quiet ledger edit.
   criterion: "GIVEN P4 lands on `happenstance`'s docs.rs page in a bounded sitting, WHEN they reach the vocabulary region and ask \"how do I check two boundaries at once?\", THEN the `DecisionModel` bullet answers in one line and links to `Boundary`, where a compiling example composes two models — presentation that actually renders: a resolved intra-doc link and a rustdoc-collected fence, not a bare sentence. No new name joins the crate root, `pub use happenstance_core::*;` survives, and nothing shadows `Query`, `EventStore`, `Tags` or `Event`."
   satisfied: true
   evidence: >-
-    `crates/happenstance/src/lib.rs:97-99` — the `DecisionModel` bullet's promise becomes the
+    `crates/happenstance/src/lib.rs:86-92` — the `DecisionModel` bullet's promise becomes the
     answer, in one line, inside region 4: *"Composing several into one query — put them in a
     tuple, which is a [`Boundary`] too — is the mechanism that makes a dynamic consistency
     boundary dynamic."* The bold term is the link, so nothing is emphasised that is not also
-    reachable. On the other end of that link, `crates/happenstance/src/composition.rs:96-159` is
+    reachable. On the other end of that link, `crates/happenstance/src/composition.rs:96-157` is
     the doc comment on the arity-2 `impl Boundary for (B1, B2)` block, carrying a compiling
     example that composes two models — collected and run by `cargo test -p happenstance --doc`
     (4 doctests pass) and rendered in `Boundary`'s *Trait Implementations* section. No new
@@ -154,12 +156,12 @@ quiet ledger edit.
     sources: `doc_prose_stays_within_eighty_columns` (URL-carrying lines exempt — a link target
     cannot be wrapped), `doc_fences_stay_within_seventy_two_columns` (which is the budget that
     keeps the arity-2 example from scrolling at 1024px),
-    `the_module_doc_stays_under_its_line_budget` (97 of 130),
+    `the_module_doc_stays_under_its_line_budget` (91 of 130),
     `the_first_fence_is_within_twelve_prose_lines` (the fence opens 5 prose lines down, and the
     same test asserts the crate root carries **exactly one** fence, so this story's example did
     not demote it) and `first_sentences_fit_the_item_table`. Composition and transience hold:
     this story adds **no** crate-root name and **no** sixth bullet — the added text is one line
-    inside the existing `DecisionModel` bullet at `crates/happenstance/src/lib.rs:97-99`, and
+    inside the existing `DecisionModel` bullet at `crates/happenstance/src/lib.rs:86-92`, and
     tuple composition stays *revealed*, one click away on `Boundary`'s page. Every public
     identifier budget is satisfied by construction, because no public identifier is added.
   mount_point: "crates/happenstance/src/lib.rs"

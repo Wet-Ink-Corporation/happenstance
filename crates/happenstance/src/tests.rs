@@ -10,7 +10,7 @@ use happenstance_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{derive_query, nominates};
+use crate::boundary::derive_query;
 use crate::{Boundary, Codec, CodecError, DecisionModel, DomainEvent};
 
 // ---------------------------------------------------------------------------
@@ -315,25 +315,74 @@ fn codec_error_carries_a_typed_source() {
     );
 }
 
+/// The full cross product of what `absorb` can be handed, against the derived
+/// query's own verdict on the same event.
+///
+/// `absorb` carries no nomination predicate of its own: it asks
+/// `Query::matches`, which composition's AC-U04 calls the contract's *only*
+/// filter vocabulary. This table is what a re-introduced second predicate would
+/// have to survive, and it is sized so the ordinary ways of getting one wrong
+/// are all reachable. A predicate that ignores tags fails the disjoint and
+/// empty rows; one that ignores types fails the undeclared row; and routing by
+/// arrival — decode first, ask later — fails the undeclared row *loudly*,
+/// because `Ticket::decode` refuses a type the domain never declared.
+///
+/// Two candidates could not do any of that, which is what the version of this
+/// test that shipped in the first pass was.
 #[test]
 fn nomination_agrees_with_the_derived_query() {
-    let gate = Gate::for_show("s1");
-    let query = gate
+    let query = Gate::for_show("s1")
         .query()
         .expect("a well-formed boundary derives a query");
-    let types = <Gate as DecisionModel>::Event::EVENT_TYPES;
 
-    for candidate in [
-        read_event(1, &Ticket::Voided, "s1"),
-        read_event(2, &Ticket::Voided, "s2"),
-    ] {
-        let event = &candidate.event;
-        assert_eq!(
-            nominates(types, gate.scope(), event),
-            query.matches(event.event_type(), event.tags()),
-            "the fold and the query select the same events"
-        );
+    let pairs =
+        |pairs: &[(&str, &str)]| Tags::from_pairs(pairs.iter().copied()).expect("valid tag pairs");
+    // In scope, a superset of the scope, disjoint from it, and none at all.
+    let tag_sets = [
+        pairs(&[("show", "s1")]),
+        pairs(&[("show", "s1"), ("row", "a")]),
+        pairs(&[("show", "s2")]),
+        Tags::empty(),
+    ];
+    // Every declared type — including `AUDITED`, which is declared and has no
+    // fold arm — plus one the domain never declared.
+    let undeclared = EventType::from_static("TicketReprinted");
+    let types = [ISSUED, VOIDED, AUDITED, undeclared];
+
+    let payload = Ticket::Voided.encode(&Json).expect("the fixture encodes");
+    let mut cells = 0_usize;
+
+    for event_type in &types {
+        for tags in &tag_sets {
+            let event = Event::new(event_type.clone(), payload.clone())
+                .expect("a valid event type")
+                .with_tags(tags.clone());
+            let selected = query.matches(event.event_type(), event.tags());
+
+            let mut gate = Gate::for_show("s1");
+            let outcome = gate.absorb(&sequenced(1, event), &Json);
+            // Acting on an event is folding it *or* refusing it loudly; both
+            // require having nominated it first. Doing neither is the skip.
+            let acted = outcome.is_err() || (gate.issued, gate.voided) != (0, 0);
+
+            assert_eq!(
+                acted, selected,
+                "`absorb` acted={acted} on `{event_type}` with {tags:?}, but the \
+                 derived query says selected={selected}"
+            );
+            cells += 1;
+        }
     }
+
+    assert_eq!(
+        cells,
+        types.len() * tag_sets.len(),
+        "the whole cross product was exercised"
+    );
+    // Both verdicts are actually reachable in the table, so the equality above
+    // cannot be satisfied by a predicate that answers the same way every time.
+    assert!(query.matches(&ISSUED, &tag_sets[0]));
+    assert!(!query.matches(&ISSUED, &tag_sets[2]));
 }
 
 // ---------------------------------------------------------------------------
@@ -519,15 +568,14 @@ const HIDDEN_LINES: usize = 2;
 const LINES_TO_FIRST_FENCE: usize = 12;
 /// Visible lines in the crate-root fence.
 ///
-/// The signed-off design budgets 35 and its own mock measured the program it
-/// budgeted at **81** (`_design.md`, `## Mock`, finding 1), accepted at
-/// sign-off as DT-2's measurement rather than as a defect to fix. The
-/// vocabulary program held here is 44, and the shortfall against 35 is
-/// recorded as defect **D-2** rather than closed by hiding lines behind `# `.
-const FENCE_LINES: usize = 44;
-/// The number the design asked for, kept in the source so the gap is visible
-/// at the place a future implementer would try to widen the ceiling.
-const FENCE_LINES_DESIGNED: usize = 35;
+/// The signed-off design's number (`_design.md`, `## Density budget`, *First
+/// program*), and the only number this constant is ever allowed to hold: it is
+/// the criterion AC-007 states, so moving it to whatever the fence happens to
+/// measure would calibrate the gate to the implementation. The fence was
+/// shortened to fit — a one-variant domain here, the two-variant walkthrough on
+/// `DecisionModel`'s own item page — and **not** by hiding ceremony behind
+/// `# `, which is anti-pattern 4 and is checked below.
+const FENCE_LINES: usize = 35;
 
 fn sources() -> Vec<(String, String)> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -712,7 +760,8 @@ fn the_crate_root_page_fits_above_the_fold() {
     let visible = fence.len() - hidden.len();
     assert!(
         visible <= FENCE_LINES,
-        "the first fence is {visible} visible lines, over the {FENCE_LINES} it holds \
-         today (the design asked for {FENCE_LINES_DESIGNED}; see defect D-2)"
+        "the first fence is {visible} visible lines, over the {FENCE_LINES} the \
+         signed-off design budgets. Shorten the program, or move part of it to an \
+         item page — never raise this constant, and never hide a line behind `# `"
     );
 }

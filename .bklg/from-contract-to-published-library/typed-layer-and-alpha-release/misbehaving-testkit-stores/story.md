@@ -37,3 +37,21 @@ process_rev: b611dd09
 > `implementation-report.md` → `report.md`), and the implement workflow reads `spec.md`, never this
 > card. Machine state (id / status / stage / archetype / slice / blocked_by) lives in the frontmatter
 > above; leaving this body as-is is expected, not a half-run pipeline.
+
+## Inbound handoffs
+
+Work routed to this story because it owns `standards/` and `crates/happenstance-testkit/`, recorded
+so it is neither done twice nor lost.
+
+- **Three stale constitution citations — routed here, and already landed.** `cargo xtask
+  lint-constitution` (a REQUIRED step of `cargo xtask ci --fast`) failed on
+  `standards/rust/60-what-a-test-must-prove.md:68-69` and `:163`, whose evidence lines pointed at
+  `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:454`, `:330` and `:296`. The
+  anchors had moved twelve lines when `90421d0 fix(typed-layer-and-alpha-release): repair
+  contaminated baseline test` edited that harness. The **typed-vocabulary** slice (M2) found it
+  because `ci --fast` is its declared merge bar, could not attribute it to itself, and landed the
+  three-line repair as its own checkpoint carrying `Story:
+  typed-layer-and-alpha-release/misbehaving-testkit-stores` rather than folding it into a slice
+  commit. The citations now read `:466`, `:342` and `:308`; the anchor text is unchanged, and
+  `cargo xtask lint-constitution` reports *27 atoms, all consistent*. **Nothing is left to do here
+  for it** — this entry exists so the drift is not re-diagnosed from scratch when this story runs.
