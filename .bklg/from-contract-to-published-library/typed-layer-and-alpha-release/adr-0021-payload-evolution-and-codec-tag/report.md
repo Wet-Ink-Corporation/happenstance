@@ -9,12 +9,29 @@ updated: "2026-08-15"
 
 ## Findings Ledger
 
-> **Seven of eight ACs satisfied. AC-008 is not, by construction.** It asserts an
-> accepted `.kb/decisions/0021-payload-evolution-and-codec-tag.md`, and only a
-> **human-invoked `/redkiln:kb-ingest` wave** may author an atom, on its own
-> worktree branch — which is why the evidence AC-008 asks for is a *wave commit sha*
-> and cannot exist in this PR's diff. Hand-authoring it is the anti-pattern reverted
-> at `0269720`.
+> **Eight of eight ACs satisfied.** Seven were satisfied inside this story's own
+> diff. **AC-008 was deferred by construction and has since been discharged by the
+> handoff it named:** it asserts an accepted
+> `.kb/decisions/0021-payload-evolution-and-codec-tag.md`, and only a
+> **human-invoked `/redkiln:kb-ingest` wave** may author an atom, on its own worktree
+> branch — which is why the evidence AC-008 asks for is a *wave commit sha* and could
+> not exist in this PR's diff. Hand-authoring it is the anti-pattern reverted at
+> `0269720`. That wave has now run and merged — `a28322b`, merged at `3fb28a1` — so
+> the row is recorded satisfied against the wave's sha rather than against this diff.
+> The row was flipped by a later bookkeeping pass, not by the implementer, and the
+> atom is still not hand-authored.
+>
+> **One defect the wave itself introduced is tracked separately.** The minted atom's
+> Rejected list (`.kb/decisions/0021-…:141-144`) attributes the serde-framing-region
+> rejection partly to ADR-0003, which states that constraint backwards — ADR-0003
+> binds `happenstance-core` and positively *assigns* encoding to `happenstance`, the
+> layer that writes the framing region. This story's staged deliverable was clean
+> (`e33dc9f:.kb/_intake/0021-…:180-181` gives only the two sound reasons, and
+> `:202-208` states the boundary in the right direction); the inversion entered at
+> ingest. An accepted atom's body is immutable, so the correction is routed as a
+> superseding atom via a further wave, staged at
+> `.kb/_intake/0031-adr-0021-serde-attribution-correction.md`. The decision itself
+> survives — the other two grounds carry it.
 
 **This story took three decisions rather than transcribing one.** `_design.md:674-679`
 hands them over in terms, and no later stage would have taken them: M3 consumes the
@@ -42,16 +59,21 @@ siting, it does not choose it.
 | **AC-004** — the version-suffix answer, with the query-naming consequence | **satisfied** | "No suffix." `references/adr/0021-…:177-221`, with the query quoted verbatim and the failure traced to `main.rs:158-160`; what carries evolution instead is named at `:214-221` |
 | **AC-005** — the hook answer, earned | **satisfied** | "No hook", with decode-time tolerance named as the strategy (`references/adr/0021-…:239-256`), a falsifier stated (`:258-262`) and the "yes" route fixed as an AC-012 defect entry (`:264-267`). Mechanical negative: no `crates/`, `examples/`, `xtask/` or `spec/` path in the diff |
 | **AC-006** — the untagged-event rule, bounded by VT-3 and the absent hook | **satisfied** | `references/adr/0021-…:275-278` states it as one implementable sentence; `UnknownTag` is **explicitly not** the outcome and is left one meaning at `:294-299`; both bounds named at `:280-288`; read back against `codec-and-feature-forwarding/discover.md:41-51` |
-| **AC-007** — the long-form record exists, is named in `source_paths`, and states the ADR-0016 seam | **satisfied** | `test -f` red → green, 454 lines against the staged document's 254; `source_paths` at `.kb/_intake/0021-…:82-88`; the seam in one sentence at `references/adr/0021-…:331-334`, with `related: kb-decision-0016` and an explicit refusal to inherit its `reversibility` |
-| **AC-008** — the wave mints the atom, the decision map carries its row, `validate --kb` clean | **NOT satisfied** | Blocked on the human-invoked `/redkiln:kb-ingest` wave. `git log --diff-filter=A -- .kb/decisions/0021-payload-evolution-and-codec-tag.md` returns nothing. Ledger row left `satisfied: false` with empty evidence, deliberately |
+| **AC-007** — the long-form record exists, is named in `source_paths`, and states the ADR-0016 seam | **satisfied** | `test -f` red → green, 454 lines against the staged document's 254 (499 after the two appendices added by the correction pass, appended below `## Provenance` so every citation into the record keeps its line numbers); `source_paths` at `.kb/_intake/0021-…:82-88`; the seam in one sentence at `references/adr/0021-…:331-334`, with `related: kb-decision-0016` and an explicit refusal to inherit its `reversibility` |
+| **AC-008** — the wave mints the atom, the decision map carries its row, `validate --kb` clean | **satisfied** (by the wave, not by this diff) | `/redkiln:kb-ingest` ran over this document and its slice-mate in one wave: `a28322b` (2 ops, suffixed wave id `2026-08-15-intake`), merged at `3fb28a1`. `git log --diff-filter=A -- .kb/decisions/0021-payload-evolution-and-codec-tag.md` now returns exactly `a28322b` — the wave, not this story's PR. Atom accepted (`adr_id: ADR-0021`, phase 7, `reversibility: low`); `.kb/maps/decision-map.md:138` and `.kb/maps/domain-map.md:174-194` carry its rows, with the mutual `related` edge to `kb-decision-0020`; `redkiln validate --kb` → "validate passed.", exit 0. `redkiln doctor` exits 1 on nine pre-existing `unconsumed-foundation` errors (HS-S0002/-0034/-0035/-0067/-0074/-0075/-0100/-0108/-0120) from planning commit `ae77ac4` that name neither this story nor its slice-mate and are routed as release blocker #122 (`_implementation.md:340-341`, `:399-403`) |
 
-**The one dependency that is missing, stated exactly:** a human must run
+**The dependency this story was blocked on has since been met.** A human ran
 `/redkiln:kb-ingest` over `.kb/_intake/0020-fold-query-agreement.md` **and**
 `.kb/_intake/0021-payload-evolution-and-codec-tag.md` in **one** wave, on its own
-worktree branch, with a suffixed wave id, dropping `.kb/_intake/README.md` from the
-default glob at the approval gate. Until then project **DoD 3** is undischarged for
-both M1 stories, and M3 (`codec-and-feature-forwarding`) is reading a document that
-is about to be deleted from `_intake`.
+worktree branch, with the suffixed wave id `2026-08-15-intake`, dropping
+`.kb/_intake/README.md` from the default glob at the approval gate. The wave cleared
+both staged sources. Project **DoD 3** — the atoms exist under `.kb/decisions/`,
+written before the code they govern, with `redkiln validate --kb` clean
+(`project.md:228-229`) — is therefore discharged for both M1 stories, and M3
+(`codec-and-feature-forwarding`) now reads the accepted atom rather than a document
+about to be deleted from `_intake`. **M3 must read the correction alongside it:** the
+atom's ADR-0003 attribution is inverted, and the superseding atom is staged at
+`.kb/_intake/0031-adr-0021-serde-attribution-correction.md`.
 
 ## Knowledge Harvest
 

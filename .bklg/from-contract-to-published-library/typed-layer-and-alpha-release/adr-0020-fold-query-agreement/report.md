@@ -9,13 +9,18 @@ updated: "2026-08-15"
 
 ## Findings Ledger
 
-> **Seven of eight ACs satisfied. AC-008 is not, by construction.** It asserts an
-> accepted `.kb/decisions/0020-fold-query-agreement.md`, and only a **human-invoked
-> `/redkiln:kb-ingest` wave** may author an atom — on its own worktree branch,
-> which is why the evidence AC-008 asks for is a *wave commit sha* and cannot exist
-> inside this PR's diff. Hand-authoring it is the anti-pattern reverted at
-> `0269720`. This story's spec anticipates the outcome and names it correct
-> (`spec.md`, *Clarifications resolved during spec*, item 2).
+> **Eight of eight ACs satisfied.** Seven were satisfied inside this story's own
+> diff. **AC-008 was deferred by construction and has since been discharged by the
+> handoff it named:** it asserts an accepted `.kb/decisions/0020-fold-query-agreement.md`,
+> and only a **human-invoked `/redkiln:kb-ingest` wave** may author an atom — on its
+> own worktree branch, which is why the evidence AC-008 asks for is a *wave commit
+> sha* and could not exist inside this PR's diff. Hand-authoring it is the
+> anti-pattern reverted at `0269720`, and this story's spec anticipates the deferral
+> and names it correct (`spec.md`, *Clarifications resolved during spec*, item 2).
+> That wave has now run and merged — `a28322b`, merged at `3fb28a1` — so the row is
+> recorded satisfied against the wave's sha rather than against this diff. The row
+> was flipped by a later bookkeeping pass, not by the implementer, and the atom is
+> still not hand-authored.
 
 | Finding | Evidence | Follow-up |
 | ------- | -------- | --------- |
@@ -37,15 +42,18 @@ updated: "2026-08-15"
 | **AC-005** — every alternative that lost, with the wrong implementation it admits | **satisfied** | `references/adr/0020-…:296-319`, eight rows; one-shape claim at `:314-319` in the contract crate's own words (`projection.rs:152-154`) |
 | **AC-006** — DT-2's price carried honestly, as a consequence and not a second decision | **satisfied** | `references/adr/0020-…:329-345`: 11 domain lines to 26 ceremony lines, 2.4:1, and the falsifiable prediction about AC-013's verdict, explicitly owned by project closeout. `:366-367` states the record decides nothing about the derive |
 | **AC-007** — the long-form record exists and is named in the proposed `source_paths` | **satisfied** | `test -f` red → green; 411 lines vs the staged document's 199; `source_paths` at `.kb/_intake/0020-…:76-83` lists both, matching `.kb/decisions/0029-…:45-47` |
-| **AC-008** — the wave mints the atom, the decision map carries its row, `validate --kb` clean | **NOT satisfied** | Blocked on the human-invoked `/redkiln:kb-ingest` wave. `git log --diff-filter=A -- .kb/decisions/0020-fold-query-agreement.md` returns nothing. Ledger row left `satisfied: false` with empty evidence, deliberately |
+| **AC-008** — the wave mints the atom, the decision map carries its row, `validate --kb` clean | **satisfied** (by the wave, not by this diff) | `/redkiln:kb-ingest` ran over this document and its slice-mate in one wave: `a28322b` (2 ops, `2026-08-15-intake`), merged at `3fb28a1`. `git log --diff-filter=A -- .kb/decisions/0020-fold-query-agreement.md` now returns exactly `a28322b` — the wave, not this story's PR. Atom accepted (`adr_id: ADR-0020`, phase 7); `.kb/maps/decision-map.md:137` and `.kb/maps/domain-map.md:174-194` carry its rows; `redkiln validate --kb` → "validate passed.", exit 0. `redkiln doctor` exits 1 on nine pre-existing `unconsumed-foundation` errors (HS-S0002/-0034/-0035/-0067/-0074/-0075/-0100/-0108/-0120) from planning commit `ae77ac4` that name neither this story nor its slice-mate and are routed as release blocker #122 (`_implementation.md:340-341`, `:399-403`) |
 
-**The one dependency that is missing, stated exactly:** a human must run
+**The dependency this story was blocked on has since been met.** A human ran
 `/redkiln:kb-ingest` over `.kb/_intake/0020-fold-query-agreement.md` **and**
 `.kb/_intake/0021-payload-evolution-and-codec-tag.md` in **one** wave, on its own
-worktree branch, with a suffixed wave id, dropping `.kb/_intake/README.md` from the
-default glob at the approval gate. Until then project **DoD 3** is undischarged and
-M2 (`domain-event-and-decision-model`) is reading a document that is about to be
-deleted from `_intake`.
+worktree branch, with the suffixed wave id `2026-08-15-intake`, dropping
+`.kb/_intake/README.md` from the default glob at the approval gate. The wave cleared
+both staged sources. Project **DoD 3** — the atoms exist under `.kb/decisions/`,
+written before the code they govern, with `redkiln validate --kb` clean
+(`project.md:228-229`) — is therefore discharged, and M2
+(`domain-event-and-decision-model`) now reads the accepted atom rather than a
+document about to be deleted from `_intake`.
 
 ## Knowledge Harvest
 

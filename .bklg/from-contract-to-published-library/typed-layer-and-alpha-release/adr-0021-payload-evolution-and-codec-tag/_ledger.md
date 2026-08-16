@@ -251,8 +251,43 @@ outcome.
     `.kb/maps/decision-map.md` carries its row, `redkiln validate --kb` and `redkiln doctor` are
     clean, and `git log --diff-filter=A` shows that atom added by the wave's commit and not by this
     story's PR.
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: >-
+    The handoff completed. `/redkiln:kb-ingest` ran over this document and its slice-mate in one
+    wave on its own worktree branch, with the suffixed wave id `2026-08-15-intake`, and landed as
+    `a28322b` ("docs(kb-intake): ingest ADR-0020 and ADR-0021 into the KB (2 ops,
+    2026-08-15-intake)", 2026-08-15), merged into the initiative branch at `3fb28a1` ("Merge the
+    ADR-0020/0021 ingest wave into the initiative").
+    `git log --diff-filter=A -- .kb/decisions/0021-payload-evolution-and-codec-tag.md` returns
+    exactly that one sha — `a28322b` — so the atom was added by the wave and not by this story's PR,
+    which is the clause that distinguishes this from the hand-authoring anti-pattern reverted at
+    `0269720`. `.kb/decisions/0021-payload-evolution-and-codec-tag.md` exists at `status: accepted`,
+    `adr_id: ADR-0021`, `phase: 7`, `reversibility: low`. `.kb/maps/decision-map.md:138` carries its
+    row; `.kb/maps/domain-map.md:174-194` carries the new "typed layer" domain section and its
+    bullet, and the mutual `related` edge to `kb-decision-0020` is wired. The wave consumed both
+    staged sources, leaving `.kb/_intake/` holding only `README.md` at `a28322b`.
+    `redkiln validate --kb` passes — "redkiln: validate passed.", exit 0 — re-run at this commit,
+    which is the check that enforces both KbFrontmatter conformance and accepted-decision
+    immutability against `HEAD`.
+    **The `redkiln doctor` clause is dispositioned, not silent:** doctor exits 1, and it did so
+    before this slice. All nine errors are `unconsumed-foundation` — HS-S0002, HS-S0034, HS-S0035,
+    HS-S0067, HS-S0074, HS-S0075, HS-S0100, HS-S0108, HS-S0120 — and none of them names this story
+    (HS-S0019) or its slice-mate (HS-S0018); they originate at planning commit `ae77ac4`, predating
+    this slice, and eight sit in five unstarted projects. They are already routed as release blocker
+    upstream redkiln #122 in
+    `.bklg/from-contract-to-published-library/_implementation.md:340-341` and `:399-403`, to be
+    settled before `publication-and-positioning` rather than at this PR. Doctor's remaining output is
+    the six expected `template-drift` advisories CLAUDE.md documents as permanent. Nothing this
+    story or the wave produced appears in doctor's output. The project's own DoD 3
+    (`project.md:228-229`) requires only that the atoms exist, are written before the code they
+    govern, and that `redkiln validate --kb` is clean — which is green.
+    **One defect the wave introduced is tracked separately and does not bear on this row:** the
+    minted atom's Rejected list attributes the serde-framing-region rejection partly to ADR-0003,
+    which states that constraint backwards (this story's staged deliverable, `e33dc9f`, did not).
+    The atom body is immutable, so the correction is routed as a superseding atom via a further
+    ingest wave; the correcting document is staged at
+    `.kb/_intake/0031-adr-0021-serde-attribution-correction.md`. AC-008 asserts the atom exists,
+    was minted by the wave and validates — all three hold.
   mount_point: ".kb/decisions/0021-payload-evolution-and-codec-tag.md"
   verifying_test: "redkiln validate --kb && redkiln doctor on the ingest branch; git log --diff-filter=A -- .kb/decisions/0021-payload-evolution-and-codec-tag.md names the wave commit; .kb/maps/decision-map.md carries the row"
 ```

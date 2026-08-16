@@ -153,9 +153,9 @@ application. The rules:
    discovered. It therefore cannot be encoded by a `Codec`, and must not depend on
    any codec feature — a build with only `postcard` enabled must still read a tag
    written by a build with only `json`.
-3. **The framing region adds no dependency.** It must be readable under
-   `--no-default-features` and on `wasm32`, both of which are gate steps
-   (`cargo xtask ci`), so it is not `serde`-encoded and is not JSON.
+3. **The framing region adds no dependency.** It must be readable with no default
+   features and on `wasm32`, so it is not `serde`-encoded and is not JSON — see
+   *Which instrument covers rule 3* below for the gate step that actually proves it.
 4. **The framing region is versioned**, so the framing itself can evolve without
    re-siting the tag — which, per *Reversibility* below, is the expensive move.
 5. **Metadata with no framing region is untagged**, and Decision 4 says what a
@@ -452,3 +452,48 @@ Taken at phase 7, **before** the code it governs exists — project AC-016's who
 content — and recorded here in the two forms the corpus keeps on purpose. Where this
 record and `spec/SPECIFICATION.md` ever disagree, the specification wins: an ADR is
 history, and is never updated to match the code.
+
+---
+
+## Which instrument covers rule 3
+
+Decision 1's rule 3 says the framing region must be readable with no default features
+and on `wasm32`. An earlier draft of that rule cited `--no-default-features` and
+`wasm32` as gate steps of `cargo xtask ci` and left it there. That is true of the gate
+and **false of this crate**, so the instrument is named here instead.
+
+Both `--no-default-features` steps in `cargo xtask ci` are scoped `-p happenstance-core`:
+the `wasm32` build at `xtask/src/main.rs:216-223` and the rustdoc build at `:532-544`.
+The framing region is written by `happenstance`, one crate above — neither step ever
+builds it. What actually covers this crate is `cargo hack check --workspace
+--feature-powerset --no-dev-deps` (`:605-615`), which is workspace-wide and so compiles
+`happenstance` with the empty feature set, together with the `wasm32` feature powerset
+(`:623-652`). Both sit in `OPTIONAL` behind a `cargo hack --version` probe; the tool
+resolves on this machine, so they run rather than print `skipped` — but a machine
+without `cargo-hack` narrows this coverage to nothing, which is the honest statement of
+the guarantee and the reason for naming the step rather than the gate.
+
+The rule itself is unchanged. This is a **repair** by `.kb/decisions/README.md`'s
+mechanical test: the set of implementations admitted is identical.
+
+---
+
+## A second citation checked — and found correct
+
+A review pass proposed widening `crates/happenstance-core/src/projection.rs:152-154`,
+cited by this record and by ADR-0020 for the two-constructor sentence, to `:152-155` on
+the grounds that the quoted clause runs one line further. **It does not.** Verified
+against `HEAD` and against ingest wave `a28322b`:
+
+```
+152:    /// fallible `parse` beside this constructor would be worse than either
+153:    /// choice: two constructors enforcing different rules is the defect that
+154:    /// makes an invalid value reachable through the weaker one.
+155:    pub fn new(value: impl Into<String>) -> Self {
+```
+
+`:152-154` covers the quoted prose exactly; line 155 is the function signature.
+Widening the range would pull code into a citation that quotes a doc comment. The
+repair these records already performed — from `:47-61`, correct at planning commit
+`ae77ac4` and stale thereafter, to `:152-154` — stands as made. Recorded so the finding
+is disposed of rather than re-raised and applied.
