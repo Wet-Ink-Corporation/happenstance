@@ -165,8 +165,8 @@ The sentence yielded. Both green after.
 
 ## Commits
 
-- `85e33b8` — `feat(typed-layer-and-alpha-release): Edge flavour and wasm claim`
-- `2ecc94d` — `fix(typed-layer-and-alpha-release): re-anchor twenty constitution citations`
+- `0a010c9` — `feat(typed-layer-and-alpha-release): Edge flavour and wasm claim`
+- `7abff7d` — `fix(typed-layer-and-alpha-release): re-anchor twenty constitution citations`
 
 The second is a separate commit on purpose, and it follows this branch's own precedent
 (`c4e36c4`): `standards/rust/**` is outside this story's PR boundary, and re-anchoring a
