@@ -23,7 +23,7 @@ attributable to the initiative rather than inherited.
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
-| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **in-progress** | run 2: 16/16 committed, 6/7 slices approved, 13/16 stories approved · blocked on the `cargo publish` human handoff (AC-007) |
+| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
@@ -628,3 +628,99 @@ than by any check. **An `advance --commit` whose commit fails should not exit 0.
 cause and **is not** — `ledgerBlock` splits on `/\r?\n/`, and `given-when-then-dsl` passed while
 CRLF. The same artifact does defeat anchored `grep '^…$'` searches over `.bklg` specs, which cost a
 wrong answer earlier in this session.
+
+### HS-P0011 `typed-layer-and-alpha-release` — run 3 and CLOSE, 2026-08-16 (`wf_6bd6e644-a7d`)
+
+Launched fresh at the same baseRef **`74135b8`**, no `resumeSlice` and no cache-buster. Git truth
+alone pointed at the right place: all sixteen stories were already committed and six slices sealed
+`approved`, so only `alpha-release` — committed but unsealed — was re-entered, at **Review**, with
+no implementer dispatched.
+
+**`degradedSummary: none`, `degraded: []`, `missingArtifacts: []`, `uncoveredAcs: []`, no
+`baselineRepairs`, no blockers. 16/16 stories, all seven slices `approved`. Project verdict
+`approved` by the human at `80984dd1`; the item is held at `review`/`in-review` with `--stay`,
+awaiting `/redkiln:closeout`.**
+
+Rubric: ac-coverage / integration-reachability / test-integrity / gate-greenness / brief-fidelity /
+intent-fidelity **3**; presentation-fidelity **0 — does not apply**. `overall: 3`.
+
+### The blocker was cleared by the act itself, not by a wave
+
+`0.2.0-alpha.1` is **live on crates.io** — `happenstance-core` 21:36:30Z, `happenstance` 21:36:55Z,
+`happenstance-testkit` 21:37:19Z, all `yanked: false`. The repository owner ran the three
+`cargo publish` commands at the entry gate; the orchestrator recorded the transcripts verbatim into
+`_release-log.md` §5.1 at `47b407f` **before** launching, because they existed only in that terminal
+and HS-S0033's own ledger note says a publish transcript is one-shot. That commit carries no `Story:`
+trailer and was deliberately **not** recorded into any `links.commits`.
+
+Two things the transcripts proved rather than asserted:
+
+- **The publish order verified itself.** Verifying `happenstance` printed `Downloaded
+  happenstance-core v0.2.0-alpha.1` and compiled against it — cargo resolved the requirement *from
+  the registry*, which is only possible because core went first. Had `[workspace.dependencies]` still
+  said `0.2.0`, that line is where it would have failed, with core already permanently live.
+- **`happenstance-testkit`'s published manifest carries no entry for `happenstance` at all.** Cargo
+  stripped the versionless path dev-dependency, confirming NF-006/CF-32 from the registry side.
+
+The MSRV shipped as `1.97.1` on all three — ADR-0029's floor reaching a published artefact for the
+first time, the event ADR-0004's **provisional** marker is scheduled to lose at phase 12.
+
+### The boundary class did not recur, for the first time in three projects
+
+Every one of the three story gates passed clean. HS-P0010 recorded seven instances of compelled
+boundary failure and HS-P0011 run 2 recorded six more; run 3 recorded **none**. The reason is
+visible in `0a3e021`, which repaired two widenings that had gone unrecorded rather than needing new
+ones. Not evidence the class is closed — the two deny-level cross-reference checkers are still there
+— but the first run in this initiative where no fence had to move.
+
+The orchestrator recorded **only each story's own checkpoint** in `links.commits` (`0a010c9`,
+`344f2c0`, `448e1ac`) and deliberately withheld `0a3e021`, whose files span *two* stories' folders
+plus telemetry and therefore lie outside either fence. That is HS-P0010 run 2's rule applied
+pre-emptively rather than after a boundary failure.
+
+### Open, disclosed by the review rather than hidden — four that need an owner
+
+1. **Every documentation link on the published crates.io page 404s** (N-3, `_release-log.md` §5.6).
+   Not a wrong URL: `github.com/Wet-Ink-Corporation/happenstance` is 404 to an anonymous client, so
+   the repository is simply not public. `## Stability`'s own pointer — *"What changed is in
+   `CHANGELOG.md`"* — lands a stranger on a 404, and AC-004's verifying test names that link.
+   **Correctly not a yank and not `0.2.0-alpha.2`:** a new number changes nothing, because the links
+   are identical strings that start resolving the moment the repository is public, with no republish.
+   Routed to **HS-P0016**. The decision it asks for — publish the repository, or point the published
+   links somewhere that resolves while it is private — is a visibility decision no story may take.
+   **Third item routed to HS-P0016**, after the testkit README understatement and the eight rustdoc
+   citations.
+2. **PS-18 / PS-27 / PS-30 took a THIRD disposition** (N-4). `project.md`'s AC-008 offers two
+   outcomes — name their callers, or promote to a documented exclusion — and what shipped is a
+   counted `[DEFERRED]` marker carrying the count, the evaluation point and a named owner
+   (`spec/SPECIFICATION.md:5273`, `:5568`, `:5670`). Judged *within* AC-008, because the failure mode
+   the criterion exists to prevent is a provisional marker nobody evaluates and the evaluation
+   demonstrably happened — but it is a judgement the project made, and it was put in front of the
+   human at the gate rather than left to pass in a file.
+3. **`RUNBOOK.md`'s phase-7 exit boxes are still unticked for six things now demonstrably done**
+   (N-5, `RUNBOOK.md:4060-4088`). CLAUDE.md calls RUNBOOK *"the plan of record, and how far it has
+   got"*, so six false negatives read as forgotten work. Only the `happenstance-macros` box was
+   ticked. Not in this project's DoD, hence unrouted.
+4. **ADR-0031 is staged intake only** (N-2) — `.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md`;
+   `.kb/decisions/` stops at 0030 and `kb-decision-0007` still reads `superseded_by: null`. The
+   accepted atom was correctly left **unedited** rather than amended in place. Project DoD 3 required
+   only ADR-0020 and ADR-0021 accepted, and both are. Carried to the next ingest wave, which now owes
+   **two** things — this and PS-32's correction to ADR-0007's long-form Context.
+
+### Found by the story gate, owed to nobody yet
+
+`cargo xtask spec-trace` reports **two conformance rules claimed by no clause and owing a decision**,
+and one of them matters: `k_disjoint_boundaries_admit_exactly_k_commits` enforces *the central DCB
+independence proposition* — that commands sharing no consistency boundary do not conflict — and **no
+clause states it**. The word *disjoint* does not appear in the specification. ES-25's *only if* half
+forbids the false-positive direction and does not say this, so claiming it there would assert that a
+`[FROZEN]` clause contains a proposition it does not. It does not fail the gate. **Unrouted.**
+
+### Still carried, unchanged
+
+- **redkiln #122 is a release blocker.** CI's `backlog` job asserts the `unconsumed-foundation` list
+  is empty; the nine problems from planning commit `ae77ac4` persist. Settle before
+  `publication-and-positioning`, not at the PR.
+- The two upstream instrument defects from run 2 stand: an `advance --commit` whose commit fails
+  should not exit 0, and `verify --grain story`'s fence matching should not silently ignore an entry
+  it cannot parse.
