@@ -17,8 +17,24 @@ fn src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
+/// One line ending, whatever the checkout used.
+///
+/// Every window below is cut with `\n`: `\n\n` for the attribute block that
+/// belongs to *one* item, `\n}\n` for the end of an enum. This repository is
+/// cloned with `core.autocrlf=true`, so on Windows those separators are `\r\n`
+/// and neither cut lands. The loud half is a panic — `the enum is terminated`.
+/// The quiet half is worse: `rsplit("\n\n")` finds no separator, yields the
+/// **whole file above the item**, and every `contains` riding on it then passes
+/// on an attribute written anywhere else in the module. Normalising here is
+/// what keeps the windows narrow, on every platform.
+fn normalise(source: &str) -> String {
+    source.replace("\r\n", "\n")
+}
+
 fn read(name: &str) -> String {
-    std::fs::read_to_string(src().join(name)).expect("the crate's own source is readable")
+    normalise(
+        &std::fs::read_to_string(src().join(name)).expect("the crate's own source is readable"),
+    )
 }
 
 /// The `//!` body of the crate root, line by line.
@@ -383,9 +399,10 @@ fn density_budget_holds() {
 
 #[test]
 fn docsrs_metadata_is_present() {
-    let manifest =
-        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-            .expect("the crate's own manifest is readable");
+    let manifest = normalise(
+        &std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+            .expect("the crate's own manifest is readable"),
+    );
     assert!(manifest.contains("[package.metadata.docs.rs]"));
     assert!(manifest.contains("all-features = true"));
     assert!(manifest.contains(r#"rustdoc-args = ["--cfg", "docsrs"]"#));
