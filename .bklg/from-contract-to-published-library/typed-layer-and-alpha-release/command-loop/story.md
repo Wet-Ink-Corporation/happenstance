@@ -23,13 +23,13 @@ archetype: capability
 slice: codec-and-command-loop
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T20:43:21.906Z
+updated: 2026-08-16T20:43:23.936Z
 links:
   pr: null
   commits:
     - "9971600"
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
