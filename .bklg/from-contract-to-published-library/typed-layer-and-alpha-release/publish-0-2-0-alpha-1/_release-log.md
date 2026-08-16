@@ -145,6 +145,18 @@ to be right up front.
 `cargo xtask ci` **whole** — not `--fast`, which drops the two feature powersets,
 `cargo deny` and the nightly `--cfg docsrs` build.
 
+**Run on the exact tree that publishes**, with nothing uncommitted:
+
+```console
+$ git status --porcelain     # empty
+$ git rev-parse HEAD
+952a87032b2cc04527fdb878a85e013513a696bf
+```
+
+That SHA is the tree a `cargo publish` from this checkout packages. Only `.bklg/`
+artefacts move after it, and `cargo package` ships none of them — so the artefact
+gated below is the artefact published.
+
 ```
 === formatting ===                                   === specification traceability ===
 === clippy (all targets, all features) ===           === no retired rule is still live ===

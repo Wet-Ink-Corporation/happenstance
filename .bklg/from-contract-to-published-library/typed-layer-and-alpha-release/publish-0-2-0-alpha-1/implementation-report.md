@@ -111,8 +111,8 @@ transcript in `_release-log.md` §4.
 
 ## Commits
 
-- `<sha1>` — `feat(typed-layer-and-alpha-release): Publish 0.2.0-alpha.1`
-- `<sha2>` — `fix(typed-layer-and-alpha-release): re-anchor two constitution citations`
+- `448e1ac` — `feat(typed-layer-and-alpha-release): Publish 0.2.0-alpha.1`
+- `952a870` — `fix(typed-layer-and-alpha-release): re-anchor two constitution citations`
 
 ## Changes
 
@@ -140,7 +140,7 @@ gated. A release story that grows a feature flag has changed the artefact it was
 | `cargo run -p xtask -- lint-changelog` | `CF-29: all 112 rules in 4 file(s) have a changelog entry` |
 | `cargo run -p xtask -- lint-constitution` | `27 atoms, all consistent` |
 | `cargo fmt --all --check` | clean |
-| **`cargo xtask ci` (whole)** | **all checks passed** — four of four `OPTIONAL` steps RAN |
+| **`cargo xtask ci` (whole)** | **all checks passed** on the clean tree at `952a870` — four of four `OPTIONAL` steps RAN |
 | `cargo xtask affected --base main` | affected gate passed |
 | `cargo publish` | **NOT RUN — human handoff** |
 
