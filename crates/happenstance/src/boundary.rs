@@ -139,7 +139,11 @@ impl<M: DecisionModel> Boundary for M {
             return Ok(());
         }
 
-        let decoded = M::Event::decode(codec, event.event.event_type(), event.event.data())?;
+        // Through the tag, not straight to the codec in hand: an event written
+        // under another encoding decodes under the one its own tag names, so a
+        // store that holds two generations folds into one model without the
+        // caller branching on encoding anywhere.
+        let decoded = crate::codec::decode_event::<M::Event, C>(codec, event)?;
         self.apply(decoded);
         Ok(())
     }

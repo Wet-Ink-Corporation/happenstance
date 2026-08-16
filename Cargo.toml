@@ -38,6 +38,16 @@ happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit"
 # `base64/alloc` in its own `serde` feature (ADR-0016 §10).
 base64 = { version = "0.22", default-features = false }
 bytes = { version = "1.10", default-features = false }
+# `happenstance`'s CBOR codec, behind its `cbor` feature. Added on a licence
+# verdict taken before the dependency landed rather than after: `cargo deny
+# check licenses` passes (`ciborium`, `ciborium-io` and `ciborium-ll` are
+# Apache-2.0; `half`, `cfg-if` and `zerocopy` are `MIT OR Apache-2.0`), and the
+# seven new nodes introduce no duplicate major — the `syn 2` its derive reaches
+# is already in this graph through `sqlx` → `url` → `idna` → `icu` → `yoke`.
+# `std` is named rather than inherited, for the reason `base64/alloc` is: it is
+# a default today, and a crate that drops a default in a patch release breaks a
+# dependant that changed nothing.
+ciborium = { version = "0.2", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 # `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
@@ -45,6 +55,19 @@ futures-util = { version = "0.3", default-features = false }
 # `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
 # default and which no native adapter wants.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# No longer dev-only, and the move is the point: `happenstance` ships a postcard
+# codec behind its `postcard` feature, so a published crate links this. It was
+# already here as the non-self-describing half of WF-7's two-format matrix, and
+# the reason that matrix is two formats: a `skip_serializing_if` attribute
+# round-trips cleanly in `serde_json` and desynchronises the stream here.
+#
+# `default-features = false` is load-bearing and was measured, not guessed. The
+# default turns on `heapless-cas`, which reaches `heapless 0.7` and then
+# `atomic-polyfill 1.0.3` — unmaintained, RUSTSEC-2023-0089, "no safe upgrade is
+# available", and `cargo deny check advisories` fails the gate on it. Nothing
+# here wants a fixed-capacity `Vec`; `use-std` is the flavour that serialises
+# into `std`'s, and it is what both the wire tests and the codec use.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 # The `/sql` endpoint speaks JSON, so `happenstance-neon` decodes JSON. `std`
 # rather than `alloc` because the endpoint's `bigint`-as-string rendering needs
@@ -79,18 +102,6 @@ trait-variant = "0.1.3"
 
 # --- dev / tooling only ---
 anyhow = "1"
-# The non-self-describing half of WF-7's two-format matrix, and the reason the
-# matrix is two formats: a `skip_serializing_if` attribute round-trips cleanly in
-# `serde_json` and desynchronises the stream here. `use-std` because it is only
-# ever a dev-dependency — nothing published links it.
-#
-# `default-features = false` is load-bearing and was measured, not guessed. The
-# default turns on `heapless-cas`, which reaches `heapless 0.7` and then
-# `atomic-polyfill 1.0.3` — unmaintained, RUSTSEC-2023-0089, "no safe upgrade is
-# available", and `cargo deny check advisories` fails the gate on it. Nothing
-# here wants a fixed-capacity `Vec`; the flavour that serialises into `std`'s is
-# the whole of what the wire tests use.
-postcard = { version = "1", default-features = false, features = ["use-std"] }
 proptest = "1"
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published

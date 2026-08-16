@@ -77,10 +77,10 @@
 //! [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)*
 //! say so, and say it about themselves rather than about the page.
 //!
-//! * [**`Codec`**](Codec) — payload encoding. Events carry a codec tag so
-//!   one store can hold more than one encoding at a time, which is what makes
-//!   a migration possible. The concrete codecs — JSON and friends — and the
-//!   feature flags that gate them are what is still *planned*.
+//! * [**`Codec`**](Codec) — payload encoding. `Json` is on by default;
+//!   `Postcard` and `Cbor` arrive with the features named below. Events carry
+//!   a codec tag, so one store can hold more than one encoding at a time,
+//!   which is what makes a payload migration possible.
 //! * [**`DomainEvent`**](DomainEvent) — a Rust type's mapping to its
 //!   [`EventType`] and [`Tags`].
 //! * [**`DecisionModel`**](DecisionModel) — folds read events into decidable
@@ -95,6 +95,20 @@
 //! * **The typed projection runner** *(planned)* — decoded events, over the
 //!   checkpoint pump that stays in the contract crate
 //!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0007-projection-runner-decodes.md)).
+//!
+//! # Features
+//!
+//! Every one of them adds. Turning any off leaves the rest compiling, and the
+//! three the contract crate also has mean there exactly what they mean here.
+//!
+//! | feature | what it turns on |
+//! | --- | --- |
+//! | `json` *(default)* | `Json` — JSON payloads, readable in a console |
+//! | `postcard` | `Postcard` — compact binary, not self-describing |
+//! | `cbor` | `Cbor` — binary, and self-describing where postcard is not |
+//! | `std` *(default)* | the standard library, forwarded to the contract |
+//! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
+//! | `serde` | the contract's wire-format derives, for replication |
 //!
 //! Adapter authors should depend on [`happenstance_core`] directly rather than
 //! on this crate: it is the smaller semver surface, and it is the one the
@@ -115,6 +129,15 @@ mod sealed;
 mod tests;
 
 pub use boundary::Boundary;
+#[cfg(feature = "cbor")]
+#[cfg_attr(docsrs, doc(cfg(feature = "cbor")))]
+pub use codec::Cbor;
+#[cfg(feature = "json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
+pub use codec::Json;
+#[cfg(feature = "postcard")]
+#[cfg_attr(docsrs, doc(cfg(feature = "postcard")))]
+pub use codec::Postcard;
 pub use codec::{Codec, CodecError};
 pub use domain::{DecisionModel, DomainEvent};
 

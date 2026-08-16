@@ -765,3 +765,39 @@ fn the_crate_root_page_fits_above_the_fold() {
          item page — never raise this constant, and never hide a line behind `# `"
     );
 }
+
+// ---------------------------------------------------------------------------
+// codec-and-feature-forwarding AC-005 — the framing region, both directions
+//
+// The write seam is crate-internal until the command loop mounts it, so this is
+// where it is driven from. The *read* seam is driven from outside the crate, in
+// `tests/codec_tag.rs`, against framing bytes that file writes by hand — so the
+// format is pinned from both sides and neither test can repair the other.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_framing_region_names_the_codec_that_wrote_it() {
+    let framed = crate::codec::frame::<Json>(None);
+
+    assert!(
+        framed.starts_with(b"hpst\x01"),
+        "the region is not distinguishable from an application's own metadata"
+    );
+    assert!(
+        framed.ends_with(b"json\xFF"),
+        "the tag is not terminated where the application's bytes would begin"
+    );
+}
+
+#[test]
+fn application_metadata_is_copied_through_untouched() {
+    let application = Bytes::from_static(b"correlation=abc");
+    let framed = crate::codec::frame::<Json>(Some(&application));
+
+    assert!(
+        framed.ends_with(&application),
+        "the application's own metadata did not survive the framing"
+    );
+    // And nothing rewrote it: the region is a prefix, so the two lengths add up.
+    assert_eq!(framed.len(), b"hpst\x01json\xFF".len() + application.len());
+}
