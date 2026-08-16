@@ -478,3 +478,61 @@ eventual run 2 stays **`74135b8`**, unchanged.
 
 **Precondition for run 2:** the wave commits and merges onto `initiative/from-contract-to-published-library`,
 leaving `.kb/_intake/` holding only `README.md` and `redkiln validate --kb` passing.
+
+### ROUTED TO HS-P0016 `publication-and-positioning` — the eight rustdoc citations
+
+Carried out of HS-P0010 as *"eight rustdoc citations resolve ~191 lines short, landing in §4.9's
+PS-32 instead of §4.11 … No AC covers them"*, re-verified against the tree on 2026-08-16 during
+HS-P0011 run 2, and **routed here rather than fixed in passing**. Second item routed to HS-P0016,
+after the `crates/happenstance-testkit/README.md` understatement.
+
+**Still broken, and now pointing somewhere new.** The eight sites, all in `happenstance-testkit`:
+
+| Site | Cites |
+|------|-------|
+| `crates/happenstance-testkit/src/projection.rs:47` | `5696-5705` |
+| `crates/happenstance-testkit/src/projection.rs:899` | `5682-5687` |
+| `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:286` | `5696-5705` |
+| `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:518` | `5682-5687` |
+| `.../projection_mutation_coverage/buffering.rs:6` | `5688-5693` |
+| `.../projection_mutation_coverage/variants.rs:48` | `5688-5693` |
+| `.../projection_mutation_coverage/mutants.rs:33` | `5680-5687` |
+| `.../projection_mutation_coverage/mutants.rs:216` | `5682-5687` |
+
+**The identification is proven, not inferred.** At baseRef `74135b8`, `spec/SPECIFICATION.md:5680-5687`
+was exactly `**PS-32 — ADR-0007's Context MUST be corrected …**`, and §4.9 opened at 5679 with §4.11
+at 5832 — so `5681 + 191 = 5872`, inside §4.11. HS-P0010's arithmetic checks out line for line.
+
+**Nothing has repaired them.** The full set of 15 distinct `SPECIFICATION.md:<line>` citations across
+`crates/**/*.rs` is byte-identical at `74135b8` and at HEAD. That is expected: no AC covers them.
+
+**The drift has widened.** HS-P0011's `projection-clause-verdicts` (`55a2370`) grew the specification
+from 9,262 to 9,399 lines, all above this region:
+
+| Section | baseRef | HEAD |
+|---------|---------|------|
+| §4.8 Failure policy | 5521 | 5546 |
+| §4.9 The runner split | 5679 | 5755 |
+| §4.11 The suite this section obliges | 5832 | **5955** |
+
+So the eight now resolve into **§4.8 Failure policy** — a *third* wrong section, neither the intended
+§4.11 nor the PS-32 they were recorded against. `5680-5687` today reads *"**Rejects:** a fan-out runner
+that wraps `&mut P::Batch` in `AssertUnwindSafe`…"*. The shortfall has gone from ~191 lines to ~275,
+and it will keep widening every time the specification grows above §4.11.
+
+**Why no instrument caught it, and why that is the real finding.** `spec-trace` checks citations
+*within* `SPECIFICATION.md`; `lint-constitution` checks `standards/rust/` citations *into code*.
+A rustdoc-into-spec citation is checked by neither. That is exactly why this run repaired eleven
+constitution citations automatically (`b77cffb`, `d95c760`) and left these eight untouched — the two
+classes differ only in which direction the reference points, and one has a gate. Same family as
+HS-P0010's `cargo doc` default-features hole and run 2's `is_a_model_rule_body` gate: a cross-reference
+class with no instrument over it.
+
+**Why it belongs to HS-P0016.** `happenstance-testkit` is publishable, so this rustdoc ships to
+docs.rs — the surface HS-P0016 owns. The eight are wrong on a page a prospective adapter author reads,
+in the *understating* direction again.
+
+**Recommended disposition, not prescribed.** A third file-reading lint extending `lint-constitution`'s
+mechanism to rustdoc→spec citations would close the class rather than the instance; repairing eight
+line numbers by hand leaves the next spec edit to reopen it. HS-P0016 owns the call — including the
+option to record a refusal with the reason, which is a legitimate outcome for a defect no AC covers.
