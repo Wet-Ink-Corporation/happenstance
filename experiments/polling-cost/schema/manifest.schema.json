@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wet-ink.net/happenstance/experiments/polling-cost/manifest.schema.json",
+  "title": "polling-cost run manifest",
+  "description": "The single line at the head of a pass, carrying the environment once rather than on every record. Every field is a condition of the numbers below it: a figure without them is an estimate wearing a decimal point.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "run_tag",
+    "rustc",
+    "cargo",
+    "git_rev",
+    "git_dirty",
+    "profile",
+    "os",
+    "cpu",
+    "logical_cpus",
+    "ram_bytes",
+    "features",
+    "started_at",
+    "projection_store"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer" },
+    "kind": { "type": "string", "enum": ["manifest"] },
+    "run_tag": {
+      "type": "string",
+      "description": "The tag this pass was written under. A re-measurement writes a new tag beside the pass it is compared with; nothing is edited in place."
+    },
+    "rustc": { "type": "string", "description": "rustc -vV, joined onto one line." },
+    "cargo": { "type": "string" },
+    "git_rev": {
+      "type": "string",
+      "description": "The commit the measured tree was at."
+    },
+    "git_dirty": {
+      "type": "boolean",
+      "description": "Whether the MEASURED tree — crates/ and the workspace manifests — had uncommitted changes. Scoped to what was measured rather than to the whole worktree: what makes a number irreproducible is the library moving under it, not this directory gaining a paragraph. A committed pass must carry false."
+    },
+    "profile": { "type": "string", "enum": ["release", "debug"] },
+    "os": { "type": "string" },
+    "cpu": { "type": "string" },
+    "logical_cpus": { "type": "integer" },
+    "ram_bytes": {
+      "type": "integer",
+      "description": "Total RAM in bytes, or 0 where the OS did not say. Zero means unknown rather than none, and the README says so rather than the field pretending."
+    },
+    "features": {
+      "type": "string",
+      "description": "The feature set the measured crate was built with."
+    },
+    "started_at": { "type": "string" },
+    "projection_store": {
+      "type": "string",
+      "enum": [
+        "happenstance_core::MemoryProjectionStore",
+        "polling-cost::LocalProjectionStore"
+      ]
+    }
+  }
+}
