@@ -7,13 +7,23 @@ updated: "2026-08-16"
 
 # Implementation Report — 0.2.0-alpha.1 on the registry, with its churn mitigations
 
-**Six of seven ACs are satisfied. AC-007 is BLOCKED, and the blocker is the publish
-itself.**
+**Written at implement time as six of seven, with AC-007 BLOCKED. Amended 2026-08-16:
+seven of seven.** The original text is kept below rather than rewritten, so the record
+shows what was outstanding and when it landed.
 
 `cargo publish` against the live crates.io index is a **human handoff**, declared as one
-by the story map (`_storymap.md:163-166`) and unreachable by any gate step (DEP-006). It
-has not been run. No registry resolution has been observed, so none is claimed: AC-007's
-ledger row stays `satisfied: false` and says why.
+by the story map (`_storymap.md:163-166`) and unreachable by any gate step (DEP-006). At
+the time of writing it had not been run, and no registry resolution had been observed, so
+none was claimed: AC-007's ledger row read `satisfied: false` and said why.
+
+**It has since been run, and the three read-back checks a successful upload does not
+discharge have been run separately.** `_release-log.md` §5.1 carries the three publish
+transcripts, §5.3 the outside-workspace resolution and the write-then-read cycle, §5.4 the
+rendered crates.io page and §5.5 docs.rs — all four checklist items filled in, and the
+ledger row flipped against them. §5.6 records the one finding that read back badly (every
+documentation link on the published page 404s, because the GitHub repository is not
+publicly reachable), assessed against EC-007, deliberately not yanked, and routed to
+HS-P0016.
 
 Everything up to the cut is done and green. The version has moved, both lock files agree,
 the README carries `## Stability` above the first code block, `## [Unreleased]` has become
@@ -149,20 +159,33 @@ not run separately, exactly as the spec's merge gate says.
 
 ## Notes
 
-**The blocker, stated plainly.** AC-007 needs three things and has two. The publish order
-is fixed and its reason recorded; the yank-and-republish instruction is written **before**
-the cut, which is the half that becomes unwritable afterwards. What is missing is the act:
-three `cargo publish` invocations against a live index, a scratch project outside this
-workspace resolving all three at an explicit pre-release requirement, the rendered
-crates.io page, and a docs.rs check. `_release-log.md` §5 is a four-item checklist for
-whoever runs it, and the ledger row is flipped only when those four are in the file.
+**The blocker, stated plainly — and cleared.** AC-007 needed three things and had two.
+The publish order was fixed and its reason recorded; the yank-and-republish instruction
+was written **before** the cut, which is the half that becomes unwritable afterwards. What
+was missing was the act: three `cargo publish` invocations against a live index, a scratch
+project outside this workspace resolving all three at an explicit pre-release requirement,
+the rendered crates.io page, and a docs.rs check. All four are now in `_release-log.md`
+§5's checklist and the ledger row is flipped against them, with the transcripts pasted in
+§5.1 and §5.3–§5.5 rather than summarised.
 
 **One boundary widening, forced and declared.**
-`examples/outside-projection-adapter/Cargo.toml` is not in the spec's fenced list and had
+`examples/outside-projection-adapter/Cargo.toml` was not in the spec's fenced list and had
 to change, because otherwise the workspace does not resolve at all and there is no tree to
 gate. Two requirement strings, in a `publish = false` example. The alternative — reverting
 the version move — is not available, and improvising a different version number under
 pressure is precisely what EC-001 exists to prevent.
+
+**Both widenings are now *in the fence* as well as in this report, amended 2026-08-16.**
+Declaring a crossing here and leaving `spec.md`'s fenced block unchanged means `redkiln
+verify --grain story` would still fail on the paths, so the declaration bought legibility
+and not admissibility. `spec.md`'s PR boundary now carries
+`examples/outside-projection-adapter/Cargo.toml` and `crates/happenstance/Cargo.toml` on
+a stated limit — *requirement strings and the comments that explain them, forced by the
+version move; no feature block, no dependency, no `src`* — and `standards/rust/**` on the
+same **citation re-anchoring only** terms `34d5311` used for the four sibling widenings.
+The alternative for the comment-only `crates/happenstance/Cargo.toml` hunk, recorded
+beside the fence so the choice is legible, is to revert it and re-land it under
+`command-loop`, whose fence already carries that path.
 
 **A second, smaller one.** `crates/happenstance/Cargo.toml` gained one **comment** edit:
 its NF-006 paragraph asserted that `[workspace.dependencies]` carries `version = "0.2.0"`

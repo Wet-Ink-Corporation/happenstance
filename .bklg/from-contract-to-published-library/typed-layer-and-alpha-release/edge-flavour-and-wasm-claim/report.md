@@ -79,6 +79,16 @@ ambient `RUSTFLAGS: -D warnings` turns it into a failure there. It bears on no c
    precedent (`c4e36c4`). Inserting the fifth step moved twenty `xtask/src/main.rs:NNN`
    citations; `cargo xtask lint-constitution` now reports *27 atoms, all consistent*.
 
+**Amended 2026-08-16 — declared is not the same as admitted.** Both items above were
+written up here and in the implementation report, and neither reached the artefact that
+decides: item 2's paths were outside `spec.md`'s fenced block, so `redkiln verify --grain
+story` would still fail on them, and item 1's relaxation of `wildcards = "deny"` appeared
+in no *In this PR* list, ledger row or AC table. Both are now on the record where a
+reader and the verifier look — `standards/rust/**` added to the fence on `34d5311`'s
+**CITATION RE-ANCHORING ONLY** terms, and `allow-wildcard-paths` named in *In this PR*
+and cited in AC-007's ledger evidence beside the `async-trait` ban that motivated the
+visit.
+
 ### Nothing deferred
 
 No public item added (NF-005). No `[FROZEN]` clause edited and no file under

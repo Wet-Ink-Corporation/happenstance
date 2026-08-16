@@ -201,8 +201,24 @@ xtask/src/main.rs
 deny.toml
 crates/happenstance/tests/**
 crates/happenstance/src/**
+standards/rust/**
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/edge-flavour-and-wasm-claim/**
 ```
+
+**`standards/rust/**` was added on 2026-08-16, and it admits citation re-anchoring
+ONLY.** The constitution cites this story's own sources by `file:line`, `cargo xtask
+lint-constitution` is a gate step, and adding the fifth `wasm32` step to
+`xtask/src/main.rs` moves every cited line below it — so the story is forced across its
+boundary or into a red gate, with no third option. This entry permits **line-number
+repair to existing citations and nothing else**: rule text, evidence selection, rule
+retirement and new atoms all stay outside, so the widening cannot later be cited to
+justify editing a rule. This story's actual use of it is `7abff7d`, twenty citation
+re-anchors across `51-features-and-no-std.md`, `52-wasm32-and-target-cfg.md`,
+`70-rustdoc-obligations.md` and `80-the-gate.md` — eighteen insertions against eighteen
+deletions, every one of them a line number. Same terms and same class as the four
+widenings `34d5311` recorded for `command-loop`, `misbehaving-testkit-stores` and
+`compile-fail-proof-artefact`; this one was **compelled on the same day and not
+recorded then**, which is the omission this paragraph repairs.
 
 `crates/happenstance/src/**` is in the boundary for **documentation only** — the
 one-line statement, on the entry points, of which flavour is bound and why
@@ -222,6 +238,21 @@ ledger, because that is exactly the failure this instrument exists to catch.
 - A `spawns_from_generic`-shaped test for the `Send` flavour over a typed-layer
   entry point.
 - `async-trait` banned in `deny.toml`.
+- **`allow-wildcard-paths = true` in `deny.toml`, scoping the pre-existing
+  `wildcards = "deny"` (`:24`) rather than switching it off.** Named here because it is
+  a *relaxation of a standing gate check* and a reader auditing "what did this story
+  change about the gate" must find both halves of the visit, not only the ban. Adding
+  the `[bans]` deny list ran `cargo deny check bans` for the first time on this tree and
+  it came back red on a pre-existing condition: `happenstance` dev-depends on
+  `happenstance-testkit` by path with **no version**, which `wildcards = "deny"` reads as
+  a wildcard. That spelling is NF-006's deliberate design — a versioned dev-dependency
+  would have to resolve from the registry at publish time and would force the testkit to
+  publish *before* `happenstance`, undoing the independent release order CF-32's own
+  version number exists to give it — and cargo strips it from the published manifest
+  entirely, so nothing a consumer resolves is affected. The limit is in the name: the
+  scoped form permits a wildcard only where it is a **path** dependency, so a wildcard
+  against the registry — the case `wildcards = "deny"` is actually for — still fails.
+  Argument and limit are written beside the setting at `deny.toml:25-36`.
 - Rustdoc lines stating the bound at the entry points.
 
 **Explicitly not in this PR**

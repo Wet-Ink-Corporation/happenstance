@@ -253,8 +253,48 @@ crates/happenstance-testkit/Cargo.toml
 crates/happenstance/README.md
 CHANGELOG.md
 experiments/wire-format/Cargo.lock
+examples/outside-projection-adapter/Cargo.toml
+crates/happenstance/Cargo.toml
+standards/rust/**
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/publish-0-2-0-alpha-1/**
 ```
+
+**Three entries were added on 2026-08-16, after the fact, and each carries its argument
+and its limit.** All three are recorded here rather than left as silent boundary
+crossings, because a fence that is quietly exceeded stops being a fence.
+
+**`standards/rust/**` — citation re-anchoring ONLY.** The constitution cites this
+repository by `file:line` and `cargo xtask lint-constitution` is a gate step, so adding
+comment lines to `Cargo.toml` and to the testkit's manifest moved two cited anchors and
+forced the story across its boundary or into a red gate, with no third option. This entry
+permits **line-number repair to existing citations and nothing else**: rule text,
+evidence selection, rule retirement and new atoms all stay outside. This story's actual
+use of it is `952a870`, two lines — one in `52-wasm32-and-target-cfg.md`, one in
+`90-skeletons-and-todo.md`, one insertion against one deletion each. Same terms as the
+four widenings `34d5311` recorded for `command-loop`, `misbehaving-testkit-stores` and
+`compile-fail-proof-artefact`. **This does not soften the *"Explicitly not in this PR"*
+line below about `standards/rust/50-dependency-hygiene.md:64`** — that line forbids
+rewriting an *illustrative TOML block*, which is rule content and not a citation, and it
+remains forbidden and untouched.
+
+**`examples/outside-projection-adapter/Cargo.toml` — requirement strings and the
+comments that explain them, forced by the version move; no feature block, no dependency,
+no `src`.** This manifest writes its requirements long-hand on purpose — it models an
+outside author's manifest — and a `version = "0.2.0"` requirement does not match a
+`0.2.0-alpha.1` candidate, so the whole workspace stopped resolving the moment the
+version moved (`_release-log.md:90-106`). The crate is `publish = false`, so no published
+artefact changes; leaving it would have left `cargo metadata` red, which is AC-001's own
+verifying test.
+
+**`crates/happenstance/Cargo.toml` — the same limit, and it is the weakest of the
+three.** The hunk in `448e1ac` is **comment-only**: one line of the NF-006 paragraph that
+quoted `version = "0.2.0"` as a literal and would have gone stale, restated as *"a version
+requirement"*. It is admitted on the terms above — requirement strings and the comments
+that explain them, no `[features]` block, no dependency, no `src` — and the honest
+alternative, recorded here so the choice is legible, is to revert this hunk and re-land
+it under [`command-loop`](../command-loop/spec.md), whose fence already carries
+`crates/happenstance/Cargo.toml`. It is kept here because splitting a one-line comment
+repair across two stories costs more to read than the widening does.
 
 **In this PR**
 

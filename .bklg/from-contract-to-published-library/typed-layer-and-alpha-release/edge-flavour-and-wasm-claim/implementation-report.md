@@ -169,9 +169,19 @@ The sentence yielded. Both green after.
 - `7abff7d` — `fix(typed-layer-and-alpha-release): re-anchor twenty constitution citations`
 
 The second is a separate commit on purpose, and it follows this branch's own precedent
-(`c4e36c4`): `standards/rust/**` is outside this story's PR boundary, and re-anchoring a
+(`c4e36c4`): `standards/rust/**` was outside this story's PR boundary, and re-anchoring a
 `file:line` citation at the file it already named changes no claim, only whether a reader
 can follow one. Inserting the fifth step shifted twenty of them.
+
+**Amended 2026-08-16: `standards/rust/**` is now *in* the fence, on the terms `34d5311`
+set.** Noting the crossing here and leaving `spec.md`'s fenced block unchanged bought
+legibility and not admissibility — `redkiln verify --grain story` would still fail on
+those four paths. The same day this story landed, `34d5311` widened `command-loop`,
+`misbehaving-testkit-stores` and `compile-fail-proof-artefact` for precisely this class
+and predicted the recurrence; this story was an instance of it and was not recorded then.
+`spec.md`'s PR boundary now carries `standards/rust/**` with the same **CITATION
+RE-ANCHORING ONLY** limit beside it: rule text, evidence selection, retirement and new
+atoms stay out, so the widening cannot later be cited to justify editing a rule.
 
 ## Changes
 
@@ -224,6 +234,16 @@ The *Release bar* row of the spec's test table — `cargo xtask ci` whole — is
    free. Leaving it red would have handed `publish-0-2-0-alpha-1` a gate it cannot pass at a
    point where the fix is a document edit under time pressure. The setting is scoped, not a
    switch-off: a wildcard against the *registry* still fails.
+
+   **Amended 2026-08-16: it is now named in `spec.md`'s *In this PR* list and cited in
+   AC-007's ledger evidence.** `deny.toml` is inside this story's fence, so this was never
+   a boundary breach — but it is a **relaxation of a standing gate check**
+   (`wildcards = "deny"`, `deny.toml:24`) that appeared in neither the spec's *In this PR*
+   list, nor the ledger row, nor the AC table, all three of which named only the
+   `async-trait` ban. A reader auditing *what did this story change about the gate* would
+   have found the addition and missed the loosening. Both halves of the visit are now on
+   the record in the same places, with the argument and the limit written beside the
+   setting at `deny.toml:25-36`.
 
 2. **The `async-trait` ban carries a named `wrappers` exemption.** Its first run exited 2:
    `async-trait v0.1.91` is already in the lock file, reached only from `wasm-bindgen-test`,
