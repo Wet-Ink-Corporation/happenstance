@@ -13,8 +13,8 @@ runner delivers each event once per view: **delivery amplification of 32.00 at 3
 views**, exactly the fan-out, with no economy of scale anywhere in the range. In
 the arm where the views' queries do not overlap it is **1.00** at every fan-out —
 the same events, delivered once. Read latency tracks the poll interval and
-nothing else: the median observation lands within about 1% of the interval at
-every fan-out from 1 to 32, and no backlog ever accumulated.
+nothing else: the median observation lands within a millisecond of the interval
+at every fan-out from 1 to 32, and no backlog ever accumulated.
 
 This directory is a reproducible experiment. It is **not** a workspace member, it
 is not a `cargo xtask ci` step, it adds no dependency to any `crates/**` manifest,
@@ -44,9 +44,10 @@ behave identically whether or not this has ever been run.
 |---|---|
 | Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, `x86_64-pc-windows-msvc`, LLVM 22.1.6 |
 | Profile | `release` |
-| Measured revision | `55a2370`, clean under `crates/` and the workspace manifests |
+| Measured revision | `3999b5a`, clean under `crates/` and the workspace manifests |
+| Run instant | `2026-08-16T16:30:55Z` — the wall clock when **this pass** started, read from the system clock and not from the commit above |
 | Host | Intel64 Family 6 Model 186 (13th-gen mobile i9 class), 20 logical CPUs, Windows |
-| RAM | not captured — the manifest records `0`, which means *unknown*, not *none* |
+| RAM | 34 069 602 304 bytes (31.7 GiB), from `Get-CimInstance Win32_ComputerSystem` |
 
 ### The axes
 
@@ -109,8 +110,8 @@ is the reads that will dominate. That distinction is the single most important
 thing this measurement does not settle.
 
 **Timings, secondary and machine-attached.** The 32-view, 100 000-event
-overlapping cell — 3.2 million deliveries — took a mean of **6.3 s**, against
-**138 ms** for the same log at one view. These figures belong to the host in §1
+overlapping cell — 3.2 million deliveries — took a mean of **1.18 s**, against
+**39 ms** for the same log at one view. These figures belong to the host in §1
 and to nothing else; they are recorded because they bound the shape of the
 experiment, not because they are the result.
 
@@ -128,12 +129,12 @@ to be right, which is exactly what would let it survive review.
 
 | poll interval | fan-out | p50 | p95 | max backlog |
 |---|---|---|---|---|
-| 10 ms | 1 | 10.7 ms | 12.0 ms | 0 |
-| 10 ms | 32 | 12.0 ms | 12.9 ms | 0 |
-| 100 ms | 1 | 100.8 ms | 101.9 ms | 0 |
-| 100 ms | 32 | 102.5 ms | 104.8 ms | 0 |
-| 1 000 ms | 1 | 1 000.6 ms | 1 001.1 ms | 0 |
-| 1 000 ms | 32 | 1 008.5 ms | 1 013.6 ms | 0 |
+| 10 ms | 1 | 10.2 ms | 10.5 ms | 0 |
+| 10 ms | 32 | 10.3 ms | 10.5 ms | 0 |
+| 100 ms | 1 | 100.3 ms | 100.5 ms | 0 |
+| 100 ms | 32 | 100.3 ms | 100.5 ms | 0 |
+| 1 000 ms | 1 | 1 000.2 ms | 1 000.4 ms | 0 |
+| 1 000 ms | 32 | 1 000.5 ms | 1 000.5 ms | 0 |
 
 … and 30 more staleness rows, both arms, in the corpus.
 
