@@ -426,6 +426,9 @@ name = "happenstance"
 version = "0.2.0"
 dependencies = [
  "happenstance-core",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

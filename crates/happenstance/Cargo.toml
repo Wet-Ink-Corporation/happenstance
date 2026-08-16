@@ -18,12 +18,32 @@ readme = "README.md"
 # about what `default-features = false` means, which is the kind of difference
 # nobody discovers until a no_std build fails three crates away.
 happenstance-core = { workspace = true }
+# The typed layer's whole job is encoding, so `serde` is a real, unconditional
+# dependency here. ADR-0003 forbids it in `happenstance-core`'s defaults and says
+# nothing about this crate; ADR-0006 made this the typed layer. Both are already
+# `[workspace.dependencies]`, so no new crate enters the graph.
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# A real codec for the crate's own tests, so an encode/decode failure carries a
+# real typed source rather than a hand-rolled stand-in. Already a workspace
+# dependency, and dev-only: nothing a consumer links.
+serde_json = { workspace = true }
 
 [features]
 default = ["std", "memory"]
-std = ["happenstance-core/std"]
+std = ["happenstance-core/std", "thiserror/std", "serde/std"]
+# Unchanged in meaning: it forwards the *contract crate's* envelope `serde`,
+# which is what replication needs. It is deliberately not repurposed to gate this
+# crate's own `serde` dependency — a feature only ever adds, and turning this one
+# into a switch over `Codec` would change what an existing flag means.
 serde = ["happenstance-core/serde"]
 memory = ["happenstance-core/memory"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
