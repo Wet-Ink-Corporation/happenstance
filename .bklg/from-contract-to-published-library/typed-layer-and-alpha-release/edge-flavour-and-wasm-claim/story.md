@@ -21,13 +21,13 @@ archetype: capability
 slice: alpha-release
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T23:09:39.087Z
+updated: 2026-08-16T23:09:49.437Z
 links:
   pr: null
   commits:
     - 0a010c9
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
