@@ -27,5 +27,11 @@ thiserror.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 
+[dev-dependencies]
+# The compile-fail harness for `tests/ui.rs`. A dev-dependency of a
+# `publish = false` crate, declared once workspace-wide, so nothing published
+# gains an edge, a feature or a floor.
+trybuild.workspace = true
+
 [lints]
 workspace = true

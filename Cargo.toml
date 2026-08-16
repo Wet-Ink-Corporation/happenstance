@@ -103,6 +103,24 @@ trait-variant = "0.1.3"
 # --- dev / tooling only ---
 anyhow = "1"
 proptest = "1"
+# The compile-fail harness. It is the only instrument that can pin a *diagnostic*
+# rather than the fact that something failed to compile: rustdoc collects
+# doctests from the lib target only, and on 1.97.1 it silently ignores an
+# unmatched error-code annotation, so `compile_fail,E0004` asserts no more than
+# bare `compile_fail` — and a negative control that cannot discriminate is not a
+# negative control (`spec/SPECIFICATION.md:8772`;
+# `crates/happenstance-core/src/event.rs:95-106`).
+#
+# Adopted on a measurement, not on taste — the `postcard` note above is the
+# precedent. It adds ten nodes to `Cargo.lock`: `trybuild` itself, `glob`,
+# `target-triple`, `termcolor`, `serde_spanned`, `winnow` and the four `toml*`
+# crates. `cargo deny check licenses` and `cargo deny check advisories` both pass
+# against the **unmodified** allowlist at `deny.toml:8-19`, and
+# `multiple-versions` reports nothing new. It is consumed only as a
+# `[dev-dependencies]` of `course-subscriptions`, which is `publish = false`, so
+# no published crate's graph, feature set or MSRV floor moves; `cargo hack
+# --no-dev-deps --rust-version` cannot see it at all.
+trybuild = "1.0"
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published
 # graph depends on it.

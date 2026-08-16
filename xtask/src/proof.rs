@@ -1,14 +1,15 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries six targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries seven targets today: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
 //! families; [ADR-0010]), the two `wire` targets the wire format was frozen
 //! against ([ADR-0016]), the projection family's two — its mutant registry's
 //! meta-tests and the harness parity guard — which are what phase 6's proof
-//! artefact rests on and which nothing held until phase 6 closed, and the
-//! worked example's `runs`, which is the only thing in the workspace that
-//! *executes* a binary and reads what it printed.
+//! artefact rests on and which nothing held until phase 6 closed, and the worked
+//! example's two — `runs`, which is the only thing in the workspace that
+//! *executes* a binary and reads what it printed, and `ui`, the `trybuild` pair
+//! that pins the compiler's own diagnostic when a domain grows a variant.
 //!
 //! # Why naming the target was not enough
 //!
@@ -216,6 +217,27 @@ const WORKED_EXAMPLE_TESTS: &[&str] = &[
     "runs::the_transcript_is_the_designed_composition",
 ];
 
+/// The compile-fail pair: the guarantee, and the control that gives it meaning.
+///
+/// Both names, never one. `an_unhandled_variant_fails_to_compile` is the claim —
+/// a variant added to a domain enum stops the build at the fold that has not
+/// been taught it — and `the_negative_control_compiles` is the only thing that
+/// makes a red build *mean* that. Without the control, a typo, a renamed import
+/// or an item moved behind a feature fails the first case and is banked as the
+/// guarantee (RS-62-1: pair every compile-fail with a compiling one, and do not
+/// trust the error code).
+///
+/// This row is [`WIRE_NEGATIVE_CONTROLS`]'s argument applied to the one place in
+/// the tree where no mutant registry exists. The two fixtures under
+/// `examples/course-subscriptions/tests/ui/` are referenced by nothing else, one
+/// of them is *supposed* to be broken, and the pair's whole value is that it can
+/// fail — so a reader six months out with a dead-code instinct is exactly who
+/// this names them for.
+const COMPILE_FAIL_PAIR: &[&str] = &[
+    "ui::an_unhandled_variant_fails_to_compile",
+    "ui::the_negative_control_compiles",
+];
+
 /// Every proof artefact the gate holds to its own names.
 pub(crate) const ARTEFACTS: &[Artefact] = &[
     Artefact {
@@ -252,6 +274,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "course-subscriptions",
         target: "runs",
         tests: WORKED_EXAMPLE_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "course-subscriptions",
+        target: "ui",
+        tests: COMPILE_FAIL_PAIR,
         registry: None,
     },
 ];
