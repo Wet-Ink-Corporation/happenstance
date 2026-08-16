@@ -31,6 +31,16 @@ thiserror = { workspace = true }
 serde_json = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
 ciborium = { workspace = true, optional = true }
+# Naming `Stream` is unavoidable for a runner that pulls a replay item by item
+# instead of buffering it, and `EventStore::read` returns the stream at the top
+# level precisely so it can be pulled. Optional and reached only through
+# `unstable-projection`, so the crate links it exactly where it is used.
+#
+# It adds no node to any dependency graph: `happenstance-core` already depends on
+# it unconditionally, and this crate already depends on `happenstance-core`
+# unconditionally, so `cargo tree` is unchanged by this line (RS-50-1 counts
+# nodes, not manifest entries).
+futures-core = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Also a real dependency below, behind `json`. Declared here as well so this
@@ -85,6 +95,21 @@ postcard = ["dep:postcard"]
 # alpha would have shipped `json` + `postcard` and this line would be the reason
 # it did not.
 cbor = ["dep:ciborium"]
+# The typed projection runner: `Projection`, `run_projection`, `Progressed` and
+# `ProjectionError`. **Off by default**, and the name is the promise: the port
+# beneath it — `happenstance-core`'s `ProjectionStore` — is not frozen, so these
+# four items make no semver promise at all. A reader has to type the word
+# `unstable` before any of them is in their build.
+#
+# It forwards, and the forwarding is not optional: `ProjectionStore`,
+# `ProjectionId`, `Checkpoint` and `Authority` all live behind the contract
+# crate's own `unstable-projection` gate, so the runner cannot compile without
+# it. `MemoryProjectionStore` needs `memory` as well, which stays a separate
+# switch here for the same reason it is one there — a fixture is not a port.
+#
+# `dep:futures-core` is the one dependency this feature turns on. See the
+# `[dependencies]` comment above for why it adds no node to the graph.
+unstable-projection = ["happenstance-core/unstable-projection", "dep:futures-core"]
 
 [package.metadata.docs.rs]
 all-features = true

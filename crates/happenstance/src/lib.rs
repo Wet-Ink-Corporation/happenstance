@@ -82,10 +82,9 @@
 //!
 //! # The vocabulary
 //!
-//! A linked term is an item you can use today. The one still marked
-//! *(planned), and specified in
-//! [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)*
-//! says so, and says it about itself rather than about the page.
+//! Every term below is an item you can use today. The last one asks for a
+//! feature first, and the feature is named after what is unfinished beneath
+//! it rather than after what it turns on.
 //!
 //! * [**`Codec`**](Codec) — payload encoding. `Json` is on by default;
 //!   `Postcard` and `Cbor` arrive with the features named below. Events carry
@@ -104,9 +103,11 @@
 //!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
 //!   Bounded by a [`Retry`] you pass in, re-deciding from a pristine model on
 //!   every attempt. Its own page carries the policy.
-//! * **The typed projection runner** *(planned)* — decoded events, over the
-//!   checkpoint pump that stays in the contract crate
-//!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0007-projection-runner-decodes.md)).
+//! * [**The typed projection runner**][projection-runner] — decoded events
+//!   into a read model, in chunks, with the rows and the checkpoint moving in
+//!   one commit. Behind `unstable-projection`, because the port beneath it is
+//!   not frozen; one call drives one projection, and it never buffers the
+//!   replay.
 //!
 //! # Features
 //!
@@ -121,6 +122,7 @@
 //! | `std` *(default)* | the standard library, forwarded to the contract |
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
+//! | `unstable-projection` | the projection runner, over an unfrozen port |
 //!
 //! # Testing without a database
 //!
@@ -159,6 +161,19 @@
     not(all(feature = "memory", feature = "json")),
     doc = "[testing-module]: https://docs.rs/happenstance/latest/happenstance/testing/"
 )]
+// And once more for the runner, whose feature is the only one of the three that
+// is **off** by default — so the configuration where the local target does not
+// exist is the one a casual `cargo doc` builds. The bullet stays on the page
+// either way: a vocabulary that lost an entry when a feature went off would
+// leave a reader unable to tell what they turned off.
+#![cfg_attr(
+    feature = "unstable-projection",
+    doc = "[projection-runner]: run_projection"
+)]
+#![cfg_attr(
+    not(feature = "unstable-projection"),
+    doc = "[projection-runner]: https://docs.rs/happenstance/latest/happenstance/fn.run_projection.html"
+)]
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -169,6 +184,13 @@ mod boundary;
 mod codec;
 mod command;
 mod domain;
+// `runner`, not `projection`. The contract crate already publishes a
+// `projection` module, and this crate's glob re-export makes it
+// `happenstance::projection`; a private module of the same name shadows it
+// silently, which is a breaking change to a facade whose whole promise is that
+// the contract's paths still work here.
+#[cfg(feature = "unstable-projection")]
+mod runner;
 mod sealed;
 
 // The one deliberate exception to root re-export: a **named module**, not a
@@ -205,5 +227,11 @@ pub use codec::{Codec, CodecError};
 pub use command::commit;
 pub use command::{CommandError, Committed, Retry, commit_with};
 pub use domain::{DecisionModel, DomainEvent};
+// Off by default, and the badge is what says so on the rendered page: an
+// item that only exists behind a feature and does not name it is the reader
+// finding out from a compiler error instead of from the documentation.
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use runner::{Progressed, Projection, ProjectionError, run_projection};
 
 pub use happenstance_core::*;

@@ -174,6 +174,52 @@ fn docs_rs_metadata_is_declared() {
 }
 
 // ---------------------------------------------------------------------------
+// AC-008 — the instability is something a reader typed, not something they hit
+// ---------------------------------------------------------------------------
+
+#[test]
+fn unstable_projection_is_declared_off_by_default() {
+    let value = feature_or_panic("unstable-projection");
+
+    // Off by default. The whole point of the name is that a reader performs an
+    // act that spells the instability before the item is in their build.
+    let default = feature_or_panic("default");
+    assert!(
+        !default.contains("unstable-projection"),
+        "`unstable-projection` joined the defaults: {default}"
+    );
+
+    // It forwards to the contract crate's own gate, or says in the manifest why
+    // it does not. Either way the decision is written down where the next
+    // reader looks for it.
+    let forwards = value.contains("happenstance-core/unstable-projection");
+    let stated = MANIFEST
+        .lines()
+        .any(|line| line.trim_start().starts_with('#') && line.contains("unstable-projection"));
+    assert!(
+        forwards && stated,
+        "`unstable-projection` neither forwards to the contract crate nor \
+         states in a comment why it does not: {value}"
+    );
+
+    // It only adds. A feature that names a removal is one `--all-features`
+    // always turns on.
+    assert!(
+        !value.contains("no-") && !value.contains("without"),
+        "`unstable-projection` reads as a subtractive feature: {value}"
+    );
+
+    // And the crate really gates something on it — a feature in the manifest
+    // that gates no item is a promise nothing keeps.
+    let root = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"))
+        .expect("the crate root is readable");
+    assert!(
+        root.contains("#[cfg(feature = \"unstable-projection\")]"),
+        "no item at the crate root is gated on `unstable-projection`"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // The workspace pin, and the header a shipped codec moves a crate out of
 // ---------------------------------------------------------------------------
 

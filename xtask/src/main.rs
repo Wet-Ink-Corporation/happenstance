@@ -1082,16 +1082,54 @@ mod tests {
         }
     }
 
-    /// A semver promise rather than an oversight: `happenstance` re-exports no
-    /// projection item, so a public feature there would promise a surface the
-    /// crate does not expose.
+    /// A semver promise rather than an oversight: the typed layer's feature
+    /// table and its public surface say the same thing.
+    ///
+    /// This assertion used to read the other way — `happenstance` re-exported
+    /// no projection item, so a public feature there would have promised a
+    /// surface the crate did not expose. The typed projection runner made the
+    /// premise false rather than the rule wrong, so the rule is stated in the
+    /// direction that still has content: a passthrough **and** a surface, or
+    /// neither. What it still forbids is the pair coming apart — a feature
+    /// table advertising a runner nobody can name, or four `pub use`s a
+    /// consumer cannot turn on.
     #[test]
     fn the_typed_layer_makes_no_promise_it_does_not_keep() {
         let manifest = read("crates/happenstance/Cargo.toml");
-        assert!(
-            !manifest.contains(GATE),
-            "`happenstance` gained a `{GATE}` passthrough while re-exporting \
-             nothing from `projection`"
+        let lib = read("crates/happenstance/src/lib.rs");
+
+        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
+        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
+
+        let passthrough = manifest.contains(&format!("\n{GATE} = "));
+        // The badge is part of the surface, not an extra: an item that only
+        // exists behind a feature and renders no gate is anti-pattern 15.
+        let surface = lib.contains(&format!("{cfg}\n{doc_cfg}\npub use runner::{{"));
+
+        assert_eq!(
+            passthrough, surface,
+            "`happenstance`'s `{GATE}` passthrough and its projection surface \
+             disagree: the manifest declares it = {passthrough}, the crate root \
+             re-exports behind it = {surface}"
         );
+
+        if passthrough {
+            assert!(
+                !default_features(&manifest).contains(GATE),
+                "`{GATE}` joined the typed layer's defaults, which hands an \
+                 unfrozen port to every caller who never asked for it: {}",
+                default_features(&manifest)
+            );
+            assert!(
+                manifest.contains(&format!("\"happenstance-core/{GATE}\"")),
+                "the typed layer gates a runner on `{GATE}` without forwarding \
+                 it to the contract crate, whose port the runner is built on"
+            );
+            assert!(
+                lib.contains(&format!("{cfg}\nmod runner;")),
+                "the runner's own module is not gated, so the feature table and \
+                 the compiler disagree about what `{GATE}` turns on"
+            );
+        }
     }
 }

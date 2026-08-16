@@ -226,11 +226,237 @@ fn every_gated_item_carries_its_badge() {
 
 #[test]
 fn new_identifiers_fit_the_item_table() {
-    for name in ["Codec", "CodecError", "Json", "Postcard", "Cbor"] {
+    for name in [
+        "Codec",
+        "CodecError",
+        "Json",
+        "Postcard",
+        "Cbor",
+        "Projection",
+        "run_projection",
+        "Progressed",
+        "ProjectionError",
+    ] {
         assert!(
             name.len() <= 24,
             "`{name}` is {} characters; name and summary cannot share a row",
             name.len()
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AC-009 — the fifth roadmap bullet became the real thing, in place
+// ---------------------------------------------------------------------------
+
+#[test]
+fn crate_root_renders_the_projection_surface() {
+    let doc = module_doc();
+
+    // The vocabulary is rewritten **in place**: same five bullets, same order,
+    // and the projection runner is still the fifth.
+    let vocabulary = position_of(&doc, "# The vocabulary");
+    let bullets: Vec<(usize, &String)> = doc
+        .iter()
+        .enumerate()
+        .filter(|(at, line)| *at > vocabulary && line.starts_with("* "))
+        .collect();
+    let runner = bullets
+        .iter()
+        .find(|(_, line)| line.contains("The typed projection runner"))
+        .map(|(at, _)| *at)
+        .expect("the vocabulary still names the projection runner");
+    assert_eq!(
+        bullets.last().map(|(at, _)| *at),
+        Some(runner),
+        "the projection bullet is no longer the fifth and last"
+    );
+
+    // The bullet is a link, and the link is the emphasis: the bolded lead-in
+    // term is the link text, the way the command loop's already is.
+    let next = doc.len();
+    let region = doc[runner..next]
+        .iter()
+        .take_while(|line| line.starts_with("* ") || line.starts_with("  "))
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        region.contains("[**The typed projection runner**]"),
+        "the projection bullet is not a link: {region}"
+    );
+
+    // Reference-style, with the target spelled **conditionally**, because a
+    // plain `](run_projection)` is an unresolved link — a *hard* rustdoc error,
+    // not a warning — in every build without `unstable-projection`, which is
+    // the default one. This is RS-70-2, and it is the whole reason a gated item
+    // cannot be linked inline from an ungated page.
+    let root = read("lib.rs");
+    assert!(
+        root.contains(r#"doc = "[projection-runner]: run_projection""#),
+        "the projection reference does not resolve to `run_projection` with the \
+         feature on"
+    );
+    assert!(
+        root.contains("feature = \"unstable-projection\"")
+            && root.contains(r"[projection-runner]: https://docs.rs/happenstance"),
+        "the projection reference resolves to nothing when the feature is off"
+    );
+
+    // No roadmap survives anywhere on the page: this was the last of the five.
+    let page = doc.join("\n").to_lowercase();
+    assert!(
+        !page.contains("(planned)") && !page.contains("planned, and specified in"),
+        "the crate-root page still carries a roadmap"
+    );
+
+    // Region 5 gains one recessive row, below the vocabulary, above the
+    // adapter-author pointer, which stays last.
+    let features = position_of(&doc, "# Features");
+    let adapters = position_of(&doc, "Adapter authors should depend on");
+    assert!(features > vocabulary && features < adapters);
+    let table = doc[features..adapters].join("\n");
+    assert!(
+        table.contains("`unstable-projection`"),
+        "the Features table says nothing about `unstable-projection`: {table}"
+    );
+
+    // The mount: every item is re-exported at the root beside the glob, and
+    // the glob itself survives.
+    assert!(root.contains("pub use happenstance_core::*;"));
+    for item in [
+        "Projection",
+        "run_projection",
+        "Progressed",
+        "ProjectionError",
+    ] {
+        assert!(
+            root.contains(&format!("{item},")) || root.contains(&format!("{item}}}")),
+            "`{item}` is not re-exported at the crate root"
+        );
+    }
+    assert!(
+        root.contains("pub use runner::{"),
+        "the four items are not re-exported from the crate's own module"
+    );
+
+    // The density budget, in the units the design fixed.
+    assert!(
+        doc.len() <= 130,
+        "the crate-root module doc is {} lines; the budget is 130",
+        doc.len()
+    );
+    let mut fenced = false;
+    for line in &doc {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        // A line carrying a URL is exempt from the prose budget: a link target
+        // cannot be wrapped, and this page already carries three.
+        if !fenced && line.contains("http") {
+            continue;
+        }
+        // The rendered column is the whole authored line, `//! ` included.
+        let columns = line.chars().count() + if fenced { 0 } else { 4 };
+        let budget = if fenced { 72 } else { 80 };
+        assert!(
+            columns <= budget,
+            "a crate-root doc line is {columns} columns; the budget is {budget}: {line}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AC-002, AC-006, AC-011, AC-012 — four absences, each of them observable
+// ---------------------------------------------------------------------------
+
+/// Every `.rs` file under this crate's `src/` and `tests/`.
+fn crate_sources() -> Vec<(PathBuf, String)> {
+    fn walk(dir: &Path, out: &mut Vec<(PathBuf, String)>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let body = std::fs::read_to_string(&path).expect("a source file is readable");
+                out.push((path, body));
+            }
+        }
+    }
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut out = Vec::new();
+    walk(&root.join("src"), &mut out);
+    walk(&root.join("tests"), &mut out);
+    assert!(!out.is_empty(), "this crate has sources");
+    out
+}
+
+#[test]
+fn no_second_decode_path() {
+    let runner = read("runner.rs");
+    assert!(
+        runner.contains("decode_event"),
+        "the runner does not go through the crate's one decode path"
+    );
+    for forbidden in ["serde_json::from_slice", "from_slice", "from_str"] {
+        assert!(
+            !runner.contains(forbidden),
+            "the runner grew a second decode path: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn runner_prints_nothing() {
+    let runner = read("runner.rs");
+    for forbidden in ["println!", "eprintln!", "print!", "eprint!", "\\r"] {
+        assert!(
+            !runner.contains(forbidden),
+            "the runner renders while it works: {forbidden}. Polling renders nothing"
+        );
+    }
+}
+
+#[test]
+fn no_contract_name_is_shadowed() {
+    for name in [
+        "ProjectionId",
+        "ProjectionStore",
+        "Query",
+        "ReadOptions",
+        "SequencePosition",
+        "Checkpoint",
+        "Authority",
+    ] {
+        for (path, body) in crate_sources() {
+            for shape in ["pub struct", "pub enum", "pub trait", "pub type"] {
+                assert!(
+                    !body.contains(&format!("{shape} {name}")),
+                    "{}: `{name}` shadows a contract name that arrives through the glob",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn no_local_projection_store() {
+    // Assembled rather than written out, so this assertion does not find
+    // itself: the needle it looks for must not be a literal in this file.
+    let bare = format!("impl {} for", "ProjectionStore");
+    let send = format!("impl Send{} for", "ProjectionStore");
+    for (path, body) in crate_sources() {
+        assert!(
+            !body.contains(&bare) && !body.contains(&send),
+            "{}: a local projection store freezes a fixture shape this project \
+             does not own (HS-P0010's AC-012)",
+            path.display()
         );
     }
 }

@@ -483,11 +483,29 @@ mod shadowing {
         core_store_bound::<S>();
     }
 
+    /// A **module** is a name the glob re-exports too, and the projection
+    /// runner is the first item in this crate that wanted one already taken.
+    /// A private `mod projection` here would shadow `happenstance::projection`
+    /// silently — a breaking change to a facade whose whole promise is that
+    /// the contract's paths still work — which is why the runner lives in
+    /// `runner`. This body is what fails if it ever moves back.
+    #[cfg(feature = "unstable-projection")]
+    fn same_projection_id(
+        id: happenstance_core::projection::ProjectionId,
+    ) -> crate::projection::ProjectionId {
+        id
+    }
+
     #[test]
     fn contract_names_are_not_shadowed() {
         let _ = same_tags as fn(happenstance_core::Tags) -> crate::Tags;
         let _ = same_event as fn(happenstance_core::Event) -> crate::Event;
         let _ = facade_store_bound::<happenstance_core::MemoryEventStore> as fn();
+        #[cfg(feature = "unstable-projection")]
+        {
+            let id = happenstance_core::projection::ProjectionId::new("van_stock");
+            assert_eq!(same_projection_id(id).as_str(), "van_stock");
+        }
 
         assert!(same_query(happenstance_core::Query::all()).is_all());
     }
