@@ -7,9 +7,9 @@ title: ADR-0020 — fold/query agreement, and DT-2's signature answer
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -19,13 +19,13 @@ archetype: foundation
 slice: decision-records
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T00:52:33.201Z
+updated: 2026-08-16T20:00:21.478Z
 links:
   pr: null
   commits:
     - c011143
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
