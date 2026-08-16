@@ -7,9 +7,9 @@ title: PS-33, PS-27, PS-30 settled and PS-18 excluded, on the record
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: capability
 slice: projection-runner
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:11.053Z
+updated: 2026-08-16T20:24:32.029Z
 links:
   pr: null
   commits:
     - 55a2370
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
