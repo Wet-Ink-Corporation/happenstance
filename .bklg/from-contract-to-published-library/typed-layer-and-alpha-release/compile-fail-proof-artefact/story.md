@@ -7,9 +7,9 @@ title: The compile-fail case, its negative control, and its gate row
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,14 +20,14 @@ archetype: capability
 slice: worked-example-and-proof
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:12.253Z
+updated: 2026-08-16T20:45:48.012Z
 links:
   pr: null
   commits:
     - 1044a95
     - c4e36c4
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
