@@ -7,9 +7,9 @@ title: The contract defect log, and the happenstance-macros verdict
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,13 @@ archetype: capability
 slice: alpha-release
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:27.445Z
+updated: 2026-08-16T23:10:35.706Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 344f2c0
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
