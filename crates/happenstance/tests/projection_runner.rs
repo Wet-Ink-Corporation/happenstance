@@ -568,6 +568,60 @@ async fn tolerates_gapped_positions() {
     assert_eq!(progress.through, Some(third));
 }
 
+/// EC-005 — the resume point has no successor.
+///
+/// [`SequencePosition::next`] is `checked_add` rather than `saturating_add`
+/// precisely so this state is representable, and the runner turns its `None`
+/// into an error arm rather than an `unwrap`. Nothing else in the suite reaches
+/// that arm, which left the reasoning in `event.rs` with an instrument on the
+/// contract side of the port and none on this one.
+///
+/// The checkpoint is seeded through the **real** port — a commit at the last
+/// representable position — so no double stands in for a store here.
+#[tokio::test]
+async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
+    let events = MemoryEventStore::new();
+    seed(&events, &[delivered("d7", 3), delivered("d7", 4)]).await;
+
+    let models = MemoryProjectionStore::new();
+    let mut projection = VanStock::for_depot("d7");
+
+    // A projection that has run to the top of the key space: rows written, and
+    // a checkpoint at the last position anything can occupy.
+    let last = SequencePosition::new(u64::MAX).expect("the last position is not zero");
+    let mut batch = models.begin();
+    batch.write("d7", 7);
+    models
+        .commit(batch, projection.id(), last, happenstance::Authority::Live)
+        .await
+        .expect("the oracle commits");
+
+    let error = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+        .await
+        .expect_err("there is no position past the last one to resume from");
+
+    match &error {
+        ProjectionError::KeySpaceExhausted { through } => assert_eq!(*through, last),
+        other => panic!("expected exhausted key space, got {other:?}"),
+    }
+    // The failure names the position it could not advance past, and reports no
+    // progress: nothing was read, so nothing was applied.
+    assert_eq!(error.position(), Some(last));
+    assert_eq!(error.progress(), Progressed::default());
+    assert!(
+        projection.seen.is_empty(),
+        "the runner read the log anyway, which is the `saturating_add` \
+         behaviour: a resume from the last position that re-reads it for ever"
+    );
+
+    // And it stopped without touching either half of the store.
+    assert_eq!(models.get("d7"), Some(7));
+    assert_eq!(
+        models.checkpoint(projection.id()).await.unwrap(),
+        Checkpoint::Live { through: last }
+    );
+}
+
 // ---------------------------------------------------------------------------
 // AC-005 — the runner streams
 // ---------------------------------------------------------------------------

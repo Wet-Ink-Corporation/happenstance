@@ -44,13 +44,16 @@
     "logical_cpus": { "type": "integer" },
     "ram_bytes": {
       "type": "integer",
-      "description": "Total RAM in bytes, or 0 where the OS did not say. Zero means unknown rather than none, and the README says so rather than the field pretending."
+      "description": "Total physical RAM in bytes, or 0 where the OS did not say. It is asked for per platform — MemTotal in /proc/meminfo, sysctl -n hw.memsize, Get-CimInstance Win32_ComputerSystem — so zero means the query was made and went unanswered, never that nobody asked. Zero is unknown rather than none, and the README says so rather than the field pretending."
     },
     "features": {
       "type": "string",
       "description": "The feature set the measured crate was built with."
     },
-    "started_at": { "type": "string" },
+    "started_at": {
+      "type": "string",
+      "description": "The wall-clock instant THIS RUN started, read from the system clock as YYYY-MM-DDTHH:MM:SSZ. Not the instant of the commit git_rev names: two passes taken months apart at the same revision differ here and nowhere else, so a field reporting the commit instant would make additive re-runs indistinguishable."
+    },
     "projection_store": {
       "type": "string",
       "enum": [

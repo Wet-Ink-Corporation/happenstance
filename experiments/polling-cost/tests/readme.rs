@@ -165,27 +165,110 @@ fn the_ratio_precedes_the_first_timing_figure() {
     );
 }
 
-#[test]
-fn no_table_runs_past_eight_rows_without_saying_it_was_trimmed() {
-    let readme = readme();
-    let mut rows = 0usize;
-    let mut overflowed = false;
-    for line in readme.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('|') {
-            rows += 1;
-            if rows > 10 {
-                overflowed = true;
+/// The first table region that runs past the density budget with no overflow
+/// marker **in its own trailing prose**, as a sentence naming where.
+///
+/// Scoped deliberately. The version of this that asked whether the marker
+/// occurred anywhere in the document was satisfied for ever by the first
+/// `… and 30 more` under a different table: once one table was trimmed, every
+/// future overflow anywhere passed. A marker belongs under the table that
+/// overflowed, because that is the table whose missing rows it accounts for.
+fn overflow_without_a_marker(doc: &str) -> Option<String> {
+    let lines: Vec<&str> = doc.lines().collect();
+    let is_row = |line: &str| line.trim_start().starts_with('|');
+
+    let mut at = 0usize;
+    while at < lines.len() {
+        if !is_row(lines[at]) {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        while at < lines.len() && is_row(lines[at]) {
+            at += 1;
+        }
+        // A header and its `|---|` rule are not rows, so the eight-row budget
+        // is ten lines.
+        let region = at - start;
+        if region <= 10 {
+            continue;
+        }
+
+        // The prose between this table and whatever comes next — the next
+        // table, the next heading, or the end.
+        let mut end = at;
+        while end < lines.len() {
+            let next = lines[end].trim_start();
+            if next.starts_with('|') || next.starts_with('#') {
+                break;
             }
-        } else {
-            if overflowed {
-                assert!(
-                    readme.contains("and N more") || readme.contains("… and"),
-                    "a table runs past its density budget with no overflow marker"
-                );
-            }
-            rows = 0;
-            overflowed = false;
+            end += 1;
+        }
+        let after = lines[at..end].join("\n");
+        if !after.contains("… and") && !after.contains("and N more") {
+            return Some(format!(
+                "the table at line {} runs to {region} lines — past the \
+                 eight-row density budget — and the prose that follows it \
+                 (lines {}–{}) carries no `… and N more` marker",
+                start + 1,
+                at + 1,
+                end
+            ));
         }
     }
+    None
+}
+
+#[test]
+fn no_table_runs_past_eight_rows_without_saying_it_was_trimmed() {
+    if let Some(why) = overflow_without_a_marker(&readme()) {
+        panic!("{why}");
+    }
+}
+
+/// The wrong document the scoped check rejects and the whole-document one
+/// accepted: an eleven-row table whose marker sits somewhere else entirely.
+///
+/// A rule no implementation can fail is decorative, and this is the
+/// implementation that fails it.
+#[test]
+fn a_marker_under_a_different_table_does_not_excuse_an_overflow() {
+    let elsewhere = "\
+## 1. Section
+
+| a | b |
+|---|---|
+| 1 | 2 |
+| 1 | 2 |
+
+… and 30 more rows are in the corpus.
+
+## 2. Section
+
+| a | b |
+|---|---|
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+| 1 | 2 |
+
+The rows above are all of them.
+";
+    assert!(
+        overflow_without_a_marker(elsewhere).is_some(),
+        "the overflow check is satisfied by a marker under a different table, \
+         so every future overflow passes once one table has been trimmed"
+    );
+    // And the same document with the marker where it belongs is accepted, so
+    // the check is about placement rather than about the marker existing.
+    let in_place = elsewhere.replace(
+        "The rows above are all of them.",
+        "… and 30 more rows are in the corpus.",
+    );
+    assert_eq!(overflow_without_a_marker(&in_place), None);
 }

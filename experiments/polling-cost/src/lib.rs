@@ -29,7 +29,7 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use happenstance::{
     Codec, CodecError, DomainEvent, Event, EventStore, EventType, Json, MemoryEventStore,
@@ -395,11 +395,30 @@ pub struct Manifest {
     pub cpu: String,
     /// Logical CPUs visible to the process.
     pub logical_cpus: usize,
-    /// Total RAM in bytes, or `0` where the OS did not say.
+    /// Total physical RAM in bytes, or `0` where the OS did not say.
+    ///
+    /// It is asked for, per platform: `/proc/meminfo`'s `MemTotal` on Linux,
+    /// `sysctl -n hw.memsize` on macOS, `Get-CimInstance Win32_ComputerSystem`
+    /// on Windows. Zero therefore means *the query was made and went
+    /// unanswered*, which is a condition worth recording; it never means
+    /// nobody asked.
     pub ram_bytes: u64,
     /// The feature set the measured crate was built with.
     pub features: String,
-    /// The instant the pass started, as an RFC-3339-ish UTC string.
+    /// The wall-clock instant **this run** started, as `YYYY-MM-DDTHH:MM:SSZ`.
+    ///
+    /// Read from the system clock when [`environment`] is called, and not from
+    /// the commit `git_rev` names. The distinction is the field's whole
+    /// purpose: two passes taken months apart at the same revision differ here
+    /// and nowhere else, and a `started_at` that reported the commit instant
+    /// would make them indistinguishable in exactly the field that separates
+    /// them — a condition reporting a different quantity than its own
+    /// documentation claims, which is the failure this artefact exists to
+    /// prevent.
+    ///
+    /// Wall clock deliberately, and never mixed with the monotonic
+    /// [`Instant`]s every duration in a [`Record`] comes from: this is a
+    /// *condition* of the run, not a measurement taken during it.
     pub started_at: String,
     /// Which projection store held the read models.
     pub projection_store: String,
@@ -763,9 +782,9 @@ pub fn environment(run_tag: &str, workspace: &Path) -> Manifest {
         os: std::env::consts::OS.to_owned(),
         cpu: cpu_model(),
         logical_cpus: std::thread::available_parallelism().map_or(0, std::num::NonZeroUsize::get),
-        ram_bytes: 0,
+        ram_bytes: total_ram_bytes(),
         features: "unstable-projection,memory,json".to_owned(),
-        started_at: command("git", &["log", "-1", "--format=%cI"]),
+        started_at: run_instant(),
         projection_store: PROJECTION_STORE.to_owned(),
     }
 }
@@ -802,6 +821,94 @@ fn command(program: &str, args: &[&str]) -> String {
             |_| "unknown".to_owned(),
             |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
         )
+}
+
+/// The wall-clock instant of **this run**, as `YYYY-MM-DDTHH:MM:SSZ`.
+///
+/// The system clock, read here and nowhere else. The version of this that read
+/// `git log -1 --format=%cI` instead recorded the *commit* instant under a name
+/// that promised the run's, so a pass taken today and one taken in six months
+/// at the same revision were byte-identical in the only field that distinguishes
+/// them.
+fn run_instant() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    let (year, month, day) = civil_from_days(i64::try_from(secs / 86_400).unwrap_or(0));
+    let rest = secs % 86_400;
+    let (hour, minute, second) = (rest / 3_600, (rest / 60) % 60, rest % 60);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+/// Days since the Unix epoch to a proleptic-Gregorian `(year, month, day)`.
+///
+/// Howard Hinnant's `civil_from_days`, transcribed. A date crate would be a
+/// dependency carrying promises — parsing, time zones, leap seconds — that
+/// nothing here makes: the harness formats one UTC instant and never parses one.
+const fn civil_from_days(days: i64) -> (i64, u64, u64) {
+    // Shift the epoch to 0000-03-01 so leap day lands at the end of the cycle.
+    let shifted = days + 719_468;
+    let toward_zero = if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    };
+    let era = toward_zero / 146_097;
+    let day_of_era = (shifted - era * 146_097) as u64;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = if month_prime < 10 {
+        month_prime + 3
+    } else {
+        month_prime - 9
+    };
+    let year = year_of_era as i64 + era * 400;
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+/// Total physical RAM in bytes, or `0` where the OS did not say.
+///
+/// One question, asked three ways because the answer lives in three places. The
+/// fallback is a genuine one — a host that will not report its memory records a
+/// zero that the schema and the README both read as *unknown* — rather than a
+/// constant standing in for a query nobody makes.
+fn total_ram_bytes() -> u64 {
+    // Linux, and cheapest: a file rather than a subprocess. The line reports
+    // kibibytes and says so, so the unit conversion is not a guess.
+    if let Ok(info) = std::fs::read_to_string("/proc/meminfo") {
+        for line in info.lines() {
+            if let Some(rest) = line.strip_prefix("MemTotal:")
+                && let Some(kib) = rest.split_whitespace().next()
+                && let Ok(kib) = kib.parse::<u64>()
+            {
+                return kib.saturating_mul(1_024);
+            }
+        }
+    }
+    if cfg!(target_os = "macos")
+        && let Ok(bytes) = command("sysctl", &["-n", "hw.memsize"]).parse::<u64>()
+    {
+        return bytes;
+    }
+    // Windows: `wmic` is gone from current builds, so the question goes to the
+    // CIM store the way the OS still answers it.
+    if cfg!(windows)
+        && let Ok(bytes) = command(
+            "powershell",
+            &[
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+        )
+        .parse::<u64>()
+    {
+        return bytes;
+    }
+    0
 }
 
 fn cpu_model() -> String {

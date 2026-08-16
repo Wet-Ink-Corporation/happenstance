@@ -25,6 +25,8 @@ behave identically whether or not this has ever been run.
 
 ## 1. What was measured, on what
 
+### The measurement
+
 | | |
 |---|---|
 | Headline | **delivery amplification 32.00** at 32 overlapping views; **1.00** disjoint |
@@ -35,6 +37,11 @@ behave identically whether or not this has ever been run.
 | Chunk | 1024 events per `begin`/`commit` pair |
 | Repeats | 2 per cell, raw rows committed |
 | Seed | `0x5011C057`, written into every record |
+
+### The machine, and the revision it measured
+
+| | |
+|---|---|
 | Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, `x86_64-pc-windows-msvc`, LLVM 22.1.6 |
 | Profile | `release` |
 | Measured revision | `55a2370`, clean under `crates/` and the workspace manifests |
