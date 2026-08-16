@@ -5,8 +5,8 @@
 
 use happenstance_core::bytes::Bytes;
 use happenstance_core::{
-    Event, EventId, EventType, InvalidQuery, RecordedAt, SequencePosition, SequencedEvent, StoreId,
-    Tags,
+    Event, EventId, EventType, InvalidQuery, Query, RecordedAt, SequencePosition, SequencedEvent,
+    StoreId, Tags,
 };
 use serde::{Deserialize, Serialize};
 
@@ -333,6 +333,80 @@ fn nomination_agrees_with_the_derived_query() {
             query.matches(event.event_type(), event.tags()),
             "the fold and the query select the same events"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// decision-model-composition AC-003 — a member's error is the composite's
+//
+// This one test lives here rather than in `tests/composition.rs`, and the
+// reason is structural rather than convenient. A member's `query()` can only
+// fail if some `Boundary` returns `Err`, and the two shipped implementations
+// cannot: the blanket derivation's only route to `InvalidQuery` is an empty
+// `EVENT_TYPES`, which is a compile error. So the failing member has to be one
+// only this crate can write, because only this crate can name the seal. It is
+// the test's *input* — the composite under test is the shipped one, and the two
+// wrong implementations it must reject are rejected from outside, in
+// `tests/composition.rs`.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Unconstrained;
+
+impl crate::sealed::Sealed for Unconstrained {}
+
+impl Boundary for Unconstrained {
+    type Event = Ticket;
+
+    fn query(&self) -> Result<Query, InvalidQuery> {
+        Err(InvalidQuery::UnconstrainedItem)
+    }
+
+    fn absorb<C: Codec>(&mut self, _event: &SequencedEvent, _codec: &C) -> Result<(), CodecError> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Itemless;
+
+impl crate::sealed::Sealed for Itemless {}
+
+impl Boundary for Itemless {
+    type Event = Ticket;
+
+    fn query(&self) -> Result<Query, InvalidQuery> {
+        Err(InvalidQuery::NoItems)
+    }
+
+    fn absorb<C: Codec>(&mut self, _event: &SequencedEvent, _codec: &C) -> Result<(), CodecError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_members_invalid_query_is_the_composites_error() {
+    let gate = Gate::for_show("s1");
+
+    // The member's error, unchanged. Never `Query::all()`, and never a
+    // composite that drops the failing member and carries on with the rest.
+    let pair = (gate.clone(), Unconstrained);
+    match pair.query() {
+        Err(InvalidQuery::UnconstrainedItem) => {}
+        other => panic!("expected the member's own error, got {other:?}"),
+    }
+
+    // On a three-tuple it is the FIRST failing member in member order.
+    let unconstrained_first = (gate.clone(), Unconstrained, Itemless);
+    match unconstrained_first.query() {
+        Err(InvalidQuery::UnconstrainedItem) => {}
+        other => panic!("expected the first failing member's error, got {other:?}"),
+    }
+
+    let itemless_first = (gate, Itemless, Unconstrained);
+    match itemless_first.query() {
+        Err(InvalidQuery::NoItems) => {}
+        other => panic!("expected the first failing member's error, got {other:?}"),
     }
 }
 

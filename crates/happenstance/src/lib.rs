@@ -94,8 +94,9 @@
 //!   [`EventType`] and [`Tags`].
 //! * [**`DecisionModel`**](DecisionModel) — folds read events into decidable
 //!   state and produces the matching [`Query`], through [`Boundary`].
-//!   Composing several into one query is the mechanism that makes a dynamic
-//!   consistency boundary *dynamic*.
+//!   Composing several into one query — put them in a tuple, which is a
+//!   [`Boundary`] too — is the mechanism that makes a dynamic consistency
+//!   boundary *dynamic*.
 //! * **The command loop** *(planned)* — read, decide, append, retry on
 //!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
 //! * **The typed projection runner** *(planned)* — decoded events, over the
@@ -108,6 +109,9 @@
 
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+
+#[macro_use]
+mod composition;
 
 mod boundary;
 mod codec;
