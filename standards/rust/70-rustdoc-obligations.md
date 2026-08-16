@@ -157,8 +157,8 @@ configuration so that the rule is checked where the consumer stands.
 **Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:77 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
-`xtask/src/main.rs:531 (no default features)` ·
-`xtask/src/main.rs:560 (documentation (default features))` ·
+`xtask/src/main.rs:575 (no default features)` ·
+`xtask/src/main.rs:604 (documentation (default features))` ·
 `Cargo.toml:134 (broken_intra_doc_links)`
 
 ---
@@ -248,7 +248,7 @@ rendering is permanent for that number, and the author learns about it from the
 docs.rs build log rather than from anything they ran.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
-`xtask/src/main.rs:45 (nightly rustdoc build with)` ·
+`xtask/src/main.rs:57 (nightly rustdoc build with)` ·
 [rustc removed features](https://raw.githubusercontent.com/rust-lang/rust/master/compiler/rustc_feature/src/removed.rs) *(checked 2026-08-09, rustc 1.97.1)* ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*
 

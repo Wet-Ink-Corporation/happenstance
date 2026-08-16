@@ -53,7 +53,7 @@ module on its first recorded timestamp, found by a user in a Worker — where
 
 **Evidence.** `crates/happenstance-cloudflare/src/lib.rs:117 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
-`xtask/src/main.rs:202 (wasm32 build of the contract crate)` ·
+`xtask/src/main.rs:215 (wasm32 build of the contract crate)` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-52-2. A feature is not target-scoped: an item behind a per-target optional dependency needs the target condition too.
@@ -105,7 +105,7 @@ asked for.
 
 **Evidence.** `crates/happenstance-testkit/Cargo.toml:67 (optional = true)` ·
 `crates/happenstance-testkit/src/fixtures.rs:487 (feature is not target-scoped)` ·
-`xtask/src/main.rs:636 (feature is not target-scoped)`
+`xtask/src/main.rs:680 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 
@@ -156,7 +156,7 @@ reproduces none of it locally, because `cargo test` never builds for wasm32.
 
 **Evidence.** `crates/happenstance-cloudflare/src/lib.rs:154 (Left un-gated it is dead code on wasm)` ·
 `crates/happenstance-cloudflare/src/lib.rs:157 (mod not_send_probe)` ·
-`xtask/src/main.rs:251 (wasm32 build of the Cloudflare adapter)`
+`xtask/src/main.rs:264 (wasm32 build of the Cloudflare adapter)`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
 
