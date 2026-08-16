@@ -7,9 +7,9 @@ title: The typed layer, the worked example, and 0.2.0-alpha.1
 parent: HS-I0006
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: implementing
+status: in-review
 process: project
-stage: integration
+stage: review
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,12 +17,12 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T23:13:25.742Z
+updated: 2026-08-16T23:13:43.916Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: 7289a0c4
 ---
