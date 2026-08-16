@@ -84,7 +84,7 @@ edit meant.
 
 ## Commits
 
-- `<sha>` — `feat(typed-layer-and-alpha-release): Defect log and macros verdict`
+- `344f2c0` — `feat(typed-layer-and-alpha-release): Defect log and macros verdict`
 
 ## Changes
 
