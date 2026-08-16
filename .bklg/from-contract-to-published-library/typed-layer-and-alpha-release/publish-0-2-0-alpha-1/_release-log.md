@@ -12,10 +12,12 @@ check, a rendered page, a publish transcript. Kept as it happened rather than
 reconstructed, because a terminal that has scrolled is evidence that no longer
 exists.
 
-**Read the status line first.** The tree is cut and gated; **the publish itself has
-not run.** `cargo publish` is a human handoff, named as one by the story map
-(`_storymap.md:163-166`), and everything below is written so that whoever runs it
-has what they need and nothing they have to reconstruct.
+**Read the status line first.** The tree is cut and gated, and **the publish has now
+run** — 2026-08-16, by the repository owner, as the human handoff the story map
+names (`_storymap.md:163-166`). §5 carries the three transcripts verbatim. The
+other three checklist items — the outside-workspace resolution, the rendered
+crates.io page and the docs.rs check — are **not yet done**, and AC-007 stays
+`satisfied: false` until they are in this file.
 
 | | |
 | --- | --- |
@@ -23,7 +25,8 @@ has what they need and nothing they have to reconstruct.
 | Crates | `happenstance-core`, `happenstance`, `happenstance-testkit` |
 | Gate | `cargo xtask ci` **whole**, green, all four `OPTIONAL` steps **ran** |
 | Dry run | `cargo publish --dry-run -p happenstance-core` — green |
-| Published | **not yet.** See *The handoff* |
+| Published | **yes** — all three live, 2026-08-16 21:36–21:37 UTC. See §5 |
+| Published from | `f90982b`, whose tracked tree outside `.bklg/` and `.redkiln/` is **byte-identical** to the gated `952a870` |
 
 ---
 
@@ -199,10 +202,11 @@ and to the testkit's manifest, re-anchored in their own commit.
 
 ---
 
-## 5. The handoff — what a human runs, in this order
+## 5. The handoff — what a human ran, in this order
 
-**Nothing below has been executed.** `cargo publish` is the one irrevocable act in
-the project and it is a human step by design.
+**Executed 2026-08-16 by the repository owner**, in the session that re-entered this
+slice. `cargo publish` is the one irrevocable act in the project and it was a human
+step by design; the commands below are what was run, and §5.1 is what came back.
 
 ```console
 # 1. core FIRST. `happenstance` cannot resolve until this is live.
@@ -222,7 +226,7 @@ the whole reason the spelling is what it is (NF-006, CF-32).
 
 **Then, before closing the terminal**, record here:
 
-- [ ] the three `cargo publish` transcripts, in the order they ran;
+- [x] the three `cargo publish` transcripts, in the order they ran — **§5.1**;
 - [ ] a scratch project **outside this workspace** — its `Cargo.toml`, its
       `cargo build` output and its program's stdout — adding all three crates at
       an **explicit pre-release requirement** (`happenstance = "0.2.0-alpha.1"`;
@@ -236,7 +240,113 @@ the whole reason the spelling is what it is (NF-006, CF-32).
       knowing and is not a blocker.
 
 **Until those four are filled in, AC-007 is not satisfied**, and this story's
-ledger says so rather than claiming a resolution nobody has observed.
+ledger says so rather than claiming a resolution nobody has observed. One of four
+is in. The three that remain are the three that involve *reading back* what was
+published, and none of them is discharged by §5.1 — a successful upload proves the
+registry accepted a tarball, not that a stranger can resolve it, not that the page
+renders as intended, and not that docs.rs built it.
+
+### 5.1 The transcripts, as they came back
+
+Pasted, not summarised, per this story's own ledger note: *"A `cargo publish`
+transcript and a first resolution against the index are one-shot."* Recorded by the
+orchestrating session, which is where the terminal was.
+
+```console
+$ cargo publish -p happenstance-core
+    Updating crates.io index
+   Packaging happenstance-core v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-core)
+    Updating crates.io index
+    Packaged 26 files, 434.5KiB (123.9KiB compressed)
+   Verifying happenstance-core v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-core)
+   Compiling happenstance-core v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\target\package\happenstance-core-0.2.0-alpha.1)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.52s
+   Uploading happenstance-core v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-core)
+    Uploaded happenstance-core v0.2.0-alpha.1 to registry `crates-io`
+note: waiting for happenstance-core v0.2.0-alpha.1 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published happenstance-core v0.2.0-alpha.1 at registry `crates-io`
+```
+
+```console
+$ cargo publish -p happenstance
+    Updating crates.io index
+   Packaging happenstance v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance)
+    Updating crates.io index
+    Packaged 33 files, 387.0KiB (104.0KiB compressed)
+   Verifying happenstance v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance)
+ Downloading crates ...
+  Downloaded happenstance-core v0.2.0-alpha.1
+   Compiling happenstance-core v0.2.0-alpha.1
+   Compiling happenstance v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\target\package\happenstance-0.2.0-alpha.1)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.71s
+   Uploading happenstance v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance)
+    Uploaded happenstance v0.2.0-alpha.1 to registry `crates-io`
+note: waiting for happenstance v0.2.0-alpha.1 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published happenstance v0.2.0-alpha.1 at registry `crates-io`
+```
+
+```console
+$ cargo publish -p happenstance-testkit
+    Updating crates.io index
+   Packaging happenstance-testkit v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-testkit)
+    Updating crates.io index
+    Packaged 48 files, 1.4MiB (397.6KiB compressed)
+   Verifying happenstance-testkit v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-testkit)
+   Compiling happenstance-core v0.2.0-alpha.1
+   Compiling happenstance-testkit v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\target\package\happenstance-testkit-0.2.0-alpha.1)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.14s
+   Uploading happenstance-testkit v0.2.0-alpha.1 (D:\repos\happenstance\.claude\worktrees\from-contract-to-published-library\crates\happenstance-testkit)
+    Uploaded happenstance-testkit v0.2.0-alpha.1 to registry `crates-io`
+note: waiting for happenstance-testkit v0.2.0-alpha.1 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published happenstance-testkit v0.2.0-alpha.1 at registry `crates-io`
+```
+
+**The publish order proved itself rather than merely being asserted.** §5's ordering
+argument was written before the cut; the middle transcript is the observation that
+confirms it. Verifying `happenstance` printed `Downloaded happenstance-core
+v0.2.0-alpha.1` and compiled against it — cargo resolved the requirement **from the
+registry**, not from the path, which is only possible because core went first. Had
+`[workspace.dependencies]` still said `version = "0.2.0"`, that line is where it
+would have failed, with core already permanently live. §2 is the check that made it
+a non-event.
+
+`happenstance-testkit` compiled `happenstance-core` and **not** `happenstance`,
+confirming NF-006/CF-32 from the other side: cargo strips the versionless path
+dev-dependency from the published manifest, so the testkit carries no ordering
+constraint against `happenstance` at all.
+
+### 5.2 Index state immediately after, and what it does not prove
+
+Read from the sparse index (`https://index.crates.io/ha/pp/<crate>`) minutes after
+the third publish. This is a **registry read**, and it is deliberately filed apart
+from the checklist: it is not the outside-workspace resolution AC-007 asks for,
+because it never invokes the resolver and never builds anything. It is recorded
+because two facts in it are one-shot-adjacent and worth pinning.
+
+| Crate | Versions live | `rust_version` | `pubtime` |
+| --- | --- | --- | --- |
+| `happenstance-core` | `0.0.0`, **`0.2.0-alpha.1`** | `1.97.1` | `2026-08-16T21:36:30Z` |
+| `happenstance` | `0.0.0`, **`0.2.0-alpha.1`** | `1.97.1` | `2026-08-16T21:36:55Z` |
+| `happenstance-testkit` | `0.0.0`, **`0.2.0-alpha.1`** | `1.97.1` | `2026-08-16T21:37:19Z` |
+
+The `0.0.0` rows are the 2026-08-06 name reservations, untouched and unyanked.
+
+Two entries in the published metadata are the shipped form of decisions this project
+argued for, now fixed on the registry and no longer editable:
+
+- `happenstance`'s dependency list carries `happenstance-core` at
+  `req: "^0.2.0-alpha.1"` — the requirement string §2 exists to get right, in the
+  form the registry will hand every future resolver.
+- `happenstance-testkit`'s dependency list contains **no entry for `happenstance`**.
+  The dev-dependency was stripped, exactly as NF-006 predicted.
+
+The MSRV shipped as `1.97.1` on all three, which is ADR-0029's floor arriving on a
+published artefact for the first time — the event ADR-0004's **provisional** marker
+is scheduled to lose at phase 12. §6's *No MSRV promise* still stands: the number is
+in the metadata, and turning it into a supported-versions promise is HS-P0016's.
 
 ---
 
