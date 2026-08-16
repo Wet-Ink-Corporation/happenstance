@@ -23,7 +23,7 @@ attributable to the initiative rather than inherited.
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
-| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **in-progress** | run 1 blocked at M1 on the ADR-0020/0021 ingest wave · 2/16 |
+| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **in-progress** | run 2: 16/16 committed, 6/7 slices approved, 13/16 stories approved · blocked on the `cargo publish` human handoff (AC-007) |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
@@ -536,3 +536,95 @@ in the *understating* direction again.
 mechanism to rustdoc→spec citations would close the class rather than the instance; repairing eight
 line numbers by hand leaves the next spec edit to reopen it. HS-P0016 owns the call — including the
 option to record a refusal with the reason, which is a legitimate outcome for a defect no AC covers.
+
+### HS-P0011 `typed-layer-and-alpha-release` — run 2, 2026-08-16 (`wf_a20b39d1-a5b`)
+
+baseRef **`74135b8`**, unchanged from run 1. The ADR-0020/0021 wave was merged onto this branch
+first (`3fb28a1`), which is what unblocked AC-008 on both M1 stories.
+
+**`degradedSummary: none`, `degraded: []`** — no agent dropped, no isolation trip, nothing missing.
+**16 of 16 stories committed. Six of seven slices sealed `approved`.** One baseline repair
+(`90421d0`). Halted at `alpha-release` / `publish-0-2-0-alpha-1`, `blocked-dependency`.
+
+| Slice | Verdict |
+|-------|---------|
+| `decision-records` · `typed-vocabulary` · `codec-and-command-loop` · `testing-surface` | approved |
+| `projection-runner` · `worked-example-and-proof` | approved |
+| `alpha-release` | **unsealed** — the run halted before its review |
+
+**The blocker is a correct refusal.** AC-007 requires a live `cargo publish` and a post-publish
+resolution from outside the workspace. `_storymap.md:163-166` names `cargo publish` one of exactly
+two human handoffs in this map, and no gate step can reach a live registry. Two of AC-007's three
+conjuncts were discharged **before** the cut — the publish order with its reasoning, and the
+yank-and-republish instruction in `_release-log.md` §1 — and the tree is cut and gated whole
+(`cargo xtask ci` → `all checks passed` at `952a870`, all four OPTIONAL steps **run**;
+`cargo publish --dry-run -p happenstance-core` green). The ledger row reads `satisfied: false` and
+names the blocker. Nothing was stubbed.
+
+Because the run halted at stories, **Integration and the project review never ran** — there is no
+`_integration.md` and no `_review.md`. HS-P0011 stays at `implementation`/`implementing`.
+
+### Story gate — 13 approved, 3 held (human, batched)
+
+`HS-S0018`–`HS-S0030` are at `report`/`in-review` with `approved` recorded. `HS-S0031`,
+`HS-S0032` and `HS-S0033` were **deliberately left at `plan`/`ready`**: their slice never reached
+review, so no reviewer has looked at them, and advancing them would put a human gate over unchecked
+work. Same refusal run 1 made, for the same reason.
+
+### The per-story gate rejected six stories inside slices the reviewer had sealed `approved`
+
+Every one was a boundary failure, and every one was **compelled** — the story's own legitimate work
+touched a file its fence did not admit. Instances 11 through 16 of the class HS-P0010 named and
+predicted. Settled by human decision, each widening carrying its argument **and its limit** beside
+the fence:
+
+| Widening | Stories | Scope clause |
+|----------|---------|--------------|
+| `Cargo.lock` (`390e1e0`) | `domain-event-and-decision-model`, `command-loop`, `given-when-then-dsl`, `worked-example-on-typed-layer` | lockfile only; `[workspace.dependencies]` and every other manifest stay out |
+| `standards/rust/**` (`34d5311`) | `command-loop`, `misbehaving-testkit-stores`, `compile-fail-proof-artefact` | **citation re-anchoring only** — rule text, evidence selection, retirement and new atoms stay out |
+| `xtask/src/main.rs` (`34d5311`) | `projection-trait-and-runner` | **only assertions this story's own deliverable falsified**; no new gate step |
+
+The `Cargo.lock` case is a **repair, not a widening**: each fence already authorised a `Cargo.toml`
+edit, and cargo rewrites the lockfile as the mechanical consequence — the boundary permitted the
+cause and forbade the effect, so no implementation could satisfy both. Four sibling specs in the
+same project already carried the entry, and `worked-example-on-typed-layer`'s own body *predicted*
+the movement in two places. It was an inconsistency inside one planning pass.
+
+`projection-trait-and-runner`'s is the most interesting: landing the runner made an existing `xtask`
+test's premise false — *"`happenstance` re-exports no projection item"* — and the implementer
+restated the assertion in the direction that still has content rather than deleting it or leaving a
+false test standing.
+
+**Worth filing upstream.** The slice reviewer sealed all seven slices `approved`; the deterministic
+per-story gate then rejected six of the thirteen stories inside them. HS-P0010 recorded this
+disagreement twice and it is now systemic — the slice review is the instrument that never runs
+`verify --grain story`.
+
+### Two instrument defects found by this gate, neither of them a code problem
+
+**1. `HS-S0024`'s acceptance ledger was unparseable for a two-character reason** (`b30e70e`). Two
+`evidence:` values embedded grep regexes — `'unwrap\(\)|expect\(|unreachable!'` and
+`'assert_eq!\(.*\[…'` — inside YAML **double-quoted** scalars, where backslash is an escape
+character and `\(`, `\)`, `\[` are invalid escapes. The YAML parse throws,
+`parseLedgerBlock` returns `null`, and `verify` reports *"`_ledger.md` has no parseable
+acceptance-ledger block"* — which reads as a **missing ledger** rather than as two mis-encoded
+characters in an otherwise complete ten-row ledger. The backslashes were doubled so the parsed
+string is byte-for-byte what the author wrote; no criterion was edited and no row flipped. **The
+error message is the defect worth reporting**: it names the wrong failure and gives the author no
+way to find the two characters. The passing ledgers avoid it only by accident, using `evidence: >-`
+block scalars, where backslash is literal.
+
+**2. A stale `index.lock` silently ate commits for fifteen minutes** (`52d93a4`). A zero-byte
+`.git/worktrees/…/index.lock` held by no git process made every `redkiln advance --commit` and
+`record-links` after 13:02:55 write its files and fail to commit them — while `advance` still
+exited **0**. `HS-S0022`'s approval sat in the working tree as an uncommitted
+`stage: report` / `status: in-review`: exactly the state this command file warns is invisible to
+`git status` reasoning and destroyed by any later tree reset. Caught by inspecting the tree rather
+than by any check. **An `advance --commit` whose commit fails should not exit 0.**
+
+**A false lead, recorded so it is not re-run.** Two ledgers (`misbehaving-testkit-stores`,
+`given-when-then-dsl`) have **CRLF** working-tree line endings under the global
+`core.autocrlf=true` with no `.gitattributes`; the committed blobs are LF. This looked like the
+cause and **is not** — `ledgerBlock` splits on `/\r?\n/`, and `given-when-then-dsl` passed while
+CRLF. The same artifact does defeat anchored `grep '^…$'` searches over `.bklg` specs, which cost a
+wrong answer earlier in this session.
