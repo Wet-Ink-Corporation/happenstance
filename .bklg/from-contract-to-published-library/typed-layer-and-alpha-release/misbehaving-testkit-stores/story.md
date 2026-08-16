@@ -7,9 +7,9 @@ title: FaultyStore<S> and GappyMemoryStore in the testkit
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -19,7 +19,7 @@ archetype: capability
 slice: testing-surface
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:08.067Z
+updated: 2026-08-16T20:56:47.297Z
 links:
   pr: null
   commits:
@@ -28,7 +28,7 @@ links:
     - d95c760
     - b77cffb
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
