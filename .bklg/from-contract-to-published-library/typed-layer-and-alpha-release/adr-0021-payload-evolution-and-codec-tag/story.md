@@ -7,9 +7,9 @@ title: ADR-0021 — payload evolution and the codec tag's home
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -19,13 +19,13 @@ archetype: foundation
 slice: decision-records
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T00:52:33.527Z
+updated: 2026-08-16T20:01:10.242Z
 links:
   pr: null
   commits:
     - e33dc9f
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
