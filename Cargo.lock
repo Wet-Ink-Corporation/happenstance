@@ -470,6 +470,7 @@ name = "happenstance"
 version = "0.2.0"
 dependencies = [
  "ciborium",
+ "futures-core",
  "happenstance-core",
  "postcard",
  "serde",

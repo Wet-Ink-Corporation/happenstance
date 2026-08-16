@@ -10,14 +10,15 @@
 #![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! DCB-compliant event sourcing, with batteries.
 //!
-//! One enum of events, one struct that folds them, and a query derived from
-//! the same declaration the fold is exhaustive over:
+//! One enum of events, one struct that folds them, and one call that reads,
+//! decides, appends and retries:
 //!
 //! ```
-//! use happenstance::{
-//!     Boundary, Codec, CodecError, DecisionModel, DomainEvent, EventType,
-//!     Tags, bytes::Bytes,
-//! };
+//! use happenstance::{bytes::Bytes, Codec, CodecError, DecisionModel};
+//! use happenstance::{DomainEvent, EventType, MemoryEventStore, Retry};
+//! use happenstance::{Tags, commit};
+//! use std::error::Error;
+//! # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! enum Seat { Taken }
@@ -33,10 +34,8 @@
 //!     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
 //!         -> Result<Self, CodecError> { c.decode(d) }
 //! }
-//!
 //! #[derive(Clone)]
 //! struct Seats { scope: Tags, taken: u32 }
-//!
 //! impl DecisionModel for Seats {
 //!     type Event = Seat;
 //!     fn scope(&self) -> &Tags { &self.scope }
@@ -44,11 +43,14 @@
 //!         match event { Seat::Taken => self.taken += 1 }
 //!     }
 //! }
-//!
-//! let scope = Tags::from_pairs([("course", "c1")])?;
-//! let seats = Seats { scope, taken: 0 };
-//! assert_eq!(seats.query()?.items().map_or(0, <[_]>::len), 1);
-//! # Ok::<(), Box<dyn core::error::Error>>(())
+//! let store = MemoryEventStore::new();
+//! let seats = Seats { scope: Tags::empty(), taken: 0 };
+//! let retry = Retry::attempts(3.try_into()?);
+//! let take =
+//!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
+//! let done = commit(&store, seats, retry, take).await?;
+//! assert_eq!(done.attempts, 1);
+//! # Ok::<(), Box<dyn Error>>(()) }
 //! ```
 //!
 //! # What arrives here, and what stays below
@@ -72,10 +74,10 @@
 //!
 //! # The vocabulary
 //!
-//! A linked term is an item you can use today. The two still marked
-//! *Planned, and specified in
+//! A linked term is an item you can use today. The one still marked
+//! *(planned), and specified in
 //! [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)*
-//! say so, and say it about themselves rather than about the page.
+//! says so, and says it about itself rather than about the page.
 //!
 //! * [**`Codec`**](Codec) — payload encoding. `Json` is on by default;
 //!   `Postcard` and `Cbor` arrive with the features named below. Events carry
@@ -90,8 +92,10 @@
 //!   Composing several into one query — put them in a tuple, which is a
 //!   [`Boundary`] too — is the mechanism that makes a dynamic consistency
 //!   boundary *dynamic*.
-//! * **The command loop** *(planned)* — read, decide, append, retry on
+//! * [**The command loop**][command-loop] — read, decide, append, retry on
 //!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
+//!   Bounded by a [`Retry`] you pass in, re-deciding from a pristine model on
+//!   every attempt. Its own page carries the policy.
 //! * **The typed projection runner** *(planned)* — decoded events, over the
 //!   checkpoint pump that stays in the contract crate
 //!   ([ADR-0007](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0007-projection-runner-decodes.md)).
@@ -113,7 +117,14 @@
 //! Adapter authors should depend on [`happenstance_core`] directly rather than
 //! on this crate: it is the smaller semver surface, and it is the one the
 //! conformance suite is written against.
+//!
 
+// The vocabulary's command-loop reference resolves to whichever door this build
+// has. A plain `](commit)` would be an unresolved link — a *hard* rustdoc error,
+// not a warning — in every build without `json`, which is the failure the
+// design's mock caught before any of this was written.
+#![cfg_attr(feature = "json", doc = "[command-loop]: commit")]
+#![cfg_attr(not(feature = "json"), doc = "[command-loop]: commit_with")]
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -122,6 +133,7 @@ mod composition;
 
 mod boundary;
 mod codec;
+mod command;
 mod domain;
 mod sealed;
 
@@ -139,6 +151,10 @@ pub use codec::Json;
 #[cfg_attr(docsrs, doc(cfg(feature = "postcard")))]
 pub use codec::Postcard;
 pub use codec::{Codec, CodecError};
+#[cfg(feature = "json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
+pub use command::commit;
+pub use command::{CommandError, Committed, Retry, commit_with};
 pub use domain::{DecisionModel, DomainEvent};
 
 pub use happenstance_core::*;

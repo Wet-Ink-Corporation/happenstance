@@ -255,9 +255,6 @@ impl<C: Codec> TagIsWritable<C> {
 /// `application` is whatever metadata the caller wanted on the event —
 /// causation, correlation — and it is copied through after the region,
 /// untouched and never parsed.
-// The command loop is this seam's only caller and lands in the slice-mate
-// `command-loop`; the allow goes with it.
-#[allow(dead_code)]
 pub(crate) fn frame<C: Codec>(application: Option<&Bytes>) -> Bytes {
     let () = TagIsWritable::<C>::CHECKED;
 
