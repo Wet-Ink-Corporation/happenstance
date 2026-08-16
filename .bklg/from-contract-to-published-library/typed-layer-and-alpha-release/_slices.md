@@ -27,6 +27,7 @@ human-readable record, the trailer is what resume greps.
 | testing-surface | approved | misbehaving-testkit-stores 6c59c46, given-when-then-dsl bd054c0 | (this commit) |
 | projection-runner | approved | projection-trait-and-runner 60b8072, projection-clause-verdicts 55a2370, polling-cost-measurement 049d513 | (this commit) |
 | worked-example-and-proof | approved | worked-example-on-typed-layer 597a20e, compile-fail-proof-artefact 1044a95 | (this commit) |
+| alpha-release | approved | edge-flavour-and-wasm-claim 0a010c9, defect-log-and-macros-verdict 344f2c0, publish-0-2-0-alpha-1 448e1ac | (this commit) |
 
 ## Surviving findings
 
