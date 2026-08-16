@@ -52,7 +52,16 @@ happenstance-core = { workspace = true, features = [
 futures-core.workspace = true
 
 [features]
-default = []
+# `memory` is in `default` deliberately. `GappyMemoryStore` is gated on it, and a
+# gate whose feature is never declared is an item that silently does not exist;
+# a gate declared but left out of `default` is an item a `cargo add
+# happenstance-testkit` user never meets. It forwards to a `happenstance-core`
+# feature this crate already enables unconditionally above, so it adds no
+# dependency and changes no resolution — what it buys is a switch
+# `--no-default-features` can turn off, which is what keeps the feature powerset
+# honest about a `#[cfg]` over a `pub` item (RS-51-1).
+default = ["memory"]
+memory = ["happenstance-core/memory"]
 # The property-test generators in `fixtures::strategies` (CF-21). Off by
 # default so the mandatory `wasm32` build stays untouched — `proptest` does not
 # build for that target — and on under `--all-features`, which is what the

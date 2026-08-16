@@ -25,6 +25,33 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-testkit` ships two stores that misbehave on purpose, because
+  every store a consumer could reach behaves perfectly.** `FaultyStore<S>` and
+  its `Send` sibling `SendFaultyStore<S>` wrap any event store and can be armed
+  — `violate_next(n)`, `fail_next_read(n)` — to refuse an append with
+  `ConditionViolated` naming **no** conflicting event, or to fail a read at its
+  first polled item. The defect that detects: a retry loop that branches on
+  `ConditionViolated::conflicting_position` being `Some`. It works against every
+  in-process store and never retries against one reached over one-shot HTTP,
+  which reports `None` conformantly — so until now the input that separates a
+  correct caller from an incorrect one did not exist in-process at all.
+  `GappyMemoryStore::with_stride(NonZeroU64)` is the second: a fully conformant
+  store whose positions advance by a caller-chosen stride. The defect that
+  detects: a read-model handler that computes its next position by adding one.
+  Both stores run the full conformance suite themselves — the wrapper *unarmed*,
+  so a disarmed fixture is proved not to be lying about ordering, positions or
+  identity, and the gapped store with its stride, so its gaps are proved to be
+  the freedom VT-11 grants rather than a defect. No conformance rule is added,
+  so no adapter's CI can turn red because of this. Four items, all at the crate
+  root: `FaultyStore`, `SendFaultyStore`, `FaultyStoreError<E>` — the projected
+  error the port's associated type forces, because `MemoryStoreError` is
+  uninhabited and there is no `S::Error` to fabricate — and `GappyMemoryStore`.
+- **`happenstance-testkit` declares a `memory` feature, and it is on by
+  default.** It gates `GappyMemoryStore` and forwards to a `happenstance-core`
+  feature this crate already enabled unconditionally, so it adds no dependency
+  and changes no resolution. What it buys is a switch `--no-default-features`
+  can turn off, which is what keeps the feature powerset honest about a `#[cfg]`
+  over a `pub` item.
 - **`projection_store_conformance!` — a fourth rule family, and the first line
   an adapter author can write against `ProjectionStore`.** One line in your own
   `tests/` expands to one test per projection rule, named after the rule, on any
