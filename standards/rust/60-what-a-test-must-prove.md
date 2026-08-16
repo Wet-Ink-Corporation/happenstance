@@ -65,8 +65,8 @@ mutated, so a mutant's verdicts become order-dependent and the registry's
 exactness claim quietly stops being true. It is found — if ever — when reordering
 `for_each_mutant!` changes which rules "fail".
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:454 (catch_unwind(probe.run))` ·
-`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:330 (function pointers are unconditionally)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:466 (catch_unwind(probe.run))` ·
+`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:342 (function pointers are unconditionally)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
@@ -160,7 +160,7 @@ vacuous and reported as covered.
 
 **Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:160 (fn is_a_rule_body)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:222 (A denylist can never be the primary check)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:296 (LAST_ORIGIN.with_borrow_mut)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:308 (LAST_ORIGIN.with_borrow_mut)` ·
 [SPECIFICATION CF-2](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
