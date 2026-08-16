@@ -7,9 +7,9 @@ title: 0.2.0-alpha.1 on the registry, with its churn mitigations
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,12 +22,13 @@ archetype: capability
 slice: alpha-release
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:28.377Z
+updated: 2026-08-16T23:11:27.443Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 448e1ac
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
