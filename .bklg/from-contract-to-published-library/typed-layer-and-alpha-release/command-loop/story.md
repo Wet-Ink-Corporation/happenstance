@@ -7,9 +7,9 @@ title: The command loop — read, decide, append, retry on ConditionViolated
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,13 +23,13 @@ archetype: capability
 slice: codec-and-command-loop
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:07.523Z
+updated: 2026-08-16T20:43:21.906Z
 links:
   pr: null
   commits:
     - "9971600"
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
