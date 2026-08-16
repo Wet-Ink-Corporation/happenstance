@@ -17,11 +17,23 @@ not the same as what a user needed to be told.
   passing adapter's CI red, so treat a minor bump there as breaking and pin it
   exactly.
 - **`ProjectionStore` ships behind an off-by-default `unstable-projection`
-  feature** and is exempt from semver until two adapters at opposite ends of the
-  batch-shape axis have passed its conformance suite. See
-  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+  feature** — declared on `happenstance-core`, and forwarded by `happenstance`
+  for the typed runner built over it — and is exempt from semver until two
+  adapters at opposite ends of the batch-shape axis have passed its conformance
+  suite. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
-## [Unreleased]
+## [0.2.0-alpha.1] — 2026-08-16
+
+**The first published release, and it is a pre-release on purpose.** The API is
+expected to move until the stable `0.2.0`; only one alpha resolves at a time,
+and each is yanked when the next lands. `happenstance-testkit` publishes on its
+own number, `0.2.0-alpha.1`, which moves *down* from its in-tree `0.2.0`: CF-32
+gives it an independent number, not an independent maturity, and a stable suite
+over a moving port is the promise this release refuses to make.
+
+Everything under `### Added`, `### Changed` and `### Fixed` below was written as
+it landed, phase by phase, rather than reconstructed from `git log` at release
+time.
 
 ### Added
 
@@ -1623,4 +1635,4 @@ not the same as what a user needed to be told.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main
+[0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

@@ -59,7 +59,7 @@ futures-core = { workspace = true }
 # `FaultyStore`, for the retry demonstration that needs no database.
 #
 # Deliberately **not** `{ workspace = true }`, and this is NF-006 rather than an
-# oversight. `[workspace.dependencies]` carries `version = "0.2.0"` on this
+# oversight. `[workspace.dependencies]` carries a version requirement on this
 # crate, and a dev-dependency carrying a version has to resolve from the
 # registry at publish time — which would make `happenstance-testkit` publish
 # *before* `happenstance`, a coupling CF-32's independent version number exists

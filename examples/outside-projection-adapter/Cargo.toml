@@ -18,7 +18,13 @@ publish = false
 # that a `cargo add happenstance-core` user does not pay. Written out long-hand,
 # the line is the line an outsider writes, minus the `path`.
 [dependencies]
-happenstance-core = { version = "0.2.0", path = "../../crates/happenstance-core", features = [
+# The requirement moves with the workspace version, and it has to: a `"0.2.0"`
+# requirement does not match a `0.2.0-alpha.1` candidate, so the whole workspace
+# stops resolving — which is the same failure `Cargo.toml`'s own requirement
+# strings would have caused at publish time, arriving here first because this
+# manifest is written long-hand on purpose. An outsider adding a pre-release
+# writes the pre-release, so the line is still the line they would write.
+happenstance-core = { version = "0.2.0-alpha.1", path = "../../crates/happenstance-core", features = [
   "conformance",
 ] }
 
@@ -27,7 +33,7 @@ happenstance-core = { version = "0.2.0", path = "../../crates/happenstance-core"
 # `macros` and `rt` for the default emitter's `#[tokio::test]`, which resolves
 # in *this* crate's scope rather than in the testkit's.
 [dev-dependencies]
-happenstance-testkit = { version = "0.2.0", path = "../../crates/happenstance-testkit" }
+happenstance-testkit = { version = "0.2.0-alpha.1", path = "../../crates/happenstance-testkit" }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 # Held to the workspace's own lint bar rather than to rustc's defaults. An

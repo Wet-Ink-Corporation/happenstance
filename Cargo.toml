@@ -3,7 +3,16 @@ resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
 
 [workspace.package]
-version = "0.2.0"
+# A **pre-release**, and it is the number `happenstance` and `happenstance-core`
+# both inherit. `0.2.0` and not `0.1.0` because phase 4 was a breaking change to
+# a version that had not moved; `-alpha.1` because the API is expected to keep
+# moving until the stable `0.2.0`, and a stable number would make "we can't
+# change that now" available as an argument against the rest of the runbook.
+#
+# A pre-release only resolves for a requirement that asks for one, so
+# `cargo add happenstance` does not pick this up by accident. That is the
+# intended behaviour, not a limitation.
+version = "0.2.0-alpha.1"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -21,9 +30,15 @@ categories = ["database", "data-structures"]
 # actually needs. Cargo forbids a member from *removing* a workspace default,
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
-happenstance-core = { version = "0.2.0", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.2.0", path = "crates/happenstance", default-features = false }
-happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit" }
+#
+# The three requirement strings move with the version above, and this is the
+# highest-cost line in the file to get wrong: `version = "0.2.0"` never matches a
+# `0.2.0-alpha.1` release, so leaving one behind resolves fine from the path
+# while the workspace is intact and fails only on the *second* `cargo publish` —
+# after `happenstance-core` is live and unremovable.
+happenstance-core = { version = "0.2.0-alpha.1", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.2.0-alpha.1", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { version = "0.2.0-alpha.1", path = "crates/happenstance-testkit" }
 
 # --- external ---
 # WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`

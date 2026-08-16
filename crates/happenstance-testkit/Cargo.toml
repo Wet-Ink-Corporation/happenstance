@@ -11,7 +11,14 @@ description = "DCB conformance suite for happenstance event store adapters."
 # change added thirty-four rules, and thirty-four new ways for a previously
 # passing adapter to go red is the event this crate's independent number exists
 # to signal.
-version = "0.2.0"
+#
+# And moved *down* to a pre-release for the alpha, which reads as a mistake
+# unless the reason is here. CF-32 gives this crate an independent **number**,
+# not an independent **maturity**: the rule set it publishes measures a port that
+# is still moving, and a stable `0.2.0` would promise adapter authors — who are
+# told to pin this crate exactly — a bar that is going to change under them. The
+# suite goes stable when the contract it measures does.
+version = "0.2.0-alpha.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
