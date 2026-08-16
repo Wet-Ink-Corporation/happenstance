@@ -24,6 +24,7 @@ human-readable record, the trailer is what resume greps.
 | decision-records | approved | adr-0020-fold-query-agreement c011143, adr-0021-payload-evolution-and-codec-tag e33dc9f | (this commit) |
 | typed-vocabulary | approved | domain-event-and-decision-model 996853f, decision-model-composition 4dc6aeb | (this commit) |
 | codec-and-command-loop | approved | codec-and-feature-forwarding da530cd, command-loop 9971600 | (this commit) |
+| testing-surface | approved | misbehaving-testkit-stores 6c59c46, given-when-then-dsl bd054c0 | (this commit) |
 
 ## Surviving findings
 
