@@ -7,9 +7,9 @@ title: DomainEvent and DecisionModel, mounted at the crate root
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,14 +21,14 @@ archetype: capability
 slice: typed-vocabulary
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:06.309Z
+updated: 2026-08-16T20:20:45.484Z
 links:
   pr: null
   commits:
     - 996853f
     - 3fde7d1
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
