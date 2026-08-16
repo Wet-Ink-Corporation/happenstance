@@ -522,7 +522,7 @@ ADR-0026 must be written against two unlike peers, not one.
 | Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do | 4 | **open, and newly so.** Raised by the phase-2 measurement rather than by a reader: the per-boundary mechanism is nearly free and the global one is not. DCB evaluates conditions against a boundary, so the question is not rhetorical. It is a clause question, not a measurement, and it is phase 4's | 0013 |
 | Benchmark harness | 8 | **decided** — `event_store_benchmarks!`, so adapters inherit it. Not a conformance rule: complexity is a benchmark, not an assertion, and a suite that asserted on timings would be flaky (CF-34) | 0022 |
 | A store holding only a suffix of its own log, as a testkit instrument | 14 | **deferred — CF-27.** The completeness axis has nothing at its far end | 0028 |
-| Is `happenstance-macros` in scope for 0.1 | 7 | open — the criterion is stated in phase 7 and evaluated in its session log | 0020 |
+| Is `happenstance-macros` in scope for 0.1 | 7 | **no — measured at phase 7 and out.** The rewritten example is 40 lines of mapping ceremony against 249 of domain; even counting the whole contested identity block (`CourseId`/`StudentId`, 85 lines) as ceremony it is 0.50:1, and the threshold is 1:1. This **contradicts** the design's own 2.4:1 prediction, which was taken over a minimal doctest: the `DomainEvent` impl is a fixed cost that barely grows with the domain, so the ratio is a function of how much domain the artefact has. `references/evaluation/phase-7-macros-verdict.md` publishes the classification range by range. Reopen only if the `DomainEvent::tags` defect is settled with an infallible `Tags` path | 0020 |
 | Snapshotting decision-model state | post-0.1 | deferred — DCB queries are narrow by construction; revisit if replay cost is measured | — |
 | `tracing` spans and metrics | post-0.1 | deferred — purely additive, no port change | — |
 | Is `happenstance-runtime` the right name and the right seam | 0 | **settled — ADR-0006**, executed in phase 0 | 0006 |
@@ -4076,9 +4076,11 @@ fail to compile* is the whole claim.
       settled here, on a count: name the callers, or promote the clause to a
       documented exclusion. A provisional marker nobody ever evaluates is the
       failure mode §1.3 forbids, arriving by patience instead of by intent.
-- [ ] The `happenstance-macros` criterion is evaluated in the session log: *if the
+- [x] The `happenstance-macros` criterion is evaluated in the session log: *if the
       rewritten example carries more mapping boilerplate than domain logic, the
-      derive is in scope for 0.1.* Record the answer either way.
+      derive is in scope for 0.1.* Record the answer either way. **Answered: out.**
+      See the session log below and
+      [`references/evaluation/phase-7-macros-verdict.md`](references/evaluation/phase-7-macros-verdict.md).
 - [ ] **PS-32, PS-33 and PS-35 leave the clause space.**
       `SPECIFICATION.md` §7.3 states that all three are instructions to
       the pass that lands the specification rather than constraints on any
@@ -4103,6 +4105,56 @@ phase.
 **Estimate.** 8 days.
 
 **Session log**
+
+**2026-08-16 — the two records BR-01 asked for. Two documents, no code.** Pinned to
+`78a2170`, and the diff touches no path under `crates/**` or `spec/**` — which is
+the mechanical form of *a defect is logged and routed, never absorbed*.
+
+- [`references/evaluation/phase-7-contract-defects.md`](references/evaluation/phase-7-contract-defects.md)
+  — five entries, each naming a clause ID with its maturity marker, what was
+  attempted with the call site, what the contract did, why it is a defect rather
+  than a misuse, and the routing. **D-1** and **D-2** are two faces of **VT-18**
+  `[FROZEN]`: no infallible `QueryItem` constructor for pre-validated inputs, and
+  an infallible `DomainEvent::tags` over a `Tags` with no infallible constructor —
+  the second costing the worked example 81 lines of identity newtype. **D-3** and
+  **D-4** are the traceability step's own: **CF-36** `[FROZEN]` names a
+  cross-reference `spec_trace.rs` does not perform, and check 4's short-circuit
+  means no `PS` clause's rule name is resolved at all, so a green `spec-trace` is
+  not evidence that a `PS` rule exists. **D-5** records `&mut P`'s N-reads-for-N-views
+  shape as evidence for the tail-seam decision rather than as a wrong answer. Two
+  further findings are recorded as explicitly *not* entries — one ES-6 and ADR-0009
+  already answer, one with no clause ID that is classified `support` at the moment
+  of finding rather than promoted by inventing a citation. A reconciliation table
+  gives every M2–M6 story that declared a routing an explicit disposition, because
+  silence and a dropped finding look identical.
+- [`references/evaluation/phase-7-macros-verdict.md`](references/evaluation/phase-7-macros-verdict.md)
+  — the macros criterion, answered **out**, and the exit box above is ticked on it.
+  The classification is published range by range over
+  `examples/course-subscriptions/src/main.rs` and the 29 ranges partition the file
+  exactly, 532 of 532, so the totals are re-derivable rather than asserted: 40 lines
+  of ceremony against 249 of domain, and 125 : 249 even with the whole contested
+  identity block counted as ceremony. **Both extremes are out**, so the contested
+  block is a footnote rather than the decision.
+
+  **This contradicts the design's own recorded prediction**, which was 2.4 : 1 and
+  *in*, and that is a successful outcome rather than a problem: the prediction was
+  written down as falsifiable so a measurement could falsify it. The two disagree
+  because the design counted a minimal doctest, where the domain is almost absent —
+  the `DomainEvent` impl is a fixed cost that grows barely at all (26 lines for two
+  variants, 40 for three) while the domain grows with every consistency concern,
+  refusal and handler. Both numbers are true; they answer different questions, and
+  the decision-table row at the head of this file now says which is which.
+
+Both records are staged for `/redkiln:kb-ingest` at
+`.kb/_intake/contract-defect-log-phase-7.md` and
+`.kb/_intake/happenstance-macros-verdict.md`, carrying **proposed** frontmatter for
+the wave to author from. **No `.kb/` atom was hand-written and no ingest was run** —
+that is a human handoff. In particular the macros verdict is staged as its own claim
+and **ADR-0020 was not edited**: it is accepted and therefore immutable, and its own
+spec assigned this verdict elsewhere. Whether the wave produces a supersession is
+the wave's adjudication.
+
+No `crates/happenstance-macros/` was created. An *out* verdict escalates nothing.
 
 ---
 

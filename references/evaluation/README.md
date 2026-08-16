@@ -163,6 +163,42 @@ absent. That constant is repointed at each supersession on purpose: a guard left
 reading a superseded artefact still passes, and holds nothing anybody is going to
 read.
 
+[`phase-7-contract-defects.md`](phase-7-contract-defects.md) (2026-08-16, pinned to
+`78a2170`) is the sixth, and carries the same lifecycle — dated, pinned,
+**immutable, superseded rather than edited**. It is the record initiative **BR-01**
+exists to produce: every defect that using the frozen `EventStore` / `Query` /
+`ProjectionStore` contract revealed while the typed layer was built on it, phase 7
+being the first time anything in this repository consumed that contract in anger.
+
+Five entries, each carrying the same six labelled fields — id, the clause ID **with
+its maturity marker**, what was attempted with the call site, what the contract did
+instead, why it is a defect rather than a misuse, and the routing. **Not one is
+fixed**, and the diff is what proves it: the commit that added this document touches
+no path under `crates/**` or `spec/**`, which is AC-A02 expressed in git rather than
+in prose. Two further findings are recorded as explicitly **not** entries — one the
+contract already answers (ES-6 and ADR-0009), one with no clause ID at all, which is
+classified `support` at the moment of finding rather than promoted by inventing a
+citation. It closes with a reconciliation table giving every M2–M6 story that
+declared a routing an explicit disposition, because a story's silence is
+indistinguishable from a finding that was dropped.
+
+[`phase-7-macros-verdict.md`](phase-7-macros-verdict.md) (2026-08-16, pinned to
+`78a2170`) is the seventh, same lifecycle, and it answers one question:
+`RUNBOOK.md:525`'s *is `happenstance-macros` in scope for 0.1?* It is a
+**measurement**, not an opinion — the counting method is stated, the classification
+is published line range by line range over
+[`examples/course-subscriptions/src/main.rs`](../../examples/course-subscriptions/src/main.rs)
+at the pinned commit, and the totals are derived by summing the rows rather than
+asserted beside them, so a reader who disagrees with one range can recompute without
+redoing the work. The ranges partition the file exactly: 532 of 532 lines.
+
+Its verdict is **out**, at both extremes of its one contested block, and it
+**contradicts** [`_design.md`](../../.bklg/from-contract-to-published-library/typed-layer-and-alpha-release/_design.md)'s
+recorded 2.4 : 1 prediction by a factor of about five — which is the outcome that
+prediction was written down as falsifiable to make possible. It reports both
+altitudes side by side, because the doctest's 2.4 : 1 is a real fact about a
+reader's first program and simply not the question AC-013 asked.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
