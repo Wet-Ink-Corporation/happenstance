@@ -19,10 +19,11 @@ archetype: foundation
 slice: decision-records
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:09.303Z
+updated: 2026-08-16T00:52:33.201Z
 links:
   pr: null
-  commits: []
+  commits:
+    - c011143
   kb: []
 gate_open: false
 schema: 1

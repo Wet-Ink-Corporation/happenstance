@@ -23,7 +23,7 @@ attributable to the initiative rather than inherited.
 | # | Project | Id | Depends on | State | Verdict / blocker |
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
-| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | pending | |
+| 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **in-progress** | run 1 blocked at M1 on the ADR-0020/0021 ingest wave · 2/16 |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
@@ -410,3 +410,49 @@ stated limit is discarded with it.
 - **PS-32's correction to ADR-0007's Context is still owed** — now a findable atom
   (`ps-32-adr-0007-context-correction-is-owed`), and narrowed: only the long-form record carries the
   defective sentence, not `kb-decision-0007`'s atom.
+
+### HS-P0011 `typed-layer-and-alpha-release` — run 1, 2026-08-15 (`wf_72b8772d-b46`)
+
+baseRef **`74135b8`** — the telemetry commit, captured after the affected gate passed at that sha
+(227 tests, exit 0). The full-suite step was skipped against `entry_baseline`. HS-P0011's design
+verdict was already `approved` from 2026-08-12, so `advance --to implementation` walked cleanly
+(`1b09e54`). **Keep baseRef stable across re-launches of this project.**
+
+`degradedSummary: none`, no `baselineRepairs`, `missingArtifacts` not reached. **2 of 16 stories
+committed. Halted at the *implement* step of slice `decision-records`, `blocked-dependency`.**
+
+| Story | Commit | State |
+|-------|--------|-------|
+| `adr-0020-fold-query-agreement` HS-S0018 | `c011143` | 7 of 8 ACs satisfied — **AC-008 blocked** |
+| `adr-0021-payload-evolution-and-codec-tag` HS-S0019 | `e33dc9f` | 7 of 8 ACs satisfied — **AC-008 blocked** |
+
+Both intake documents and both long-form records are on the branch:
+`.kb/_intake/0020-fold-query-agreement.md`, `.kb/_intake/0021-payload-evolution-and-codec-tag.md`,
+`references/adr/0020-fold-query-agreement.md`, `references/adr/0021-payload-evolution-and-codec-tag.md`.
+
+**The block is AC-008 on both stories, and it is a correct refusal.** AC-008 asserts an *accepted*
+atom at `.kb/decisions/0020-…` / `-0021-…`, which only a human-invoked `/redkiln:kb-ingest` wave may
+author on its own worktree branch. Hand-writing it is the anti-pattern reverted at `0269720`, and
+each spec instructs against it directly. Both implementers left the row `satisfied: false` with empty
+evidence rather than minting the atom — which is what the ledger contract asks of an implementer who
+cannot produce the wave sha (`_ledger.md:29`). Project DoD 3 is undischarged until the wave runs.
+
+**This is the second time an M1 decision-records slice has blocked on a wave, and it is the same
+shape as HS-P0010 run 1's `projection-decision-atoms`.** What changed is where it surfaces: the
+planning prose of `adr-0020-…/spec.md:286` says the story "ends at staged and ready", but its own
+AC-008 asserts the accepted atom, so the story cannot close on the staging alone. The prose and the
+criterion disagree, and the criterion is what the gate reads. Worth noting for the three later
+projects that carry foundation decision stories.
+
+**No transitions recorded.** The slice was never sealed — `_slices.md` has no row, because the run
+halted before the adversarial slice review, so **no reviewer has looked at either story**. Advancing
+them to `report` would put a human gate over unreviewed work with a known-unsatisfied AC on each.
+HS-P0011 stays at `implementation`/`implementing`; both stories stay at `plan`/`ready`.
+
+`links.commits` was recorded by the run itself — `c011143` on HS-S0018 and `e33dc9f` on HS-S0019,
+each story carrying only its own checkpoint, which is the rule run 2 of HS-P0010 established.
+
+**Next:** invoke `/redkiln:kb-ingest` over both intake documents in **one** wave with a suffixed id,
+then re-launch the workflow fresh at the same baseRef. Git truth re-enters at slice
+`decision-records`'s Review — both stories are committed but the slice is unsealed — and the fix pass
+flips both AC-008 rows against the wave sha before the slice seals.
