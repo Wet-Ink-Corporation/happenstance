@@ -106,6 +106,14 @@ fn subscribed(student: &str) -> Enrolment {
     }
 }
 
+/// One domain event, encoded and tagged the way a command would have left it.
+fn landed(event: &Enrolment) -> Event {
+    let payload = event.encode(&Json).expect("the fixture encodes");
+    Event::new(event.event_type(), payload)
+        .expect("a valid event type")
+        .with_tags(event.tags())
+}
+
 /// A domain refusal, so `CommandError::Refused` carries a real caller type.
 #[derive(Debug, PartialEq, Eq)]
 struct Full;
@@ -163,6 +171,18 @@ impl Contended {
         self
     }
 
+    /// An event a *previous* command left behind, in place before this one runs.
+    ///
+    /// It goes straight to the inner store, bypassing the watch on purpose: it
+    /// is not one of the loop's own appends and must not be counted as one. Its
+    /// job is to give the fold a non-zero state, so that a test can tell a
+    /// pristine re-fold from a stale one.
+    async fn seed(&self, event: Enrolment) {
+        EventStore::append(&self.inner, &[landed(&event)], None)
+            .await
+            .expect("the fixture seeds");
+    }
+
     fn positions(&self) -> Vec<SequencePosition> {
         self.inner
             .snapshot()
@@ -213,11 +233,7 @@ impl EventStore for Contended {
             Some(self.interlopers.borrow_mut().remove(0))
         };
         if let Some(event) = interloper {
-            let payload = event.encode(&Json).expect("the fixture encodes");
-            let landed = Event::new(event.event_type(), payload)
-                .expect("a valid event type")
-                .with_tags(event.tags());
-            EventStore::append(&self.inner, &[landed], None).await?;
+            EventStore::append(&self.inner, &[landed(&event)], None).await?;
         }
 
         let remaining = self.violate.get();
@@ -340,9 +356,21 @@ async fn refusal_appends_nothing() {
 // AC-004 — a retry re-decides against the world as it now is
 // ---------------------------------------------------------------------------
 
+/// The wrong implementation this rejects: `let mut model = boundary.clone();`
+/// hoisted **out** of the retry loop, so attempt 2 folds its own read onto
+/// attempt 1's model instead of onto a pristine one.
+///
+/// That shape needs a non-zero state to be visible at all. Against an empty
+/// store both the sound loop and the hoisted one record `[0, 1]` — attempt 1
+/// folds nothing either way — so the empty-store version of this test rejected
+/// only *"the loop never re-reads"*. One subscription already in the store
+/// separates them: a pristine re-fold records `[1, 2]` and a stale one
+/// double-counts the seeded event to record `[1, 3]`.
 #[tokio::test]
 async fn retry_refolds_from_pristine_state() {
     let store = Contended::new();
+    // A previous command's event, so attempt 1 has something to fold.
+    store.seed(subscribed("s0")).await;
     store.interlope(subscribed("interloper"));
 
     let folded: RefCell<Vec<u32>> = RefCell::new(Vec::new());
@@ -362,8 +390,9 @@ async fn retry_refolds_from_pristine_state() {
     assert_eq!(done.attempts, 2);
     assert_eq!(
         *folded.borrow(),
-        vec![0, 1],
-        "attempt 2 did not re-fold a store that had moved"
+        vec![1, 2],
+        "attempt 2 folded a store that had moved onto a model that had not been \
+         rebuilt: a hoisted clone records [1, 3] here"
     );
 }
 

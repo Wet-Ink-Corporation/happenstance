@@ -8,6 +8,14 @@
 // and `include_str!` would not resolve once published, so it is compiled by
 // `xtask` instead, which is never published.
 #![cfg_attr(doctest, doc = include_str!("../README.md"))]
+// The first program below calls `commit`, which is `#[cfg(feature = "json")]`,
+// so that fence compiles only where the default features are on. Deliberate, and
+// recorded here so it is not read as an oversight: it is the JSON-default first
+// program the design signed off, and the two feature-state checks in the gate are
+// `cargo check` and `cargo hack check`, neither of which builds a doctest. If a
+// gate step ever compiles doctests with `json` off, the fix is a second fence
+// behind a `#[cfg(not(feature = "json"))]` doc line calling `commit_with`, the
+// way the `[command-loop]` reference below is already written.
 //! DCB-compliant event sourcing, with batteries.
 //!
 //! One enum of events, one struct that folds them, and one call that reads,

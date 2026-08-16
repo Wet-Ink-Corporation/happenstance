@@ -47,6 +47,27 @@ bound, so its bounds are the assertion rather than an escape hatch — the spec'
 sketch allowed that bound, and it turned out not to be needed once the error is collapsed
 in one statement.
 
+**AC-004's pristine-clone half was proved non-vacuous the same way, and it was vacuous
+first.** Driven from an empty store, attempt 1 folds nothing and the closure records `0`
+whether or not the loop re-clones — the sound loop and the hoisted-clone loop both record
+`[0, 1]`, so the assertion rejected only *"the loop never re-reads"*. `Contended::seed`
+now lands one subscription before the call, so attempt 1 folds `1` and a pristine re-fold
+records `[1, 2]` where a stale one double-counts to `[1, 3]`. With
+`let mut model = boundary.clone();` hoisted out of the loop:
+
+```
+---- retry_refolds_from_pristine_state stdout ----
+assertion `left == right` failed: attempt 2 folded a store that had moved onto
+a model that had not been rebuilt: a hoisted clone records [1, 3] here
+  left: [1, 3]
+ right: [1, 2]
+test result: FAILED. 9 passed; 1 failed
+```
+
+Nine of ten tests in the file passed under that mutation, which is the measurement that
+matters: this test is the only thing standing between the hoisted clone and a green gate.
+The mutation was reverted.
+
 ## Commits
 
 * `feat(typed-layer-and-alpha-release): Command loop` — the SHA is recorded in the slice
@@ -58,11 +79,11 @@ in one statement.
 
 | File | Shape of the change |
 | --- | --- |
-| `crates/happenstance/src/command.rs` | **New, 419 lines.** `Retry` (`NonZeroU32`, no `Default`), `Committed` (`#[must_use]` + `#[non_exhaustive]`), `CommandError<E, D>` (seven variants, six typed `#[source]`s, one `#[from]`), `commit_with` (the whole policy), `commit` (the `json`-gated JSON door), the private `encode` and `violation` helpers, and a `#[cfg(test)] mod tests` with six unit tests. |
+| `crates/happenstance/src/command.rs` | **New, 596 lines.** `Retry` (`NonZeroU32`, no `Default`), `Committed` (`#[must_use]` + `#[non_exhaustive]`), `CommandError<E, D>` (seven variants, six typed `#[source]`s, one `#[from]`), `commit_with` (the whole policy), `commit` (the `json`-gated JSON door), the private `encode` and `violation` helpers, and a `#[cfg(test)] mod tests` with six unit tests over a module-local one-variant domain (`Turnstile`/`Gate`) and a module-local `Wire` codec, so the unit tier drives the real loop against a bare `MemoryEventStore` rather than asserting over hand-built values. |
 | `crates/happenstance/src/codec.rs` | One line: the `#[allow(dead_code)]` on `frame` is gone, because the command loop is now its caller. |
 | `crates/happenstance/src/lib.rs` | The mount. `mod command;`, the five `pub use`s beside the glob, region 2's first program rewritten to call `commit`, region 4's bullet rewritten in place as a reference-style link, and the two conditional `doc = "[command-loop]: …"` definitions that make it resolve in every feature state. |
 | `crates/happenstance/Cargo.toml` | `[dev-dependencies]` only: `tokio` gains `rt-multi-thread` (the spawn test needs a real work-stealing runtime) and `futures-core` arrives because naming `Stream` is unavoidable in a hand-written `impl EventStore`. The `[features]` block is the slice-mate's and was not touched by this story. |
-| `crates/happenstance/tests/command_loop.rs` | New. The recording/violating wrapper (three knobs: violate next *n*, record every condition and batch, land an interloper between read and append) and nine tests. |
+| `crates/happenstance/tests/command_loop.rs` | New. The recording/violating wrapper (three knobs: violate next *n*, record every condition and batch, land an interloper between read and append), a fourth affordance `seed` that puts a *previous* command's event in place before the loop runs — bypassing the watch, because it is nobody's attempt — and ten tests. |
 | `crates/happenstance/tests/flavours.rs` | New. The spawn test, a hand-written `!Send` `impl EventStore`, and a Send probe with a positive control. |
 | `crates/happenstance/tests/docs_composition.rs` | New. Nine source-reading assertions over the rendered surface. |
 
@@ -119,6 +140,26 @@ it runs `cargo fmt --all --check`, `clippy --all-targets --all-features -D warni
   `Boundary::query`'s own unreachable arm gets, and the same residual as **defect
   candidate D-1**, which is inherited unchanged and still routed to AC-012's log. No new
   defect was found and nothing under `crates/happenstance-core/src/**` moved.
+* **The crate root's first program is deliberately the JSON-default one, and the source
+  now says so.** It calls `commit`, which is `#[cfg(feature = "json")]`, so the fence
+  compiles only with the defaults on. No gate step catches that today and none needs to:
+  the two feature-state checks the spec names are `cargo check` and `cargo hack check`,
+  neither of which builds a doctest, and docs.rs builds `all-features`. The choice is
+  recorded in a comment beside the module doc (`crates/happenstance/src/lib.rs:11-18`)
+  rather than left for the next reader to mistake for an oversight, and it names the fix
+  if a gate step ever does compile doctests with `json` off: a second fence behind a
+  `#[cfg(not(feature = "json"))]` doc line calling `commit_with`, the way the
+  `[command-loop]` reference at `:134-135` already is. The comment sits *above* the `//!`
+  block on purpose — `doc_budget.rs::first_sentences_fit_the_item_table` resets its
+  sentence accumulator on any non-doc line, so a `//` comment inserted mid-block would
+  make it start accumulating the doctest's own body.
+* **One edit in this story's commit belonged in the slice-mate's.**
+  `standards/rust/90-skeletons-and-todo.md:269` is a one-line citation repair
+  (`./Cargo.toml:125` → `:136`) forced by the codec commit's workspace-manifest edit;
+  without it `cargo xtask lint-constitution` goes red. It is kept — reverting it would
+  break the gate it exists to satisfy — and recorded here as a commit-boundary slip
+  rather than substantive drift. The repository has precedent for such repairs
+  (`b77cffb`).
 * **No conformance rule was added.** This is a caller-side composition of unchanged port
   methods; `happenstance-testkit`'s suite observes adapters, not consumers, and it passes
   untouched.

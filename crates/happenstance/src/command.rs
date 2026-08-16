@@ -270,7 +270,9 @@ where
 
         // A fresh clone every attempt. `DecisionModel: Clone` exists for this:
         // re-using the previous attempt's value with a "reset" is how a stale
-        // field survives a retry.
+        // field survives a retry. `retry_refolds_from_pristine_state` is what
+        // rejects hoisting this line out of the loop — and it only does so
+        // because its store is seeded, so the fold has a state to be stale.
         let mut model = boundary.clone();
         let query = model.query()?;
 
@@ -361,19 +363,130 @@ fn violation<E>(err: AppendError<E>) -> ConditionViolated {
 
 #[cfg(test)]
 mod tests {
-    use super::{Committed, Retry};
-    use happenstance_core::SequencePosition;
+    use core::convert::Infallible;
 
-    #[test]
-    fn first_try_reports_one_attempt() {
-        let position = SequencePosition::new(4).expect("4 is not zero");
-        let committed = Committed {
-            position,
-            attempts: 1,
+    use happenstance_core::bytes::Bytes;
+    use happenstance_core::{EventType, MemoryEventStore, SequencePosition, Tags};
+
+    use super::{Retry, commit_with};
+    use crate::{Codec, CodecError, DecisionModel, DomainEvent};
+
+    // -----------------------------------------------------------------------
+    // The smallest domain a command can be run against
+    // -----------------------------------------------------------------------
+
+    /// One declared type, one variant, one fold arm.
+    ///
+    /// Deliberately neither `src/tests.rs`'s `Ticket` nor the doctests' `Seat`:
+    /// a change to one fixture must not quietly repair another.
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    enum Turnstile {
+        Passed,
+    }
+
+    const PASSED: EventType = EventType::from_static("TurnstilePassed");
+
+    impl DomainEvent for Turnstile {
+        const EVENT_TYPES: &'static [EventType] = &[PASSED];
+
+        fn event_type(&self) -> EventType {
+            PASSED
+        }
+
+        fn tags(&self) -> Tags {
+            gate_tags()
+        }
+
+        fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+            codec.encode(self)
+        }
+
+        fn decode<C: Codec>(
+            codec: &C,
+            _event_type: &EventType,
+            data: &Bytes,
+        ) -> Result<Self, CodecError> {
+            codec.decode(data)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct Gate {
+        scope: Tags,
+        passed: u32,
+    }
+
+    impl DecisionModel for Gate {
+        type Event = Turnstile;
+
+        fn scope(&self) -> &Tags {
+            &self.scope
+        }
+
+        // No `_ =>` arm: a second variant is a compile error here.
+        fn apply(&mut self, event: Self::Event) {
+            match event {
+                Turnstile::Passed => self.passed += 1,
+            }
+        }
+    }
+
+    fn gate_tags() -> Tags {
+        Tags::from_pairs([("gate", "north")]).expect("a valid tag pair")
+    }
+
+    /// A real codec, so the loop's encode step encodes something.
+    ///
+    /// Tagged `wire` rather than `json` so this module needs no feature the
+    /// contract's in-memory store does not already need.
+    struct Wire;
+
+    impl Codec for Wire {
+        const TAG: &'static str = "wire";
+
+        fn encode<T: serde::Serialize>(&self, value: &T) -> Result<Bytes, CodecError> {
+            serde_json::to_vec(value)
+                .map(Bytes::from)
+                .map_err(|err| CodecError::Encode(Box::new(err)))
+        }
+
+        fn decode<T: serde::de::DeserializeOwned>(&self, data: &[u8]) -> Result<T, CodecError> {
+            serde_json::from_slice(data).map_err(|err| CodecError::Decode(Box::new(err)))
+        }
+    }
+
+    /// An uncontended commit reports `1`, and reports it from the loop.
+    ///
+    /// Driven through `commit_with` rather than asserted off a `Committed`
+    /// literal, which would only prove that field assignment works. This
+    /// rejects a counter read before its increment (`0`), one seeded at the
+    /// retry bound (`Retry::once()` here, so a bound-shaped answer is still
+    /// `1` — hence the second assertion), and a `position` that is anything
+    /// other than what the store assigned.
+    #[tokio::test]
+    async fn first_try_reports_one_attempt() {
+        let store = MemoryEventStore::new();
+        let gate = Gate {
+            scope: gate_tags(),
+            passed: 0,
         };
 
-        assert_eq!(committed.attempts, 1);
-        assert_eq!(committed.position, position);
+        let done = commit_with(&store, gate, &Wire, Retry::once(), |gate: &Gate| {
+            assert_eq!(
+                gate.passed, 0,
+                "an empty store folded into a non-zero state"
+            );
+            Ok::<_, Infallible>(vec![Turnstile::Passed])
+        })
+        .await
+        .expect("an uncontended commit");
+
+        assert_eq!(done.attempts, 1, "an uncontended commit is one attempt");
+        // Compared against the position the store actually assigned, never a
+        // literal: the specification permits gaps.
+        let held = store.snapshot();
+        let first = held.first().expect("one event landed");
+        assert_eq!(first.position, done.position);
     }
 
     // An inherent method shadows a trait method when the bound holds, and
@@ -454,7 +567,7 @@ mod tests {
         let position = SequencePosition::new(12).expect("12 is not zero");
         let err: super::CommandError<Disk, Disk> = super::CommandError::Decode {
             position,
-            source: crate::CodecError::UnknownTag {
+            source: CodecError::UnknownTag {
                 tag: "protobuf".into(),
             },
         };
@@ -464,14 +577,14 @@ mod tests {
             "the message does not name which event: {err}"
         );
         let source = core::error::Error::source(&err).expect("a typed source");
-        assert!(source.downcast_ref::<crate::CodecError>().is_some());
+        assert!(source.downcast_ref::<CodecError>().is_some());
     }
 
     #[test]
     fn encode_failure_names_its_event_type() {
         let err: super::CommandError<Disk, Disk> = super::CommandError::Encode {
-            event_type: happenstance_core::EventType::from_static("SeatTaken"),
-            source: crate::CodecError::UnknownTag {
+            event_type: EventType::from_static("SeatTaken"),
+            source: CodecError::UnknownTag {
                 tag: "protobuf".into(),
             },
         };
@@ -481,6 +594,6 @@ mod tests {
             "the message does not name the event type: {err}"
         );
         let source = core::error::Error::source(&err).expect("a typed source");
-        assert!(source.downcast_ref::<crate::CodecError>().is_some());
+        assert!(source.downcast_ref::<CodecError>().is_some());
     }
 }

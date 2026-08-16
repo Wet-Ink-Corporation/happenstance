@@ -53,9 +53,13 @@ quiet ledger edit.
     at crates/happenstance/src/lib.rs:157. The counter is incremented once per append
     submitted (:270) and is the same one `Exhausted` reports, so the two cannot
     disagree. `cargo test -p happenstance --all-features`:
-    command.rs::tests::first_try_reports_one_attempt ... ok,
-    command_loop.rs::commit_is_commit_with_json ... ok (attempts == 1 and
-    `Committed.position` equals the position the store assigned),
+    command.rs::tests::first_try_reports_one_attempt ... ok — the unit tier now
+    **drives** `commit_with` against a bare `MemoryEventStore` with a module-local
+    domain and codec and asserts the `attempts` the loop produced plus a `position`
+    equal to the one the store assigned; the `Committed` struct literal it used to
+    assert its own fields back is gone, because that proved only that field
+    assignment works. command_loop.rs::commit_is_commit_with_json ... ok (the same
+    claim at the integration tier, through the JSON door),
     docs_composition.rs::committed_is_non_exhaustive_and_must_use ... ok.
 
 - id: AC-004
@@ -67,8 +71,16 @@ quiet ledger edit.
     and the fold rebuilt (:282) from the pristine value; the caller's `boundary` is
     never mutated and no batch survives an iteration. `cargo test -p happenstance
     --all-features`: command_loop.rs::retry_refolds_from_pristine_state ... ok — the
-    closure records the folded `taken` it saw and the test asserts `[0, 1]`, so
-    attempt 2 saw the interloper and attempt 1 did not; and
+    store is **seeded** with one subscription through `Contended::seed` before the
+    call, so attempt 1 folds a non-zero state; the closure records the folded `taken`
+    it saw and the test asserts `[1, 2]`. That is what makes it a falsifier rather
+    than a description: the named wrong implementation — `let mut model =
+    boundary.clone();` hoisted out of the retry loop, so attempt 2 folds its own read
+    onto attempt 1's model — records `[1, 3]`. Verified by mutation: with the clone
+    hoisted, `cargo test -p happenstance --all-features --test command_loop` fails
+    with `left: [1, 3] right: [1, 2]` and **no other test in the file notices**; the
+    mutation was reverted. Against the empty store this test used before, both shapes
+    record `[0, 1]` and the assertion discriminated nothing. Also
     ::retry_does_not_resubmit_the_previous_batch ... ok — the events reaching `append`
     on attempt 2 are byte-equal to attempt 2's own decision, not attempt 1's.
 

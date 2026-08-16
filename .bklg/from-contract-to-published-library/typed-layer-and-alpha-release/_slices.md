@@ -29,3 +29,14 @@ human-readable record, the trailer is what resume greps.
 For each slice whose verdict is `changes-requested`, the findings that survived the in-slice fix
 pass, with the `file:line` evidence the reviewer cited. These are the prescription a resumed run —
 or a human — starts from. They are hypotheses for the next reviewer to verify, not facts to trust.
+
+## Deviations from the signed-off `_design.md`
+
+Where a shipped surface is not spelled the way `_design.md`'s *Signatures* block spells it. The
+design's risk table calls a shape difference *"blocking: escalate rather than adapt silently"*, so
+each row here is the escalation: disclosed at the time, carried forward so the next milestone that
+reads *Signatures* as binding meets the shipped signature rather than the written one.
+
+| Slice | Item | Design says | Shipped | Why, and what it costs |
+| ----- | ---- | ----------- | ------- | ---------------------- |
+| codec-and-command-loop | `happenstance::commit`, `happenstance::commit_with` (`crates/happenstance/src/command.rs:221`, `:261`) | `B: Boundary` | `B: Boundary + Clone` | The design's own *Shape decision* requires the loop to re-fold from a pristine model on every retry, and gives `DecisionModel` a `Clone` supertrait for exactly that — but `Boundary` is sealed and carries no `Clone`, so the bound has to be written at the entry points. The alternative, adding `Clone` to the sealed trait, edits M2's frozen surface. It costs a caller nothing: every `DecisionModel` is already `Clone` and tuples of `Clone` are `Clone`. Disclosed in `command-loop/implementation-report.md` and `report.md` claim 4 when it landed; **no code change is owed** — this row exists so `_design.md` and the shipped signature do not diverge silently. |
