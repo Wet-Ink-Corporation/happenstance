@@ -7,9 +7,9 @@ title: The application-facing Projection trait and its streaming runner
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,13 +23,13 @@ archetype: capability
 slice: projection-runner
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T19:59:10.752Z
+updated: 2026-08-16T20:44:57.572Z
 links:
   pr: null
   commits:
     - 60b8072
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
