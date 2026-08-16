@@ -22,6 +22,7 @@ human-readable record, the trailer is what resume greps.
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
 | decision-records | approved | adr-0020-fold-query-agreement c011143, adr-0021-payload-evolution-and-codec-tag e33dc9f | (this commit) |
+| typed-vocabulary | approved | domain-event-and-decision-model 996853f, decision-model-composition 4dc6aeb | (this commit) |
 
 ## Surviving findings
 
