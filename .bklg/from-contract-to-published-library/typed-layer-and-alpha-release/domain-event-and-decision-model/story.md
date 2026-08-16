@@ -21,14 +21,14 @@ archetype: capability
 slice: typed-vocabulary
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-16T20:20:45.484Z
+updated: 2026-08-16T20:20:46.842Z
 links:
   pr: null
   commits:
     - 996853f
     - 3fde7d1
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
