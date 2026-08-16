@@ -21,10 +21,11 @@ archetype: capability
 slice: testing-surface
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:21.617Z
+updated: 2026-08-16T19:59:08.589Z
 links:
   pr: null
-  commits: []
+  commits:
+    - bd054c0
   kb: []
 gate_open: false
 schema: 1

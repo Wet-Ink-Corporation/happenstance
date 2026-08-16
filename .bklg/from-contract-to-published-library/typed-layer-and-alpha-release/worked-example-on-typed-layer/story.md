@@ -22,10 +22,11 @@ archetype: capability
 slice: worked-example-and-proof
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:24.902Z
+updated: 2026-08-16T19:59:11.724Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 597a20e
   kb: []
 gate_open: false
 schema: 1

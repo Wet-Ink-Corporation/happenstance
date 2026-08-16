@@ -7,9 +7,9 @@ title: Codec, JSON by default, CBOR and postcard behind forwarded features
 parent: HS-P0011
 initiative: from-contract-to-published-library
 project: typed-layer-and-alpha-release
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,10 +21,11 @@ archetype: capability
 slice: codec-and-command-loop
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:18.863Z
+updated: 2026-08-16T20:07:29.445Z
 links:
   pr: null
-  commits: []
+  commits:
+    - da530cd
   kb: []
 gate_open: false
 schema: 1

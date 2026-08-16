@@ -23,10 +23,11 @@ archetype: capability
 slice: projection-runner
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:22.477Z
+updated: 2026-08-16T19:59:10.752Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 60b8072
   kb: []
 gate_open: false
 schema: 1
