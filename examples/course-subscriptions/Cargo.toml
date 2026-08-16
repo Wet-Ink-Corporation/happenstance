@@ -8,7 +8,22 @@ license.workspace = true
 publish = false
 
 [dependencies]
-happenstance-core = { workspace = true, features = ["std", "memory"] }
+# The crate a user actually installs. It was `happenstance-core` until phase 7,
+# which meant the example exercised the crate *adapter* authors pin rather than
+# the one a `cargo add` reader gets (ADR-0006). Every contract name this file
+# still uses — `MemoryEventStore`, `Tags`, `EventType` — resolves through the
+# facade's `pub use happenstance_core::*;`, so the move costs no import.
+happenstance = { workspace = true, features = ["std", "memory", "json"] }
+# The domain enum's encoding. The workspace entry already carries `derive`, and
+# `happenstance/std` forwards `serde/std`, so this line adds no node and no
+# feature decision.
+serde.workspace = true
+# The refusal type. `CommandError`'s domain parameter is bound
+# `core::error::Error`, which `anyhow::Error` does not implement, so a refusal
+# cannot cross the decision closure as an `anyhow` value. This is the cheapest
+# shape that keeps each refusal's *value* in the type rather than in a
+# formatted string.
+thiserror.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 

@@ -160,7 +160,9 @@ name = "course-subscriptions"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "happenstance-core",
+ "happenstance",
+ "serde",
+ "thiserror",
  "tokio",
 ]
 

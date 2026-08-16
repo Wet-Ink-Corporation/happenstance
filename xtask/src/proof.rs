@@ -1,12 +1,14 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries five targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries six targets today: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
 //! families; [ADR-0010]), the two `wire` targets the wire format was frozen
-//! against ([ADR-0016]), and the projection family's two — its mutant registry's
+//! against ([ADR-0016]), the projection family's two — its mutant registry's
 //! meta-tests and the harness parity guard — which are what phase 6's proof
-//! artefact rests on and which nothing held until phase 6 closed.
+//! artefact rests on and which nothing held until phase 6 closed, and the
+//! worked example's `runs`, which is the only thing in the workspace that
+//! *executes* a binary and reads what it printed.
 //!
 //! # Why naming the target was not enough
 //!
@@ -191,6 +193,29 @@ const PROJECTION_PARITY_TESTS: &[&str] = &[
     "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
 ];
 
+/// The two tests that execute the worked example and read its transcript.
+///
+/// Listed for the reason the whole file exists, one level further out than
+/// usual: nothing else in this workspace runs the example at all. `cargo test
+/// --locked --workspace --all-features` *compiles* `course-subscriptions` and
+/// never calls `main`, so before this target landed the initiative's flagship
+/// scenario — *"the worked example runs end to end … with no `todo!()`
+/// reached"* — was checked by a compile. A target holding the only execution of
+/// a `publish = false` example is exactly the shape
+/// [`WIRE_NEGATIVE_CONTROLS`] describes: nothing references it, a dead-code
+/// instinct removes it, and every other test stays green.
+///
+/// Two names rather than the target's ten, and deliberately these two. The
+/// first is *did it run*; the second is *is what it printed the surface the
+/// design signed off* — and the second is the one an "it exits 0" rewrite
+/// silently drops. The other eight are source-reading assertions whose subject
+/// is the example's own text, and the subset check (`:34-41`) means a ninth
+/// needs no edit here.
+const WORKED_EXAMPLE_TESTS: &[&str] = &[
+    "runs::the_binary_completes_the_dcb_cycle",
+    "runs::the_transcript_is_the_designed_composition",
+];
+
 /// Every proof artefact the gate holds to its own names.
 pub(crate) const ARTEFACTS: &[Artefact] = &[
     Artefact {
@@ -221,6 +246,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "happenstance-sync",
         target: "wire",
         tests: SYNC_WIRE_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "course-subscriptions",
+        target: "runs",
+        tests: WORKED_EXAMPLE_TESTS,
         registry: None,
     },
 ];
