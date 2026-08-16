@@ -25,6 +25,7 @@ human-readable record, the trailer is what resume greps.
 | typed-vocabulary | approved | domain-event-and-decision-model 996853f, decision-model-composition 4dc6aeb | (this commit) |
 | codec-and-command-loop | approved | codec-and-feature-forwarding da530cd, command-loop 9971600 | (this commit) |
 | testing-surface | approved | misbehaving-testkit-stores 6c59c46, given-when-then-dsl bd054c0 | (this commit) |
+| projection-runner | approved | projection-trait-and-runner 60b8072, projection-clause-verdicts 55a2370, polling-cost-measurement 049d513 | (this commit) |
 
 ## Surviving findings
 
