@@ -170,6 +170,18 @@ impl Origin {
     /// falling over. The distinction is the whole content of
     /// `the_model_rule_rejects_exactly_what_it_claims`: a store that panics on a
     /// borrow conflict would otherwise be counted as a store the *model* caught.
+    ///
+    /// Gated on the feature for the reason [`model_probes`] is, and it was
+    /// missing that gate from the day it landed. Its only caller is
+    /// `model_outcome`, which is `#[cfg(feature = "proptest")]` because the
+    /// family it classifies is — so without the feature there is no model rule
+    /// for this to classify and the method is dead in fact, which `-D warnings`
+    /// reports as an error in any clippy run that is not `--all-features`.
+    /// `#[expect(dead_code)]` is the wrong repair twice over: it would go on
+    /// hiding the method once it became dead for real, and it would itself fire
+    /// `unfulfilled_lint_expectation` under `--all-features`, where the method
+    /// *is* used.
+    #[cfg(feature = "proptest")]
     pub(crate) fn is_a_model_rule_body(&self) -> bool {
         self.is_in("model.rs")
     }
