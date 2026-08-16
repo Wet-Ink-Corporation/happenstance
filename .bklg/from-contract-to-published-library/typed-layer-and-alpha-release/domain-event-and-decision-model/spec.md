@@ -316,8 +316,22 @@ fails on any file changed outside it.
 crates/happenstance/src/**
 crates/happenstance/tests/**
 crates/happenstance/Cargo.toml
+Cargo.lock
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/domain-event-and-decision-model/**
 ```
+
+**`Cargo.lock` was added to the fence on 2026-08-16, and it is a repair rather than a
+widening.** The fence already authorises `crates/happenstance/Cargo.toml` — and this story
+is *required* to add `serde` and `thiserror` there — while cargo rewrites the workspace
+lockfile as the mechanical consequence of any dependency change. The boundary therefore
+permitted the cause and forbade the effect, and no implementation could satisfy both;
+`redkiln verify --grain story` rejected this story's checkpoint on `Cargo.lock` alone, a
+three-line delta that is exactly those two dependencies. Four sibling specs in this project
+— `codec-and-feature-forwarding`, `projection-trait-and-runner`,
+`compile-fail-proof-artefact` and `publish-0-2-0-alpha-1` — already carry the entry, so the
+omission was an inconsistency inside one planning pass, not a policy. The addition admits
+the lockfile and nothing else: `[workspace.dependencies]` and every other manifest stay
+outside.
 
 **Merge DoD one-liner** — `DomainEvent`, `DecisionModel`, the sealed `Boundary` and the
 `Codec`/`CodecError` vocabulary exist exactly as `_design.md`'s `## Signatures` writes them, are

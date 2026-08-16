@@ -235,8 +235,19 @@ a demonstration.
 ```
 examples/course-subscriptions/**
 xtask/src/proof.rs
+Cargo.lock
 .bklg/from-contract-to-published-library/typed-layer-and-alpha-release/worked-example-on-typed-layer/**
 ```
+
+**`Cargo.lock` was added to the fence on 2026-08-16, and it is a repair rather than a
+widening.** This spec's own body already *predicts* the movement in two places — *"`Cargo.lock`
+may move, because the example gains `serde` and drops a direct"* dependency, and *"`Cargo.lock`
+is expected to move, by edges rather than nodes"* — so the story anticipated writing a file its
+fence did not admit, which is precisely the contradiction `redkiln verify --grain story`
+rejected the checkpoint for. Four sibling specs in this project — `codec-and-feature-forwarding`,
+`projection-trait-and-runner`, `compile-fail-proof-artefact` and `publish-0-2-0-alpha-1` —
+already carry the entry. The addition admits the lockfile and nothing else:
+`[workspace.dependencies]` and every other manifest stay outside.
 
 **In this PR**
 
