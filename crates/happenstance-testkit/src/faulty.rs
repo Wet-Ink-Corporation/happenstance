@@ -173,7 +173,7 @@ where
 /// deliberately unspecified.
 ///
 /// Use [`SendFaultyStore`] where the inner store implements
-/// [`SendEventStore`](happenstance_core::SendEventStore) and the wrapper has to
+/// [`SendEventStore`] and the wrapper has to
 /// cross a thread boundary. Two types rather than one impl: `trait_variant`'s
 /// blanket impl makes one type carrying both flavours `error[E0119]`.
 ///
