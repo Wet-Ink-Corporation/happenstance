@@ -9,7 +9,7 @@ initiative: docs-that-teach
 project: null
 status: exploring
 process: initiative
-stage: intake
+stage: distillation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,11 +17,12 @@ blocks: []
 tier: standard
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T00:54:15.619Z
+updated: 2026-08-17T01:24:58.396Z
 links:
   pr: null
   commits: []
   kb: []
+gate_open: false
 schema: 1
 process_rev: 62affb3b
 ---
