@@ -21,7 +21,7 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| bench-harness-and-adr | approved | benchmark-harness 2665883, adr-0022-append-condition-strategy 791b929 | (this commit) |
 
 ## Surviving findings
 
