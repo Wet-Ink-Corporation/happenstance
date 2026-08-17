@@ -24,7 +24,7 @@ attributable to the initiative rather than inherited.
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
-| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **in-progress** | run 1 stopped at the token checkpoint · 0/14 committed · baseRef `90cbca5` |
+| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **in-progress** | run 2 halted at slice 2 review · 7/14 committed · baseRef `90cbca5` |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
@@ -780,3 +780,96 @@ regenerate it. Drop the branch whenever it stops being interesting.
   in `concurrency-family-and-contender-count` hangs until the CI timeout — a finding about ADR-0022's timeout
   paragraph, not something a test may paper over. The initiative DoD wants 64 contenders; the code sets
   `CONTENDERS = 8`; story 8 owns closing it.
+
+### HS-P0012 `sqlite-durable-store` — run 2, 2026-08-17 (`wf_5c32a42d-c62`)
+
+baseRef **`90cbca5`**, unchanged from run 1 and to be held unchanged again. The full-suite step was
+skipped against `entry_baseline`; `cargo xtask affected --base main` was green beforehand (227 tests,
+exit 0). Both resume axes were empty — run 1 committed no stories — so the run started at story 1 and
+forfeited nothing.
+
+**`degradedSummary: none`, `degraded: []`, no `baselineRepairs`.** 11 agents, 0 errors, ~4.3h.
+**7 of 14 stories committed. Halted at the *review* step of slice `durable-event-store`,
+verdict `changes-requested`.** Integration and the project review never ran, so there is no
+`_integration.md` and no `_review.md`; HS-P0012 stays at `implementation`/`implementing`.
+
+| Slice | Verdict | Sealed by | Stories |
+|-------|---------|-----------|---------|
+| `bench-harness-and-adr` | **approved** | `20842af` | `2665883` · `791b929` |
+| `durable-event-store` | **changes-requested** | `1f29a46` | `8381c89` · `23bc776` · `0c6ce2b` · `11596b4` · `41a2064` |
+
+Slices 3–5 never ran, so neither the crates.io reservation (story 13) nor the ADR-0022 wave
+dependency at project DoD 3 was reached. Both remain as run 1 predicted them.
+
+### The blocking finding is a new instance of the gate blind-spot class, and it was verified
+
+`RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-sqlite --no-deps` fails at
+`crates/happenstance-sqlite/src/event_store.rs:39` — the module doc links `[`SqliteEventStore::migrate`]`,
+which is private (`-D rustdoc::private_intra_doc_links`). Introduced by `8381c89`. **Reproduced by the
+orchestrator against the tree, not relayed on the reviewer's word.**
+
+`cargo xtask affected` deliberately excludes the documentation build (`xtask/src/affected.rs:41-42`),
+so every per-story gate passed green over a red `cargo xtask ci --fast`. This is the same family as
+HS-P0010's `cargo doc` default-features hole and HS-P0011's eight uncheckable rustdoc→spec citations:
+**a cross-reference class with no instrument over it in the loop that runs per story.**
+
+The second blocking finding is the consequence rather than a separate defect —
+`schema-migration-and-identity/_ledger.md` AC-008 was flipped `satisfied: true` with evidence closing
+*"the `docs` step of `cargo xtask ci --fast` builds the rustdoc"*, which is exactly the step that fails,
+on the very block AC-008 delivers.
+
+Four non-blocking findings stand, in `_slices.md:33-51`: an `UPDATE … WHERE origin_position IS NULL`
+that full-scans `event` inside `BEGIN IMMEDIATE` on every append (correct, but the precise cost class
+the schema amendment exists to remove); four drifted `file:line` citations across two ledgers; a
+self-contradicting `verifying_test` on `wide-query`'s AC-007; and `xtask/src/spec_trace.rs` edited
+outside every story's fence — necessary, correct, unattributed. Instance seventeen of the boundary class.
+
+### NO STORY VERDICT COULD BE RECORDED — the boundary check now fails every story in the initiative
+
+The human gate was answered — **approve slice 1, hold slice 2** — and **neither half could be
+executed.** `redkiln advance HS-S0034 --to report` exits 1 on `implement`'s command gate:
+`verify --grain story` reports `[FAIL] boundary` naming roughly **180 files**, spanning
+`crates/happenstance/**`, `examples/outside-projection-adapter/**`, `experiments/polling-cost/**` and
+the whole of `standards/rust/` — that is, every code path touched by HS-P0010 and HS-P0011, none of
+which `2665883` goes near. The story's own commit touches 14 files.
+
+**This is not this story's defect, and it is not a fence that needs widening.** The decisive check:
+`redkiln verify --item HS-S0018 --grain story` — an HS-P0011 story **approved, recorded and closed on
+2026-08-16** — fails today with the same whole-branch list. The changed-set the check compares each
+fence against is the entire initiative branch (`ce933d8..HEAD`, 1,091 files, less the non-code trees),
+not the story's `links.commits`. The two reports differ only by each story's own declared boundary
+being subtracted, which is what confirms the base is shared.
+
+Consequence, and it is the part that matters: **an approval and a rejection are equally unrecordable.**
+`--to report` runs the red command gate on the way out, so a held story cannot reach `report` to have
+its `changes-requested` verdict recorded either. All seven stay at `plan`/`ready` — the state this
+command file names as the one case where a rejection cannot be recorded, now reached for every story
+at once rather than one.
+
+Provenance was recorded first and did commit (`694dccd`): each story carries **only its own
+checkpoint**, and the slice-wide fix commit `9a10dbf` was deliberately withheld, its files spanning
+several stories' folders. `verify`'s `provenance` and `ledger` checks both report `[ok]`.
+
+### A concurrent redkiln session was mutating shared state throughout
+
+`main` moved during this session — from `be1712a` at entry to `570fefa` — and `redkiln record-links`
+then failed outright with `EC-001`: the id lock at `D:\repos\happenstance\.git\redkiln\.id.lock` held
+by pid 27500 in `.claude/worktrees/docs-that-teach`, still running. The index build at entry had
+already reported `partitionsDiverged: 5` with 692,144 telemetry bytes unindexed across worktrees, for
+the same reason: *a partition name must have a single writer*.
+
+Whether the moved merge base is what regressed the boundary check is **not established** — it is a
+candidate, not a finding, and it is recorded here as one. What is established is that the check passed
+for these same stories yesterday and fails for them today. **Do not widen a single fence against this.**
+Sixteen prior boundary widenings in this initiative were each argued from a compelled edit; this one
+would be a fence widened to accommodate an instrument reading the wrong diff, and it would be the first
+that could not be justified from the story's own work.
+
+### Next
+
+The two blocking findings are cleared by a fresh re-launch at the same baseRef `90cbca5` — git truth
+re-enters `durable-event-store` at Review with no implementer dispatched, hands the six findings to a
+new reviewer as hypotheses, runs the fix→re-review→seal tail, then continues into slices 3–5. That was
+the human's answer at the gate and it stands; it was not launched, because the boundary regression and
+the live concurrent session both want settling first — a run whose per-story gate cannot pass would
+halt at the first story's checkpoint.
