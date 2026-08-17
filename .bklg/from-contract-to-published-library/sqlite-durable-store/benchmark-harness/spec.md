@@ -103,8 +103,36 @@ crates/happenstance-testkit/Cargo.toml
 crates/happenstance-testkit/README.md
 crates/happenstance-testkit/tests/memory_benchmarks.rs
 CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/sqlite-durable-store/benchmark-harness/**
 ```
+
+**`standards/rust/**` was added on 2026-08-17, and it admits citation re-anchoring ONLY.**
+The constitution cites `crates/happenstance-testkit/src/lib.rs` and
+`crates/happenstance-testkit/Cargo.toml` by `file:line`; this story adds `pub mod bench`,
+the `bench` feature and `event_store_benchmarks!`, which moved every `lib.rs` anchor below
+them by 26 lines and the `Cargo.toml` anchor by 16, and `cargo xtask lint-constitution` is
+a gate step. The story is therefore forced across its boundary or into a red gate, with no
+third option. This entry permits **line-number repair to existing citations and nothing
+else**: rule text, evidence selection, rule retirement and new atoms all stay outside, so
+the widening cannot later be cited to justify editing a rule. It also does not reopen
+`xtask/**`, which the exclusion above keeps out — no new gate step is admitted. This
+story's actual use is nine citations across `41-declarative-macros.md`,
+`52-wasm32-and-target-cfg.md`, `62-doctests-and-harnesses.md` and
+`91-adapter-authoring-recipe.md` (`lib.rs:436→462`, `:458→484`, `:466→492`, `:490→516`,
+`:505→531`; `Cargo.toml:83→99`), every hunk a balanced insertion/deletion — 9 and 9, with
+no prose changed. **Eighteenth instance of this class in the initiative**; HS-P0010 settled
+the first three the same way (`aef8990`) and predicted the recurrence, and HS-P0011 settled
+instances four through seven identically (`34d5311`).
+
+**This one was settled after its slice had already sealed `approved`, and that is worth
+recording rather than smoothing over.** The story boundary check was unpassable for every
+story in this initiative until the redkiln 0.19.0 upgrade on 2026-08-17 — it diffed each
+story's fence against the whole initiative branch (~180 files) rather than the story's own
+commits, upstream #94 — so slice `bench-harness-and-adr` sealed without it ever having run.
+The stray files were found by re-auditing with the repaired instrument, not by the slice
+review. A re-launch skips a sealed-`approved` slice, so this could not be handed to the
+next reviewer and was settled by hand instead, on the same terms as the seventeen before it.
 
 **Merge DoD.** `cargo xtask ci --fast` green, plus the wasm32 feature-powerset step run explicitly (it is `OPTIONAL` and `--fast` skips it, and it is the only step that compiles `bench` on `wasm32`); `cargo test -p happenstance-testkit --features bench` runs the mounted target; the rule-name count is identical either side of the diff; every AC-### has a cited row in `_ledger.md`.
 
