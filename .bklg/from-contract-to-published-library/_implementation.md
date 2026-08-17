@@ -1102,4 +1102,26 @@ findings converging from different directions is the strongest evidence either o
 abstract. Its verdict should be read as *unverified*, not *passed*.
 
 Both failures are genuine and both need a human decision on the fence; neither is the instrument.
-Nothing was widened here.
+
+### The two fence decisions, settled differently and for a structural reason
+
+**HS-S0037 → handed to run 3's reviewer.** Slice `durable-event-store` is sealed
+`changes-requested`, so a fresh re-launch re-enters it at Review and its surviving-findings block
+already names `xtask/src/spec_trace.rs`. That entry now also carries the independent machine
+attribution, so the reviewer gets both routes to the same finding and takes the call.
+
+**HS-S0034 → settled by hand (`e020276`), because it could not be handed over.** Slice
+`bench-harness-and-adr` is sealed **`approved`**, and a re-launch skips a slice that is committed
+and sealed approved — so handing it to run 3's reviewer would have meant nobody looking at it. Same
+trap HS-P0010 recorded and settled the same way. The fence was widened on the precedent's exact
+terms: `standards/rust/**` admits **citation re-anchoring only**, rule text / evidence selection /
+retirement / new atoms excluded, `xtask/**` not reopened, argument and limit stated beside the fence
+at `benchmark-harness/spec.md:99-133`. `redkiln verify --item HS-S0034 --grain story` now exits 0
+on all four checks.
+
+Neither widening was recorded into any `links.commits` — `e020276` is an orchestrator fence
+decision, not a story checkpoint, and carries no `Story:` trailer. That follows `34d5311`'s
+handling.
+
+**Five of the seven committed stories are now verdictable** (HS-S0034–HS-S0038, HS-S0040).
+HS-S0039's boundary is still never parsed (#135), so its gate passing means only that no check ran.
