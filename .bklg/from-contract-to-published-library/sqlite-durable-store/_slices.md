@@ -49,3 +49,23 @@ or a human — starts from. They are hypotheses for the next reviewer to verify,
 
 - **Issue:** xtask/src/spec_trace.rs is outside every slice story's declared PR boundary (see scopeDrift). The change is necessary and correct, but it is unattributed.
   **Fix:** Either record it explicitly in append-atomicity-and-store-limits' report as a forced gate repair with its reason, or move it to the story that owns spec/citation reconciliation (spec-and-code-reconciliation) and note the dependency.
+  **CONFIRMED INDEPENDENTLY, 2026-08-17 (orchestrator).** This is no longer a hypothesis. After the redkiln 0.19.0 upgrade repaired the story boundary check (upstream #94 — it had been diffing every story's fence against the whole initiative branch, ~180 files, and could not pass), `redkiln verify --item HS-S0037 --grain story` scopes to that story's own `links.commits` and reports exactly one stray file: `xtask/src/spec_trace.rs`. The reviewer found it by reading; the repaired instrument attributes it to `append-atomicity-and-store-limits` by machine. Two independent routes to the same finding. **This fence decision is deliberately left to this run's reviewer** rather than pre-settled — the human's instruction at the 2026-08-17 entry gate. Precedent for the shape of an acceptable widening: `aef8990` and `34d5311`, each carrying its argument AND its limit beside the fence.
+
+## Carried outside the slice loop — a finding a re-launch cannot reach
+
+This section is NOT a surviving-findings block and must not be read as one. It records work owed on
+a slice sealed `approved`, which a fresh re-launch **skips** — so nothing in the slice loop will
+look at it, and it needs a decision taken outside that loop.
+
+### bench-harness-and-adr (sealed `approved` at 20842af) — HS-S0034 `benchmark-harness`
+
+- **Issue:** `benchmark-harness`'s checkpoint `2665883` changes four files outside its declared PR boundary: `standards/rust/41-declarative-macros.md`, `52-wasm32-and-target-cfg.md`, `62-doctests-and-harnesses.md`, `91-adapter-authoring-recipe.md`. Found only after the fact, because the boundary check was unpassable for every story in this initiative until the 0.19.0 upgrade on 2026-08-17 (upstream #94); slice 1 sealed `approved` on 2026-08-17 without it ever having run. The edit is **9 insertions to 9 deletions and is pure citation re-anchoring** — `crates/happenstance-testkit/src/lib.rs:490→:516`, `:466→:492`, `:505→:531` — compelled because adding `event_store_benchmarks!` to `lib.rs` moved the lines the constitution cites and `cargo xtask lint-constitution` is a gate step, so leaving them stale is a red gate. This is **instance eighteen** of the compelled-boundary class this initiative has recorded since HS-P0010.
+  **Fix:** A human decision, not a reviewer's. Either widen `benchmark-harness`'s fence to `standards/rust/**` **scoped to citation re-anchoring only** — rule text, evidence selection, retirement and new atoms explicitly out, per the `aef8990` / `34d5311` precedent — with the argument and the limit stated beside the fence; or attribute the four edits to a story that owns the constitution. Until one of those happens `redkiln advance HS-S0034 --to report` exits 1 on `implement`'s command gate, so **neither an approval nor a rejection can be recorded for HS-S0034**.
+
+### wide-query-chunked-not-refused HS-S0039 — read its verdict as unverified
+
+Its `spec.md` declares a valid three-line fence at `:294` that redkiln never parses: an earlier
+prose heading, `### What an arm is, and where the chunk boundary comes from` at `:86`, matches
+`declaredBoundary`'s heading regex first and the check silently disables itself. Filed upstream as
+**redkiln #135**; unfixed on 0.19.0. So this story's boundary was **not checked**, and a green gate
+for it means only that no check ran. Verify its diff by hand before treating it as clean.
