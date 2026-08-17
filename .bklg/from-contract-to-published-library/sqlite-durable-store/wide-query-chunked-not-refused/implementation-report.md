@@ -114,3 +114,35 @@ exist in `happenstance-core`, minting it would add public surface to a frozen
 contract crate for the benefit of one implementor, and the evidence that would
 earn it is `postgres-and-neon-stores` independently needing the same
 decomposition — as its own ADR then, not as a side effect of this one.
+
+**Corrected after slice review: "chunk and merge, never refuse" held on the read
+path only.** `query_sql`'s module doc opened by asserting the translation is
+asked "in two places" and that "both callers use it" — and the code had two
+spellings. `read` went through `chunks`; `evaluate`, the append-condition guard
+at `crates/happenstance-sqlite/src/event_store.rs:627`, went through an
+unchunked `match_sql`. A guard carrying more than `MAX_QUERY_ARMS_PER_STATEMENT`
+arms therefore failed with SQLite's own *"too many terms in compound SELECT"*
+wrapped as `AppendError::Store`: the refusal at the pushdown limit that AC-008
+names as its wrong implementation, arriving on the **write** path, where
+`crates/happenstance-core/src/limits.rs:46-52` gives it no variant to be reported
+through. Nothing in the suite could see it — `MIN_SUPPORTED_QUERY_ITEMS` is 128
+and the chunk width is 400 — so it was latent rather than red.
+
+`evaluate` now plans with `chunks` and folds the per-chunk `max(position)`
+results with `Option<i64>`'s own ordering (`None` sorts below every `Some`, so an
+empty chunk contributes nothing and there is no special case for "no match yet").
+The fold is **exact**, not an approximation of the unchunked query: a guard is an
+inequality on the *highest* match, and `max(max(a), max(b))` is `max(a ∪ b)`.
+
+`match_sql` is **deleted** rather than left beside `chunks`. A single-chunk plan
+is the narrow case of the wide one, so the removed spelling could say nothing the
+survivor cannot — and two spellings of one question is precisely how a module doc
+came to claim a property half the crate did not have.
+
+Two tests, both red before the change with the literal SQLite message and green
+after: `tests/wide_query.rs::a_wide_append_condition_guard_is_not_refused` and
+`::a_wide_guard_answers_from_every_chunk_not_the_first`. The second is the
+sharper one: it puts matching items either side of the chunk partition and sets
+the guard's boundary at the **lower** of them, so an implementation that answered
+from the first chunk alone would find nothing above the boundary and *accept* the
+append — a silent wrong answer rather than a loud one.

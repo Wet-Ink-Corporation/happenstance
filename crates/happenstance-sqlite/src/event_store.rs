@@ -129,7 +129,7 @@ use tokio::runtime::{Handle, TryCurrentError};
 use tokio::task::{JoinError, JoinHandle};
 
 use crate::connection::ConnectionSettings;
-use crate::query_sql::{Selectivity, match_sql};
+use crate::query_sql::Selectivity;
 
 /// How many rows one `spawn_blocking` hop fetches.
 ///
@@ -605,15 +605,35 @@ fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEve
 
 /// The position violating a guard of `condition`, if one exists.
 ///
-/// **One `SELECT max(position)` per guard**, which is ADR-0022's decision and
-/// the one that measured fastest on the *rejection* path — the path a DCB
-/// command loop takes every time it loses a race. The insight it trades on: a
-/// guard asks *"is there anything matching after this boundary"*, which reads
-/// like an existence question and is an inequality on the **highest** matching
-/// position. One `max()` answers both halves at once — whether the condition is
-/// violated, and by which event — so the rejection path needs no second query,
-/// where an `EXISTS` probe would need a follow-up `min(position)` to name the
-/// conflict.
+/// **One `SELECT max(position)` per guard statement**, which is ADR-0022's
+/// decision and the one that measured fastest on the *rejection* path — the path
+/// a DCB command loop takes every time it loses a race. The insight it trades
+/// on: a guard asks *"is there anything matching after this boundary"*, which
+/// reads like an existence question and is an inequality on the **highest**
+/// matching position. One `max()` answers both halves at once — whether the
+/// condition is violated, and by which event — so the rejection path needs no
+/// second query, where an `EXISTS` probe would need a follow-up `min(position)`
+/// to name the conflict.
+///
+/// # Chunk and merge, on this path too
+///
+/// A wide guard goes through [`crate::query_sql::chunks`], the same
+/// decomposition the read path plans with, and the per-chunk maxima are merged
+/// by `max` — which is **exact** rather than approximate precisely because the
+/// guard is an inequality on the highest match, so `max(max(a), max(b))` is
+/// `max(a ∪ b)`.
+///
+/// The alternative was to leave this path on the unchunked translation, and it
+/// is not a smaller version of the same thing: a `Query` bounds nothing by
+/// design, so a guard carrying more than
+/// [`MAX_QUERY_ARMS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT)
+/// arms failed with SQLite's own *"too many terms in compound SELECT"* wrapped
+/// as `AppendError::Store`. That is a refusal at the pushdown limit — VT-23's
+/// named wrong implementation — arriving on the *write* path, where
+/// `crates/happenstance-core/src/limits.rs:46-52` gives it no variant to be
+/// honestly reported through. `tests/wide_query.rs::a_wide_append_condition_guard_is_not_refused`
+/// is the standing guard; the conformance suite cannot reach it, because
+/// `MIN_SUPPORTED_QUERY_ITEMS` is 128 and the chunk width is 400.
 ///
 /// `after: None` is a boundary of zero, because positions start at one. Guards
 /// are checked in order and the first violation ends the evaluation.
@@ -623,14 +643,24 @@ fn evaluate(
 ) -> rusqlite::Result<Option<SequencePosition>> {
     for guard in condition.guards() {
         let selectivity = Selectivity::read_for(connection, &guard.query)?;
-        let mut params: Vec<Value> = Vec::new();
-        let matched = match_sql(&guard.query, &selectivity, &mut params);
+        let plan = crate::query_sql::chunks(
+            &guard.query,
+            &selectivity,
+            SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+        );
 
-        let highest: Option<i64> = connection.query_row(
-            &format!("SELECT max(position) FROM ({matched})"),
-            rusqlite::params_from_iter(params.iter()),
-            |row| row.get(0),
-        )?;
+        // `Option<i64>`'s own ordering is what merges the chunks: `None` sorts
+        // below every `Some`, so an empty chunk contributes nothing and the fold
+        // is the global maximum without a special case for "no match yet".
+        let mut highest: Option<i64> = None;
+        for (matched, params) in plan {
+            let chunk: Option<i64> = connection.query_row(
+                &format!("SELECT max(position) FROM ({matched})"),
+                rusqlite::params_from_iter(params.iter()),
+                |row| row.get(0),
+            )?;
+            highest = highest.max(chunk);
+        }
 
         let boundary = guard.after.map_or(0, as_i64);
         if let Some(highest) = highest

@@ -127,17 +127,48 @@ impl Fixture for SqliteFixture {
     /// this fixture can do.
     const REOPEN: Capability = Capability::SUPPORTED;
 
-    /// Declined, in this adapter's own words rather than the trait's generic
-    /// default — because inheriting the default would still be green and would
-    /// put a sentence about *some* store into *this* adapter's CI log.
+    /// Declined **by scope, not by incapacity**, and in this adapter's own words
+    /// rather than the trait's generic default — because inheriting the default
+    /// would still be green and would put a sentence about *some* store into
+    /// *this* adapter's CI log.
+    ///
+    /// # The reason says what it says on purpose
+    ///
+    /// An earlier spelling of this constant claimed the store had *no supported
+    /// way* to fail between two rows — "a trigger or a `CHECK` armed for one
+    /// write would be schema this store does not have". That sentence was false
+    /// when it was written and the same commit disproved it:
+    /// `tests/append.rs::a_failure_mid_batch_leaves_nothing` installs exactly
+    /// such a trigger through a second connection, and the append fails
+    /// **unabsorbed** as `AppendError::Store` with every row rolled back. The
+    /// mechanism the testkit names as the canonical adapter injection — *"a
+    /// trigger that raises on the third insert"*, at
+    /// `crates/happenstance-testkit/src/contract.rs:207-211` — is therefore a
+    /// mechanism this adapter has, and a CI log that says otherwise is worse
+    /// than one that says nothing.
+    ///
+    /// What the decline records is the trade the trait's own documentation
+    /// describes: *the fixture could have co-operated and chose not to*. This
+    /// project's architecture brief §9 assigned the fault far end out of scope
+    /// (`_decomposition.md`), this story's AC-006 states the reason it must
+    /// carry, and `reopen-negative-control-and-durability-verdicts` owns ES-35's
+    /// maturity marker — wiring the arm here would retire that clause's residual
+    /// falsifier as a side effect of a different story, which is the one move
+    /// that story's scope bar forbids by name.
+    ///
+    /// So: declined, with the mechanism named rather than denied, and the story
+    /// that must wire it named too.
     const MID_BATCH_FAULT: Capability = Capability::declined(
-        "this adapter writes a batch inside one BEGIN IMMEDIATE transaction and \
-         has no supported way to make SQLite fail between two of its rows: a \
-         trigger or a CHECK armed for one write would be schema this store does \
-         not have, and killing the connection mid-statement is not something \
-         rusqlite offers a caller. It supplies the reopen far end instead, and \
-         ES-35 keeps a live falsifier this project cannot retire — a store that \
-         loses a write to a fault rather than to an instruction",
+        "by scope, not by incapacity. This adapter supplies the reopen far end \
+         and not the fault far end, which is ES-35's live residual falsifier — a \
+         store that loses a write to a fault rather than to an instruction. The \
+         injection the testkit names IS available here: an AFTER INSERT trigger \
+         installed through a second connection, exercised by \
+         tests/append.rs::a_failure_mid_batch_leaves_nothing, where the append \
+         fails unabsorbed and rolls back every row. It is not armed from this \
+         fixture because ES-35's marker belongs to \
+         reopen-negative-control-and-durability-verdicts, and arming it here \
+         would retire that clause's falsifier from a story that has no say in it",
     );
 
     /// Mirrored from the adapter's own constant rather than restated, so a

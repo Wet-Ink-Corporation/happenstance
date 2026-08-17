@@ -124,16 +124,50 @@ that its ceiling is sampled earlier than it was. The rule is unchanged; the
 testkit is untouched; the guarantee is stricter than before. Recording it plainly
 is the point — this is the mount doing exactly the job it was written for.
 
-**Why the two `MID_BATCH_FAULT` rules are declined rather than made to work.**
-This adapter writes a batch inside one `BEGIN IMMEDIATE` transaction and has no
-supported way to make SQLite fail between two of its rows: a trigger or a `CHECK`
-armed for one write would be schema the store does not have, and killing a
-connection mid-statement is not something `rusqlite` offers a caller. Declaring
-the capability and arming nothing would turn both rules into green results about
-a store nothing ever faulted, which is worse than a skip. The reason is written
-in this fixture rather than inherited from the trait's default, so what lands in
-this adapter's CI log is a sentence about *this* adapter — and it names ES-35's
-live residual falsifier, which this project cannot retire.
+**Why the two `MID_BATCH_FAULT` rules are declined — corrected.** The first
+version of this paragraph, and of the constant it described, claimed the adapter
+had *no supported way* to make SQLite fail between two rows, "a trigger or a
+`CHECK` armed for one write would be schema the store does not have". **That was
+false, and the same commit disproved it**:
+`crates/happenstance-sqlite/tests/append.rs::a_failure_mid_batch_leaves_nothing`
+installs exactly such a trigger through a second connection, and asserts the
+append fails **unabsorbed** as `AppendError::Store` with (0, 0, 0) rows left
+behind. The trigger route is the mechanism
+`crates/happenstance-testkit/src/contract.rs:207-211` names as the canonical
+adapter injection, and `crates/happenstance-testkit/src/suite.rs:2782-2788`
+restricts the *absorbing* store's declension to a store that can swallow every
+fault its fixture can arm — the opposite of this one. The paragraph also offered
+a false dichotomy, "declare the capability and arm nothing" against "skip", and
+omitted the third option the diff already demonstrated.
+
+What the decline actually records is the trade `contract.rs` itself describes: a
+declined `Capability` is a choice — *the fixture could have co-operated and chose
+not to* — and the reason string is the record of that choice. Three things make
+it this story's choice rather than this story's to reverse:
+
+- `../_decomposition.md`, architecture brief §9, assigns the fault far end out of
+  this project's scope and says the fixture "should decline it **explicitly, with
+  the real reason**".
+- This story's **AC-006** states the reason the constant must carry — *supplies
+  the reopen far end and not the fault far end, which is ES-35's live residual
+  falsifier* — and asserts both gated rules print it.
+- `reopen-negative-control-and-durability-verdicts` owns ES-35's maturity marker
+  and bars *"moving any maturity marker's level"* from any other story. Arming
+  the fault here retires that clause's residual falsifier as a side effect of a
+  story that has no say in it.
+
+So the constant now declines **by scope, not by incapacity**, names the mechanism
+rather than denying it, cites the test that proves it works, and names the story
+that must decide whether to wire it. Nobody reading this crate's CI log can now
+conclude the adapter is incapable of a mid-batch fault, which is the only thing
+the old sentence actually achieved.
+
+**Two conformance rules remain dark, and that is a stated cost, not a hidden
+one.** `append_is_atomic_under_a_mid_batch_fault` and
+`arming_a_mid_batch_fault_makes_the_append_fail` would both pass under an armed
+trigger — the first reads only after the faulted append, and the second wants
+exactly the `Err` this mechanism produces — so wiring it is roughly twenty lines
+whenever the owning story decides to spend them.
 
 **Two axes the runbook records as empty are now filled.** *Handle multiplicity*:
 `connect` opens a second real `rusqlite::Connection`, not a refcount clone of one

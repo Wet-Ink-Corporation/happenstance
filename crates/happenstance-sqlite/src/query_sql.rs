@@ -4,7 +4,10 @@
 //! is asked on the read path, where the cost is per replayed event, and inside
 //! the append transaction, where the probe runs *while the write lock is held*
 //! and every other writer waits behind it. So the translation lives in one
-//! module and both callers use it.
+//! module and both callers go through **one** entry point, [`chunks`] — which
+//! is the property this module doc used to assert and the code did not have:
+//! `read` chunked, `evaluate` did not, and a guard wider than the pushdown limit
+//! failed with SQLite's own *"too many terms in compound SELECT"*.
 //!
 //! # Adapter-private, deliberately
 //!
@@ -114,28 +117,6 @@ impl Selectivity {
     }
 }
 
-/// SQL selecting every position matching `query`, pushing its parameters onto
-/// `params`.
-///
-/// [`Query::all`] short-circuits to the `event` table rather than going through
-/// the tag index, and that is the definition rather than an optimisation: `all`
-/// matches every event *including an untagged one*, and an untagged event has no
-/// row in `event_tag` at all.
-///
-/// Items are combined with `UNION` rather than `UNION ALL`, which is what makes
-/// `duplicate_items_do_not_duplicate_events` pass by construction rather than by
-/// a `DISTINCT` bolted on afterwards.
-pub(crate) fn match_sql(
-    query: &Query,
-    selectivity: &Selectivity,
-    params: &mut Vec<Value>,
-) -> String {
-    match query.items() {
-        None => "SELECT position FROM event".to_owned(),
-        Some(items) => arms_sql(items, selectivity, params),
-    }
-}
-
 /// How many statements one page of `query` takes at `max_arms` arms each.
 ///
 /// Never zero: `Query::all` is one arm.
@@ -150,11 +131,26 @@ pub(crate) fn statement_count(query: &Query, max_arms: usize) -> usize {
 /// specification requires every store to evaluate at least 128 items, so an
 /// adapter that returned an error at its own pushdown limit would be inventing a
 /// refusal the contract has no way to report. The merge over these cursors is
-/// the read path's; what belongs here is only the decomposition.
+/// the caller's; what belongs here is only the decomposition.
 ///
-/// The caller wraps each chunk in the bounds, the ordering and the page budget,
-/// which is what makes the per-chunk statements identical in shape and therefore
-/// mergeable.
+/// This is the **only** entry point, deliberately. It replaced a second,
+/// unchunked spelling that the append-condition path used: two spellings of one
+/// question is how the write path came to refuse at the pushdown limit while the
+/// module doc above claimed the translation was shared. A single-chunk plan is
+/// the narrow case of the wide one, so there is nothing the removed spelling
+/// could say that this cannot.
+///
+/// [`Query::all`] short-circuits to the `event` table rather than going through
+/// the tag index, and that is the definition rather than an optimisation: `all`
+/// matches every event *including an untagged one*, and an untagged event has no
+/// row in `event_tag` at all. Within a chunk, items are combined with `UNION`
+/// rather than `UNION ALL`, which is what makes
+/// `duplicate_items_do_not_duplicate_events` pass by construction rather than by
+/// a `DISTINCT` bolted on afterwards.
+///
+/// The caller wraps each chunk in the bounds, the ordering and the page budget —
+/// or, on the append path, in `SELECT max(position) FROM (…)` — which is what
+/// makes the per-chunk statements identical in shape and therefore mergeable.
 pub(crate) fn chunks(
     query: &Query,
     selectivity: &Selectivity,

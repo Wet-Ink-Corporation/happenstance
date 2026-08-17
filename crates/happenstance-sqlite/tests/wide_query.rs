@@ -16,6 +16,15 @@
 //! anything it needs that is not public would fail to compile. The boundary
 //! observation therefore had to be designed rather than smuggled in behind
 //! `#[doc(hidden)]` or `cfg(test)`.
+//!
+//! **Both callers, not just `read`.** The same translation runs inside the
+//! append transaction, where an `AppendCondition` guard asks the identical
+//! question under the write lock. That path was *not* chunked until the slice
+//! review found it, so a wide guard refused at the pushdown limit — the wrong
+//! implementation, on the write path, where the contract has no way to report
+//! it. `::a_wide_append_condition_guard_is_not_refused` and
+//! `::a_wide_guard_answers_from_every_chunk_not_the_first` are the standing
+//! guards.
 
 #![cfg(feature = "event-store")]
 #![allow(clippy::unwrap_used)]
@@ -25,8 +34,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures_core::Stream;
 use happenstance_core::{
-    Event, EventStore, MIN_SUPPORTED_QUERY_ITEMS, Query, QueryItem, ReadOptions, SequencePosition,
-    SequencedEvent, Tags,
+    AppendCondition, AppendError, Event, EventStore, MIN_SUPPORTED_QUERY_ITEMS, Query, QueryItem,
+    ReadOptions, SequencePosition, SequencedEvent, Tags,
 };
 use happenstance_sqlite::event_store::SqliteEventStore;
 
@@ -181,6 +190,98 @@ async fn a_query_far_above_the_minimum_is_served() {
         seen.iter().map(|event| event.position).collect::<Vec<_>>(),
         assigned
     );
+}
+
+/// AC-001 — and on the **write** path, where the same translation runs under
+/// the write lock.
+///
+/// The read path and the append-condition guard ask one question — *which
+/// positions match this query?* — and `query_sql`'s module doc advertises the
+/// translation as shared by both. It was not: `read` chunked and `evaluate` did
+/// not, so a guard carrying more than `MAX_QUERY_ARMS_PER_STATEMENT` arms failed
+/// with SQLite's own *"too many terms in compound SELECT"* wrapped as
+/// `AppendError::Store` — a refusal at the pushdown limit, which is AC-008's
+/// named wrong implementation, arriving on the write path instead of the read
+/// one. VT-23 forbids the refusal wherever it appears, and
+/// `crates/happenstance-core/src/limits.rs:46-52` gives it no variant to be
+/// reported through.
+///
+/// The conformance suite cannot reach this: `MIN_SUPPORTED_QUERY_ITEMS` is 128,
+/// well below a chunk width of 400.
+#[tokio::test]
+async fn a_wide_append_condition_guard_is_not_refused() {
+    let db = TempDb::new("guard-wide");
+    let store = db.open();
+    seed(&store, 3).await;
+
+    // Every item names a subject nothing carries, so the guard is satisfied and
+    // the append must land.
+    let query = wide_query(WIDE, 0);
+    assert!(
+        SqliteEventStore::planned_statement_count(&query) > 1,
+        "at one statement this would be testing the single-statement guard and \
+         the write path's merge would be dead code"
+    );
+
+    store
+        .append(
+            &[tagged("Subject", "subject", "new")],
+            Some(&AppendCondition::new(query)),
+        )
+        .await
+        .expect("a wide guard is chunked and merged, never refused");
+}
+
+/// AC-001 / AC-003 — the guard's answer is the highest match across **every**
+/// chunk, not the first chunk's.
+///
+/// A guard asks an inequality on the *highest* matching position, so chunking it
+/// is exact only if the per-chunk `max(position)` results are merged by `max`.
+/// This arranges the two matching items either side of the chunk partition and
+/// sets the boundary at the **lower** one: an implementation that answered from
+/// the first chunk alone would find nothing above the boundary and let the
+/// append through, which is the silent wrong answer rather than the loud one.
+#[tokio::test]
+async fn a_wide_guard_answers_from_every_chunk_not_the_first() {
+    let db = TempDb::new("guard-merge");
+    let store = db.open();
+    let assigned = seed(&store, 3).await;
+
+    let mut items: Vec<QueryItem> = Vec::with_capacity(WIDE);
+    items.push(QueryItem::tagged(tags_of(&[("subject", "s0")])).unwrap());
+    for index in 1..WIDE - 1 {
+        items.push(QueryItem::tagged(tags_of(&[("subject", &format!("absent-{index}"))])).unwrap());
+    }
+    items.push(QueryItem::tagged(tags_of(&[("subject", "s2")])).unwrap());
+    let query = Query::from_items(items).unwrap();
+    assert!(SqliteEventStore::planned_statement_count(&query) > 1);
+
+    let refused = store
+        .append(
+            &[tagged("Subject", "subject", "new")],
+            Some(&AppendCondition::new(query.clone()).after(assigned[0])),
+        )
+        .await;
+    assert!(
+        matches!(
+            &refused,
+            Err(AppendError::ConditionViolated(violated))
+                if violated.conflicting_position == Some(assigned[2])
+        ),
+        "the guard must name the highest matching position across the whole \
+         query, not the highest one the first statement happened to see; got \
+         {refused:?}"
+    );
+
+    // The boundary still applies across the merge: at the highest match there is
+    // nothing above it, so the same guard is satisfied.
+    store
+        .append(
+            &[tagged("Subject", "subject", "new")],
+            Some(&AppendCondition::new(query).after(assigned[2])),
+        )
+        .await
+        .expect("nothing matches above the highest match, so the guard holds");
 }
 
 // ---------------------------------------------------------------------------

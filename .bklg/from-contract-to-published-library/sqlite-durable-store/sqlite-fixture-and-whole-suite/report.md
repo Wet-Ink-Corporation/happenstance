@@ -78,6 +78,19 @@ stronger than it was. Recorded here rather than folded into a green tick.
   than to an instruction — is not retired by this project, and the
   `MID_BATCH_FAULT` declension says so in the fixture's own words. The verdict on
   the marker is `reopen-negative-control-and-durability-verdicts`'.
+
+  **Corrected after slice review, and the correction matters.** The declension
+  first shipped claiming the adapter had *no supported way* to fail between two
+  rows. It has one, and the same commit proves it:
+  `tests/append.rs::a_failure_mid_batch_leaves_nothing` installs an
+  `AFTER INSERT` trigger through a second connection and the append fails
+  **unabsorbed** with every row rolled back — the exact injection
+  `crates/happenstance-testkit/src/contract.rs:207-211` names as canonical. The
+  constant now declines **by scope, not by incapacity**: it names the mechanism,
+  cites the test, and names the story that owns the decision. `_ledger.md`'s
+  AC-006 evidence carries the twenty-line `arm_mid_batch_fault` sketch so that
+  story does not have to rediscover it. **Two conformance rules stay dark, and
+  that is the stated cost of leaving ES-35's marker to its owner.**
 - **The concurrency family and the model family** are not mounted here: they are
   `concurrency-family-and-contender-count`'s and
   `model-family-and-mutant-pass-column`'s. This story mounts
