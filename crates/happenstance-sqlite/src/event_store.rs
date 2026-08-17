@@ -1165,6 +1165,43 @@ struct ReadCursor {
 }
 
 impl ReadCursor {
+    /// Takes ADR-0011's position ceiling, once, and does nothing thereafter.
+    ///
+    /// # Why this runs on the polling thread rather than on the blocking one
+    ///
+    /// ES-11 says the sample is taken **no later than the first poll**, and that
+    /// is stricter than it looks: a sample taken inside the `spawn_blocking`
+    /// hop is taken *after* the first poll returned, so a caller that polls once
+    /// — which is legal, and may legitimately answer `Pending` — and then
+    /// appends can have its append land **before** the sample. The event is then
+    /// below the ceiling and the read observes it.
+    ///
+    /// That is not theoretical and it is not flakiness. It is exactly what
+    /// `read_result_is_stable_under_concurrent_append` and
+    /// `query_items_share_one_snapshot` were written to catch, and this adapter
+    /// failed both intermittently — roughly one run in two — until the sample
+    /// moved here.
+    ///
+    /// The cost is one `SELECT max(position)` on the executor's thread. It is
+    /// an O(1) seek to the end of an integer primary key, and it is the same
+    /// lock `append` and `head` already take synchronously, so it adds no shape
+    /// this crate did not already have.
+    fn sample_ceiling(&mut self) -> Result<(), SqliteEventStoreError> {
+        if !matches!(self.ceiling, Ceiling::Unsampled) {
+            return Ok(());
+        }
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
+        let highest: Option<i64> =
+            connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
+        self.ceiling = highest
+            .and_then(|value| SequencePosition::new(value.unsigned_abs()))
+            .map_or(Ceiling::Empty, Ceiling::At);
+        Ok(())
+    }
+
     /// Runs one page's worth of SQL. Called only on a blocking thread.
     ///
     /// # The ceiling, and why one `max(position)` is a snapshot
@@ -1187,20 +1224,14 @@ impl ReadCursor {
     /// Every item of one query shares this one predicate, which is how ES-12 is
     /// discharged. There is deliberately no second mechanism for it.
     fn fetch_page(&mut self) -> Result<Page, SqliteEventStoreError> {
+        // A no-op if `poll_next` already took it, which it always has — the
+        // sample is not allowed to wait for this thread. See `sample_ceiling`.
+        self.sample_ceiling()?;
+
         let connection = self
             .connection
             .lock()
             .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
-
-        if matches!(self.ceiling, Ceiling::Unsampled) {
-            // Taken under the same lock acquisition that selects the first
-            // page's rows, and before those rows are selected.
-            let highest: Option<i64> =
-                connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
-            self.ceiling = highest
-                .and_then(|value| SequencePosition::new(value.unsigned_abs()))
-                .map_or(Ceiling::Empty, Ceiling::At);
-        }
 
         let Ceiling::At(ceiling) = self.ceiling else {
             return Ok(Page {
@@ -1362,9 +1393,18 @@ impl Stream for SqliteReadStream {
             // right placeholder: every arm either restores a live state or is
             // genuinely terminal.
             match std::mem::replace(&mut this.state, ReadState::Done) {
-                ReadState::Idle(cursor) => {
+                ReadState::Idle(mut cursor) => {
                     if cursor.finished {
                         return Poll::Ready(None);
+                    }
+                    // ES-11's sample, taken **on this thread, before the spawn**.
+                    // Deferring it into the blocking hop would put it after this
+                    // poll returned, and a caller that polls once and then
+                    // appends would see its own later event. See
+                    // `ReadCursor::sample_ceiling` for the failing runs that
+                    // moved this line.
+                    if let Err(err) = cursor.sample_ceiling() {
+                        return Poll::Ready(Some(Err(err)));
                     }
                     // The deferred spawn. This is the line that could not have
                     // been written inside `read`.

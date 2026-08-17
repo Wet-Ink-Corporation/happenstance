@@ -269,6 +269,50 @@ async fn a_concurrent_append_mid_drain_is_not_observed() {
     assert_eq!(after.len(), before.len() + 2);
 }
 
+/// AC-003, at the sharpest point: **one** poll, then an append.
+///
+/// ES-11 says the sample is taken *no later than the first poll*, and this is
+/// the shape that makes "no later than" mean something. A store that defers the
+/// sample into its own `spawn_blocking` hop takes it **after** the first poll
+/// returns — so an append that lands in between is below the ceiling and the
+/// read observes it.
+///
+/// This adapter did exactly that, and failed `read_result_is_stable_under_concurrent_append`
+/// and `query_items_share_one_snapshot` roughly one conformance run in two until
+/// the sample moved onto the polling thread. Drained-then-appended tests cannot
+/// see it — by the time they append, the sample is long taken — which is why
+/// this one is written separately and polls exactly once.
+#[tokio::test]
+async fn an_append_after_a_single_poll_is_not_observed() {
+    let db = TempDb::new("first-poll");
+    let store = db.open();
+    let before = seed(&store, "Seeded", 3).await;
+
+    let everything = Query::all();
+    let mut stream = Box::pin(store.read(&everything, ReadOptions::new()));
+
+    // Exactly one poll. `Pending` is a legal answer and is not a violation.
+    let mut observed = Vec::new();
+    let first =
+        core::future::poll_fn(|context| Poll::Ready(stream.as_mut().poll_next(context))).await;
+    if let Poll::Ready(Some(item)) = first {
+        observed.push(item.unwrap().position);
+    }
+
+    store.append(&[event("Later")], None).await.unwrap();
+
+    while let Some(event) = next(&mut stream).await {
+        observed.push(event.position);
+    }
+
+    assert_eq!(
+        observed, before,
+        "the sample is taken no later than the FIRST POLL: an append that lands \
+         after that poll returned must be above the ceiling, however little of \
+         the stream had been drained"
+    );
+}
+
 /// One item from a pinned stream.
 async fn next<S>(stream: &mut Pin<Box<S>>) -> Option<SequencedEvent>
 where
