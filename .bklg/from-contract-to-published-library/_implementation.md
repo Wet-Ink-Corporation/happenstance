@@ -1056,3 +1056,50 @@ and it turns the story gate from unpassable back into a real check — including
 stories run 2 already committed, whose `links.commits` are recorded correctly. Verify afterwards
 with `redkiln verify --item HS-S0018 --grain story`, which fails today and should pass on 0.19.0
 without a single fence being touched. **Do not run `redkiln adopt --templates`.**
+
+### Item 0 DONE — 0.19.0 installed, and the prediction held exactly, 2026-08-17
+
+`redkiln@redkiln-local` is at **0.19.0** (`lastUpdated 2026-08-17T19:33`, `gitCommitSha 93eac24`);
+`redkiln --version` and `workflow-root` both resolve to it, and `ownChangedFiles` is present in the
+installed bundle.
+
+**`redkiln verify --item HS-S0018 --grain story` now exits 0** — `[ok] affected-gate`,
+**`[ok] boundary`**, `[ok] ledger`, `[ok] provenance` — with **not one fence touched**. That is the
+falsifiable claim this diagnosis rested on, and it held. The seventeen widenings argued through in
+HS-P0010 and HS-P0011 are retrospectively vindicated as *unnecessary* for the reported symptom: the
+instrument was reading the wrong diff, and no fence needed to move for it.
+
+### The instrument went from unusable to precise, and immediately found real work
+
+Replaying 0.19.0's `ownChangedFiles(links.commits)` per story across HS-P0012 (`redkiln verify`
+confirmed on HS-S0034; the rest computed with the same logic, on a clean tree):
+
+| Story | Own files | Boundary |
+|---|---|---|
+| `benchmark-harness` HS-S0034 | 14 | **FAIL — 4 stray** |
+| `adr-0022-append-condition-strategy` HS-S0035 | 31 | pass |
+| `schema-migration-and-identity` HS-S0036 | 10 | pass |
+| `append-atomicity-and-store-limits` HS-S0037 | 10 | **FAIL — 1 stray** |
+| `lazy-read-with-snapshot-ceiling` HS-S0038 | 6 | pass |
+| `wide-query-chunked-not-refused` HS-S0039 | — | **not checked (#135)** |
+| `sqlite-fixture-and-whole-suite` HS-S0040 | 6 | pass |
+
+The seven unstarted stories have no `links.commits` and correctly fall back to the branch diff.
+
+**HS-S0034 — four `standards/rust/**` atoms** (`41-declarative-macros`, `52-wasm32-and-target-cfg`,
+`62-doctests-and-harnesses`, `91-adapter-authoring-recipe`). **9 insertions, 9 deletions**: pure
+citation re-anchoring, `lib.rs:490→:516`, `:466→:492`, `:505→:531`. Adding `event_store_benchmarks!`
+moved the cited lines and `lint-constitution` is a gate step, so stale citations are a red gate.
+**Instance eighteen** of the compelled class, and it matches the precedent set at `aef8990` and
+`34d5311` — a widening scoped to *citation re-anchoring only*, rule text and evidence selection out.
+
+**HS-S0037 — `xtask/src/spec_trace.rs`.** Run 2's reviewer had already found this by reading and
+recorded it in `_slices.md:33-51` as *"edited outside every story's fence — necessary, correct,
+unattributed"*. The repaired instrument now attributes it, independently, to the right story. Two
+findings converging from different directions is the strongest evidence either of them is real.
+
+**HS-S0039 is not clean — it is unchecked**, and that is #135 in this project rather than in the
+abstract. Its verdict should be read as *unverified*, not *passed*.
+
+Both failures are genuine and both need a human decision on the fence; neither is the instrument.
+Nothing was widened here.
