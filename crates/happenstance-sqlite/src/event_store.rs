@@ -162,6 +162,28 @@ pub struct SqliteEventStore {
     /// unlike a cached `rusqlite::Statement` or `Transaction<'_>`, both of which
     /// borrow the connection and are `!Send`. See [`SqliteReadStream`]'s docs.
     store_id: StoreId,
+    /// The runtime a read's `spawn_blocking` hops onto, captured here rather
+    /// than looked up at every poll.
+    ///
+    /// ADR-0022 §9's decision, and the reason is the concurrency family: its
+    /// contenders are **bare OS threads** driving futures under the testkit's
+    /// own park-loop `block_on`, with no tokio context anywhere at poll time. A
+    /// store constructed inside the harness's runtime carries a handle out to
+    /// them; `Handle::try_current()` at poll would find nothing and every read
+    /// would fail as `NoRuntime` — a red family that is not about this
+    /// adapter's logic.
+    ///
+    /// A [`Handle`] is `Clone`, `Send`, `Sync` and `Unpin`, so carrying one in
+    /// the store, the cursor and the stream costs the shape assertions nothing.
+    ///
+    /// The rejected alternative was to run the statement inline on the calling
+    /// thread when no runtime is found. It is not unsound — it is what the
+    /// experiment's candidates did, and sixty-four bare threads completed
+    /// correctly — but it keeps blocking work on an executor's thread whenever
+    /// there *is* one, and it makes [`SqliteEventStoreError::NoRuntime`]
+    /// unreachable. Under the option that won, the variant keeps a real meaning:
+    /// a store both constructed *and* driven with no runtime anywhere.
+    runtime: Option<Handle>,
 }
 
 /// The migration this build knows how to operate.
@@ -265,10 +287,15 @@ impl SqliteEventStore {
     }
 
     /// Pairs a connection with an incarnation already read off it.
+    ///
+    /// The runtime handle is captured **here**, at construction, because this is
+    /// the point at which a caller is most likely to be inside one — and the
+    /// concurrency family's contenders, which are bare OS threads, never are.
     fn with_store_id(connection: Connection, store_id: StoreId) -> Self {
         Self {
             connection: Arc::new(Mutex::new(connection)),
             store_id,
+            runtime: Handle::try_current().ok(),
         }
     }
 
@@ -824,6 +851,22 @@ pub enum SqliteEventStoreError {
         /// How many bytes the row actually held.
         len: usize,
     },
+
+    /// A stored row carries no event identity.
+    ///
+    /// Unreachable if the write path is correct — `append` stamps the origin
+    /// pair onto every row of the batch before it commits — and reported rather
+    /// than panicked so that a schema mistake surfaces as a failing rule naming
+    /// this store rather than as a crash naming the suite.
+    #[error("the event at position {position} carries no origin identity")]
+    UnstampedEvent {
+        /// Where the unstamped row sits.
+        position: SequencePosition,
+    },
+
+    /// The canonical tag column of a stored row is not UTF-8.
+    #[error("a stored tag column is not valid UTF-8")]
+    CorruptTags,
 }
 
 impl SendEventStore for SqliteEventStore {
@@ -836,14 +879,18 @@ impl SendEventStore for SqliteEventStore {
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
         // Nothing is executed here on purpose. See the module documentation:
         // `read` may legally be called with no runtime in scope, and
-        // `spawn_blocking` panics there.
+        // `spawn_blocking` panics there. No lock is taken either — a guard
+        // parked in the cursor would deadlock the next `append` through this
+        // same handle.
         SqliteReadStream {
             state: ReadState::Idle(Box::new(ReadCursor {
                 connection: Arc::clone(&self.connection),
+                runtime: self.runtime.clone(),
                 query: query.clone(),
                 options,
                 resume_from: options.from,
                 remaining: options.limit,
+                ceiling: Ceiling::Unsampled,
                 finished: false,
             })),
         }
@@ -925,24 +972,57 @@ impl SendEventStore for SqliteEventStore {
         )
     }
 
+    /// The highest position any reader can currently observe, or `None` on an
+    /// empty store.
+    ///
+    /// Asked of the database **every time**, and that is the whole of it. What
+    /// this must never become is a field the store caches and `append` updates:
+    /// one file backs several handles, so a second connection would then report
+    /// a head that predates the first connection's commit — the stale head ES-30
+    /// exists to reject, and the defect a single-handle test cannot see.
+    ///
+    /// # Errors
+    ///
+    /// * another thread panicked while holding this store's connection;
+    /// * the driver failed, or a stored position is not one the contract can
+    ///   represent.
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        // `SELECT max(position) FROM event`, on a blocking thread like every
-        // other statement here, and asked of the database *every time*. What it
-        // must not become is a field this store caches and `append` updates:
-        // one file backs several handles, so a second connection would then
-        // report a head that predates the first connection's commit — the stale
-        // head ES-30 exists to reject. The row is `NULL` on an empty table,
-        // which is the `None` arm rather than an error.
-        todo!("SQLite event store: head")
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
+        // `NULL` on an empty table is the `None` arm, not an error.
+        let highest: Option<i64> =
+            connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
+        Ok(highest.and_then(|value| SequencePosition::new(value.unsigned_abs())))
     }
 
-    async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
-        // `SELECT 1 FROM event WHERE origin_store = ? AND origin_position = ?
-        // LIMIT 1`. Migration 1 creates those two columns and constrains them
-        // `UNIQUE` **together**, which is one constraint serving two jobs: the
-        // index this probe seeks, and the guard that keeps ingest from storing
-        // one event twice.
-        todo!("SQLite event store: contains_event_id")
+    /// Whether this store already holds the event `id` names.
+    ///
+    /// The probe seeks the `UNIQUE (origin_store, origin_position)` index
+    /// migration 1 created — one constraint serving two jobs: this lookup, and
+    /// the guard that keeps ingest from storing one event twice.
+    ///
+    /// # Errors
+    ///
+    /// * another thread panicked while holding this store's connection;
+    /// * the driver failed.
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
+        let found: Option<i64> = connection
+            .query_row(
+                "SELECT 1 FROM event WHERE origin_store = ? AND origin_position = ? LIMIT 1",
+                rusqlite::params![&id.store().to_bytes()[..], as_i64(id.position())],
+                |row| row.get(0),
+            )
+            .or_else(|err| match err {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })?;
+        Ok(found.is_some())
     }
 }
 
@@ -1005,10 +1085,32 @@ struct Page {
     exhausted: bool,
 }
 
+/// ADR-0011's position ceiling, and whether it has been taken yet.
+///
+/// Three states rather than an `Option<Option<SequencePosition>>`, because the
+/// two `None`s mean genuinely different things and conflating them is how the
+/// registered defect gets written: *not sampled yet* is a thing to do, and
+/// *sampled, and the store was empty* is an answer.
+#[derive(Debug, Clone, Copy)]
+enum Ceiling {
+    /// No statement has run yet. The next `fetch_page` takes the sample.
+    Unsampled,
+    /// Nothing was in the store when the sample was taken, so this read is
+    /// spent. **Not an error**: it is the state every adapter is in before it
+    /// works, and computing arithmetic on it is the defect
+    /// `reading_an_empty_store_yields_nothing` exists to reject.
+    Empty,
+    /// Every statement of this read is bounded at or below this position.
+    At(SequencePosition),
+}
+
 /// Everything the blocking thread needs to fetch the next page.
 #[derive(Debug)]
 struct ReadCursor {
     connection: Arc<Mutex<Connection>>,
+    /// The runtime the store captured, carried so that every hop of this read
+    /// uses the same one. See [`SqliteEventStore`]'s field of the same name.
+    runtime: Option<Handle>,
     query: Query,
     options: ReadOptions,
     /// Where the next page resumes, **inclusive** — the same sense as
@@ -1020,27 +1122,132 @@ struct ReadCursor {
     /// of page one, once per page boundary. `AppendCondition::after` is the
     /// exclusive one in this contract and `ReadOptions::from` is the inclusive
     /// one, and they sit two types apart — mixing them is the easiest mistake
-    /// in the port and this field made it. Invisible today only because
-    /// [`ReadCursor::fetch_page`] is `todo!()`.
+    /// in the port and this field made it. The multi-page criteria in
+    /// `tests/read.rs` seed past `2 × PAGE_SIZE` rows precisely so that a return
+    /// of that bug is visible.
     resume_from: Option<SequencePosition>,
     /// What is left of [`ReadOptions::limit`], or `None` for unlimited.
     remaining: Option<usize>,
+    /// ADR-0011's ceiling: sampled no later than the first poll, never
+    /// re-sampled.
+    ceiling: Ceiling,
     finished: bool,
 }
 
 impl ReadCursor {
     /// Runs one page's worth of SQL. Called only on a blocking thread.
+    ///
+    /// # The ceiling, and why one `max(position)` is a snapshot
+    ///
+    /// ADR-0011 requires an adapter issuing more than one statement per `read`
+    /// to capture a position ceiling no later than the first poll and bound
+    /// every later statement by it. At `PAGE_SIZE = 512` that is every log over
+    /// 512 events, so it is not a corner.
+    ///
+    /// It is sound because position order **is** visibility order (ADR-0013):
+    /// nothing that commits after *H* is captured can ever land at or below *H*,
+    /// which is what makes one cheap `max(position)` equivalent to a snapshot
+    /// and why ES-11 and ES-12 reduce to ES-10 plus a ceiling. A store that
+    /// re-samples per page instead grows under the caller's feet, and the
+    /// consequence is not a wrong read — it is an **accepted append that should
+    /// have been rejected**, because the caller derives its condition's boundary
+    /// from the maximum position the read observed, and that maximum sits above
+    /// an event the read silently missed.
+    ///
+    /// Every item of one query shares this one predicate, which is how ES-12 is
+    /// discharged. There is deliberately no second mechanism for it.
     fn fetch_page(&mut self) -> Result<Page, SqliteEventStoreError> {
-        let _connection = self
+        let connection = self
             .connection
             .lock()
             .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
-        let _budget = self.remaining.map_or(PAGE_SIZE, |left| left.min(PAGE_SIZE));
-        todo!(
-            "SQLite event store: page query for {:?} {:?}",
-            self.query,
-            self.options
-        )
+
+        if matches!(self.ceiling, Ceiling::Unsampled) {
+            // Taken under the same lock acquisition that selects the first
+            // page's rows, and before those rows are selected.
+            let highest: Option<i64> =
+                connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
+            self.ceiling = highest
+                .and_then(|value| SequencePosition::new(value.unsigned_abs()))
+                .map_or(Ceiling::Empty, Ceiling::At);
+        }
+
+        let Ceiling::At(ceiling) = self.ceiling else {
+            return Ok(Page {
+                rows: Vec::new(),
+                exhausted: true,
+            });
+        };
+
+        let budget = self.remaining.map_or(PAGE_SIZE, |left| left.min(PAGE_SIZE));
+        if budget == 0 {
+            return Ok(Page {
+                rows: Vec::new(),
+                exhausted: true,
+            });
+        }
+
+        let selectivity = Selectivity::read_for(&connection, &self.query)?;
+        let mut params: Vec<Value> = Vec::new();
+        let matched = match_sql(&self.query, &selectivity, &mut params);
+        let columns = crate::row::COLUMNS;
+        let mut sql = format!("SELECT {columns} FROM event WHERE position IN ({matched})");
+
+        // `resume_from` is inclusive in both directions; which side of the
+        // position order it sits on is what `backwards` decides. Under
+        // `backwards`, `from` stays the *starting* (higher) bound and `to` the
+        // stopping (lower) one — they swap roles in position order, not in
+        // meaning. Copying `position <= ?` into the descending branch is correct
+        // forwards, passes two of the three read-bound rules, and returns the
+        // oldest events where the newest were asked for.
+        if let Some(from) = self.resume_from {
+            sql.push_str(if self.options.backwards {
+                " AND position <= ?"
+            } else {
+                " AND position >= ?"
+            });
+            params.push(Value::Integer(as_i64(from)));
+        }
+        if let Some(to) = self.options.to {
+            sql.push_str(if self.options.backwards {
+                " AND position >= ?"
+            } else {
+                " AND position <= ?"
+            });
+            params.push(Value::Integer(as_i64(to)));
+        }
+
+        // The ceiling **composes** with `to` rather than replacing it, and it is
+        // the same clause in both directions because *H* is an upper bound
+        // either way: forwards it tightens the stopping end, backwards it
+        // tightens the starting one.
+        sql.push_str(" AND position <= ?");
+        params.push(Value::Integer(as_i64(ceiling)));
+
+        sql.push_str(if self.options.backwards {
+            " ORDER BY position DESC"
+        } else {
+            " ORDER BY position ASC"
+        });
+
+        // The page budget, which is `min(remaining, PAGE_SIZE)` and is an
+        // implementation detail *beneath* `ReadOptions::limit` — never a limit
+        // applied per page, and never one applied per query item.
+        sql.push_str(" LIMIT ?");
+        params.push(Value::Integer(i64::try_from(budget).unwrap_or(i64::MAX)));
+
+        let mut statement = connection.prepare(&sql)?;
+        let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
+        let mut fetched = Vec::with_capacity(budget);
+        while let Some(row) = rows.next()? {
+            fetched.push(crate::row::to_event(row)?);
+        }
+
+        let exhausted = fetched.len() < budget;
+        Ok(Page {
+            rows: fetched,
+            exhausted,
+        })
     }
 
     /// Folds a fetched page back into the cursor's position and budget.
@@ -1088,9 +1295,20 @@ impl Stream for SqliteReadStream {
                     }
                     // The deferred spawn. This is the line that could not have
                     // been written inside `read`.
-                    let runtime = match Handle::try_current() {
-                        Ok(runtime) => runtime,
-                        Err(err) => return Poll::Ready(Some(Err(err.into()))),
+                    //
+                    // The handle captured at construction is preferred, and
+                    // `Handle::try_current()` is the fallback — ADR-0022 §9's
+                    // decision, and the reason is that the concurrency family's
+                    // contenders are bare OS threads with no tokio context at
+                    // poll time. `NoRuntime` keeps a real meaning under it: it
+                    // is reachable only for a store both constructed *and*
+                    // driven with no runtime anywhere.
+                    let runtime = match cursor.runtime.clone() {
+                        Some(runtime) => runtime,
+                        None => match Handle::try_current() {
+                            Ok(runtime) => runtime,
+                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
+                        },
                     };
                     this.state = ReadState::Fetching(runtime.spawn_blocking(move || {
                         let mut cursor = cursor;
