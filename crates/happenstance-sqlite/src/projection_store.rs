@@ -82,7 +82,7 @@ impl SqliteProjectionStore {
     /// Returns [`SqliteProjectionStoreError::Sqlite`] if the file cannot be
     /// opened or the schema cannot be applied.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteProjectionStoreError> {
-        let connection = Connection::open(path)?;
+        let connection = crate::connection::open_configured(path)?;
         Self::migrate(&connection)?;
         Ok(Self::new(connection))
     }

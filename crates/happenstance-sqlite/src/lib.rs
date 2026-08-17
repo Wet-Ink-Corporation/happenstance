@@ -82,6 +82,9 @@
 // outliving it. Phase 8 removes both the bodies and this line.
 #![allow(clippy::todo)]
 
+#[cfg(any(feature = "event-store", feature = "projection-store"))]
+pub mod connection;
+
 #[cfg(feature = "event-store")]
 pub mod event_store;
 

@@ -363,3 +363,39 @@ The reproduction, the bisection and a script that regenerates the table live in
 This matters beyond the bug report. **`where Self: 'a` on the port's GAT is one
 of the five ingredients**, and phase 6 decides whether that GAT survives. If it
 goes, so does the workspace's exposure to this ICE.
+
+## 7. VT-6 identity mechanisms, per adapter
+
+VT-6 (`spec/SPECIFICATION.md:783-841`) permits two mechanisms for a store's own
+`StoreId` — **minted afresh on every open**, or **minted once and persisted** —
+and it does not leave the choice free. Mint-once is available only to an adapter
+that can **detect** its state was restored or cloned, *or* whose deployment is
+**documented to invoke a re-mint**; an adapter that can do neither MUST mint
+fresh on every open. The clause closes with a second MUST: the chosen mechanism
+is recorded here.
+
+Until phase 8 this section did not exist, which is the more honest way of saying
+that the second MUST was undischarged for every adapter in the workspace.
+
+| adapter | mechanism | what earns it | where it is |
+| --- | --- | --- | --- |
+| `happenstance-sqlite` | **mint once, persist, read back on every open** | An explicit, documented re-mint operation — `SqliteEventStore::remint_identity`. Detection is *not* available: a SQLite file copied from Friday's backup is indistinguishable from the original from inside SQLite, so the documented-procedure arm of VT-6 is the only one open to it | `crates/happenstance-sqlite/src/event_store.rs` — minted by `migrate` into `store_meta`, replaced by `remint_identity` |
+| `happenstance-core`'s `MemoryEventStore` | mint per construction | Nothing to earn: the store has no medium that outlives the process, so "restored from a backup" is not a state it can be in | `crates/happenstance-core/src/memory.rs` |
+| the testkit's `DurableFixture` | mint once | A fixture instrument rather than an adapter, switched to mint-once so that `recorded_time_survives_a_reopen` and `reopened_store_does_not_reissue_an_event_id` are askable at all | `crates/happenstance-testkit/tests/fixture_instruments.rs:75-90` |
+| `happenstance-cloudflare`, `happenstance-postgres`, `happenstance-neon`, `happenstance-ladybug` | **undecided** | Skeletons. Each owes this row before it can claim to have passed the suite | — |
+
+**Why mint-once and not mint-per-open, for a file-backed store.** Mint-per-open
+splits one store's history into many origins whose interleaving is no longer
+recoverable, and it fails `reopened_store_does_not_reissue_an_event_id`
+(`crates/happenstance-testkit/src/suite.rs:2310`) outright. Holding the
+incarnation fixed across a reopen is what makes the *position* the thing that
+must never repeat — and `AUTOINCREMENT` is the mechanism for that, which is why
+the two decisions are one decision rather than two.
+
+**What the re-mint costs an operator, stated plainly**, because a documented
+procedure nobody can find is not a documented procedure: after restoring or
+copying a `happenstance-sqlite` database, run `remint_identity` on the copy
+before it accepts its first append. Two copies of one file that keep one
+incarnation are two stores minting `EventId`s that collide — a failure VT-6
+describes as having no error path and no observable symptom, until a replication
+peer sees the same identity twice.
