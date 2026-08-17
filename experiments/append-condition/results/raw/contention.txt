@@ -1,0 +1,33 @@
+warning: method `path` is never used
+  --> tests\support\mod.rs:66:12
+   |
+44 | impl<A: AppendStrategy, T: TagStorage> CandidateFixture<A, T> {
+   | ------------------------------------------------------------- method in this implementation
+...
+66 |     pub fn path(&self) -> &std::path::Path {
+   |            ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `append-condition-probes` (test "contention_at_64") generated 1 warning
+    Finished `release` profile [optimized] target(s) in 0.04s
+     Running tests\contention_at_64.rs (target\release\deps\contention_at_64-07233902db37ae3b.exe)
+
+running 1 test
+SEQUENTIAL	begin-immediate-probe	conditional_append_us=288	unconditional_append_us=221	guard_cost_us=67	rejected_1tag_us=32	rejected_1tag_p10_us=26	rejected_2tag_us=1513	rejected_2tag_p10_us=1425	rounds=400	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+SEQUENTIAL	conditional-insert	conditional_append_us=304	unconditional_append_us=225	guard_cost_us=79	rejected_1tag_us=45	rejected_1tag_p10_us=35	rejected_2tag_us=1532	rejected_2tag_p10_us=1443	rounds=400	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+SEQUENTIAL	monotonic-guard	conditional_append_us=299	unconditional_append_us=225	guard_cost_us=74	rejected_1tag_us=23	rejected_1tag_p10_us=17	rejected_2tag_us=972	rejected_2tag_p10_us=913	rounds=400	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+CONTEND	begin-immediate-probe	contenders=8	race_us_median=135948	race_us_min=127973	race_us_max=153998	committed=10	rejected=70	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+CONTEND	conditional-insert	contenders=8	race_us_median=122702	race_us_min=70228	race_us_max=152042	committed=10	rejected=70	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+CONTEND	monotonic-guard	contenders=8	race_us_median=131636	race_us_min=62586	race_us_max=154251	committed=10	rejected=70	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+test the_three_strategies_at_sixty_four_connections has been running for over 60 seconds
+CONTEND	begin-immediate-probe	contenders=64	race_us_median=2724759	race_us_min=1970474	race_us_max=3496577	committed=10	rejected=630	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+CONTEND	conditional-insert	contenders=64	race_us_median=1878294	race_us_min=1427292	race_us_max=2452566	committed=10	rejected=630	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+CONTEND	monotonic-guard	contenders=64	race_us_median=1437206	race_us_min=349134	race_us_max=2405583	committed=10	rejected=630	busy=0	failed=0	rounds=10	seeded=5000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+SEQUENTIAL	begin-immediate-probe	conditional_append_us=18597	unconditional_append_us=18605	guard_cost_us=0	rejected_1tag_us=311	rejected_1tag_p10_us=198	rejected_2tag_us=65637	rejected_2tag_p10_us=49895	rounds=400	seeded=50000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+SEQUENTIAL	conditional-insert	conditional_append_us=17322	unconditional_append_us=5403	guard_cost_us=11919	rejected_1tag_us=306	rejected_1tag_p10_us=206	rejected_2tag_us=65383	rejected_2tag_p10_us=47784	rounds=400	seeded=50000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+SEQUENTIAL	monotonic-guard	conditional_append_us=18653	unconditional_append_us=18369	guard_cost_us=284	rejected_1tag_us=213	rejected_1tag_p10_us=143	rejected_2tag_us=42399	rejected_2tag_p10_us=30926	rounds=400	seeded=50000	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+test the_three_strategies_at_sixty_four_connections ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 219.42s
+
