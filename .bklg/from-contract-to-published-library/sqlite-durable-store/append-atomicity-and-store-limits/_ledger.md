@@ -28,71 +28,71 @@ Two evidence notes specific to this story, both from `spec.md`:
 ```yaml
 - id: AC-001
   criterion: "GIVEN an application author whose retry loop branches on `is_condition_violated` and rebuilds its decision model on every rejection, WHEN it calls `append` with an empty slice and a condition that a matching event in the store would violate, THEN it receives `AppendError::NoEvents` and not `ConditionViolated`, so the loop terminates instead of rebuilding a model that will produce the same empty batch forever."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:896-903 — the emptiness gate is the FIRST statement of `append`, above the ceilings, above the lock and above any transaction. Tests PASSED: `crates/happenstance-sqlite/tests/append.rs::empty_batch_is_refused_before_any_condition_is_looked_at`, which calls `append(&[], Some(&c))` with a condition a matching event in the store WOULD violate and asserts `AppendError::NoEvents`; and `::the_two_borrowed_empty_batch_rules_pass`, which drives the testkit's own `append_rejects_empty_batch` and `empty_batch_is_refused_before_the_condition_is_evaluated` by name through `happenstance_testkit::rules` against a real file, so the claim is checked against the sibling's contract rather than a local restatement of it"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::empty_batch_is_refused_before_any_condition_is_looked_at, plus happenstance_testkit::rules::append_rejects_empty_batch (crates/happenstance-testkit/src/suite.rs:2841) and ::empty_batch_is_refused_before_the_condition_is_evaluated (:2870) invoked from the same target"
 
 - id: AC-002
   criterion: "GIVEN an adapter author who must tell a sync runner apart a batch that will never fit in this store from a disk that is momentarily full, WHEN a batch exceeds any of the three ceilings this adapter declares, THEN `append` returns `AppendError::ExceedsStoreLimit { limit, len }` carrying the matching `StoreLimit` variant and the offending magnitude — never `AppendError::Store`, never a truncation — and a value at exactly the ceiling is still accepted."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "The three ceilings are documented public constants on the adapter — `SqliteEventStore::MAX_EVENT_DATA_LEN` = 1_048_576 bytes, `MAX_TAGS_PER_EVENT` = 128, `MAX_EVENTS_PER_BATCH` = 256 (crates/happenstance-sqlite/src/event_store.rs:212-237) — each strictly inside its corridor: 16x, 2x and 2x its VT-21/VT-22/VT-24 floor, and each small enough for the rule to allocate ceiling + 1 twice per run. They are enforced by `check_ceilings` (crates/happenstance-sqlite/src/event_store.rs:415-437), BEFORE any transaction opens, which is what keeps ADR-0015's quarantine path open. Test `crates/happenstance-sqlite/tests/append.rs::each_ceiling_is_exact_at_both_ends` PASSED: for each of `EventDataLen`, `TagsPerEvent` and `EventsPerBatch`, a value at EXACTLY the constant is accepted (the anchor, without which a store refusing everything would satisfy the rest) and one unit larger returns `ExceedsStoreLimit` with the matching variant AND `len` equal to the offending magnitude — never `AppendError::Store`, never a truncation. The payload ceiling is measured on `Event::data`'s byte length alone"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::each_ceiling_is_exact_at_both_ends (all three StoreLimit variants, at the ceiling and at ceiling + 1), mirroring crates/happenstance-testkit/src/suite.rs:4272-4360"
 
 - id: AC-003
   criterion: "GIVEN an application author whose second, independent reader must never build an answer from a torn log, WHEN any `append` is refused — empty batch, any ceiling, or a violated guard — THEN a **second raw `rusqlite::Connection`** opened on the same file afterwards finds no row of the refused batch in `event`, `event_tag` or `tag_cardinality`, so the refusal cost the log nothing."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "Test `crates/happenstance-sqlite/tests/append.rs::a_refused_append_leaves_the_file_unchanged` PASSED. All three refusal kinds are exercised against one file — an empty batch, a ceiling, and a violated guard whose batch is large enough to have needed more than one insert statement — and the row counts and assigned positions of `event`, `event_tag` AND `tag_cardinality` are captured before and compared after, **through a second raw `rusqlite::Connection` the store never held**. That is the claim no port-level round trip can make: a store whose `read` is also wrong satisfies a read-back perfectly. The precondition refusals never open a transaction at all (crates/happenstance-sqlite/src/event_store.rs:896-910); the guard refusal drops the transaction without committing (:459-466)"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::a_refused_append_leaves_the_file_unchanged — all three tables counted and compared through a connection the store never held"
 
 - id: AC-004
   criterion: "GIVEN an adapter author who cannot trust a green single-threaded run, WHEN two handles onto one file decide from the same state and both attempt a conditional append, THEN the loser is refused as `AppendError::ConditionViolated` rather than surfacing a driver error, because the guard probe and the insert happen inside one `BEGIN IMMEDIATE` transaction that takes the write lock at the top and holds it to commit."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:446-469 — `append_locked` opens ONE `rusqlite::TransactionBehavior::Immediate` transaction, evaluates every guard inside it, writes inside it, and commits; there is no path on which a probe is followed by an unrelated insert. Test `crates/happenstance-sqlite/tests/append.rs::two_handles_racing_one_condition_yield_one_winner_and_one_rejection` PASSED: two `SqliteEventStore` handles — two real `rusqlite::Connection`s onto one file — decide from the same state, exactly one lands, and the loser is asserted to be `AppendError::ConditionViolated` and NOT `AppendError::Store`. That variant is the whole signal: `BEGIN DEFERRED` (the named wrong implementation) starts as a reader and upgrades at the first write, so its loser gets `SQLITE_BUSY` and surfaces as `Store` → `Attempt::Failed` rather than `Rejected`"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::two_handles_racing_one_condition_yield_one_winner_and_one_rejection — the losing attempt asserted ConditionViolated and not Store, mirroring the Attempt::Rejected / Attempt::Failed split at crates/happenstance-testkit/src/concurrency.rs:214-231"
 
 - id: AC-005
   criterion: "GIVEN an application author who modelled one consistency boundary as several guards, WHEN `append` evaluates an `AppendCondition`, THEN a guard is violated only by a match at a position **strictly greater** than its `after`, a guard whose `after` is `None` is violated by any match at all, any one violated guard refuses the whole append, and no event of the batch being written is ever evaluated against the batch's own condition."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:563-586 — `evaluate` runs one `SELECT max(position)` per guard (ADR-0022 §4's decision, and the one that measured fastest on the rejection path because it answers *whether* and *which* in one query), treats `after: None` as a boundary of zero, and violates on `highest > boundary` — strictly greater, so `after` stays exclusive and is never conflated with the inclusive `ReadOptions::from`. Four tests PASSED: `::guard_after_is_exclusive_at_the_boundary` (an event AT the boundary does not violate; one strictly above does), `::a_guard_without_after_sees_the_whole_log`, `::any_violated_guard_refuses_the_whole_batch` (three guards, the middle one matching), and `::a_batch_never_conflicts_with_itself` — a batch whose own events match its own condition, which lands, because the probes run before any row of the batch exists (ES-21)"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::guard_after_is_exclusive_at_the_boundary, ::a_guard_without_after_sees_the_whole_log, ::any_violated_guard_refuses_the_whole_batch, ::a_batch_never_conflicts_with_itself (ES-21, spec/SPECIFICATION.md:3516)"
 
 - id: AC-006
   criterion: "GIVEN an application author who records the position their own write landed at, WHEN `append` succeeds while other connections are committing, THEN the returned `SequencePosition` is the one assigned to the last event of **this** batch in slice order — not the store head, and never assumed to be a predecessor plus one."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:601-644 — `write_batch` reads each row's position from `last_insert_rowid()` after its own insert and returns the LAST of them; there is no `head()` call and no arithmetic on a predecessor. Two tests PASSED: `::append_returns_the_callers_own_last_position`, where a **second handle commits in between** and the returned value is compared against the position actually stored for this batch's own last event (read through the raw connection) — which is exactly when returning the head stops being the same number; and `::batch_positions_follow_slice_order`, which asserts the stored order matches slice order and that positions ascend **strictly**, never by one, because `AUTOINCREMENT` permits gaps and the specification allows them"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::append_returns_the_callers_own_last_position (with a second handle committing in between) and ::batch_positions_follow_slice_order — strict ascent, no literal position values"
 
 - id: AC-007
   criterion: "GIVEN an application author whose second reader identifies an event across stores and whose sync runner must reject a duplicate on ingest, WHEN a batch is appended, THEN every row carries `origin_store` = this store's persisted `StoreId`, `origin_position` = its own assigned position and a `recorded_at` stamped exactly once here, its `event_tag` rows carry the covering `event_type`, and `tag_cardinality` is incremented for each tag written."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:628-643 (the identity stamp: one `UPDATE ... WHERE origin_position IS NULL` at the end of the batch, because a local event's identity is this store's incarnation paired with the position it was just given, which is not known until the row exists), :606-623 (`recorded_at` bound once, at append), :648-684 (`write_tag_rows`, carrying the covering `event_type` on every row) and :691-702 (`bump_cardinality`). Two tests PASSED, both asserting through the raw second connection: `::every_appended_row_carries_its_identity_and_stamp` — `origin_store` equal to `store_id().to_bytes()`, `origin_position` equal to the row's own `position`, `recorded_at` inside the interval the test bracketed the call with, and every `event_tag` row carrying its event's type; and `::tag_cardinality_is_maintained_by_append`, which asserts the exact counts {course:c1 → 3, student:s1..s3 → 1} rather than merely non-zero"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::every_appended_row_carries_its_identity_and_stamp and ::tag_cardinality_is_maintained_by_append — asserted through the raw second connection"
 
 - id: AC-008
   criterion: "GIVEN an adapter author who declared a batch ceiling above the specification's 128-event floor, WHEN a batch at exactly that ceiling is appended, THEN it lands whole in one transaction — the insert is split into parameter-budget-sized statements, the transaction is not split, and no partially-applied batch is ever observable."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "crates/happenstance-sqlite/src/event_store.rs:648-684 — the `event_tag` insert is chunked at `PARAMETER_BUDGET / TAG_ROW_PARAMETERS` rows, **derived** from a budget constant (30,000, below SQLite's 32,766) and the per-row parameter cost rather than picked as a literal, so raising a ceiling cannot silently exceed it; the buffer is bounded by the chunk rather than by the batch. All chunks are inside the one `BEGIN IMMEDIATE`. Two tests PASSED: `::a_batch_at_the_declared_ceiling_lands_whole`, appending 256 events each carrying 128 tags — 32,768 tag rows, which one statement could never bind — and verifying every event row AND every tag row landed, with positions ascending strictly; and `::a_failure_mid_batch_leaves_nothing`, which installs a real `AFTER INSERT ON event` trigger through a second connection that raises once the fourth row of the batch is written, asserts the append fails as `AppendError::Store`, and asserts (0, 0, 0) rows across all three tables afterwards"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::a_batch_at_the_declared_ceiling_lands_whole (full ceiling at maximum tags per event) and ::a_failure_mid_batch_leaves_nothing (failure forced after the first chunk, zero rows asserted)"
 
 - id: AC-009
   criterion: "GIVEN an adapter author running a suite that has no watchdog anywhere in it by design, WHEN several connections contend for the write lock, THEN contention is a bounded **wait** rather than an `AppendError::Store`, because the finite busy timeout `schema-migration-and-identity` configured is consumed rather than replaced — and no timeout, watchdog, `sleep` or retry loop is introduced anywhere in this diff."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "Test `crates/happenstance-sqlite/tests/append.rs::contention_waits_rather_than_erroring` PASSED: four tokio worker threads, four separate `SqliteEventStore` handles on one file, eight conditional-free appends each — thirty-two contended `BEGIN IMMEDIATE` transactions — and **every one committed**. The test panics with a named message on any `Err`, so an `AppendError::Store` from `SQLITE_BUSY` fails it rather than being tolerated. The busy timeout consumed is the one `schema-migration-and-identity` configured (crates/happenstance-sqlite/src/connection.rs:89-100); `append` adds no retry loop of its own. `rg -n \"timeout|sleep|retry\" crates/happenstance-sqlite/tests/ crates/happenstance-sqlite/src/` finds nothing added around a test — the only two hits in the diff are `BUSY_TIMEOUT_MS`'s own definition and doc, and `ensure_wal`'s bounded WAL-conversion retry from the predecessor story, neither of which is around a test"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/append.rs::contention_waits_rather_than_erroring, plus the reviewer check `rg -n \"timeout|sleep|retry\" crates/happenstance-sqlite/` over the diff finding nothing added around a test (testing brief §4)"
 
 - id: AC-010
   criterion: "GIVEN an evaluator reading this adapter's public surface in one sitting, WHEN they open `SqliteEventStore`, THEN the three ceilings are documented public constants stating their unit and that they are facts about this adapter, `append`'s rustdoc carries an `# Errors` section naming conditions rather than error types, `crates/happenstance-sqlite/tests/shapes.rs` still holds, the feature powerset still compiles clean — and nothing beyond this adapter has been decided: no `StoreLimit` variant added, no item added to `happenstance-core`, no `spec/SPECIFICATION.md` edit, no ADR authored, and CF-40's clause home still recorded as open."
-  satisfied: false
-  evidence: ""
+  satisfied: true
+  evidence: "The three ceilings are documented `pub const` associated items with their unit and their reason stated (crates/happenstance-sqlite/src/event_store.rs:212-237), so the fixture can mirror them rather than restate them and a number can never be declared at one value and enforced at another. `append`'s rustdoc carries an `# Errors` section naming **conditions** rather than types — empty batch, each of the three ceilings, a violated guard, the driver after the busy timeout has elapsed, a poisoned lock (:852-890). `cargo test -p happenstance-sqlite --test shapes` PASSED (10 assertions, file unchanged); `cargo xtask affected --base main` PASSED whole, including `clippy -D warnings` over all targets and all features and the rustdoc build. Nothing beyond this adapter was decided: `git diff --stat HEAD -- crates/happenstance-core crates/happenstance-testkit spec .kb` is **EMPTY**, so no `StoreLimit` variant was added, no item was added to the contract crate, no clause or marker moved, and `.kb/open-questions/cf-40-fixture-limits-ownership.md` is untouched — CF-40's clause home stays open. The one file outside this crate that changed is `xtask/src/spec_trace.rs`, a `BARE_NAME_MAP` entry recorded in this story's report"
   mount_point: "crates/happenstance-sqlite/tests/append.rs"
   verifying_test: "crates/happenstance-sqlite/tests/shapes.rs via `cargo test -p happenstance-sqlite --test shapes`; `cargo xtask affected --base main` (docs + clippy -D warnings) and `cargo xtask ci --fast` (feature powerset); reviewer diff check that crates/happenstance-core/**, crates/happenstance-testkit/**, spec/SPECIFICATION.md and .kb/open-questions/cf-40-fixture-limits-ownership.md are untouched"
 ```

@@ -2049,7 +2049,8 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 ///
 /// The document cites by bare name on purpose — `event.rs:215` reads better in
 /// a sentence than the path does, and most of the 200 bare citations resolve
-/// uniquely. Four do not, and **the obvious default is wrong for half of them**,
+/// uniquely. A handful do not, and **the obvious default is wrong for some of
+/// them**,
 /// which is why this is a table rather than a "prefer `happenstance-core`" rule:
 /// bare `lib.rs` means the *sync* crate at both of its sites (§1.6's port table
 /// and §5), and `happenstance-core` also has a `lib.rs`. A preference rule would
@@ -2062,7 +2063,7 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 /// backstop for this table being wrong: if a citation mapped here to `core`
 /// really meant `sync`, the anchor it names will not be found in the file this
 /// sends it to.
-const BARE_NAME_MAP: [(&str, &str); 6] = [
+const BARE_NAME_MAP: [(&str, &str); 7] = [
     ("memory.rs", "crates/happenstance-core/src/memory.rs"),
     ("error.rs", "crates/happenstance-core/src/error.rs"),
     ("identity.rs", "crates/happenstance-core/src/identity.rs"),
@@ -2086,6 +2087,16 @@ const BARE_NAME_MAP: [(&str, &str); 6] = [
     // string they contain. Both mean the workspace root, and §8036 says so in
     // the sentence around it: "inheriting `version` from the workspace root".
     ("Cargo.toml", "Cargo.toml"),
+    // The collision phase 8 created, and the same shape as the projection one
+    // above: `crates/happenstance-sqlite/tests/append.rs` is the adapter's own
+    // append target, so the basename stopped resolving uniquely the day it
+    // landed and **twenty-four** citations failed at once. Every one of them
+    // predates that file and names the **contract**: `AppendCondition`, `Guard`,
+    // `guards()`, `after`, `is_violated_by` and the module doc's precedence
+    // paragraph — items that exist only in `happenstance-core`. A test file that
+    // did not exist when the sentences were written cannot be what they meant,
+    // and the anchor check is the backstop if any of them is.
+    ("append.rs", "crates/happenstance-core/src/append.rs"),
 ];
 
 /// What a citation's file name resolved to.

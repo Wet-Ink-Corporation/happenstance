@@ -2,9 +2,10 @@
 //!
 //! # Status: the schema is real; the port's bodies are landing
 //!
-//! Migration 1, the persisted identity and the connection settings have real
-//! bodies and a test target that reads them back out of SQLite. The port's four
-//! methods are still `todo!()`. The *types* were never stubbed: the connection
+//! Migration 1, the persisted identity, the connection settings and `append`
+//! have real bodies and test targets that read them back out of SQLite. `read`,
+//! `head` and `contains_event_id` are still `todo!()`. The *types* were never
+//! stubbed: the connection
 //! is a real [`rusqlite::Connection`], the error enum wraps
 //! [`rusqlite::Error`], and [`SqliteReadStream`] is the state machine the real
 //! read path uses. A skeleton that stubs its associated types has stubbed the
@@ -119,14 +120,16 @@ use std::vec;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, InvalidEventType, InvalidTag, Query, ReadOptions,
-    SendEventStore, SequencePosition, SequencedEvent, StoreId,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, InvalidEventType, InvalidTag,
+    Query, ReadOptions, RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId,
 };
 use rusqlite::Connection;
+use rusqlite::types::Value;
 use tokio::runtime::{Handle, TryCurrentError};
 use tokio::task::{JoinError, JoinHandle};
 
 use crate::connection::ConnectionSettings;
+use crate::query_sql::{Selectivity, match_sql};
 
 /// How many rows one `spawn_blocking` hop fetches.
 ///
@@ -207,6 +210,32 @@ const STORE_ID_KEY: &str = "store_id";
 const SCHEMA_VERSION_KEY: &str = "schema_version";
 
 impl SqliteEventStore {
+    /// The largest `data` payload this store accepts, in **bytes of
+    /// [`Event::data`]** — not of an encoded row, and not of `data` and
+    /// `metadata` together.
+    ///
+    /// A **fact about this adapter**, not a trade: SQLite's own ceiling is near
+    /// a gigabyte, and this is the number below it that keeps the conformance
+    /// suite runnable, because the rule that checks a ceiling allocates it plus
+    /// one byte twice per run. It is sixteen times VT-21's 65,536-byte floor.
+    pub const MAX_EVENT_DATA_LEN: usize = 1_048_576;
+
+    /// The largest number of tags on one event this store accepts.
+    ///
+    /// Twice VT-22's floor of 64. Every tag costs a row in `event_tag` and an
+    /// upsert in `tag_cardinality`, both inside the write transaction, so the
+    /// number is bounded by lock hold time rather than by storage.
+    pub const MAX_TAGS_PER_EVENT: usize = 128;
+
+    /// The largest number of events this store accepts in one append.
+    ///
+    /// Twice VT-24's floor of 128. At this ceiling with
+    /// [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT) tags on every event, a
+    /// single multi-row tag insert would bind 98,304 of SQLite's 32,766 bound
+    /// parameters — which is why the insert is chunked to the parameter budget
+    /// and the transaction is not.
+    pub const MAX_EVENTS_PER_BATCH: usize = 256;
+
     /// Wraps an already-open connection onto an **already-migrated** database.
     ///
     /// The caller is responsible for having applied the schema — use
@@ -374,6 +403,71 @@ impl SqliteEventStore {
         Ok(minted)
     }
 
+    /// The three ceilings, checked before any transaction opens.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppendError::ExceedsStoreLimit` naming which ceiling was
+    /// exceeded and by what magnitude. Never `AppendError::Store`: a caller that
+    /// cannot tell "this will never fit here, park it and tell a human" from
+    /// "the disk is full, retry" has to guess, and a sync runner that guesses
+    /// wrong drops an event permanently.
+    fn check_ceilings(events: &[Event]) -> Result<(), AppendError<SqliteEventStoreError>> {
+        if events.len() > Self::MAX_EVENTS_PER_BATCH {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: happenstance_core::StoreLimit::EventsPerBatch,
+                len: events.len(),
+            });
+        }
+        for event in events {
+            if event.data().len() > Self::MAX_EVENT_DATA_LEN {
+                return Err(AppendError::ExceedsStoreLimit {
+                    limit: happenstance_core::StoreLimit::EventDataLen,
+                    len: event.data().len(),
+                });
+            }
+            if event.tags().len() > Self::MAX_TAGS_PER_EVENT {
+                return Err(AppendError::ExceedsStoreLimit {
+                    limit: happenstance_core::StoreLimit::TagsPerEvent,
+                    len: event.tags().len(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Everything that happens inside the one `BEGIN IMMEDIATE`.
+    ///
+    /// In order: every guard probed against the state the store already held —
+    /// which is free, because no row of this batch exists yet — then the rows
+    /// inserted, then the identity stamped, then commit. A guard violation drops
+    /// the transaction without committing, which is what "a rejected append
+    /// leaves the file byte-identical" means.
+    fn append_locked(
+        connection: &mut Connection,
+        store_id: StoreId,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+        recorded_at: RecordedAt,
+    ) -> Result<SequencePosition, AppendError<SqliteEventStoreError>> {
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(store_error)?;
+
+        if let Some(condition) = condition
+            && let Some(conflict) = evaluate(&transaction, condition).map_err(store_error)?
+        {
+            drop(transaction);
+            return Err(AppendError::ConditionViolated(ConditionViolated::at(
+                conflict,
+            )));
+        }
+
+        let last = write_batch(&transaction, store_id, events, recorded_at).map_err(store_error)?;
+        transaction.commit().map_err(store_error)?;
+        Ok(last)
+    }
+
     /// Applies the schema in the module documentation, and returns the
     /// incarnation the file carries afterwards.
     ///
@@ -413,6 +507,198 @@ impl SqliteEventStore {
         transaction.commit()?;
         Ok(store_id)
     }
+}
+
+/// How many bound parameters one statement may carry.
+///
+/// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766. This sits below it with
+/// headroom rather than at it, because the arithmetic that matters is done once
+/// in `happenstance-core`'s `limits.rs` and an adapter that binds one extra
+/// parameter per row should not be within rounding distance of the wall.
+const PARAMETER_BUDGET: usize = 30_000;
+
+/// Bound parameters one `event_tag` row costs.
+const TAG_ROW_PARAMETERS: usize = 3;
+
+/// Milliseconds since the Unix epoch, stamped **once**, at append.
+///
+/// ADR-0014's whole point is that the stamp is a property of the append rather
+/// than of the read: a store that re-stamps on reopen hands every auditor the
+/// time of the last restart.
+fn now() -> RecordedAt {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|since| i64::try_from(since.as_millis()).ok())
+        .unwrap_or(0);
+    RecordedAt::from_millis(millis)
+}
+
+/// A [`SequencePosition`] as the integer SQLite stores.
+fn as_i64(position: SequencePosition) -> i64 {
+    i64::try_from(position.get()).unwrap_or(i64::MAX)
+}
+
+/// Wraps an adapter failure as the port's store-error arm.
+fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEventStoreError> {
+    AppendError::Store(error.into())
+}
+
+/// The position violating a guard of `condition`, if one exists.
+///
+/// **One `SELECT max(position)` per guard**, which is ADR-0022's decision and
+/// the one that measured fastest on the *rejection* path — the path a DCB
+/// command loop takes every time it loses a race. The insight it trades on: a
+/// guard asks *"is there anything matching after this boundary"*, which reads
+/// like an existence question and is an inequality on the **highest** matching
+/// position. One `max()` answers both halves at once — whether the condition is
+/// violated, and by which event — so the rejection path needs no second query,
+/// where an `EXISTS` probe would need a follow-up `min(position)` to name the
+/// conflict.
+///
+/// `after: None` is a boundary of zero, because positions start at one. Guards
+/// are checked in order and the first violation ends the evaluation.
+fn evaluate(
+    connection: &Connection,
+    condition: &AppendCondition,
+) -> rusqlite::Result<Option<SequencePosition>> {
+    for guard in condition.guards() {
+        let selectivity = Selectivity::read_for(connection, &guard.query)?;
+        let mut params: Vec<Value> = Vec::new();
+        let matched = match_sql(&guard.query, &selectivity, &mut params);
+
+        let highest: Option<i64> = connection.query_row(
+            &format!("SELECT max(position) FROM ({matched})"),
+            rusqlite::params_from_iter(params.iter()),
+            |row| row.get(0),
+        )?;
+
+        let boundary = guard.after.map_or(0, as_i64);
+        if let Some(highest) = highest
+            && highest > boundary
+        {
+            return Ok(SequencePosition::new(highest.unsigned_abs()));
+        }
+    }
+    Ok(None)
+}
+
+/// Writes every row of the batch, and returns the position of its last event.
+///
+/// The `event` rows go in one at a time so that each one's assigned position is
+/// read from `last_insert_rowid()` rather than inferred: `AUTOINCREMENT` permits
+/// gaps and nothing may assume `+ 1`. The `event_tag` rows are where the
+/// parameter pressure actually is — at the declared ceilings a single multi-row
+/// statement would bind 98,304 of SQLite's 32,766 — so they are batched into
+/// statements sized from the budget, and the buffer is bounded by the chunk
+/// rather than by the batch.
+///
+/// **Chunking the statements is not chunking the transaction.** Committing
+/// between chunks would produce a partially applied batch, which is the one way
+/// to fail atomicity that a single-threaded read-back would happily confirm.
+fn write_batch(
+    connection: &Connection,
+    store_id: StoreId,
+    events: &[Event],
+    recorded_at: RecordedAt,
+) -> rusqlite::Result<SequencePosition> {
+    let mut positions = Vec::with_capacity(events.len());
+    {
+        let mut insert = connection.prepare(
+            "INSERT INTO event (event_type, data, metadata, tags, recorded_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        )?;
+        for event in events {
+            insert.execute(rusqlite::params![
+                event.event_type().as_str(),
+                &event.data()[..],
+                event.metadata().map(|metadata| &metadata[..]),
+                crate::row::encode_tags(event.tags()),
+                recorded_at.as_millis(),
+            ])?;
+            positions.push(connection.last_insert_rowid());
+        }
+    }
+
+    write_tag_rows(connection, events, &positions)?;
+    bump_cardinality(connection, events)?;
+
+    // One statement at the end of the batch rather than a value bound per row:
+    // a locally appended event's identity is *this store's incarnation paired
+    // with the position it was just given*, and that position is not known until
+    // the row exists. `origin_position IS NULL` is the marker, and the
+    // `UNIQUE (origin_store, origin_position)` constraint tolerates it because
+    // SQLite treats NULLs as distinct — which is what lets a multi-row batch
+    // stamp itself without tripping it.
+    connection.execute(
+        "UPDATE event SET origin_store = ?, origin_position = position \
+         WHERE origin_position IS NULL",
+        [&store_id.to_bytes()[..]],
+    )?;
+
+    let last = positions.last().copied().unwrap_or_default();
+    SequencePosition::new(last.unsigned_abs())
+        .ok_or(rusqlite::Error::IntegralValueOutOfRange(0, last))
+}
+
+/// Inserts every `(tag, position, event_type)` row, chunked to the parameter
+/// budget.
+fn write_tag_rows(
+    connection: &Connection,
+    events: &[Event],
+    positions: &[i64],
+) -> rusqlite::Result<()> {
+    let rows_per_statement = (PARAMETER_BUDGET / TAG_ROW_PARAMETERS).max(1);
+    let mut buffer: Vec<Value> = Vec::with_capacity(rows_per_statement * TAG_ROW_PARAMETERS);
+    let mut buffered = 0usize;
+
+    for (event, position) in events.iter().zip(positions) {
+        for tag in event.tags() {
+            buffer.push(Value::Text(tag.as_str().to_owned()));
+            buffer.push(Value::Integer(*position));
+            buffer.push(Value::Text(event.event_type().as_str().to_owned()));
+            buffered += 1;
+            if buffered == rows_per_statement {
+                flush_tag_rows(connection, &buffer, buffered)?;
+                buffer.clear();
+                buffered = 0;
+            }
+        }
+    }
+    if buffered > 0 {
+        flush_tag_rows(connection, &buffer, buffered)?;
+    }
+    Ok(())
+}
+
+/// One multi-row `event_tag` insert.
+fn flush_tag_rows(connection: &Connection, buffer: &[Value], rows: usize) -> rusqlite::Result<()> {
+    let tuples = (0..rows).map(|_| "(?,?,?)").collect::<Vec<_>>().join(",");
+    connection.execute(
+        &format!("INSERT INTO event_tag (tag, position, event_type) VALUES {tuples}"),
+        rusqlite::params_from_iter(buffer.iter()),
+    )?;
+    Ok(())
+}
+
+/// Maintains `tag_cardinality`, which is what orders a multi-tag probe.
+///
+/// Migration 1 creates the table; this is what writes to it. A table created and
+/// never updated silently restores the plan the schema amendment was made to
+/// avoid, and nothing in the conformance suite would notice.
+fn bump_cardinality(connection: &Connection, events: &[Event]) -> rusqlite::Result<()> {
+    let mut statement = connection.prepare(
+        "INSERT INTO tag_cardinality (tag, events) VALUES (?, 1) \
+         ON CONFLICT(tag) DO UPDATE SET events = events + 1",
+    )?;
+    for event in events {
+        for tag in event.tags() {
+            statement.execute([tag.as_str()])?;
+        }
+    }
+    Ok(())
 }
 
 /// Reads the schema version and the incarnation back out of `store_meta`.
@@ -563,12 +849,80 @@ impl SendEventStore for SqliteEventStore {
         }
     }
 
+    /// Appends `events`, refusing the write if `condition` is violated.
+    ///
+    /// The body is mostly *order*, and the order is the specification rather
+    /// than a style: two of its four steps decide what happens **before** any
+    /// SQL runs, and the fourth decides that everything remaining happens inside
+    /// exactly one `BEGIN IMMEDIATE` transaction — the write lock taken before
+    /// the condition is read and held to commit, so the snapshot the guard sees
+    /// is the snapshot the insert writes into and no second writer can fit
+    /// between the two halves.
+    ///
+    /// A probe followed by an unrelated insert is the wrong implementation this
+    /// whole port exists to reject: it passes every single-threaded rule
+    /// forever, and fails only when two writers decide from the same state.
+    ///
+    /// Returns the position assigned to the **last event of this batch**, in
+    /// slice order — never the store head, which is a different number the
+    /// moment another connection commits.
+    ///
+    /// # Errors
+    ///
+    /// Named by condition rather than by type:
+    ///
+    /// * the batch was empty — decided first, before the condition is read,
+    ///   because *rebuild the decision model and retry* is not advice a caller
+    ///   can act on for an empty batch;
+    /// * one event's `data` was larger than
+    ///   [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN), one event carried
+    ///   more tags than [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT), or the
+    ///   batch held more events than
+    ///   [`MAX_EVENTS_PER_BATCH`](Self::MAX_EVENTS_PER_BATCH) — each reported as
+    ///   a capacity refusal carrying the magnitude that exceeded it, never as a
+    ///   store failure and never by truncating, so that a caller can tell *this
+    ///   will never fit here* from *the disk is full, retry*;
+    /// * a guard of the condition matched an event strictly after its boundary,
+    ///   in which case the transaction rolls back and the file is unchanged;
+    /// * the driver failed — including `SQLITE_BUSY` after the configured busy
+    ///   timeout has genuinely elapsed, which is contention reported honestly
+    ///   rather than a condition violation;
+    /// * another thread panicked while holding this store's connection.
     async fn append(
         &self,
-        _events: &[Event],
-        _condition: Option<&AppendCondition>,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        todo!("SQLite event store: append")
+        // Step 1. An empty batch is the caller's own bug, and it is decided
+        // above everything else. ES-20 is not a stylistic ordering: a caller
+        // whose retry loop branches on `is_condition_violated` and receives
+        // `ConditionViolated` for an empty batch never terminates, because an
+        // empty batch will still be empty next time.
+        if events.is_empty() {
+            return Err(AppendError::NoEvents);
+        }
+
+        // Step 2. The declared ceilings, still before any transaction exists.
+        // A caller must be able to learn a value will never fit *here* without
+        // the store having to try, which is what keeps a quarantine path open
+        // for a sync runner.
+        Self::check_ceilings(events)?;
+
+        let recorded_at = now();
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| AppendError::Store(SqliteEventStoreError::ConnectionPoisoned))?;
+
+        // Steps 3 and 4 are one transaction, and that is the whole of the
+        // atomicity claim.
+        Self::append_locked(
+            &mut connection,
+            self.store_id,
+            events,
+            condition,
+            recorded_at,
+        )
     }
 
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
