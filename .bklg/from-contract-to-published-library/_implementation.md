@@ -873,3 +873,124 @@ new reviewer as hypotheses, runs the fix→re-review→seal tail, then continues
 the human's answer at the gate and it stands; it was not launched, because the boundary regression and
 the live concurrent session both want settling first — a run whose per-story gate cannot pass would
 halt at the first story's checkpoint.
+
+### HS-P0012 — run 3 not launched, 2026-08-17 (preflight investigation)
+
+Preflight was clean: tree clean, branch and worktree confirmed, full-suite step skipped against
+`entry_baseline`, and the affected gate green (227 tests, exit 0). baseRef stays **`90cbca5`**.
+**No workflow was launched and no transition was recorded**, by human decision at the entry gate:
+the ADR-0022 ingest wave goes first, because project DoD 3 demands the accepted atom and a run that
+reached Integration without it would halt there. The boundary blocker was investigated instead.
+
+The concurrent-session hazard has cleared on its own — `.git/redkiln/.id.lock` is gone and no
+redkiln process holds it.
+
+### The boundary blocker: two candidates falsified, and the real finding is worse
+
+**Falsified — the moved `main`.** Run 2 recorded this as a candidate, correctly marking it
+unestablished. It is now ruled out. `merge-base` is `ce933d8` against **both** the old main
+(`be1712a`) and the new (`570fefa`), and `git diff --name-only <main>...HEAD` returns **1,089 files
+either way**. Neither telemetry commit is an ancestor of this branch, so main's movement cannot
+have moved the merge base.
+
+**Falsified — a plugin upgrade.** `0.14.0` and `0.18.0` are both installed, both dated 2026-08-09,
+before any implementation work. No version changed under the initiative.
+
+**The mechanism, read from the shipped bundle and not only the source.**
+`changedFiles(root, base)` computes `git diff --name-only ${base}...HEAD` — the *cumulative* branch
+diff from the merge base — plus working-tree and untracked files. `verify` defaults `base` to
+`main` and the pinned `story.yaml` gate declares no `--base`, so there is no override:
+`redkiln advance` has no `--base` flag at all, only standalone `verify` does. `boundaryCheck` then
+exempts `.bklg/`, `.kb/` and `.redkiln/` and requires **every remaining file** to match the one
+story's fence. On this branch that is ~180 non-exempt files from two completed projects against a
+fence admitting one or two.
+
+So it is **structural, not a fence problem**: after the first story on a shared initiative branch,
+no story can pass. That is why `HS-S0018` — approved, recorded and closed on 2026-08-16 — fails
+today, with `affected-gate`, `ledger` and `provenance` all still `[ok]` and only `boundary` red.
+**No single static base would fix it**, because story 5's fence would still see stories 1–4's files.
+
+### The finding that matters: the story gate has never once passed by evaluation
+
+The repository's own committed telemetry settles what run 2 could only guess at. Census of
+`gate_result` events in `.redkiln/telemetry/events/ryan-britton@from-contract-to-published-library.jsonl`:
+
+| type/stage | pass: evaluated | pass: memoized | fail |
+|---|---|---|---|
+| `story/discover` | **135** | 0 | 0 |
+| `project/intake` | **10** | 0 | 0 |
+| `story/implement` | **0** | **37** | **18** |
+| `project/integration` | **0** | **4** | 0 |
+
+**Every one of the 37 story `implement` passes in this initiative is `basis: memoized`. Not one is
+`basis: evaluated`. Every one of the 18 evaluations failed** — seventeen on `boundary`, one on
+`ledger`. `story/discover` shows 135 evaluated passes in the same file, so this is not the memo
+replacing evaluation everywhere; it is specific to `implement` and `integration`.
+
+**Both closed projects reached `integration` the same way** — `HS-P0010` and `HS-P0011` each show
+two `pass=true basis=memoized` integration gates and zero evaluations.
+
+The replay is exact rather than inferred. Reimplementing `declaredBoundary` and `boundaryRegExp`
+from the shipped bundle and running HS-S0018's three declared patterns against the branch diff at
+`4314349` — the tree at 2026-08-16T20:00, the minute its pass was cached — yields **1,034 changed,
+161 non-exempt, 160 stray**. The check would have failed. Telemetry records it passing, memoized,
+at 20:00:23.
+
+**This reframes the "boundary class" narrative recorded across HS-P0010 and HS-P0011.** Seventeen
+widenings were argued through by hand, each from a genuinely compelled edit, and each was followed
+by a pass that was *replayed rather than computed*. The stray-file reports that prompted them were
+real. What is **not** established is that any widening ever made the check pass — no evaluation
+records one. Run 2's `HS-S0034` failure is not a regression; it is the first time no memo was
+available to paper over a check that has been failing all along.
+
+### A second, independent defect: the check silently disables itself on 13 of 135 specs
+
+`declaredBoundary` finds the **first** heading matching `/^#{1,6}\s+.*boundary/i` anywhere in
+`spec.md`, then scans forward for a fence and returns `undefined` — a silent, warn-free **pass** —
+if it meets another heading first. In a DCB library "boundary" is domain vocabulary, so the regex
+collides with prose headings.
+
+Replicating it across all 135 specs: **122 enforce a boundary, 13 do not.** Five lose it to a
+domain heading matching ahead of `## PR boundary` — `### What an arm is, and where the chunk
+boundary comes from`, `# Spec — A payload survives the boundary unchanged, and replay changes
+nothing`, `### The packaging boundary is the placement rule…`, `### 7. This project's boundary bar
+is the full gate, not --fast`, `### 10. Where the verdict is written, and the one boundary tension
+it raises`. The other eight reach `## PR boundary` but carry a sub-heading before the fence.
+
+Two are this project's: **`wide-query-chunked-not-refused` (HS-S0039)**, one of the seven stories
+run 2 committed, whose boundary check never ran at all; and
+**`reopen-negative-control-and-durability-verdicts` (HS-S0043)**, upcoming in slice 3.
+
+This is the same family as run 6's fence-comment trap, one level up: there, an unparseable fence
+*entry* was silently ignored; here the entire *check* is. Both fail closed in the safe direction
+and both discard the author's stated limit without saying so.
+
+### Owed upstream — now four, and this one outranks the others
+
+1. **The story boundary check scopes to the whole branch, not the story's change.** It should read
+   the story's own `links.commits` — which `provenance` already reads — or take a per-story base.
+   As shipped it is unpassable on any multi-story branch.
+2. **A memoized pass can stand in for a check that has never passed.** Whatever the key mechanics,
+   the observable outcome is 37 replayed passes over 0 computed ones. A memo that can only ever
+   replay a pass nothing recorded is not a cache.
+3. **`declaredBoundary`'s heading regex matches domain vocabulary and then fails open, silently.**
+   It should anchor on the exact `## PR boundary` heading and warn when it finds none.
+4. Still standing from run 2: an `advance --commit` whose commit fails should not exit 0, and
+   `verify --grain story`'s fence matching should not silently ignore an entry it cannot parse.
+
+**redkiln #122 remains a release blocker** and is unchanged by any of this.
+
+### Next
+
+1. **The ADR-0022 ingest wave** — `/redkiln:kb-ingest` over `.kb/_intake/`, which holds six
+   documents: `0033-adr-0022-append-condition-strategy.md` and its separate evidence source
+   `0034-append-condition-experiment-2026-08.md` (the pair AC-008 requires), plus four carried
+   forward — `0031-adr-0021-serde-attribution-correction.md`,
+   `0032-adr-0031-the-runner-collapses-upward.md`, `contract-defect-log-phase-7.md` and
+   `happenstance-macros-verdict.md`. Drop `README.md` at the approval gate. Suffix the wave id.
+2. **Reserve `happenstance-sqlite` on crates.io by hand**, converting story 13's live irreversible
+   act into a precondition — the same move that cleared HS-P0011's `cargo publish`.
+3. **Then re-launch run 3 fresh at `90cbca5`.** Git truth re-enters `durable-event-store` at
+   Review. Expect the story gate to stay unpassable until the boundary defect is settled: the run
+   itself is unaffected, since the workflow's own gates do not run `verify --grain story`, but no
+   story verdict — approval **or** rejection — can be recorded while it is red.
