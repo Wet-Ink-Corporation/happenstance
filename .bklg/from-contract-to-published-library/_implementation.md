@@ -965,20 +965,78 @@ This is the same family as run 6's fence-comment trap, one level up: there, an u
 *entry* was silently ignored; here the entire *check* is. Both fail closed in the safe direction
 and both discard the author's stated limit without saying so.
 
-### Owed upstream — now four, and this one outranks the others
+### Upstream — the headline defect was already filed AND already fixed
 
-1. **The story boundary check scopes to the whole branch, not the story's change.** It should read
-   the story's own `links.commits` — which `provenance` already reads — or take a per-story base.
-   As shipped it is unpassable on any multi-story branch.
-2. **A memoized pass can stand in for a check that has never passed.** Whatever the key mechanics,
-   the observable outcome is 37 replayed passes over 0 computed ones. A memo that can only ever
-   replay a pass nothing recorded is not a cache.
-3. **`declaredBoundary`'s heading regex matches domain vocabulary and then fails open, silently.**
-   It should anchor on the exact `## PR boundary` heading and warn when it finds none.
-4. Still standing from run 2: an `advance --commit` whose commit fails should not exit 0, and
-   `verify --grain story`'s fence matching should not silently ignore an entry it cannot parse.
+**Corrects the framing above.** The whole-branch scoping defect is **redkiln #94** — *"The story
+boundary gate diffs against a hardcoded main, so a narrow PR-boundary fence can never pass on a
+long-lived initiative branch"*. It was filed **against 0.18.0, the exact version pinned here**, and
+**closed COMPLETED on 2026-08-11**. Its report describes this symptom precisely, down to the ~180
+stray paths and the observation that the gate is strictest on the most disciplined specs.
 
-**redkiln #122 remains a release blocker** and is unchanged by any of this.
+**0.19.0 fixes it** (`src/store/verify.ts:917-932`), taking the issue's own candidate (2):
+
+```js
+// #94 — the BOUNDARY question is "did THIS STORY stay in its lane", so it is
+// asked of the story's own recorded commits when it has any, falling back to
+// the base-derived set when it has none (a story mid-flight, before its first
+// checkpoint). Deliberately scoped to this one check: …
+const ownScope = ownChangedFiles(root, commitLinks(located.data));
+checks.push(boundaryCheck(located.dir, ownScope ?? changed));
+```
+
+`changedFiles` and `boundaryCheck` are byte-identical in 0.19.0; the fix is entirely in what the
+caller *passes*. `affected-gate`, `ledger` and `provenance` deliberately keep the broad set.
+
+**So nothing here needs filing, and nothing needs a fence widened. It needs a plugin upgrade.**
+`redkiln@redkiln-local` is installed at **0.18.0**, `lastUpdated: 2026-08-10T02:21` — one day
+before #94 closed. **`v0.19.0` is tagged and published.** Run 2's stories already record
+`links.commits` correctly (one checkpoint each, `694dccd`), which is exactly the input 0.19.0's
+boundary check consumes, so the seven committed stories should gate cleanly straight after the
+upgrade with no rework.
+
+**Do not run `redkiln adopt --templates` as part of the upgrade** — CLAUDE.md forbids it, and
+`upgrade` recommends it. It would overwrite all six deliberate template customisations and then
+fail the `backlog` CI job on the absence it created.
+
+### Filed: redkiln #135 — the one defect here that was genuinely new
+
+**<https://github.com/Wet-Ink-Corporation/redkiln/issues/135>** — *"declaredBoundary matches the
+first heading containing 'boundary' anywhere, so a prose heading hijacks the parse and the fence is
+silently skipped."* Unfixed on 0.19.0 (`declaredBoundary` is byte-identical there), orthogonal to
+#94, and not masked by it: #94 fixed the *scope* of the changed set, this is the *parse*.
+
+Evidence filed: 122 of 135 specs enforce a boundary, 13 do not. Five lose it to a prose heading
+matching ahead of `## PR boundary` — including `byte-identical-round-trip-and-idempotent-replay`,
+whose **H1 title** contains the word, so its parse is over before the body begins. Eight reach
+`## PR boundary` and find no fence under it. Both are silent, warn-free passes.
+`wide-query-chunked-not-refused` (HS-S0039) is the worked case: a valid three-line fence at
+`spec.md:294` that the parser never reaches, on a story already committed and slice-reviewed.
+
+### Not filed — the memo census, which the code says should be impossible
+
+`readVerifyPass` matches on an exact key with a TTL, and `writeVerifyPass` runs **only** after a
+real pass, immediately before `basis: "evaluated"` is returned (`src/process/gates.ts:406-408`). So
+37 memoized passes require at least one evaluated pass, and the census finds **none** — not in this
+partition, not in `ryan-britton@happenstance.jsonl`, not in the kb-intake partitions, not in the
+`docs-that-teach` worktree's.
+
+Left unfiled deliberately, because a report with no mechanism is a guess, and two known problems
+could produce this shape without a memo defect: telemetry partitions diverged across worktrees
+(`partitionsDiverged: 5`, ~692 KB unindexed), and run 2's stale-`index.lock` finding — an
+`advance --commit` that wrote its files, failed to commit, and **still exited 0** — means gate
+telemetry from these runs is not fully trustworthy either. **Re-run the census after the 0.19.0
+upgrade**: if evaluated passes start appearing, the anomaly was the boundary defect all along and
+there is nothing to file. Adjacent, already open: #86.
+
+### Still standing, unchanged
+
+- **redkiln #122 is a release blocker** — CI's `backlog` job asserts the `unconsumed-foundation`
+  list is empty; nine problems persist from planning commit `ae77ac4`.
+- **#129** — a trailing `#` comment silently voids a PR-boundary fence entry. Same family as #135,
+  one level down.
+- **#130** — the slice review seals `approved` without running the story boundary gate. This is the
+  instrument disagreement HS-P0010 and HS-P0011 each recorded; it is filed.
+- An `advance --commit` whose commit fails should not exit 0 (run 2's finding, still unfiled).
 
 ### Next
 
@@ -991,6 +1049,10 @@ and both discard the author's stated limit without saying so.
 2. **Reserve `happenstance-sqlite` on crates.io by hand**, converting story 13's live irreversible
    act into a precondition — the same move that cleared HS-P0011's `cargo publish`.
 3. **Then re-launch run 3 fresh at `90cbca5`.** Git truth re-enters `durable-event-store` at
-   Review. Expect the story gate to stay unpassable until the boundary defect is settled: the run
-   itself is unaffected, since the workflow's own gates do not run `verify --grain story`, but no
-   story verdict — approval **or** rejection — can be recorded while it is red.
+   Review.
+
+**Do item 0 first: upgrade the redkiln plugin to 0.19.0.** It is the fix for #94, it is published,
+and it turns the story gate from unpassable back into a real check — including for the seven
+stories run 2 already committed, whose `links.commits` are recorded correctly. Verify afterwards
+with `redkiln verify --item HS-S0018 --grain story`, which fails today and should pass on 0.19.0
+without a single fence being touched. **Do not run `redkiln adopt --templates`.**
