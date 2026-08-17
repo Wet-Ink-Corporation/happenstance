@@ -7,9 +7,9 @@ title: The first adapter that is not an instrument
 parent: HS-I0006
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: in-review
+status: implementing
 process: project
-stage: design
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-12T12:57:05.984Z
+updated: 2026-08-17T00:53:30.326Z
 links:
   pr: null
   commits: []
