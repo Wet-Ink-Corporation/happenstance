@@ -24,7 +24,7 @@ attributable to the initiative rather than inherited.
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
-| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | pending | |
+| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **in-progress** | run 1 stopped at the token checkpoint · 0/14 committed · baseRef `90cbca5` |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
@@ -724,3 +724,59 @@ forbids the false-positive direction and does not say this, so claiming it there
 - The two upstream instrument defects from run 2 stand: an `advance --commit` whose commit fails
   should not exit 0, and `verify --grain story`'s fence matching should not silently ignore an entry
   it cannot parse.
+
+### HS-P0012 `sqlite-durable-store` — run 1, 2026-08-17 (`wf_f59e2fdc-003`) — STOPPED AT A BUDGET CHECKPOINT
+
+baseRef **`90cbca5`** — the telemetry commit closing HS-P0011, captured on a clean tree after
+`cargo xtask affected --base main` passed there (227 tests, exit 0). The full-suite step was skipped
+against `entry_baseline`. HS-P0012's design verdict was already `approved` from 2026-08-12, so
+`advance --to implementation` walked cleanly (`67310f2`). **Keep baseRef stable across re-launches of
+this project.**
+
+**Not a halt and not a blocker** — the repository owner stopped the run at 80% of weekly token usage,
+by decision at a checkpoint the orchestrator offered. `TaskStop`, not a workflow exit: there is **no
+manifest**, no `_integration.md` and no `_review.md`, and `degraded` is empty because nothing reported.
+Recorded as `stopped:operator-checkpoint`.
+
+**0 of 14 stories committed. `_slices.md` was scaffolded empty. The only commit in `baseRef..HEAD` is
+the orchestrator's own advance.** So a re-launch fresh at `90cbca5` re-enters at story 1 with both
+resume axes empty, and forfeits nothing but this run's preflight.
+
+**The partial work was preserved off-branch rather than discarded.** Story 1's implementer was mid-flight
+and had written ~975 lines — `crates/happenstance-testkit/src/bench.rs` (767), `tests/memory_benchmarks.rs`
+(208), plus `Cargo.toml` and `lib.rs` edits. It compiles but is genuinely unfinished: `fold_attempt` and
+`replay` are dead code, which `-D warnings` would reject. It is at
+**`wip/hs-p0012-benchmark-harness` (`d8fd819`)** and deliberately **not** on
+`initiative/from-contract-to-published-library`, because a commit with no `Story:` trailer inside
+`baseRef..HEAD` would pollute the project's cumulative review diff for no gain. It is reference material,
+**not a resume point** — the two-axis model re-implements HS-S0034 from scratch, so run 2 should expect to
+regenerate it. Drop the branch whenever it stops being interesting.
+
+### What run 2 should know before it launches
+
+- **The ADR story will not block the way HS-P0010's and HS-P0011's did.** Both of those halted because a
+  foundation story's AC asserted an *accepted* `.kb/decisions/` atom only a human-invoked
+  `/redkiln:kb-ingest` wave may author. `adr-0022-append-condition-strategy`'s **AC-008 inverts that**: it
+  requires that **no** `.kb/decisions/**` or `.kb/maps/**` path appears in the diff, and that exactly two
+  files be staged under `.kb/_intake/` — the atom source and a *separate* evidence source, so the decision
+  can be superseded without invalidating the numbers. The story genuinely ends at staged-and-ready, and its
+  criterion agrees with its prose for the first time in this initiative.
+- **The wave dependency moved up a level, to project DoD 3**, which demands ADR-0022 as an accepted atom.
+  So the block surfaces at **Integration**, after all five slices, rather than at story 2. Planning a wave
+  between run 2 and the project review is the cheaper order than discovering it at the DoD bar.
+- **Story 13 (`crates-io-name-and-packaging-facts`) performs a live, irreversible registry act** — reserving
+  `happenstance-sqlite` on crates.io. `RUNBOOK.md:4191-4193` says claim the name when the phase *starts*,
+  so doing it by hand up front converts a probable mid-run halt into a precondition. Same class as
+  HS-P0011's `cargo publish`, which halted run 2 and was cleared by the owner running it at the entry gate.
+- **Two of the nine `unconsumed-foundation` errors are this project's own stories** — `HS-S0034`
+  (`benchmark-harness`) and `HS-S0035` (`adr-0022-…`). Still redkiln **#122**, still a release blocker to
+  settle before `publication-and-positioning`, and still unrouted.
+- **Two escalate-don't-settle items**, per `_storymap.md`: CF-40's ownership contradiction, whose open
+  question names *this* phase as the forcing one, and the DoD 7 second-unlike-batch-shape question, which is
+  assigned to `projection-store-freeze` — if it lands here it is a **blocking re-plan** that inverts the
+  6 → 8 DAG edge, not something `projection-store-passes-the-borrowed-suite` absorbs.
+- **Schedule shape.** Largest single adapter on the trunk (ten runbook-days, `RUNBOOK.md:4235`) with
+  `publication-and-positioning` blocked behind it. CF-33 forbids a watchdog, so a `BEGIN IMMEDIATE` deadlock
+  in `concurrency-family-and-contender-count` hangs until the CI timeout — a finding about ADR-0022's timeout
+  paragraph, not something a test may paper over. The initiative DoD wants 64 contenders; the code sets
+  `CONTENDERS = 8`; story 8 owns closing it.
