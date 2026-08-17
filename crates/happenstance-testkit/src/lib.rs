@@ -143,14 +143,30 @@
 //! check-and-write. There is deliberately no timeout anywhere in it; the
 //! `concurrency` module says why, and the answer is CF-33.
 //!
-//! **Neither the model nor the concurrency family's names are intra-doc
-//! links**, and both paragraphs above
+//! `event_store_benchmarks!` is a fourth macro family and the only one that is
+//! **not a bar**. It lives in `bench`, behind this crate's off-by-default
+//! `bench` feature and absent on `wasm32-unknown-unknown`, and it measures the
+//! three things phase 8 needs measured: append throughput over a batch of *n*,
+//! conditional append under *k* contenders reporting the committed and rejected
+//! counts separately, and replay of *N* events run both unfiltered and behind a
+//! tag filter — with *n*, *k* and *N* supplied at the call site. It adds **no**
+//! conformance rule, changes no adapter's bar, and can never fail a merge:
+//! CF-34 says performance is measured by a separate harness which is not part
+//! of the conformance bar, and this is that harness. There is no threshold in
+//! it at any budget, and no clock either — CF-33 forbids one anywhere in this
+//! crate's `src/`, so the harness reports counts and the *emitter* reports
+//! durations, which puts `criterion`, `divan` or a CSV writer in the caller's
+//! `dev-dependencies` and leaves this crate's two.
+//!
+//! **None of the model, concurrency or benchmark families' names is an
+//! intra-doc link**, and all three paragraphs above
 //! spell them plainly on purpose. Each module is absent on some configuration
 //! this crate is documented under, and rustdoc treats an unresolved link as a
 //! hard error: `model` is behind the off-by-default `proptest` feature, so a
 //! link would break `cargo doc` with default features; `concurrency` is
 //! `#[cfg(not(target_arch = "wasm32"))]`, so a link would break
-//! `cargo doc --target wasm32-unknown-unknown`. That is the D13 failure this
+//! `cargo doc --target wasm32-unknown-unknown`; `bench` is behind a feature
+//! *and* a target gate, so it would break both. That is the D13 failure this
 //! workspace has already paid for once.
 //!
 //! An earlier version of this paragraph said the concurrency module "needs no
@@ -295,6 +311,16 @@
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+// The same two conditions `model` carries below, and the second one is not
+// tidiness: a **feature is not target-scoped**, so `--all-features` sets `bench`
+// on `wasm32-unknown-unknown` too, where there are no threads and no host clock.
+// The only gate step that compiles that combination is the wasm32 feature
+// powerset, which is OPTIONAL and is skipped by `cargo xtask ci --fast` — so
+// this is the one condition here that can reach `main` unnoticed, and it is
+// copied from `model` rather than written fresh.
+#[cfg(all(feature = "bench", not(target_arch = "wasm32")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "bench")))]
+pub mod bench;
 // Named `contract`, not `fixture`: one letter from the public `fixtures` module
 // below, which the specification names by that exact path and which therefore
 // cannot be renamed to make room.

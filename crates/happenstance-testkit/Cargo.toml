@@ -74,6 +74,22 @@ memory = ["happenstance-core/memory"]
 # build for that target — and on under `--all-features`, which is what the
 # gate's clippy, test and doc steps all run.
 proptest = ["dep:proptest"]
+# The benchmark family (`bench`, `event_store_benchmarks!`). CF-34: performance
+# is measured by a *separate* harness which is not part of the conformance bar,
+# so this feature buys a fourth macro family and **no** conformance rule.
+#
+# It adds no dependency — the empty list is the point, and NF-001 pins it. What
+# a benchmark needs and this crate must not have is a clock: CF-33 forbids one
+# anywhere under `src/`, and `xtask`'s `lint-clock` step enforces it by scanning
+# for the construct. So the harness produces counts and the caller's emitter
+# produces durations, with the measurement crate — `criterion`, `divan`, a CSV
+# writer — living in the *caller's* `dev-dependencies`.
+#
+# Off by default, and the module is target-gated on top of that. A Cargo feature
+# is not target-scoped, so `--all-features` reaches `wasm32-unknown-unknown`
+# too; see `src/lib.rs`'s declaration and `fixtures.rs`'s note, which is the
+# same trap `proptest` above paid for once already.
+bench = []
 
 # Split by target so the wasm harness can be *compiled* for wasm32 without
 # dragging tokio's multi-threaded runtime — which cannot exist there — into the

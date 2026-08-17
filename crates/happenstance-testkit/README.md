@@ -133,6 +133,45 @@ registry row declares. The port is still `[PROVISIONAL]` and lives behind
 what will freeze it, and what would clear that bar is an adapter over storage
 this workspace does not control — which neither fixture shipped here is.
 
+### The benchmark harness — which is *not* the bar
+
+```rust,ignore
+happenstance_testkit::event_store_benchmarks!(MyFixture::new());
+```
+
+Behind this crate's off-by-default `bench` feature, and absent on
+`wasm32-unknown-unknown`. It is the one family that checks nothing: it adds no
+conformance rule, it changes no adapter's bar, and **no result it produces can
+fail a merge** — there is no threshold in it, at any budget. The specification
+requires performance to be measured by a separate harness which is not part of
+the conformance bar, and this is that harness.
+
+Where the four families differ:
+
+| Family | Feature | Checks | Can fail a merge |
+| --- | --- | --- | --- |
+| `event_store_conformance!` | — | the event-store bar | yes, and that is the point |
+| `event_store_model_conformance!` | `proptest` | the same bar, over generated sequences | yes |
+| `event_store_concurrency_conformance!` | — (opt-in, `Send`) | the bar under contention | yes |
+| `event_store_benchmarks!` | `bench` | **nothing** — it measures | **no** |
+
+Three scenarios: append throughput over a batch of *n*; conditional append under
+*k* contenders, reporting the committed and rejected counts separately so that a
+run in which nobody collided is legible as such; and replay of *N* events, once
+unfiltered and once behind a tag filter. *n*, *k* and *N* are yours, at the call
+site, because no constant here could be right for both an in-process `Vec` and a
+file under a write lock.
+
+**You bring the clock, and with it the measurement crate.** Nothing in this
+crate's `src/` may read one, so the harness reports counts — events appended,
+batches acknowledged, committed, rejected, refused, failed, events matched on
+replay — and the per-scenario wrapper is the `emit` parameter, exactly as it is
+for the other three families. `criterion`, `divan` or a line of CSV goes in
+*your* `dev-dependencies`; this crate's stay `happenstance-core` and
+`futures-core`. `tests/memory_benchmarks.rs` writes such an emitter and runs the
+whole family against `fixtures::MemoryFixture` on every `cargo test --features
+bench`, so the harness ships having been executed rather than merely compiled.
+
 ## Why this exists as a published crate
 
 A claim about behaviour is worth exactly as much as the test that checks it.

@@ -22,6 +22,40 @@ not the same as what a user needed to be told.
   adapters at opposite ends of the batch-shape axis have passed its conformance
   suite. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
+## [Unreleased]
+
+### Added
+
+- **`happenstance-testkit` ships a benchmark harness, behind an off-by-default
+  `bench` feature — and it is deliberately not part of the bar.**
+  `event_store_benchmarks!(MyFixture::new())` is inherited exactly as
+  conformance is, one line against the fixture you already wrote, and it adds
+  **no** conformance rule: the rule-name list this crate publishes is
+  byte-for-byte what it was, `suite.rs` gained no rule, and the family carries
+  its own enumeration (`for_each_event_store_benchmark!`) beside the scenarios
+  it names. The specification requires performance to be measured by a separate
+  harness which is not part of the conformance bar, and this is that harness —
+  so **no result it produces can fail a merge**: there is no threshold in it, at
+  any budget, and no watchdog. Three scenarios, fixed by their two consumers
+  rather than chosen: append throughput over a batch of *n*; conditional append
+  under *k* contenders, reporting the committed and rejected counts *separately*
+  and distinguishing a condition violation from a store failure, because a run
+  in which nobody collided is a measurement of the wrong thing however fast it
+  was; and replay of *N* events, once unfiltered and once behind a tag filter.
+  *n*, *k* and *N* are the caller's, supplied at the call site. **The clock is
+  the caller's too.** Nothing in this crate's `src/` may read one, so the
+  harness reports counts and the per-scenario wrapper is the `emit` parameter —
+  which puts `criterion`, `divan` or a CSV writer in *your* `dev-dependencies`
+  and leaves this crate's exactly two. Four public items behind the feature, in
+  the new `bench` module: `BenchmarkParams`, `BenchmarkRecord`, `BenchmarkPass`
+  and `scenarios`, plus the macro and two emitters. The feature is additive and
+  off by default, so nothing an existing consumer sees moves; it is also
+  target-gated, because a Cargo feature is not target-scoped and
+  `--all-features` would otherwise reach `wasm32-unknown-unknown`.
+  `tests/memory_benchmarks.rs` runs the whole family against `MemoryFixture` on
+  every `cargo test --features bench`, so it ships having been executed rather
+  than merely compiled.
+
 ## [0.2.0-alpha.1] — 2026-08-16
 
 **The first published release, and it is a pre-release on purpose.** The API is

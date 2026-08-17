@@ -103,7 +103,7 @@ and the author is told the target is fine; the combination that fails is the one
 enables the feature — in a crate they did not write, naming a crate they never
 asked for.
 
-**Evidence.** `crates/happenstance-testkit/Cargo.toml:83 (optional = true)` ·
+**Evidence.** `crates/happenstance-testkit/Cargo.toml:99 (optional = true)` ·
 `crates/happenstance-testkit/src/fixtures.rs:487 (feature is not target-scoped)` ·
 `xtask/src/main.rs:680 (feature is not target-scoped)`
 
