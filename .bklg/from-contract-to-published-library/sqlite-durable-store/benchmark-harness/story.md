@@ -19,10 +19,11 @@ archetype: foundation
 slice: bench-harness-and-adr
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:29.306Z
+updated: 2026-08-17T12:59:40.973Z
 links:
   pr: null
-  commits: []
+  commits:
+    - "2665883"
   kb: []
 gate_open: false
 schema: 1

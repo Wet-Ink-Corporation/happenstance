@@ -20,10 +20,11 @@ archetype: capability
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:41.681Z
+updated: 2026-08-17T12:59:55.921Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 11596b4
   kb: []
 gate_open: false
 schema: 1

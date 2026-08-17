@@ -22,10 +22,11 @@ archetype: foundation
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:37.712Z
+updated: 2026-08-17T12:59:45.581Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 8381c89
   kb: []
 gate_open: false
 schema: 1
