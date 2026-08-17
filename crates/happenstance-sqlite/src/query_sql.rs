@@ -136,6 +136,44 @@ pub(crate) fn match_sql(
     }
 }
 
+/// How many statements one page of `query` takes at `max_arms` arms each.
+///
+/// Never zero: `Query::all` is one arm.
+pub(crate) fn statement_count(query: &Query, max_arms: usize) -> usize {
+    let arms = query.items().map_or(1, <[QueryItem]>::len).max(1);
+    arms.div_ceil(max_arms.max(1))
+}
+
+/// One `SELECT position …` subquery per chunk of at most `max_arms` items.
+///
+/// **Chunk and merge, never refuse.** A `Query` bounds nothing by design and the
+/// specification requires every store to evaluate at least 128 items, so an
+/// adapter that returned an error at its own pushdown limit would be inventing a
+/// refusal the contract has no way to report. The merge over these cursors is
+/// the read path's; what belongs here is only the decomposition.
+///
+/// The caller wraps each chunk in the bounds, the ordering and the page budget,
+/// which is what makes the per-chunk statements identical in shape and therefore
+/// mergeable.
+pub(crate) fn chunks(
+    query: &Query,
+    selectivity: &Selectivity,
+    max_arms: usize,
+) -> Vec<(String, Vec<Value>)> {
+    let max_arms = max_arms.max(1);
+    match query.items() {
+        None => vec![("SELECT position FROM event".to_owned(), Vec::new())],
+        Some(items) => items
+            .chunks(max_arms)
+            .map(|chunk| {
+                let mut params = Vec::new();
+                let sql = arms_sql(chunk, selectivity, &mut params);
+                (sql, params)
+            })
+            .collect(),
+    }
+}
+
 /// The `UNION` of one arm per item.
 ///
 /// An empty item list cannot be constructed — `Query::from_items` refuses it —

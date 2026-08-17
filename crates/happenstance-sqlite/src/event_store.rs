@@ -1,15 +1,15 @@
 //! SQLite-backed [`SendEventStore`].
 //!
-//! # Status: the schema is real; the port's bodies are landing
+//! # Status: every event-store path is real
 //!
-//! Migration 1, the persisted identity, the connection settings and `append`
-//! have real bodies and test targets that read them back out of SQLite. `read`,
-//! `head` and `contains_event_id` are still `todo!()`. The *types* were never
-//! stubbed: the connection
-//! is a real [`rusqlite::Connection`], the error enum wraps
-//! [`rusqlite::Error`], and [`SqliteReadStream`] is the state machine the real
-//! read path uses. A skeleton that stubs its associated types has stubbed the
-//! only part of it a type checker can disagree with.
+//! Migration 1, the persisted identity, the connection settings, `append`,
+//! `read`, `head` and `contains_event_id` all have real bodies, and four test
+//! targets read them back out of SQLite — `tests/migration.rs`,
+//! `tests/append.rs`, `tests/read.rs` and `tests/wide_query.rs`. The *types*
+//! were never stubbed: the connection is a real [`rusqlite::Connection`], the
+//! error enum wraps [`rusqlite::Error`], and [`SqliteReadStream`] is the state
+//! machine the real read path uses. A skeleton that stubs its associated types
+//! has stubbed the only part of it a type checker can disagree with.
 //!
 //! # Why the stream is a hand-written state machine
 //!
@@ -257,6 +257,36 @@ impl SqliteEventStore {
     /// parameters — which is why the insert is chunked to the parameter budget
     /// and the transaction is not.
     pub const MAX_EVENTS_PER_BATCH: usize = 256;
+
+    /// How many index arms one prepared statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite compiles a `UNION` of *n* arms as one compound `SELECT`, and
+    /// `SQLITE_MAX_COMPOUND_SELECT` defaults to **500** terms. A `Query` bounds
+    /// nothing by design — the specification requires every store to evaluate at
+    /// least 128 items and puts no ceiling above that — so a wide query is
+    /// **chunked and merged, never refused**: there is no `MAX_QUERY_ITEMS`
+    /// anywhere in this crate and no fourth `StoreLimit` variant to report one
+    /// through, because a query-item refusal is not an append outcome.
+    ///
+    /// The number is public so that a test can compute the boundary rather than
+    /// guess at it: a merge that never executes is dead code behind a green
+    /// suite, which is the failure mode this whole project exists to retire.
+    pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+
+    /// How many prepared statements one page of `query` will take.
+    ///
+    /// `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)`, and never zero.
+    /// [`Query::all`] is one arm, because it goes straight to the `event` table
+    /// rather than through the tag index.
+    ///
+    /// This is the seam a test uses to observe that a wide query genuinely
+    /// crossed the chunk boundary. It is the same function the read path itself
+    /// plans with, so it cannot drift from the behaviour it reports.
+    #[must_use]
+    pub fn planned_statement_count(query: &Query) -> usize {
+        crate::query_sql::statement_count(query, Self::MAX_QUERY_ARMS_PER_STATEMENT)
+    }
 
     /// Wraps an already-open connection onto an **already-migrated** database.
     ///
@@ -1188,64 +1218,107 @@ impl ReadCursor {
         }
 
         let selectivity = Selectivity::read_for(&connection, &self.query)?;
-        let mut params: Vec<Value> = Vec::new();
-        let matched = match_sql(&self.query, &selectivity, &mut params);
-        let columns = crate::row::COLUMNS;
-        let mut sql = format!("SELECT {columns} FROM event WHERE position IN ({matched})");
 
-        // `resume_from` is inclusive in both directions; which side of the
-        // position order it sits on is what `backwards` decides. Under
-        // `backwards`, `from` stays the *starting* (higher) bound and `to` the
-        // stopping (lower) one — they swap roles in position order, not in
-        // meaning. Copying `position <= ?` into the descending branch is correct
-        // forwards, passes two of the three read-bound rules, and returns the
-        // oldest events where the newest were asked for.
-        if let Some(from) = self.resume_from {
+        // **Chunk and merge, never refuse.** A `Query` bounds nothing by design;
+        // SQLite compiles a `UNION` of n arms as one compound `SELECT` and stops
+        // at `SQLITE_MAX_COMPOUND_SELECT`, which is 500 by default. An adapter
+        // that returned an error at its own pushdown limit would be inventing a
+        // refusal the contract has no way to report, so a wide query becomes
+        // `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)` statements merged here.
+        //
+        // Every chunk statement is **identical in shape** — same ceiling, same
+        // `resume_from`, same `to`, same direction, same page budget — which is
+        // what makes merging them sound rather than approximate.
+        let plan = crate::query_sql::chunks(
+            &self.query,
+            &selectivity,
+            SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+        );
+        let mut merged: Vec<SequencedEvent> = Vec::with_capacity(budget);
+
+        for (matched, arm_params) in plan {
+            let mut params = arm_params;
+            let columns = crate::row::COLUMNS;
+            let mut sql = format!("SELECT {columns} FROM event WHERE position IN ({matched})");
+
+            // `resume_from` is inclusive in both directions; which side of the
+            // position order it sits on is what `backwards` decides. Under
+            // `backwards`, `from` stays the *starting* (higher) bound and `to`
+            // the stopping (lower) one — they swap roles in position order, not
+            // in meaning. Copying `position <= ?` into the descending branch is
+            // correct forwards, passes two of the three read-bound rules, and
+            // returns the oldest events where the newest were asked for.
+            //
+            // It is applied **per chunk and per hop**, never carried as
+            // per-chunk state across a hop: `advance()` folds only the *merged*
+            // page back into `resume_from`, which is what stops the historical
+            // `resume_after` bug returning in a new disguise.
+            if let Some(from) = self.resume_from {
+                sql.push_str(if self.options.backwards {
+                    " AND position <= ?"
+                } else {
+                    " AND position >= ?"
+                });
+                params.push(Value::Integer(as_i64(from)));
+            }
+            if let Some(to) = self.options.to {
+                sql.push_str(if self.options.backwards {
+                    " AND position >= ?"
+                } else {
+                    " AND position <= ?"
+                });
+                params.push(Value::Integer(as_i64(to)));
+            }
+
+            // The ceiling **composes** with `to` rather than replacing it, and
+            // it is the same clause in both directions because *H* is an upper
+            // bound either way: forwards it tightens the stopping end,
+            // backwards it tightens the starting one. Every chunk carries it,
+            // which is how ES-12 survives a read becoming multi-statement.
+            sql.push_str(" AND position <= ?");
+            params.push(Value::Integer(as_i64(ceiling)));
+
             sql.push_str(if self.options.backwards {
-                " AND position <= ?"
+                " ORDER BY position DESC"
             } else {
-                " AND position >= ?"
+                " ORDER BY position ASC"
             });
-            params.push(Value::Integer(as_i64(from)));
-        }
-        if let Some(to) = self.options.to {
-            sql.push_str(if self.options.backwards {
-                " AND position >= ?"
-            } else {
-                " AND position <= ?"
-            });
-            params.push(Value::Integer(as_i64(to)));
+
+            // The page budget, which is `min(remaining, PAGE_SIZE)` and is an
+            // implementation detail *beneath* `ReadOptions::limit` — never a
+            // limit applied per page, and never one applied per query item. A
+            // chunk may return at most this many rows, and the merged top
+            // `budget` is a subset of the union of the per-chunk tops, so
+            // bounding each one loses nothing.
+            sql.push_str(" LIMIT ?");
+            params.push(Value::Integer(i64::try_from(budget).unwrap_or(i64::MAX)));
+
+            let mut statement = connection.prepare(&sql)?;
+            let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
+            while let Some(row) = rows.next()? {
+                merged.push(crate::row::to_event(row)?);
+            }
         }
 
-        // The ceiling **composes** with `to` rather than replacing it, and it is
-        // the same clause in both directions because *H* is an upper bound
-        // either way: forwards it tightens the stopping end, backwards it
-        // tightens the starting one.
-        sql.push_str(" AND position <= ?");
-        params.push(Value::Integer(as_i64(ceiling)));
-
-        sql.push_str(if self.options.backwards {
-            " ORDER BY position DESC"
+        // The merge, and the two things it has to get right: one order for the
+        // whole page regardless of how the items were partitioned, and each
+        // event exactly once however many arms matched it.
+        if self.options.backwards {
+            merged.sort_by_key(|event| core::cmp::Reverse(event.position));
         } else {
-            " ORDER BY position ASC"
-        });
-
-        // The page budget, which is `min(remaining, PAGE_SIZE)` and is an
-        // implementation detail *beneath* `ReadOptions::limit` — never a limit
-        // applied per page, and never one applied per query item.
-        sql.push_str(" LIMIT ?");
-        params.push(Value::Integer(i64::try_from(budget).unwrap_or(i64::MAX)));
-
-        let mut statement = connection.prepare(&sql)?;
-        let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
-        let mut fetched = Vec::with_capacity(budget);
-        while let Some(row) = rows.next()? {
-            fetched.push(crate::row::to_event(row)?);
+            merged.sort_by_key(|event| event.position);
         }
+        merged.dedup_by_key(|event| event.position);
 
-        let exhausted = fetched.len() < budget;
+        // Computed **before** truncation. Every chunk returned fewer rows than
+        // the budget exactly when the merged set is short of it: a chunk's rows
+        // are already distinct, so a chunk that filled its budget puts that many
+        // distinct positions into the merge.
+        let exhausted = merged.len() < budget;
+        merged.truncate(budget);
+
         Ok(Page {
-            rows: fetched,
+            rows: merged,
             exhausted,
         })
     }
