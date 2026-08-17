@@ -7,9 +7,9 @@ title: The declaration check watched failing, and recovering
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,12 @@ archetype: capability
 slice: page-need-gate-step
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:06.170Z
+updated: 2026-08-17T22:02:29.724Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

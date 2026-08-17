@@ -411,5 +411,6 @@ Knowledge base and standards:
   [`../_decomposition.md`](../_decomposition.md); `architecture` and `deployment` are
   not warranted here. The `testing` brief is earned by AC-005 and by DT-6's possible
   compiled wrong side.
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup
 - [`../initiative.md`](../initiative.md) — the initiative charter
 - [`../_decomposition.md`](../_decomposition.md) — the decomposition of record

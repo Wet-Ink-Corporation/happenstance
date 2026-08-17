@@ -377,5 +377,6 @@ Board-invisible drill-down for this card:
   review is a skip, so this is the only record of those choices
 - The three warranted briefs — `architecture`, `ux`, `testing` — authored into this
   directory by the briefs workflow. No `deployment` brief is warranted
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup
 - [`../_decomposition.md`](../_decomposition.md) — the decomposition of record
 - [`../initiative.md`](../initiative.md) — the initiative charter

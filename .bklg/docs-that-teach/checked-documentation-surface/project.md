@@ -348,3 +348,4 @@ Gate and standards:
 - [`_storymap.md`](_storymap.md) — the vertical-slice story map
 - [`_intake-brief.md`](_intake-brief.md) — this project's intake artifact
 - [`../initiative.md`](../initiative.md) — the initiative charter
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup

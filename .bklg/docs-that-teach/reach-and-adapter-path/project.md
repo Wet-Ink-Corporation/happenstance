@@ -355,3 +355,4 @@ Code and existing surfaces:
   record, including this project's dependency edges and its warranted briefs
   (`architecture`, `ux`; no `testing`, no `deployment`)
 - [`../initiative.md`](../initiative.md) — the initiative charter
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup

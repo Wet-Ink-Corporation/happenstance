@@ -7,9 +7,9 @@ title: The hand-off note naming one directly observed persona
 parent: HS-P0024
 initiative: docs-that-teach
 project: comprehension-evidence
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,12 @@ archetype: capability
 slice: scoped-claim-and-handoff
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:11.990Z
+updated: 2026-08-17T22:02:52.607Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

@@ -370,3 +370,4 @@ Board-invisible drill-down for this card:
   workflow and approved at the story-map review gate
 - [`../initiative.md`](../initiative.md) — the initiative charter
 - [`../_decomposition.md`](../_decomposition.md) — the initiative decomposition of record
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup

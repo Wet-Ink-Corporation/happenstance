@@ -156,7 +156,7 @@ here, and no `[FROZEN]` clause is touched. The binding constraints are conventio
   (`:73`, `:195-197`), which must keep precedence over
   the new arm; and, as a *fact* rather than a symbol, `xtask::narrative::TREE` in the slice-mate's
   lib-crate module (`_design.md` `## Signatures`).
-- **Renders surfaces**: **none** of the six ids in `_design.md` `## Surfaces`. The output this
+- **Renders surfaces**: **none** of the five ids in `_design.md` `## Surfaces`. The output this
   story changes is the `=== affected packages ===` banner and package list at
   `xtask/src/affected.rs:130-135`, which the design deliberately does not claim as a surface —
   its two gate surfaces (`gate-narrative-compile-step`, `gate-narrative-checker-step`) belong to
@@ -268,7 +268,7 @@ run). The `ci` and `ci --fast` halves of AC-009 belong to the slice-mate
 
 ## Interaction quality
 
-This story renders **none** of the six surfaces in `_design.md` `## Surfaces`. It changes
+This story renders **none** of the five surfaces in `_design.md` `## Surfaces`. It changes
 which package names appear in an output block the design deliberately does not claim
 (`xtask/src/affected.rs:130-146`). The invariants below therefore apply in the terminal's
 medium, and every one of them is carried by an AC row above — this section only says which

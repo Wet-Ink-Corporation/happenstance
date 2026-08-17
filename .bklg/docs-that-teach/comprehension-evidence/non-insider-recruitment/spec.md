@@ -9,124 +9,294 @@ rendered_sig: 605d80a9
 
 # Spec — Recruit a reader who is verifiably outside, and record the declaration
 
+## Scope lock
+
+| What | Path |
+| --- | --- |
+| Initiative (gold source) | [`.bklg/docs-that-teach/initiative.md`](../../initiative.md) — BR-05, BR-06, BR-14; AC-09; DoD-5 (lines 429–433) |
+| Initiative decomposition | [`.bklg/docs-that-teach/_decomposition.md`](../../_decomposition.md) — DT-9 ownership (line 158), the DAG edge, the warranted-brief table |
+| Project | [`.bklg/docs-that-teach/comprehension-evidence/project.md`](../project.md) — AC-003 is this story's sole traced criterion; the disqualifying-criteria bullet (lines 84–89); risk row 1 (line 295) |
+| This spec | `.bklg/docs-that-teach/comprehension-evidence/non-insider-recruitment/spec.md` |
+| Key briefs | [`../_decomposition.md`](../_decomposition.md) — `## UX brief` (the three users, the state enumeration at lines 73–95, the accessibility floor, IQ-1…IQ-7) and `## Testing brief` (the AC/tier table; AC-003's row at line 415) |
+| Signed-off design | [`../_design.md`](../_design.md) — signed off by the repository owner 2026-08-17, `hasSurface: false` (lines 103–116). **Binding, and not re-decided here.** |
+| Grounding | [`../_grounding.md`](../_grounding.md) — the citation audit every brief above rests on |
+| Roadmap pointer | [`../_storymap.md`](../_storymap.md) — this story's row (line 57), the dependency note (lines 129–135), `## Merge order` step 1 |
+
+## One-line PR slice
+
+Apply the written criteria to a real candidate and record the reader's own declaration, platform, toolchain and assistive technology in the log — including the ineligible-but-used-anyway state, if it occurs, as a stated failure of the artefact rather than a redefinition of the bar.
+
+## Executive summary
+
+This PR lands the **declaration**: the recruited reader's own, dated, first-person statement of where they stand against the disqualifying criteria that `dt9-and-fixed-protocol` already froze in [`../_design.md`](../_design.md), written into the declaration section that `friction-log-skeleton` already landed in the friction log — plus the environment of record (platform, toolchain, browser, assistive technology) and an explicit three-valued eligibility verdict.
+
+**Pointer, not restatement.** The method, the persona and the criteria themselves are not this story's; they are `_design.md`'s, and the log's shape is the skeleton's. The delta this PR adds on top of those two is narrow and entirely about evidence of *provenance*:
+
+1. A real named candidate has been screened **against the criteria as written**, unchanged, with the file untouched while the candidate was in hand.
+2. The declaration is the reader's, not the facilitator's summary of it, and is complete enough that a reviewer six months from now can check it **without asking the reader anything further** — which is the literal bar in `project.md`'s AC-003 (line 207–209).
+3. Eligibility resolves to one of exactly three states, and the third — *ineligible, used anyway* — is representable and says the artefact is unmet, rather than being smoothed away by widening the bar.
+
+This story ends at a declared, dated, eligible reader. It does **not** run the session: that is `session-run-against-pinned-tree`, which is blocked on the HS-P0022/HS-P0023 merge, whereas recruitment deliberately starts earlier (`project.md`, `## Risks and coupling notes`, closing paragraph).
+
 ## Context pack
 
-The MUST-READ distilled core (RFC §6.8/D7): the smallest high-signal set of load-bearing DECISIONS this story
-must honor, internalized before any code — the ADR trade-offs, the mount/integration points, the persona-journey
-slice it realizes — stated as decisions, not a reading list. This layer is self-sufficient on first load; the
-deeper artifacts stay behind the signposted, AC-bound anchors below (progressive disclosure, not duplication).
+Everything below is a decision this story must honour. Read it once; the deeper artifacts stay behind the anchors.
 
-## Behavior
+**Non-insider status is the mechanism, not a courtesy.** The research this project rests on says plainly that new hires make the best friction loggers *because* they lack the inside knowledge that lets an insider unconsciously route around a rough spot ([`../../_discovery/research/04-comprehension-as-evidence-documentation-usability-testing-co.md`](../../_discovery/research/04-comprehension-as-evidence-documentation-usability-testing-co.md), lines 30 and 61). It implicates **insider knowledge, not authorship** — so "has not written the docs" is not the bar. The bar named in `project.md` (`## In scope`, lines 84–89) is: has not authored the material under test, has not read `crates/happenstance-core/`'s source, has not read `references/adr/` or `references/evaluation/`. The *operative* list is whatever `_design.md`'s protocol section fixed under project AC-002; apply that list verbatim, item by item, and treat this paragraph as the reason it exists rather than as the list itself.
 
-The observable behavior this work must exhibit.
+**The criteria are frozen before the candidate is approached, and this story must not touch them.** Project AC-002's check is mechanical: `git log --format=%aI -- <path to _design.md>` must predate the session date recorded in the log (`../_decomposition.md`, `## Testing brief`, line 414). The failure mode this forbids is not only "criteria written afterwards" but "criteria adjusted with a candidate in hand" — a softened criterion still leaves the commit date intact and destroys the argument anyway. **If the candidate does not fit, that is a finding about the candidate, never an edit to `_design.md`.** Consequence for the PR boundary below: `_design.md` is out of bounds for this story, deliberately.
+
+**The declaration is the reader's own words, and it must be self-contained.** `project.md` AC-003 requires a reviewer to check it *without asking the reader anything further*. That rules out three shapes that would otherwise pass a shallow read: a facilitator's third-person paraphrase ("Confirmed they're outside the project"); a blanket single-line assertion that does not name which criteria it answers; and a declaration that answers the criteria as a set rather than one by one, so a reviewer cannot tell which one the "no" applies to. Record it criterion-by-criterion, in the first person, dated with the date it was **given** — which must itself precede the session date, extending AC-002's provenance chain rather than depending on it.
+
+**Eligibility is three-valued, and the third value is a real state.** The UX brief enumerates it so it is designed in rather than discovered as a missing column: *eligible / ineligible / ineligible-but-used-anyway*, and "if it occurs, the artefact is unmet and the log says so" (`../_decomposition.md`, `## UX brief`, lines 77–79, tracking `project.md`'s risk row 1 at line 295). The initiative's own position is that no reader found is a **failure of the initiative, not a reason to redefine the bar**. Both of the non-green arms must therefore be expressible in the artifact, in that language, before either is needed — a state that only exists once it is required is a state the record will not have.
+
+**The reader's environment is part of the evidence, captured now rather than reconstructed later.** Platform, toolchain, browser and any assistive technology in use, because a stumble is only reproducible against the context that produced it (`../_decomposition.md`, `## UX brief`, the accessibility floor and UX-AC-004 at lines 251–254). Captured at declaration time: after the session it is a memory, and the same brief's objection to retrospective reconstruction applies here as much as to the narration mode.
+
+**This is a mount, not a new file.** The declaration is written into the section `friction-log-skeleton` already landed, using the skeleton's own heading vocabulary. Two invariants of that skeleton bind here: **IQ-3** — ids and headings are stable once written, because a later reader landing on a cited anchor must find the item that was cited (`../_decomposition.md`, lines 196–200 and UX-AC-007 at 261–264) — and **IQ-2**, nothing exists only in a filtered or collapsed view. A second log file, a renamed heading, or a declaration kept in the story folder and summarised into the log would each break one of them.
+
+**The persona-journey slice.** Three users, and this story serves all three at different times (`../_decomposition.md`, `## UX brief`, the user table at lines 63–67). **U2, the facilitator**, acts here: they apply the criteria and capture the declaration. **U1, the recruited reader**, is the subject and must not be coached — the same non-interference logic that IQ-5 imposes during the session applies to recruitment, because a candidate walked through which answer keeps them eligible is no longer declaring anything. **U3, the downstream actor** — a reviewer, a sibling-project owner, eventually HS-P0025 — is the reader this section is *written for*, six months later, with no one left to ask.
+
+**What this story does not get to decide.** `_design.md` records `hasSurface: false` and declares no public API and no rendered UI (`../_design.md`, lines 10–65, 103–116); this story adds no `pub` item and touches no crate. It authors nothing under `.kb/` — hand-authoring atoms outside the ingest path is a named non-goal and the first attempt was reverted (`0269720`) — and it promotes no persona, which is HS-P0025's (`project.md`, `## Out of scope`). If the recruitment attempt surfaces a finding that belongs elsewhere, it is routed by **id**, never by description: `HS-P0022`, `HS-P0023`, or the `support` initiative per `.redkiln/config.yaml:5` (`../_decomposition.md`, IQ-7 at lines 219–223).
 
 ## Integration contract
 
-How this story mounts into the real app — not an isolated component. State:
+| Field | Value |
+| --- | --- |
+| **Archetype** | `capability` — a user-observable slice: a real person is screened, and the record a stranger audits changes as a result |
+| **Slice / milestone** | `session-protocol`. Slice-mates: `dt9-and-fixed-protocol`, `friction-log-skeleton`. All three are implemented in one context and mounted as one integrated surface; the merge order inside the slice is protocol → skeleton → **this story** (`../_storymap.md`, `## Merge order`, step 1) |
+| **Mount point** | `.bklg/docs-that-teach/comprehension-evidence/_friction-log.md` — the **logger identity / declaration section** of the single friction log that `friction-log-skeleton` lands. That filename follows this project's existing `_`-prefixed companion convention (`_design.md`, `_grounding.md`, `_storymap.md`, `_decomposition.md` all sit beside it); the authoritative name and heading vocabulary are `_design.md`'s to fix (`../_storymap.md`, line 88). **Resolve the real path by reading `_design.md`'s protocol section before writing, and correct the path in this spec and in the PR boundary below if it differs — never create a second log.** |
+| **Wires into** | `_design.md`'s protocol section — the disqualifying criteria produced by `dt9-and-fixed-protocol` (read-only here) · the skeleton's declaration and date fields from `friction-log-skeleton` · the document primitives named in `../_decomposition.md`, `## UX brief`, `#### The primitive layer to compose from`: [`.redkiln/templates/briefs/brief.md`](../../../../.redkiln/templates/briefs/brief.md)'s Intent/AC/Notes spine, the two-column routing-table shape [`docs/README.md`](../../../../docs/README.md) already uses, and the **one-line checkbox** primitive from [`.redkiln/templates/gates/`](../../../../.redkiln/templates/gates/) — the parser matches line by line and a wrapped box never matches · [`.redkiln/config.yaml`](../../../../.redkiln/config.yaml):5 (`support_initiative: support`) as a routing destination if recruitment surfaces a library-side finding · [`.redkiln/templates/_ledger.md`](../../../../.redkiln/templates/_ledger.md), whose `evidence` / `verifying_test` columns this story's criteria are cited into |
+| **Renders surfaces** | **None** in `_design.md`'s `## Items` sense — it declares no public API and no rendered UI, and the `## Items` block is `# no items` (`../_design.md`, lines 63–65). The artifact this story writes into is user-facing surface **2** in that file's own enumeration, *"the friction log — a dated markdown artifact whose reader is a reviewer, a sibling-project owner, and eventually HS-P0025"* (`../_design.md`, lines 41–42) |
+| **Conformance rule(s)** | **None, and this is not adapter-observable.** This story adds no crate code and no port behaviour; `happenstance-testkit`'s `suite.rs` cannot observe a markdown declaration. The analogous instrument is the ledger discipline `require_ledger: true` imposes (`.redkiln/config.yaml:67`), with `evidence` as a real `file:line` into the log — see `../_decomposition.md`, `## Testing brief`, opening paragraph |
+| **Clause(s)** | **None.** No `spec/SPECIFICATION.md` clause is discharged or amended; nothing here touches a `[FROZEN]` clause, so no ADR is owed |
+| **Advances DoD scenario** | **DoD-5** (`../../initiative.md`, lines 429–433) — *"A reader who is not the author and not an insider completes a stated scenario, and it is recorded."* This story lands the clause of DoD-5 that says **"the logger's declared non-authorship and non-insider status"**; the walk and the chronological record are `session-run-against-pinned-tree`'s half. Mirrored at project grain as DoD-1 (`project.md`, `## Definition of done`) |
 
-- **Archetype**: `capability` (a user-observable slice through every layer) or `foundation` (real
-  in-tree substrate consumed by a capability slice in this initiative — never a double or a fixme).
-- **Slice / milestone**: the milestone id this story is delivered with (its slice-mates).
-- **Mount point**: the real composition-root / render-path file this capability wires into (never
-  constructed-but-unmounted or reachable only through a test).
-- **Wires into**: the real sibling contracts it consumes — the ports, the value types, the testkit
-  fixtures — named by path.
-- **Public items**: the `path` ids from the project's `_design.md` `## Items` block this story
-  implements or changes. Name them. An item no story claims is an item nobody built, and the design
-  sign-off becomes a document about work that did not happen.
-- **Conformance rule(s)**: the rule id(s) in `suite.rs` that observe this story's behaviour, or the
-  explicit statement that it is not adapter-observable and why. A story that changes a port and names
-  no rule is a port change nothing can fail.
-- **Clause(s)**: the `SPECIFICATION.md` clause ids this story discharges or amends. Changing a
-  `[FROZEN]` clause takes a new ADR, not an edit — say which ADR if so.
-- **Advances DoD scenario**: which initiative Definition-of-Done scenario this story moves toward green.
-
-## Acceptance Criteria
-
-Framed from USER INTENT — a persona goal crossing the full stack (GIVEN a <persona> <context>, WHEN they
-<action>, THEN <observable, humane outcome>), not a bare capability ("rename works"). Each maps to a real-path
-test.
-
-- AC-001:
-
-## Surface quality
-
-The invariants this story must honor as first-class, blocking criteria — never demoted to a
-non-functional footnote.
-
-**This section replaces the bundled template's interaction-quality list**, which is about screens. A
-Rust library has the same hole in a different medium, and the substitution is not a softening: every
-bullet below names something that a green conformance suite, a green clippy and a green `missing_docs`
-are all satisfied by. What it is not allowed to become is a list of invariants no story can fail —
-strike a bullet that cannot fail here rather than ticking it.
-
-**Write each one as an `AC-###` row in the table above, not as a bullet here.** `redkiln verify`
-extracts acceptance criteria by matching `| AC-001 |` and `- AC-001:`; prose bullets in this section
-match neither, so an invariant left as a bullet gets no ledger row, is never gated, and is never
-tested. List the ids that carry each invariant below and how each is verified.
-
-**Surface invariants** — is the thing a caller meets the thing that was designed? Take these from the
-project's `_design.md`, not from first principles; this story implements that surface, it does not
-re-decide it:
-
-- **The surface exists as designed** — signatures match `## Signatures`, item for item. A body that is
-  correct behind a signature nobody agreed to is a different deliverable.
-- **Both flavours** — anything touching a port type-checks on the bare *and* the `Send` flavour, or the
-  spec says which one it deliberately does not serve and why (ADR-0001).
-- **The example compiles** — the doctest from `_design.md`'s `## The doctest` exists in the source and
-  is run by the gate. A described example is not a checked one.
-- **Errors are documented** — every fallible public function carries an `# Errors` section naming the
-  conditions, not the error type.
-- **Visibility is as signed off** — `pub` / `pub(crate)` / `#[non_exhaustive]` / feature gate exactly as
-  `## Visibility and stability` states. An item that became `pub` during implementation is a semver
-  promise nobody made.
-- **Anti-patterns** — none of the forbidden moves named in `_design.md` or in `CLAUDE.md`'s binding constraints appear.
-
-**Suite invariants** — apply to any story that touches `happenstance-testkit`. Each is a rule this
-repository has already been burned by:
-
-- **The rule can fail** — a named wrong implementation exists in the mutant registry and this rule
-  rejects it. A rule no adapter can fail is decorative.
-- **No literal position values** — the specification permits gaps, so asserting `[1, 2, 3]` converts a
-  `MAY` into a `MUST` without an ADR (CF-6).
-- **No clock** — a conformance rule does not read time (CF-33).
-- **A changelog entry** — naming the defect the rule detects (CF-29).
+**Delivered mounted, not as an isolated component.** The acceptance bar is that a reviewer opening the friction log at its declaration section finds the declaration there — not that a declaration exists somewhere in this story's folder and is referenced.
 
 ## PR boundary
 
-The paths this story is allowed to touch, as globs. `redkiln verify --grain story` reads the first
-fenced block under this heading and fails on any file changed outside it — so this replaces a
-self-reported list of touched files with one computed from git.
-
-Write the narrowest set that is honestly true. A boundary widened to make a failing gate pass is a
-boundary that has stopped meaning anything; widen it in the spec, deliberately, or split the story.
-
-Include the story's own backlog folder when it will carry a ledger or report, and remember that
-`spec/SPECIFICATION.md` is source here even though rustc never opens it.
+`redkiln verify --grain story` reads the first fenced block below and fails on any file changed outside it.
 
 ```
-crates/<crate>/src/**
-crates/<crate>/tests/**
-.bklg/<initiative>/<project>/<story>/**
+.bklg/docs-that-teach/comprehension-evidence/_friction-log.md
+.bklg/docs-that-teach/comprehension-evidence/non-insider-recruitment/**
 ```
 
-## Error Conditions
+The first line is the mount point, and it is the *only* file outside this story's own folder that may change — mounting the declaration into it is the point of the story, not scope drift. If `_design.md` fixed a different filename for the log, change that line to the real path deliberately, here in the spec, before implementing.
 
-- EC-001:
+**In this PR**
 
-## Non-Functional
+- The reader's own declaration, criterion-by-criterion against `_design.md`'s written criteria, dated with the date it was given, in the log's existing declaration section.
+- The environment of record: platform, toolchain, browser, assistive technology.
+- The explicit eligibility verdict, one of the three enumerated states.
+- Whichever non-green arm applies, if one does: the *ineligible-but-used-anyway* statement that the artefact is unmet, or the *no reader found* terminal record — each with what was attempted.
+- This story's `_ledger.md`, `plan.md` and stage reports under its own folder.
 
-- NF-001:
+**Explicitly not in this PR**
+
+- **Any edit to [`../_design.md`](../_design.md).** The criteria are frozen; a candidate who does not fit is a finding, not an amendment. Re-deciding DT-9 or the severity scale is `dt9-and-fixed-protocol`'s, already merged by the time this lands.
+- **Any change to the log's shape** — new headings, new sections, renumbering, reordering. That is `friction-log-skeleton`'s, and IQ-3 makes changing it after the fact a citation-breaking act.
+- **Running the session, or any chronological entry.** `session-run-against-pinned-tree`, blocked on the HS-P0022/HS-P0023 merge.
+- **Any dispositioning, routing or escalation content.** `disposition-every-stumble` and `route-and-escalate`.
+- **Any `.kb/` atom, and any persona promotion or reconciliation.** HS-P0025's, through the ingest path (`project.md`, `## Out of scope`).
+- **Any crate, example or `docs/` change.** Content fixes are `content-fixes-from-dispositions`, and they require a disposition to exist first.
+
+**Merge DoD one-liner.** Merge when a reviewer opening the friction log at its declaration section can resolve the reader's eligibility against `_design.md`'s written criteria, item by item, without contacting the reader — with `redkiln validate` and `redkiln doctor` clean and no new `template-drift` beyond the six standing advisories (`project.md`, DoD-8).
+
+## Behavior and interfaces
+
+| Behavior or contract | Details | Evidence path |
+| --- | --- | --- |
+| **Screen against the criteria as written** | The facilitator reads the disqualifying criteria out of `_design.md`'s protocol section and applies them unchanged. No criterion is added, dropped or softened while a candidate is in hand; `_design.md` is not modified by this story at all. The screening happens against a commit that already predates it. | `../_decomposition.md`, `## Testing brief`, AC-002 row (line 414) — `git log --format=%aI -- <_design.md>`; `project.md`, `## In scope`, lines 84–89 |
+| **Capture the declaration in the reader's own voice** | First person, criterion-by-criterion — one answer per written criterion, so a reviewer can tell which criterion a "no" belongs to. A facilitator paraphrase, a single blanket assertion, or an answer to the criteria as an undifferentiated set each fail this. | `project.md` AC-003 (lines 207–209); `../_decomposition.md`, `## Testing brief`, AC-003 row (line 415) |
+| **Date the declaration with the date it was given** | Distinct from, and earlier than, the session date the log will later carry. This extends the AC-002 provenance chain: criteria commit → declaration date → session date, each strictly before the next. | `../_decomposition.md`, `## UX brief`, *Protocol fixed, nobody recruited* (lines 73–76) |
+| **Record the environment of record** | Platform, toolchain, browser, and any assistive technology in use — captured at declaration time, not reconstructed after the session. | `../_decomposition.md`, `## UX brief`, the accessibility floor (lines 167–170) and UX-AC-004 (lines 251–254) |
+| **Resolve eligibility to exactly one of three states** | `eligible` / `ineligible` / `ineligible-but-used-anyway`, stated as a token a reviewer can read from plain text with all styling stripped — never implied by the absence of an objection. "Not mentioned" is not one of the states. | `../_decomposition.md`, `## UX brief`, *Candidate declared, eligibility resolved* (lines 77–79) |
+| **The third arm says the artefact is unmet** | If an ineligible reader is used anyway, the log states that this is a **failure of the artefact**, names which criterion was breached, and does not redefine the criterion to fit. The finding is routed by id, not absorbed. | `project.md`, risk row 1 (line 295); `../../initiative.md`, `## Assumptions`; IQ-7 (`../_decomposition.md`, lines 219–223) |
+| **No reader found is a recorded terminal state** | If recruitment fails, the declaration section records the terminal state with what was attempted and over what period. An insider is never substituted to produce an artifact. | `../_decomposition.md`, `## UX brief`, *No reader found* (lines 94–96) |
+| **Mount into the existing section, append-only** | Written into the skeleton's own declaration section under its own headings; other sections, ids and ordering untouched. One log file. Nothing lives only in a summary, a fold or this story's folder. | IQ-2 / IQ-3 (`../_decomposition.md`, lines 189–200); UX-AC-006 / UX-AC-007 (lines 258–264) |
+| **Non-interference during recruitment** | The candidate is not coached toward an eligible answer, and any prior exposure they volunteer is recorded as given rather than negotiated. The same logic as IQ-5's session rule: a coached declaration is agreement, not evidence. | `../_decomposition.md`, IQ-5 (lines 208–213); research 04, lines 30 and 61 |
+| **Identity is a resolvable referent** | Whatever identity form is used — a name, or a stable pseudonym plus who can vouch for it — a reviewer six months later can resolve it without asking the facilitator. The UX brief's whole intent for this artifact is that *"a stranger six months later can audit without asking anyone a question."* | `../_decomposition.md`, `## UX brief`, `### Intent` (lines 20–23); `project.md` AC-004's "logger identity" element |
+| **Interfaces** | **None.** No public API, no crate, no signature, no doctest — `_design.md`'s `## Signatures` … `## The doctest` are all `N/A — no user-facing surface`, and its `## Items` block is `# no items`. | `../_design.md`, lines 67–101 (the `N/A` block) and 63–65 (`# no items`) |
+
+**Verification grain.** The story-grain check is `cargo xtask affected --base {{base}}` (`.redkiln/config.yaml:40`), which for a diff touching nothing under `crates/` falls through to the file-reading lints and `spec-trace` rather than passing vacuously on an empty package set (`../_decomposition.md`, `## Testing brief`, `### Notes`, first paragraph). The integration bar for this non-terminal project is `cargo xtask ci --fast` (`.redkiln/config.yaml:55`). Neither says anything about comprehension, and neither is offered here as though it did.
+
+## Data and migrations
+
+**N/A — no schema, no store, no migration.** This story adds no table, no serialised type and no persisted format under any adapter crate; it appends prose to one markdown file.
+
+Stated rather than left blank because the analogue is real and does bind. The log's **stumble ids and heading anchors are the schema** of this project's evidence: IQ-3 makes them stable once written, and a sibling project's citation into a heading is exactly the kind of reference a rename breaks (`../_decomposition.md`, lines 196–200). This story therefore performs the moral equivalent of an additive-only change — filling a section the skeleton already declared — and never the equivalent of a rename or a backfill. A declaration that arrives after a heading has been re-worded to accommodate it is the migration this project does not do.
+
+The one durable-knowledge seam is likewise closed: nothing here is written to `.kb/`, and the persona this evidence eventually supports is promoted at closeout by HS-P0025 through the ingest path, never hand-authored (`project.md`, `## Out of scope`; `CLAUDE.md`, `## Where the work lives`).
+
+## Acceptance criteria
+
+Seven criteria. Each is framed from the intent of one of the three users in [`../_decomposition.md`](../_decomposition.md), `## UX brief` (lines 63–67) — **U1** the recruited reader, **U2** the facilitator, **U3** the downstream actor six months later — because a criterion phrased as a capability ("a declaration exists") is satisfied by an artifact that fails the only reader it was written for. All seven together discharge project **AC-003** (`project.md`, lines 207–209), and they carry the interaction-quality invariants enumerated in the section below: there is no invariant here that is not also a row in this table.
+
+`redkiln verify --grain story` extracts these by the leading `| AC-00n |` cell, and [`_ledger.md`](_ledger.md) carries one row per id (`.redkiln/config.yaml:67`, `require_ledger: true`).
+
+| id | criterion | verification |
+| --- | --- | --- |
+| **AC-001** | **GIVEN** the disqualifying criteria are already frozen in `_design.md` at a commit that predates this story, **WHEN** U2 the facilitator screens a real named candidate, **THEN** every criterion is applied exactly as written — none added, dropped, reworded or softened while the candidate is in hand — and `_design.md` is unchanged by this PR, so a reviewer can see the criteria could not have been fitted to the person who answered them. | Static (provenance), two checks, plus ledger evidence. `git log --format=%aI -- .bklg/docs-that-teach/comprehension-evidence/_design.md` returns a timestamp strictly earlier than the declaration date in the log; `git diff --stat <base>...HEAD -- .bklg/docs-that-teach/comprehension-evidence/_design.md` is **empty**. The wrong implementation both reject: a criterion relaxed mid-recruitment, which leaves AC-002's commit date intact and would otherwise pass unnoticed (`../_decomposition.md`, `## Testing brief`, AC-002 row, line 414). Ledger `evidence` is a `file:line` into the log's declaration section. |
+| **AC-002** | **GIVEN** U3 opens the friction log six months later with nobody left to ask, **WHEN** they read the declaration section, **THEN** they find the reader's **own first-person** answer to **each** written criterion — one answer per criterion, tied to that criterion's own label in `_design.md` rather than restating its text — and can resolve eligibility from that section plus `_design.md` alone. A facilitator's third-person paraphrase, a single blanket assertion, or one answer covering the criteria as an undifferentiated set each **fail** this criterion. | Artifact-evidence, reviewer-read against a named artifact, cited in the ledger as `file:line`. The reviewer performs the AC-003 test literally: resolve the verdict without contacting the reader or the facilitator. Also `rg -n` the declaration section for one answer line per criterion label present in `_design.md` — a count mismatch is a mechanical fail, and it rejects the blanket-assertion shape rather than merely confirming a heading exists (`../_decomposition.md`, `## Testing brief`, `### Notes`, *Do not automate … into a check that nothing can fail*). |
+| **AC-003** | **GIVEN** the project's AC-002 fixes a provenance chain — criteria commit → declaration → session — **WHEN** U2 records the declaration, **THEN** it carries the date it was **given** (not the date it was transcribed), that date is strictly later than the `_design.md` criteria commit and strictly earlier than any session date the log later records, and no date is back-filled or inferred. | Static (provenance) date comparison, three terms, run from this worktree: `git log --format=%aI -- .bklg/docs-that-teach/comprehension-evidence/_design.md` < declaration date < session date (absent until `session-run-against-pinned-tree`, so the third term is asserted as a **bound the log must not later violate** and re-checked there). Rejects the wrong implementation where the declaration is dated the day it was written up, collapsing the chain to a single point. |
+| **AC-004** | **GIVEN** a stumble is only reproducible against the context that produced it, **WHEN** the declaration is captured, **THEN** U1's environment of record — **platform, toolchain, browser, assistive technology** — is recorded at declaration time, all four present, with `none` stated explicitly where one does not apply rather than the field being silently omitted. Reconstructed-after-the-session values fail: the same objection the UX brief raises to retrospective narration applies to context. | Static (presence) + artifact-evidence. `rg -n` the declaration section for the four field labels the skeleton declares; a missing field and an empty field are distinguishable, which is the point of requiring `none`. Ledger cites the `file:line`. Grounded in `../_decomposition.md`, `## UX brief`, the accessibility floor (lines 167–170) and UX-AC-004 (lines 250–254). |
+| **AC-005** | **GIVEN** eligibility is three-valued by design, **WHEN** U2 records the verdict, **THEN** the log carries **exactly one** of `eligible` / `ineligible` / `ineligible-but-used-anyway` as a plain-text token legible with all styling stripped and in a `git diff`; the third arm additionally states **the artefact is unmet**, names which criterion was breached, and does not redefine that criterion to fit; and a verdict changed after first being written is recorded **as a revision beside the original**, with the earlier verdict and the reason still legible, never an in-place overwrite. Absence of an objection is not a verdict. | Static (token presence) + artifact-evidence. `rg -n` returns exactly one of the three tokens in the declaration section; zero tokens and two tokens both fail. Colour, emoji or bolding as the sole carrier fails on the plain-text read (`../_decomposition.md`, accessibility floor, lines 144–160). The revision rule is [`.kb/governance/rewrite-the-referent-never-the-reasoning.md`](../../../../.kb/governance/rewrite-the-referent-never-the-reasoning.md) applied through IQ-4 (lines 201–207) and is checked by reading the section, and by `git log -p` on the log showing no verdict line replaced without its predecessor surviving in the text. |
+| **AC-006** | **GIVEN** U1 must remain resolvable to a stranger and must not be coached, **WHEN** identity and prior exposure are recorded, **THEN** the declaration names a referent a reviewer can resolve **without asking the facilitator** — a name, or a stable pseudonym plus who can vouch for it — and any prior exposure the candidate volunteers is recorded **as given**, not negotiated toward the answer that keeps them eligible. A declaration produced by walking the candidate to the eligible answer is agreement, not evidence. | Artifact-evidence, reviewer-read, cited as `file:line`. The check is the UX brief's own intent test — *a stranger six months later can audit without asking anyone a question* (lines 20–23) — applied to the identity field: a bare first name with no vouching route fails it, and so does an identity resolvable only through the facilitator. Non-interference is asserted in the record the way IQ-5 asserts it for the session (lines 208–213): the declaration states how the criteria were put to the candidate. |
+| **AC-007** | **GIVEN** `friction-log-skeleton` has already landed the single friction log, **WHEN** the declaration is mounted, **THEN** it appears **inside that log's existing declaration section**, composed into the skeleton's own field vocabulary and the repository's document primitives — never a pasted raw transcript blob, a bespoke format, or a second log file — with **no new or renamed heading, no id renumbered, no section reordered**, nothing added only to a summary, a fold or this story's folder, and the whole section reachable and readable as plain text by browser find with no widget, script or rendering tool. Any checkbox occupies exactly one line. | Static (structure) + artifact-evidence. `git diff -U0 <base>...HEAD -- <log path>` shows **no removed heading lines and no heading lines outside the declaration section**; `rg -n "<details|<summary"` over the log returns nothing; `ls` of this story's folder shows no second copy of the declaration. The deletion test from UX-AC-006 (lines 258–260) is applied directly: delete every roll-up and fold and the declaration is still complete. The one-line-checkbox constraint is `CLAUDE.md`'s parser rule, sourced from [`.redkiln/templates/gates/`](../../../../.redkiln/templates/gates/). |
+
+**Coverage of the traced project AC.** `project.md` AC-003 has two clauses — *the log carries the reader's own declaration against the criteria in AC-002* (AC-001, AC-002, AC-006, AC-007 here) and *a reviewer can check that declaration without asking the reader anything further* (AC-002, AC-003, AC-004, AC-005, AC-006). Both are covered, and no criterion above claims anything the project did not ask for. The initiative clause advanced is DoD-5's *"the logger's declared non-authorship and non-insider status"* ([`../../initiative.md`](../../initiative.md), lines 429–433).
+
+## Interaction quality
+
+This project renders no screen and `_design.md` records `hasSurface: false` with `# no items` (lines 63–65) — so "presentation" here is the composition of a **markdown artifact a stranger audits**, which is user-facing surface 2 in that file's own enumeration (lines 41–42). `_design.md`'s `## Anti-patterns` section is `N/A — no user-facing surface`; the operative anti-pattern list for this medium is therefore the one `_design.md` itself points at as the primitive layer: [`../_decomposition.md`](../_decomposition.md), `## UX brief` (the accessibility floor, IQ-1…IQ-7) and [`../../_discovery/distillation/interaction-patterns.md`](../../_discovery/distillation/interaction-patterns.md), `## Anti-patterns`. Nothing below re-decides either.
+
+Every invariant that applies is carried by a row in the table above. This section says **which row carries which invariant, and how it is verified** — it adds no new obligation.
+
+**State invariants**
+
+| Invariant | Carried by | How it is checked |
+| --- | --- | --- |
+| **In place, not a context jump** (IQ-1, lines 182–186) | AC-002, AC-007 | The verdict is resolvable at the declaration section. Exactly **one** optional hop is permitted — outward to `_design.md`'s criteria list — and **zero** hops are required to read the verdict itself. A declaration that says "see the story folder for details" fails. |
+| **Non-occlusion — a fold must not hide what it folds** (IQ-2, lines 188–194) | AC-007 | The deletion test: remove every roll-up, fold and extract and the declaration is intact. `rg -n "<details\|<summary"` over the log returns nothing. |
+| **Preserved position — ids and headings stable once written** (IQ-3, lines 195–200) | AC-007 | The diff adds no heading and removes none; a sibling project's citation into a heading anchor still resolves after this PR. This is the invariant that makes the mount append-only in substance, not just in intent. |
+| **Reversibility** (IQ-4, lines 201–207) | AC-005 | A changed eligibility verdict is a revision beside the original with the reason attached; `git log -p` shows no verdict line overwritten without its predecessor surviving in the text. |
+| **Non-interference** (IQ-5, lines 208–213) | AC-006 | The declaration records how the criteria were put to the candidate; prior exposure is recorded as given, never negotiated. |
+| **Keyboard reachability** (accessibility floor, lines 161–166) | AC-007 | The section is reachable by browser find and by stable heading anchor; it requires no widget, script or rendering tool to be read. The same floor the log itself is held to. |
+
+**Composition invariants**
+
+| Invariant | Carried by | The real budget or rule |
+| --- | --- | --- |
+| **Presentation exists at all** | AC-007 | The declaration is *composed into* the skeleton's declared fields, not pasted in as a raw email or chat transcript. The primitives are named and real: the Intent/AC/Notes spine of [`.redkiln/templates/briefs/brief.md`](../../../../.redkiln/templates/briefs/brief.md), the two-column routing shape [`docs/README.md`](../../../../docs/README.md) uses, and the one-line checkbox from [`.redkiln/templates/gates/`](../../../../.redkiln/templates/gates/) (`../_decomposition.md`, lines 97–123). |
+| **Composition and placement** | AC-007 | Inside the log's existing declaration section, under the skeleton's headings, in the skeleton's field order. One log file. |
+| **Transience** | AC-007 | The declaration is **persistent chrome**: visible by default in the chronological artifact, never revealed-on-demand and never opened-on-demand. Nothing about eligibility lives behind a fold, a summary table or a link. |
+| **Density budget** | AC-002, AC-004, AC-005, AC-007 | Real numbers: **N criteria → N answers** (one per written criterion, none merged, none omitted); **4** environment fields, each present, `none` where inapplicable; **exactly 1** eligibility token; **1** date-given; **0** new headings; **0** renumbered ids; **1** log file; **1** optional outward hop and **0** required ones; each checkbox on **1** line. |
+| **Hierarchy** | AC-002, AC-007 | Criterion label → the reader's answer, one level, in the skeleton's heading hierarchy. The eligibility verdict reads as the section's conclusion, not as an aside inside a criterion answer. |
+| **Named anti-patterns, all forbidden** | AC-001, AC-005, AC-007 | A severity or status carried by colour or emoji alone (accessibility floor); a load-bearing item behind a fold, an inactive tab or a collapsed admonition (`interaction-patterns.md`, `## Anti-patterns`, and IQ-2); a bespoke widget or format layered onto a medium that already renders the equivalent for free; a wrapped checkbox the gate parser can never match; and — this story's own — a criterion edited to fit the candidate (AC-001). |
+
+An unstyled, structurally perfect render satisfies every presence check above and still fails AC-002 and AC-005: the criteria answers can each be present and still leave a reviewer unable to say which criterion a "no" belonged to, or whether the verdict was `ineligible` or merely unstated. That is what these rows exist to reject.
+
+## Error conditions
+
+| id | condition | required behaviour |
+| --- | --- | --- |
+| **EC-001** | The candidate fails one or more written criteria. | Record the verdict `ineligible` with the criterion that disqualified them, in their own words. **Do not edit `_design.md`.** This is a finding about the candidate, not an amendment to the bar (`project.md`, risk row 1, line 295). Recruitment continues or terminates in EC-004. |
+| **EC-002** | The candidate's exposure is genuinely ambiguous — the criteria as written do not resolve it (for example, they skimmed one `references/adr/` record years ago). | Record the exposure verbatim as the candidate stated it, resolve conservatively against the criteria **as written**, and record that the criteria did not settle the case as a **finding routed by id** (`../_decomposition.md`, IQ-7, lines 219–223). Widening or narrowing the criteria to resolve the ambiguity is forbidden and is the exact failure AC-001 exists to catch. |
+| **EC-003** | An ineligible reader is used anyway. | The third arm of AC-005. The log states the verdict `ineligible-but-used-anyway`, states that **the artefact is unmet**, names the breached criterion, and records that project AC-003 and initiative DoD-5 are consequently **not** satisfied by this evidence. The finding is routed by id, never absorbed (`../../initiative.md`, `## Assumptions`). The bar is not redefined to make the artifact green. |
+| **EC-004** | No eligible reader is found within the recruitment window. | The terminal state from `../_decomposition.md`, `## UX brief` (lines 94–96): the declaration section records *no reader found*, what was attempted, over what period, and with what candidate pool. An insider is **never** substituted to produce an artifact. This is a failure of the initiative and is recorded as one. |
+| **EC-005** | The log's declaration section is absent, or its filename or heading vocabulary differs from what this spec assumed. | **Halt.** Do not create a second log, do not invent a heading, do not write the declaration into this story's folder as a stand-in. Resolve the real path and vocabulary from `_design.md`'s protocol section and correct the mount point and the PR boundary in this spec deliberately (`## Integration contract`). A missing section means `friction-log-skeleton` has not landed and this story's `depends_on` is unmet. |
+| **EC-006** | The candidate withdraws, or asks to amend an answer, after declaring. | Append-only. The original declaration stays in the record as written, with a dated withdrawal or amendment recorded beside it and the reason attached — IQ-4 (lines 201–207) and [`.kb/governance/rewrite-the-referent-never-the-reasoning.md`](../../../../.kb/governance/rewrite-the-referent-never-the-reasoning.md). Deleting the earlier text is forbidden even at the reader's request; if the reader will not consent to the record persisting, that is EC-001 territory, resolved before anything is written. |
+| **EC-007** | The `_design.md` criteria commit does **not** predate the declaration date, or `_design.md` was touched during recruitment. | The provenance chain is broken and cannot be repaired by editing dates. Stop, record what happened, and escalate: back-dating a declaration or a commit is the single failure this story's whole argument rests on not having occurred. AC-001 and AC-003 both fail; neither may be marked satisfied. |
+| **EC-008** | The reader declines to be named in a public artifact. | Not a failure. AC-006 permits a stable pseudonym **plus who can vouch for it**, provided a reviewer can resolve the referent without asking the facilitator. A pseudonym with no vouching route does not satisfy AC-006 and is EC-001's outcome for auditability rather than for eligibility. |
+
+## Non-functional
+
+| id | requirement | how it is judged |
+| --- | --- | --- |
+| **NF-001 — Auditable in one read, by a stranger.** | A reviewer with no prior context resolves the eligibility verdict against `_design.md`'s criteria in a single pass over the declaration section, with at most one optional outward hop and no human contact. | The UX brief's stated intent (lines 20–23) and `project.md` AC-003's literal wording. Judged by having someone who did not write the declaration attempt exactly this. |
+| **NF-002 — Complete as static text.** | The section carries its full meaning with all styling stripped, in a `git diff`, and to a screen reader. No colour, emoji, motion, recording or rendering tool is load-bearing. | The accessibility floor (lines 144–175), WCAG 2.2 AA translated to this medium. `rg` over the raw file returns every token a reviewer needs. |
+| **NF-003 — Record only what the criteria and the context require.** | Identity, prior exposure and the four environment fields; nothing further about the person. The reader knows what is being recorded and where it will live before they declare. | Proportionality against AC-004 and AC-006's field lists. A declaration carrying employer, project affiliation or personal detail beyond the criteria is over-collection, not thoroughness. |
+| **NF-004 — Citations into this section survive.** | The heading anchors this declaration lands under remain resolvable after the log is finalised, because `session-run-against-pinned-tree` and `handoff-note-to-closeout` will cite into it. | IQ-3 (lines 195–200) and UX-AC-007 (lines 261–264). Checked as the AC-007 diff assertion. |
+| **NF-005 — Costs the repository gate nothing.** | The diff touches no crate, so `cargo xtask affected` falls through to the file-reading lints and `spec-trace` rather than compiling a package set; wall-clock cost of the gate is unchanged, and no new `template-drift` advisory appears beyond the six standing ones. | `.redkiln/config.yaml:40`; `project.md` DoD-8; `CLAUDE.md`, `## Where the work lives` (the six-template assertion). |
+| **NF-006 — Recruitment latency is bounded and recorded.** | This is the only story in the initiative whose schedule depends on a person outside the team (`project.md`, `## Risks and coupling notes`, closing paragraph). The recruitment window is recorded so that EC-004 is a dated decision rather than an indefinite wait. | The window and its start appear in the declaration section (or in the EC-004 terminal record). Judged present, not judged for length — this spec sets no duration, because the project charter sets none. |
+
+## Implementation notes (non-prescriptive)
+
+These are observations that save a wrong turn, not instructions. The implementer may reach the criteria above by any route that satisfies them.
+
+**Do this first, before contacting anyone.** Read `_design.md`'s protocol section end to end and resolve two things: the **operative criteria list** (the one this story applies verbatim — `project.md`'s three-bullet list at lines 84–89 is the *reason* the list exists, not necessarily its final wording) and the **real filename and heading vocabulary of the log**. If either differs from what the `## Integration contract` assumed, correct this spec's mount point and PR boundary deliberately before writing a line into the log. Both resolutions are cheap now and expensive after EC-005 has already happened.
+
+**Reference each criterion by its label, do not restate its text.** If the declaration paraphrases a criterion in order to answer it, `_design.md` and the log now hold two copies that can drift, and a reviewer six months later cannot tell which is authoritative. A label plus the reader's answer keeps exactly one authoritative statement of the bar.
+
+**Capture the declaration and the environment in the same sitting.** Splitting them is how the environment becomes a reconstruction, which is precisely the objection the UX brief raises to retrospective narration (line 66). If the declaration arrives by email or chat, transcribe it verbatim and attribute it; a verbatim quotation is the reader's own words, a summary of it is not.
+
+**Write the eligibility token last, and write it as a token.** It is a conclusion drawn from the criterion-by-criterion answers already on the page — not a judgement the answers are then arranged to support. Writing it first is how a borderline answer gets rounded toward the verdict already recorded.
+
+**If a non-green arm occurs, use the artifact's own language.** *"The artefact is unmet"* and *"no reader found"* are the phrases the UX brief and `project.md`'s risk row use. A softer paraphrase in the log is how the state stops being findable by the person who needs to find it, and the states were enumerated in advance precisely so neither has to be invented under pressure.
+
+**Nothing here is a `.kb/` atom, and nothing here promotes a persona.** If the recruitment turns up something durable about how non-insider readers are found, it is staged for ingest with the id of that hand-off recorded — it is not written into `.kb/` by this story (`project.md`, `## Out of scope`; `CLAUDE.md`).
+
+**Route findings by id, immediately.** `HS-P0022`, `HS-P0023`, or the `support` initiative per `.redkiln/config.yaml:5`. "Route to whoever owns the docs" is not a destination (IQ-7, lines 219–223).
+
+## Tests and CI (merge gate)
+
+The tiers are the ones `../_decomposition.md`'s `## Testing brief` already declares for this project — Artifact-evidence, Static (provenance/existence), and the ordinary repository gates. Nothing below converts the recruitment itself into an automated check; U1 and U2 are never mocked, scripted or simulated, because *"a stand-in reader is not a cheaper version of this instrument; it is a different, useless one"* (`## Testing brief`, `### Notes`).
+
+| tier | command / path | proves |
+| --- | --- | --- |
+| **Artifact-evidence (ledger)** | [`_ledger.md`](_ledger.md) — one row per AC, each `evidence` a real `file:line` into `.bklg/docs-that-teach/comprehension-evidence/_friction-log.md`; enforced by `redkiln verify --grain story` (`.redkiln/config.yaml:67`, `require_ledger: true`) | Every criterion is discharged against the artifact that is the deliverable, not against a memory of the session. Blocks `implement → report` until each row is `satisfied: true` with non-placeholder evidence (`.redkiln/templates/_ledger.md`, lines 10–17) |
+| **Static (provenance)** | `git log --format=%aI -- .bklg/docs-that-teach/comprehension-evidence/_design.md` compared against the declaration date in the log | AC-001, AC-003. Rejects a protocol written or adjusted to fit the reader — the check `../_decomposition.md`'s AC-002 row (line 414) already names |
+| **Static (immutability)** | `git diff --stat <base>...HEAD -- .bklg/docs-that-teach/comprehension-evidence/_design.md` — must be empty | AC-001. Rejects the softened-criterion failure that the timestamp check alone cannot see |
+| **Static (presence, content-asserting)** | `rg -n` over the log's declaration section for: one answer line per criterion label in `_design.md`; the four environment field labels; exactly one of the three eligibility tokens | AC-002, AC-004, AC-005. Deliberately asserts on **content**, not on structural presence — a check that merely confirmed a `Declaration:` heading exists would pass a blank one, which is the decorative-rule failure `../_decomposition.md`, `### Notes` warns against |
+| **Static (structure stability)** | `git diff -U0 <base>...HEAD -- <log path>` inspected for heading lines: no removals, no additions outside the declaration section; `rg -n "<details\|<summary"` over the log returns nothing | AC-007, NF-004. Rejects a renamed or re-ordered heading, and rejects a declaration parked behind a fold |
+| **Reviewer-read (the AC-003 test, performed)** | A reviewer who did not write the declaration resolves eligibility from the section plus `_design.md`, without contacting the reader or the facilitator; result recorded in the ledger | AC-002, AC-006, NF-001. This is the only instrument that can fail a declaration that is structurally perfect and still unauditable |
+| **Story grain** | `cargo xtask affected --base main` (`.redkiln/config.yaml:40`) | The gate is green for a diff that touches no crate — it falls through to the five file-reading lints and `spec-trace` rather than passing vacuously on an empty package set |
+| **Reachability, static** | `cargo xtask lints && cargo xtask spec-trace` (`.redkiln/config.yaml:48`) | No `SPECIFICATION.md` citation or doc-comment lint was broken. Expected to be a no-op here; run so that the expectation is checked rather than assumed |
+| **Integration (this project's merge bar)** | `cargo xtask ci --fast` (`.redkiln/config.yaml:55`) | DoD-7 at project grain. It says nothing about comprehension and is not offered as though it did (`../_decomposition.md`, `## Testing brief`, the E2E-tier paragraph) |
+| **Backlog hygiene** | `redkiln validate --kb && redkiln doctor` | DoD-8: clean, with no new `template-drift` beyond the six standing advisories `CLAUDE.md` documents. Also confirms no `.kb/` atom was hand-authored |
+| **PR boundary + provenance** | `redkiln verify --grain story` (`require_commit_provenance: true`, `.redkiln/config.yaml:73`) | No file changed outside the declared boundary — which is how a stray edit to `_design.md` fails the gate as well as AC-001 — and the work commit is recorded |
+
+**Not a tier here.** `cargo xtask ci` (`.redkiln/config.yaml:60`) is the terminal bar and belongs to HS-P0025. The session itself is a research instrument, not a CI step, and the two *"falsify different things and neither may stand in for the other"* (`project.md`, `## How this advances the initiative`).
+
+## Risks and coupling (PR-scoped)
+
+| Risk | Likelihood / Impact | Mitigation |
+| --- | --- | --- |
+| The candidate in hand fails a criterion, and the criterion is quietly relaxed to keep them | Medium / **High** — it destroys the entire provenance argument, and silently | AC-001's two-part check: the commit timestamp *and* an empty diff on `_design.md`. The PR boundary excludes `_design.md`, so `redkiln verify --grain story` fails the PR before a reviewer has to notice. EC-001 and EC-002 state the required behaviour in advance, so the decision is not made under pressure |
+| An insider is substituted because recruitment is slow and the slice is waiting | Medium / **High** — this is `project.md`'s risk row 1 (line 295) verbatim | EC-003 makes *ineligible-but-used-anyway* a representable, dated state that says the artefact is **unmet**; EC-004 makes *no reader found* terminal. Neither arm can be reached by widening the bar, because the bar is a file this PR may not touch |
+| The declaration is written thin — one line, "confirmed outside the project" — and only fails review months later | Medium / Medium | AC-002's per-criterion count check is mechanical and runs at implement time, not at review time. The reviewer-read tier performs the AC-003 test literally rather than trusting that it would pass |
+| The log's real filename or heading vocabulary differs from what this spec assumed, and a second log or a new heading is created | Medium / **High** — a second log breaks IQ-2 and every citation into the first | EC-005 halts rather than improvising; the `## Integration contract` already instructs the implementer to resolve the path from `_design.md` first and to correct this spec deliberately if it differs |
+| Recruitment latency stalls the `session-protocol` slice | Medium / Medium | This story is **last** in the slice's merge order (`../_storymap.md`, `## Merge order`, step 1), so its two slice-mates land regardless; and recruitment deliberately begins while HS-P0023 is still in flight (`project.md`, coupling notes). NF-006 bounds the wait by recording the window |
+| The facilitator coaches the candidate toward eligibility without intending to | Medium / Medium | AC-006 requires the record to state how the criteria were put and to carry volunteered exposure as given. IQ-5's logic is imported explicitly rather than left to apply by analogy |
+| The reader's identity or environment is over-collected | Low / Medium | NF-003 bounds the fields to the criteria plus the four environment values; EC-008 gives the pseudonym-plus-voucher route so that declining to be named does not push anyone toward recording more |
+
+**Coupling, both directions.** *Inbound:* this story cannot start until `dt9-and-fixed-protocol` has fixed the criteria and `friction-log-skeleton` has landed the section — both are slice-mates, implemented in the same context, and both are named in `depends_on`. *Outbound:* `session-run-against-pinned-tree` consumes the declared environment (its AC-004 context element) and inherits AC-003's date bound as a constraint on the session date it records; `handoff-note-to-closeout` and eventually HS-P0025 read this section as the evidence that the observed persona was observed by a **non-insider**. A declaration that is late is a schedule problem; a declaration that is unauditable is a defect in HS-P0025's only irreplaceable input.
+
+## Dependencies
+
+**Blocks on** — both are slice-mates in `session-protocol`, implemented in one context and merged before this story (`../_storymap.md`, `## Merge order`, step 1, lines 175–181):
+
+- **`dt9-and-fixed-protocol`** — the disqualifying criteria this story applies verbatim, and the commit whose timestamp AC-001 and AC-003 compare against. Without it there is no bar to screen anyone against, and the provenance chain has no first term.
+- **`friction-log-skeleton`** — the single friction log and its declaration section, with the field vocabulary AC-007 mounts into. Without it there is nowhere to write that does not violate IQ-2 or IQ-3.
+
+**Unlocks**
+
+- **`session-run-against-pinned-tree`** — which cannot run until a declared, eligible reader exists (`../_storymap.md`, `### Dependency graph`, lines 116–135), and which consumes this story's environment record and date bound.
+- Transitively, everything downstream of that: `disposition-every-stumble`, `scope-the-claim`, and ultimately `handoff-note-to-closeout` and HS-P0025.
+
+This matches the story's `depends_on` exactly: `["dt9-and-fixed-protocol", "friction-log-skeleton"]`.
 
 ## Anchors (progressive disclosure)
 
-The load-bearing deeper artifacts — real repo/.kb paths, never inlined in bulk. Each anchor is SIGNPOSTED and
-bound to the AC it serves so just-in-time retrieval is reliable, not discretionary (RFC §6.8/D7). One row each:
+Load-bearing depth, deferred rather than pasted. The `## Context pack` above is self-sufficient to start; open these at the stated moment.
 
-| Anchor (real path) | Why it is load-bearing | When to open | Serves AC |
-| ------------------ | ---------------------- | ------------ | --------- |
-|                    |                        |              |           |
+| Anchor | Why it is load-bearing | When to open | Serves |
+| --- | --- | --- | --- |
+| [`.bklg/docs-that-teach/comprehension-evidence/_design.md`](../_design.md) | Holds the **operative** disqualifying criteria and the log's authoritative filename and heading vocabulary. This spec deliberately does not copy either, so that the two cannot drift; and this file is read-only for this story | **First, before contacting any candidate** and before writing a line into the log | AC-001 |
+| [`.bklg/docs-that-teach/comprehension-evidence/project.md`](../project.md) | AC-003's literal wording (*without asking the reader anything further*) at lines 207–209, the in-scope criteria rationale at 84–89, and risk row 1 at 295 — the three sentences the declaration's shape is answerable to | Before drafting the declaration's structure | AC-002 |
+| [`.bklg/docs-that-teach/comprehension-evidence/_decomposition.md`](../_decomposition.md) | The state enumeration (lines 69–95) that makes the three eligibility arms designed-in, the IQ-1…IQ-7 invariants (178–223), the accessibility floor (144–175), and the testing brief's AC rows (411–423) | Before writing the eligibility verdict, and before adding any summary or roll-up | AC-005 |
+| [`.bklg/docs-that-teach/_discovery/research/04-comprehension-as-evidence-documentation-usability-testing-co.md`](../../_discovery/research/04-comprehension-as-evidence-documentation-usability-testing-co.md) | Lines 30 and 61: non-insider status is the **mechanism** — insiders unconsciously route around rough spots — which is why coaching a candidate destroys the evidence rather than merely biasing it | When a candidate is borderline, or when the temptation to help them answer appears | AC-006 |
+| [`.bklg/docs-that-teach/initiative.md`](../../initiative.md) | DoD-5's exact clause at lines 429–433, and `## Assumptions` — that no reader found is a failure of the initiative, **not** a reason to redefine the bar | The moment a non-green arm looks likely (EC-003 or EC-004) | AC-005 |
+| [`.kb/governance/rewrite-the-referent-never-the-reasoning.md`](../../../../.kb/governance/rewrite-the-referent-never-the-reasoning.md) | The only KB atom binding on this project's work. It is what makes a revised verdict a revision rather than an overwrite | Before changing anything already written into the log | AC-005 |
+| [`.bklg/docs-that-teach/_discovery/distillation/interaction-patterns.md`](../../_discovery/distillation/interaction-patterns.md) | `## Anti-patterns` — the load-bearing-item-behind-a-fold rule and the bespoke-widget-on-a-medium-that-renders-it-free rule, which `_design.md` defers to because its own `## Anti-patterns` is `N/A` | Before adding any fold, index, roll-up or summary near the declaration | AC-007 |
+| [`.redkiln/templates/gates/`](../../../../.redkiln/templates/gates/) | The one-line-checkbox primitive. `CLAUDE.md` is explicit that the parser matches line by line and a wrapped box can never match — the closest thing to a hard token constraint in this repository | If the declaration uses checkboxes at all | AC-007 |
+| [`.bklg/docs-that-teach/comprehension-evidence/_storymap.md`](../_storymap.md) | The slice merge order (step 1, lines 175–181) and the dependency note (129–135) explaining why this story needs **both** protocol stories, not just the skeleton | Before starting, to confirm both slice-mates have landed | AC-007 |
+| [`.redkiln/templates/_ledger.md`](../../../../.redkiln/templates/_ledger.md) | The evidence discipline: `evidence` is a real `file:line`, rows are flipped only by the implementer, and criteria are never re-worded. `require_ledger: true` makes it a gate, not a convention | When filling [`_ledger.md`](_ledger.md) | AC-001 |
+| [`.bklg/docs-that-teach/comprehension-evidence/_grounding.md`](../_grounding.md) | The citation audit every brief above rests on, and the worked example of a citation **failing** reachability (`examples/outside-projection-adapter/`) — the discipline AC-003's date chain applies to a timestamp | If any citation in this spec looks unreachable from this worktree | AC-003 |
+| [`.bklg/docs-that-teach/_discovery/distillation/personas-and-journeys.md`](../../_discovery/distillation/personas-and-journeys.md) | Persona 1 / 2 / 3 in full — the intent behind whichever one DT-9 selected, which is what a candidate must plausibly be. Explicitly **not** promoted to `.kb/product/`; this story does not promote it either | When judging whether a candidate fits the selected persona's intent, alongside `_design.md`'s DT-9 resolution | AC-006 |
+| [`.redkiln/config.yaml`](../../../../.redkiln/config.yaml) | Line 5 (`support_initiative: support`) is a real routing destination id; lines 40/48/55/67/73 are the gate commands this story is checked by | When routing a finding by id, and when running the merge gate | AC-005 |
 
-## Out of Scope
+## Clarifications resolved during spec
 
-What this work explicitly does not cover.
+**The AC set is exactly the seven the first pass decided** — AC-001 … AC-007. None added, none dropped. The interaction-quality invariants were folded into those seven rather than spawning new ids, because each is a property of a criterion already present: composition and placement belong to the mount (AC-007), density splits across the four rows that state the counts (AC-002, AC-004, AC-005, AC-007), and reversibility belongs to the verdict (AC-005). A separate "the log renders nicely" id would have had nothing to fail against in a medium with no CSS layer.
+
+**`_design.md` declares `hasSurface: false`, so composition was resolved against the document-primitive layer instead of a design system.** That is not a waiver. `_design.md` names the primitives explicitly (lines 47–61) and its `## Anti-patterns` is `N/A — no user-facing surface`, which is why the operative anti-pattern list in `## Interaction quality` is sourced from `../_decomposition.md`'s UX brief and `interaction-patterns.md` — the two artifacts `_design.md` itself points at. No design decision has been re-made here.
+
+**The mount point's filename is asserted, not yet verified — deliberately.** `.bklg/docs-that-teach/comprehension-evidence/_friction-log.md` does not exist at spec time and is therefore **absent from the anchors table**, which cites only paths that resolve today. It is created by `friction-log-skeleton`, and its authoritative name is `_design.md`'s to fix (`../_storymap.md`, line 88). EC-005 is the halt condition if the two disagree, and the `## Integration contract` and `## PR boundary` both already instruct the implementer to correct the path here before writing.
+
+**AC-003's third term is a bound, not a check that can run today.** The session date does not exist until `session-run-against-pinned-tree`. This story asserts *declaration date < session date* as a constraint that story must not violate, and verifies the two terms that do exist (criteria commit < declaration date). Stated rather than left implicit so nobody marks AC-003 satisfied on a comparison that only had two of its three terms.
+
+**Nothing in this story is adapter-observable, and no conformance rule was invented for it.** `happenstance-testkit` cannot observe a markdown declaration; inventing a rule that no adapter could fail would be decorative, which `CLAUDE.md`'s own corollary forbids. The equivalent instrument is the ledger, and the static checks above were written to assert on **content** — one answer per criterion label, exactly one eligibility token — precisely because a structural-presence check would pass a blank declaration (`../_decomposition.md`, `## Testing brief`, `### Notes`).
+
+**Privacy was resolved rather than left open.** The reader may decline to be named; AC-006 accepts a stable pseudonym plus a vouching route, and NF-003 bounds collection to the criteria and the four environment fields. EC-008 states the outcome when even that is refused, so the implementer does not improvise a trade between auditability and consent in the moment.

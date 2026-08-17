@@ -7,9 +7,9 @@ title: Somewhere for the second question to go
 parent: HS-P0023
 initiative: docs-that-teach
 project: reach-and-adapter-path
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,12 @@ archetype: capability
 slice: front-door-reach
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:09.698Z
+updated: 2026-08-17T22:02:34.448Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

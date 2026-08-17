@@ -7,9 +7,9 @@ title: Audit DT-1 … DT-10 for resolution, deferral or gap
 parent: HS-P0025
 initiative: docs-that-teach
 project: durable-audience-closeout
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -19,12 +19,12 @@ archetype: capability
 slice: closeout-adjudication
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:13.166Z
+updated: 2026-08-17T22:02:55.247Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

@@ -7,9 +7,9 @@ title: Mount every promoted atom at all four mount points
 parent: HS-P0025
 initiative: docs-that-teach
 project: durable-audience-closeout
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,12 @@ archetype: capability
 slice: product-layer-promotion
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:14.446Z
+updated: 2026-08-17T22:02:56.772Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

@@ -7,9 +7,9 @@ title: "Re-observe scenario 2 in both halves: fail by name, then recover"
 parent: HS-P0025
 initiative: docs-that-teach
 project: durable-audience-closeout
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,12 @@ archetype: capability
 slice: dod-reobservation
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:14.446Z
+updated: 2026-08-17T22:03:03.766Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

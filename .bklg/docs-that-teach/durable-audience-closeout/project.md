@@ -298,3 +298,4 @@ Process and gate:
   and `## Testing brief`. There is no `briefs/` directory and no `_architecture.md`.
 - [`_storymap.md`](_storymap.md) — the vertical-slice story map
 - [`../initiative.md`](../initiative.md) — the parent charter
+- [`../_plan.md`](../_plan.md) — the initiative planning rollup

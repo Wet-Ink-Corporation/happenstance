@@ -7,9 +7,9 @@ title: Hidden content is inside the check, or absent
 parent: HS-P0020
 initiative: docs-that-teach
 project: checked-documentation-surface
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -19,12 +19,12 @@ archetype: capability
 slice: narrative-checker-discipline
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:02.654Z
+updated: 2026-08-17T22:02:09.530Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

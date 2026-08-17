@@ -163,7 +163,7 @@ story.
   `narrative-checker-mounted-with-pinned-path` creates, which calls it **once per run** and passes
   the resulting set to both the citation check and the pin check — two calls would read and parse the
   same document twice in one step.
-- **Renders surfaces**: none. `_design.md`'s six surfaces are markdown a reader meets, gate output a
+- **Renders surfaces**: none. `_design.md`'s five surfaces are markdown a reader meets, gate output a
   contributor meets, and the index that connects them; this story renders none of them. It
   implements one row of `## Items` — `xtask::spec_trace::clause_ids` (`_design.md:53-57`) — whose
   `clause` field reads "n/a — reads `SPECIFICATION.md`, discharges no clause". The two gate-output

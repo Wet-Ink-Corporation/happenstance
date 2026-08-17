@@ -7,9 +7,9 @@ title: A governed page names the discipline as the reason it is shaped as it is
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,12 @@ archetype: capability
 slice: binding-beyond-this-project
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:05.750Z
+updated: 2026-08-17T22:02:30.448Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

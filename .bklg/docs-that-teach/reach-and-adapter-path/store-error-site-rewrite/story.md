@@ -7,9 +7,9 @@ title: rustc's own E0034 output at the site where it fires
 parent: HS-P0023
 initiative: docs-that-teach
 project: reach-and-adapter-path
-status: in-review
+status: ready
 process: story
-stage: spec
+stage: plan
 automation: HITL
 severity: null
 blocked_by:
@@ -21,12 +21,12 @@ archetype: capability
 slice: adapter-error-site
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:17:08.629Z
+updated: 2026-08-17T22:02:32.756Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---

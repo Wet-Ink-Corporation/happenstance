@@ -108,9 +108,19 @@ const HIDDEN_MARKERS: &[&str] = &[
 
 ## Surfaces
 
-Six surfaces. Two are markdown a reader meets, two are the gate's output a contributor
-meets, one is the index that connects the first two, and one is recorded because this
-project deliberately does **not** touch it.
+Five surfaces this project builds and a reader or contributor can actually reach. One is
+markdown a reader meets, two are the gate's output a contributor meets, one is the index
+that connects them, and one is recorded because this project deliberately does **not**
+touch it.
+
+Not six. `## Pattern decision`, D2, resolves DT-7's option (c) — one page per scope, past
+the 3-scope/25-line threshold — as the pattern a *future* content author follows once
+scoped content outgrows the inline form. No story in this project (nor anywhere else in the
+initiative) instantiates a page that crosses that threshold, so the pattern has no built
+instance and is deliberately absent from the manifest below: a manifest entry with no
+story claiming it in a Renders-surfaces line would promise a surface this story set does
+not deliver. The pattern stays specified, in prose, at D2; it is simply not one of the
+surfaces this design review can open a path to.
 
 `selector` is the isolating locator *in that surface's own medium*. For the markdown
 surfaces it is `null` and that is a finding, not an omission: this repository controls no
@@ -131,12 +141,6 @@ reads it by opening the paths.
   selector: null
   pattern: "always-visible single-need page; no hidden panels (DT-7 (b))"
   states: [default, scoped-inline, long-page-overflow, long-label, narrow-70col]
-
-- id: narrative-scoped-page
-  route: "docs/<topic>/<scope>.md"
-  selector: null
-  pattern: "one page per scope, reached from the index (DT-7 (c))"
-  states: [default, orphan-unregistered, narrow-70col]
 
 - id: gate-narrative-compile-step
   route: "cargo xtask ci -> === the narrative tree's examples compile ==="
@@ -673,7 +677,7 @@ one.
 
 | Mock | Path | Viewports | Themes | Notes |
 | --- | --- | --- | --- | --- |
-| Static sign-off mock | [`design/mock.html`](design/mock.html) | 1440x900, 1024x768 | light | 46 frames: all six surfaces × all 23 declared states × 2 viewports. Self-contained — no network fetch of any kind. |
+| Static sign-off mock | [`design/mock.html`](design/mock.html) | 1440x900, 1024x768 | light | 46 frames, drawn before the `## Surfaces` strike below: the five built surfaces plus `narrative-scoped-page`'s documented-but-unbuilt reference frame, × all 23 declared states × 2 viewports. Self-contained — no network fetch of any kind. |
 
 **What it is composed from.** There is no design system here, and the mock proves it rather
 than assuming it: `git ls-files` matches no `.css`/`.scss`/`.sass`/`.less`/`.styl`, there is
@@ -702,7 +706,6 @@ columns the way a terminal does rather than scrolling.
 | --- | --- | --- |
 | `narrative-tree-index` | `design/reference/narrative-tree-index@1440x900.png` | `design/reference/narrative-tree-index@1024x768.png` |
 | `narrative-page` | `design/reference/narrative-page@1440x900.png` | `design/reference/narrative-page@1024x768.png` |
-| `narrative-scoped-page` | `design/reference/narrative-scoped-page@1440x900.png` | `design/reference/narrative-scoped-page@1024x768.png` |
 | `gate-narrative-compile-step` | `design/reference/gate-narrative-compile-step@1440x900.png` | `design/reference/gate-narrative-compile-step@1024x768.png` |
 | `gate-narrative-checker-step` | `design/reference/gate-narrative-checker-step@1440x900.png` | `design/reference/gate-narrative-checker-step@1024x768.png` |
 | `rustdoc-reference-surface` | `design/reference/rustdoc-reference-surface@1440x900.png` | `design/reference/rustdoc-reference-surface@1024x768.png` |
@@ -770,7 +773,8 @@ measurement that corrected it, and the two are supposed to disagree here.
 
 ## Sign-off
 
-**Pending.** No perceptual review will ever run against this project — `design.capture` is
+**Approved, then amended once — see the amendment row below.** No perceptual review will ever
+run against this project — `design.capture` is
 undeclared by design — so a human reading this file is the only gate these decisions have.
 Two rows are the ones worth disagreeing with cheaply, now: **D1**, which trades a sidebar,
 a search index and a rendered site for a surface that cannot diverge from what CI checked;
@@ -784,3 +788,15 @@ deterministically today.
 Recorded via `redkiln advance HS-P0020 --verdict approved --stay --apply`, which clears the
 review gate without moving the project off `design` — its stories are scaffolded next, and
 `implement.md` owns the transition into `implementation`.
+
+### Amendment — the surface manifest went from six to five, after sign-off
+
+| Amended by | Date | What changed, and why it was not folded in silently |
+| --- | --- | --- |
+| Ryan Britton (repository owner) | 2026-08-17 | `narrative-scoped-page` was **struck** from `## Surfaces`, from the reference-captures table, and from the six-surface claim in the section lede. Stage B-2's adversarial verifier found it was a declared surface **no story in the initiative claims in a Renders-surfaces line** — six of this project's own stories explicitly recorded it as "not rendered/changed" by them, so it was known and unowned rather than overlooked. Striking it applies this project's own "a rule no implementation can fail is decorative" standard to a *surface*: a manifest entry with no story behind it promises a reader a path this story set does not build. DT-7's option (c) is **not** withdrawn — `## Pattern decision` D2 still specifies one-page-per-scope in prose for a future content author who exceeds the 3-scope/25-line threshold; it is simply no longer a surface this design review can open a path to. Presented and accepted at the Stage B-2 spec gate rather than absorbed into the fix pass, because the six-surface manifest is what the row above signed off. |
+
+**The mock deliberately still draws six.** `design/mock.html`'s 46 frames were rendered before
+this strike, and its `narrative-scoped-page` frames stay as the dated reference for a pattern D2
+still specifies. This is the same rule the `## Mock` section already states for the pre-correction
+density figures: the mock is the measurement, the design is the specification, and they are
+allowed to disagree where the disagreement is the record of what changed.
