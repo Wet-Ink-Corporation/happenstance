@@ -376,8 +376,26 @@ crates/happenstance-sqlite/src/projection_store.rs
 crates/happenstance-sqlite/src/lib.rs
 crates/happenstance-sqlite/Cargo.toml
 crates/happenstance-sqlite/tests/projection.rs
+crates/happenstance-sqlite/tests/migration.rs
+standards/rust/**
 .bklg/from-contract-to-published-library/sqlite-durable-store/projection-store-passes-the-borrowed-suite/**
 ```
+
+**Two compelled excursions, admitted rather than merely disclosed**, on the terms
+`benchmark-harness` set at `e020276` and
+`reopen-negative-control-and-durability-verdicts` restated at
+`../reopen-negative-control-and-durability-verdicts/implementation-report.md:102-117`.
+
+- `crates/happenstance-sqlite/tests/migration.rs` — **one assertion only.** Its
+  `pragmas_are_in_effect_on_every_connection` wraps `SqliteProjectionStore::open`
+  in `catch_unwind` and asserts it *panics*, with a message instructing whoever
+  lands this migration to assert on the return value instead. That test goes red
+  the moment this story is green, and the edit it asks for is the whole of the
+  admission.
+- `standards/rust/**` — **citation re-anchoring only.** Two `file:line` citations
+  point into `projection_store.rs`, and `cargo xtask lint-constitution` reds when
+  cited code moves. No sentence, rule or example in the constitution may be
+  changed under this entry.
 
 `Cargo.toml` is inside the boundary for **one reason only**: the `conformance`
 feature entry and the `unstable-projection` forward, both of which are load

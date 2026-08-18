@@ -549,22 +549,16 @@ fn pragmas_are_in_effect_on_every_connection() {
     // And that it is genuinely the path `SqliteProjectionStore::open` takes,
     // observed rather than asserted from the source: on a file nothing else has
     // ever touched, the journal mode left behind is the one that `open` set
-    // before its own (still `todo!()`, and a slice-mate's) migration panicked.
-    // WAL is a persistent property of the file, which is what makes the
-    // observation survive the panic.
+    // before its own migration ran. WAL is a persistent property of the file,
+    // which is what makes the observation outlive the connection.
+    //
+    // This assertion used to be a `catch_unwind` around a `todo!()`, with a
+    // message telling whoever landed the projection migration to assert on the
+    // return value instead. `projection-store-passes-the-borrowed-suite` landed
+    // it, so this is that assertion.
     let untouched = TempDb::new("projection-open");
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let attempt = std::panic::catch_unwind(|| {
-        let _ =
-            happenstance_sqlite::projection_store::SqliteProjectionStore::open(untouched.path());
-    });
-    std::panic::set_hook(previous);
-    assert!(
-        attempt.is_err(),
-        "the projection store's own migration is a slice-mate's and is still \
-         `todo!()`; if it has landed, assert on its return value instead"
-    );
+    happenstance_sqlite::projection_store::SqliteProjectionStore::open(untouched.path())
+        .expect("the projection store's migration has landed, and must apply cleanly");
     let mode: String = raw(untouched.path())
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .unwrap();

@@ -204,7 +204,7 @@ decorative shape RS-01-1 exists to forbid, and its `Do` example — binding
 compiles. The id is spent and is never reused.
 
 The transcript is kept where it happened rather than restated here:
-`crates/happenstance-sqlite/src/projection_store.rs:216 (transcript this line used to carry)`
+`crates/happenstance-sqlite/src/projection_store.rs:534 (transcript this line used to carry)`
 holds the error verbatim beside the impl that paid it, and
 `experiments/live-handle-projection-batch/live_handle.rs:68 (exactly where PS-5 says it is)`
 holds the same finding from the borrowed end.

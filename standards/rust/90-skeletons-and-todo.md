@@ -80,7 +80,7 @@ and the driver's real types are met by whoever writes the bodies — one phase
 after the port was frozen against them.
 
 **Evidence.** `crates/happenstance-postgres/src/projection_store.rs:100 (Transaction<'static, Postgres>)` ·
-`crates/happenstance-sqlite/src/projection_store.rs:226 (type Batch = SqliteBatch)` ·
+`crates/happenstance-sqlite/src/projection_store.rs:544 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:11 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
