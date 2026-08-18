@@ -55,8 +55,29 @@
 //!   It reports the bytes a page carries. Whether a particular host collapses,
 //!   ignores or escapes them is outside anything this repository can observe,
 //!   which is the whole reason the markers are rejected rather than measured.
-//! * **An unresolvable clause id is still invisible here.** That is the
-//!   `specification-pin` milestone's, landing in this same module.
+//! * **A citation that resolves says nothing about the sentence above it.**
+//!   [`check_citations`] answers whether `spec/SPECIFICATION.md` declares the
+//!   clause a page names. Whether the claim the page makes is true, and whether
+//!   the page *defers* to that clause rather than quietly restating it, are the
+//!   reviewer's half of BR-09 and nothing here can see either. Provenance is
+//!   what rots and what is checked; comprehension is neither.
+//! * **A clause-shaped token inside a fence is not told apart from prose.** The
+//!   whole page is scanned, fences included, deliberately: a clause id in a
+//!   comment above an example is still a claim, and excluding fenced regions
+//!   would put a hiding place inside the one region that *is* the checked
+//!   artifact. The cost is stated rather than parsed around — a clause id that
+//!   is genuinely data inside an example is reported, and the answer is to
+//!   spell it outside the fence. There is no allowance list for it, and adding
+//!   one is a petition in its own change with its own falsification.
+//! * **A near-miss in a family the specification declares nowhere is silent.**
+//!   `ES-4O` inside the declared `ES-` family is reported as unreadable; `QQ-4O`
+//!   is not, because nothing distinguishes it from prose that happens to carry
+//!   two capitals and a hyphen. The check is scoped to families the document
+//!   itself declares, and that scoping is what keeps it from firing on correct
+//!   sentences.
+//! * **A doubly-declared clause id collapses upstream.** `clause_ids` returns a
+//!   set, so a document declaring one id twice resolves exactly as one
+//!   declaring it once, and nothing in this repository looks for the duplicate.
 //! * **The harness is matched as text, so reformatting it can break this check
 //!   without breaking the compile.** Splitting an `include_str!` across lines, or
 //!   writing a `mod` line that does not start with `mod ` after trimming, makes a
@@ -163,12 +184,13 @@
 //! to stay true. [`HARNESS`] names a file this module reads as text and never
 //! links.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
-use crate::spec_trace::workspace_root;
+use crate::spec_trace::{clause_ids, workspace_root};
 
 /// The narrative tree, pinned by path.
 ///
@@ -374,15 +396,27 @@ fn collect(root: &Path, rel_dir: &str, out: &mut Vec<Page>) -> Result<()> {
         if is_dir {
             collect(root, &rel, out)?;
         } else if is_markdown(&name) {
-            // Hard error rather than a skipped page: a scanner that silently
-            // steps over what it cannot read reports green over exactly the file
-            // it failed to inspect.
-            let text = fs::read_to_string(root.join(TREE).join(&rel))
-                .with_context(|| format!("reading {TREE}/{rel}"))?;
+            let text = read_page(root, &rel)?;
             out.push(Page::new(&rel, &text));
         }
     }
     Ok(())
+}
+
+/// One page's text, read once, at enumeration.
+///
+/// Hard error rather than a skipped page, and the call site `?`-propagates it:
+/// a scanner that silently steps over what it cannot read reports green over
+/// exactly the file it failed to inspect (RS-81-2,
+/// `standards/rust/81-checks-that-cannot-be-types.md:95`). The `let Ok(text) =
+/// … else { continue }` that would shorten the page list instead is the named
+/// wrong implementation.
+///
+/// # Errors
+///
+/// When the page cannot be read, naming the page by its tree-relative path.
+fn read_page(root: &Path, rel: &str) -> Result<String> {
+    fs::read_to_string(root.join(TREE).join(rel)).with_context(|| format!("reading {TREE}/{rel}"))
 }
 
 /// Whether a file name is a markdown page, however it is cased.
@@ -931,16 +965,245 @@ fn check_hidden_markers(page: &Page, found: &mut Vec<Found>) {
     }
 }
 
+/// The specification's clause ids, resolved once per run.
+///
+/// Read once and passed by reference to every check that needs it. Two calls
+/// would read and parse a 9,070-line document twice inside one step for no new
+/// information, which is the contract
+/// [`crate::spec_trace::clause_ids`] states on its consumers.
+struct Clauses {
+    /// Every clause id `spec/SPECIFICATION.md` declares.
+    ids: BTreeSet<String>,
+    /// The families those ids sit in, as their two-letter prefixes.
+    ///
+    /// **Derived from the set, never listed.** A literal list of the six
+    /// families here would be the fourth, and `SECTIONS`' own doc comment
+    /// (`xtask/src/spec_trace.rs:107-120`) already says why the fourth is the
+    /// one that can half-land: a seventh family added in that one place would
+    /// have every id of it reported here as an undeclared family while
+    /// `spec-trace` counted it happily.
+    families: BTreeSet<String>,
+}
+
+impl Clauses {
+    fn new(ids: BTreeSet<String>) -> Self {
+        let families = ids
+            .iter()
+            .filter_map(|id| id.split_once('-'))
+            .map(|(letters, _)| letters.to_owned())
+            .collect();
+        Self { ids, families }
+    }
+
+    /// The declared families as a reader spells them: `CF-, ES-, …`.
+    ///
+    /// In the message rather than in a constant, so an author who meant a
+    /// constitution rule sees what the specification actually declares instead
+    /// of guessing — and so the sentence cannot go stale when a seventh lands.
+    fn declared(&self) -> String {
+        self.families
+            .iter()
+            .map(|letters| format!("{letters}-"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// A token on a page shaped like a clause citation.
+#[derive(Debug, PartialEq, Eq)]
+struct Cited<'a> {
+    /// The token as written: `ES-40`, `ES-4O`, `ES-`, `ES -40`.
+    text: &'a str,
+    /// The family's two letters, hyphen excluded: `ES`.
+    letters: &'a str,
+    /// The clause id, when the token parses as one at all.
+    id: Option<&'a str>,
+}
+
+/// Every citation-shaped token on one line, in source order.
+///
+/// The scan, split from the decision so both boundaries are assertable against
+/// a `&str` with no id set, no page and no filesystem.
+///
+/// **Two boundaries, and they are the load-bearing half.** The character before
+/// the two capitals must not be ASCII-alphanumeric, which is what keeps
+/// `ADR-0001` from being read as a dangling `DR-0001`; and the character after
+/// the digits must not be a hyphen, which is what keeps `RS-81-1` — this
+/// repository's own constitution rule ids, which a page may legitimately cite —
+/// from being read as a dangling `RS-81`. A checker missing either fires on
+/// prose that is **correct**, which is worse than missing a defect: it teaches
+/// contributors to delete true sentences.
+///
+/// `HS-S0142` fails the shape outright, because a letter and not a digit
+/// follows the hyphen. `ES-` and `ES-4O` do not parse but are still returned,
+/// with `id: None`, because the caller — not this scan — decides whether the
+/// family is one the specification declares.
+fn clause_citations(line: &str) -> Vec<Cited<'_>> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+
+    for start in 0..bytes.len() {
+        if !bytes[start].is_ascii_uppercase()
+            || !bytes.get(start + 1).is_some_and(u8::is_ascii_uppercase)
+        {
+            continue;
+        }
+        // The leading boundary. `ADR-0001` is the token it exists to protect:
+        // without it the scan reads a dangling `DR-0001` out of the middle of
+        // one, and a page citing an ADR correctly fails the gate.
+        if line[..start]
+            .chars()
+            .next_back()
+            .is_some_and(|character| character.is_ascii_alphanumeric())
+        {
+            continue;
+        }
+
+        // A hyphen, or one space and then a hyphen. The spaced form never
+        // parses — `ES -40` is the typo rather than a spelling — and it is
+        // recognised only far enough to say so.
+        let (hyphen, spaced) = match bytes.get(start + 2) {
+            Some(b'-') => (start + 2, false),
+            Some(b' ') if bytes.get(start + 3) == Some(&b'-') => (start + 3, true),
+            _ => continue,
+        };
+
+        let letters = &line[start..start + 2];
+        let digits_end = hyphen
+            + 1
+            + bytes[hyphen + 1..]
+                .iter()
+                .take_while(|byte| byte.is_ascii_digit())
+                .count();
+        let has_digits = digits_end > hyphen + 1;
+        let after = bytes.get(digits_end).copied();
+
+        if spaced {
+            // `ES --` is punctuation rather than a mis-typed citation, so the
+            // spaced form is reported only when digits actually follow.
+            if has_digits {
+                out.push(Cited {
+                    text: &line[start..digits_end],
+                    letters,
+                    id: None,
+                });
+            }
+            continue;
+        }
+
+        if !has_digits {
+            // `HS-S0142` fails the shape outright: a letter, not a digit,
+            // follows the hyphen. `ES-` alone does not parse and is reported.
+            if after.is_none_or(|byte| !byte.is_ascii_alphanumeric()) {
+                out.push(Cited {
+                    text: &line[start..digits_end],
+                    letters,
+                    id: None,
+                });
+            }
+            continue;
+        }
+
+        match after {
+            // The trailing boundary. `RS-81-1` — this repository's own
+            // constitution rule ids, which a page may legitimately cite — is
+            // the token it exists to protect.
+            Some(b'-') => {}
+            // `ES-4O`, a letter for a zero. The whole word is carried so the
+            // message quotes what the author actually wrote.
+            Some(byte) if byte.is_ascii_alphanumeric() => {
+                let word_end = digits_end
+                    + bytes[digits_end..]
+                        .iter()
+                        .take_while(|byte| byte.is_ascii_alphanumeric())
+                        .count();
+                out.push(Cited {
+                    text: &line[start..word_end],
+                    letters,
+                    id: None,
+                });
+            }
+            _ => {
+                let id = &line[start..digits_end];
+                out.push(Cited {
+                    text: id,
+                    letters,
+                    id: Some(id),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Every clause a page cites, resolved against the specification.
+///
+/// Three problem forms, worded apart on purpose: a reviewer scanning a log
+/// should be able to tell "you meant a different family", "I could not read
+/// this" and "this clause does not exist" apart without opening the page.
+///
+/// The whole page is scanned, fenced blocks included — see this module's limits.
+fn check_citations(page: &Page, clauses: &Clauses, found: &mut Vec<Found>) {
+    for (index, line) in page.text.lines().enumerate() {
+        // One problem per occurrence, never per id: each occurrence is a line a
+        // contributor has to edit, and a list that hides four of five is the
+        // six-review-cycle failure `_decomposition.md:218-219` names.
+        for cited in clause_citations(line) {
+            let at = index + 1;
+
+            if !clauses.families.contains(cited.letters) {
+                // Well formed, it is a problem naming the families that do
+                // exist, so an author who meant a constitution rule spells it
+                // in full. Malformed, it is not distinguishable from prose —
+                // the limit this module states rather than a silent skip.
+                if let Some(id) = cited.id {
+                    found.push((
+                        at,
+                        format!(
+                            "cites `{id}`, and SPECIFICATION.md has no `{}-` family; the \
+                             families it declares are {}",
+                            cited.letters,
+                            clauses.declared()
+                        ),
+                    ));
+                }
+                continue;
+            }
+
+            match cited.id {
+                // Resolved. Silent, deliberately: a check that reports every
+                // resolving citation makes the one line that matters harder to
+                // find.
+                Some(id) if clauses.ids.contains(id) => {}
+                Some(id) => found.push((
+                    at,
+                    format!("cites `{id}`, which SPECIFICATION.md does not define"),
+                )),
+                None => found.push((
+                    at,
+                    format!(
+                        "`{}` looks like a clause citation and does not parse; a citation \
+                         the checker cannot read is one nothing checks",
+                        cited.text
+                    ),
+                )),
+            }
+        }
+    }
+}
+
 /// Every problem one page carries, composed and in line order.
 fn check_page(
     page: &Page,
     allowances: &[(&str, &str, &str)],
     usage: &mut [Usage],
+    clauses: &Clauses,
     problems: &mut Vec<String>,
 ) {
     let mut found: Vec<Found> = Vec::new();
     check_fences(page, allowances, usage, &mut found);
     check_hidden_markers(page, &mut found);
+    check_citations(page, clauses, &mut found);
     // Stable, so two problems on one line keep the order they were found in and
     // a marker interleaves with a fence problem by line rather than by check.
     found.sort_by_key(|(line, _)| *line);
@@ -956,13 +1219,13 @@ fn check_page(
 /// problems in line order — and after it the two files that register and permit,
 /// the harness and this module. Nothing short-circuits and nothing is truncated:
 /// a check that stops at the first problem turns one review cycle into six.
-fn problems(pages: &[Page], harness: &str) -> Vec<String> {
+fn problems(pages: &[Page], harness: &str, clauses: &Clauses) -> Vec<String> {
     let mut problems = Vec::new();
     check_paths(pages, &mut problems);
 
     let mut usage = vec![Usage::default(); IGNORE_ALLOWANCES.len()];
     for page in pages {
-        check_page(page, IGNORE_ALLOWANCES, &mut usage, &mut problems);
+        check_page(page, IGNORE_ALLOWANCES, &mut usage, clauses, &mut problems);
     }
 
     check_registration(pages, harness, &mut problems);
@@ -988,13 +1251,31 @@ fn summary(pages: &[Page]) -> String {
 /// Fails when the tree is missing or empty, when the harness cannot be read, or
 /// when any check finds a problem.
 pub(crate) fn run() -> Result<()> {
-    let root = workspace_root()?;
-    let pages = pages(&root)?;
+    check(&workspace_root()?)
+}
+
+/// The whole step, against one workspace root.
+///
+/// Split from [`run`] only so the hard-error postures are assertable: a root
+/// with no `spec/SPECIFICATION.md` must fail naming the *specification*, and a
+/// `run` that discovers its own root cannot be handed one.
+///
+/// # Errors
+///
+/// The same conditions [`run`] documents.
+fn check(root: &Path) -> Result<()> {
+    // Resolved first, and exactly once. First because a specification the
+    // checker cannot read is the *checker's* failure, and doing it before the
+    // tree walk is what stops that failure arriving with a page's name on it.
+    // Once because the set is shared by every check below that needs it.
+    let clauses = Clauses::new(clause_ids(root)?);
+
+    let pages = pages(root)?;
     guard_not_vacuous(&pages)?;
 
     let harness =
         fs::read_to_string(root.join(HARNESS)).with_context(|| format!("reading {HARNESS}"))?;
-    let problems = problems(&pages, &harness);
+    let problems = problems(&pages, &harness, &clauses);
 
     if problems.is_empty() {
         println!("{}", summary(&pages));
@@ -1019,6 +1300,15 @@ mod tests {
     /// The composition root every mount assertion reads as text.
     const ROOT_MODULE: &str = "xtask/src/main.rs";
 
+    /// One id per family the specification declares today, hand-built.
+    ///
+    /// Hand-built rather than read from `spec/SPECIFICATION.md`: the parse is
+    /// `clause_ids`' own story's, and §1.3's hand count already checks it
+    /// against the real document on every gate run, so a parallel fixture
+    /// corpus here is exactly what the testing brief forbids. `ES-40` is the
+    /// one the fixture page cites.
+    const DECLARED: &[&str] = &["VT-1", "WF-1", "ES-40", "PS-1", "SY-1", "CF-1"];
+
     /// The module whose unconditional file-reading list this checker joins.
     const AFFECTED: &str = "xtask/src/affected.rs";
 
@@ -1038,12 +1328,39 @@ mod tests {
     /// Every problem one page carries under `allowances`, plus the sweep over
     /// them — the two halves of the walk a real run always performs together.
     fn walk(pages: &[Page], allowances: &[(&str, &str, &str)]) -> Vec<String> {
+        let clauses = Clauses::new(DECLARED.iter().map(|id| (*id).to_owned()).collect());
         let mut usage = vec![Usage::default(); allowances.len()];
         let mut problems = Vec::new();
         for page in pages {
-            check_page(page, allowances, &mut usage, &mut problems);
+            check_page(page, allowances, &mut usage, &clauses, &mut problems);
         }
         check_allowances(allowances, &usage, &mut problems);
+        problems
+    }
+
+    /// Every problem one page carries under a hand-built resolution, composed
+    /// through the same [`check_page`] a real run composes it through.
+    ///
+    /// The id set is hand-built rather than read from `spec/SPECIFICATION.md`:
+    /// the parse is `clause_ids`' own story's, and §1.3's hand count already
+    /// checks it against the real document on every gate run, so a parallel
+    /// fixture corpus here is what the testing brief forbids.
+    ///
+    /// [`walk`] above resolves *nothing* — an empty set declares no family, so
+    /// the citation check contributes no problem to the fence and marker tests
+    /// and their assertions mean exactly what they meant before. The citation
+    /// half is exercised here and by the recorded `cargo xtask narrative` run.
+    fn cited(rel: &str, text: &str, ids: &[&str]) -> Vec<String> {
+        let clauses = Clauses::new(ids.iter().map(|id| (*id).to_owned()).collect());
+        let mut usage: Vec<Usage> = Vec::new();
+        let mut problems = Vec::new();
+        check_page(
+            &page_with(rel, text),
+            &[],
+            &mut usage,
+            &clauses,
+            &mut problems,
+        );
         problems
     }
 
@@ -1375,7 +1692,7 @@ mod tests {
             "#[cfg(doctest)]\nmod renamed_away {\n}\n"
         );
 
-        let found = problems(&pages, &harness);
+        let found = problems(&pages, &harness, &Clauses::new(BTreeSet::new()));
 
         assert_eq!(
             found.len(),
@@ -2435,5 +2752,331 @@ One writer at a time.
             summary(&[page("append-conditions.md")]),
             "  1 pages, all consistent"
         );
+    }
+
+    // ======================================================================
+    // narrative-citation-resolution
+    // ======================================================================
+
+    // ---- AC-001: the families are derived, and the resolver is called once --
+
+    /// The fictional `ZZ-` family is the whole assertion: a checker holding a
+    /// literal list of the six prefixes reports `ZZ-9` as an *undeclared
+    /// family*, and one deriving its prefixes from the resolved set reports it
+    /// as a *dangling id*. Adding a seventh family to `SECTIONS` therefore needs
+    /// no second edit here.
+    #[test]
+    fn the_recognised_families_are_derived_from_the_resolved_set() {
+        let found = cited(
+            "append-conditions.md",
+            "the boundary is checked as ZZ-9 requires\n",
+            &["ZZ-1"],
+        );
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("which SPECIFICATION.md does not define"),
+            "a derived family must make `ZZ-9` a dangling id, not an unknown family, \
+             got: {}",
+            found[0]
+        );
+    }
+
+    /// The one-call-per-run contract the resolver's own spec states on its
+    /// consumers, held as text rather than as a review note: two calls read and
+    /// parse a 9,070-line document twice inside one step.
+    #[test]
+    fn the_specification_is_resolved_once_per_run() {
+        let source = production_source();
+
+        assert_eq!(
+            source.matches("clause_ids(").count(),
+            1,
+            "exactly one call site, before the page loop"
+        );
+        assert!(
+            source.contains("let clauses = Clauses::new(clause_ids(root)?);"),
+            "the set is resolved once in `check` and passed by reference"
+        );
+    }
+
+    /// The foundation's marker is deleted by its first caller, not left to rot.
+    #[test]
+    fn the_resolvers_dead_code_marker_is_gone() {
+        let resolver = read("xtask/src/spec_trace.rs");
+
+        assert!(
+            !resolver.contains("expect(\n        dead_code")
+                && !resolver.contains("expect(dead_code"),
+            "an unfulfilled expectation is a warning and the gate is `-D warnings`"
+        );
+        assert!(
+            !resolver.contains("allow(dead_code"),
+            "`allow` would rot into a permanent exemption, which is why it was `expect`"
+        );
+    }
+
+    // ---- AC-002: a resolving citation passes, silently ---------------------
+
+    #[test]
+    fn a_citation_naming_a_declared_clause_is_not_a_problem() {
+        let found = cited(
+            "append-conditions.md",
+            "a writer cannot be overtaken between reading and appending (ES-40).\n",
+            DECLARED,
+        );
+
+        assert!(
+            found.is_empty(),
+            "provenance is checked, not narrated: {found:?}"
+        );
+    }
+
+    // ---- AC-003: a dangling id names the page, the line and the id ----------
+
+    /// The composed line `_design.md:333` draws, character for character.
+    #[test]
+    fn a_dangling_id_names_the_page_the_line_and_the_id() {
+        let text = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\n\
+                    a claim resting on ES-99\n";
+
+        let found = cited("append-conditions.md", text, DECLARED);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(
+            found[0],
+            "docs/append-conditions.md:12 — cites `ES-99`, which SPECIFICATION.md does not \
+             define"
+        );
+
+        let (location, _) = found[0]
+            .split_once(" — ")
+            .unwrap_or_else(|| panic!("no em dash separator in `{}`", found[0]));
+        assert!(
+            location.chars().count() <= 48,
+            "the location prefix is budgeted at 48 columns of an 80-column log, got: \
+             {location}"
+        );
+    }
+
+    // ---- AC-004: never a silent skip, and the three wordings stay apart -----
+
+    #[test]
+    fn a_citation_shaped_token_in_an_undeclared_family_is_a_problem() {
+        let found = cited("append-conditions.md", "as XX-7 requires\n", DECLARED);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("`XX-7`") && found[0].contains("no `XX-` family"),
+            "the problem must name the token and its family, got: {}",
+            found[0]
+        );
+        for family in ["CF-", "ES-", "PS-", "SY-", "VT-", "WF-"] {
+            assert!(
+                found[0].contains(family),
+                "the message must list the families the specification declares so an author \
+                 who meant a constitution rule can spell it in full; `{family}` missing from: \
+                 {}",
+                found[0]
+            );
+        }
+    }
+
+    /// `spec_trace::citations` skips a span it cannot read, which is safe there;
+    /// here the span *is* the check, so a citation the checker cannot read is
+    /// one nothing verifies. The wording stays distinct from the dangling form.
+    #[test]
+    fn a_near_miss_inside_a_declared_family_is_a_problem() {
+        for text in [
+            "the ES- family\n",
+            "as ES-4O requires\n",
+            "as ES -40 says\n",
+        ] {
+            let found = cited("append-conditions.md", text, DECLARED);
+
+            assert_eq!(found.len(), 1, "`{text}` got: {found:?}");
+            assert!(
+                found[0].contains("looks like a clause citation and does not parse"),
+                "`{text}` must report the cannot-read wording, got: {}",
+                found[0]
+            );
+            assert!(
+                !found[0].contains("does not define"),
+                "`{text}` must stay distinguishable from a dangling id, got: {}",
+                found[0]
+            );
+        }
+    }
+
+    // ---- AC-005: both boundaries, on prose that is correct ------------------
+
+    #[test]
+    fn a_constitution_rule_id_is_not_a_clause_citation() {
+        for text in ["RS-81-1 says so\n", "and RS-00-1 too\n"] {
+            assert!(
+                cited("append-conditions.md", text, DECLARED).is_empty(),
+                "`{text}` is a constitution rule id a page may legitimately cite"
+            );
+        }
+    }
+
+    #[test]
+    fn an_adr_reference_is_not_a_clause_citation() {
+        for text in ["ADR-0001 forbids it\n", "ADR-0029 raised the MSRV\n"] {
+            assert!(
+                cited("append-conditions.md", text, DECLARED).is_empty(),
+                "`{text}` must not be read as `DR-0001`; the leading boundary is what stops it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_backlog_item_id_is_not_a_clause_citation() {
+        for text in ["HS-S0142 is this story\n", "reserved for HS-P0020\n"] {
+            assert!(
+                cited("append-conditions.md", text, DECLARED).is_empty(),
+                "`{text}` fails the shape outright: no digit follows the hyphen"
+            );
+        }
+    }
+
+    /// And the check is not simply always-empty: the same page with a real
+    /// citation on it still resolves, and with a dangling one still reports.
+    #[test]
+    fn the_boundaries_are_both_load_bearing() {
+        let text = "RS-81-1 and ADR-0001 and HS-S0142, then ES-40.\n";
+        assert!(
+            cited("append-conditions.md", text, DECLARED).is_empty(),
+            "correct prose beside a resolving citation reports nothing"
+        );
+
+        let dangling = "RS-81-1 and ADR-0001 and HS-S0142, then ES-99.\n";
+        assert_eq!(
+            cited("append-conditions.md", dangling, DECLARED).len(),
+            1,
+            "the carve-outs must not have emptied the check"
+        );
+    }
+
+    // ---- AC-006: every problem, source order, fences included ---------------
+
+    #[test]
+    fn five_dangling_ids_on_one_page_report_five_problems_in_source_order() {
+        let text = "ES-91\nES-92\nES-93\nES-94\nES-95\n";
+
+        let found = cited("append-conditions.md", text, DECLARED);
+
+        assert_eq!(found.len(), 5, "got: {found:?}");
+        for (index, problem) in found.iter().enumerate() {
+            assert!(
+                problem.starts_with(&format!("docs/append-conditions.md:{}", index + 1)),
+                "problems read in source order, got: {problem}"
+            );
+            assert!(
+                !problem.contains("more"),
+                "no problem list is truncated: {problem}"
+            );
+        }
+    }
+
+    /// Excluding fenced regions would put a hiding place inside the one region
+    /// that *is* the checked artifact.
+    #[test]
+    fn a_clause_id_inside_a_fence_is_still_checked() {
+        let text = "a claim\n\n```rust\n// as ES-99 requires\nfn main() {}\n```\n";
+
+        let found = cited("append-conditions.md", text, DECLARED);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("docs/append-conditions.md:4 — "),
+            "got: {}",
+            found[0]
+        );
+    }
+
+    /// The page text the module already read is what the check consumes; a
+    /// second read doubles the I/O the `affected::run` argument rests on and can
+    /// see a different file mid-edit.
+    #[test]
+    fn the_citation_check_consumes_the_page_text_already_read() {
+        let source = production_source();
+
+        assert_eq!(
+            source.matches("read_page(").count(),
+            2,
+            "one definition and one call site: the page is read exactly once"
+        );
+        assert!(source.contains("fn check_citations(page: &Page, clauses: &Clauses"));
+    }
+
+    // ---- AC-007: the artifact that broke is the one named -------------------
+
+    /// The resolver's error, propagated unchanged. A page blamed for the
+    /// specification's condition does not satisfy this row, so the chain is
+    /// asserted to carry no page path at all.
+    #[test]
+    fn an_unreadable_specification_is_propagated_not_swallowed() {
+        let err = check(Path::new("this-root-does-not-exist"))
+            .expect_err("a missing specification must end the run");
+
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains("reading spec/SPECIFICATION.md"),
+            "the chain must name the specification, got: {chain}"
+        );
+        assert!(
+            !chain.contains(TREE),
+            "the pages must not be blamed for the specification's condition, got: {chain}"
+        );
+    }
+
+    /// RS-81-2, one medium over. Driven against the read seam the walk uses,
+    /// because making a *present* page unreadable needs a temp directory and
+    /// `xtask` deliberately carries no `tempfile` dev-dependency (DR-12).
+    #[test]
+    fn an_unreadable_page_is_a_hard_error_naming_the_page() {
+        let err = read_page(&workspace_root().unwrap(), "no-such-page.md")
+            .expect_err("a page that cannot be read must never be a skipped page");
+
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains("reading docs/no-such-page.md"),
+            "the chain must name the page, got: {chain}"
+        );
+        assert!(
+            production_source().contains("read_page(root, &rel)?"),
+            "the walk `?`-propagates it, so the page list can never be silently short by \
+             one — the `let Ok(text) = … else {{ continue }}` is the rejected shape"
+        );
+    }
+
+    // ---- AC-008: the limits, before the guarantee ---------------------------
+
+    #[test]
+    fn the_citation_check_documents_its_limits_before_its_guarantee() {
+        let source = production_source();
+
+        let limits = source
+            .find("# What this does not verify")
+            .expect("the module states no limits at all");
+        let guarantee = source
+            .find("fn check_citations")
+            .expect("the citation check is missing");
+        assert!(
+            limits < guarantee,
+            "a check whose limits are undocumented is read as a guarantee"
+        );
+
+        for limit in [
+            "says nothing about the sentence above it",
+            "is not told apart from prose",
+            "collapses upstream",
+        ] {
+            assert!(
+                source.contains(limit),
+                "the module must state `{limit}` among its limits"
+            );
+        }
     }
 }

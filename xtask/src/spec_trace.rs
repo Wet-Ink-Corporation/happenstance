@@ -1800,21 +1800,6 @@ pub(crate) fn collect_rules(suite: &str) -> BTreeSet<String> {
 /// second condition is deliberate and belongs here rather than in a caller: an empty set
 /// would report every citation and every pinned id as missing, which is this function being
 /// broken rather than the document.
-// `not(test)` because the test module below is already a caller, so under `cfg(test)` the
-// item is live and the expectation would be unfulfilled — the same self-erasure firing one
-// configuration early, and clippy runs over every target.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the two consumers land later in this same slice — \
-                  `narrative-citation-resolution` resolves the ids a page cites and \
-                  `frozen-documentation-must-pin` resolves the pinned set, both in \
-                  `lint_narrative`. `expect` rather than `allow` so the first call site \
-                  makes this expectation unfulfilled, which `-D warnings` turns into a \
-                  failure that forces the attribute out"
-    )
-)]
 pub(crate) fn clause_ids(root: &Path) -> Result<BTreeSet<String>> {
     collect_clause_ids(&read(root, SPEC)?)
 }
