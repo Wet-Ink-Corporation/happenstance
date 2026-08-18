@@ -29,16 +29,20 @@ serves neither reader.
 | The decisions, and why each was taken | [`.kb/decisions/`](../.kb/decisions/) — the full records are [`references/adr/`](../references/adr/) |
 | What is deliberately still unsettled | [`.kb/open-questions/`](../.kb/open-questions/) |
 
-Three trees are read by the gate rather than only by people: `cargo xtask
+Four trees are read by the gate rather than only by people: `cargo xtask
 spec-trace` parses `spec/SPECIFICATION.md` and `spec/E2E-CASES.md` by path;
 `cargo xtask lint-constitution` plus `cargo test -p xtask --doc` read every file
-under `standards/rust/`; and the narrative pages in this directory are registered
+under `standards/rust/`; the narrative pages in this directory are registered
 one by one in `xtask/src/narrative.rs`, where `cargo test -p xtask --doc` compiles
-their examples under the mandatory `cargo xtask narrative-doctests` step. A
-fourth tree, `standards/pages/`, is pinned the same way — by path, in
-`xtask/src/lint_pages.rs` — and is
-**[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]**: no gate
-step reads it yet, and that story is the one that adds the step and removes this
+their examples under the mandatory `cargo xtask narrative-doctests` step; and
+`standards/pages/` is pinned the same way — by path, in `xtask/src/lint_pages.rs`
+— whose own tests read every rule atom there by name under the gate's mandatory
+`tests` step, so a dangling index link or an over-budget atom fails `cargo xtask
+ci` today. That fourth reader is
+**[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]**: it is a
+hand-written list of filenames inside a test module rather than a dedicated
+`lint-pages` step reading the directory, so an atom nobody adds to the list is
+read by nothing — and that story is the one that replaces it and removes this
 bracket. Moving any of them
 means editing `xtask/src/` in the same change — which is the point of pinning
 them by path rather than by convention.

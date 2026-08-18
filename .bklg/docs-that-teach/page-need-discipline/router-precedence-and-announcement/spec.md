@@ -167,6 +167,20 @@ analogue states at this merge that **no gate step reads `standards/pages/` yet**
 the story that adds one, and names what will still not be checked after that (whether a
 page *answers* its declared need — DR-07's reviewer procedure is the instrument).
 
+**Corrected 2026-08-18 — this paragraph, and AC-006's THEN, were overtaken inside their
+own slice.** The clause *"no gate step reads `standards/pages/` yet"* was true of the
+merge this spec was written against and false by the time the slice landed: `xtask` is a
+workspace member, `cargo xtask ci`'s mandatory `tests` step is
+`cargo test --locked --workspace --all-features`, and `xtask/src/lint_pages.rs`'s test
+module reads every atom in this tree by name — a dangling router link, a missing
+`**Rejects.**`, an over-96-column prose line or a `rust`-tagged fence turns the gate red
+today. What is actually missing is the **dedicated** `lint-pages` step and the corpus
+reader that walks the directory rather than a hand-written list of filenames, both
+`page-need-checker-mounted-in-the-gate`'s. The router says that instead, and
+`::router_states_what_checks_this_tree_and_what_does_not` pins the corrected sentence and
+rejects the old one. RS-81-1's bar is unchanged and is the reason for the correction:
+state the blind spot first, and state it accurately.
+
 **The affected-gate consequence, accepted rather than fixed.**
 `affected_packages` has an arm for prose outside every workspace member: `README.md`
 and `standards/rust/` select `xtask` because their examples compile as that crate's

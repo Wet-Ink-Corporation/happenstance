@@ -77,10 +77,19 @@ compiles this tree.
 
 ## What checks this tree, and what does not
 
-At this merge **no gate step reads `standards/pages/`**. The step that adds one
-is `page-need-checker-mounted-in-the-gate`; until it lands these rules are held
-up by review and by this tree's own unit tests in `xtask/src/lint_pages.rs`, not
-by `cargo xtask ci`.
+No **dedicated** gate step reads this tree yet: the `lint-pages` step, and the
+corpus reader that walks this directory rather than a list of filenames, are
+`page-need-checker-mounted-in-the-gate`'s. What already reads it is the gate's
+mandatory `tests` step — `cargo test --locked --workspace --all-features`, which
+includes `xtask`, whose `xtask/src/lint_pages.rs` names every atom here and reads
+it. A dangling link in the index, a rule missing its `**Rejects.**`, a prose line
+past 96 columns, a `rust`-tagged fence, a router over 8,192 bytes and a token
+that disagrees with the `NEEDS` constant all turn `cargo xtask ci` red today.
+
+The gap the checker closes is *which* files are read: the list of atoms is
+hand-written in that module, so an atom nobody adds to it is read by nothing and
+an empty tree would pass. A test module reading five named files is not a corpus
+reader, and only the second makes a green run a statement about the tree.
 
 After it lands, one thing still will not be checked, and it is the one that
 matters most: a check can see that a page **declares** a need, never that the

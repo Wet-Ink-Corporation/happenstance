@@ -109,3 +109,18 @@ namespace rather than an index.
 repair is a pair of edits that only makes sense with the checker
 (`xtask/src/affected.rs:222-223`, CR-4), and it belongs to
 `page-need-checker-mounted-in-the-gate`.
+
+**Correction, 2026-08-18 (slice review fix, not part of this story's checkpoint).** Two
+things this report records as green were wrong and have been repaired in a later commit on
+the same branch. First, `## What checks this tree, and what does not` said *"no gate step
+reads `standards/pages/`"* and `docs/README.md` said *"no gate step reads it yet"*; both
+were false as merged, because the same slice's `xtask/src/lint_pages.rs` test module reads
+every atom in the tree under `cargo xtask ci`'s mandatory `tests` step. Both now say what
+is actually missing — the **dedicated** `lint-pages` step and the directory-walking corpus
+reader — and `::router_states_what_checks_this_tree_and_what_does_not` pins the corrected
+sentence and rejects the old one. Second, AC-002's and AC-004's assertions read
+`standards/rust/README.md` directly; they now compare against `PRECEDENCE_CHAIN` and
+`GENERATED_HEADER`, literals inlined in `xtask/src/lint_pages.rs` and commented with the
+lines they were copied from, so a pages-tree test cannot go red for a constitution-tree
+reason (RS-81-3). `git diff main -- standards/rust/README.md` stays the ledger-side proof
+that the chain is unedited.

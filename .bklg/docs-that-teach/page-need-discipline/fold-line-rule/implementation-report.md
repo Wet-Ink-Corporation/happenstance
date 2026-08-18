@@ -97,3 +97,15 @@ directly by `every_atom_is_reachable_from_both_router_regions`.
 **No fold-checker was built, and none may be.** `PERMITTED_FOLD_MECHANISMS` is a table in
 the rules tree; nothing in `xtask/src/` names it except band 00's guard asserting its
 absence from band 00. The atom's closing section says why, in its own words.
+
+**Correction, 2026-08-18 (slice review fix, not part of this story's checkpoint).** The
+closing statement's first bullet read *"No gate step reads this rule"*, which was false:
+this atom is read on every `cargo xtask ci` by `xtask/src/lint_pages.rs`'s tests, which
+hold it to the tree's grammar and budgets. The bullet is now scoped to what it can honestly
+claim — **nothing counts folds** on a governed page, and none ever will, while the atom
+itself is read — and `::band_twenty_states_what_this_rule_does_not_do` pins the corrected
+wording and rejects the old one. The four procedural rows in `_ledger.md` (AC-001, AC-002,
+AC-004 and AC-006) are also restated: they described walks by "a reader who did not author
+it", where the walker was in fact this implementation. They now name the real walker and
+carry the independence debt explicitly, with the independent walks scheduled at project
+review.

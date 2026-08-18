@@ -145,9 +145,12 @@ to a clause, so a rule here may not be waived to fit one) ·
 
 ## What this rule does not do
 
-- **No gate step reads this rule.** It is applied by a reader. Nothing in
-  `cargo xtask ci` counts folds, and nothing will: the markers are textual and
-  the judgement is not.
+- **Nothing counts folds.** This rule is applied by a reader: no step in
+  `cargo xtask ci` opens a governed page and counts what is hidden on it, and
+  none will, because the markers are textual and the verdict is not. The atom
+  you are reading *is* read — `xtask/src/lint_pages.rs`'s tests hold it to this
+  tree's grammar and budgets on every gate run — which checks the rule's shape
+  and never the pages it governs.
 - `PERMITTED_FOLD_MECHANISMS` is a table in this tree and **not a `const`** in
   `xtask/src/lint_pages.rs`. Nothing would enforce such a constant, and an
   unenforced one beside an enforced one reads as a check that exists.

@@ -220,6 +220,30 @@ mod tests {
         "**Evidence.**",
     ];
 
+    /// The precedence chain, copied from `standards/rust/README.md:25-26` —
+    /// the chain's own words, without the closing period of the sentence that
+    /// carries them.
+    ///
+    /// A literal here rather than a read of that file. A test in *this* tree
+    /// that opens the constitution's router turns an edit to the constitution
+    /// into a red pages-tree test with a pages-tree message, which is the one
+    /// error message answering two trees' questions that RS-81-3 forbids
+    /// (`standards/rust/81-checks-that-cannot-be-types.md:209`, architecture
+    /// brief Note 6; Note 8 lists `standards/rust/` under what must not move).
+    /// That the chain itself is unedited is a ledger-side fact with its own
+    /// command: `git diff main -- standards/rust/README.md`.
+    const PRECEDENCE_CHAIN: &str = "SPECIFICATION clause > ADR > constitution atom > \
+                                    `CLAUDE.md` / `CONTRIBUTING.md` summary > \
+                                    `references/evaluation/*`";
+
+    /// The generated region's header and separator, copied from
+    /// `standards/rust/README.md:68-69`.
+    ///
+    /// Inlined for the same reason as [`PRECEDENCE_CHAIN`], and it is what makes
+    /// the checker story's `generated_region` analogue a copy of the precedent
+    /// rather than a variant of it.
+    const GENERATED_HEADER: [&str; 2] = ["| Atom | Load when | Rules |", "|---|---|---|"];
+
     fn root() -> PathBuf {
         crate::spec_trace::workspace_root().unwrap()
     }
@@ -571,23 +595,18 @@ mod tests {
             "the discipline sits inside the chain and adds no tier to it"
         );
 
-        // The only way anything inside this diff can speak to a *different*
-        // file being untouched is to read that file and find its own words
-        // still there. `git diff main -- standards/rust/README.md` is the
-        // ledger's form of the same check.
+        // The chain is quoted here, and the quote is compared with an inlined
+        // copy rather than with `standards/rust/README.md` itself — see
+        // `PRECEDENCE_CHAIN` for why this tree's tests do not open that file,
+        // and for the ledger-side command that proves it unedited.
         //
-        // Line endings are normalised first: this is a Windows checkout with
-        // `core.autocrlf=true`, so a tracked file arrives CRLF and a literal
-        // written with `\n` would fail on the checkout rather than on the edit.
-        let chain = std::fs::read_to_string(root().join("standards/rust/README.md"))
-            .unwrap()
-            .replace("\r\n", "\n");
+        // Blockquote markers are stripped and the whole file flattened first:
+        // the router wraps the chain across two `>` lines, and on this Windows
+        // checkout it wraps with CRLF besides.
         assert!(
-            chain.contains(
-                "> **SPECIFICATION clause > ADR > constitution atom > `CLAUDE.md` /\n\
-                 > `CONTRIBUTING.md` summary > `references/evaluation/*`.**"
-            ),
-            "standards/rust/README.md's precedence block is cited, never edited"
+            unquoted(&text).contains(PRECEDENCE_CHAIN),
+            "the router quotes the chain verbatim rather than re-deriving it: \
+             it must carry {PRECEDENCE_CHAIN}"
         );
     }
 
@@ -628,16 +647,17 @@ mod tests {
 
         // The header and separator are the precedent's verbatim, so the checker
         // story's `generated_region` analogue is a copy rather than a variant.
-        let chain = std::fs::read_to_string(root().join("standards/rust/README.md")).unwrap();
-        let precedent = generated_region(&chain);
+        // Compared against `GENERATED_HEADER`, an inlined copy, rather than
+        // against the constitution's live region: a pages-tree test may only
+        // fail for pages-tree reasons (RS-81-3).
         assert_eq!(
             region.first().map(String::as_str),
-            precedent.first().map(String::as_str),
+            Some(GENERATED_HEADER[0]),
             "the region's header row is the constitution's verbatim"
         );
         assert_eq!(
             region.get(1).map(String::as_str),
-            precedent.get(1).map(String::as_str),
+            Some(GENERATED_HEADER[1]),
             "the region's separator row is the constitution's verbatim"
         );
 
@@ -686,6 +706,7 @@ mod tests {
     #[test]
     fn router_states_what_checks_this_tree_and_what_does_not() {
         let text = router();
+        let prose = flat(&text);
         assert!(
             text.contains("## What checks this tree, and what does not"),
             "a check whose limits are undocumented is read as a guarantee \
@@ -693,11 +714,26 @@ mod tests {
         );
         assert!(
             text.contains("page-need-checker-mounted-in-the-gate"),
-            "the section names the story that adds the first gate step"
+            "the section names the story that adds the dedicated step"
         );
         assert!(
-            text.contains("no gate step reads"),
-            "at this merge nothing reads the tree, and the router says so"
+            prose.contains("No **dedicated** gate step reads this tree yet"),
+            "what is missing is the *dedicated* step; the tree itself is read"
+        );
+        assert!(
+            prose.contains("`cargo test --locked --workspace --all-features`"),
+            "and the router names what reads it today — the gate's mandatory \
+             `tests` step, which compiles and runs this module"
+        );
+
+        // This module's own tests read every atom named in `TREE` on every
+        // `cargo xtask ci`. A router claiming otherwise ships a false statement
+        // about what checks it, in the one place a reader meets the question —
+        // RS-81-1 inverted, and never-fold class 5 broken by the tree that
+        // wrote the class.
+        assert!(
+            !prose.contains("no gate step reads `standards/pages/`"),
+            "the tree *is* read by the gate; the router may not say it is not"
         );
     }
 
@@ -716,10 +752,25 @@ mod tests {
              so the tree is reachable by someone who does not know it exists"
         );
         assert!(
+            index.contains("Four trees are read by the gate rather than only by people"),
+            "this tree is one of them: the gate's mandatory `tests` step runs \
+             this module, which reads every atom by name"
+        );
+        assert!(
+            !index.contains("no gate step reads it yet"),
+            "the repository index may not tell a reader the pages tree is \
+             unread when `cargo xtask ci` reads it on every run"
+        );
+        assert!(
             index.contains("[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]"),
-            "the gate-read paragraph names the third pinned tree with a marker \
-             that names its own removal, rather than promising a check that does \
-             not exist"
+            "the marker stays, and names what is provisional: a hand-written \
+             list of filenames inside a test module, not a dedicated step \
+             reading the directory"
+        );
+        assert!(
+            index.contains("hand-written list of filenames inside a test module"),
+            "the bracket says what it is a placeholder for, so the reader \
+             learns which half is missing rather than that everything is"
         );
         assert!(
             index.contains("which is the point of pinning them by path rather than by convention"),
@@ -1022,6 +1073,20 @@ mod tests {
         text.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
+    /// [`flat`], with each line's leading blockquote markers removed first.
+    ///
+    /// A quotation that wraps is still the same quotation, and in `CommonMark`
+    /// every continuation line of a blockquote carries its own `>`. Stripping
+    /// them is what lets a quoted sentence be compared with the literal it was
+    /// copied from.
+    fn unquoted(text: &str) -> String {
+        let stripped: Vec<&str> = text
+            .lines()
+            .map(|line| line.trim_start().trim_start_matches('>'))
+            .collect();
+        flat(&stripped.join(" "))
+    }
+
     /// One `## RP-` rule's body, by id.
     fn rule_body(text: &str, id: &str) -> String {
         let found = rules(text).into_iter().find(|(found, _)| found == id);
@@ -1183,7 +1248,9 @@ mod tests {
              never-fold class 5 applied to the atom that wrote the class"
         );
         for limit in [
-            "No gate step reads this rule",
+            "Nothing counts folds",
+            "the markers are textual and the verdict is not",
+            "checks the rule's shape and never the pages it governs",
             "DT-7",
             "band 40",
             "not a `const`",
@@ -1193,6 +1260,15 @@ mod tests {
                 "the closing statement names all four limits; `{limit}` is missing"
             );
         }
+
+        // The first limit is scoped to what it can honestly claim. The atom is
+        // read on every `cargo xtask ci` — by this module's own tests — so a
+        // bullet saying no gate step reads *the rule* is false, while "nothing
+        // counts folds on a governed page" is exactly true.
+        assert!(
+            !text.contains("No gate step reads this rule"),
+            "the fold *line* is unchecked; the atom stating it is not"
+        );
 
         // Assembled at run time from two halves, and anchored on `const `.
         // `THIS_FILE` is this module's own source: a whole literal here would

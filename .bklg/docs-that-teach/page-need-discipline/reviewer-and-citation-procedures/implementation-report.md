@@ -101,3 +101,13 @@ where `need-vocabulary-and-declaration-form` had already merged.
 `clause_ids` and that a second parser is forbidden, and nothing in this diff resolves an id.
 The spot check is a procedure a person runs, which is exactly the point: the half a parser
 could do is somebody else's, and the half it cannot do is this story's.
+
+**Correction, 2026-08-18 (slice review fix, not part of this story's checkpoint).** The
+residual above is now partly discharged, and the AC-007 row records the discharge rather
+than the author-run walk. The adversarial slice reviewer — a non-author of the fixture, of
+band `40` and of every file in this slice — executed the calibration walk against
+`standards/pages/examples/two-needs.md` on 2026-08-18 and reached `fail — two needs`. That
+walk, its recorded step answers and the walker's identity replace the capture EC-005 makes
+inadmissible; the paragraph above stays unedited as the audit trail of the state the row
+was in. What remains owed is a walk by a named human non-author at this project's review
+and integration stages.
