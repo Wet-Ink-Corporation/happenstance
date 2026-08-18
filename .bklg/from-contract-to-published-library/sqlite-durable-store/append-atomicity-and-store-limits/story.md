@@ -7,9 +7,9 @@ title: "append: preconditions, then one BEGIN IMMEDIATE transaction"
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: in-review
+status: in-progress
 process: story
-stage: report
+stage: implement
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: capability
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-18T03:28:10.791Z
+updated: 2026-08-18T03:28:12.034Z
 links:
   pr: null
   commits:
     - 23bc776
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
