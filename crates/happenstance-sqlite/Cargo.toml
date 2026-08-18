@@ -22,7 +22,18 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-happenstance-testkit.workspace = true
+# `proptest` is the testkit's own off-by-default feature, and it is enabled
+# **here** rather than mirrored as a feature of this crate because
+# `cfg(feature = "…")` names the *current* crate's features: `happenstance-sqlite`
+# cannot `cfg` on a dependency's feature at all, which is why
+# `crates/happenstance-testkit/tests/memory_model_conformance.rs`'s inner
+# `#![cfg(all(not(target_arch = "wasm32"), feature = "proptest"))]` works only
+# from inside the testkit. The rejected alternative was a `proptest` feature on
+# this crate forwarding to it: the project's conformance command is
+# `cargo test -p happenstance-sqlite` with no flags, and a family that needs an
+# extra flag to appear is a family that silently does not run. It is a
+# dev-dependency, so nothing it pulls in reaches a consumer of this crate.
+happenstance-testkit = { workspace = true, features = ["proptest"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]

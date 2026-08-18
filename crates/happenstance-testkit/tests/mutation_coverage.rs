@@ -2545,17 +2545,32 @@ const RACERS: &[Racer] = &[
              `MemoryEventStore` itself",
         expect: &[],
     },
+    // **There is no `REGISTRY` row for this defect and there cannot be one.**
+    // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
+    // empty, and a probe-then-insert store fails *no* sequential rule — that is
+    // the entire content of the defect. A concurrency rule's wrong store belongs
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:106-113` says
+    // so in prose where the harness says it in code
+    // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
+    // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is
+    // an instruction that has been written down once already and will read as an
+    // unfilled gap to the next person who looks for it.
     Racer {
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
             "k_disjoint_boundaries_admit_exactly_k_commits",
         ],
-        provenance: "`SELECT 1 FROM events WHERE …` and then `INSERT`, with no `BEGIN` between \
-             them and no `SERIALIZABLE` under them — what an adapter writes when its \
-             driver's convenience API is one statement per call. It is \
-             `WriteThenCheckStore` with the two halves the other way round, which is \
-             what makes it invisible to `append_is_atomic`",
+        provenance: "`BEGIN DEFERRED` — or no `BEGIN` at all — then `SELECT 1 FROM events \
+             WHERE …`, then `INSERT`, with nothing holding a write lock across the \
+             two and no `SERIALIZABLE` under them. `BEGIN DEFERRED` is the SQLite \
+             spelling and it is the default one: rusqlite's `Connection::transaction` \
+             opens deferred, so the read lock is taken at the probe and promoted at \
+             the insert, and between those two SQLite lets another connection \
+             commit. The autocommit form is the same defect with the driver's \
+             convenience API — one statement per call — supplying the gap instead. \
+             It is `WriteThenCheckStore` with the two halves the other way round, \
+             which is what makes it invisible to `append_is_atomic`",
         // Both pins name the *too many winners* side. That is the whole content
         // of this defect: every contender's probe was answered before any of
         // them acted on it, so the answers were all stale together.
