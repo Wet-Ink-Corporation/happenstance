@@ -20,13 +20,13 @@ archetype: foundation
 slice: specification-pin
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T15:16:37.201Z
+updated: 2026-08-18T15:16:38.459Z
 links:
   pr: null
   commits:
     - d69253c
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
