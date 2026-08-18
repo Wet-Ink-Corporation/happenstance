@@ -278,16 +278,16 @@ impl SqliteEventStore {
 
     /// How many prepared statements one page of `query` will take.
     ///
-    /// `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)`, and never zero.
-    /// [`Query::all`] is one arm, because it goes straight to the `event` table
-    /// rather than through the tag index.
-    ///
-    /// This is the seam a test uses to observe that a wide query genuinely
-    /// crossed the chunk boundary. It is the same function the read path itself
-    /// plans with, so it cannot drift from the behaviour it reports.
+    /// Never zero: [`Query::all`] is one chunk, straight to the `event` table.
+    /// This is the seam a test uses to observe a wide query genuinely crossing
+    /// the boundary, so it is **the same call** the read path makes —
+    /// `query_sql::chunks`, counted — never a second `ceil(arms / width)` that
+    /// would go on reporting a boundary `fetch_page` had stopped taking. A
+    /// default `Selectivity` orders tags inside an arm, never the partition.
     #[must_use]
     pub fn planned_statement_count(query: &Query) -> usize {
-        crate::query_sql::statement_count(query, Self::MAX_QUERY_ARMS_PER_STATEMENT)
+        let width = Self::MAX_QUERY_ARMS_PER_STATEMENT;
+        crate::query_sql::chunks(query, &Selectivity::default(), width).len()
     }
 
     /// Wraps an already-open connection onto an **already-migrated** database.

@@ -117,14 +117,6 @@ impl Selectivity {
     }
 }
 
-/// How many statements one page of `query` takes at `max_arms` arms each.
-///
-/// Never zero: `Query::all` is one arm.
-pub(crate) fn statement_count(query: &Query, max_arms: usize) -> usize {
-    let arms = query.items().map_or(1, <[QueryItem]>::len).max(1);
-    arms.div_ceil(max_arms.max(1))
-}
-
 /// One `SELECT position …` subquery per chunk of at most `max_arms` items.
 ///
 /// **Chunk and merge, never refuse.** A `Query` bounds nothing by design and the
@@ -139,6 +131,14 @@ pub(crate) fn statement_count(query: &Query, max_arms: usize) -> usize {
 /// module doc above claimed the translation was shared. A single-chunk plan is
 /// the narrow case of the wide one, so there is nothing the removed spelling
 /// could say that this cannot.
+///
+/// For the same reason there is no separate `statement_count` beside it. A
+/// `ceil(arms / max_arms)` of its own agreed with this partition by arithmetic
+/// rather than by construction, so it would have gone on reporting a boundary
+/// after the read path stopped taking one — a merge that never executes, behind
+/// a number saying it did.
+/// [`planned_statement_count`](crate::event_store::SqliteEventStore::planned_statement_count)
+/// counts *this* call instead.
 ///
 /// [`Query::all`] short-circuits to the `event` table rather than going through
 /// the tag index, and that is the definition rather than an optimisation: `all`

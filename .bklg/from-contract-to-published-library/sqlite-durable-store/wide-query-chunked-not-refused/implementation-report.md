@@ -39,8 +39,8 @@ The two that passed are the ones that do not cross the boundary: the 128-item
 minimum, and the off-runtime construction. Every other one failed with
 `too many terms in compound SELECT`.
 
-**GREEN.** `query_sql::statement_count` and `query_sql::chunks`, and a
-`fetch_page` that loops the plan and merges. **16 passed, 0 failed.**
+**GREEN.** `query_sql::chunks`, and a `fetch_page` that loops the plan and
+merges. **16 passed, 0 failed.**
 
 | AC | Test that encodes it | Red → Green |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ minimum, and the off-runtime construction. Every other one failed with
 
 | File | Shape of the change |
 | --- | --- |
-| `crates/happenstance-sqlite/src/query_sql.rs` | `statement_count` and `chunks` — the decomposition, crate-private |
+| `crates/happenstance-sqlite/src/query_sql.rs` | `chunks` — the decomposition, crate-private, and the single entry point both callers go through |
 | `crates/happenstance-sqlite/src/event_store.rs` | `MAX_QUERY_ARMS_PER_STATEMENT` and `planned_statement_count` (the two new public items, documented); `fetch_page` loops the plan, and merges with one direction-aware sort, one dedup on position, an `exhausted` computed before truncation, and the budget applied to the merged output; the module-doc status banner corrected now that every event-store path is real |
 | `crates/happenstance-sqlite/tests/wide_query.rs` | **New target.** Sixteen tests, every width derived from the crate's own constant rather than a literal |
 
