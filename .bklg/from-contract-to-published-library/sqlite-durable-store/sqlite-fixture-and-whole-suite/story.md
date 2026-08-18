@@ -7,9 +7,9 @@ title: SqliteFixture, and the first green conformance run against a file
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: in-review
+status: in-progress
 process: story
-stage: report
+stage: implement
 automation: HITL
 severity: null
 blocked_by:
@@ -22,13 +22,13 @@ archetype: capability
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-18T03:30:42.472Z
+updated: 2026-08-18T03:30:43.803Z
 links:
   pr: null
   commits:
     - 41a2064
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
