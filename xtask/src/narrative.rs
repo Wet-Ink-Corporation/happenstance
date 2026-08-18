@@ -7,31 +7,61 @@
 //! its own, and this corpus is the one most likely to be quoted as evidence of
 //! something it never checked.
 //!
-//! * **It does not check that an example still demonstrates its claim.** A
-//!   fence whose surrounding sentence has drifted compiles exactly as happily
-//!   as one that has not. This is the headline blind spot of the whole step,
-//!   and the only compensation is compositional: each fence sits immediately
-//!   after the sentence it demonstrates, so a reviewer reading the diff meets
-//!   both at once.
-//! * **It does not lint fence bodies.** Doctests receive neither the workspace
-//!   `[lints]` table nor `cargo clippy`, which does not lint doctests at all,
-//!   so `unwrap_used = "deny"` is unenforced inside every fence in this tree.
-//! * **The file it names on a failure is this harness, not the page.** The
-//!   report reads ``xtask\src\../../docs/<page>.md - narrative::<page> (line
-//!   N)``: one module per page is what keeps the *module* the page's name and
-//!   the *line* relative to the page, and nothing recovers the rest. That is a
-//!   residual of the mechanism, recorded rather than routed around.
-//! * **A fence tagged `text` is neither compiled nor flagged**, and neither is
-//!   one with no tag at all or one marked `ignore`. The fence walk and its
-//!   allowance list are `fence-discipline-and-allowance-list`'s; until they
-//!   land, this is a known hole and not something to lean on.
-//! * **What `RUSTDOCFLAGS=-D warnings` actually enforces inside a narrative
-//!   fence is unmeasured here.** The gate step reaches `rustdoc` through an
-//!   extra `cargo run -p xtask` hop, and nothing in this change re-ran the
-//!   probe through it. [`crate::constitution`]'s finding was measured without
-//!   that hop and is deliberately not inherited; measuring it belongs to
-//!   `documented-blind-spots-and-their-proofs`.
-//! * **This step is silent about whether the page teaches anybody anything.**
+//! Four of the six limits below are properties of *this* mechanism — compiling
+//! a fence — and are stated here. The fifth is a property of the fence *walk*,
+//! which reads pages as files, and is stated where it holds, in
+//! `xtask/src/lint_narrative.rs`. That is a plain path and deliberately not an
+//! intra-doc link: the checker is a **bin**-crate module, this file is compiled
+//! into the lib target, and the two never link — a link would be a broken
+//! intra-doc link, which the gate's `documentation` step turns into a hard
+//! error rather than a warning.
+//!
+//! * **It does not check that an example is still demonstrating the claim above
+//!   it.** A fence whose surrounding sentence has drifted compiles exactly as
+//!   happily as one that has not. This is the headline blind spot of the whole
+//!   step, and **no mechanical test can close it**: the gap is semantic rather
+//!   than mechanical, so there is nothing for a checker to compare. None is
+//!   written, and writing one that gestured at it would be worse than none —
+//!   a decorative instrument is what gets the real one deleted. The
+//!   compensation inside the tree is compositional, each fence sitting
+//!   immediately after the sentence it demonstrates so a reviewer meets both at
+//!   once; the real instrument is HS-P0024's friction log, and nothing in this
+//!   repository substitutes for it.
+//! * **It does not lint what is inside a fence.** Doctests receive neither the
+//!   workspace `[lints]` table nor `cargo clippy`, which does not lint doctests
+//!   at all, so `unwrap_used = "deny"` is unenforced in every fence in this
+//!   tree — measured, below. The only instrument is the reviewer reading the
+//!   diff, and the fence band is composed to make that possible rather than
+//!   likely.
+//! * **`RUSTDOCFLAGS=-D warnings` reaches nothing inside a narrative fence, and
+//!   that is measured rather than cited.** The two claims this repository held
+//!   disagreed — [`crate::constitution`]'s own probe recorded that the variable
+//!   recovers rustc's *default-on* lints inside a doctest, while the upstream
+//!   reports say `cargo test --doc` drops it — so the probe was re-run against
+//!   this step as `REQUIRED` declares it, on `rust-toolchain.toml`'s pinned
+//!   **1.97.1**. Result: a fence violating `non_snake_case`, a warn-by-default
+//!   rustc lint confirmed to fire on the same snippet under plain `rustc`,
+//!   compiled and ran with **no diagnostic and exit 0** — with the variable
+//!   set, with it removed, and with the extra `cargo run -p xtask` hop taken
+//!   out. `unwrap_used` was likewise unenforced. Three transcripts, their exact
+//!   commands and the toolchain are in this project's `_limits-evidence.md`;
+//!   the upstream reports are context, not the finding.
+//! * **A failure does not name this file, and the path it prints is the page's
+//!   own — reached through this file's directory, with a line that is not the
+//!   failing statement.** Measured: libtest names the doctest
+//!   ``xtask\src\../../docs/append-conditions.md - narrative::append_conditions
+//!   (line 9)``, where `9` is the *opening* line of the fence rather than the
+//!   line that failed. The panic's own `file:line` is worse and is not a
+//!   location at all: it is a temporary bundle file under the OS temp
+//!   directory, or — under `--show-output` — the page's path with a line
+//!   counted inside rustdoc's synthesized doctest source, which lands on a
+//!   sentence of prose. So the only stable, actionable identifier is **the
+//!   doctest's module name**: one module per page is what keeps it the page's
+//!   name, and that is the whole of what registration buys.
+//! * **This step says nothing about whether any page teaches anybody
+//!   anything.** A green banner means the fences compiled and their assertions
+//!   held; comprehension is HS-P0024's friction log, and no run of this step
+//!   substitutes for it.
 //!
 //! # Why the harness is here and not in a published crate
 //!
@@ -70,4 +100,14 @@
 #[cfg(doctest)]
 mod append_conditions {
     #![doc = include_str!("../../docs/append-conditions.md")]
+}
+
+// Registered like any other page, and it carries no `rust` fence at all. That
+// is the point: it is the retained fixture behind the `text`-fence limit stated
+// in `xtask/src/lint_narrative.rs`, walked by the checker on every run and
+// reported by nothing. It is also why the count this step prints is a count of
+// pages that *produce* a doctest rather than of pages the harness registers.
+#[cfg(doctest)]
+mod text_fences {
+    #![doc = include_str!("../../docs/text-fences.md")]
 }

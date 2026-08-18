@@ -12,21 +12,25 @@
 //! * **It does not lint the fences.** Doctests receive neither the workspace
 //!   `[lints]` table nor `cargo clippy`, which does not lint doctests at all, so
 //!   `unwrap_used = "deny"` is unenforced inside every example in the tree.
-//! * **The file a failure names is the harness, not the page.**
-//!   `xtask/src/narrative.rs` carries that residual in full: the module resolves
-//!   the page and the line resolves the location, and the path in front of both
-//!   is `xtask/src/`.
+//! * **What a failure names is not the file you edited.**
+//!   `xtask/src/narrative.rs` carries that residual in full, measured rather
+//!   than forecast: the doctest's *module* resolves the page, its `(line N)` is
+//!   the fence's opening line rather than the failing statement, and the panic's
+//!   own `file:line` is not a location a reader can open.
 //! * **It does not read the pages.** A fence tagged `text`, an untagged fence,
 //!   an `ignore`d fence, a hidden panel, an unresolvable clause id and a page
-//!   nobody registered are all invisible here. Those are the *checker's*, and
-//!   the checker does not exist yet — `narrative-checker-mounted-with-pinned-path`
-//!   and the stories after it build it. This step compiles what the harness
-//!   names and asserts that the set is not empty; that is the whole of it.
-//! * **What `RUSTDOCFLAGS=-D warnings` enforces inside a narrative fence is
-//!   unmeasured here.** This step reaches `rustdoc` through an extra
-//!   `cargo run -p xtask` hop that `xtask/src/constitution.rs`'s probe never had, so
-//!   that probe's finding is deliberately not inherited. Re-running it is
-//!   `documented-blind-spots-and-their-proofs`'.
+//!   nobody registered are all invisible here. Those are the *checker's*, in
+//!   `xtask/src/lint_narrative.rs`. This step compiles what the harness names
+//!   and asserts that the set is not empty; that is the whole of it. The count
+//!   it prints is a count of pages that produce a doctest, so a page whose
+//!   fences are all `text` is registered, walked, and absent from this number.
+//! * **`RUSTDOCFLAGS=-D warnings` reaches nothing inside a narrative fence.**
+//!   Measured on 1.97.1 against this step as `REQUIRED` declares it, including
+//!   the extra `cargo run -p xtask` hop that `xtask/src/constitution.rs`'s
+//!   earlier probe never had: a `non_snake_case` violation compiled and ran with
+//!   no diagnostic and exit 0, with the variable set and with it removed. That
+//!   probe's finding is not inherited, and this one is written up where the
+//!   mechanism lives, in `xtask/src/narrative.rs`.
 //! * **A green banner here says nothing about whether the page teaches.**
 //!
 //! # Why a subcommand rather than a bare `cargo test --doc`

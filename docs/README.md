@@ -13,6 +13,7 @@ serves neither reader.
 | Page | Read it at |
 | --- | --- |
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |
+| Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
 
 | Looking for | It is at |
 | --- | --- |

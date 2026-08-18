@@ -14,17 +14,22 @@
 //! this corpus is the one most likely to be quoted as evidence of something it
 //! never checked.
 //!
+//! One of the tree's six enumerated limits is a property of *this* walk and is
+//! stated here. The other four that belong to the machine — what a compiled
+//! fence does and does not establish, what `RUSTDOCFLAGS` reaches, and what a
+//! failure actually names — are properties of the compile mechanism and are
+//! stated where they hold, in `xtask/src/narrative.rs`. A plain path rather
+//! than an intra-doc link, because that file is compiled into the **lib**
+//! target and this module into the bin target: the two never link, and a link
+//! across the boundary resolves to nothing while failing nothing.
+//!
 //! * **Registration proves that a page is compiled. It does not prove that the
 //!   page is correct.** A page this module reports as registered is a page
 //!   rustdoc will hand to the compiler. Whether its prose still describes what
 //!   its fences do is a question nothing in this repository asks; adjacency is
-//!   what makes it reviewable by a human, and nothing makes it mechanical.
-//! * **A compile failure names the harness, not the markdown.**
-//!   `cargo test -p xtask --doc` reports ``xtask\src\../../docs/<page>.md -
-//!   narrative::<page> (line N)``: the module resolves the page and the line
-//!   resolves the location, and the path in front of both is `xtask/src/`.
-//!   Registration is what keeps even that much true, and it is the whole of what
-//!   it buys.
+//!   what makes it reviewable by a human, and nothing makes it mechanical. What
+//!   a compiled fence does and does not establish is stated in full in
+//!   `xtask/src/narrative.rs`, not restated here.
 //! * **A Rust example deliberately tagged `text` is neither compiled nor
 //!   flagged.** The fence walk rejects an untagged fence and refuses any info
 //!   string it does not enumerate — in every spelling rustdoc accepts, which is
@@ -33,7 +38,12 @@
 //!   legitimate tag for prose, and a block whose info string carries no rustdoc
 //!   tag at all *is* prose as far as the compiler is concerned, so an author who
 //!   wants a Rust block the compiler never sees can still have one by calling it
-//!   something else. This list narrows that hole and does not close it.
+//!   something else. This list narrows that hole and does not close it. The
+//!   hole is executed rather than asserted: `docs/text-fences.md` is a retained
+//!   fixture whose `text` fence is deliberately false about the library, walked
+//!   by this module on every gate run and reported by nothing, and a test pins
+//!   that silence so the day it closes is the day this bullet fails a build.
+//!   The only other instrument is the reviewer who reads the tag in the diff.
 //! * **A block indented by four spaces or more is invisible to this walk.**
 //!   `CommonMark` makes it an indented code block rather than a fence, and
 //!   rustdoc compiles it — measured, not assumed. What escapes is therefore the
@@ -102,9 +112,11 @@
 //!   registered page look unregistered. It is the coupling
 //!   `lint_constitution::check_harness` already lives with, recorded here rather
 //!   than defended against with a parser.
-//! * **Nothing here says a page teaches anybody anything.** A green run of this
-//!   step means the tree is where it is pinned, holds pages, and that every page
-//!   is offered to the compiler. That is the whole of it.
+//! * **This step says nothing about whether any page teaches anybody
+//!   anything.** A green run means the tree is where it is pinned, holds pages,
+//!   and that every page is offered to the compiler. That is the whole of it;
+//!   comprehension is HS-P0024's friction log, and no run of this step
+//!   substitutes for it.
 //!
 //! # Why the module is `lint_narrative` and the subcommand is `narrative`
 //!
@@ -2327,8 +2339,18 @@ mod tests {
         );
     }
 
-    /// Two obligations in one place: the limits this story's own checks create,
-    /// and the `affected::run` divergence recorded rather than left implicit.
+    /// Two obligations in one place: the limits this module's own checks
+    /// create, and the `affected::run` divergence recorded rather than left
+    /// implicit.
+    ///
+    /// One claim moved. This test used to require the phrase *names the
+    /// harness, not the markdown*, and the run recorded in
+    /// `observed-failure-falsification`'s `_falsification.md` measured that
+    /// sentence to be false — the report names the *page's* path behind
+    /// `xtask\src\../../`, and never this harness's filename. The record beats
+    /// the forecast, so the claim was corrected where it holds
+    /// (`xtask/src/narrative.rs`) and this module now points at that file
+    /// instead of carrying a second, wrong copy.
     #[test]
     fn the_module_states_its_own_limits_and_its_one_divergence() {
         let docs: String = production_source()
@@ -2339,7 +2361,7 @@ mod tests {
 
         for claim in [
             "does not prove that the",
-            "names the harness, not the markdown",
+            "stated where they hold, in `xtask/src/narrative.rs`",
             "affected",
             "lint-constitution",
             "teach",
@@ -4204,6 +4226,526 @@ One writer at a time.
                 assert!(
                     !problem.contains(claim),
                     "`{claim}` reads as a claim the pin cannot make: {problem}"
+                );
+            }
+        }
+    }
+
+    // ======================================================================
+    // documented-blind-spots-and-their-proofs
+    // ======================================================================
+
+    /// The heading both modules must carry, first.
+    const LIMITS_HEADING: &str = "What this does not verify";
+
+    /// The retained `text`-fence fixture, tree-relative.
+    ///
+    /// Retained rather than deleted after its walk: limit 5's proof has to stay
+    /// re-runnable, and a limit whose demonstration was thrown away is a limit
+    /// stated rather than executed. Removing it is a three-file change — the
+    /// page, its registration in [`HARNESS`], and the pinning test below — and
+    /// that is the signal that limit 5's status changed.
+    const TEXT_FIXTURE: &str = "text-fences.md";
+
+    /// The record limit 3's prose cites for its three transcripts.
+    ///
+    /// Asserted as a *string in the docs* and never read: nothing in
+    /// `xtask/src/` may open `.bklg/`, or a clean checkout would need the
+    /// backlog to pass its own gate.
+    const LIMITS_RECORD: &str = "_limits-evidence.md";
+
+    /// One of the six limits `_decomposition.md` Note 10 enumerates.
+    ///
+    /// `owners` is the module or modules whose docs must state it: limits 1-4
+    /// are properties of the compile mechanism and belong to [`HARNESS`],
+    /// limit 5 is a property of the fence walk and belongs to [`CHECKER`], and
+    /// limit 6 belongs, unhedged, to both. A module that states a limit it does
+    /// not own is two spellings of one sentence, and one of them goes stale.
+    ///
+    /// `claim` and `instrument` are the two halves of the bullet shape
+    /// `lint_constitution.rs:15-28` uses — what is not verified, and what the
+    /// real instrument is. They are checked against the *same* bullet rather
+    /// than against the file, because a limit whose compensating instrument is
+    /// named three paragraphs away is a limit a reader meets as an apology.
+    struct Limit {
+        n: u8,
+        owners: &'static [&'static str],
+        claim: &'static str,
+        instrument: &'static str,
+    }
+
+    /// Note 10's six, additive-only. None may be dropped, softened or reordered.
+    const NOTE_TEN: &[Limit] = &[
+        Limit {
+            n: 1,
+            owners: &[HARNESS],
+            claim: "still demonstrating the claim above it",
+            instrument: "friction log",
+        },
+        Limit {
+            n: 2,
+            owners: &[HARNESS],
+            claim: "does not lint what is inside a fence",
+            instrument: "reviewer reading the diff",
+        },
+        Limit {
+            n: 3,
+            owners: &[HARNESS],
+            claim: "RUSTDOCFLAGS=-D warnings",
+            instrument: LIMITS_RECORD,
+        },
+        Limit {
+            n: 4,
+            owners: &[HARNESS],
+            claim: "the path it prints is the page's own",
+            instrument: "the doctest's module name",
+        },
+        Limit {
+            n: 5,
+            owners: &[CHECKER],
+            claim: "tagged `text` is neither compiled nor flagged",
+            instrument: "docs/text-fences.md",
+        },
+        Limit {
+            n: 6,
+            owners: &[HARNESS, CHECKER],
+            claim: "says nothing about whether any page teaches",
+            instrument: "friction log",
+        },
+    ];
+
+    /// A hedge on limit 6 — the one clause that turns it back into a promise.
+    const HEDGES: &[&str] = &[" but ", " however", " although", " except", " unless "];
+
+    /// The half of a module that ships, for the two that carry a test block.
+    ///
+    /// `read` returns the whole file, and this module's own `#[cfg(test)]` code
+    /// quotes the very tokens the prose scan forbids — so scanning the file
+    /// rather than the shipping half would fail on the test that exists to
+    /// forbid them. The split is [`production_source`]'s, generalised to a path.
+    fn shipping_source(module: &str) -> String {
+        read(module)
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    /// A module's leading `//!` block, one entry per line, marker stripped.
+    fn module_docs(source: &str) -> Vec<String> {
+        source
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .map(|line| line.trim_start_matches("//!").trim().to_owned())
+            .collect()
+    }
+
+    /// The bullets of the [`LIMITS_HEADING`] section, one string per bullet.
+    ///
+    /// Continuation lines are folded into their bullet, which is what makes the
+    /// claim-and-instrument pair checkable against one bullet rather than
+    /// against the whole file.
+    fn limits_bullets(docs: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut inside = false;
+
+        for line in docs {
+            if let Some(heading) = line.strip_prefix("# ") {
+                inside = heading.trim() == LIMITS_HEADING;
+                continue;
+            }
+            if !inside {
+                continue;
+            }
+            if let Some(bullet) = line.strip_prefix("* ") {
+                out.push(bullet.to_owned());
+            } else if !line.is_empty()
+                && let Some(last) = out.last_mut()
+            {
+                last.push(' ');
+                last.push_str(line);
+            }
+        }
+
+        out
+    }
+
+    /// Every way one module's limits section can be wrong, in one pass.
+    ///
+    /// A `Vec` rather than an assertion so the negative arms below can name
+    /// which wrong implementation was rejected, and so a module missing three
+    /// limits reports three problems rather than the first.
+    fn limits_problems(module: &str, source: &str) -> Vec<String> {
+        let mut problems = Vec::new();
+        let docs = module_docs(source);
+
+        match docs.iter().find_map(|line| line.strip_prefix("# ")) {
+            None => problems.push(format!(
+                "{module} — the module docs carry no `#` heading at all, so the limits \
+                 cannot be first"
+            )),
+            Some(heading) if heading.trim() != LIMITS_HEADING => problems.push(format!(
+                "{module} — the first heading is `{}`; `{LIMITS_HEADING}` must come first, \
+                 because a check whose limits are undocumented is read as a guarantee",
+                heading.trim()
+            )),
+            Some(_) => {}
+        }
+
+        let bullets = limits_bullets(&docs);
+        if bullets.is_empty() {
+            problems.push(format!(
+                "{module} — the limits section carries no bulleted body; six sentences run \
+                 together in a paragraph satisfy every substring check and no reader"
+            ));
+        }
+
+        for limit in NOTE_TEN {
+            let stating = bullets.iter().find(|bullet| bullet.contains(limit.claim));
+
+            if limit.owners.contains(&module) {
+                match stating {
+                    None => problems.push(format!(
+                        "{module} — limit {} is missing: no bullet states `{}`",
+                        limit.n, limit.claim
+                    )),
+                    Some(bullet) if !bullet.contains(limit.instrument) => problems.push(format!(
+                        "{module} — limit {}'s bullet does not name the real instrument \
+                         (`{}`); a limit stated without one reads as an apology rather than \
+                         a redirection",
+                        limit.n, limit.instrument
+                    )),
+                    Some(_) => {}
+                }
+            } else if stating.is_some() {
+                problems.push(format!(
+                    "{module} — restates limit {}, which holds in {}; two spellings of one \
+                     limit is two things to update and one that goes stale",
+                    limit.n, limit.owners[0]
+                ));
+            }
+        }
+
+        let teaching = NOTE_TEN
+            .iter()
+            .find(|limit| limit.n == 6)
+            .expect("Note 10's sixth limit must be enumerated");
+        if let Some(bullet) = bullets
+            .iter()
+            .find(|bullet| bullet.contains(teaching.claim))
+        {
+            for hedge in HEDGES {
+                assert!(
+                    !hedge.is_empty(),
+                    "an empty hedge token would match every bullet"
+                );
+                if bullet.contains(hedge) {
+                    problems.push(format!(
+                        "{module} — limit 6 is hedged with `{}`; it is one unhedged sentence, \
+                         and a clause qualifying it is how a green run becomes evidence of \
+                         comprehension",
+                        hedge.trim()
+                    ));
+                }
+            }
+        }
+
+        problems
+    }
+
+    /// `source` with the bullet stating `claim` deleted, continuations and all.
+    fn without_bullet(source: &str, claim: &str) -> String {
+        let mut out: Vec<&str> = Vec::new();
+        let mut dropping = false;
+
+        for line in source.lines() {
+            let body = line.strip_prefix("//!").map(str::trim_start);
+            if body.is_some_and(|body| body.starts_with("* ")) {
+                dropping = line.contains(claim);
+            } else if dropping && body.is_none_or(str::is_empty) {
+                dropping = false;
+            }
+            if !dropping {
+                out.push(line);
+            }
+        }
+
+        out.join("\n")
+    }
+
+    // ---- AC-001 / AC-002 / AC-003: the section, first, in both modules -----
+
+    /// The shape a contributor meets: a real rustdoc heading, first, with a
+    /// bulleted body — not a `//` comment and not a bullet under a preamble.
+    ///
+    /// Read as *text* through `workspace_root()` rather than asserted through
+    /// rustdoc, because rustdoc cannot see either file the way this needs:
+    /// `cargo doc -p xtask` documents the **lib** target only, so the bin
+    /// crate's module docs are rendered by nothing in the gate — which is why
+    /// `lint_constitution.rs:5`'s `[crate::constitution]` has never failed a
+    /// step that denies every rustdoc warning. The technique is
+    /// `lint_constitution.rs:423-425`'s, one file over.
+    #[test]
+    fn both_modules_state_every_limit_they_own_and_none_of_the_others() {
+        for module in [HARNESS, CHECKER] {
+            let found = limits_problems(module, &shipping_source(module));
+            assert!(found.is_empty(), "{module} — got: {found:#?}");
+        }
+    }
+
+    /// The bin crate has no path to the lib target's modules, and the
+    /// `#[cfg(doctest)]` page modules do not exist under `cargo doc` at all, so
+    /// a link either way is a broken intra-doc link — a hard error under the
+    /// `documentation` step's `-D warnings`, not a warning.
+    #[test]
+    fn the_cross_target_reference_is_a_plain_path_and_not_an_intra_doc_link() {
+        let harness_docs = module_docs(&shipping_source(HARNESS)).join("\n");
+        let checker_docs = module_docs(&shipping_source(CHECKER)).join("\n");
+
+        assert!(
+            checker_docs.contains(HARNESS),
+            "the checker must point at {HARNESS} by path for the four limits it does not state"
+        );
+        assert!(
+            harness_docs.contains(CHECKER),
+            "the harness must point at {CHECKER} by path for the limit it does not state"
+        );
+
+        for (module, docs) in [(HARNESS, &harness_docs), (CHECKER, &checker_docs)] {
+            for link in ["[`crate::lint_narrative`]", "[`crate::narrative`]"] {
+                assert!(
+                    !docs.contains(link),
+                    "{module} — `{link}` spans the target boundary and resolves to nothing"
+                );
+            }
+        }
+    }
+
+    // ---- AC-004: limit 1 carries its inherently-untestable clause ----------
+
+    /// The precedent is `xtask/src/constitution.rs:20-25`: a limit documented
+    /// with no test behind it, because none is possible. A test that gestured
+    /// at this one would be worse than none — it is the decorative instrument
+    /// RS-81-1 names, the one a reader deletes the real instrument for.
+    #[test]
+    fn limit_one_says_no_mechanical_test_can_close_it() {
+        let bullets = limits_bullets(&module_docs(&read(HARNESS)));
+        let bullet = bullets
+            .iter()
+            .find(|bullet| bullet.contains("still demonstrating the claim above it"))
+            .expect("the harness must state limit 1");
+
+        assert!(
+            bullet.contains("no mechanical test can close"),
+            "limit 1 must say it is inherently untestable, got: {bullet}"
+        );
+        assert!(
+            bullet.contains("semantic"),
+            "limit 1 must say *why* no test is possible — the gap is semantic, not \
+             mechanical, got: {bullet}"
+        );
+    }
+
+    // ---- AC-005: limit 3 states the measurement, not either citation -------
+
+    /// The two claims this repository holds disagree, so Note 10 item 3 asks
+    /// for a measurement. The prose must carry what the re-run did and the
+    /// toolchain it did it on; a measurement without its toolchain is a claim
+    /// about nothing.
+    #[test]
+    fn limit_three_states_the_measurement_and_cites_the_record() {
+        let bullets = limits_bullets(&module_docs(&read(HARNESS)));
+        let bullet = bullets
+            .iter()
+            .find(|bullet| bullet.contains("RUSTDOCFLAGS=-D warnings"))
+            .expect("the harness must state limit 3");
+
+        for required in [LIMITS_RECORD, "1.97.1", "non_snake_case"] {
+            assert!(
+                bullet.contains(required),
+                "limit 3 must carry `{required}`, got: {bullet}"
+            );
+        }
+    }
+
+    // ---- AC-009: three named wrong implementations, each rejected ----------
+
+    /// Wrong implementation 1: the section is present, complete, and no longer
+    /// the first thing a reader meets.
+    #[test]
+    fn a_limits_section_moved_below_another_heading_is_rejected() {
+        let moved = format!(
+            "//! # How the harness works\n//!\n//! A preamble that arrived first.\n//!\n{}",
+            read(HARNESS)
+        );
+
+        let found = limits_problems(HARNESS, &moved);
+
+        assert!(
+            found
+                .iter()
+                .any(|problem| problem.contains("must come first")),
+            "a section below another heading must be rejected, got: {found:#?}"
+        );
+    }
+
+    /// Wrong implementation 2: five of the six.
+    #[test]
+    fn a_module_missing_one_of_its_limits_is_rejected() {
+        let source = read(HARNESS);
+        assert!(
+            source.contains("does not lint what is inside a fence"),
+            "the mutation below removes nothing unless limit 2 is there to remove"
+        );
+
+        let dropped = without_bullet(&source, "does not lint what is inside a fence");
+        assert!(
+            !dropped.contains("does not lint what is inside a fence"),
+            "the mutation must remove the whole bullet, continuations and all"
+        );
+
+        let found = limits_problems(HARNESS, &dropped);
+
+        assert!(
+            found
+                .iter()
+                .any(|problem| problem.contains("limit 2 is missing")),
+            "a dropped limit must be rejected by number, got: {found:#?}"
+        );
+    }
+
+    /// Wrong implementation 3: limit 6 with a clause that gives it back.
+    #[test]
+    fn a_hedged_teaching_sentence_is_rejected() {
+        let hedged = read(HARNESS).replace(
+            "says nothing about whether any page teaches",
+            "says nothing about whether any page teaches, but the gate does check every \
+             fence in the tree, so",
+        );
+
+        let found = limits_problems(HARNESS, &hedged);
+
+        assert!(
+            found.iter().any(|problem| problem.contains("hedged with")),
+            "a hedged limit 6 must be rejected, got: {found:#?}"
+        );
+    }
+
+    /// Wrong implementation 4, AC-003's negative direction: the checker
+    /// restating a limit that holds in the harness. This is what the two-place
+    /// split costs if nothing enforces it.
+    #[test]
+    fn a_module_restating_the_other_modules_limit_is_rejected() {
+        let restated = shipping_source(CHECKER).replace(
+            "//! # What this does not verify\n",
+            "//! # What this does not verify\n//!\n//! * **A failure names the harness, and \
+             the path it prints is the page's own.** Restated here, which is the defect.\n",
+        );
+
+        let found = limits_problems(CHECKER, &restated);
+
+        assert!(
+            found
+                .iter()
+                .any(|problem| problem.contains("restates limit 4")),
+            "a restated limit must be rejected by number, got: {found:#?}"
+        );
+    }
+
+    // ---- AC-006 / AC-007: limit 5 is walked, and pinned by a test ----------
+
+    /// The whole of limit 5's proof: the real fence walk, over the real
+    /// retained fixture, reporting **nothing**.
+    ///
+    /// If a later change teaches the walk to inspect `text` fences, this test
+    /// fails — and its message says what to do about it, which is what makes
+    /// the coupling loud rather than annoying.
+    #[test]
+    fn the_text_fixture_is_not_flagged_by_the_real_fence_walk() {
+        let text = read(&format!("{TREE}/{TEXT_FIXTURE}"));
+
+        assert!(
+            text.contains("```text"),
+            "the fixture must carry a `text` fence or this test proves nothing"
+        );
+
+        let found = walk(&[page_with(TEXT_FIXTURE, &text)], IGNORE_ALLOWANCES);
+
+        assert!(
+            found.is_empty(),
+            "limit 5 is closed: the fence walk now reports a `text` fence. Delete limit 5 \
+             from {CHECKER}'s `# {LIMITS_HEADING}` section in this same change, and delete \
+             this test with it — the limits section is now wrong. got: {found:#?}"
+        );
+    }
+
+    /// A retained fixture nobody registered is a fixture the compile step never
+    /// sees and the orphan check reports. Both directions, and the path budget
+    /// that protects the terminal surface.
+    #[test]
+    fn the_text_fixture_is_registered_in_both_directions_and_inside_the_budget() {
+        let harness = read(HARNESS);
+        let page = page(TEXT_FIXTURE);
+
+        assert!(
+            harness.contains(&format!("include_str!(\"../../{TREE}/{TEXT_FIXTURE}\")")),
+            "{HARNESS} must include {TEXT_FIXTURE}"
+        );
+        assert!(
+            harness.contains(&format!("mod {} {{", page.module)),
+            "{HARNESS} must declare `mod {}`",
+            page.module
+        );
+        assert!(
+            page.path.chars().count() <= PATH_BUDGET,
+            "{} is {} characters; the budget is {PATH_BUDGET}",
+            page.path,
+            page.path.chars().count()
+        );
+        assert_eq!(
+            page.rel.matches('/').count(),
+            0,
+            "the fixture must not add a directory level under {TREE}"
+        );
+    }
+
+    /// A page nobody can route to is a page nobody reads. One row, appended,
+    /// with the rows already there left where they were.
+    #[test]
+    fn the_text_fixture_has_an_index_row_and_reorders_nothing() {
+        let index = read(INDEX);
+
+        assert!(
+            index.contains(&format!("]({TEXT_FIXTURE})")),
+            "{INDEX} must route to {TEXT_FIXTURE}"
+        );
+
+        let existing = index
+            .find("](append-conditions.md)")
+            .expect("the index must still route to the page that was already there");
+        let added = index
+            .find(&format!("]({TEXT_FIXTURE})"))
+            .expect("the index must route to the fixture");
+
+        assert!(
+            existing < added,
+            "the new row must be appended, not inserted above the rows already there"
+        );
+    }
+
+    // ---- AC-011: nothing anywhere claims the surface proves teaching -------
+
+    /// The initiative's top-ranked risk, and this is the story most tempted to
+    /// breach it, because it is the one that gets to describe what the machine
+    /// does.
+    #[test]
+    fn neither_module_carries_a_mark_claiming_the_documentation_is_checked() {
+        for module in [HARNESS, CHECKER] {
+            let source = shipping_source(module);
+            for mark in ["verified", "badge", "shield", "✅"] {
+                assert!(
+                    !source.contains(mark),
+                    "{module} — `{mark}` reads as a claim neither module can make"
                 );
             }
         }
