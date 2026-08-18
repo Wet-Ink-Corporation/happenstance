@@ -23,13 +23,13 @@ archetype: capability
 slice: narrative-checker-discipline
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T15:15:03.059Z
+updated: 2026-08-18T15:15:04.323Z
 links:
   pr: null
   commits:
     - b62de17
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
