@@ -38,7 +38,7 @@ holds a `const MIGRATION_1`; `:195` was cited as a `head` impl and now holds
 when `:47-53` is the `event` table and the side table is `:62-67`.
 
 None of them was reported. The reason is visible in the tool's own numbers: of
-398 citations checked, **78** are *anchored*, because `subject_before`
+401 citations checked, **80** are *anchored*, because `subject_before`
 (`xtask/src/spec_trace.rs:2158`) declines unless the code span immediately before
 the citation is a lowercase identifier of four characters or more on the citation's
 own line or the one above. Every one of the six sits in a sentence whose nearest
@@ -48,7 +48,7 @@ derivable, the citation is counted and not anchored, and drift is invisible.
 That is the tool behaving exactly as documented and arguably correctly: it
 "declines rather than guesses". The finding is not that the heuristic is wrong.
 It is that **`checked` is a coverage number and `anchored` is the only quality
-number, and 78 of 398 is the fraction of the corpus under any anchoring
+number, and 80 of 401 is the fraction of the corpus under any anchoring
 discipline at all.** A reader who takes a green `spec-trace` as "the citations
 are right" is reading a claim about 20% of them.
 
