@@ -51,10 +51,12 @@ each of those went red first.
 
 | SHA | Subject |
 | --- | ------- |
-| `PENDING` | `feat(page-need-discipline): Page-need checker mounted in the gate` |
+| `ee0a500` | `feat(page-need-discipline): Page-need checker mounted in the gate` |
 
-The SHA is filled in by the checkpoint commit that carries this report; the commit is the last
-action of the story, so the row is written in the same change it describes.
+`ee0a5000955bbe7230874ce5897e46eee99d863a`. A commit cannot record its own SHA, so this row was
+written one commit later, in the slice-mate `declaration-check-seen-to-fail`'s checkpoint — which
+is the only other commit in this slice and the one whose five captures were all taken at exactly
+this SHA.
 
 ## Changes
 
