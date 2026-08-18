@@ -49,9 +49,16 @@ first evidence for AC-009.
 
 ## Commits
 
+One checkpoint commit on `initiative/from-contract-to-published-library`, carrying
+the code, the tests, the ledger and both stage artifacts.
+
 | SHA | Subject |
 | --- | ------- |
-| `{{sha}}` | `feat(sqlite-durable-store): SqliteProjectionStore against the suite it did not write` |
+| `1afb47b` | `feat(sqlite-durable-store): SqliteProjectionStore against the suite it did not write` |
+
+`redkiln record-links HS-S0044 --sha 1afb47b` is the orchestrating command's
+write, not this implementer's — the SHA of a commit containing the item file
+cannot be inside that item file, which is why it is cited here as well.
 
 ## Changes
 
