@@ -341,12 +341,58 @@ unstated limit is the guarantee-by-silence RS-81-1 names, and it fails this stor
 | Frozen-MUST pin | `check_pin` | **Stated**, three ways: an anchor can survive while the reasoning around it is rewritten; a clause wording its obligation outside `DOCUMENTATION_OBLIGATIONS` is never a candidate; the pin proves a discharge is *present*, never *adequate*. | not one of the six |
 | Count agreement / coverage line | `summary` | **Stated** as finding **L2** below and in `xtask/src/narrative_doctests.rs`: the compile step's enumerated count counts pages that produce a doctest, not pages the harness registers. | new, additive |
 | Fence compiling | `narrative_doctests::run` | **Stated** in `xtask/src/narrative.rs`: limits 1, 2, 3, 4 and 6. | 1, 2, 3, 4, 6 |
+| The compile step's **attribution** | `narrative_doctests::run`'s banner, `run_steps` (`xtask/src/main.rs:963`) | **Stated** in `xtask/src/narrative.rs` as the additive **limit 7**: a broken fence in this tree does not fail under this step's banner. | **7**, new and additive (EC-005) |
 
-**The candidate seventh limit, disposed of.** The research names `compile_fail` on stable
+**The additive seventh limit, added (EC-005).** The reconciliation above was first written
+listing five limits against the compile step and no limit against its *attribution* — which
+left the one thing `observed-failure-falsification` called the most valuable output of its run
+(`_falsification.md` **F2**) reachable only as prose in a merged story's evidence file. That is
+the guarantee-by-silence this story exists to prevent, one level up, so it is added rather than
+dispositioned away.
+
+**What it says.** Under `cargo xtask ci` a broken narrative fence fails under `=== tests ===`
+at index **2**, because that step is `cargo test --locked --workspace --all-features` and
+`cargo test` compiles a lib target's doctests — `xtask`'s lib target being where the harness is
+declared. `run_steps` `bail!`s at the first non-zero status, so neither of the tree's own
+banners prints at all. Milestone 1's claim that step ordering "keeps a broken narrative fence
+under the narrative banner" is true of the two compile steps and **false of the gate**, and
+limit 7 is worded to say so.
+
+*One index correction, which changes nothing.* F2's prose puts the two compile steps at
+`REQUIRED` indices 16 and 17. The record's own banner list — machine output, and so what
+governs — places them eighteenth and nineteenth of twenty-six banners, which is indices **17 and
+18**; `xtask/src/main.rs`'s array agrees. `tests` at index **2** is right in both readings and
+is the whole of the finding. Recorded here rather than corrected in `_falsification.md`, whose
+measurements are never edited to agree with a later reading — which is why limit 7's prose and
+`the_narrative_step_precedes_the_constitution_step`'s doc comment name the two steps rather than
+number them.
+
+**Where it landed, and what holds it there.**
+
+| Half | Where |
+| --- | --- |
+| The bullet | `xtask/src/narrative.rs` `# What this does not verify`, immediately after limit 4 — the other attribution limit — so limit 6 stays the closing sentence in both modules and none of the six is reordered |
+| Its evidence line | `_falsification.md` finding **F2**, cited in the bullet; `FALSIFICATION_RECORD` in `xtask/src/lint_narrative.rs` asserts the citation is present |
+| Its enumeration | a seventh `NOTE_TEN` entry (`n: 7`, owner `HARNESS`), so the presence, instrument and no-restatement checks all cover it |
+| Its presence assertion | `::tests::limit_seven_names_the_step_that_fails_first_and_cites_the_run` (the bullet must name `tests`, `--workspace`, `_falsification.md` and `F2`) and `::tests::a_dropped_seventh_limit_is_rejected` (the mutation arm, so it cannot be dropped silently) |
+| The array side | `narrative_doctests::tests::the_steps_that_compile_this_tree_are_pinned_in_gate_order` pins the three `REQUIRED` steps that hand these pages to rustdoc, in gate order, so the bullet and the array cannot drift apart again |
+
+**And the defect it reports, routed with an addressee.** The step ordering itself — that the
+gate's first compiler of these pages is a step with no narrative banner — is a defect of the
+gate's shape, not of this check, and F2's original recipient
+(`pinned-narrative-tree-and-compiling-step`) was sealed at `6368e2b` before the finding existed.
+It is now owned by **`FU-1` of `HS-P0020`**, recorded in the project charter's
+`## Follow-ups routed out of this project`, and cited from F2's disposition line in
+`_falsification.md`. Repairing it here is forbidden twice over: EC-009 of
+`observed-failure-falsification` (a story may not repair the thing it was written to test) and
+the fact that every transcript in that record would then describe a tree that never existed.
+
+**The candidate seventh limit, disposed of.** A *different* candidate, and it is not what
+limit 7 became. The research names `compile_fail` on stable
 asserting only *that* compilation failed and not *why* — the error-code form being nightly-only
 and "unlikely to be stabilized"
 (`_discovery/research/02-compiled-prose-tooling-mdbook-test-doc-comment-skeptic-doc-i.md`).
-**Disposition: not applicable to this tree, and it is not a seventh bullet.** The delivered
+**Disposition: not applicable to this tree, and it is not one of the bullets.** The delivered
 fence walk does permit `compile_fail` (`is_rustdoc_tag`, `xtask/src/lint_narrative.rs:719-728`)
 and it goes further than the research's concern: a `compile_fail` fence carrying an error code
 the prose never names is a problem, and a bare error code without `compile_fail` is a problem
@@ -356,7 +402,7 @@ the prose never names is a problem, and a bare error code without `compile_fail`
 research's limit asks for — and no page in `docs/` uses `compile_fail` today. Recorded rather
 than added, so a future page that does can re-open it against this paragraph.
 
-### Two findings this reconciliation turned up
+### Three findings this reconciliation turned up
 
 **L1 — `narrative_doctests.rs` carried two sentences the runs measured to be false.** Its limit
 4 read *"The file a failure names is the harness, not the page"* and its limit 3 read *"What
@@ -372,6 +418,18 @@ registered, the checker prints `2 pages, all consistent` and the compile step pr
 absent from the compile step's number. That is not a defect — the number is a fact about what
 rustdoc was given — but a reader who reads it as "pages in the tree" will under-count, so it is
 now stated in `xtask/src/narrative_doctests.rs` beside the count it describes.
+
+**L6 — the same module carried a *third* false sentence, and L1's pass missed it.** The doc
+comment on `the_narrative_step_precedes_the_constitution_step` read *"`run_steps` bails at the
+first failing step, so ordering is the whole of what keeps a broken narrative fence under the
+narrative banner"* — the claim `_falsification.md` **F2** states in as many words is "true of
+steps 16 and 17 and false of the gate" (F2's words, and its index correction is above), and
+which F2 says may not be repeated. It survived L1 because L1 swept the module's
+`# What this does not verify` bullets and not its test doc comments. Corrected to L1's standard: the doc comment now says the assertion orders those two
+steps only, names `tests` as where a broken narrative fence actually fails, and cites F2 as
+the measurement. The assertion itself, and every step name, argument and `env` entry, are
+untouched — the boundary forbids changing them, and EC-009 forbids repairing the ordering
+here. The new sibling assertion is what keeps the corrected sentence and the array in step.
 
 ---
 

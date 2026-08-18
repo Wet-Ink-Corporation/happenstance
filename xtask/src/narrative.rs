@@ -7,10 +7,16 @@
 //! its own, and this corpus is the one most likely to be quoted as evidence of
 //! something it never checked.
 //!
-//! Four of the six limits below are properties of *this* mechanism — compiling
-//! a fence — and are stated here. The fifth is a property of the fence *walk*,
-//! which reads pages as files, and is stated where it holds, in
-//! `xtask/src/lint_narrative.rs`. That is a plain path and deliberately not an
+//! Five of the seven limits below are properties of *this* mechanism —
+//! compiling a fence — and are stated here: `_decomposition.md` Note 10's four,
+//! and a seventh about *attribution* that Note 10 could not have forecast,
+//! because it is a property of the assembled gate and was only visible once the
+//! gate was watched failing. Adding it is what EC-005 of
+//! `documented-blind-spots-and-their-proofs` provides for: a limit may be added,
+//! and none of the six may be dropped, softened or reordered to make room for
+//! it. The remaining limit, the fifth, is a property of the fence *walk* —
+//! which reads pages as files rather than compiling them — and is stated where
+//! it holds, in `xtask/src/lint_narrative.rs`. That is a plain path and not an
 //! intra-doc link: the checker is a **bin**-crate module, this file is compiled
 //! into the lib target, and the two never link — a link would be a broken
 //! intra-doc link, which the gate's `documentation` step turns into a hard
@@ -58,6 +64,22 @@
 //!   sentence of prose. So the only stable, actionable identifier is **the
 //!   doctest's module name**: one module per page is what keeps it the page's
 //!   name, and that is the whole of what registration buys.
+//! * **A broken fence here does not fail under this step's banner.** Under
+//!   `cargo xtask ci` the first step that compiles these pages is
+//!   `=== tests ===` at index 2: `cargo test --locked --workspace
+//!   --all-features` compiles the **lib** target's doctests, and this file is
+//!   that target's doctest root. `run_steps` bails at the first non-zero status
+//!   (`xtask/src/main.rs:963`), so neither of the tree's own banners prints at
+//!   all. What the two compile steps' ordering decides is narrower than it
+//!   reads: which of *those two* a failure is attributed to, in a run that
+//!   reached them. So the instrument that tells a reader which corpus broke is
+//!   the failing doctest's module name — the limit above — and never the banner
+//!   over it. Measured rather than forecast, in
+//!   `observed-failure-falsification`'s `_falsification.md`, finding **F2**.
+//!   The step ordering that record reports is a defect of the gate's shape
+//!   rather than of this check, and is owned by the follow-up this project's
+//!   `_limits-evidence.md` names — not repaired from here, which would make
+//!   every transcript in that record describe a tree that never existed.
 //! * **This step says nothing about whether any page teaches anybody
 //!   anything.** A green banner means the fences compiled and their assertions
 //!   held; comprehension is HS-P0024's friction log, and no run of this step

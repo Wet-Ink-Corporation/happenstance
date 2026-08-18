@@ -227,23 +227,37 @@ proves anything, and do not weaken the fence walk to make the documented limit t
   criterion: "GIVEN the project is being called done, WHEN a reviewer asks whether every delivered check has its limit on the record, THEN `_limits-evidence.md` carries the reconciliation — pinned tree, empty-tree guard, bidirectional registration, fence discipline, allowance sweep, hidden markers, citation resolution, frozen-MUST pin, count agreement — each with its limit in the section or a written reason it has none, plus a written disposition for the `compile_fail` candidate seventh (added, or not-applicable because the delivered fence walk does not permit `compile_fail`)."
   satisfied: true
   evidence: |-
-    `_limits-evidence.md` § *The completeness reconciliation* — an eleven-row table, one row per
+    `_limits-evidence.md` § *The completeness reconciliation* — a twelve-row table, one row per
     delivered check, each carrying either the limit's location in a module's section or a
     written reason it has none. The nine the criterion enumerates are all there: pinned tree
     (none of its own, with the reason), empty-tree guard (none, with the reason), bidirectional
     registration (stated, and its registration-guarantee half pointing at limits 1-4), fence
     discipline (stated, limit 5), allowance sweep (stated), hidden markers (stated three ways),
     citation resolution (stated four ways), frozen-MUST pin (stated three ways), count
-    agreement (stated as new finding **L2**), plus fence compiling itself. **The `compile_fail`
-    candidate seventh is disposed of in writing: not applicable, and not a seventh bullet** —
+    agreement (stated as new finding **L2**), plus fence compiling itself and — added on review,
+    the twelfth row — the compile step's **attribution**. That row is **EC-005** taken as
+    addition: `observed-failure-falsification`'s `_falsification.md` **F2** measured that a
+    broken narrative fence fails under `=== tests ===` at index 2 and under neither of the
+    tree's banners, and that residual had no limit anywhere. It is now the seventh bullet of
+    `xtask/src/narrative.rs`'s `# What this does not verify`, a seventh `NOTE_TEN` entry, and
+    two tests (`limit_seven_names_the_step_that_fails_first_and_cites_the_run` and the mutation
+    arm `a_dropped_seventh_limit_is_rejected`), with
+    `narrative_doctests::tests::the_steps_that_compile_this_tree_are_pinned_in_gate_order`
+    pinning the three `REQUIRED` steps that compile the tree so the bullet and the array cannot
+    drift. The ordering *defect* is routed to `FU-1` of `HS-P0020` rather than repaired here
+    (EC-009), and recorded as finding **L6**. **The `compile_fail`
+    candidate seventh is disposed of in writing: not applicable, and not one of the bullets** —
     the delivered walk permits `compile_fail` (`is_rustdoc_tag`, `xtask/src/lint_narrative.rs`)
     *and* goes further than the research's concern by making a `compile_fail` fence name its
     error code in prose, which is the mitigation the limit asks for; no page in `docs/` uses it
-    today, and the paragraph is written so a future page that does can re-open it. Two findings
-    the reconciliation itself turned up are recorded as **L1** (two sentences in
-    `xtask/src/narrative_doctests.rs` the runs measured to be false, corrected in this change)
-    and **L2** (the compile step's coverage number counts doctests, not registrations — `2
-    pages, all consistent` beside `1 page(s)' examples enumerated`). EC-009 did not fire: no
+    today, and the paragraph is written so a future page that does can re-open it. Three
+    findings the reconciliation itself turned up are recorded as **L1** (two sentences in
+    `xtask/src/narrative_doctests.rs` the runs measured to be false, corrected in this change),
+    **L2** (the compile step's coverage number counts doctests, not registrations — `2
+    pages, all consistent` beside `1 page(s)' examples enumerated`) and **L6** (F2's residual
+    unstated, and a third false sentence in the same module — the ordering claim on
+    `the_narrative_step_precedes_the_constitution_step`, which L1's sweep missed because it read
+    the module's limits bullets and not its test doc comments). EC-009 did not fire: no
     delivered check has a limit nobody could state.
   mount_point: "`.bklg/docs-that-teach/checked-documentation-surface/documented-blind-spots-and-their-proofs/_limits-evidence.md`, reconciled against the limits sections at both mounts"
   verifying_test: "review artefact: the reconciliation table in `_limits-evidence.md`, one row per delivered check, checked against `_decomposition.md` Note 10 and `_design.md` `## The states the API must express`"

@@ -67,3 +67,25 @@ story's transcripts describing a tree that actually existed.
 `cargo xtask ci` green (run 3, whole gate) · `cargo xtask ci --fast` green ·
 `cargo xtask affected --base main` reporting `affected gate passed` with `231 passed; 0 failed` ·
 `cargo fmt --all --check` clean · `cargo xtask lint-constitution` reporting `27 atoms, all consistent`.
+
+### Review disposition — 2026-08-17
+
+Two things the slice review settled about this story, recorded here so a later reader does not
+have to reconstruct them.
+
+**F2 now has an addressee.** Its routing named `pinned-narrative-tree-and-compiling-step`, which
+was sealed at `6368e2b` — the commit this run measured — so the finding had no live inbox. The
+*limits-list* half landed as the additive seventh limit in `xtask/src/narrative.rs` (see
+`documented-blind-spots-and-their-proofs/_limits-evidence.md` and its finding **L6**); the
+*step-ordering* half is owned by `FU-1` of `HS-P0020`. `_falsification.md`'s F2 carries the
+disposition addendum. Nothing measured in this record was edited.
+
+**NF-006 — "transcripts complete, never abridged" — reviewed and accepted as stated.** The three
+logs are 4,366–5,716 lines and are quoted by region, which § *How complete each transcript below
+is* declares rather than performs silently. The review's finding: no change required. The
+complete banner sequence with log line numbers is quoted — precisely the region NF-006 exists to
+protect — `grep -c "^skipped"` is reported as **0** for all three runs, every rendered-surface
+block and the whole failure region are unedited, and § *Provenance* gives the commands that
+reproduce the omitted regions byte-for-byte. Recorded so the deviation is not later mistaken for
+an unnoticed gap.
+

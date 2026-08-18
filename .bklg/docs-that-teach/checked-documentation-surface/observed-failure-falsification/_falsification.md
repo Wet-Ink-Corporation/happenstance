@@ -671,6 +671,30 @@ not the narrative banner. Whatever HS-S0145 writes about attribution must say th
 not repeat milestone 1's claim that ordering keeps a broken narrative fence under the narrative
 banner — that claim is true of steps 16 and 17 and false of the gate.
 
+> **Disposition addendum — 2026-08-17, from HS-S0145's review.** Appended rather than edited
+> into the paragraphs above: nothing measured here is restated, corrected or softened, and the
+> transcripts stand as they were run. What is added is the addressee the routing line lacked.
+>
+> The first recipient named above, `pinned-narrative-tree-and-compiling-step`, was **sealed at
+> `6368e2b`** — the same commit this run measured — so it had no live inbox when this finding
+> was written, and the finding existed only as prose in a merged story's evidence file. The
+> two halves are now separated and each has an owner:
+>
+> - **The limits-list half landed.** It is the additive seventh limit in
+>   `xtask/src/narrative.rs`'s `# What this does not verify`, cited to this finding, enumerated
+>   as `NOTE_TEN`'s seventh entry and held there by
+>   `lint_narrative::tests::limit_seven_names_the_step_that_fails_first_and_cites_the_run` and
+>   its mutation arm. `documented-blind-spots-and-their-proofs`'s `_limits-evidence.md` carries
+>   the reconciliation row and the full disposition. The claim this finding forbids repeating
+>   was also still live in `narrative_doctests.rs`'s
+>   `the_narrative_step_precedes_the_constitution_step` doc comment, and is corrected there
+>   (recorded as **L6** in that record).
+> - **The step-ordering half is owned by `FU-1` of `HS-P0020`**, recorded under
+>   `## Follow-ups routed out of this project` in
+>   `.bklg/docs-that-teach/checked-documentation-surface/project.md`. It carries the two `main.rs`
+>   step comments that still state the disproved claim, because they are the step definitions
+>   themselves and EC-009 keeps this project's stories out of them.
+
 #### F3 — the failure's tail is one xtask line, not two
 
 `_design.md` `## Composition` (and mock finding 2's correction) predicts a two-line tail:

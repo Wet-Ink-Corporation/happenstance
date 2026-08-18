@@ -341,6 +341,59 @@ Gate and standards:
 - `spec/SPECIFICATION.md:280` — clause ids are stable and never renumbered
 - `RUNBOOK.md:918-925` — the decorative-step precedent this project exists not to repeat
 
+## Follow-ups routed out of this project
+
+Defects this project *measured* and deliberately did not fix, each with an owner. A finding
+whose routing names a direction rather than an addressee is a finding nobody has — which is
+what `FU-1` below was, until HS-S0145's review said so.
+
+These are project-level notes, not backlog items: the `redkiln` CLI is the only writer of item
+frontmatter, so promoting one to a story is `/redkiln:fix` or the next initiative's intake,
+never a hand-written folder. The id is stable so a record can cite it.
+
+### FU-1 — the gate's first compiler of the narrative tree has no narrative banner
+
+**Owner: unassigned; opened 2026-08-17 by HS-S0145's review.**
+
+**What was measured.** `observed-failure-falsification`'s `_falsification.md` finding **F2**,
+at `6368e2b`: under `cargo xtask ci` a broken fence in `docs/` fails under `=== tests ===` at
+step index 2, because that step is `cargo test --locked --workspace --all-features` and
+`cargo test` compiles a lib target's doctests — `xtask`'s lib target being where the harness is
+declared. `run_steps` `bail!`s at the first non-zero status (`xtask/src/main.rs:963`), so
+neither `=== the narrative tree's examples compile ===` nor
+`=== the constitution's examples compile ===` prints at all.
+
+One index correction, which changes nothing about the finding. F2's prose puts those two steps
+at `REQUIRED` indices 16 and 17; the record's own banner list — machine output, and therefore
+what governs — places them eighteenth and nineteenth of twenty-six, which is indices **17 and
+18**. `tests` at index **2** is right in both, and it is the whole of the finding. Noted here
+rather than corrected in `_falsification.md`, whose measurements are never edited to agree with
+a later reading.
+
+**Why it is a follow-up and not a story's bug.** F2's original recipient,
+`pinned-narrative-tree-and-compiling-step`, was sealed at `6368e2b` — the very commit the run
+measured — so the routing had no live inbox. EC-009 of `observed-failure-falsification` forbids
+a story from repairing the thing it was written to test, and a repair would make every
+transcript in that record describe a tree that never existed on any branch.
+
+**What it owns.**
+
+- The step-ordering question itself: whether the gate should attribute a doctest failure to the
+  corpus it came from (filtering the workspace test step, splitting it, or printing the corpus
+  from the failure's module name), and what each option costs. `_falsification.md` F2 notes
+  that filtering *the constitution's* step from the other side drops the repository README's
+  doctest out of the gate, so the obvious fix is already known to be wrong.
+- The two step comments in `xtask/src/main.rs` that still state the disproved claim — that
+  ordering is "the whole of what keeps a broken narrative fence" under its own banner. They sit
+  on the step definitions this project's stories may not touch, and they are prose only: no
+  behaviour depends on them.
+
+**What is already discharged, so this item does not carry it.** The *limit* is stated: the
+additive seventh limit in `xtask/src/narrative.rs`, enumerated in `NOTE_TEN` and held there by
+two tests, with `narrative_doctests`' array-side pin keeping it honest. See
+`documented-blind-spots-and-their-proofs/_limits-evidence.md`. This item is about the defect,
+not about the silence.
+
 ## Companions
 
 - [`_decomposition.md`](_decomposition.md) — this project's briefs (architecture, ux,

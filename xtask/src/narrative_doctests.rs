@@ -294,9 +294,21 @@ mod tests {
         );
     }
 
-    /// The constitution's step is unfiltered, so it compiles these pages too.
-    /// `run_steps` bails at the first failing step, so ordering is the whole of
-    /// what keeps a broken narrative fence under the narrative banner.
+    /// The constitution's step is unfiltered, so it compiles these pages too,
+    /// and `run_steps` bails at the first failing step — so this assertion is
+    /// what keeps a fence broken *here* from being attributed to the
+    /// constitution's corpus.
+    ///
+    /// It orders those two steps and nothing else. It does **not** put a broken
+    /// narrative fence under the narrative banner: measured on the assembled
+    /// gate, the step that fails first is `tests`, whose
+    /// `cargo test --locked --workspace --all-features` compiles the lib
+    /// target's doctests — so neither of the tree's banners prints at all. The
+    /// measurement is `observed-failure-falsification`'s `_falsification.md`,
+    /// finding F2, and the residual is stated as the seventh limit in
+    /// `xtask/src/narrative.rs`. Repairing the ordering is not this story's to
+    /// do and not this assertion's job; the sibling below is what keeps the two
+    /// claims and the array from drifting apart again.
     #[test]
     fn the_narrative_step_precedes_the_constitution_step() {
         assert_eq!(
@@ -304,6 +316,53 @@ mod tests {
             step_index("the constitution's examples compile"),
             "the narrative step must sit immediately before the constitution's"
         );
+    }
+
+    /// The set of `REQUIRED` steps that hand this tree's pages to rustdoc, in
+    /// gate order — pinned so the sentence above cannot drift from the array
+    /// again.
+    ///
+    /// The claim it protects is `_falsification.md` F2's: `tests` compiles
+    /// these pages before either banner exists, so it is `tests` that a broken
+    /// fence fails under. Two wrong implementations it rejects. A step inserted
+    /// or reordered so that the narrative step is no longer preceded by the
+    /// workspace test run — which would make the seventh limit in
+    /// `xtask/src/narrative.rs` false while every other assertion here stayed
+    /// green. And a *fourth* step that compiles the tree, added without anyone
+    /// deciding which banner then owns a failure.
+    #[test]
+    fn the_steps_that_compile_this_tree_are_pinned_in_gate_order() {
+        let compiling: Vec<&str> = REQUIRED
+            .iter()
+            .filter(|step| compiles_the_narrative_tree(step))
+            .map(|step| step.name)
+            .collect();
+
+        assert_eq!(
+            compiling,
+            vec!["tests", STEP, "the constitution's examples compile"],
+            "the steps that compile this tree, and their order, decide which \
+             banner a broken fence fails under — `xtask/src/narrative.rs`'s \
+             seventh limit states this set, so a change here is a change there"
+        );
+    }
+
+    /// Whether a step hands this tree's registered pages to rustdoc.
+    ///
+    /// Three shapes, and the reason each one qualifies. A workspace-wide
+    /// `cargo test` compiles every lib target's doctests, and `xtask`'s lib
+    /// target is where the harness is declared. An unfiltered
+    /// `cargo test … --doc` over `xtask` compiles them for the same reason. And
+    /// this step's own subcommand runs [`DOC_TEST`] itself, one process down,
+    /// which no inspection of its argv would show.
+    fn compiles_the_narrative_tree(step: &crate::Step) -> bool {
+        if step.name == STEP {
+            return true;
+        }
+
+        step.program == "cargo"
+            && step.args.first() == Some(&"test")
+            && (step.args.contains(&"--workspace") || step.args.contains(&"--doc"))
     }
 
     /// rustdoc does not read `RUSTFLAGS`, and an ambient `RUSTDOCFLAGS` leaks

@@ -157,3 +157,28 @@ compile step's `1 page(s)' examples enumerated` counts pages that *produce a doc
 the harness registers, which is why it prints `1` beside the checker's `2 pages, all consistent`.
 Both numbers are correct and they answer different questions; the sentence saying so now sits
 next to the count.
+
+---
+
+## Addendum — 2026-08-17, the review fix (limit 7 / finding L6)
+
+Appended rather than rewritten: the counts above are what the implement stage measured and stay
+as they were. What changed afterwards, under the slice review:
+
+- **A seventh limit landed** in `xtask/src/narrative.rs` — a broken fence in this tree does not
+  fail under this step's banner; it fails under `=== tests ===` at index 2, because that step
+  compiles the lib target's doctests and `run_steps` bails first. It is `_falsification.md`
+  **F2**, which HS-S0144 called the most valuable output of its run and which had landed
+  nowhere. `NOTE_TEN` carries it as a seventh entry, and two tests hold it there.
+- **A third measured-false sentence** in `xtask/src/narrative_doctests.rs` — the ordering claim
+  on `the_narrative_step_precedes_the_constitution_step`, which L1's sweep missed — was reworded
+  to L1's standard. No assertion weakened; no step name, argument or `env` entry touched.
+- **`narrative_doctests::tests::the_steps_that_compile_this_tree_are_pinned_in_gate_order`** now
+  pins the three `REQUIRED` steps that hand these pages to rustdoc, in gate order, so the prose
+  and the array cannot drift apart again.
+- **The ordering defect is routed with an addressee**: `FU-1` of `HS-P0020`, in the project
+  charter's `## Follow-ups routed out of this project`.
+
+Gate after the fix: `cargo xtask ci` exit 0, `all checks passed`, 0 `skipped:` lines;
+`cargo test --locked -p xtask --bin xtask` **178 passed, 0 failed**; `cargo xtask affected
+--base main` → `affected gate passed`; `cargo fmt --all --check` clean.

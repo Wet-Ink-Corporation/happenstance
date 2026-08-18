@@ -14,10 +14,11 @@
 //! this corpus is the one most likely to be quoted as evidence of something it
 //! never checked.
 //!
-//! One of the tree's six enumerated limits is a property of *this* walk and is
-//! stated here. The other four that belong to the machine — what a compiled
-//! fence does and does not establish, what `RUSTDOCFLAGS` reaches, and what a
-//! failure actually names — are properties of the compile mechanism and are
+//! One of the tree's seven enumerated limits is a property of *this* walk and
+//! is stated here. The other five that belong to the machine — what a compiled
+//! fence does and does not establish, what `RUSTDOCFLAGS` reaches, what a
+//! failure actually names, and which of the gate's banners it appears under —
+//! are properties of the compile mechanism and are
 //! stated where they hold, in `xtask/src/narrative.rs`. A plain path rather
 //! than an intra-doc link, because that file is compiled into the **lib**
 //! target and this module into the bin target: the two never link, and a link
@@ -4254,10 +4255,22 @@ One writer at a time.
     /// backlog to pass its own gate.
     const LIMITS_RECORD: &str = "_limits-evidence.md";
 
-    /// One of the six limits `_decomposition.md` Note 10 enumerates.
+    /// The record the additive seventh limit cites: the dated falsification run
+    /// that measured which step a broken narrative fence actually fails under.
+    ///
+    /// A second record rather than a second citation of [`LIMITS_RECORD`],
+    /// because the two were produced by different instruments — this one by
+    /// `observed-failure-falsification`'s three `cargo xtask ci` runs — and a
+    /// limit that cites the wrong one sends its reader to a file that cannot
+    /// answer them. Asserted as a string, never read, for [`LIMITS_RECORD`]'s
+    /// reason.
+    const FALSIFICATION_RECORD: &str = "_falsification.md";
+
+    /// One of the limits the tree's two modules must state — `_decomposition.md`
+    /// Note 10's six, and the seventh a run measured after it was written.
     ///
     /// `owners` is the module or modules whose docs must state it: limits 1-4
-    /// are properties of the compile mechanism and belong to [`HARNESS`],
+    /// and 7 are properties of the compile mechanism and belong to [`HARNESS`],
     /// limit 5 is a property of the fence walk and belongs to [`CHECKER`], and
     /// limit 6 belongs, unhedged, to both. A module that states a limit it does
     /// not own is two spellings of one sentence, and one of them goes stale.
@@ -4274,7 +4287,17 @@ One writer at a time.
         instrument: &'static str,
     }
 
-    /// Note 10's six, additive-only. None may be dropped, softened or reordered.
+    /// Note 10's six, plus the seventh EC-005 provides for. Additive-only: none
+    /// may be dropped, softened or reordered, and a limit a run *measures* is
+    /// added here rather than left as prose in the record that found it.
+    ///
+    /// Limit 7 is the addition, and it is the one EC-005 was written for. Note
+    /// 10 forecast the limits of *compiling* a fence; this one is a limit of
+    /// **attribution** — which banner a contributor meets when a page breaks —
+    /// and it could not be forecast, because it is a property of the assembled
+    /// gate's step order and was only visible once the gate was watched
+    /// failing. Its evidence is [`FALSIFICATION_RECORD`] finding F2 rather than
+    /// [`LIMITS_RECORD`].
     const NOTE_TEN: &[Limit] = &[
         Limit {
             n: 1,
@@ -4311,6 +4334,12 @@ One writer at a time.
             owners: &[HARNESS, CHECKER],
             claim: "says nothing about whether any page teaches",
             instrument: "friction log",
+        },
+        Limit {
+            n: 7,
+            owners: &[HARNESS],
+            claim: "does not fail under this step's banner",
+            instrument: FALSIFICATION_RECORD,
         },
     ];
 
@@ -4566,6 +4595,61 @@ One writer at a time.
                 "limit 3 must carry `{required}`, got: {bullet}"
             );
         }
+    }
+
+    // ---- AC-010 / EC-005: the additive seventh limit ----------------------
+
+    /// The seventh limit is about *attribution*, and it is the one thing a
+    /// reader of this section would otherwise be told by nobody: the banner a
+    /// contributor meets when they break a page is not the narrative one.
+    ///
+    /// So the bullet has to carry the step that actually fails first, the
+    /// invocation that makes it compile these pages, and the run that measured
+    /// it. A bullet saying only "ordering is subtle" is the apology shape the
+    /// [`Limit`] struct exists to reject.
+    #[test]
+    fn limit_seven_names_the_step_that_fails_first_and_cites_the_run() {
+        let bullets = limits_bullets(&module_docs(&read(HARNESS)));
+        let bullet = bullets
+            .iter()
+            .find(|bullet| bullet.contains("does not fail under this step's banner"))
+            .expect("the harness must state limit 7");
+
+        for required in [FALSIFICATION_RECORD, "F2", "tests", "--workspace"] {
+            assert!(
+                bullet.contains(required),
+                "limit 7 must carry `{required}`, got: {bullet}"
+            );
+        }
+    }
+
+    /// Wrong implementation 5: the additive seventh dropped, which is how a
+    /// limit a run *bought* quietly becomes silence again — the one disposition
+    /// AC-010 forecloses. The six are protected by the arm above; this proves
+    /// the protection is the enumeration and not the number six.
+    #[test]
+    fn a_dropped_seventh_limit_is_rejected() {
+        let source = read(HARNESS);
+        let claim = "does not fail under this step's banner";
+        assert!(
+            source.contains(claim),
+            "the mutation below removes nothing unless limit 7 is there to remove"
+        );
+
+        let dropped = without_bullet(&source, claim);
+        assert!(
+            !dropped.contains(claim),
+            "the mutation must remove the whole bullet, continuations and all"
+        );
+
+        let found = limits_problems(HARNESS, &dropped);
+
+        assert!(
+            found
+                .iter()
+                .any(|problem| problem.contains("limit 7 is missing")),
+            "a dropped seventh limit must be rejected by number, got: {found:#?}"
+        );
     }
 
     // ---- AC-009: three named wrong implementations, each rejected ----------
