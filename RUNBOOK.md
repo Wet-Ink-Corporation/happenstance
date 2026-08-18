@@ -4022,8 +4022,8 @@ mapping, which is what makes deferring `happenstance-macros` past 0.1 defensible
       guarantees and collapsing them is a lost update.
 - [ ] **The application-facing projection runner** — the `Projection` trait an
       application implements (decoded events, the projection's `Query`, the store's
-      own `Batch`), layered over the checkpoint pump that stays in the contract
-      crate, per ADR-0007. A projection nominates its events with `Query`, the same
+      own `Batch`). **Corrected 2026-08-17 by ADR-0031, which superseded ADR-0007's
+      allocation: no checkpoint pump stays in the contract crate — it collapsed upward and none was ever written.** A projection nominates its events with `Query`, the same
       type a decision model uses; there is no second filter vocabulary. **This is
       the half that had no owning phase in either previous plan**
       (`PRESSURE-TEST.md:270-272`).

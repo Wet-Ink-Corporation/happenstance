@@ -16,7 +16,14 @@ summary: >-
   nothing" bullet. A second, later 2026-08-15 wave (`2026-08-15-intake`) added ADR-0020 and
   ADR-0021 (kb-decision-0020, kb-decision-0021), phase 7's typed-layer decisions — the first
   phase-7 rows on this map — in their own section rather than the ADR-0030 section, since the two
-  waves share a date but not a subject; neither atom supersedes any existing row.
+  waves share a date but not a subject; neither atom supersedes any existing row. The 2026-08-17
+  wave (`2026-08-17-adr-0022-append-condition`) added ADR-0022 (phase 8) and ADR-0031, ADR-0032 and
+  ADR-0033 (phase 7) in one section spanning both phases. ADR-0031 partly supersedes ADR-0007 — the
+  first amendment this map has annotated on a row that was itself already annotated as a partial
+  supersession — and ADR-0032 fully supersedes ADR-0021, flipping its row to superseded.
+  kb-decision-0007's own frontmatter stays `accepted` with `superseded_by: null`, unflipped by this
+  map edit; kb-decision-0021's frontmatter was flipped by the ingest wave itself, and this map only
+  mirrors it.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -27,7 +34,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
   - .kb/_governance/integration-waves/2026-08-15-intake
-last_reviewed: 2026-08-15
+  - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
+last_reviewed: 2026-08-17
 ---
 
 # Decision map
@@ -63,7 +71,7 @@ strength.
 | ADR-0004 | [`kb-decision-0004`](../decisions/0004-edition-and-msrv.md) | Rust 2024 edition, MSRV 1.85 | accepted (amended, not superseded) | 0 | amended by `kb-decision-0029` |
 | ADR-0005 | [`kb-decision-0005`](../decisions/0005-rename-to-happenstance.md) | Rename the project to happenstance, and make it the contract crate | accepted (partly superseded) | 0 | supersedes `kb-decision-0002`; partly superseded by `kb-decision-0006` |
 | ADR-0006 | [`kb-decision-0006`](../decisions/0006-bare-name-to-the-typed-layer.md) | The bare name goes to the typed layer; the contract becomes happenstance-core | accepted (partly superseded) | 0 | partly superseded by `kb-decision-0007` |
-| ADR-0007 | [`kb-decision-0007`](../decisions/0007-projection-runner-decodes.md) | The projection runner decodes, and therefore splits across the seam | accepted | 0 | partly supersedes `kb-decision-0006` |
+| ADR-0007 | [`kb-decision-0007`](../decisions/0007-projection-runner-decodes.md) | The projection runner decodes, and therefore splits across the seam | accepted (partly superseded) | 0 | partly supersedes `kb-decision-0006`; partly superseded by `kb-decision-0031` |
 | ADR-0008 | [`kb-decision-0008`](../decisions/0008-one-derivation-for-both-ports.md) | One derivation scheme, both ports, and what a provided body owes | accepted | 1 | — |
 | ADR-0009 | [`kb-decision-0009`](../decisions/0009-error-send-sync.md) | Error stays unbounded, and the strength goes in a marker | accepted | 2 | — |
 | ADR-0010 | [`kb-decision-0010`](../decisions/0010-the-suite-must-prove-itself.md) | The conformance suite's own proof obligation | accepted | 3 | — |
@@ -135,7 +143,31 @@ query-naming cost is the tax ADR-0020's derived `Boundary::query` already collap
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0020 | [`kb-decision-0020`](../decisions/0020-fold-query-agreement.md) | A decision model folds a domain enum, and its query is derived on a sealed trait the caller cannot override | accepted | 7 | — |
-| ADR-0021 | [`kb-decision-0021`](../decisions/0021-payload-evolution-and-codec-tag.md) | The codec tag lives in Event::metadata, event types do not carry versions, and upcasting happens at decode | accepted | 7 | — |
+| ADR-0021 | [`kb-decision-0021`](../decisions/0021-payload-evolution-and-codec-tag.md) | The codec tag lives in Event::metadata, event types do not carry versions, and upcasting happens at decode | **superseded** | 7 | superseded by `kb-decision-0032` |
+
+## 2026-08-17 append-condition, runner-collapse, and macros-scope ADRs (ADR-0022, ADR-0031, ADR-0032, ADR-0033)
+
+Four decision atoms, one wave (`2026-08-17-adr-0022-append-condition`), `.kb/decisions/`, spanning
+phase 7 and phase 8 — the wave is a single ingest, not a single phase, so it gets one section per
+this map's own *Adding a row* convention. ADR-0022 settles `happenstance-sqlite`'s append-condition
+SQL strategy and tag storage, phase 8's first real measurement against SQLite. ADR-0031 fires
+ADR-0007's own falsifier — no checkpoint pump exists in `happenstance-core` after phase 7 — and
+partly supersedes it: only the allocation of a runnable pump moves, while ADR-0007's discriminator
+and all three shape decisions stand, so `kb-decision-0007` keeps `status: accepted` with
+`superseded_by: null` and this map's ADR-0007 row is annotated rather than flipped, the same
+treatment `kb-decision-0006`'s row already carries. ADR-0032 fully supersedes ADR-0021: a repair
+that withdraws one incorrect justification (a backwards reading of ADR-0003) for an already-correct
+rejection, leaving all three of ADR-0021's decisions intact — full rather than partial, because the
+defect was in ADR-0021's own body rather than in an allocation one of its parts made. ADR-0033
+records `happenstance-macros` out of scope for 0.1 against a measured ceremony ratio; it supersedes
+nothing, since ADR-0020 published its own contrary prediction as explicitly falsifiable.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted | 8 | — |
+| ADR-0031 | [`kb-decision-0031`](../decisions/0031-the-runner-collapses-upward.md) | One runner, in happenstance — the checkpoint pump collapses upward | accepted | 7 | partly supersedes `kb-decision-0007` |
+| ADR-0032 | [`kb-decision-0032`](../decisions/0032-adr-0021-serde-attribution-correction.md) | The serde-encoded framing region is rejected on two grounds, and ADR-0003 was never one of them | accepted | 7 | supersedes `kb-decision-0021` |
+| ADR-0033 | [`kb-decision-0033`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md) | happenstance-macros is out of scope for 0.1 | accepted | 7 | — |
 
 ### Reading the partial-supersession chain
 
@@ -145,6 +177,14 @@ half and reversed the allocation half, and 0007 kept 0006's naming discriminator
 only the projection-runner placement. Each later atom's `depends_on` names the one it corrects;
 none of the three is `status: superseded` in full, because each still has a half standing. Only
 `kb-decision-0002` is superseded outright, by `kb-decision-0005`.
+
+`kb-decision-0031` extends this lineage by one more link, on a different axis: it does not touch
+0006's naming discriminator at all, only 0007's allocation of a runnable checkpoint pump to
+`happenstance-core`. `kb-decision-0007` therefore now carries two annotations rather than one —
+"partly supersedes `kb-decision-0006`" and "partly superseded by `kb-decision-0031`" — and stays
+`status: accepted` throughout, for the same reason 0006 does: a status flip would retire shape
+decisions that are still standing and implemented, one of which `kb-decision-0030` itself depends
+on.
 
 `kb-decision-0004` and `kb-decision-0029` are the other shape: an amendment, not a supersession.
 0004 stays `status: accepted` because its reasoning (the floor is a preference until first

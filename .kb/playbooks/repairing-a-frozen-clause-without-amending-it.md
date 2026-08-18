@@ -30,6 +30,8 @@ related:
   - kb-open-question-es-6-unwritable-rule-001
   - kb-decision-0030
   - kb-open-question-ps-32-adr-0007-correction-owed-001
+  - kb-open-question-cf-36-unperformed-cross-reference-001
+  - kb-open-question-no-ps-rule-name-resolved-001
 source_paths:
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md
   - spec/SPECIFICATION.md

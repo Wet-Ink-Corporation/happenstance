@@ -27,6 +27,7 @@ related:
   - kb-decision-0009
   - kb-reference-port-traits-compiled-findings-001
   - kb-open-question-es-38-and-gap-read-unowned-001
+  - kb-open-question-cf-36-unperformed-cross-reference-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/0008-one-derivation-for-both-ports.md

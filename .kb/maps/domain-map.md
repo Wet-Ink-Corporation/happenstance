@@ -18,7 +18,12 @@ summary: >-
   domain, "The typed layer: decision models, codecs, and payload evolution," for ADR-0020 and
   ADR-0021 (phase 7) — the two are a subject area neither existing domain frames itself around, and
   the domain cites `kb-decision-0006` and `kb-decision-0007` by reference rather than moving them
-  out of the ports domain.
+  out of the ports domain. The 2026-08-17 wave added ADR-0022 (phase 8, SQLite append-condition
+  strategy) to the ports domain, and ADR-0031, ADR-0032 and ADR-0033 (phase 7) to the typed-layer
+  domain; ADR-0031 partly supersedes ADR-0007 and ADR-0032 fully supersedes ADR-0021, both
+  reflected here by annotation rather than by moving either superseded row. A new open question,
+  ES-17, was added to the ports domain, and D-1, CF-36 and "no PS rule name is resolved" were added
+  to the typed-layer and specification-governance domains respectively.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -30,7 +35,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
   - .kb/_governance/integration-waves/2026-08-15-intake
-last_reviewed: 2026-08-15
+  - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
+last_reviewed: 2026-08-17
 ---
 
 # Domain map
@@ -98,7 +104,12 @@ byte-identical),
 2026-08-13 verdict stands),
 `kb-open-question-es-6-unwritable-rule-001`,
 `kb-open-question-provisional-falsifiers-001`,
-`kb-open-question-post-phase-reconciliation-001`.
+`kb-open-question-post-phase-reconciliation-001`,
+`kb-open-question-cf-36-unperformed-cross-reference-001` (added 2026-08-17 — CF-36 is `[FROZEN]`
+and claims a level-marker cross-reference `cargo xtask spec-trace` does not perform),
+`kb-open-question-no-ps-rule-name-resolved-001` (added 2026-08-17 — CF-38 is `[FROZEN]`; a bare
+dagger in a clause's `Rule:` line, not the `has_suite` family switch this domain's own reference
+atom records fixed, is what still leaves every `PS` rule name unresolved).
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
@@ -112,22 +123,33 @@ The 2026-08-13 wave added three more to this same domain — `.kb/decisions/0017
 no-op-on-`apply`-failure stance, phase 6's `ProjectionStore` freeze. The 2026-08-15 wave added a
 fourth, `.kb/decisions/0030`, minting `[PROVISIONAL]` clause PS-38 — a successful `commit` MUST
 advance its `ProjectionId`'s checkpoint, and an id no successful `commit` has named MUST read as
-`Checkpoint::NeverRun` — the progress obligation section 4 never stated. The full decision list,
-including status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated
-here.
+`Checkpoint::NeverRun` — the progress obligation section 4 never stated. The 2026-08-17 wave added
+a fifth, `.kb/decisions/0022`, phase 8's first real measurement against SQLite: the append-condition
+SQL strategy and tag storage `happenstance-sqlite` ships, settling what ADR-0012 declined to decide
+at phase 4. The full decision list, including status and supersession, is
+[`decision-map.md`](decision-map.md) rather than repeated here.
 
 **Reference**
 
 - [`port-traits-compiled-findings.md`](../reference/port-traits-compiled-findings.md)
   (`kb-reference-port-traits-compiled-findings-001`) — what compiling `EventStore` and
   `ProjectionStore`, rather than reasoning about them, found across ADR-0001, ADR-0008,
-  ADR-0009, ADR-0010 and ADR-0011.
+  ADR-0009, ADR-0010 and ADR-0011. Gained a sixth finding 2026-08-17: the caller-side
+  `S::Error: Send + Sync` obligation ADR-0009 assigned is now exercised by a real consumer,
+  `happenstance::run_projection` (ADR-0031), and holds as frozen rather than as a defect.
 - [`position-visibility-experiment-2026-08.md`](../reference/position-visibility-experiment-2026-08.md)
   (`kb-reference-position-visibility-experiment-001`) — the four-arm measurement against real
   PostgreSQL that ADR-0013's visibility invariant rests on.
 - [`wire-format-encoding-measurements.md`](../reference/wire-format-encoding-measurements.md)
   (`kb-reference-wire-format-measurements-001`) — the encoding-size measurements ADR-0016 rests
   on, plus two instruments that measured wrong.
+- [`append-condition-experiment-2026-08.md`](../reference/append-condition-experiment-2026-08.md)
+  (`kb-reference-append-condition-experiment-001`) — the phase-8 measurement ADR-0022 rests on:
+  three append-condition strategies and three tag storages against real SQLite. Added 2026-08-17.
+- [`projection-fan-out-costs-n-reads.md`](../reference/projection-fan-out-costs-n-reads.md)
+  (`kb-reference-projection-fan-out-cost-001`) — `ProjectionStore::apply`'s `&mut P` fixes N
+  projections at N reads, derivable from the signature alone; a shape, not a verdict, on the
+  `[PROVISIONAL]` projection family. Added 2026-08-17.
 
 **Concepts**
 
@@ -169,7 +191,13 @@ self-contained list. The ones this domain owns:
 `kb-open-question-human-readable-encoding-limits-001`,
 `kb-open-question-sync-message-set-undesigned-001`,
 `kb-open-question-ps-32-adr-0007-correction-owed-001` (added 2026-08-15 — ADR-0007's Context
-overstates what cannot be written against the port; only a superseding atom may correct it).
+overstates what cannot be written against the port; only a superseding atom may correct it.
+**Superseded** 2026-08-17 by `kb-decision-0031`, which carries the corrected Context as part of its
+own partial supersession of ADR-0007),
+`kb-open-question-es-17-two-adapter-measurement-001` (added 2026-08-17 — ADR-0012's falsifier item
+1 asks for two builds of one SQLite adapter differing only in `append`'s batch ownership; the
+phase-8 append-condition experiment measured three strategies against the same `&[Event]` signature
+instead, and nothing currently scheduled produces the two-build evidence).
 
 ## The typed layer: decision models, codecs, and payload evolution
 
@@ -182,8 +210,20 @@ itself around `happenstance-core`'s async port design, and these two decisions a
 one seam above it. The domain stands on two atoms that stay in the ports domain rather than moving
 here — `kb-decision-0006` allocated the typed-layer crate these decisions live in, and
 `kb-decision-0007` drew the line that decoding sits strictly above the port, the premise ADR-0021's
-first decision consumes. See [`decision-map.md`](decision-map.md#2026-08-15-typed-layer-adrs-adr-0020-adr-0021)
+first decision consumes; `kb-decision-0031`, added 2026-08-17, is the third atom to stay in the
+ports domain's decision-map rows while governing conduct in this one — it is where
+`kb-decision-0007`'s checkpoint pump ends up, `happenstance::run_projection`, one seam above the
+port. See [`decision-map.md`](decision-map.md#2026-08-15-typed-layer-adrs-adr-0020-adr-0021)
 for status and supersession rather than repeated here.
+
+The 2026-08-17 wave added three more decisions to this domain. ADR-0031 fires ADR-0007's own
+falsifier and collapses the checkpoint pump upward into `happenstance::run_projection` — a partial
+supersession of ADR-0007, tracked on `decision-map.md`'s ADR-0007 row rather than moved here.
+ADR-0032 fully supersedes ADR-0021, withdrawing one incorrect justification (a backwards reading of
+ADR-0003) for an already-correct rejection while leaving all three of ADR-0021's own decisions
+intact; ADR-0021's row below is annotated **superseded** rather than removed. ADR-0033 records
+`happenstance-macros` out of scope for 0.1 against a measured ceremony ratio — a record, not a
+supersession, since ADR-0020's own contrary prediction was published as explicitly falsifiable.
 
 **Decisions**
 
@@ -191,9 +231,37 @@ for status and supersession rather than repeated here.
   (`kb-decision-0020`) — a `DecisionModel`'s query is not hand-written; it is derived on a sealed
   `Boundary::query`, so the query and the fold can no longer name different event sets.
 - [`0021-payload-evolution-and-codec-tag.md`](../decisions/0021-payload-evolution-and-codec-tag.md)
-  (`kb-decision-0021`) — the codec tag lives in `Event::metadata`'s framing region, `EventType`
-  carries no version suffix, and an older payload shape is tolerated at decode rather than by a
-  hook on `EventStore`.
+  (`kb-decision-0021`) — **superseded** by `kb-decision-0032` (2026-08-17). Three decisions still
+  stand: the codec tag lives in `Event::metadata`'s framing region, `EventType` carries no version
+  suffix, and an older payload shape is tolerated at decode rather than by a hook on `EventStore`.
+  What was withdrawn was one incorrect justification for a rejected alternative, not any of those
+  three.
+- [`0031-the-runner-collapses-upward.md`](../decisions/0031-the-runner-collapses-upward.md)
+  (`kb-decision-0031`) — added 2026-08-17. `happenstance-core` publishes no checkpoint pump;
+  `happenstance::run_projection` is the only runner, reading the checkpoint, deriving the query,
+  decoding through `Codec` and committing chunk-by-chunk. Partly supersedes `kb-decision-0007`.
+- [`0032-adr-0021-serde-attribution-correction.md`](../decisions/0032-adr-0021-serde-attribution-correction.md)
+  (`kb-decision-0032`) — added 2026-08-17. Supersedes `kb-decision-0021` in full: the framing
+  region's rejection of `serde` stands on its two codec-independence grounds alone, never on
+  ADR-0003, which constrains `happenstance-core` and positively assigns encoding to this crate.
+- [`0033-happenstance-macros-out-of-scope-for-0-1.md`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md)
+  (`kb-decision-0033`) — added 2026-08-17. The worked example's ceremony-to-domain ratio is
+  0.50:1/0.12:1 under both extreme classifications of its contested lines, against the 1.0
+  threshold AC-013 set — `happenstance-macros` does not ship in 0.1.
+
+**Reference**
+
+- [`phase-7-macros-ceremony-measurement.md`](../reference/phase-7-macros-ceremony-measurement.md)
+  (`kb-reference-macros-ceremony-measurement-001`) — the 29-range, line-by-line ceremony/domain
+  classification of `examples/course-subscriptions/src/main.rs` that `kb-decision-0033` rests on.
+  Added 2026-08-17.
+
+**Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
+self-contained list. The one this domain owns:
+`kb-open-question-d-1-no-total-path-001` (added 2026-08-17 — `QueryItem::new` is fallible even over
+already-validated inputs and `DomainEvent::tags` is total over a fallible `Tags`; no infallible
+route exists in either direction, and it is the single condition that would reopen ADR-0033's
+verdict).
 
 ## Adding a domain
 

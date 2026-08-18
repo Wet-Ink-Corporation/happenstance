@@ -2,13 +2,13 @@
 id: kb-decision-0021
 title: The codec tag lives in Event::metadata, event types do not carry versions, and upcasting happens at decode
 kind: decision
-status: accepted
+status: superseded
 authority_tier: decision
 adr_id: ADR-0021
 reversibility: low
 phase: 7
 supersedes: null
-superseded_by: null
+superseded_by: kb-decision-0032
 summary: >-
   Three answers, none of them taken at the design gate, because the public surface is invariant
   under all three - Codec::TAG is a &'static str either way. The codec tag lives in
@@ -55,7 +55,7 @@ source_paths:
   - crates/happenstance-core/src/event.rs
   - crates/happenstance-core/src/store.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-17
 ---
 
 # The codec tag lives in Event::metadata, event types do not carry versions, and upcasting happens at decode

@@ -20,6 +20,7 @@ depends_on: []
 related:
   - kb-decision-0012
   - kb-decision-0013
+  - kb-decision-0022
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
   - references/adr/0011-read-laziness-and-isolation.md
