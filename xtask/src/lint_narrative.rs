@@ -78,6 +78,24 @@
 //! * **A doubly-declared clause id collapses upstream.** `clause_ids` returns a
 //!   set, so a document declaring one id twice resolves exactly as one
 //!   declaring it once, and nothing in this repository looks for the duplicate.
+//! * **An anchor can survive while the reasoning around it is rewritten.**
+//!   [`FROZEN_DOC_MUSTS`] holds one verbatim phrase per pinned clause and
+//!   checks that the phrase is still there. A rewrite that keeps the sentence
+//!   and guts the paragraph explaining it is a re-discharge this check cannot
+//!   detect. `.kb/governance/rewrite-the-referent-never-the-reasoning.md` is
+//!   the human rule that covers it, and it is a human rule because no string
+//!   match can be one.
+//! * **A clause wording its documentation obligation outside
+//!   [`DOCUMENTATION_OBLIGATIONS`] is invisible to the derived scan.** The
+//!   phrase list is six entries and deliberately short. A clause that says "the
+//!   reader has to be told" instead of "MUST document" is never a candidate, so
+//!   the pin cannot notice it going unclassified — which is the one direction
+//!   the derived-versus-hand-written comparison cannot protect.
+//! * **The pin proves a discharge is *present*, never that it is *adequate*.**
+//!   A site carrying its anchor is a site whose load-bearing sentence is still
+//!   there. Whether the paragraph around it still teaches an adapter author
+//!   what the clause needs them to know is a review question, and this step
+//!   asks none.
 //! * **The harness is matched as text, so reformatting it can break this check
 //!   without breaking the compile.** Splitting an `include_str!` across lines, or
 //!   writing a `mod` line that does not start with `mod ` after trimming, makes a
@@ -225,6 +243,18 @@ const HARNESS: &str = "xtask/src/narrative.rs";
 /// number, and the checker enforces the stricter of the two surfaces because a
 /// path that fits the compile surface necessarily fits this one.
 const PATH_BUDGET: usize = 32;
+
+/// The specification the pin resolves against and scans for candidates.
+///
+/// A second spelling of a path `spec_trace::SPEC` already holds, and it is a
+/// second spelling on purpose rather than by accident: that constant is private
+/// to the module that owns the parser, this module's one permitted edit to that
+/// file is a deletion, and widening its visibility to save one string would be
+/// this story reaching into a neighbour's file for a convenience. The two agree
+/// or the run fails loudly — `clause_ids` resolves through its own constant
+/// immediately before this read, so a divergence is a missing-file error on the
+/// next line rather than a silent scan of nothing.
+const SPECIFICATION: &str = "spec/SPECIFICATION.md";
 
 /// This module's own path, which is the file a stale allowance is a defect in.
 ///
@@ -1212,6 +1242,499 @@ fn check_page(
     }
 }
 
+/// The wordings a clause uses to place an obligation on documentation.
+///
+/// The derived half of the pin's third assertion: a line scan of
+/// `spec/SPECIFICATION.md` for these phrases, over clause bodies whose
+/// whitespace has been collapsed first, so a phrase broken across a soft wrap is
+/// still found — `PS-34`'s is, and a line-keyed scan misses it.
+///
+/// **Short on purpose, and its limit is stated here rather than discovered.** A
+/// clause wording its documentation obligation in none of these — "the reader
+/// has to be told", "this belongs in the doc comment" — is invisible to the
+/// scan, so the pin cannot notice it going unclassified. A long list of
+/// near-synonyms would buy recall nobody can verify and would hide exactly this
+/// sentence.
+const DOCUMENTATION_OBLIGATIONS: &[&str] = &[
+    "MUST document",
+    "MUST state",
+    "MUST say",
+    "documentation MUST",
+    "MUST be documented",
+    "belongs in the port's documentation",
+];
+
+/// What the pin decided about one candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Disposition {
+    /// Discharged in the contract's own documentation, at `site`, by `anchor`.
+    ///
+    /// The anchor is a **verbatim phrase**, never the clause id, and that is
+    /// forced rather than preferred: as `main` stands, not one discharge site
+    /// names its clause id, so an id-as-anchor pin fails on every entry the day
+    /// it lands — and the repair a contributor reaches for is widening the match
+    /// until it passes, which empties the check. [`guard_pin`] refuses it.
+    Pinned {
+        /// Repo-relative, `/`-separated.
+        site: &'static str,
+        /// The load-bearing sentence of the discharge, not a nearby convenience.
+        anchor: &'static str,
+    },
+    /// Not pinned, with the reason the next reader meets beside the entry.
+    Excluded {
+        /// One line. Why the derivation rule does not reach this candidate.
+        reason: &'static str,
+    },
+}
+
+/// One candidate documentation obligation, disposed of.
+#[derive(Debug, Clone, Copy)]
+struct DocumentationMust {
+    /// The clause id, resolved through [`crate::spec_trace::clause_ids`].
+    clause: &'static str,
+    /// Pinned with a site and an anchor, or excluded with a reason.
+    disposition: Disposition,
+}
+
+/// Every documentation obligation `spec/SPECIFICATION.md` words, disposed of.
+///
+/// **The derivation rule, where the next reader meets it.** A candidate is
+/// **pinned** when (a) its clause is `[FROZEN]` **and** (b) its obligation falls
+/// on **the contract's own documentation** — not on an adapter's, not on a
+/// fixture's, and not on this specification's own prose. Everything the scan
+/// finds and the rule does not reach is **excluded**, with its reason on the
+/// entry rather than in a paragraph somewhere else.
+///
+/// The set is **re-derived** against the document as it stands rather than
+/// copied from either of the two statements that disagree about it, and the
+/// re-derivation is written down in
+/// `.bklg/docs-that-teach/checked-documentation-surface/frozen-documentation-must-pin/`.
+/// No count is written anywhere here: `UNCLAIMED_PENDING_ADR` already refused
+/// that trade (`xtask/src/spec_trace.rs:1975-1978`), because a comment naming a
+/// total above an array holding a different one is the defect this pin exists
+/// to prevent, one level up. The count is the array's length and nothing
+/// restates it.
+///
+/// An entry the scan no longer finds, and a candidate no entry classifies, are
+/// both problems — and they are two different sentences, because they mean
+/// opposite things about which side moved.
+const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
+    DocumentationMust {
+        clause: "VT-13",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/event.rs",
+            anchor: "resumes with `ReadOptions::from(checkpoint.next()?)`, and that is sound \
+                     on a store with gaps",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-15",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/tag.rs",
+            anchor: "# Equality is byte equality, and nothing is normalised",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-17",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/tag.rs",
+            anchor: "a key may legally appear more than once",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-21",
+        disposition: Disposition::Excluded {
+            reason: "the obligation is on a store — `MUST document its actual limit` — not on \
+                     the contract's own documentation",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-22",
+        disposition: Disposition::Excluded {
+            reason: "as VT-21: the limit a store documents is the store's, not the contract's",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-24",
+        disposition: Disposition::Excluded {
+            reason: "as VT-21: the limit a store documents is the store's, not the contract's",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-32",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/event.rs",
+            anchor: "an invalid one that nothing reads survives `check`, `clippy`, `build` \
+                     and `test`",
+        },
+    },
+    DocumentationMust {
+        clause: "VT-33",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/tag.rs",
+            anchor: "Not the amortised O(1) `Extend` usually implies.",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-19",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/store.rs",
+            anchor: "It is not a sound `after` for a follow-up condition",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-23",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/store.rs",
+            anchor: "# Cancellation",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-24",
+        disposition: Disposition::Pinned {
+            site: "crates/happenstance-core/src/store.rs",
+            anchor: "at-most-once under verbatim reissue",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-26",
+        disposition: Disposition::Excluded {
+            reason: "`[FROZEN]` and on the contract's own documentation, and **not discharged**: \
+                     both halves are documented but nothing says the asymmetry is deliberate. \
+                     Anchoring it needs a doc-comment edit, which is HS-P0023's under \
+                     `.kb/governance/rewrite-the-referent-never-the-reasoning.md`",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-35",
+        disposition: Disposition::Excluded {
+            reason: "`[PROVISIONAL]`, and the obligation is on an adapter that declines \
+                     durability rather than on the contract",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-40",
+        disposition: Disposition::Excluded {
+            reason: "`[PROVISIONAL]`. Its discharge at `append.rs:29` is present today and \
+                     would anchor on `# A claim about one store's log, not about the world`, \
+                     so this becomes a pinned entry the day the clause freezes",
+        },
+    },
+    DocumentationMust {
+        clause: "PS-31",
+        disposition: Disposition::Excluded {
+            reason: "`[FROZEN]` and on the port's own documentation, and **not discharged**: \
+                     `projection.rs` does not say that an event-emitting projection is out of \
+                     scope at 0.1. HS-P0023's edit",
+        },
+    },
+    DocumentationMust {
+        clause: "PS-34",
+        disposition: Disposition::Excluded {
+            reason: "`[PROVISIONAL — contingent on PS-5]`, and dead the moment `type Batch;` \
+                     lands",
+        },
+    },
+    DocumentationMust {
+        clause: "PS-36",
+        disposition: Disposition::Excluded {
+            reason: "`[FROZEN]` and on the port's own documentation, and **not discharged**: \
+                     `projection.rs` does not document that the `Send` flavour transitively \
+                     requires `Batch: Send`. HS-P0023's edit",
+        },
+    },
+    DocumentationMust {
+        clause: "SY-32",
+        disposition: Disposition::Excluded {
+            reason: "`[DEFERRED]`, and `SyncPeer` is `happenstance-sync`'s port rather than \
+                     the contract's",
+        },
+    },
+    DocumentationMust {
+        clause: "CF-35",
+        disposition: Disposition::Excluded {
+            reason: "the obligation is on this specification's own clauses and is discharged \
+                     by `cargo xtask spec-trace` (CF-38), not by a doc comment",
+        },
+    },
+    DocumentationMust {
+        clause: "CF-39",
+        disposition: Disposition::Excluded {
+            reason: "the obligation is on a fixture — `The fixture MUST state the mechanism` \
+                     — not on the contract's own documentation",
+        },
+    },
+    DocumentationMust {
+        clause: "CF-40",
+        disposition: Disposition::Excluded {
+            reason: "as CF-39: the ceilings a fixture states are the fixture's",
+        },
+    },
+];
+
+/// Doc-comment text with its markers stripped and its whitespace collapsed.
+///
+/// Applied to **both** sides of every anchor match, which is what lets an anchor
+/// be written as one readable sentence while the discharge it names is wrapped
+/// across three source lines.
+///
+/// The alternative was choosing anchors that happen to sit on one source line,
+/// and it lost: every anchor available today does fit one line, so the trap is
+/// invisible until somebody re-wraps a paragraph — and the remedy a false
+/// positive teaches is deleting the entry, which is the one thing this pin
+/// cannot survive.
+fn normalised(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let line = line.trim_start();
+        let line = line
+            .strip_prefix("///")
+            .or_else(|| line.strip_prefix("//!"))
+            .or_else(|| line.strip_prefix("//"))
+            .unwrap_or(line);
+        for word in line.split_ascii_whitespace() {
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(word);
+        }
+    }
+    out
+}
+
+/// Whether `text` names `clause` as a whole identifier.
+///
+/// Clause ids nest — `ES-1` inside `ES-17`, `VT-3` inside `VT-33`, `ES-4` inside
+/// `ES-40` — and a bare `contains` is a substring test. The shape is copied from
+/// `names_rule` (`xtask/src/lints.rs:492-500`) rather than shared with it: that
+/// defect shipped once already in this repository, where a longer rule name
+/// silently discharged a shorter rule's obligation and inflated the arithmetic
+/// built on the same match. Two twelve-line boundary tests in two modules is
+/// cheaper than one helper that makes two checkers move together.
+fn names_clause(text: &str, clause: &str) -> bool {
+    let ident = |character: char| character.is_ascii_alphanumeric() || character == '-';
+    text.match_indices(clause).any(|(at, _)| {
+        let before = text[..at].chars().next_back().is_none_or(|c| !ident(c));
+        let after = text[at + clause.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !ident(c));
+        before && after
+    })
+}
+
+/// The clause a specification line declares, if it declares one.
+///
+/// Resolution stays [`Clauses::ids`]' — membership and nothing else — so no
+/// second family list exists. What this decides is *declaration position*: the
+/// line's first citation-shaped token, at the very start once heading and bold
+/// markers are stripped, and not closed immediately by `**`, which is how §1
+/// writes a cross-reference. That much is `spec_trace::clause_id`'s shape,
+/// copied rather than shared (Note 8) — and the test below holds the two to the
+/// same set over the real document, so a divergence fails instead of drifting.
+fn declared_clause<'a>(line: &'a str, clauses: &Clauses) -> Option<&'a str> {
+    let stripped = line.trim_start().trim_start_matches('#').trim_start();
+    let stripped = stripped.strip_prefix("**").unwrap_or(stripped);
+    let id = clause_citations(stripped).into_iter().next()?.id?;
+    if !stripped.starts_with(id) || !clauses.ids.contains(id) {
+        return None;
+    }
+    // `**ES-40**` closes immediately: that is a cross-reference, and §1 is full
+    // of them. `**PS-1 — …` and `**CF-30 is …` continue inside the bold run.
+    (!stripped[id.len()..].starts_with('*')).then_some(id)
+}
+
+/// Every clause whose body words a documentation obligation.
+///
+/// The derived half of assertion 3, and the reason a clause the sibling branch
+/// adds surfaces as a gate failure on the merge-forward commit rather than as a
+/// closeout re-check.
+fn documentation_candidates(spec: &str, clauses: &Clauses) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let mut current: Option<String> = None;
+    let mut body = String::new();
+
+    for line in spec.lines() {
+        if let Some(id) = declared_clause(line, clauses) {
+            if let Some(previous) = current.take()
+                && words_an_obligation(&body)
+            {
+                out.insert(previous);
+            }
+            body.clear();
+            current = Some(id.to_owned());
+        }
+        body.push_str(line);
+        body.push('\n');
+    }
+    if let Some(previous) = current
+        && words_an_obligation(&body)
+    {
+        out.insert(previous);
+    }
+    out
+}
+
+/// Whether one clause body carries any of [`DOCUMENTATION_OBLIGATIONS`].
+///
+/// Normalised first, so a phrase a soft wrap split across two lines is still
+/// found. `PS-34`'s is exactly that, and it is why the scan is not line-keyed.
+fn words_an_obligation(body: &str) -> bool {
+    let body = normalised(body);
+    DOCUMENTATION_OBLIGATIONS
+        .iter()
+        .any(|phrase| body.contains(phrase))
+}
+
+/// Refuses a pin that cannot fail, before any check over it runs.
+///
+/// Three ways an enumeration becomes decorative, and all three are hard errors
+/// rather than problems, because each one makes the checks below say nothing
+/// while looking like they said something.
+///
+/// # Errors
+///
+/// When [`FROZEN_DOC_MUSTS`] is empty; when it names one clause twice, which
+/// would let a dedup absorb an entry and make the derived-versus-hand-written
+/// comparison lie about which side moved; or when an anchor names its own
+/// clause id — as `main` stands, no discharge site names its clause id, so an
+/// id-as-anchor entry fails the day it lands and the repair a contributor
+/// reaches for is widening the match until it passes.
+fn guard_pin(pin: &[DocumentationMust]) -> Result<()> {
+    if pin.is_empty() {
+        bail!(
+            "the frozen documentation MUST pin enumerates nothing, so every check over it is vacuous"
+        );
+    }
+
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for entry in pin {
+        if !seen.insert(entry.clause) {
+            bail!(
+                "the pin names `{}` twice; a duplicate lets one entry be absorbed and makes \
+                 the derived-versus-hand-written comparison lie about which side moved",
+                entry.clause
+            );
+        }
+        if let Disposition::Pinned { anchor, .. } = entry.disposition
+            && names_clause(anchor, entry.clause)
+        {
+            bail!(
+                "the pin's anchor for `{}` names the clause id; no discharge site names its \
+                 id, so an id-as-anchor entry fails on every site there is",
+                entry.clause
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Assertion 1 — every id the pin names is one the specification declares.
+///
+/// Membership in [`Clauses::ids`], which is exact rather than a substring test,
+/// so `ES-1` cannot be satisfied by a document declaring only `ES-17`. The
+/// problem names the id and the pin, never a page: a renumbered clause is not a
+/// page's fault.
+fn check_pin_resolution(pin: &[DocumentationMust], clauses: &Clauses, problems: &mut Vec<String>) {
+    for entry in pin {
+        if !clauses.ids.contains(entry.clause) {
+            problems.push(format!(
+                "{CHECKER} — the pin names `{}`, which SPECIFICATION.md does not declare",
+                entry.clause
+            ));
+        }
+    }
+}
+
+/// Assertion 2, the decision half — the discharging text is still there.
+///
+/// Both sides are [`normalised`] first, so re-wrapping a paragraph is not a gate
+/// failure. A missing *file* is the caller's problem to report, with a different
+/// sentence: a contributor who reads "the anchor is gone" and goes looking for a
+/// missing file has been sent to the wrong place.
+fn check_anchor(clause: &str, site: &str, anchor: &str, text: &str, problems: &mut Vec<String>) {
+    if !normalised(text).contains(&normalised(anchor)) {
+        problems.push(format!(
+            "{site} — the discharge of `{clause}` no longer carries `{anchor}`; the \
+             discharging text moved"
+        ));
+    }
+}
+
+/// Assertion 3 — the derived candidates and the hand-written enumeration agree.
+///
+/// Two directions, two sentences, and RS-81-5's requirement is that they are
+/// never one: a candidate nobody classified means the **document grew**, and an
+/// entry that is no longer a candidate means the **enumeration is stale**. Both
+/// name the ids. "The counts disagree" would be neither.
+fn check_pin_census(
+    pin: &[DocumentationMust],
+    clauses: &Clauses,
+    derived: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) {
+    let classified: BTreeSet<&str> = pin.iter().map(|entry| entry.clause).collect();
+
+    for id in derived {
+        if !classified.contains(id.as_str()) {
+            problems.push(format!(
+                "{CHECKER} — SPECIFICATION.md words a documentation obligation in `{id}`, \
+                 which the pin classifies neither way; the document grew"
+            ));
+        }
+    }
+    for entry in pin {
+        // An id the document no longer declares cannot be a candidate either,
+        // and assertion 1 has already said so in the sentence that fits. Saying
+        // it twice would give one defect two messages, the second of which
+        // blames the enumeration for a clause that was renumbered under it.
+        if !clauses.ids.contains(entry.clause) {
+            continue;
+        }
+        if !derived.contains(entry.clause) {
+            problems.push(format!(
+                "{CHECKER} — the pin classifies `{}`, which words no documentation \
+                 obligation in SPECIFICATION.md; the enumeration is stale",
+                entry.clause
+            ));
+        }
+    }
+}
+
+/// The pin, checked three ways, against one workspace root.
+///
+/// The I/O half: one read per pinned discharge site, and one scan of the
+/// specification text the caller already read.
+fn check_pin(
+    root: &Path,
+    pin: &[DocumentationMust],
+    clauses: &Clauses,
+    spec: &str,
+    problems: &mut Vec<String>,
+) {
+    check_pin_resolution(pin, clauses, problems);
+
+    for entry in pin {
+        let Disposition::Pinned { site, anchor } = entry.disposition else {
+            continue;
+        };
+        match fs::read_to_string(root.join(site)) {
+            Ok(text) => check_anchor(entry.clause, site, anchor, &text, problems),
+            Err(err) => problems.push(format!(
+                "{site} — reading the discharge site for `{}` failed ({err}); the path moved",
+                entry.clause
+            )),
+        }
+    }
+
+    check_pin_census(
+        pin,
+        clauses,
+        &documentation_candidates(spec, clauses),
+        problems,
+    );
+}
+
 /// Every problem the tree carries, composed, in source order.
 ///
 /// The order is the order a contributor reads: the tree first — the pinning
@@ -1269,13 +1792,17 @@ fn check(root: &Path) -> Result<()> {
     // tree walk is what stops that failure arriving with a page's name on it.
     // Once because the set is shared by every check below that needs it.
     let clauses = Clauses::new(clause_ids(root)?);
+    guard_pin(FROZEN_DOC_MUSTS)?;
+    let spec = fs::read_to_string(root.join(SPECIFICATION))
+        .with_context(|| format!("reading {SPECIFICATION}"))?;
 
     let pages = pages(root)?;
     guard_not_vacuous(&pages)?;
 
     let harness =
         fs::read_to_string(root.join(HARNESS)).with_context(|| format!("reading {HARNESS}"))?;
-    let problems = problems(&pages, &harness, &clauses);
+    let mut problems = problems(&pages, &harness, &clauses);
+    check_pin(root, FROZEN_DOC_MUSTS, &clauses, &spec, &mut problems);
 
     if problems.is_empty() {
         println!("{}", summary(&pages));
@@ -1292,6 +1819,7 @@ fn check(root: &Path) -> Result<()> {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
 
+    use std::fmt::Write as _;
     use std::path::PathBuf;
 
     use super::*;
@@ -3077,6 +3605,543 @@ One writer at a time.
                 source.contains(limit),
                 "the module must state `{limit}` among its limits"
             );
+        }
+    }
+
+    // ======================================================================
+    // frozen-documentation-must-pin
+    // ======================================================================
+
+    fn pinned(clause: &'static str, site: &'static str, anchor: &'static str) -> DocumentationMust {
+        DocumentationMust {
+            clause,
+            disposition: Disposition::Pinned { site, anchor },
+        }
+    }
+
+    fn excluded(clause: &'static str) -> DocumentationMust {
+        DocumentationMust {
+            clause,
+            disposition: Disposition::Excluded {
+                reason: "a reason a reviewer reads",
+            },
+        }
+    }
+
+    /// A specification slice declaring every clause a pin names, each wording an
+    /// obligation — so the census is silent and a test can drive the other two
+    /// assertions without it.
+    fn slice_for(pin: &[DocumentationMust]) -> String {
+        let mut out = String::new();
+        for entry in pin {
+            let _ = write!(
+                out,
+                "#### {} — a clause shaped like the document's\n\n[FROZEN]\n\n\
+                 The port's documentation MUST state the thing.\n\n",
+                entry.clause
+            );
+        }
+        out
+    }
+
+    /// Every problem a pin carries, against the real checkout, over a slice that
+    /// classifies exactly what the pin does.
+    fn pin_problems(pin: &[DocumentationMust]) -> Vec<String> {
+        let ids: Vec<&str> = pin.iter().map(|entry| entry.clause).collect();
+        pin_problems_over(pin, &ids, &slice_for(pin))
+    }
+
+    /// The same, with the resolution and the specification slice chosen.
+    fn pin_problems_over(pin: &[DocumentationMust], ids: &[&str], spec: &str) -> Vec<String> {
+        let clauses = Clauses::new(ids.iter().map(|id| (*id).to_owned()).collect());
+        let mut problems = Vec::new();
+        check_pin(
+            &workspace_root().unwrap(),
+            pin,
+            &clauses,
+            spec,
+            &mut problems,
+        );
+        problems
+    }
+
+    // ---- AC-001: one enumeration, every candidate disposed of ---------------
+
+    #[test]
+    fn every_pin_entry_is_disposed_with_a_site_and_an_anchor() {
+        assert!(!FROZEN_DOC_MUSTS.is_empty());
+
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        for entry in FROZEN_DOC_MUSTS {
+            assert!(!entry.clause.is_empty());
+            assert!(
+                seen.insert(entry.clause),
+                "`{}` is enumerated twice",
+                entry.clause
+            );
+            match entry.disposition {
+                Disposition::Pinned { site, anchor } => {
+                    assert!(site.starts_with("crates/"), "`{}`: {site}", entry.clause);
+                    assert!(!anchor.trim().is_empty(), "`{}`", entry.clause);
+                    assert!(
+                        !names_clause(anchor, entry.clause),
+                        "`{}`'s anchor names its own clause id; no site does",
+                        entry.clause
+                    );
+                }
+                Disposition::Excluded { reason } => {
+                    assert!(
+                        reason.trim().len() > 20,
+                        "`{}` is excluded with no reason a reviewer can read",
+                        entry.clause
+                    );
+                }
+            }
+        }
+        assert!(
+            FROZEN_DOC_MUSTS
+                .iter()
+                .any(|entry| matches!(entry.disposition, Disposition::Pinned { .. })),
+            "an enumeration of nothing but exclusions is a pin that cannot fail"
+        );
+    }
+
+    /// The trade `UNCLAIMED_PENDING_ADR` already made
+    /// (`xtask/src/spec_trace.rs:1975-1978`): a count written into a comment can
+    /// come to disagree with the array beneath it, which is the defect BR-10
+    /// exists to prevent, one level up.
+    #[test]
+    fn the_pin_holds_no_written_count() {
+        let source = production_source();
+        let block = source
+            .split("const FROZEN_DOC_MUSTS")
+            .next()
+            .expect("split always yields a first part");
+        let comment: String = block
+            .lines()
+            .rev()
+            .take_while(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        // The three numbers that could come to disagree with the array beneath
+        // the comment: its length, and the two halves of its disposition.
+        let all = FROZEN_DOC_MUSTS.len();
+        let held = FROZEN_DOC_MUSTS
+            .iter()
+            .filter(|entry| matches!(entry.disposition, Disposition::Pinned { .. }))
+            .count();
+        let tokens: Vec<&str> = comment
+            .split(|character: char| !character.is_ascii_alphanumeric())
+            .collect();
+
+        for total in [all, held, all - held] {
+            let numeral = total.to_string();
+            assert!(
+                !tokens.contains(&numeral.as_str()),
+                "`{numeral}` stands alone in the pin's comment, where it can come to \
+                 disagree with the array beneath it: {comment}"
+            );
+            // Number words, for the totals whose word is not also an ordinary
+            // English one — `one` is, which is why the table starts at two.
+            for (value, word) in [
+                (2, "two"),
+                (8, "eight"),
+                (13, "thirteen"),
+                (21, "twenty-one"),
+            ] {
+                assert!(
+                    value != total || !comment.contains(word),
+                    "`{word}` in the pin's comment is a written count: {comment}"
+                );
+            }
+        }
+    }
+
+    // ---- AC-002: every pinned id resolves, through the shared set -----------
+
+    #[test]
+    fn a_pinned_id_absent_from_the_specification_is_a_problem() {
+        let pin = [excluded("ES-19"), excluded("ES-23"), excluded("ES-24")];
+        let ids = ["ES-19", "ES-24"];
+
+        let found = pin_problems_over(&pin, &ids, &slice_for(&pin));
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("ES-23") && found[0].starts_with(CHECKER),
+            "the problem names the missing id and the pin, never a page, got: {}",
+            found[0]
+        );
+        assert!(
+            !found[0].contains(TREE),
+            "a renumbered clause is not a page's fault, got: {}",
+            found[0]
+        );
+    }
+
+    // ---- AC-003: the path moved and the text moved are two problems ---------
+
+    #[test]
+    fn a_missing_anchor_and_a_missing_site_are_two_different_problems() {
+        let pin = [
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "a sentence that store.rs has never carried",
+            ),
+            pinned(
+                "ES-24",
+                "crates/no-such-crate/src/gone.rs",
+                "# Cancellation",
+            ),
+        ];
+
+        let found = pin_problems(&pin);
+
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(
+            found[0].contains("the discharging text moved") && found[0].contains("ES-23"),
+            "got: {}",
+            found[0]
+        );
+        assert!(
+            found[1].contains("the path moved") && found[1].contains("ES-24"),
+            "got: {}",
+            found[1]
+        );
+        assert!(
+            !found[0].contains("the path moved") && !found[1].contains("the discharging text"),
+            "a contributor sent to a missing file by an anchor problem is sent to the wrong \
+             place: {found:?}"
+        );
+    }
+
+    /// The only test that touches the real checkout's discharge sites, and the
+    /// one that would fail on the day a `happenstance-core` doc comment
+    /// un-discharges a `[FROZEN]` clause.
+    #[test]
+    fn the_whole_pin_holds_against_the_real_tree() {
+        let root = workspace_root().unwrap();
+        let clauses = Clauses::new(clause_ids(&root).unwrap());
+        let spec = read(SPECIFICATION);
+        let mut problems = Vec::new();
+
+        check_pin(&root, FROZEN_DOC_MUSTS, &clauses, &spec, &mut problems);
+
+        assert!(problems.is_empty(), "the pin does not hold: {problems:?}");
+    }
+
+    // ---- AC-004: reflow-insensitive, and whole-identifier ------------------
+
+    /// The criterion that protects the pin from its own users: the remedy a
+    /// contributor reaches for when a check fires on an innocuous edit is to
+    /// edit the check, and the check *is* the pin.
+    #[test]
+    fn the_anchor_match_survives_a_reflowed_doc_comment() {
+        let anchor = "at-most-once under verbatim reissue";
+        for text in [
+            "/// **A conditional append is at-most-once under verbatim reissue.**\n",
+            "    /// **A conditional append is at-most-once under\n    /// verbatim reissue.**\n",
+            "//! at-most-once     under\n//!    verbatim reissue\n",
+        ] {
+            let mut problems = Vec::new();
+            check_anchor(
+                "ES-24",
+                "crates/happenstance-core/src/store.rs",
+                anchor,
+                text,
+                &mut problems,
+            );
+            assert!(problems.is_empty(), "`{text}` got: {problems:?}");
+        }
+    }
+
+    /// `ES-1` inside `ES-17`, `VT-3` inside `VT-33`. The defect shipped once
+    /// already in this repository, for conformance rule names.
+    #[test]
+    fn a_short_clause_id_does_not_match_a_longer_one() {
+        let pin = [excluded("ES-1"), excluded("VT-3")];
+
+        let found = pin_problems_over(&pin, &["ES-17", "VT-33"], &slice_for(&pin));
+
+        assert_eq!(
+            found.len(),
+            2,
+            "neither short id resolves against the longer one: {found:?}"
+        );
+
+        assert!(!names_clause("ES-17 is a different clause", "ES-1"));
+        assert!(!names_clause("VT-33 is a different clause", "VT-3"));
+        assert!(names_clause("as VT-3 requires", "VT-3"));
+    }
+
+    // ---- AC-005: which side moved, in two different sentences ---------------
+
+    #[test]
+    fn an_unclassified_candidate_says_the_document_grew() {
+        let pin = [excluded("ES-19")];
+        let spec = format!(
+            "{}#### ES-23 — a clause the pin never classified\n\n\
+             The port's documentation MUST state the thing.\n",
+            slice_for(&pin)
+        );
+
+        let found = pin_problems_over(&pin, &["ES-19", "ES-23"], &spec);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("ES-23") && found[0].contains("the document grew"),
+            "the message must name the id and attribute the movement to the document, got: {}",
+            found[0]
+        );
+    }
+
+    #[test]
+    fn an_entry_that_is_no_longer_a_candidate_says_the_enumeration_is_stale() {
+        let pin = [excluded("ES-19"), excluded("ES-23")];
+        let spec = format!(
+            "{}#### ES-23 — a clause that words no documentation obligation\n\n[FROZEN]\n",
+            slice_for(&pin[..1])
+        );
+
+        let found = pin_problems_over(&pin, &["ES-19", "ES-23"], &spec);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("ES-23") && found[0].contains("the enumeration is stale"),
+            "the message must name the id and attribute the movement to the enumeration, \
+             got: {}",
+            found[0]
+        );
+        assert!(
+            !found[0].contains("the document grew"),
+            "RS-81-5: never one sentence for two unrelated bugs, got: {}",
+            found[0]
+        );
+    }
+
+    // ---- AC-006: every problem, in one run, never truncated ------------------
+
+    #[test]
+    fn every_pin_problem_is_reported_not_just_the_first() {
+        let pin = [
+            excluded("ES-99"),
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "a sentence that store.rs has never carried",
+            ),
+        ];
+        let spec = format!(
+            "{}#### VT-15 — a candidate nobody classified\n\n\
+             The documentation MUST state the thing.\n",
+            slice_for(&pin)
+        );
+
+        let found = pin_problems_over(&pin, &["ES-23", "VT-15"], &spec);
+
+        assert_eq!(found.len(), 3, "got: {found:?}");
+        assert!(found[0].contains("ES-99"), "got: {}", found[0]);
+        assert!(found[1].contains("ES-23"), "got: {}", found[1]);
+        assert!(found[2].contains("VT-15"), "got: {}", found[2]);
+    }
+
+    #[test]
+    fn the_pin_never_truncates_its_problem_list() {
+        let pin: Vec<DocumentationMust> = (0..20)
+            .map(|_| excluded("ES-99"))
+            .enumerate()
+            .map(|(index, mut entry)| {
+                // Twenty distinct unresolvable ids, without twenty literals.
+                entry.clause = [
+                    "CF-91", "CF-92", "CF-93", "CF-94", "CF-95", "CF-96", "CF-97", "CF-98",
+                    "CF-99", "PS-91", "PS-92", "PS-93", "PS-94", "PS-95", "PS-96", "PS-97",
+                    "PS-98", "PS-99", "SY-91", "SY-92",
+                ][index];
+                entry
+            })
+            .collect();
+
+        let found = pin_problems_over(&pin, &[], "");
+
+        assert_eq!(found.len(), 20, "got {} problems", found.len());
+        assert!(
+            found.iter().all(|problem| !problem.contains("more")),
+            "no problem list is truncated: {found:?}"
+        );
+    }
+
+    // ---- AC-007: location first, inside the 48-column prefix ---------------
+
+    /// Driven from the pin array and the candidate scan rather than from five
+    /// literals, so a future condition cannot escape the budget by being added
+    /// somewhere this test does not look.
+    #[test]
+    fn every_pin_problem_line_begins_with_its_artifact() {
+        let pin = [
+            excluded("ES-99"),
+            pinned(
+                "ES-23",
+                "crates/no-such-crate/src/gone.rs",
+                "# Cancellation",
+            ),
+            pinned(
+                "ES-24",
+                "crates/happenstance-core/src/store.rs",
+                "a sentence that store.rs has never carried",
+            ),
+            excluded("VT-1"),
+        ];
+        let spec = format!(
+            "{}#### VT-1 — a clause that words no documentation obligation\n\n[FROZEN]\n\n\
+             #### VT-15 — a candidate nobody classified\n\n\
+             The documentation MUST state the thing.\n",
+            slice_for(&pin[..3])
+        );
+
+        let found = pin_problems_over(&pin, &["ES-23", "ES-24", "VT-1", "VT-15"], &spec);
+
+        assert_eq!(
+            found.len(),
+            5,
+            "every condition the pin can emit: {found:?}"
+        );
+        for problem in &found {
+            let (location, message) = problem
+                .split_once(" — ")
+                .unwrap_or_else(|| panic!("no em dash separator in `{problem}`"));
+            assert!(
+                location.contains("/src/"),
+                "the first visual row must begin with a repo-relative path, got: {location}"
+            );
+            assert!(
+                location.chars().count() <= 48,
+                "the location prefix is budgeted at 48 columns, got: {location}"
+            );
+            assert!(!message.is_empty());
+            assert!(
+                problem
+                    .chars()
+                    .all(|c| c != '\u{1b}' && !('\u{2500}'..='\u{257f}').contains(&c)),
+                "hierarchy is position and adjacency only, got: {problem}"
+            );
+        }
+    }
+
+    // ---- EC-004/005/006: a pin that cannot fail is refused outright ---------
+
+    #[test]
+    fn an_empty_pin_is_a_hard_error() {
+        let err = guard_pin(&[]).expect_err("an enumeration of nothing must not pass");
+
+        assert!(err.to_string().contains("vacuous"), "got: {err}");
+    }
+
+    #[test]
+    fn a_pin_naming_one_clause_twice_is_a_hard_error() {
+        let pin = [excluded("ES-23"), excluded("ES-23")];
+
+        let err = guard_pin(&pin).expect_err("a duplicate lets one entry be absorbed");
+
+        assert!(err.to_string().contains("ES-23"), "got: {err}");
+    }
+
+    /// Verified on `main`: not one discharge site names its clause id, so an
+    /// id-as-anchor entry fails on every site there is — and the repair a
+    /// contributor reaches for is widening the match until it passes.
+    #[test]
+    fn an_anchor_equal_to_its_clause_id_is_a_hard_error() {
+        let pin = [pinned(
+            "ES-23",
+            "crates/happenstance-core/src/store.rs",
+            "ES-23",
+        )];
+
+        let err = guard_pin(&pin).expect_err("an id-as-anchor pin empties the check");
+
+        assert!(err.to_string().contains("ES-23"), "got: {err}");
+
+        // And the premise the rule rests on, held rather than asserted: the
+        // *shipping* half of every discharge site — the doc comments a reader
+        // meets, `#[cfg(test)]` excluded, exactly as `production_source` splits
+        // this module — names no clause id, so an id-as-anchor pin would fail on
+        // every entry there is.
+        for entry in FROZEN_DOC_MUSTS {
+            if let Disposition::Pinned { site, .. } = entry.disposition {
+                let text = read(site);
+                let shipping = text.split("#[cfg(test)]").next().unwrap();
+                assert!(
+                    !names_clause(shipping, entry.clause),
+                    "{site} names `{}` outside its tests; the anchor rule's premise has changed",
+                    entry.clause
+                );
+            }
+        }
+    }
+
+    // ---- AC-008: the limits come before the pin, and claim nothing ---------
+
+    #[test]
+    fn the_module_states_the_pins_limits_before_the_pin() {
+        let source = production_source();
+
+        let limits = source
+            .find("# What this does not verify")
+            .expect("the module states no limits at all");
+        let pin = source
+            .find("const FROZEN_DOC_MUSTS")
+            .expect("the pin is missing");
+        assert!(
+            limits < pin,
+            "a check whose limits are undocumented is read as a guarantee"
+        );
+
+        for limit in [
+            "reasoning around it is rewritten",
+            "invisible to the derived scan",
+            "never that it is *adequate*",
+        ] {
+            assert!(
+                source.contains(limit),
+                "the module must state `{limit}` among its limits"
+            );
+        }
+    }
+
+    #[test]
+    fn no_pin_message_claims_a_discharge_is_correct() {
+        let pin = [
+            excluded("ES-99"),
+            pinned(
+                "ES-23",
+                "crates/no-such-crate/src/gone.rs",
+                "# Cancellation",
+            ),
+            pinned(
+                "ES-24",
+                "crates/happenstance-core/src/store.rs",
+                "a sentence that store.rs has never carried",
+            ),
+        ];
+        let spec = format!(
+            "{}#### VT-15 — a candidate nobody classified\n\n\
+             The documentation MUST state the thing.\n",
+            slice_for(&pin)
+        );
+
+        let found = pin_problems_over(&pin, &["ES-23", "ES-24", "VT-15"], &spec);
+        assert!(!found.is_empty());
+
+        for problem in &found {
+            for claim in [
+                "verified", "correct", "proves", "teaches", "✓", "badge", "shield",
+            ] {
+                assert!(
+                    !problem.contains(claim),
+                    "`{claim}` reads as a claim the pin cannot make: {problem}"
+                );
+            }
         }
     }
 }
