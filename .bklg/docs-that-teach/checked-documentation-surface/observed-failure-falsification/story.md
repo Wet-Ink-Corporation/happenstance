@@ -7,9 +7,9 @@ title: The gate is watched failing on a page broken on purpose, then recovering
 parent: HS-P0020
 initiative: docs-that-teach
 project: checked-documentation-surface
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: falsification-and-limits
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T05:51:54.954Z
+updated: 2026-08-18T15:18:27.868Z
 links:
   pr: null
   commits:
     - b0bb9bd
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
