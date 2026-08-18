@@ -72,7 +72,7 @@ subject had ever reached. The swap was reverted.
 
 ## Commits
 
-- `<checkpoint>` — `feat(sqlite-durable-store): The reopen negative control, and three recorded verdicts`
+- `2d08e0d` — `feat(sqlite-durable-store): The reopen negative control, and three recorded verdicts`
 
 ## Changes
 
