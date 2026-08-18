@@ -52,7 +52,7 @@ superseded by project AC-015 (AC-008).
     and `:276` were reconciled before the irreversible upload, OR the divergence is recorded in
     `_ledger.md` with a stated reason. Whichever is chosen, the six unreserved names inherit it.
   satisfied: true
-  evidence: "RECONCILED, NOT DIVERGED, AND BEFORE ANY UPLOAD IS POSSIBLE. Both template sentences now name 0.2.0-alpha.1: xtask/src/reserve.rs:258 ('The first functional release will be `0.2.0-alpha.1`.') in the README template and xtask/src/reserve.rs:276 ('will be `0.2.0-alpha.1`; this version exists so that the name matches the') in the lib.rs template. `grep -n '0\\.1\\.0-alpha\\.1' xtask/src/reserve.rs` now matches only inside the new test module, where SUPERSEDED_RELEASE_CLAIM (:304) holds the string deliberately as the value a regression would reintroduce. THE REGENERATED PLACEHOLDER CARRIES IT: after re-running `cargo xtask reserve happenstance-sqlite`, `grep -n '0\\.2\\.0-alpha\\.1' target/reserve/happenstance-sqlite/README.md target/reserve/happenstance-sqlite/src/lib.rs` matches both - README.md:15 and src/lib.rs:4. A TEST NOW HOLDS IT FOR ALL TEN NAMES, not just this one: xtask/src/reserve.rs::tests::every_placeholder_names_the_release_this_project_will_ship renders readme() and lib_rs() for every RESERVABLE row and asserts both surfaces name 0.2.0-alpha.1 and neither names 0.1.0-alpha.1. IT WAS RED FIRST, on the base tree, with 'the happenstance placeholder's README.md still promises 0.1.0-alpha.1, which this initiative superseded with 0.2.0-alpha.1' - so the six unreserved names inherit the corrected claim mechanically rather than by anyone remembering. `cargo test -p xtask` green (227 passed inside `cargo xtask affected --base main`). ORDERING IS STRUCTURAL RATHER THAN CHRONOLOGICAL HERE: AC-001's upload has not happened at all, so the reconciliation cannot fail to precede it, and EC-004 is unreachable for this reservation."
+  evidence: "RECONCILED, NOT DIVERGED, AND BEFORE ANY UPLOAD IS POSSIBLE. Both template sentences now name 0.2.0-alpha.1: xtask/src/reserve.rs:258 ('The first functional release will be `0.2.0-alpha.1`.') in the README template and xtask/src/reserve.rs:276 ('will be `0.2.0-alpha.1`; this version exists so that the name matches the') in the lib.rs template. `grep -n '0\\.1\\.0-alpha\\.1' xtask/src/reserve.rs` now matches only inside the new test module, where SUPERSEDED_RELEASE_CLAIM (:304) holds the string deliberately as the value a regression would reintroduce. THE REGENERATED PLACEHOLDER CARRIES IT: after re-running `cargo xtask reserve happenstance-sqlite`, `grep -n '0\\.2\\.0-alpha\\.1' target/reserve/happenstance-sqlite/README.md target/reserve/happenstance-sqlite/src/lib.rs` matches both - README.md:15 and src/lib.rs:4. A TEST NOW HOLDS IT FOR ALL TEN NAMES, not just this one: xtask/src/reserve.rs::tests::every_placeholder_names_the_release_this_project_will_ship renders readme() and lib_rs() for every RESERVABLE row and asserts both surfaces name 0.2.0-alpha.1 and neither names 0.1.0-alpha.1. IT WAS RED FIRST, on the base tree, with 'the happenstance placeholder's README.md still promises 0.1.0-alpha.1, which this initiative superseded with 0.2.0-alpha.1' - so the six unreserved names inherit the corrected claim mechanically rather than by anyone remembering. `cargo test -p xtask` green (227 passed inside `cargo xtask affected --base main`). ORDERING IS STRUCTURAL RATHER THAN CHRONOLOGICAL HERE: this row was written while AC-001's upload had not happened at all, and the upload landed afterwards on 2026-08-18, so the reconciliation cannot fail to precede it and EC-004 is unreachable for this reservation."
   mount_point: "crates/happenstance-sqlite/Cargo.toml"
   verifying_test: "xtask/src/reserve.rs::tests::every_placeholder_names_the_release_this_project_will_ship; `rg -n \"0\\.1\\.0-alpha\\.1\" xtask/src/reserve.rs` empty; re-run `cargo xtask reserve happenstance-sqlite` and `rg -n \"0\\.2\\.0-alpha\\.1\" target/reserve/happenstance-sqlite/README.md target/reserve/happenstance-sqlite/src/lib.rs` matches both; `cargo test -p xtask` green; ledger ordering shows the reconciliation predates AC-001's upload"
 
@@ -218,21 +218,36 @@ silence — which is this note.
 
 ### Reservation record (AC-001, AC-002)
 
-**Not performed. AC-001 stays `satisfied: false`, and this is a handoff rather than a claim.**
+**Performed 2026-08-18 under explicit human authorisation. AC-001 is `satisfied: true`, and the
+three facts below are read back from the registry rather than from the upload's own claim.**
 
 | Field | Value |
 | --- | --- |
 | Placeholder generated | yes — `cargo xtask reserve happenstance-sqlite`, written to `target/reserve/happenstance-sqlite/` with `Cargo.toml`, `LICENSE-APACHE`, `LICENSE-MIT`, `README.md`, `src/lib.rs` |
 | Dry run | **green** — `cargo publish --manifest-path target/reserve/happenstance-sqlite/Cargo.toml --dry-run`: `Packaged 7 files, 15.8KiB (6.0KiB compressed)`, `Verifying happenstance-sqlite v0.0.0`, `Compiling happenstance-sqlite v0.0.0`, `warning: aborting upload due to dry run` |
 | Version claim reconciled first | **yes** — `0.2.0-alpha.1` in both templates before any upload was possible (AC-002) |
-| Version published | — |
-| Date | — |
-| Registry URL | — (unresolved; the name is **not** claimed) |
-| Who authorises | the repository owner, who holds the crates.io token in `$CARGO_HOME/credentials.toml` |
-| What remains | one command from the worktree root: `cargo publish --manifest-path target/reserve/happenstance-sqlite/Cargo.toml` — re-running `cargo xtask reserve happenstance-sqlite` first if `target/` has been cleaned. Then fill the three empty fields above and flip AC-001 |
+| Version published | `0.0.0` |
+| Date | `2026-08-18T13:16:06Z` — `created_at` from `GET https://crates.io/api/v1/crates/happenstance-sqlite` (`2026-08-18T13:16:06.844473Z`), `yanked: false` |
+| Registry URL | `https://crates.io/crates/happenstance-sqlite` — resolves to this project |
+| Who authorised | the repository owner, who holds the crates.io token in `$CARGO_HOME/credentials.toml`, at the run-4 gate; the orchestrator executed it, the authority this criterion requires being the authorisation rather than the keystroke |
+| What was run | one command from the worktree root, after regenerating and inspecting the artefact and re-running the dry run: `cargo publish --manifest-path target/reserve/happenstance-sqlite/Cargo.toml` → `Uploaded happenstance-sqlite v0.0.0 to registry crates-io` / `Published happenstance-sqlite v0.0.0 at registry crates-io` |
+| What the tracked tree did | nothing — the placeholder is generated under `target/` and declares its own empty `[workspace]`; `publish = false` and `PUBLISHABLE` are untouched, which is AC-015's second half |
 
-A token **is** present on this machine, so `EC-001`'s literal condition (no credential) does not hold.
-The blocker is the other half of the criterion: the upload is irreversible, public, and explicitly a
-human-authorised act. Nothing in the tracked tree depends on it — the placeholder lives under
-`target/` and declares its own empty `[workspace]` — so every other criterion in this story lands
-regardless, which is what `EC-001` prescribes.
+**The pre-upload verification chain, kept as written while the row was blocked.** It is not
+discarded, because it is the record of what was established *before* the irreversible act rather
+than after it — the same reason AC-001's evidence field keeps its own blocked-state text verbatim.
+It read: a token **is** present on this machine, so `EC-001`'s literal condition (no credential)
+does not hold. The blocker is the other half of the criterion: the upload is irreversible, public,
+and explicitly a human-authorised act. Nothing in the tracked tree depends on it — the placeholder
+lives under `target/` and declares its own empty `[workspace]` — so every other criterion in this
+story lands regardless, which is what `EC-001` prescribes. That ordering held: AC-002's
+reconciliation was complete before the command was available to run, so `EC-004` was unreachable
+for this reservation.
+
+**Disclosed rather than discovered later.** The published README carries three links to
+`https://github.com/Wet-Ink-Corporation/happenstance`, all of which return HTTP 404 to an anonymous
+client because the repository is private. That is finding N-3 from HS-P0011's review, owned by
+`publication-and-positioning` (HS-P0016), and it is **not** this story's to fix — the links are
+identical strings that begin resolving the moment the repository is public, with no republish and no
+version bump. It is recorded here because this record is the reason a fourth crates.io page now
+carries them, and the decision to ship them was taken knowingly at the run-4 gate.

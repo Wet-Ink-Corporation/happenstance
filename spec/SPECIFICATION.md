@@ -8094,9 +8094,20 @@ has no ceiling" is the same sentence for every store that says it.
 Postgres row whose TOAST threshold depends on what else is in the row, or a KV
 store whose per-value cap varies with the key, would make a single
 `Option<usize>` unable to say where the boundary is, and the rule built on it
-would be asserting a number the store cannot honour. The instruments are the
-rusqlite adapter at phase 8, the Cloudflare adapter at phase 9 and the Postgres
-adapter at phase 10; no adapter has stated a ceiling yet.]`
+would be asserting a number the store cannot honour. The first named instrument
+has landed and answered the **constant-ceiling** half: `happenstance-sqlite`
+states all three, each mirrored from the adapter's own `pub const` rather than
+restated (`crates/happenstance-sqlite/tests/support/mod.rs:189-195`, mirroring
+`crates/happenstance-sqlite/src/event_store.rs:245`, `:252` and `:261`), and
+`append_reports_exceeded_store_limits` runs there rather than skipping. On a
+store whose ceilings *are* constants, an `Option<usize>` says exactly where the
+boundary is and the rule asserts a number the store honours. What is still live
+is the other half, and it is narrower than "an adapter" was: a store whose
+ceiling is **not** a constant — the Postgres row whose TOAST threshold moves
+with the rest of the row, the KV store whose per-value cap moves with the key —
+for which no single number is honest. The instruments are the Cloudflare adapter
+at phase 9 and the Postgres adapter at phase 10, whichever states a varying
+ceiling first.]`
 Rule: `append_reports_exceeded_store_limits`, which is unwritable without it —
 a rule cannot locate a boundary the store has not named, and asserting a
 hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which

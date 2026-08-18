@@ -7,10 +7,10 @@
 //! `contains_event_id`, `checkpoint` and `commit` — and each of them is executed
 //! against a real file on disk rather than against something standing in for
 //! one. [`happenstance-testkit`](https://docs.rs/happenstance-testkit)'s
-//! conformance suite is mounted twice, at `tests/conformance.rs` for the event
-//! store and `tests/projection.rs` for the projection store, with the
-//! concurrency and model families beside them at `tests/concurrency.rs`. Passing
-//! that suite is what makes an adapter in this workspace rather than an
+//! conformance suite is mounted three times: `tests/conformance.rs` carries the
+//! event-store family and the model family, `tests/projection.rs` the
+//! projection-store family, and `tests/concurrency.rs` the concurrency family.
+//! Passing that suite is what makes an adapter in this workspace rather than an
 //! instrument, and it is the bar this crate has now cleared.
 //!
 //! Whether the crate is *published* is a different question with a different

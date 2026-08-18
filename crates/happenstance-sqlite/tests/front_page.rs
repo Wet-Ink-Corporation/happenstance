@@ -79,6 +79,29 @@ fn no_todo_macro_survives_in_the_crate() {
     }
 }
 
+/// The name of the innermost function declared at or above `line`.
+///
+/// Keyed on the *declaration* rather than on a `{`-counting scan of the file: an
+/// invocation's enclosing `fn` is the nearest `fn` above it in every shape this
+/// crate writes, and a brace counter is a parser with the failure modes of one.
+/// Returns `None` above the first function in the file, which is the honest
+/// answer for a macro invocation at module scope and excuses nothing.
+fn enclosing_fn(source: &str, line: usize) -> Option<&str> {
+    let above: Vec<&str> = source.lines().take(line).collect();
+    above.into_iter().rev().find_map(|candidate| {
+        let mut rest = candidate.trim_start();
+        for prefix in ["pub(crate) ", "pub ", "const ", "async ", "unsafe "] {
+            rest = rest.strip_prefix(prefix).unwrap_or(rest);
+        }
+        let name = rest.strip_prefix("fn ")?;
+        Some(
+            name.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .unwrap_or(name),
+        )
+    })
+}
+
 /// No `todo!()` synonym stands in for work not done.
 ///
 /// `clippy::unimplemented` is **not** in the workspace lint table, so
@@ -89,12 +112,17 @@ fn no_todo_macro_survives_in_the_crate() {
 /// `READS_THROUGH_BATCH` is `false` and answering from committed state is what
 /// PS-12 forbids — a contract-mandated panic on a path the suite never takes,
 /// not a body someone has not written yet.
+///
+/// The excuse is keyed to that **function**, and the first spelling of it was
+/// keyed to the file and to a substring of the file — `*permitted_path == path
+/// && source.contains(reason)`. That excused every synonym anywhere in
+/// `projection_store.rs`, because the reason string stays present in the file
+/// wherever a second one is added, so the doc comment above claimed a guard the
+/// code did not have. One invocation site is excused; a second anywhere else in
+/// the same file fails.
 #[test]
 fn no_todo_synonym_stands_in_for_work_not_done() {
-    const PERMITTED: [(&str, &str); 1] = [(
-        "src/projection_store.rs",
-        "SqliteBatch buffers its statements",
-    )];
+    const PERMITTED: [(&str, &str); 1] = [("src/projection_store.rs", "probe_read_through")];
 
     for (path, source) in SOURCES {
         for (number, line) in code_lines(source) {
@@ -102,8 +130,8 @@ fn no_todo_synonym_stands_in_for_work_not_done() {
                 if !line.contains(marker) {
                     continue;
                 }
-                let excused = PERMITTED.iter().any(|(permitted_path, reason)| {
-                    *permitted_path == path && source.contains(reason)
+                let excused = PERMITTED.iter().any(|(permitted_path, permitted_fn)| {
+                    *permitted_path == path && enclosing_fn(source, number) == Some(*permitted_fn)
                 });
                 assert!(
                     excused,
