@@ -238,8 +238,22 @@ xtask/src/main.rs
 xtask/src/affected.rs
 xtask/src/narrative.rs
 docs/README.md
+standards/rust/**
 .bklg/docs-that-teach/checked-documentation-surface/narrative-checker-mounted-with-pinned-path/**
 ```
+
+> **Amended 2026-08-18, after implementation.** `standards/rust/**` was added
+> because it was missing, not to clear a gate. This story mounts a second
+> `REQUIRED` step in `xtask/src/main.rs`, which again shifts every line number
+> the constitution's **Evidence** lines cite into that file, and
+> `cargo xtask lint-constitution` fails until they are re-pointed. `b62de17`
+> therefore carries the same 8 lines of citation repair across
+> `standards/rust/{51-features-and-no-std,52-wasm32-and-target-cfg,70-rustdoc-obligations,80-the-gate}.md`
+> that `pinned-narrative-tree-and-compiling-step` carried for its own mount. The
+> omission was an oversight in the spec and went unreported until `redkiln`
+> 0.19.0 scoped the boundary check to a story's own commits (redkiln #94). No
+> claim, rule or example in any atom was changed — only the line numbers its
+> Evidence lines point at.
 
 **In this PR**
 

@@ -245,8 +245,23 @@ xtask/src/lib.rs
 xtask/src/main.rs
 xtask/src/narrative.rs
 xtask/src/narrative_doctests.rs
+standards/rust/**
 .bklg/docs-that-teach/checked-documentation-surface/pinned-narrative-tree-and-compiling-step/**
 ```
+
+> **Amended 2026-08-18, after implementation.** `standards/rust/**` was added
+> because it was missing, not to clear a gate. Inserting this story's `REQUIRED`
+> step into `xtask/src/main.rs` shifts every line number the constitution's
+> **Evidence** lines cite into that file, and `cargo xtask lint-constitution`
+> — itself a `REQUIRED` step — fails until they are re-pointed. `7020c4c`
+> therefore carries 8 lines of citation repair across
+> `standards/rust/{51-features-and-no-std,52-wasm32-and-target-cfg,70-rustdoc-obligations,80-the-gate}.md`
+> (e.g. `xtask/src/main.rs:784` → `:820`). That is a forced consequence of the
+> mount this story owns, so it belongs inside the fence; the original omission
+> was an oversight in the spec, and it went unreported until `redkiln` 0.19.0
+> scoped the boundary check to a story's own commits (redkiln #94). No claim,
+> rule or example in any atom was changed — only the line numbers its Evidence
+> lines point at.
 
 **In this PR**
 
