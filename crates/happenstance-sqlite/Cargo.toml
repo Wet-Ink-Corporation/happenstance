@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-sqlite"
-description = "SQLite event store and projection store adapters for happenstance. Not yet implemented."
+description = "SQLite event store and projection store adapters for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,16 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
+# Stated rather than left to Cargo's auto-discovery. Cargo would find the file
+# either way; what this key decides is what crates.io renders as the crate's
+# front page, and a silent default is a poor thing for a first impression to
+# depend on. Same reasoning, same spelling, as `happenstance-core`.
+readme = "README.md"
+# Stays. Whether this crate is published at all is `publication-and-positioning`'s
+# decision, and `xtask/src/package.rs`'s PUBLISHABLE still names three crates —
+# promoting one here without the other would fail `reconcile()` on a
+# promoted-but-unreconciled crate, which is the failure that module was written
+# to produce.
 publish = false
 
 [dependencies]
