@@ -22,6 +22,7 @@ human-readable record, the trailer is what resume greps.
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
 | compiled-narrative-tree | approved | pinned-narrative-tree-and-compiling-step 7020c4c, narrative-tree-story-grain-selection 2a388ec | (this commit) |
+| narrative-checker-discipline | approved | narrative-checker-mounted-with-pinned-path b62de17, fence-discipline-and-allowance-list 0a67e50, hidden-content-resolution 13494c7 | (this commit) |
 
 ## Surviving findings
 
