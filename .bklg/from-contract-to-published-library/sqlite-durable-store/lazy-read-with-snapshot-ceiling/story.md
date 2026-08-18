@@ -7,9 +7,9 @@ title: The real read stream, lazy, paged, and snapshot-bounded
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: capability
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-17T12:59:53.864Z
+updated: 2026-08-18T03:28:59.341Z
 links:
   pr: null
   commits:
     - 0c6ce2b
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
