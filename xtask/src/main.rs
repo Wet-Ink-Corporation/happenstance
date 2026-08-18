@@ -64,6 +64,7 @@ use anyhow::{Context, Result, bail};
 mod affected;
 mod lint_constitution;
 mod lint_narrative;
+mod lint_pages;
 mod lints;
 mod narrative_doctests;
 mod package;
