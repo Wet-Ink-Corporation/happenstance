@@ -143,6 +143,15 @@ shape is `spec_trace::clause_id`'s, copied rather than shared (Note 8), and it i
 measurement rather than by argument: over the real document it attributes to exactly the 200
 clauses the parser resolves (`declared=200 ids=200 missing=[] extra=[]`).
 
+That measurement is a **standing assertion**, not a reading taken once.
+`the_declaration_scan_attributes_every_clause_the_parser_declares` re-derives it against the real
+checkout on every `cargo test -p xtask`, and the failure prints `missing`/`extra` rather than two
+200-id sets. It is what `the_whole_pin_holds_against_the_real_tree` cannot see: that test fails
+only when a divergence moves a **candidate**, so an attribution that slides an obligation onto a
+neighbour while leaving the candidate set unchanged passes it. Falsified by perturbing
+`declared_clause` to skip the `VT` family — the assertion fails naming all thirty-four ids, and
+the perturbation was reverted.
+
 **One behaviour decided at implementation and worth a reviewer's eye.** An entry whose clause id
 the document no longer declares is reported **once**, by assertion 1, and is skipped by the
 census. Reporting it twice would give one defect two messages, the second of which blames the

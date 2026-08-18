@@ -17,10 +17,15 @@ A candidate is **pinned** when
 * **(b)** its obligation falls on **the contract's own documentation** — not on an adapter's,
   not on a fixture's, and not on this specification's own prose,
 
-and it is additionally required that the discharge **exists today**, because pinning an
-undischarged obligation would land the gate red and the only repair would be editing a
-`happenstance-core` doc comment — HS-P0023's boundary, governed by
-`.kb/governance/rewrite-the-referent-never-the-reasoning.md`.
+* **(c)** the discharge **exists today**, because pinning an undischarged obligation would land
+  the gate red and the only repair would be editing a `happenstance-core` doc comment —
+  HS-P0023's boundary, governed by
+  `.kb/governance/rewrite-the-referent-never-the-reasoning.md`.
+
+All three conditions are stated in `FROZEN_DOC_MUSTS`' own comment, beside the array they
+classify, along with the fact that ES-26, PS-31 and PS-36 fail **only** (c). A rule stated here
+and an array over there is the defect this pin exists to prevent, one level up: a reader applying
+the comment's rule to the entries beneath it must get the entries' answer.
 
 Everything the candidate scan finds and the rule does not reach is **excluded**, with a
 one-line reason on the entry.
@@ -70,7 +75,12 @@ Two mechanical findings worth recording, because each one would have silently sh
 * **The declaration heuristic agrees with the parser exactly.** Over the real document the scan
   attributes candidates to 200 declared clauses, and `crate::spec_trace::clause_ids` resolves
   the same 200 — measured, `declared=200 ids=200 missing=[] extra=[]` — so no candidate is
-  attributed to a heading the parser does not consider a declaration, and none is dropped.
+  attributed to a heading the parser does not consider a declaration, and none is dropped. The
+  measurement is re-derived on every test run by
+  `the_declaration_scan_attributes_every_clause_the_parser_declares`, so the agreement is an
+  assertion rather than a reading taken once: an attribution divergence that leaves the candidate
+  set unchanged is invisible to `the_whole_pin_holds_against_the_real_tree` and is exactly what
+  that test catches.
 
 The scan finds **21** candidates:
 

@@ -1299,11 +1299,23 @@ struct DocumentationMust {
 /// Every documentation obligation `spec/SPECIFICATION.md` words, disposed of.
 ///
 /// **The derivation rule, where the next reader meets it.** A candidate is
-/// **pinned** when (a) its clause is `[FROZEN]` **and** (b) its obligation falls
-/// on **the contract's own documentation** — not on an adapter's, not on a
-/// fixture's, and not on this specification's own prose. Everything the scan
-/// finds and the rule does not reach is **excluded**, with its reason on the
-/// entry rather than in a paragraph somewhere else.
+/// **pinned** when (a) its clause is `[FROZEN]`, (b) its obligation falls on
+/// **the contract's own documentation** — not on an adapter's, not on a
+/// fixture's, and not on this specification's own prose — **and** (c) the
+/// discharge exists today. Everything the scan finds and the rule does not
+/// reach is **excluded**, with its reason on the entry rather than in a
+/// paragraph somewhere else.
+///
+/// **(c) is a condition and not a footnote**, because pinning an undischarged
+/// obligation lands the gate red on a tree nobody broke, and the only repair is
+/// editing a `happenstance-core` doc comment — which is HS-P0023's under
+/// `.kb/governance/rewrite-the-referent-never-the-reasoning.md`, not this pin's.
+/// `ES-26`, `PS-31` and `PS-36` fail **only** (c): each is `[FROZEN]`, each
+/// puts its obligation on the contract's own documentation, and nothing
+/// discharges it. They are the follow-up this pin hands forward, named here so
+/// the finding is where the reader meets the array rather than only in the
+/// re-derivation record — a rule stated above an array it does not explain is
+/// the defect this pin exists to prevent, one level up.
 ///
 /// The set is **re-derived** against the document as it stands rather than
 /// copied from either of the two statements that disagree about it, and the
@@ -1530,8 +1542,10 @@ fn names_clause(text: &str, clause: &str) -> bool {
 /// line's first citation-shaped token, at the very start once heading and bold
 /// markers are stripped, and not closed immediately by `**`, which is how §1
 /// writes a cross-reference. That much is `spec_trace::clause_id`'s shape,
-/// copied rather than shared (Note 8) — and the test below holds the two to the
-/// same set over the real document, so a divergence fails instead of drifting.
+/// copied rather than shared (Note 8) — and
+/// `tests::the_declaration_scan_attributes_every_clause_the_parser_declares`
+/// holds the two to the same set over the real document, so a divergence fails
+/// instead of drifting.
 fn declared_clause<'a>(line: &'a str, clauses: &Clauses) -> Option<&'a str> {
     let stripped = line.trim_start().trim_start_matches('#').trim_start();
     let stripped = stripped.strip_prefix("**").unwrap_or(stripped);
@@ -1874,10 +1888,12 @@ mod tests {
     /// checks it against the real document on every gate run, so a parallel
     /// fixture corpus here is what the testing brief forbids.
     ///
-    /// [`walk`] above resolves *nothing* — an empty set declares no family, so
-    /// the citation check contributes no problem to the fence and marker tests
-    /// and their assertions mean exactly what they meant before. The citation
-    /// half is exercised here and by the recorded `cargo xtask narrative` run.
+    /// [`walk`] above resolves [`DECLARED`], and the only clause-shaped token
+    /// the fence and marker fixtures carry is the `ES-40` [`FIXTURE_PAGE`]
+    /// cites — which [`DECLARED`] declares. So the citation check contributes
+    /// no problem to those tests and their assertions mean exactly what they
+    /// meant before. The citation half is exercised here and by the recorded
+    /// `cargo xtask narrative` run.
     fn cited(rel: &str, text: &str, ids: &[&str]) -> Vec<String> {
         let clauses = Clauses::new(ids.iter().map(|id| (*id).to_owned()).collect());
         let mut usage: Vec<Usage> = Vec::new();
@@ -3918,6 +3934,54 @@ One writer at a time.
             !found[0].contains("the document grew"),
             "RS-81-5: never one sentence for two unrelated bugs, got: {}",
             found[0]
+        );
+    }
+
+    /// The second declaration heuristic, held to the first over the real
+    /// document — the assertion [`declared_clause`]'s own comment promises.
+    ///
+    /// [`declared_clause`] decides *declaration position* the way
+    /// `spec_trace::clause_id` decides it, copied rather than shared (Note 8),
+    /// and a copy is only honest while something holds the two to one answer.
+    /// [`the_whole_pin_holds_against_the_real_tree`] cannot: it fails only when
+    /// a divergence moves a **candidate**, and an attribution that slides a
+    /// documentation obligation onto the wrong neighbour, or drops a clause
+    /// wording none, leaves the candidate set untouched and passes it. So the
+    /// re-derivation's `declared=200 ids=200 missing=[] extra=[]` measurement
+    /// is made here on every run instead of being recorded once.
+    ///
+    /// One direction is structural and one is live, and saying which is the
+    /// point: [`declared_clause`] returns only ids [`Clauses::ids`] contains,
+    /// so `extra` is empty by construction and `missing` is what can fail
+    /// today — a clause the parser declares that the line scan never sees at a
+    /// declaration position. `extra` is still differenced and printed, because
+    /// a later widening of that membership filter is exactly the change that
+    /// would make it live, and a diagnostic added after the fact is one nobody
+    /// reads the failure with.
+    #[test]
+    fn the_declaration_scan_attributes_every_clause_the_parser_declares() {
+        let root = workspace_root().unwrap();
+        let clauses = Clauses::new(clause_ids(&root).unwrap());
+        let spec = read(SPECIFICATION);
+
+        let attributed: BTreeSet<String> = spec
+            .lines()
+            .filter_map(|line| declared_clause(line, &clauses))
+            .map(str::to_owned)
+            .collect();
+
+        let missing: Vec<&String> = clauses.ids.difference(&attributed).collect();
+        let extra: Vec<&String> = attributed.difference(&clauses.ids).collect();
+
+        // The two differences rather than `assert_eq!` on the sets themselves:
+        // both sides carry every clause the document declares, and a failure
+        // that prints two of those in full buries the handful of ids that
+        // actually moved. Empty on both sides is the same claim.
+        assert!(
+            missing.is_empty() && extra.is_empty(),
+            "the two declaration heuristics disagree over {SPECIFICATION}, so the candidate \
+             scan attributes documentation obligations by a rule `clause_ids` does not share: \
+             missing={missing:?} extra={extra:?}"
         );
     }
 
