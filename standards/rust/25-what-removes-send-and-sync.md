@@ -82,7 +82,7 @@ per method of the trait, and the fix was a single `Mutex` at the field rather
 than anything in any body.
 
 **Evidence.** `crates/happenstance-core/src/memory.rs:657 (across an await, which needs)` ·
-`crates/happenstance-sqlite/src/event_store.rs:87 (flavour captures)` ·
+`crates/happenstance-sqlite/src/event_store.rs:147 (flavour captures)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -122,8 +122,8 @@ and `Arc` is "the thread-safe one" produces a type that is neither `Send` nor
 `EventStore` instead. That compiles, passes the whole suite, and ships an adapter
 no consumer can spawn.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:93 (is not for sharing the store; it is so that a)` ·
-`crates/happenstance-sqlite/src/event_store.rs:255 (is what makes the whole)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:153 (is not for sharing the store; it is so that a)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1116 (is what makes the whole)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
 

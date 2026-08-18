@@ -36,8 +36,10 @@
 //!
 //! # Intended schema
 //!
-//! Migration 1, exactly as [`SqliteEventStore::migrate`] applies it. The block
-//! below is compared object-by-object against `sqlite_master` by
+//! Migration 1, exactly as [`SqliteEventStore::open`] applies it on every
+//! connect — through a private `migrate`, which is why this block and not a
+//! rustdoc link is what a reader has. It is compared object-by-object against
+//! `sqlite_master` by
 //! `tests/migration.rs::module_doc_schema_matches_sqlite_master`, because a
 //! reviewer reading SQL prose against SQL code is the check that passes by
 //! fatigue.
@@ -719,11 +721,29 @@ fn write_batch(
     // `UNIQUE (origin_store, origin_position)` constraint tolerates it because
     // SQLite treats NULLs as distinct — which is what lets a multi-row batch
     // stamp itself without tripping it.
-    connection.execute(
-        "UPDATE event SET origin_store = ?, origin_position = position \
-         WHERE origin_position IS NULL",
-        [&store_id.to_bytes()[..]],
-    )?;
+    //
+    // The marker alone is not a predicate a planner can seek: the only index
+    // over the column is `UNIQUE (origin_store, origin_position)` and
+    // `origin_store` leads it, so `WHERE origin_position IS NULL` on its own
+    // scans the whole `event` table — under the `BEGIN IMMEDIATE` write lock,
+    // with every other writer queued behind it, at a cost that grows with the
+    // log. That is the defect class ADR-0022 §7's amendment exists to remove and
+    // that NF-001 forbids in the write path. Bounding it by the batch's own
+    // first assigned position turns it into a rowid seek, because `position` is
+    // the `INTEGER PRIMARY KEY`; the write lock is what guarantees no row was
+    // assigned in between.
+    //
+    // The marker stays beside the bound rather than being replaced by it. A
+    // replication ingest writes rows carrying *another* store's origin, and one
+    // landing inside this positional range must not be restamped under this
+    // incarnation.
+    if let Some(&first) = positions.first() {
+        connection.execute(
+            "UPDATE event SET origin_store = ?, origin_position = position \
+             WHERE position >= ? AND origin_position IS NULL",
+            rusqlite::params![&store_id.to_bytes()[..], first],
+        )?;
+    }
 
     let last = positions.last().copied().unwrap_or_default();
     SequencePosition::new(last.unsigned_abs())

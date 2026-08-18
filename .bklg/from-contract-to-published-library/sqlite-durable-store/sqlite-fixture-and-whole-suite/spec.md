@@ -280,8 +280,40 @@ to mount this slice; that is not scope drift.
 crates/happenstance-sqlite/tests/**
 crates/happenstance-sqlite/src/event_store.rs
 crates/happenstance-sqlite/Cargo.toml
+standards/rust/**
 .bklg/from-contract-to-published-library/sqlite-durable-store/sqlite-fixture-and-whole-suite/**
 ```
+
+**`standards/rust/**` was added on 2026-08-17, and it admits citation
+re-anchoring ONLY.** The constitution cites
+`crates/happenstance-sqlite/src/event_store.rs` by `file:line` with a phrase that
+must sit within ten lines of the number, and `cargo xtask lint-constitution` is a
+gate step. This slice grew that file from a 420-line skeleton to just under
+1,500 lines of real bodies, which moved **fifteen** citations across four atoms
+onto unrelated code: `23-streams-and-state-machines.md` (`:64`, `:124`),
+`24-the-blocking-bridge.md` (`:68`, `:133`, `:134`, `:185`, `:186`, `:245`,
+`:246`), `25-what-removes-send-and-sync.md` (`:85`, `:125`, `:126`) and
+`30-error-taxonomy.md` (`:65`, `:351`, `:352`). The repair lands on **this**
+story's fence rather than a predecessor's for a mechanical reason: every one of
+the five stories edits `event_store.rs`, so the final offsets do not exist until
+the last of them has landed, and this is the slice's terminal story — it moved
+the anchors a further 62 lines itself (`41a2064`).
+
+**The limit.** Line-number repair to existing citations, and nothing else: no
+rule text, no evidence selection, no rule retirement, no new atom, no change to
+the router's generated region, and no new gate step. Every hunk is a balanced
+one-line replacement — 15 and 15 — with the quoted phrase carried through
+unchanged, so the widening cannot later be cited to justify editing a rule.
+
+**Why the story's own green runs did not catch it**, which is the part worth
+recording: `cargo xtask affected --base main` is this story's stated merge DoD,
+and `affected` deliberately excludes the documentation build and does not run
+`lint-constitution` (`xtask/src/affected.rs:38-44`). Both failures were only
+reachable through `cargo xtask ci --fast`, and there the *first* of them —
+a rustdoc intra-doc link to a private item — aborted the gate before
+`lint-constitution` ever ran, so the fifteen were masked by one. **Nineteenth
+instance of this class in the initiative**, on the same terms as
+`benchmark-harness/spec.md:99-133` (`aef8990`, `34d5311`, `e020276`).
 
 ## Behavior and interfaces
 

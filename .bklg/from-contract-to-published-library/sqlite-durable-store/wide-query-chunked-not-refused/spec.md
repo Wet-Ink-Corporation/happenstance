@@ -645,6 +645,46 @@ each is load-bearing for one criterion, and none needs to be read in advance.
    Implementation notes; the implementer picks one and records which in the ledger's
    evidence. Resolving it by adding `#[doc(hidden)] pub` is public surface wearing a
    hat and does not satisfy AC-007.
+
+   **Amendment, 2026-08-17, after implementation and slice review.** The tension is
+   not resolvable as written, and it was resolved in the implementation by deviating
+   from AC-007's literal text. That is a spec amendment, so it is recorded here
+   rather than left as a paragraph in `_ledger.md`'s evidence — an implementer
+   flipping a criterion `satisfied` while stating a deviation from it is amending the
+   spec in the wrong artifact.
+
+   All three candidate resolutions fail, and one of them cannot be built at all.
+   AC-002's own verification cell (`:412`) offers *"a `pub(crate)` planner function
+   the integration target reaches"* — **impossible**: an integration target is a
+   separate crate, so `pub(crate)` is exactly what it cannot reach. The
+   `#[cfg(test)]` unit-module option is buildable but contradicts **Interaction
+   quality → Reachability** (`:455`), which requires everything asserted to be
+   asserted from an integration target and never through a private hook a `mod` test
+   could reach. The "property of the result" option observes that every chunk
+   *answered*, which is AC-003's assertion, not AC-002's: it cannot fail at
+   `== 1`, because a single-statement plan returns the same union.
+
+   **What was built, and what AC-007 now means.** `happenstance-sqlite` gains exactly
+   two documented public items — `SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT` and
+   `SqliteEventStore::planned_statement_count` — and AC-007's clause *"the crate's
+   only surface change is documentation"* is amended to *"…is documentation plus
+   exactly those two items, which AC-002 compels"*. **The invariant AC-007 exists to
+   protect is unchanged and holds**: `happenstance-core` and `happenstance-testkit`
+   byte-identical, no `index_arms()`, no `arm_count()`, no `IndexArm`, no
+   `MAX_QUERY_ITEMS`, no fourth `StoreLimit` variant, no new rule, registry entry or
+   mutant row. What moved is one adapter-private crate's surface by two items, in the
+   crate whose ceilings are already public facts (`MAX_EVENT_DATA_LEN` and its two
+   siblings) rather than in the frozen contract.
+
+   Two consequences, stated so they are not rediscovered. First, AC-007's stated
+   verification *"`cargo doc -p happenstance-sqlite --no-deps` showing no new public
+   item"* is retired by this amendment: it asserts the opposite of the disclosed
+   deviation and cannot pass. `git diff --stat` over `crates/happenstance-core` and
+   `crates/happenstance-testkit` being empty is the check that carries the invariant,
+   and it does hold. Second, the widening is **local to this adapter**: it is not
+   licence to publish a planner from `happenstance-core`, which is what ADR-0022 §10
+   refuses and what the recorded re-open trigger — two unlike storage shapes needing
+   the same decomposition, in its own ADR — still governs.
 5. **ES-12 is discharged, not re-argued.** Making a read multi-statement is the
    shape ES-12 rejects, and the temptation is to invent a second isolation mechanism
    (a transaction, a `BEGIN`, a snapshot table). The clause and the rule both say the

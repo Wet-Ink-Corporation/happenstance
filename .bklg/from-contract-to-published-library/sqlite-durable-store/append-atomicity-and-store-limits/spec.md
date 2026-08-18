@@ -391,8 +391,38 @@ was silently unconditional is exactly the production contract defect
 ```
 crates/happenstance-sqlite/src/**
 crates/happenstance-sqlite/tests/append.rs
+xtask/src/spec_trace.rs
 .bklg/from-contract-to-published-library/sqlite-durable-store/append-atomicity-and-store-limits/**
 ```
+
+**`xtask/src/spec_trace.rs` was added on 2026-08-17, and it admits `BARE_NAME_MAP`
+citation-collision repair ONLY.** `spec/SPECIFICATION.md` cites by bare basename on
+purpose, and bare `append.rs` resolved uniquely to
+`crates/happenstance-core/src/append.rs` until this story created
+`crates/happenstance-sqlite/tests/append.rs` — at which point **twenty-four** citations
+failed at once, all of them predating the new file and all of them naming contract items
+(`AppendCondition`, `Guard`, `guards()`, `after`, `is_violated_by`, the precedence
+paragraph) that exist only in `happenstance-core`. `cargo xtask spec-trace` is a gate
+step, so the story's own mounted test target forced it across its boundary or into a red
+gate, with no third option: the alternative — editing twenty-four sentences of
+`spec/SPECIFICATION.md` — is *explicitly excluded* below and is the larger trespass.
+
+**The limit.** This entry permits **one `BARE_NAME_MAP` row and the doc sentence that
+counts it, and nothing else** (`23bc776`, 13 insertions / 2 deletions, of which 2 are the
+array length and a reworded count). No change to what `spec-trace` checks or how it
+resolves anchors, no new gate step, no `RULE_FILES` edit, no other `BARE_NAME_MAP` row
+touched, and no `spec/SPECIFICATION.md` edit — that exclusion stands unchanged. The
+anchor check remains the backstop the table's own rustdoc names: a citation mapped to the
+contract crate that really meant the test file will fail to find the anchor it names. So
+this widening cannot later be cited to justify changing spec-trace's checking logic.
+
+**Same class as the seventeen before it**, and settled the same way: HS-P0010 admitted the
+first three (`aef8990`) and predicted the recurrence, HS-P0011 admitted four through seven
+(`34d5311`), and `benchmark-harness/spec.md:99-133` is the sibling instance in this very
+project — a story forced across a fence by a gate step its own new file broke. Recorded
+here rather than only in `report.md:40-44` because the fence is what
+`redkiln verify --item HS-S0037 --grain story` reads; a report the checker never opens is
+not a boundary decision, it is a note about one.
 
 **In this PR**
 

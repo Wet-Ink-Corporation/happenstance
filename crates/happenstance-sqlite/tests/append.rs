@@ -159,6 +159,21 @@ fn assigned_positions(connection: &Connection) -> Vec<i64> {
     rows.map(Result::unwrap).collect()
 }
 
+/// The `detail` column of `EXPLAIN QUERY PLAN`, one string per plan row.
+///
+/// The same helper `tests/migration.rs` carries, for the same reason: the plan
+/// is asserted on by *name* — whether a table is searched or scanned — and never
+/// by pattern-matching SQLite's exact phrasing, which changes between versions.
+fn query_plan(connection: &Connection, sql: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(3))
+        .unwrap();
+    rows.map(Result::unwrap).collect()
+}
+
 // ---------------------------------------------------------------------------
 // AC-001 — an empty batch is refused, and refused first
 // ---------------------------------------------------------------------------
@@ -659,6 +674,118 @@ async fn tag_cardinality_is_maintained_by_append() {
         ],
         "every tag written is counted; a zero here is the most-selective-tag \
          probe with nothing to order by"
+    );
+}
+
+/// AC-007 and NF-001 — the identity stamp touches the batch's own rows and
+/// nothing else, so its cost does not grow with the log it is appended to.
+///
+/// The stamp runs inside the `BEGIN IMMEDIATE` transaction, which is where
+/// NF-001's whole budget is: `WHERE origin_position IS NULL` on its own has no
+/// index to seek — the only index over the column is
+/// `UNIQUE (origin_store, origin_position)` and `origin_store` leads it — so it
+/// is a scan of the entire `event` table, walked with every other writer queued
+/// behind the write lock. That is the same defect class ADR-0022 §7's schema
+/// amendment exists to remove, named in the module documentation, and it lands
+/// on the concurrency family rather than here.
+///
+/// It is observable through the port because the bound changes *behaviour*, not
+/// only cost: a row that already carries a NULL origin — the shape a replication
+/// ingest will one day write — is re-stamped under this store's incarnation by
+/// the unbounded predicate, and left exactly as found by the bounded one. This
+/// is the assertion that pins the production statement; the plan assertion below
+/// is what names the reason.
+#[tokio::test]
+async fn the_identity_stamp_touches_only_the_batch_it_wrote() {
+    let db = TempDb::new("stamp-bounds");
+    let store = db.open();
+
+    // A row the store did not write, carrying no origin, planted through a
+    // connection the port never held so that nothing about it is arranged by the
+    // code under test. `X'1f'` is one UNIT byte: the canonical encoding of the
+    // empty tag set.
+    let planted = {
+        let inspector = db.raw();
+        inspector
+            .execute(
+                "INSERT INTO event (event_type, data, metadata, tags, recorded_at) \
+                 VALUES ('Planted', X'7b7d', NULL, X'1f', 0)",
+                [],
+            )
+            .unwrap();
+        inspector.last_insert_rowid()
+    };
+
+    store.append(&[event("Enrolled")], None).await.unwrap();
+
+    let inspector = db.raw();
+    let planted_origin: Option<i64> = inspector
+        .query_row(
+            "SELECT origin_position FROM event WHERE position = ?",
+            [planted],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        planted_origin, None,
+        "the stamp rewrote a row outside its own batch. An unbounded \
+         `WHERE origin_position IS NULL` scans the whole log under BEGIN \
+         IMMEDIATE and claims another origin's events as this store's own"
+    );
+
+    // The anchor: a stamp bounded so tightly that it stamps nothing would
+    // satisfy the assertion above.
+    let appended_origin: Option<i64> = inspector
+        .query_row(
+            "SELECT origin_position FROM event WHERE event_type = 'Enrolled'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        appended_origin,
+        Some(planted + 1),
+        "the batch's own row must still be stamped with the position it was \
+         just given"
+    );
+}
+
+/// AC-007 and NF-001 — the bound is a rowid seek, and the predicate it replaced
+/// is the scan.
+///
+/// Asserted by plan *name* rather than by matching SQLite's phrasing, the way
+/// `tests/migration.rs` asserts the tag-plus-type probe never joins back to
+/// `event`. The unbounded arm is the negative control: without it this test
+/// would pass against a planner that had simply stopped reporting scans.
+#[test]
+fn the_identity_stamp_seeks_by_position_rather_than_scanning() {
+    let db = TempDb::new("stamp-plan");
+    drop(db.open());
+    let connection = db.raw();
+
+    let bounded = query_plan(
+        &connection,
+        "UPDATE event SET origin_store = X'00', origin_position = position \
+         WHERE position >= 1 AND origin_position IS NULL",
+    );
+    assert!(!bounded.is_empty(), "EXPLAIN QUERY PLAN returned no rows");
+    for detail in &bounded {
+        assert!(
+            !detail.contains("SCAN"),
+            "the identity stamp scans `event` instead of seeking to its own \
+             batch, under the BEGIN IMMEDIATE write lock. Plan: {bounded:?}"
+        );
+    }
+
+    let unbounded = query_plan(
+        &connection,
+        "UPDATE event SET origin_store = X'00', origin_position = position \
+         WHERE origin_position IS NULL",
+    );
+    assert!(
+        unbounded.iter().any(|detail| detail.contains("SCAN")),
+        "the negative control no longer scans, so the assertion above proves \
+         nothing about the bound. Plan: {unbounded:?}"
     );
 }
 
