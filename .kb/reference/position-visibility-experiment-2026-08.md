@@ -23,6 +23,7 @@ related:
   - kb-open-question-global-vs-boundary-visibility-001
   - kb-open-question-postgres-arm-c-cost-001
   - kb-open-question-poll-count-rule-strength-001
+  - kb-reference-append-condition-experiment-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - references/adr/0013-position-assignment-and-visibility.md

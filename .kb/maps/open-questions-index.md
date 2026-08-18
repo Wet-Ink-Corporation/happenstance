@@ -17,7 +17,15 @@ summary: >-
   wave flipped kb-open-question-ps-1-no-progress-obligation-001 and
   kb-open-question-ps-19-scope-narrower-001 to Superseded (both by ADR-0030, which mints PS-38)
   and added kb-open-question-ps-32-adr-0007-correction-owed-001 (ADR-0007's Context still
-  overstates what cannot be written against the port).
+  overstates what cannot be written against the port). The 2026-08-17 wave flipped
+  kb-open-question-ps-32-adr-0007-correction-owed-001 to Superseded (by ADR-0031, which carries the
+  corrected Context riding with its own partial supersession of ADR-0007) and added four new
+  questions: kb-open-question-es-17-two-adapter-measurement-001 (the two-build append-ownership
+  measurement ADR-0012's falsifier asks for is scheduled by nobody), kb-open-question-d-1-no-total-path-001
+  (no infallible route into or out of a validated `QueryItem`/`Tags`), kb-open-question-cf-36-unperformed-cross-reference-001
+  (CF-36 names a level-marker cross-reference `spec-trace` does not perform), and
+  kb-open-question-no-ps-rule-name-resolved-001 (a bare dagger, not the `has_suite` family switch,
+  is what still leaves every `PS` rule name unresolved).
 depends_on: []
 related:
   - kb-map-domain-001
@@ -28,7 +36,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-10-intake-2
   - .kb/_governance/integration-waves/2026-08-13-projection-adrs
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
-last_reviewed: 2026-08-15
+  - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
+last_reviewed: 2026-08-17
 ---
 
 # Open-questions index
@@ -41,11 +50,12 @@ questions sit inside.
 
 ## Specification governance & conformance
 
-All seven questions below were filed by the 2026-08-10 phase 4/5
+The first seven questions below were filed by the 2026-08-10 phase 4/5
 specification-reconciliation intake wave. Full grounding for each is in the
 [census reference atom](../reference/phase-4-5-specification-reconciliation-census.md)
 (`kb-reference-phase-4-5-spec-reconciliation-001`); this index states only
-what the question is, not its evidence.
+what the question is, not its evidence. The last two were added by the
+2026-08-17 wave from the phase-7 contract-defect log.
 
 - **Open** — [`disjoint-boundaries-have-no-clause.md`](../open-questions/disjoint-boundaries-have-no-clause.md)
   (`kb-open-question-disjoint-boundaries-no-clause-001`) — the independence
@@ -96,12 +106,27 @@ what the question is, not its evidence.
   phase just changed. Forced by phase 6's exit and, secondarily, by first
   publish at phase 12. Depends conceptually on the PS-1, PS-19 and
   ES-7/VT-9 questions above.
+- **Open** — [`cf-36-names-a-cross-reference-nothing-performs.md`](../open-questions/cf-36-names-a-cross-reference-nothing-performs.md)
+  (`kb-open-question-cf-36-unperformed-cross-reference-001`) — CF-36 is
+  `[FROZEN]` and its `Rule:` line claims `cargo xtask spec-trace`
+  cross-references each case's level marker; it does not, and no other check
+  performs the comparison under another name. Added 2026-08-17; forced by
+  the next reader who cites a green `spec-trace` as evidence for a level
+  marker, and by phase 12.
+- **Open** — [`no-ps-rule-name-is-resolved.md`](../open-questions/no-ps-rule-name-is-resolved.md)
+  (`kb-open-question-no-ps-rule-name-resolved-001`) — CF-38 is `[FROZEN]`;
+  PS-27 and PS-30 are the visible symptom of a rule-name check that never
+  runs against any `PS` clause carrying a bare dagger, since the dagger sets
+  `schedules_new` regardless of what `has_suite` now admits. Added
+  2026-08-17; forced by the next `PS` clause that cites a rule name nobody
+  has written.
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
-Eleven questions below were filed by the 2026-08-10 ADR-import intake wave, deferred rather than
-settled because each is forced by a phase or an adapter that has not arrived yet. Grounding for
-each is in the atom itself; see [`domain-map.md`](domain-map.md#contract-ports-conformance-and-the-adr-corpus-2026-08-10-adr-import)
+The first eleven questions below were filed by the 2026-08-10 ADR-import intake wave, deferred
+rather than settled because each is forced by a phase or an adapter that has not arrived yet. The
+twelfth, ES-17, was added by the 2026-08-17 wave. Grounding for each is in the atom itself; see
+[`domain-map.md`](domain-map.md#contract-ports-conformance-and-the-adr-corpus-2026-08-10-adr-import)
 for the reference, concept, governance and playbook atoms this domain also owns.
 
 - **Open** — [`adr-status-vocabulary-exceeds-the-schema.md`](../open-questions/adr-status-vocabulary-exceeds-the-schema.md)
@@ -159,14 +184,43 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-sync-message-set-undesigned-001`) — `FORMAT_VERSION = 1`
   is fully tested and names no message set yet; the vocabulary is phase 13's
   design.
-- **Open** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
+- **Superseded** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
   (`kb-open-question-ps-32-adr-0007-correction-owed-001`) — PS-32 is `[FROZEN]`
   and states ADR-0007's Context must be corrected: a callback-driven pump
   *can* be written against the port as it stands, falsified by compilation
   rather than argument. What is not decided is who performs the correction
   and in which atom — ADR-0007 is accepted and immutable, so it is a
-  superseding decision's act. Added 2026-08-15; forced by whoever writes the
-  runner.
+  superseding decision's act. Added 2026-08-15. **Resolved 2026-08-17** by
+  ADR-0031 (`kb-decision-0031`): the correction rides with a partial
+  supersession of ADR-0007 that collapses the checkpoint pump upward into
+  `happenstance::run_projection`; `kb-decision-0007` stays accepted because
+  its three shape decisions are implemented as written, and the pump
+  sub-question is answered in the negative — no pump is written.
+- **Open** — [`es-17-two-adapter-measurement-is-unscheduled.md`](../open-questions/es-17-two-adapter-measurement-is-unscheduled.md)
+  (`kb-open-question-es-17-two-adapter-measurement-001`) — ADR-0012's
+  falsifier item 1 asks for two builds of one SQLite adapter differing only
+  in `append`'s batch ownership; the phase-8 append-condition experiment
+  (`kb-reference-append-condition-experiment-001`) measured three strategies
+  against the same `&[Event]` signature instead, and no story currently
+  scheduled produces the two-build evidence. Added 2026-08-17; forced by
+  whoever next proposes lifting ES-17 to `[FROZEN]`, or by phase 12.
+
+## The typed layer: decision models, codecs, and payload evolution
+
+One question, added by the 2026-08-17 wave from the phase-7 contract-defect log. See
+[`domain-map.md`](domain-map.md#the-typed-layer-decision-models-codecs-and-payload-evolution) for
+the decision and reference atoms this domain also owns.
+
+- **Open** — [`d-1-the-validated-type-has-no-total-path.md`](../open-questions/d-1-the-validated-type-has-no-total-path.md)
+  (`kb-open-question-d-1-no-total-path-001`) — `QueryItem::new` is fallible
+  even over already-validated `EventType`/`Tag` inputs, and `Boundary`'s
+  seal makes that error arm untestable from outside the crate; `DomainEvent::tags`
+  is total over a `Tags` every constructor route into which is fallible, so an
+  implementor with runtime tag values has no total path without a hand-rolled
+  newtype. ADR-0020 named the pair defect candidate D-1 and routed it to a
+  decision record that has not been written. Added 2026-08-17; forced by the
+  first API change after 0.1, and named by ADR-0033 as the single condition
+  that would reopen the `happenstance-macros` scope verdict.
 
 ## Adding an entry
 
