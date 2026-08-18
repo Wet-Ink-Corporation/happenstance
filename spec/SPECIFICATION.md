@@ -229,17 +229,20 @@ declaring a port frozen while an axis of §6.5's instrument portfolio has no
 passing implementation at its far end, unless the freeze names the axis and the
 ADR accepting the risk.
 
-**Seven axes, and exactly one of them — durability — has an adapter instrument at
-its far end.** Phase 3 produced none, and could not have: it builds fixtures.
-What it did move is the other half. Four axes — async flavour, handle
-multiplicity, durability and, since CF-13's fixture landed, position allocation —
-carry a **fixture** instrument, which by CF-26 discharges CF-25's falsifiability
-half and explicitly not its implementability half. Phase 8 moved durability's
-other half and only durability's: `happenstance-sqlite`'s `SqliteFixture` runs
-the reopen rules against a real file on disk, so that axis has a passing
-implementation at its far end — of the *reopen* half of it, and not of the
-*fault* half, which is what ES-35 stays `[PROVISIONAL]` against. The remaining
-three — transport, batch shape and completeness — have nothing at either end. So
+**Seven axes, and exactly two of them — durability and handle multiplicity — have
+an adapter instrument at their far ends.** Phase 3 produced none, and could not
+have: it builds fixtures. What it did move is the other half. Four axes — async
+flavour, handle multiplicity, durability and, since CF-13's fixture landed,
+position allocation — carry a **fixture** instrument, which by CF-26 discharges
+CF-25's falsifiability half and explicitly not its implementability half. Phase 8
+moved the other half on two of those four, both through
+`happenstance-sqlite`'s `SqliteFixture`: it runs the reopen rules against a real
+file on disk, and its `connect` opens a second `rusqlite::Connection` onto that
+file rather than an `Arc` clone. Each tick is partial in a way §6.5 states — the
+*reopen* half of durability and not the *fault* half, which is what ES-35 stays
+`[PROVISIONAL]` against; a second real connection and not a **pool**. The
+remaining three — transport, batch shape and completeness — have nothing at
+either end. So
 the qualification is not hypothetical, it is not discharged by asserting it, and
 it is not discharged by a fixture tick either; §6.5 says which axes are which,
 how far the adapter column has got, and why the distinction is the whole point of
@@ -379,8 +382,8 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:93-268` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put one there, at durability's, and nowhere else. Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; three — transport, batch shape, completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five skeleton impls straddling the batch-shape axis — owned write sets in `happenstance-sqlite`, `happenstance-neon` and `happenstance-ladybug`, a live borrowed handle in `live_handle.rs:174`, a `Transaction<'static, Postgres>` in `happenstance-postgres`. **Two** of the five are `todo!()` throughout — `LadybugProjectionStore` (`crates/happenstance-ladybug/src/projection_store.rs:270-292`) and `PostgresProjectionStore` (`crates/happenstance-postgres/src/projection_store.rs:105-127`). The other three carry real bodies: `NeonProjectionStore` in all four methods (`crates/happenstance-neon/src/projection_store.rs:164-202` — its two `todo!()`s are in the free functions `decode_checkpoint` and `decode_commit`, which are not port methods), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in `begin` and `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:235-260`). That distinction is the whole reason the count is stated: a `todo!()` has type `!` and coerces to anything, so a body of them proves a signature is nameable, not that it can be satisfied. Nothing runs against any of the five | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:93-268` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two there — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else. Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; three — transport, batch shape, completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — four of them still skeletons — owned write sets in `happenstance-sqlite`, `happenstance-neon` and `happenstance-ladybug`, a live borrowed handle in `live_handle.rs:174`, a `Transaction<'static, Postgres>` in `happenstance-postgres`. **Two** of the five are `todo!()` throughout — `LadybugProjectionStore` (`crates/happenstance-ladybug/src/projection_store.rs:270-292`) and `PostgresProjectionStore` (`crates/happenstance-postgres/src/projection_store.rs:105-127`). The other three carry real bodies: `NeonProjectionStore` in all four methods (`crates/happenstance-neon/src/projection_store.rs:164-202` — its two `todo!()`s are in the free functions `decode_checkpoint` and `decode_commit`, which are not port methods), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in **all four** since phase 8, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). That distinction is the whole reason the count is stated: a `todo!()` has type `!` and coerces to anything, so a body of them proves a signature is nameable, not that it can be satisfied. One of the five now runs against a suite — `SqliteProjectionStore`, through `happenstance_testkit::projection_store_conformance!` at `crates/happenstance-sqlite/tests/projection.rs`, against a real temporary file; the other four still run against nothing | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point. `EventStore` is frozen because it has evidence:
@@ -455,13 +458,16 @@ answer.
   not omitted.
 
 **And the honest caveat that outranks all of them.** Section 6.5's portfolio has
-seven axes and **one adapter instrument at one far end**. Four of the seven —
+seven axes and **two adapter instruments, at two far ends**. Four of the seven —
 async flavour, handle multiplicity, durability and position allocation — carry a
 *fixture* instrument, which proves the rules at that end can fail and says
-nothing about whether a real implementation there can pass (CF-26). Durability is
-the one that also carries the other kind: since phase 8 `happenstance-sqlite`
-passes the reopen rules against a real file, which is a real implementation at
-that far end and still not a store that has met a *fault*. The other three —
+nothing about whether a real implementation there can pass (CF-26). Two of those
+four also carry the other kind, both since phase 8 and both through
+`happenstance-sqlite`: it passes the reopen rules against a real file, which is a
+real implementation at durability's far end and still not a store that has met a
+*fault*; and its fixture hands out second `rusqlite::Connection`s onto one file,
+which is a real implementation at handle multiplicity's far end and still not a
+connection pool. The other three —
 transport, batch shape and completeness — are empty at both ends. Every
 port in this document has been checked against a population of implementations
 that agree with it: `MemoryEventStore`, a rusqlite adapter and a planned Durable
@@ -1591,6 +1597,24 @@ Rotor's 1,840-event ingest does not argue against this floor, because ingest
 decomposes into independently-conditioned groups (E2E-35) and the batch bound
 applies to a group.
 
+**VT-21, VT-22 and VT-24's documentation obligation is discharged at phase 8, and
+the markers stay where they are.** Each of those three says a store MUST document
+its actual limit; until phase 8 no store in this workspace had one to document,
+and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
+states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
+`MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
+(`crates/happenstance-sqlite/src/event_store.rs:245`, `:252`, `:261`) — enforces
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:475`,
+`:482`, `:488`), and mirrors them onto its fixture so
+`append_reports_exceeded_store_limits` reads them rather than a literal. All
+three clear their floors with room, VT-23's 128-item floor is evaluated by the
+same adapter through chunked statements rather than refused, and each number is
+checked from both sides — the limit accepted, one more refused
+(`crates/happenstance-sqlite/tests/append.rs:238-286`). **The markers do not
+move.** Their falsifiers are about a *named target that cannot honour the floor*,
+and one adapter clearing four floors comfortably is not that target; discharging
+the documentation half is a different claim from settling the number.
+
 #### VT-25 — A capacity refusal is distinguishable from a store failure
 
 `AppendError` MUST carry a variant `ExceedsStoreLimit { limit: StoreLimit, len:
@@ -2563,7 +2587,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:202` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:959` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2651,9 +2675,10 @@ is E2E-53's failure. Whether that trade was the right one could not be settled
 while nothing in the tree could fail the bound, and for a long time nothing
 could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 `SqliteEventStoreError` *was* a single placeholder variant. Phase 2 built errors
-that can. `SqliteEventStoreError` is now seven real variants over
-`rusqlite::Error`, `JoinError` and `TryCurrentError`
-(`crates/happenstance-sqlite/src/event_store.rs:151-193`), and
+that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
+twelve real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
+the crate's own decode failures
+(`crates/happenstance-sqlite/src/event_store.rs:857-950`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsHandle`, whose payload is an `Rc<str>`
 (`crates/happenstance-cloudflare/src/js.rs:45-58`).
@@ -2957,8 +2982,16 @@ The obligation is stronger than laziness, and laziness survives it. The sample
 may be taken **at or before** the first poll and a caller may not depend on
 which. This is defect D7, and it is what makes `MemoryEventStore` (which filters,
 orders and truncates under the read lock at call time) and `happenstance-sqlite`
-(which cannot: `spawn_blocking` panics with no runtime in scope and `read` is not
-`async`, so its work must move into `poll_next`) both conformant. Laziness is
+(which does not: `read` is not `async` and may legally be called with no runtime
+in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
+its ceiling is sampled there — `Ceiling::Unsampled` at
+`crates/happenstance-sqlite/src/event_store.rs:973` is the state the first poll
+resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
+to the call site: the store captures a `tokio::runtime::Handle` at construction
+and falls back to `Handle::try_current`, so the lazy spawn has a runtime to hop
+onto even under the concurrency family's bare OS threads, and
+`SqliteEventStoreError::NoRuntime` keeps a reachable meaning instead of becoming
+dead code. Laziness is
 therefore **permitted and never required**, and building a stream and never
 polling it is not guaranteed to be free. What no adapter may do is take a *new*
 snapshot per chunk. An adapter that issues **more than one statement per `read`**
@@ -3337,9 +3370,13 @@ every path.
 - **Cases:** E2E-36, E2E-39.
 - **Rejects:** an adapter that loses metadata or tag order while copying into its
   own row type — concretely, the SQLite shape that stores tags in a side table
-  (`crates/happenstance-sqlite/src/event_store.rs:47-53`) and forgets to write
+  (`crates/happenstance-sqlite/src/event_store.rs:62-67`) and forgets to write
   `metadata`. `append_preserves_event_payload` compares the whole `Event` and
-  catches it.
+  catches it. That shape is no longer hypothetical: ADR-0022 landed
+  `event_tag(tag, position)` as the tag index, beside a `tags` column on `event`
+  itself (`:53`) which is what the round trip reads back — so the defect this
+  bullet names is a real omission an implementer of *that* schema can make,
+  rather than a sketch's.
 
 #### ES-18 — Atomicity
 
@@ -3850,9 +3887,12 @@ store. All three of this specification's retirements were written the same way
 and two of the three were wrong.
 
 - **Rejects:** an adapter that drops the tag join from its condition probe. This
-  is the natural first cut, because the join is the expensive half and the planned
+  is the natural first cut, because the join is the expensive half and the landed
   SQLite schema puts tags in a separate table
-  (`crates/happenstance-sqlite/src/event_store.rs:47-53`). Until this clause's
+  (`crates/happenstance-sqlite/src/event_store.rs:62-67`) — measured at roughly
+  200x a single-tag boundary's cost at 50,000 events, which is why ADR-0022
+  ships `tag_cardinality` and most-selective-tag-first probing as requirements.
+  Until this clause's
   rules landed, **no rule's verdict depended on the condition path matching
   tags**: every append-condition rule built its condition from `query_of_types`,
   with two exceptions and neither closed the gap —
@@ -3967,9 +4007,10 @@ Sync` (ES-4). A single-threaded on-device store — a `RefCell` in a Durable
 Object, an `Rc`-shared cursor — is `!Sync`, and that adapter is the entire
 reason the bare flavour exists. A provided method the edge adapter cannot call
 is a method the port does not have. The cost of "required" is seven impls
-today, five of them skeletons: `memory.rs:293`,
+today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
+8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:195`,
+`crates/happenstance-sqlite/src/event_store.rs:952`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
 `crates/happenstance-cloudflare/src/event_store.rs:146` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
@@ -4409,8 +4450,18 @@ structure VT-8 does not already oblige it to keep. The exposed axes are
 transport, because `contains_event_id` is one more round trip on a store with no
 connection and no cursor, and completeness, because a store that cannot state
 what it does not hold (ES-39) cannot distinguish "no such event" from "not
-visible to me". The instruments are `happenstance-sqlite` at phase 8 and
-`happenstance-cloudflare` at phase 9, whichever lands first.]**
+visible to me". The first named instrument has landed and answered the
+**in-process, connection-holding** half: `happenstance-sqlite` implements the
+method as a lookup on the `UNIQUE (origin_store, origin_position)` pair migration
+1 already creates for ingest's duplicate guard
+(`crates/happenstance-sqlite/src/event_store.rs:57`), so on that shape the
+structure costs nothing VT-8 did not already oblige. What is still unanswered is
+the **transport** half, and it is narrower than "an adapter" was: falsified by a
+store with no connection, no interactive transaction and no cursor for which the
+membership probe is a whole extra round trip it cannot fold into anything else —
+`happenstance-cloudflare` at phase 9 and `happenstance-neon` at phase 10,
+whichever lands first. Completeness is untouched by phase 8 and has an instrument
+at neither end.]**
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -4600,9 +4651,9 @@ reading a stronger claim than this section makes.
 
 Four facts frame everything below.
 
-**The port has five implementers and not one adapter.** `grep -rn
+**The port has five implementers and, since phase 8, one adapter.** `grep -rn
 "ProjectionStore for"` matches `SqliteProjectionStore`
-(`crates/happenstance-sqlite/src/projection_store.rs:208`),
+(`crates/happenstance-sqlite/src/projection_store.rs:529`),
 `PostgresProjectionStore`
 (`crates/happenstance-postgres/src/projection_store.rs:94`),
 `LadybugProjectionStore`
@@ -4610,17 +4661,24 @@ Four facts frame everything below.
 `LiveHandleProjectionStore`
 (`experiments/live-handle-projection-batch/live_handle.rs:174`) and
 `NeonProjectionStore<T>`
-(`crates/happenstance-neon/src/projection_store.rs:153`). All five are phase-2
-skeletons, and none has run a suite because none exists. What changed is the
-*kind* of ignorance rather than its amount: the signatures have now been
-disagreed with by a type checker, and every claim the module documentation
-makes about transactions is still a claim about behaviour nothing has executed.
+(`crates/happenstance-neon/src/projection_store.rs:153`). Four are still phase-2
+skeletons whose claims about transactions nothing has executed. The fifth is
+not: `SqliteProjectionStore` has real bodies in all four port methods and
+`crates/happenstance-sqlite/tests/projection.rs` mounts
+`happenstance_testkit::projection_store_conformance!` against a real temporary
+file, so **the suite it did not write now exists and it passes it**. What that
+does not buy is PS-2, which wants the suite green against two adapters at
+opposite ends of the batch-shape axis; this is a third replay-at-commit shape
+beside `MemoryProjectionStore` and the testkit's buffering variant, and no
+`rusqlite` adapter can supply the other end (a `rusqlite::Transaction<'_>` is
+`!Send`). For the other four the *kind* of ignorance is still what it was: the
+signatures have been disagreed with by a type checker and nothing more.
 
 **`error[E0195]` is real, reproduced twice, and explains nothing about the
 absence.** Spelling the impl with the concrete batch type — `async fn
 commit(&self, _batch: MyBatch<'_>, …)` — fails against `projection.rs:126-131`;
 only the literal `Self::Batch<'_>` compiles, and phase 2 hit it independently
-from both ends (`crates/happenstance-sqlite/src/projection_store.rs:215-224`,
+from both ends (`crates/happenstance-sqlite/src/projection_store.rs:534-542`,
 `experiments/live-handle-projection-batch/live_handle.rs:68-83`). It is a tax every
 implementer pays, not a barrier: five impls were written straight through it.
 The strongest available explanation for why none of them is an adapter is the
@@ -7545,7 +7603,7 @@ Rejects: the saboteur — `struct AlwaysWrong; impl EventStore for AlwaysWrong {
 — which satisfies CF-1 mechanically and proves nothing, because no author would
 have written it. The mutant that earns its place is the one someone would ship:
 dropping the tag join because tags live in a second table
-(`crates/happenstance-sqlite/src/event_store.rs:47-53`), caching `max(position)` per
+(`crates/happenstance-sqlite/src/event_store.rs:62-67`), caching `max(position)` per
 session, evaluating each `QueryItem` as its own statement.
 
 **CF-5.** The testkit MUST also hold at least one *conformant variant* — a store
@@ -7611,8 +7669,8 @@ asks whether a committed append is *visible* across handles, and returns the
 same verdict whether or not the probe joins on tags. The residual gap is
 unchanged and is exactly what this clause names. The tag join is the expensive
 half and lives in a separate
-table in the planned SQLite adapter
-(`crates/happenstance-sqlite/src/event_store.rs:47-53`), which makes dropping it the
+table in the landed SQLite adapter
+(`crates/happenstance-sqlite/src/event_store.rs:62-67`), which makes dropping it the
 natural first cut. Such an adapter rejects every command touching any course, and
 passes all twenty-seven rules while doing it: a total-availability failure
 certified as conformant, on the canonical DCB uniqueness shape.
@@ -8451,33 +8509,41 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Skeletons at both ends, a passing implementation at neither.** Five impls, of which only two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, `SqliteProjectionStore` in `begin` and `rollback`. The far end is therefore better evidenced than the near one, and still there is no suite to run any of them against (`references/adapter-shapes.md:297`) | The projection conformance suite, which does not exist |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter no.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object, so no *connection* has ever been opened twice | Fixture (CF-16) — **done**; then a pool-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1015`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
-Seven axes, and **the adapter column carries exactly one tick: durability**.
-Three are empty at both ends — transport, batch shape and completeness. Three
-carry a **fixture** instrument and, as their rows stand, no adapter one — async
-flavour, handle multiplicity and, since CF-13's fixture landed, position
-allocation — which by CF-26 satisfies the falsifiability half and not the
-implementability half. Durability carries both ticks, and only for the half phase
-8 could buy: `SqliteFixture` runs the three reopen rules against a real file, so
-the axis has a passing implementation at its far end, while a store that loses a
-write to a *fault* rather than to an instruction is supplied by nothing. Phase 3
-produced four fixture instruments and zero adapter instruments, which is the most
-it could produce; phase 8 produced the first adapter one, and the rest of that
-column moves at phases 9, 10, 11 and 14 and nowhere earlier. That is the honest
-state, and it is the reason this section exists before the freeze rather than
-after it.
+Seven axes, and **the adapter column carries exactly two ticks: durability and
+handle multiplicity**, both bought by phase 8 and both partial in a way the rows
+state. Three axes are empty at both ends — transport, batch shape and
+completeness. Two carry a **fixture** instrument and no adapter one — async
+flavour and, since CF-13's fixture landed, position allocation — which by CF-26
+satisfies the falsifiability half and not the implementability half. Durability
+carries both ticks for the half phase 8 could buy: `SqliteFixture` runs the three
+reopen rules against a real file, while a store that loses a write to a *fault*
+rather than to an instruction is supplied by nothing. Handle multiplicity carries
+both for the same shape of reason: `SqliteFixture::connect` opens a second
+`rusqlite::Connection` onto one file rather than an `Arc` clone, and the
+concurrency family races up to 64 of them, while a store drawing handles from a
+**pool** it does not own — and handles in different *processes* — is supplied by
+nothing. Phase 3 produced four fixture instruments and zero adapter instruments,
+which is the most it could produce; phase 8 produced the first two adapter ones,
+and the rest of that column moves at phases 9, 10, 11 and 14 and nowhere earlier.
+That is the honest state, and it is the reason this section exists before the
+freeze rather than after it.
 
-**One entry in the count above is under re-reading and should not be leaned on
-here.** The handle-multiplicity row says no *connection* has ever been opened
-twice, and `SqliteFixture::connect` opens a second `rusqlite::Connection` onto
-one file — the row predates it. Whether that puts an adapter instrument at that
-axis's far end, or only a second handle that still shares a process, is
-`spec-and-code-reconciliation`'s to settle by re-reading every §6.5 row against
-the whole phase-8 tree. It is not settled here, because a row moved in passing by
-the story that happened to notice it is exactly the drift that reconciliation
-pass exists to catch.
+**The handle-multiplicity entry was left under re-reading by phase 8's durability
+pass and is settled here.** That row read *"no connection has ever been opened
+twice"*, and `SqliteFixture::connect` had already falsified it. The question
+handed over was whether a second real connection puts an *adapter* instrument at
+the axis's far end or only a second handle sharing a process. It puts one there:
+the far end this table names is "two or more handles onto one backing store,
+concurrent", the second connection is opened through `SqliteEventStore::open` and
+runs migration 1 rather than bumping a refcount, and CF-19 plus the whole
+concurrency family pass against handles obtained that way. The narrower reading —
+that only a pool-backed adapter counts — was rejected because it renames the far
+end after the fact: pooling is a property of how handles are *acquired*, and it
+is recorded as what is still missing rather than as what was always meant. A
+cross-process reader is missing for the same reason and is named beside it.
 
 The distinction is worth holding on to now that four rows have moved, because the
 temptation is to read the first tick as the axis being covered.
@@ -8490,10 +8556,13 @@ replaying a `Vec` has never met a fault, and a store that suspends between
 allocating and publishing because a rule polled it that way has never met a
 transaction. ES-6 was settled on a purpose-built instrument rather than on this
 store for the same reason: a reference store's error type is chosen by whoever
-wrote the reference store. CF-17's is the one of those three rows that has since
-gained a second tick, and the second is a different claim rather than a stronger
-version of the first: `SqliteFixture` reopens a real file instead of replaying a
-`Vec`, and has still never met a fault.
+wrote the reference store. **Two** of those three rows have since gained a second
+tick, and in both cases the second is a different claim rather than a stronger
+version of the first: CF-17's `SqliteFixture` reopens a real file instead of
+replaying a `Vec` and has still never met a fault, and CF-16's opens a real
+second connection instead of an `Arc` clone and has still never been drawn from
+a pool. CF-13's has not: nothing in the tree yet allocates a position outside a
+transaction.
 
 **Position allocation is the row where the gap between the two halves is widest,
 and it is worth saying so where the tick is.** It is the axis the pressure test
@@ -8649,6 +8718,17 @@ Rejects: a benchmark result gating a merge. A threshold nobody can justify
 becomes a threshold everybody raises, and the number stops meaning anything the
 second time it is moved. Benchmarks are published per adapter and compared
 against that adapter's own history; they decide nothing about conformance.
+
+**The separation stopped being a plan at phase 8.** `event_store_benchmarks!` now
+exists as a fourth macro family in `crates/happenstance-testkit/src/bench.rs`,
+behind an off-by-default `bench` feature
+(`crates/happenstance-testkit/Cargo.toml:92`), and it is **not** in
+`for_each_event_store_rule!` — so an adapter that runs the conformance macros
+compiles none of it and the bar is unchanged by its existence. ADR-0022 is its
+first paying customer: every number in that record was measured through this
+harness rather than through an ad-hoc script. The marker stays `[PROVISIONAL]`
+because its falsifier is about a *complexity property expressible as a
+deterministic assertion*, which the harness landing neither supplies nor refutes.
 
 ---
 
