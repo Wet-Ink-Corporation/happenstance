@@ -26,3 +26,11 @@
 // is the only place that claim is checked. See the module's own docs for why the
 // atoms are not all attached to one module.
 mod constitution;
+
+// The narrative tree's pages, one private module per page. Same argument again
+// — `docs/` lives outside every publishable package — and the same obligation
+// as the constitution's: `docs/` claims its examples compile against the crates
+// a reader installed, and this is the only place that claim is checked. It must
+// stay in *this* target: `cargo test --doc` compiles the lib crate's doctests,
+// so the same line in `main.rs` would compile clean and check nothing.
+mod narrative;

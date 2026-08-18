@@ -1,13 +1,18 @@
 # Documentation
 
 **This directory is for user documentation** — what someone who has run `cargo add
-happenstance` needs in order to use it. It is deliberately near-empty: the crate's
-documentation currently lives in its rustdoc and its README, and nothing has yet
-been written that belongs here instead.
+happenstance` needs in order to use it. It is the **narrative tree**: the Rust
+examples on the pages below are compiled by `cargo xtask ci` against the real
+workspace crates, so an example that stopped compiling fails the gate rather than
+a reader.
 
 Everything else that used to live under `docs/` was moved out, because a directory
 holding both "how to use this library" and "the 9,000-line normative specification"
 serves neither reader.
+
+| Page | Read it at |
+| --- | --- |
+| Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 
 | Looking for | It is at |
 | --- | --- |
@@ -22,11 +27,14 @@ serves neither reader.
 | The decisions, and why each was taken | [`.kb/decisions/`](../.kb/decisions/) — the full records are [`references/adr/`](../references/adr/) |
 | What is deliberately still unsettled | [`.kb/open-questions/`](../.kb/open-questions/) |
 
-Two of those are read by the gate rather than only by people: `cargo xtask
-spec-trace` parses `spec/SPECIFICATION.md` and `spec/E2E-CASES.md` by path, and
+Three trees are read by the gate rather than only by people: `cargo xtask
+spec-trace` parses `spec/SPECIFICATION.md` and `spec/E2E-CASES.md` by path;
 `cargo xtask lint-constitution` plus `cargo test -p xtask --doc` read every file
-under `standards/rust/`. Moving either tree means editing `xtask/src/` in the same
-change — which is the point of pinning them by path rather than by convention.
+under `standards/rust/`; and the narrative pages in this directory are registered
+one by one in `xtask/src/narrative.rs`, where `cargo test -p xtask --doc` compiles
+their examples under the mandatory `cargo xtask narrative-doctests` step. Moving
+any of the three means editing `xtask/src/` in the same change — which is the
+point of pinning them by path rather than by convention.
 
 ## What belongs here
 

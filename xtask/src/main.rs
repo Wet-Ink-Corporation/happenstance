@@ -64,6 +64,7 @@ use anyhow::{Context, Result, bail};
 mod affected;
 mod lint_constitution;
 mod lints;
+mod narrative_doctests;
 mod package;
 mod proof;
 mod reserve;
@@ -478,6 +479,35 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The narrative tree's examples, under their own banner. Two steps
+        // rather than one, and this one *first*, because the step below is
+        // unfiltered and therefore compiles these pages too: `run_steps` bails
+        // at the first failure, so the ordering is the whole of what keeps a
+        // broken narrative fence attributed to the narrative corpus. Fixing it
+        // from the other side — filtering the step below — would drop the
+        // repository README's doctest out of the gate, because its test name
+        // carries neither corpus's module path.
+        //
+        // It runs through `cargo run -p xtask` rather than invoking `cargo test`
+        // directly for the reason `proof-artefact` does: a filtered
+        // `cargo test --doc` exits 0 over `running 0 tests`, so the subcommand
+        // asserts the doctests out of `--list` before running them. The
+        // `RUSTDOCFLAGS` below is inherited by the cargo it spawns.
+        name: narrative_doctests::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "narrative-doctests",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // Its own step rather than a line in `tests`, for the reason
         // `proof-artefact` has one: the workspace test step passes just as
         // happily with one fewer doctest as with one more, so an atom whose
@@ -679,6 +709,7 @@ fn main() -> ExitCode {
         },
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
+        Some("narrative-doctests") => narrative_doctests::run(),
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),
@@ -761,6 +792,11 @@ fn print_help() {
         proof::ARTEFACTS.len()
     );
     println!("         on an empty target, so the names are checked out of `--list` first.");
+    println!("  narrative-doctests");
+    println!("         Compile every Rust example in docs/, the narrative tree, as doctests");
+    println!("         of xtask's lib target. Same argument as above, one corpus further on:");
+    println!("         a filtered `cargo test --doc` exits 0 over `running 0 tests`, so the");
+    println!("         pages are asserted out of `--list` and counted before they are run.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");
