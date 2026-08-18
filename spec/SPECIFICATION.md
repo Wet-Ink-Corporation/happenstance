@@ -5827,15 +5827,15 @@ is `happenstance::run_projection`
 the invariant.
 
 **The verdict is executed as ADR-0007's own narrowly-rejected alternative, and
-it is staged rather than written here.** The superseding decision — one runner,
-in `happenstance`, with `happenstance-core` keeping the port and no pump — is
-staged at `.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md` for the
-human-invoked `/redkiln:kb-ingest`. It is staged rather than authored because an
-accepted decision atom is immutable and hand-writing one produces the directory
-layout of the process without the process; ADR-0007's Context is corrected by
-supersession, never by edit
-(`.kb/governance/rewrite-the-referent-never-the-reasoning.md:50-59`), which is
-the same discipline PS-32 records for the same ADR.
+it was staged rather than written here.** The superseding decision — one runner,
+in `happenstance`, with `happenstance-core` keeping the port and no pump — was
+staged for the human-invoked `/redkiln:kb-ingest`, and that wave ran on
+2026-08-17: it is now the **accepted** atom `kb-decision-0031`
+(`.kb/decisions/0031-the-runner-collapses-upward.md`). It was staged rather than
+authored because an accepted decision atom is immutable and hand-writing one
+produces the directory layout of the process without the process; ADR-0007's
+Context is corrected by supersession, never by edit
+(`.kb/governance/rewrite-the-referent-never-the-reasoning.md:50-59`), as PS-32.
 
 **Why this clause leaves the space rather than becoming `[FROZEN]`.** Its
 subject was a phase's obligation to look, and the phase has looked. There is

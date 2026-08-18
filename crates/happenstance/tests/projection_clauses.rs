@@ -248,18 +248,31 @@ fn no_checkpoint_pump_exists_in_the_contract_crate() {
         !ps33.contains("[DEFERRED"),
         "PS-33 is still deferred after the phase that owned its evaluation exited"
     );
-    // Branch two of exactly two admissible forms: the superseding ADR, staged
-    // by filename for the human-invoked ingest.
-    let staged = "0032-adr-0031-the-runner-collapses-upward";
+    // Branch two of exactly two admissible forms: the superseding ADR.
+    //
+    // This half used to pin the STAGED file, `.kb/_intake/0032-adr-0031-…`, and
+    // that was a fact with an expiry date: staging exists to be consumed, so the
+    // assertion went red on 2026-08-17 the moment the ingest wave it was waiting
+    // for succeeded and cleared `_intake`. A test that fails when the thing it
+    // wants finally happens is pinned to the wrong half — the module doc above
+    // asks for the fact the verdict was derived from, and that fact is the
+    // ACCEPTED atom, which is durable. Nothing is weakened by the move: an atom
+    // in `.kb/decisions/` at `status: accepted` is strictly more than a draft
+    // sitting in `_intake`, which is what blocked this verdict for four waves.
+    let atom = "0031-the-runner-collapses-upward";
     assert!(
-        ps33.contains(staged),
-        "PS-33's verdict cites no staged superseding ADR: {ps33}"
+        ps33.contains(atom),
+        "PS-33's verdict cites no superseding ADR: {ps33}"
+    );
+    let rel = format!(".kb/decisions/{atom}.md");
+    assert!(
+        workspace().join(&rel).is_file(),
+        "PS-33's verdict cites a superseding ADR that is not in `.kb/decisions/`"
     );
     assert!(
-        workspace()
-            .join(format!(".kb/_intake/{staged}.md"))
-            .is_file(),
-        "PS-33's verdict cites a staged ADR that is not in `.kb/_intake/`"
+        read(&rel).contains("status: accepted"),
+        "PS-33's superseding ADR exists but is not accepted, so the falsifier's \
+         verdict is recorded against a decision nobody has signed"
     );
 }
 
