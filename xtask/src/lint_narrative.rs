@@ -25,11 +25,16 @@
 //!   resolves the location, and the path in front of both is `xtask/src/`.
 //!   Registration is what keeps even that much true, and it is the whole of what
 //!   it buys.
-//! * **It does not read a page's contents.** A fence tagged `text`, an untagged
-//!   fence, an `ignore`d fence, a hidden panel and an unresolvable clause id are
-//!   all invisible to the checks below. Those are the fence walk's, which
-//!   `fence-discipline-and-allowance-list` and `hidden-content-resolution` add
-//!   to this same module.
+//! * **A Rust example deliberately tagged `text` is neither compiled nor
+//!   flagged.** The fence walk rejects an untagged fence and refuses any info
+//!   string it does not enumerate, and the allowance list makes every `ignore`
+//!   a thing a human approved with a reason attached — but `text` is a
+//!   legitimate tag for prose, so an author who wants a Rust block the compiler
+//!   never sees can still have one by calling it something else. This list
+//!   narrows that hole and does not close it.
+//! * **A hidden panel and an unresolvable clause id are still invisible here.**
+//!   Those are `hidden-content-resolution`'s and the `specification-pin`
+//!   milestone's, and both land in this same module.
 //! * **The harness is matched as text, so reformatting it can break this check
 //!   without breaking the compile.** Splitting an `include_str!` across lines, or
 //!   writing a `mod` line that does not start with `mod ` after trimming, makes a
@@ -72,6 +77,27 @@
 //! documentation initiative is held to, so a checker absent from that list is a
 //! checker those stories never run. It is a convention, not a decision, and it
 //! is discharged by this paragraph.
+//!
+//! # Why this tree's `ignore` rule is stricter than the constitution's
+//!
+//! `lint_constitution` permits an `ignore` fence when the line above it is an
+//! `<!-- ignore: <reason> -->` comment. Under this tree the comment form is not
+//! accepted at all: an `ignore`-class fence is permitted only by an entry in
+//! [`IGNORE_ALLOWANCES`]. Two `ignore` rules in one repository is exactly the
+//! shape a later contributor reads as a mistake in one of them, so the reason is
+//! written here rather than inferred.
+//!
+//! A comment is reviewable only in the diff that introduced it, and a stale one
+//! is undetectable — it sits above a fence that has changed underneath it and
+//! reads as a live approval. A `const` array is one place a reviewer reads in
+//! full without a `git log`, and it is *sweepable*: an entry naming a fence that
+//! no longer exists, or one naming a fence that no longer opts out, is itself a
+//! problem. That is the whole trade, and it is the same argument the
+//! bidirectional registration check above rests on.
+//!
+//! Nothing about `lint_constitution` changes. The two corpora are supposed to
+//! differ here, so a shared helper would have to be parameterised by exactly the
+//! difference — which is the rule.
 //!
 //! # The constants are contracts, not details
 //!
@@ -117,6 +143,32 @@ const HARNESS: &str = "xtask/src/narrative.rs";
 /// path that fits the compile surface necessarily fits this one.
 const PATH_BUDGET: usize = 32;
 
+/// This module's own path, which is the file a stale allowance is a defect in.
+///
+/// The shape [`HARNESS`] already has, one file over: a problem is reported
+/// against the file that carries the mistake, and an entry of
+/// [`IGNORE_ALLOWANCES`] that names nothing is a mistake here rather than on the
+/// page it names.
+const CHECKER: &str = "xtask/src/lint_narrative.rs";
+
+/// Fences permitted to opt out of the compiler, enumerated.
+///
+/// `(page path, line-or-anchor, reason)`. The page path is repo-relative and
+/// `/`-separated, so one entry means the same fence on Windows and on CI. The
+/// line-or-anchor is a line number when it is all digits and otherwise a
+/// substring of the fence's own body: **prefer the anchor**, because inserting a
+/// paragraph above a fence moves every line-keyed entry below it, and an anchor
+/// does not move at all. Either way the sweep reports the drift.
+///
+/// The reason is prose and this module never interprets it. It exists so a
+/// reviewer reading the list in full knows what was approved and why — which is
+/// the whole argument for a list rather than `lint_constitution`'s
+/// `<!-- ignore: … -->` comment, and it is written out in this module's docs.
+///
+/// It ships empty, and it grows by review rather than as the repair for a
+/// failing gate.
+const IGNORE_ALLOWANCES: &[(&str, &str, &str)] = &[];
+
 /// The gate step's name, which is also the claim it makes.
 ///
 /// Named once, here, because `REQUIRED`, `lint_steps` and the tests that hold
@@ -136,6 +188,11 @@ struct Page {
     module: String,
     /// Whether this is the tree's index rather than a page.
     index: bool,
+    /// The page's whole text, read once at enumeration.
+    ///
+    /// Held rather than re-read, so the fence walk and the marker scan are two
+    /// checks over one read rather than two traversals of the tree.
+    text: String,
 }
 
 impl Page {
@@ -144,12 +201,13 @@ impl Page {
     /// The module name is derived exactly once, here, so both directions of the
     /// registration check compare the same string. Two spellings of one
     /// derivation is how the halves of an orphan check start disagreeing.
-    fn new(rel: &str) -> Self {
+    fn new(rel: &str, text: &str) -> Self {
         let path = format!("{TREE}/{rel}");
         Self {
             module: module_name(rel),
             index: path == INDEX,
             rel: rel.to_owned(),
+            text: text.to_owned(),
             path,
         }
     }
@@ -216,7 +274,12 @@ fn collect(root: &Path, rel_dir: &str, out: &mut Vec<Page>) -> Result<()> {
         if is_dir {
             collect(root, &rel, out)?;
         } else if is_markdown(&name) {
-            out.push(Page::new(&rel));
+            // Hard error rather than a skipped page: a scanner that silently
+            // steps over what it cannot read reports green over exactly the file
+            // it failed to inspect.
+            let text = fs::read_to_string(root.join(TREE).join(&rel))
+                .with_context(|| format!("reading {TREE}/{rel}"))?;
+            out.push(Page::new(&rel, &text));
         }
     }
     Ok(())
@@ -228,7 +291,10 @@ fn collect(root: &Path, rel_dir: &str, out: &mut Vec<Page>) -> Result<()> {
 /// different one to a suffix comparison, and a page the walk declines to see is
 /// a page nothing below ever checks.
 fn is_markdown(name: &str) -> bool {
-    name.len() > ".md".len() && name[name.len() - ".md".len()..].eq_ignore_ascii_case(".md")
+    name.len() > ".md".len()
+        && name
+            .get(name.len() - ".md".len()..)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(".md"))
 }
 
 /// Refuses a tree with no pages in it.
@@ -312,16 +378,324 @@ fn check_registration(pages: &[Page], harness: &str, problems: &mut Vec<String>)
     }
 }
 
+/// One fenced block, parsed far enough to check it.
+#[derive(Debug)]
+struct Fence {
+    /// The info string as written, e.g. `rust,compile_fail,E0277`.
+    info: String,
+    /// 1-based line of the opening fence.
+    line: usize,
+    /// The fence's contents.
+    body: String,
+    /// Whether a closing fence was ever found.
+    closed: bool,
+}
+
+/// How an [`IGNORE_ALLOWANCES`] entry was used during one walk.
+#[derive(Debug, Default, Clone, Copy)]
+struct Usage {
+    /// How many `ignore`-class fences this entry permitted.
+    permitted: usize,
+    /// Whether it located a fence that is present and does not opt out.
+    named_an_open_fence: bool,
+}
+
+/// One problem on one page, before it is composed into a line.
+type Found = (usize, String);
+
+/// Every fenced block on a page, in source order.
+fn fences(text: &str) -> Vec<Fence> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    let mut open: Option<(usize, String, Vec<String>)> = None;
+    let mut quoted = false;
+
+    for (index, line) in lines.iter().enumerate() {
+        if line.starts_with("````") {
+            quoted = !quoted;
+            continue;
+        }
+        if quoted {
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("```") else {
+            if let Some((_, _, body)) = open.as_mut() {
+                body.push((*line).to_owned());
+            }
+            continue;
+        };
+        match open.take() {
+            None => open = Some((index, rest.trim().to_owned(), Vec::new())),
+            Some((start, info, body)) => out.push(Fence {
+                info,
+                line: start + 1,
+                body: body.join("\n"),
+                closed: true,
+            }),
+        }
+    }
+
+    // The precedent parser drops an unpaired opener on the floor, so its info
+    // string is never examined — an opt-out route inherited by copying. Fixed
+    // here rather than in `lint_constitution`, whose corpus is not this one's.
+    if let Some((start, info, body)) = open {
+        out.push(Fence {
+            info,
+            line: start + 1,
+            body: body.join("\n"),
+            closed: false,
+        });
+    }
+    out
+}
+
+/// Fence discipline, and the allowance list that is the only way out of it.
+///
+/// Four rules and one bookkeeping duty. An untagged fence is rejected because
+/// rustdoc compiles it as Rust regardless. The info string's parts are matched
+/// against a **closed** set, so a spelling nobody enumerated is a hard error
+/// rather than a novel opt-out that passes unnoticed. An `ignore`-class fence is
+/// permitted only by an [`IGNORE_ALLOWANCES`] entry — never by a comment above
+/// it. And the error-code rules are carried over from `check_fences` unchanged.
+///
+/// The bookkeeping is `usage`: which entry permitted which fence, recorded here
+/// so [`check_allowances`] gets its reverse sweep out of the same walk.
+fn check_fences(
+    page: &Page,
+    allowances: &[(&str, &str, &str)],
+    usage: &mut [Usage],
+    found: &mut Vec<Found>,
+) {
+    for fence in fences(&page.text) {
+        let at = fence.line;
+
+        if !fence.closed {
+            found.push((
+                at,
+                "a fence opened here is never closed; its info string is therefore \
+                 never examined, which is an opt-out nothing reports"
+                    .to_owned(),
+            ));
+        }
+
+        let info = fence.info.as_str();
+        let rust = info == "rust" || info.starts_with("rust,");
+        if !rust {
+            // A non-Rust tag is fine; an untagged fence is not, because rustdoc
+            // treats it as Rust and would try to compile it.
+            if info.is_empty() {
+                found.push((
+                    at,
+                    "an untagged fence is compiled as Rust; tag it `rust` or `text`".to_owned(),
+                ));
+            }
+            continue;
+        }
+
+        let mut recognised = true;
+        let mut ignored = false;
+        let mut compile_fail = false;
+        let mut code: Option<&str> = None;
+        for part in info.split(',').skip(1) {
+            match part {
+                "no_run" | "should_panic" => {}
+                "ignore" => ignored = true,
+                "compile_fail" => compile_fail = true,
+                other if is_error_code(other) => code = Some(other),
+                // No accepting arm. This one character is the whole of AC-002.
+                _ => recognised = false,
+            }
+        }
+        if !recognised {
+            found.push((at, format!("unrecognised fence info string `{info}`")));
+        }
+        if code.is_some() && !compile_fail {
+            found.push((
+                at,
+                "an error code on a fence that is not `compile_fail`".to_owned(),
+            ));
+        }
+        if compile_fail
+            && let Some(code) = code
+            && !names_outside_a_fence_marker(&page.text, code)
+        {
+            // rustdoc accepts a `compile_fail` whose code never matches, so the
+            // prose naming the code is the part a reader can check.
+            found.push((
+                at,
+                format!("the fence claims `{code}` and the page's prose never names it"),
+            ));
+        }
+
+        let named: Vec<usize> = allowances
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| allowance_names(entry, &page.path, at, &fence.body))
+            .map(|(index, _)| index)
+            .collect();
+
+        if ignored {
+            for &index in &named {
+                usage[index].permitted += 1;
+            }
+            match named.len() {
+                0 => found.push((
+                    at,
+                    "an `ignore` fence needs an `IGNORE_ALLOWANCES` entry naming it; \
+                     a comment above the fence does not permit it, because a comment is \
+                     reviewable only in the diff that introduced it"
+                        .to_owned(),
+                )),
+                1 => {}
+                _ => found.push((
+                    at,
+                    format!(
+                        "two or more `IGNORE_ALLOWANCES` entries name this fence ({}); \
+                         deleting one would leave the other silently authorising it",
+                        named
+                            .iter()
+                            .map(|index| format!("`{}`", allowances[*index].2))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                )),
+            }
+        } else {
+            for &index in &named {
+                usage[index].named_an_open_fence = true;
+            }
+        }
+    }
+}
+
+/// Whether a page names `code` somewhere other than a fence's own info string.
+///
+/// The info string is where the claim is *made*, so counting it as the prose
+/// that supports it makes the rule vacuous — it would be satisfied by the very
+/// line it is checking.
+fn names_outside_a_fence_marker(text: &str, code: &str) -> bool {
+    text.lines()
+        .filter(|line| !line.trim_start().starts_with("```"))
+        .any(|line| line.contains(code))
+}
+
+/// Whether an info-string part is a rustc error code.
+fn is_error_code(part: &str) -> bool {
+    part.len() == 5
+        && part.starts_with('E')
+        && part[1..].chars().all(|digit| digit.is_ascii_digit())
+}
+
+/// Whether an allowance entry names this fence.
+///
+/// The page path is compared separator-normalised, so an entry written
+/// `docs/adapters/sqlite.md` matches the same page discovered on Windows: a list
+/// that silently matches nothing on one platform grants permission on one runner
+/// and denies it on another. The key is a line number when it is all digits, and
+/// otherwise an anchor matched inside the fence's own body.
+fn allowance_names(entry: &(&str, &str, &str), page: &str, line: usize, body: &str) -> bool {
+    let (path, key, _) = *entry;
+    if path.replace('\\', "/") != page {
+        return false;
+    }
+    if is_line_key(key) {
+        key.parse::<usize>().is_ok_and(|wanted| wanted == line)
+    } else {
+        body.contains(key)
+    }
+}
+
+/// Whether an allowance key is a line number rather than an anchor.
+fn is_line_key(key: &str) -> bool {
+    !key.is_empty() && key.chars().all(|character| character.is_ascii_digit())
+}
+
+/// The reverse sweep over the allowance list.
+///
+/// The half that earns the list. Forward, the walk catches a fence nobody
+/// approved; here it catches an approval for a fence that is gone — the same
+/// asymmetry [`check_registration`] documents, one corpus over. Without it the
+/// list accumulates standing permission for code nobody has, and a malformed
+/// entry sits inert while reading like a granted permission.
+fn check_allowances(
+    allowances: &[(&str, &str, &str)],
+    usage: &[Usage],
+    problems: &mut Vec<String>,
+) {
+    for (entry, used) in allowances.iter().zip(usage) {
+        let (path, key, reason) = *entry;
+        let at = format!("the `IGNORE_ALLOWANCES` entry for {path}:{key}");
+
+        if reason.trim().is_empty() {
+            problems.push(format!(
+                "{CHECKER} — {at} carries no reason; an entry a reviewer cannot read \
+                 is a permission nobody knowingly granted"
+            ));
+            continue;
+        }
+        if !path.replace('\\', "/").starts_with(&format!("{TREE}/")) {
+            problems.push(format!(
+                "{CHECKER} — {at} names a path that is not under {TREE}, so it can \
+                 never match and can never be swept"
+            ));
+            continue;
+        }
+        if key.trim().is_empty() || key == "0" {
+            problems.push(format!(
+                "{CHECKER} — {at} carries no line-or-anchor, so it names a page rather \
+                 than a fence"
+            ));
+            continue;
+        }
+
+        if used.permitted == 0 {
+            if used.named_an_open_fence {
+                problems.push(format!(
+                    "{CHECKER} — {at} names a fence that no longer opts out; a line-keyed \
+                     entry drifts the moment a paragraph is inserted above its fence"
+                ));
+            } else {
+                problems.push(format!(
+                    "{CHECKER} — {at} names no `ignore` fence in {TREE}"
+                ));
+            }
+        }
+    }
+}
+
+/// Every problem one page carries, composed and in line order.
+fn check_page(
+    page: &Page,
+    allowances: &[(&str, &str, &str)],
+    usage: &mut [Usage],
+    problems: &mut Vec<String>,
+) {
+    let mut found: Vec<Found> = Vec::new();
+    check_fences(page, allowances, usage, &mut found);
+    found.sort_by_key(|(line, _)| *line);
+    for (line, message) in found {
+        problems.push(format!("{}:{line} — {message}", page.path));
+    }
+}
+
 /// Every problem the tree carries, composed, in source order.
 ///
 /// The order is the order a contributor reads: the tree first — the pinning
-/// check before any other line, then each page — and after it the files that
-/// register the tree. Nothing short-circuits and nothing is truncated: a check
-/// that stops at the first problem turns one review cycle into six.
+/// check before any other line, then each page in path order and each page's
+/// problems in line order — and after it the two files that register and permit,
+/// the harness and this module. Nothing short-circuits and nothing is truncated:
+/// a check that stops at the first problem turns one review cycle into six.
 fn problems(pages: &[Page], harness: &str) -> Vec<String> {
     let mut problems = Vec::new();
     check_paths(pages, &mut problems);
+
+    let mut usage = vec![Usage::default(); IGNORE_ALLOWANCES.len()];
+    for page in pages {
+        check_page(page, IGNORE_ALLOWANCES, &mut usage, &mut problems);
+    }
+
     check_registration(pages, harness, &mut problems);
+    check_allowances(IGNORE_ALLOWANCES, &usage, &mut problems);
     problems
 }
 
@@ -383,7 +757,23 @@ mod tests {
     }
 
     fn page(rel: &str) -> Page {
-        Page::new(rel)
+        Page::new(rel, "")
+    }
+
+    fn page_with(rel: &str, text: &str) -> Page {
+        Page::new(rel, text)
+    }
+
+    /// Every problem one page carries under `allowances`, plus the sweep over
+    /// them — the two halves of the walk a real run always performs together.
+    fn walk(pages: &[Page], allowances: &[(&str, &str, &str)]) -> Vec<String> {
+        let mut usage = vec![Usage::default(); allowances.len()];
+        let mut problems = Vec::new();
+        for page in pages {
+            check_page(page, allowances, &mut usage, &mut problems);
+        }
+        check_allowances(allowances, &usage, &mut problems);
+        problems
     }
 
     /// This module's own source, without its tests — the half whose prose ships.
@@ -691,7 +1081,7 @@ mod tests {
     fn a_problem_is_a_composed_line() {
         let rel = format!("{}.md", "a".repeat(25));
         let mut found = Vec::new();
-        check_paths(&[Page::new(&rel)], &mut found);
+        check_paths(&[page(&rel)], &mut found);
 
         assert_eq!(found.len(), 1, "got: {found:?}");
         let (location, message) = found[0]
@@ -719,8 +1109,8 @@ mod tests {
     fn the_path_budget_is_enforced_at_its_four_corners() {
         let inside = format!("{}.md", "a".repeat(23));
         let outside = format!("{}.md", "a".repeat(25));
-        assert_eq!(Page::new(&inside).path.chars().count(), 31);
-        assert_eq!(Page::new(&outside).path.chars().count(), 33);
+        assert_eq!(page(&inside).path.chars().count(), 31);
+        assert_eq!(page(&outside).path.chars().count(), 33);
 
         for (rel, expected) in [
             (inside.as_str(), 0),
@@ -729,7 +1119,7 @@ mod tests {
             ("adapters/sqlite.md", 0),
         ] {
             let mut problems = Vec::new();
-            check_paths(&[Page::new(rel)], &mut problems);
+            check_paths(&[page(rel)], &mut problems);
             assert_eq!(
                 problems.len(),
                 expected,
@@ -790,5 +1180,379 @@ mod tests {
                 "`{mark}` reads as a claim this check cannot make"
             );
         }
+    }
+
+    // ======================================================================
+    // fence-discipline-and-allowance-list
+    // ======================================================================
+
+    // ---- AC-001: an untagged fence is compiled as Rust regardless ----------
+
+    /// rustdoc compiles an untagged fence as Rust whatever the author meant, so
+    /// silence here means either prose is compiled by accident or Rust is
+    /// compiled that nobody decided to check.
+    #[test]
+    fn an_untagged_fence_is_rejected() {
+        let page = page_with("append-conditions.md", "intro\n\n```\nfn main() {}\n```\n");
+
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(
+            found[0],
+            "docs/append-conditions.md:3 — an untagged fence is compiled as Rust; \
+             tag it `rust` or `text`"
+        );
+    }
+
+    /// The back door this walk narrows and does not close: a `text` tag is
+    /// neither compiled nor flagged, and the module docs say so.
+    #[test]
+    fn a_text_tagged_fence_is_neither_compiled_nor_flagged() {
+        let page = page_with("append-conditions.md", "```text\nnot rust\n```\n");
+        assert!(walk(&[page], &[]).is_empty());
+    }
+
+    // ---- AC-002: the info string is matched exhaustively -------------------
+
+    /// The whole mechanism is that the match has no accepting wildcard arm. A
+    /// novel opt-out spelling is a hard error rather than a silent pass, which
+    /// is RS-81-2's posture one medium over.
+    #[test]
+    fn an_unrecognised_info_string_part_is_a_problem() {
+        for info in ["rust,ignore_me", "rust,norun", "rust,edition2027"] {
+            let page = page_with("append-conditions.md", &format!("```{info}\n```\n"));
+            let found = walk(&[page], &[]);
+
+            assert_eq!(found.len(), 1, "`{info}` got: {found:?}");
+            assert!(
+                found[0].contains(&format!("unrecognised fence info string `{info}`")),
+                "the problem must quote the whole info string, got: {}",
+                found[0]
+            );
+        }
+    }
+
+    /// The parts that *are* enumerated stay accepted, so the closed match is a
+    /// rule about unknown spellings rather than a rule against every attribute.
+    #[test]
+    fn the_enumerated_info_string_parts_are_accepted() {
+        for info in ["rust", "rust,no_run", "rust,should_panic", "text"] {
+            let page = page_with("append-conditions.md", &format!("```{info}\n```\n"));
+            assert!(walk(&[page], &[]).is_empty(), "`{info}` should be accepted");
+        }
+    }
+
+    #[test]
+    fn an_error_code_without_compile_fail_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust,E0277\n```\n");
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("an error code on a fence that is not `compile_fail`"),
+            "got: {}",
+            found[0]
+        );
+    }
+
+    /// rustdoc accepts a `compile_fail` whose code never matches, so the prose
+    /// naming the code is the part a reader can check.
+    #[test]
+    fn a_compile_fail_claiming_a_code_the_prose_never_names_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust,compile_fail,E0277\n```\n");
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].contains("E0277"), "got: {}", found[0]);
+
+        let named = page_with(
+            "append-conditions.md",
+            "the trait bound fails with E0277.\n\n```rust,compile_fail,E0277\n```\n",
+        );
+        assert!(walk(&[named], &[]).is_empty());
+    }
+
+    // ---- AC-003: an `ignore` fence needs an enumerated allowance -----------
+
+    #[test]
+    fn an_unlisted_ignore_fence_is_rejected() {
+        let page = page_with(
+            "append-conditions.md",
+            "a\n\n```rust,ignore\nfn f() {}\n```\n",
+        );
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("docs/append-conditions.md:3 — "),
+            "the problem must name the page and the fence's line, got: {}",
+            found[0]
+        );
+        assert!(found[0].contains("IGNORE_ALLOWANCES"), "got: {}", found[0]);
+    }
+
+    /// The named wrong implementation from the testing brief: `lint_constitution`
+    /// permits `ignore` when the line above is `<!-- ignore: … -->`. Under the
+    /// narrative tree that comment rescues nothing, because a comment is
+    /// reviewable only in the diff that introduced it.
+    #[test]
+    fn a_comment_above_an_ignore_fence_does_not_permit_it() {
+        let page = page_with(
+            "append-conditions.md",
+            "<!-- ignore: needs a running database -->\n```rust,ignore\n```\n",
+        );
+
+        assert_eq!(walk(&[page], &[]).len(), 1);
+    }
+
+    #[test]
+    fn a_listed_ignore_fence_passes() {
+        let page = page_with(
+            "append-conditions.md",
+            "a\n\n```rust,ignore\nfn f() {}\n```\n",
+        );
+        let allowances = [(
+            "docs/append-conditions.md",
+            "3",
+            "the example needs a running database",
+        )];
+
+        assert!(walk(&[page], &allowances).is_empty());
+    }
+
+    /// Both halves of "line-or-anchor" work, and the anchor is the recommended
+    /// one because it does not move when a paragraph is inserted above it.
+    #[test]
+    fn an_anchored_allowance_survives_an_insertion_above_the_fence() {
+        let allowances = [(
+            "docs/append-conditions.md",
+            "fn needs_a_database",
+            "the example needs a running database",
+        )];
+        let fence = "```rust,ignore\nfn needs_a_database() {}\n```\n";
+
+        assert!(walk(&[page_with("append-conditions.md", fence)], &allowances).is_empty());
+        assert!(
+            walk(
+                &[page_with(
+                    "append-conditions.md",
+                    &format!("a new paragraph\n\n{fence}")
+                )],
+                &allowances
+            )
+            .is_empty(),
+            "an anchored allowance must survive an insertion above its fence"
+        );
+    }
+
+    #[test]
+    fn an_allowance_with_an_empty_reason_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust,ignore\n```\n");
+        let allowances = [("docs/append-conditions.md", "1", "")];
+
+        let found = walk(&[page], &allowances);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("xtask/src/lint_narrative.rs — "),
+            "got: {}",
+            found[0]
+        );
+        assert!(found[0].contains("reason"), "got: {}", found[0]);
+    }
+
+    // ---- AC-004: the list is swept in reverse ------------------------------
+
+    #[test]
+    fn a_stale_allowance_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust\n```\n");
+        let allowances = [("docs/gone.md", "12", "the example needs a running database")];
+
+        let found = walk(&[page], &allowances);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].contains("docs/gone.md"), "got: {}", found[0]);
+        assert!(found[0].contains("no `ignore` fence"), "got: {}", found[0]);
+    }
+
+    /// EC-005, the drift most likely to happen: the fence is still there and no
+    /// longer opts out, so the permission is standing and unused.
+    #[test]
+    fn an_allowance_for_a_fence_that_no_longer_opts_out_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust\n```\n");
+        let allowances = [(
+            "docs/append-conditions.md",
+            "1",
+            "the example needs a running database",
+        )];
+
+        let found = walk(&[page], &allowances);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("no longer opts out"),
+            "the sweep must say the fence stopped opting out, not merely that the \
+             entry is stale, got: {}",
+            found[0]
+        );
+    }
+
+    /// EC-003. An inert entry looks like a granted permission to the next reader.
+    #[test]
+    fn a_malformed_allowance_is_a_problem() {
+        for (entry, expected) in [
+            (
+                ("standards/rust/80-the-gate.md", "1", "why"),
+                "not under docs",
+            ),
+            (("docs/append-conditions.md", "", "why"), "line-or-anchor"),
+        ] {
+            let page = page_with("append-conditions.md", "```rust,ignore\n```\n");
+            let found = walk(&[page], &[entry]);
+
+            assert!(
+                found.iter().any(|problem| problem.contains(expected)),
+                "{entry:?} should report `{expected}`, got: {found:?}"
+            );
+        }
+    }
+
+    /// EC-004. Otherwise deleting one leaves the other silently authorising the
+    /// fence, and the sweep reports neither as stale.
+    #[test]
+    fn a_duplicate_allowance_is_a_problem() {
+        let page = page_with("append-conditions.md", "```rust,ignore\n```\n");
+        let allowances = [
+            ("docs/append-conditions.md", "1", "the first reason"),
+            ("docs/append-conditions.md", "1", "the second reason"),
+        ];
+
+        let found = walk(&[page], &allowances);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("two") && found[0].contains("IGNORE_ALLOWANCES"),
+            "got: {}",
+            found[0]
+        );
+    }
+
+    // ---- AC-005: no false positive, and the right location ----------------
+
+    /// The corpus quotes fenced material inside a four-backtick block — the
+    /// design's own fixture page is written that way. Read as examples, those
+    /// inner fences would be compiled as Rust, and flagging them teaches
+    /// contributors that the checker cries wolf.
+    #[test]
+    fn four_backtick_fences_are_not_examples() {
+        let text = "````markdown\n```\nfn main() {}\n```\n````\n";
+
+        assert!(fences(text).iter().all(|fence| fence.info != "rust"));
+        assert!(
+            walk(&[page_with("append-conditions.md", text)], &[]).is_empty(),
+            "an untagged fence inside a quoted block is quoted material, not an example"
+        );
+    }
+
+    #[test]
+    fn a_problem_names_the_page_and_the_fence_line() {
+        let page = page_with("adapters/sqlite.md", "one\ntwo\nthree\n```\n```\n");
+
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        let (location, _) = found[0].split_once(" — ").unwrap();
+        assert_eq!(
+            location, "docs/adapters/sqlite.md:4",
+            "the location is the page and the fence's line, never the harness"
+        );
+        assert!(
+            location.chars().count() <= 48,
+            "the location prefix must fit the 48-column budget"
+        );
+    }
+
+    /// EC-002. The precedent parser drops an unpaired opener on the floor, so
+    /// its info string is never examined — an opt-out route inherited by
+    /// copying. Fixed in the copy, and not in `lint_constitution`.
+    #[test]
+    fn an_unterminated_fence_is_a_problem() {
+        let page = page_with("append-conditions.md", "a\n\n```rust,ignore\nfn f() {}\n");
+
+        let found = walk(&[page], &[]);
+
+        assert!(
+            found.iter().any(|problem| problem.contains("never closed")),
+            "an unpaired opener must be reported rather than dropped, got: {found:?}"
+        );
+    }
+
+    // ---- AC-006: all of them, in source order, never truncated -------------
+
+    #[test]
+    fn problems_are_reported_in_source_order() {
+        let first = page_with("adapters/sqlite.md", "```rust,ignore\n```\n\n```\n```\n");
+        let second = page_with("append-conditions.md", "```rust,zzz\n```\n");
+
+        let found = walk(&[first, second], &[]);
+
+        assert_eq!(found.len(), 3, "got: {found:?}");
+        assert!(found[0].starts_with("docs/adapters/sqlite.md:1 — "));
+        assert!(found[1].starts_with("docs/adapters/sqlite.md:4 — "));
+        assert!(found[2].starts_with("docs/append-conditions.md:1 — "));
+    }
+
+    #[test]
+    fn every_problem_is_reported_not_the_first() {
+        let mut text = String::new();
+        for _ in 0..40 {
+            text.push_str("```\n```\n");
+        }
+        let found = walk(&[page_with("append-conditions.md", &text)], &[]);
+
+        assert_eq!(found.len(), 40, "forty problems print as forty lines");
+        assert!(
+            found.iter().all(|problem| !problem.contains("more")),
+            "no `… and N more`: {found:?}"
+        );
+    }
+
+    // ---- AC-007: the green surface, and the record it owes -----------------
+
+    #[test]
+    fn the_module_docs_state_the_text_limit_and_the_divergence() {
+        let source = production_source();
+        let docs_end = source
+            .find("\nuse std::fs;")
+            .unwrap_or_else(|| panic!("this module's docs do not end where they used to"));
+        let first_check = source
+            .find("fn check_fences")
+            .unwrap_or_else(|| panic!("this module declares no fence walk"));
+
+        for sentence in ["tagged `text`", "narrows that hole", "<!-- ignore:"] {
+            let at = source
+                .find(sentence)
+                .unwrap_or_else(|| panic!("the module docs must state `{sentence}`"));
+            assert!(
+                at < docs_end && at < first_check,
+                "`{sentence}` must be in the module docs, before the first check"
+            );
+        }
+    }
+
+    /// The green surface does not change: this story adds no per-page or
+    /// per-fence chatter, and the tree as it stands still reports one line.
+    #[test]
+    fn a_clean_tree_still_reports_one_line_after_the_fence_walk() {
+        let clean = page_with(
+            "append-conditions.md",
+            "a claim\n\n```rust\nfn main() {}\n```\n",
+        );
+        assert!(walk(&[clean], &[]).is_empty());
+        assert_eq!(
+            summary(&[page("append-conditions.md")]),
+            "  1 pages, all consistent"
+        );
     }
 }
