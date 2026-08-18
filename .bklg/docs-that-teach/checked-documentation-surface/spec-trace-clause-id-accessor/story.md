@@ -7,9 +7,9 @@ title: One resolver for specification clause ids, next to the parser that owns t
 parent: HS-P0020
 initiative: docs-that-teach
 project: checked-documentation-surface
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -20,13 +20,13 @@ archetype: foundation
 slice: specification-pin
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T05:51:54.197Z
+updated: 2026-08-18T15:16:37.201Z
 links:
   pr: null
   commits:
     - d69253c
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
