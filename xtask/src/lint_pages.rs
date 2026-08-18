@@ -122,12 +122,14 @@ const _: () = assert!(
 /// entry in `xtask/src/affected.rs` and two `affected` tests.
 const RULE_DIR: &str = "standards/pages";
 
-/// The rules tree's router.
+/// The rules tree's router, and the tree's only composition root.
 ///
-/// A forward pin: the file is created by `router-precedence-and-announcement`,
-/// which inverts `tests::router_is_not_created_by_this_story` in the same change.
-/// The constant is taken here so that both path pins are introduced together
-/// rather than in two commits.
+/// Taken as a forward pin by `need-vocabulary-and-declaration-form`, which
+/// asserted the file's *absence* and named the story that would invert the
+/// assertion rather than delete it quietly.
+/// `router-precedence-and-announcement` created the file and performed that
+/// inversion; `tests::router_is_created_by_the_router_story` is what the old
+/// assertion became.
 const ROUTER: &str = "standards/pages/README.md";
 
 /// The one place a token is judged a member of [`NEEDS`].
@@ -162,6 +164,16 @@ mod tests {
     /// Band 10 — the closed need set and the two `orientation` ceilings.
     const BAND_10: &str = "10-the-need-set.md";
 
+    /// The atoms filed into the tree, in filename order.
+    ///
+    /// A deliberate list rather than a `read_dir`: the directory-reading corpus
+    /// reader belongs to `page-need-checker-mounted-in-the-gate`, and a second
+    /// one here is the duplication this slice's ordering exists to prevent.
+    /// Each story in the slice appends its own band as that band lands, which
+    /// is what keeps the router's generated region a *derived* region rather
+    /// than a hand-maintained one.
+    const TREE: &[&str] = &[BAND_00, BAND_10];
+
     /// The five section markers a rule carries, in the order they must appear.
     ///
     /// The same list, in the same order, as `lint_constitution::SECTIONS`
@@ -190,6 +202,94 @@ mod tests {
         let path = root().join(RULE_DIR).join(file);
         std::fs::read_to_string(&path)
             .unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+    }
+
+    /// The rules tree's router, read whole.
+    fn router() -> String {
+        let path = root().join(ROUTER);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+    }
+
+    /// The `Load when:` triggers of an atom, or the empty string.
+    ///
+    /// Mirrors `lint_constitution::load_when` (`xtask/src/lint_constitution.rs:245-257`)
+    /// deliberately, including its limit: only the **first** source line of the
+    /// block is read, and a continuation on the next `>` line is silently
+    /// dropped. The router's `## The shape of a rule` states the one-source-line
+    /// constraint precisely because this is what builds the index cell.
+    fn load_when(text: &str) -> String {
+        for line in text.lines() {
+            let trimmed = line.trim_start_matches(['>', ' ']);
+            if let Some(rest) = trimmed.strip_prefix("**Load when:**") {
+                return rest.trim().to_owned();
+            }
+        }
+        String::new()
+    }
+
+    /// The row the generator would emit for one atom.
+    ///
+    /// Byte-for-byte `lint_constitution::generated_region`'s per-atom format
+    /// (`xtask/src/lint_constitution.rs:400-420`): a markdown link to the file,
+    /// the first `Load when` source line with every interior `|` escaped (or an
+    /// em dash when absent), then the comma-separated rule ids. Derived from the
+    /// real atom rather than written down, so the checker's first `--write`
+    /// against this router can only produce no diff.
+    fn expected_index_row(file: &str) -> String {
+        let text = atom(file);
+        let trigger = load_when(&text);
+        let ids: Vec<String> = rules(&text).into_iter().map(|(id, _)| id).collect();
+        format!(
+            "| [`{file}`]({file}) | {} | {} |",
+            if trigger.is_empty() {
+                "—".to_owned()
+            } else {
+                trigger.replace('|', "\\|")
+            },
+            ids.join(", ")
+        )
+    }
+
+    /// The lines strictly between the generated-region markers of a file.
+    fn generated_region(text: &str) -> Vec<String> {
+        let lines: Vec<&str> = text.lines().collect();
+        let start = lines
+            .iter()
+            .position(|line| line.trim() == "<!-- BEGIN GENERATED -->")
+            .unwrap_or_else(|| panic!("no `<!-- BEGIN GENERATED -->` marker"));
+        let end = lines
+            .iter()
+            .position(|line| line.trim() == "<!-- END GENERATED -->")
+            .unwrap_or_else(|| panic!("no `<!-- END GENERATED -->` marker"));
+        assert!(start < end, "the region's markers are out of order");
+        lines[start + 1..end]
+            .iter()
+            .map(|line| (*line).to_owned())
+            .collect()
+    }
+
+    /// The rows of the first markdown table whose header line is `header`.
+    fn table_rows(text: &str, header: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut inside = false;
+        for line in text.lines() {
+            if line.starts_with(header) {
+                inside = true;
+                continue;
+            }
+            if !inside {
+                continue;
+            }
+            if !line.starts_with('|') {
+                break;
+            }
+            if line.starts_with("| ---") || line.starts_with("|---") {
+                continue;
+            }
+            out.push(line.to_owned());
+        }
+        out
     }
 
     /// This module's `//!` block, marker stripped, in source order.
@@ -355,13 +455,307 @@ mod tests {
         }
     }
 
+    /// The inversion `need-vocabulary-and-declaration-form` scheduled.
+    ///
+    /// That story took `ROUTER` as a forward pin and asserted the file's
+    /// *absence*, naming `router-precedence-and-announcement` as the story that
+    /// would invert the assertion rather than delete it quietly. This is that
+    /// inversion, in the change that creates the file.
     #[test]
-    fn router_is_not_created_by_this_story() {
+    fn router_is_created_by_the_router_story() {
         assert!(
-            !root().join(ROUTER).exists(),
-            "{ROUTER} is a forward pin: router-precedence-and-announcement \
-             creates it and inverts this assertion in the same change"
+            root().join(ROUTER).exists(),
+            "{ROUTER} is the tree's composition root; without it every atom is \
+             reachable only by `ls`"
         );
+    }
+
+    #[test]
+    fn router_opens_with_the_scope_paragraph_and_the_band_table() {
+        let text = router();
+        assert!(
+            text.lines().next() == Some("# Page standards"),
+            "the router opens `# Page standards`; it opens {:?}",
+            text.lines().next()
+        );
+        assert!(
+            text.contains("load one rule, never the tree"),
+            "the scope paragraph carries the load instruction"
+        );
+        let bands: Vec<String> = table_rows(&text, "| Band |");
+        let names: Vec<&str> = bands
+            .iter()
+            .map(|row| {
+                row.trim_start_matches('|')
+                    .split('|')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+            })
+            .collect();
+        assert_eq!(
+            names,
+            ["`00`", "`10`", "`20`", "`30`", "`40`"],
+            "the band table is the tree's numeric namespace, five rows, in order"
+        );
+    }
+
+    #[test]
+    fn router_states_its_rank_without_editing_the_chain() {
+        let text = router();
+        assert!(
+            text.contains("constitution-atom tier"),
+            "the reader learns the rank on the page they landed on (UX-005)"
+        );
+        assert!(
+            text.contains("SPECIFICATION clause"),
+            "the rank is stated relative to the five-tier chain, not in the abstract"
+        );
+        assert!(
+            !text.contains("sixth tier"),
+            "the discipline sits inside the chain and adds no tier to it"
+        );
+
+        // The only way anything inside this diff can speak to a *different*
+        // file being untouched is to read that file and find its own words
+        // still there. `git diff main -- standards/rust/README.md` is the
+        // ledger's form of the same check.
+        //
+        // Line endings are normalised first: this is a Windows checkout with
+        // `core.autocrlf=true`, so a tracked file arrives CRLF and a literal
+        // written with `\n` would fail on the checkout rather than on the edit.
+        let chain = std::fs::read_to_string(root().join("standards/rust/README.md"))
+            .unwrap()
+            .replace("\r\n", "\n");
+        assert!(
+            chain.contains(
+                "> **SPECIFICATION clause > ADR > constitution atom > `CLAUDE.md` /\n\
+                 > `CONTRIBUTING.md` summary > `references/evaluation/*`.**"
+            ),
+            "standards/rust/README.md's precedence block is cited, never edited"
+        );
+    }
+
+    #[test]
+    fn router_indexes_every_atom_in_the_tree() {
+        let text = router();
+        let region = generated_region(&text);
+        assert!(
+            !text.contains("show all") && !text.contains("<details"),
+            "a filter may not hide what it filters: the index is on the same \
+             page, complete, whether or not `## Start here` matched"
+        );
+        let rows: Vec<&String> = region.iter().skip(2).collect();
+        assert_eq!(
+            rows.len(),
+            TREE.len(),
+            "the index carries one row per atom; it has {} rows and the tree \
+             has {} atoms",
+            rows.len(),
+            TREE.len()
+        );
+        for (file, row) in TREE.iter().zip(rows) {
+            assert!(
+                row.contains(&format!("]({file})")),
+                "the index row for {file} links to it; the row reads {row}"
+            );
+            assert!(
+                root().join(RULE_DIR).join(file).exists(),
+                "{RULE_DIR}/{file} resolves; a router may not ship a dangling link"
+            );
+        }
+    }
+
+    #[test]
+    fn router_index_rows_are_byte_identical_to_the_generator() {
+        let text = router();
+        let region = generated_region(&text);
+
+        // The header and separator are the precedent's verbatim, so the checker
+        // story's `generated_region` analogue is a copy rather than a variant.
+        let chain = std::fs::read_to_string(root().join("standards/rust/README.md")).unwrap();
+        let precedent = generated_region(&chain);
+        assert_eq!(
+            region.first().map(String::as_str),
+            precedent.first().map(String::as_str),
+            "the region's header row is the constitution's verbatim"
+        );
+        assert_eq!(
+            region.get(1).map(String::as_str),
+            precedent.get(1).map(String::as_str),
+            "the region's separator row is the constitution's verbatim"
+        );
+
+        for (index, file) in TREE.iter().enumerate() {
+            let want = expected_index_row(file);
+            let found = region.get(index + 2).cloned().unwrap_or_default();
+            assert_eq!(
+                found, want,
+                "row {index} disagrees with what the generator would emit for \
+                 {file}; the checker's first `--write` must produce no diff"
+            );
+        }
+        assert!(
+            !region.iter().any(|line| line.trim().is_empty()),
+            "no blank line inside the markers — the region is compared whole"
+        );
+    }
+
+    #[test]
+    fn router_states_the_one_source_line_rule_for_load_when() {
+        let text = router();
+        assert!(
+            text.contains("## The shape of a rule"),
+            "the router carries the authoring grammar for the reader writing a rule"
+        );
+        assert!(
+            text.contains("one source line"),
+            "the generator reads only the first line of a `Load when:` block, so \
+             the constraint is stated where the atom author will meet it"
+        );
+        for file in TREE {
+            let atom_text = atom(file);
+            let lines: Vec<&str> = atom_text.lines().collect();
+            let at = lines
+                .iter()
+                .position(|line| line.starts_with("> **Load when:**"))
+                .unwrap_or_else(|| panic!("{file} carries no `> **Load when:**` line"));
+            assert!(
+                !lines[at + 1].starts_with('>'),
+                "{file}'s trigger phrase would be truncated mid-phrase in the \
+                 generated index, which is the defect the precedent tolerates"
+            );
+        }
+    }
+
+    #[test]
+    fn router_states_what_checks_this_tree_and_what_does_not() {
+        let text = router();
+        assert!(
+            text.contains("## What checks this tree, and what does not"),
+            "a check whose limits are undocumented is read as a guarantee \
+             (RS-81-1); so is a tree whose reader assumes the gate is watching it"
+        );
+        assert!(
+            text.contains("page-need-checker-mounted-in-the-gate"),
+            "the section names the story that adds the first gate step"
+        );
+        assert!(
+            text.contains("no gate step reads"),
+            "at this merge nothing reads the tree, and the router says so"
+        );
+    }
+
+    #[test]
+    fn the_repository_index_reaches_the_rules_tree_in_one_hop() {
+        // Flattened to one whitespace-separated line before matching: the
+        // sentences below are prose that wraps, and on this Windows checkout
+        // they wrap with CRLF. A phrase that spans a line break is still the
+        // same phrase to a reader, so the assertion is about the words rather
+        // than about where the author happened to break them.
+        let raw = std::fs::read_to_string(root().join("docs/README.md")).unwrap();
+        let index = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            index.contains("(../standards/pages/README.md)"),
+            "docs/README.md's `Looking for / It is at` table links the router, \
+             so the tree is reachable by someone who does not know it exists"
+        );
+        assert!(
+            index.contains("[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]"),
+            "the gate-read paragraph names the third pinned tree with a marker \
+             that names its own removal, rather than promising a check that does \
+             not exist"
+        );
+        assert!(
+            index.contains("which is the point of pinning them by path rather than by convention"),
+            "the referent is rewritten and the reasoning is not \
+             (.kb/governance/rewrite-the-referent-never-the-reasoning.md)"
+        );
+    }
+
+    #[test]
+    fn router_regions_are_in_the_binding_order() {
+        let text = router();
+        let headings: Vec<&str> = text
+            .lines()
+            .filter(|line| line.starts_with("# ") || line.starts_with("## "))
+            .collect();
+        assert_eq!(
+            headings,
+            [
+                "# Page standards",
+                "## Precedence",
+                "## Start here",
+                "## Index",
+                "## The shape of a rule",
+                "## What checks this tree, and what does not",
+            ],
+            "the filter sits above the thing it filters, and the order is the \
+             only positional language a text medium has"
+        );
+        for marker in [
+            "<details",
+            "<summary",
+            "role=\"tab\"",
+            "{{#tab",
+            "<small>",
+            "<sub>",
+            "<sup>",
+            "<nav>",
+            "<img",
+        ] {
+            assert!(
+                !text.contains(marker),
+                "{ROUTER} carries `{marker}`: no region is occluded, and no \
+                 meaning is carried by size, an icon or a widget"
+            );
+        }
+    }
+
+    #[test]
+    fn router_is_inside_its_budgets() {
+        let text = router();
+        let bytes = text.len();
+        assert!(
+            bytes <= 8_192,
+            "{ROUTER} is {bytes} bytes and the ceiling is 8192 — half an atom, \
+             because this is the one file every page author loads"
+        );
+        let over: Vec<String> = text
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| !line.starts_with('|'))
+            .filter(|(_, line)| line.chars().count() > 96)
+            .map(|(index, line)| {
+                format!("{ROUTER}:{}: {} columns", index + 1, line.chars().count())
+            })
+            .collect();
+        assert!(over.is_empty(), "prose wraps at 96 columns: {over:?}");
+
+        let filter = table_rows(&text, "| You are");
+        assert!(
+            filter.len() <= 12,
+            "`## Start here` carries {} rows and the ceiling is 12; past a dozen \
+             a filter is a second index and the reader reads both",
+            filter.len()
+        );
+        assert!(
+            !filter.is_empty(),
+            "`## Start here` is the filter; an empty one routes nobody"
+        );
+
+        for (index, line) in text.lines().enumerate() {
+            let Some(info) = line.strip_prefix("```") else {
+                continue;
+            };
+            let info = info.trim();
+            assert!(
+                info == "text" || info == "markdown",
+                "{ROUTER}:{} — a fence tagged `{info}`; nothing in the workspace \
+                 compiles this tree, so `text` or `markdown` is the honest tag",
+                index + 1
+            );
+        }
     }
 
     #[test]
