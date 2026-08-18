@@ -27,11 +27,20 @@
 //!   it buys.
 //! * **A Rust example deliberately tagged `text` is neither compiled nor
 //!   flagged.** The fence walk rejects an untagged fence and refuses any info
-//!   string it does not enumerate, and the allowance list makes every `ignore`
-//!   a thing a human approved with a reason attached — but `text` is a
-//!   legitimate tag for prose, so an author who wants a Rust block the compiler
-//!   never sees can still have one by calling it something else. This list
-//!   narrows that hole and does not close it.
+//!   string it does not enumerate — in every spelling rustdoc accepts, which is
+//!   what the section below is about — and the allowance list makes every
+//!   `ignore` a thing a human approved with a reason attached. But `text` is a
+//!   legitimate tag for prose, and a block whose info string carries no rustdoc
+//!   tag at all *is* prose as far as the compiler is concerned, so an author who
+//!   wants a Rust block the compiler never sees can still have one by calling it
+//!   something else. This list narrows that hole and does not close it.
+//! * **A block indented by four spaces or more is invisible to this walk.**
+//!   `CommonMark` makes it an indented code block rather than a fence, and
+//!   rustdoc compiles it — measured, not assumed. What escapes is therefore the
+//!   *tagging* rule and not the compiler: an indented block carries no info
+//!   string at all, so it cannot claim `ignore` and cannot opt out of anything.
+//!   A diagnostic hole rather than a way through, and
+//!   [`crate::narrative_doctests`] still compiles what is inside it.
 //! * **A disclosure marker in a spelling this set does not carry is invisible.**
 //!   [`HIDDEN_MARKERS`] is seven tokens, and a renderer that folds content on
 //!   some eighth directive — a `<div>` with a theme's collapse class, a
@@ -91,6 +100,40 @@
 //! checker those stories never run. It is a convention, not a decision, and it
 //! is discharged by this paragraph.
 //!
+//! # How a fence is recognised, and why it is not a `starts_with`
+//!
+//! Measured against the compiler rather than reasoned about. `rustdoc --test`
+//! collects `` ```ignore ``, `` ```rust ignore ``, `` ```ignore,rust `` and
+//! `` ~~~ignore `` as doctests and reports all four *ignored*; it collects a
+//! three-space-indented fence and an untagged four-backtick block and compiles
+//! both. Every one of those is a Rust block that a walk keyed on
+//! `info.starts_with("rust")`, or on `line.starts_with("```")`, never sees —
+//! and `` ```ignore `` is rustdoc's own canonical spelling, so it is the first
+//! one an author reaches for.
+//!
+//! So the info string is read the way rustdoc reads it: split on `,`, a space
+//! and a tab, empty parts dropped, and the block is a doctest when the token
+//! list is empty or **any** token is a tag rustdoc itself defines. This tree's
+//! accepted set is then matched over every token rather than over everything
+//! after the first, which is what makes `ignore` a thing an
+//! [`IGNORE_ALLOWANCES`] entry has to name wherever in the info string it
+//! appears.
+//!
+//! Recognised by rustdoc and permitted here are two different sets, and the gap
+//! is deliberate: `edition2024` and `test_harness` are rustdoc's, so a fence
+//! carrying one is a doctest and every rule below applies to it — and neither is
+//! on the accepted list, so it is *also* an unrecognised info string. A tree
+//! whose examples pin their own edition is a tree whose examples stopped being
+//! checked against the workspace's.
+//!
+//! Fences are delimited by `` ``` `` or `~~~`, indented by up to three spaces,
+//! and closed only by at least as many of the same character with nothing after
+//! them. That last rule is what makes a four-backtick block *quote* the fences
+//! inside it, rather than a step-over of this parser's own: the previous
+//! spelling toggled on any four-backtick line whatever its info string, so
+//! `` ````ignore `` was an ignore-class doctest the walk never examined and one
+//! stray opener disabled the walk for the rest of the page.
+//!
 //! # Why this tree's `ignore` rule is stricter than the constitution's
 //!
 //! `lint_constitution` permits an `ignore` fence when the line above it is an
@@ -138,6 +181,11 @@ const TREE: &str = "docs";
 ///
 /// It is routing rather than teaching, so [`HARNESS`] deliberately does not
 /// register it — the shape `lint_constitution`'s `ROUTER` already has.
+///
+/// The exemption is from *registration* only, and it is one-way. The index is
+/// still walked and still scanned, and [`check_fences`] refuses a Rust-class
+/// fence on it outright: unregistered means nothing compiles it, so an example
+/// here would be the one page in the pinned tree shipping unchecked.
 const INDEX: &str = "docs/README.md";
 
 /// The lib-crate harness whose `include_str!` lines register every page.
@@ -205,7 +253,13 @@ const IGNORE_ALLOWANCES: &[(&str, &str, &str)] = &[];
 /// [`check_hidden_markers`] correct rather than accidentally correct. The
 /// trailing space in `{{#tab ` is load-bearing: without it the token shadows
 /// `{{#tabs` and one `{{#tabs}}` line would report twice.
-const HIDDEN_MARKERS: &[&str] = &[
+///
+/// `pub(crate)` for one reason: [`crate::narrative_doctests`]'s fixture test
+/// asserts the compiled page carries none of these, and it held a private copy
+/// of the list while this constant did not exist. Two spellings of a set that
+/// may only change by a new design record is one that can satisfy the pin below
+/// and drift anyway, so the copy is deleted and this is the set.
+pub(crate) const HIDDEN_MARKERS: &[&str] = &[
     "<details",
     "<summary",
     "{{#tabs",
@@ -449,60 +503,182 @@ struct Usage {
 /// One problem on one page, before it is composed into a line.
 type Found = (usize, String);
 
-/// Every fenced block on a page, in source order.
-fn fences(text: &str) -> Vec<Fence> {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut out = Vec::new();
-    let mut open: Option<(usize, String, Vec<String>)> = None;
-    let mut quoted = false;
+/// A fence whose closing delimiter has not been found yet.
+///
+/// A named struct rather than the tuple the precedent carried, because the
+/// closing rule needs the opener's delimiter *and* its length: a four-backtick
+/// block is closed by four backticks and holds the three-backtick fences in
+/// between as content, which is how a page quotes fenced material without being
+/// flagged for what it quotes.
+#[derive(Debug)]
+struct Open {
+    /// `` ` `` or `~`. A tilde fence is not closed by backticks.
+    delimiter: char,
+    /// How many of them the opener carried. A closer needs at least as many.
+    length: usize,
+    /// 0-based line of the opener.
+    start: usize,
+    /// The opener's info string, trimmed.
+    info: String,
+    /// Every line since, verbatim.
+    body: Vec<String>,
+}
 
-    for (index, line) in lines.iter().enumerate() {
-        if line.starts_with("````") {
-            quoted = !quoted;
-            continue;
+impl Open {
+    /// The finished fence, whether or not anything closed it.
+    fn into_fence(self, closed: bool) -> Fence {
+        Fence {
+            info: self.info,
+            line: self.start + 1,
+            body: self.body.join("\n"),
+            closed,
         }
-        if quoted {
-            continue;
-        }
-        let Some(rest) = line.strip_prefix("```") else {
-            if let Some((_, _, body)) = open.as_mut() {
-                body.push((*line).to_owned());
-            }
-            continue;
+    }
+}
+
+/// The fence delimiter a line carries: its character, its length, and the rest.
+///
+/// `CommonMark` allows a fence to be indented by up to three spaces and to be
+/// written with `~` instead of a backtick, and rustdoc compiles both — measured,
+/// not assumed. A parser keyed on `line.starts_with("```")` sees neither, which
+/// makes indentation and a tilde two ways past every rule below.
+fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
+    let mut rest = line;
+    for _ in 0..3 {
+        let Some(shorter) = rest.strip_prefix(' ') else {
+            break;
         };
+        rest = shorter;
+    }
+
+    let delimiter = rest
+        .chars()
+        .next()
+        .filter(|character| *character == '`' || *character == '~')?;
+    // Both delimiters are one byte, so the count is also the byte offset.
+    let length = rest
+        .chars()
+        .take_while(|character| *character == delimiter)
+        .count();
+    if length < 3 {
+        return None;
+    }
+    Some((delimiter, length, rest[length..].trim()))
+}
+
+/// Every fenced block on a page, in source order.
+///
+/// A closing fence carries the same delimiter as its opener, is at least as
+/// long, and has nothing after it. That one rule replaces the precedent's
+/// unconditional four-backtick step-over and does its job better: an inner
+/// three-backtick fence is *content* of the four-backtick block that opened
+/// before it, so a page quoting fenced material still reports nothing for what
+/// it quotes — while `` ````ignore ``, which the step-over made invisible, is
+/// now a fence like any other.
+fn fences(text: &str) -> Vec<Fence> {
+    let mut out = Vec::new();
+    let mut open: Option<Open> = None;
+
+    for (index, line) in text.lines().enumerate() {
+        let marker = fence_marker(line);
         match open.take() {
-            None => open = Some((index, rest.trim().to_owned(), Vec::new())),
-            Some((start, info, body)) => out.push(Fence {
-                info,
-                line: start + 1,
-                body: body.join("\n"),
-                closed: true,
-            }),
+            Some(mut current) => {
+                let closes = marker.is_some_and(|(delimiter, length, rest)| {
+                    delimiter == current.delimiter && length >= current.length && rest.is_empty()
+                });
+                if closes {
+                    out.push(current.into_fence(true));
+                } else {
+                    current.body.push(line.to_owned());
+                    open = Some(current);
+                }
+            }
+            None => {
+                if let Some((delimiter, length, info)) = marker {
+                    open = Some(Open {
+                        delimiter,
+                        length,
+                        start: index,
+                        info: info.to_owned(),
+                        body: Vec::new(),
+                    });
+                }
+            }
         }
     }
 
     // The precedent parser drops an unpaired opener on the floor, so its info
     // string is never examined — an opt-out route inherited by copying. Fixed
     // here rather than in `lint_constitution`, whose corpus is not this one's.
-    if let Some((start, info, body)) = open {
-        out.push(Fence {
-            info,
-            line: start + 1,
-            body: body.join("\n"),
-            closed: false,
-        });
+    // It covers the four-backtick case too, which the step-over never could: an
+    // unterminated quoted block silently swallowed the rest of the page.
+    if let Some(current) = open {
+        out.push(current.into_fence(false));
     }
     out
 }
 
+/// The info string's parts, tokenised the way rustdoc tokenises them.
+///
+/// Split on `,`, a space and a tab, with the empty parts dropped, so
+/// `` ```rust ignore ``, `` ```rust,ignore `` and `` ```ignore,rust `` are one
+/// block to the compiler and are one block here. Reading the info string as a
+/// single string and asking whether it *starts with* `rust` is how
+/// `` ```ignore `` — rustdoc's own canonical spelling — walked out of this check
+/// entirely.
+fn info_tokens(info: &str) -> Vec<&str> {
+    info.split([',', ' ', '\t'])
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// Whether rustdoc will hand this block to the compiler.
+///
+/// An empty info string is Rust, and so is any info string carrying a tag
+/// rustdoc defines. Anything else — `text`, `markdown`, `console` — is prose,
+/// and prose is none of this walk's business.
+///
+/// Where this and rustdoc's own rule differ, this one says "Rust" more often:
+/// rustdoc demotes `` ```console ignore `` to prose because an unknown tag came
+/// first, and here it stays a fence that needs an allowance. That direction
+/// costs a contributor an explicit tag; the other direction costs the tree a
+/// silent opt-out.
+fn is_doctest(tokens: &[&str]) -> bool {
+    tokens.is_empty() || tokens.iter().copied().any(is_rustdoc_tag)
+}
+
+/// Whether a token is a tag rustdoc itself defines.
+///
+/// Recognised is not permitted — see this module's docs. The point of the wider
+/// set is only to decide whether the rules apply at all; which tokens this tree
+/// *accepts* is the closed match in [`check_fences`], and it is narrower.
+fn is_rustdoc_tag(token: &str) -> bool {
+    matches!(
+        token,
+        "rust" | "ignore" | "no_run" | "should_panic" | "compile_fail" | "test_harness"
+    ) || token.starts_with("ignore-")
+        || is_edition(token)
+        || is_error_code(token)
+}
+
+/// Whether a token is a rustdoc `editionNNNN` tag.
+fn is_edition(token: &str) -> bool {
+    token
+        .strip_prefix("edition")
+        .is_some_and(|year| year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit()))
+}
+
 /// Fence discipline, and the allowance list that is the only way out of it.
 ///
-/// Four rules and one bookkeeping duty. An untagged fence is rejected because
-/// rustdoc compiles it as Rust regardless. The info string's parts are matched
-/// against a **closed** set, so a spelling nobody enumerated is a hard error
-/// rather than a novel opt-out that passes unnoticed. An `ignore`-class fence is
-/// permitted only by an [`IGNORE_ALLOWANCES`] entry — never by a comment above
-/// it. And the error-code rules are carried over from `check_fences` unchanged.
+/// Five rules and one bookkeeping duty. A Rust-class fence on the tree's index
+/// is rejected outright, because [`INDEX`] is never registered and so nothing
+/// ever compiles what is in it. An untagged fence is rejected because rustdoc
+/// compiles it as Rust regardless. The info string's tokens are matched against
+/// a **closed** set — every token, not everything after the first — so a
+/// spelling nobody enumerated is a hard error rather than a novel opt-out that
+/// passes unnoticed. An `ignore`-class fence is permitted only by an
+/// [`IGNORE_ALLOWANCES`] entry — never by a comment above it. And the error-code
+/// rules are carried over from `check_fences` unchanged.
 ///
 /// The bookkeeping is `usage`: which entry permitted which fence, recorded here
 /// so [`check_allowances`] gets its reverse sweep out of the same walk.
@@ -518,23 +694,38 @@ fn check_fences(
         if !fence.closed {
             found.push((
                 at,
-                "a fence opened here is never closed; its info string is therefore \
-                 never examined, which is an opt-out nothing reports"
+                "a fence opened here is never closed; every line below it reads as \
+                 fenced content, which is an opt-out nothing reports"
                     .to_owned(),
             ));
         }
 
         let info = fence.info.as_str();
-        let rust = info == "rust" || info.starts_with("rust,");
-        if !rust {
-            // A non-Rust tag is fine; an untagged fence is not, because rustdoc
-            // treats it as Rust and would try to compile it.
-            if info.is_empty() {
-                found.push((
-                    at,
-                    "an untagged fence is compiled as Rust; tag it `rust` or `text`".to_owned(),
-                ));
-            }
+        let tokens = info_tokens(info);
+        if !is_doctest(&tokens) {
+            // A non-Rust tag is prose, and prose is not this walk's business.
+            continue;
+        }
+
+        if page.index {
+            // The one page the harness deliberately never registers. Reported
+            // here rather than left as a documented limit, because a `rust`
+            // fence on the index is compiled by nothing and would otherwise be
+            // reported by nothing either.
+            found.push((
+                at,
+                "the index is routing, not a page; it is never registered, so its \
+                 examples are never compiled"
+                    .to_owned(),
+            ));
+            continue;
+        }
+
+        if tokens.is_empty() {
+            found.push((
+                at,
+                "an untagged fence is compiled as Rust; tag it `rust` or `text`".to_owned(),
+            ));
             continue;
         }
 
@@ -542,13 +733,14 @@ fn check_fences(
         let mut ignored = false;
         let mut compile_fail = false;
         let mut code: Option<&str> = None;
-        for part in info.split(',').skip(1) {
-            match part {
-                "no_run" | "should_panic" => {}
+        for token in &tokens {
+            match *token {
+                "rust" | "no_run" | "should_panic" => {}
                 "ignore" => ignored = true,
                 "compile_fail" => compile_fail = true,
                 other if is_error_code(other) => code = Some(other),
-                // No accepting arm. This one character is the whole of AC-002.
+                // No accepting arm. This one character is the whole of AC-002,
+                // and it now sees `ignore` wherever in the info string it sits.
                 _ => recognised = false,
             }
         }
@@ -618,10 +810,11 @@ fn check_fences(
 ///
 /// The info string is where the claim is *made*, so counting it as the prose
 /// that supports it makes the rule vacuous — it would be satisfied by the very
-/// line it is checking.
+/// line it is checking. [`fence_marker`] rather than a `starts_with`, so a
+/// tilde-delimited or indented opener is excluded on the same terms.
 fn names_outside_a_fence_marker(text: &str, code: &str) -> bool {
     text.lines()
-        .filter(|line| !line.trim_start().starts_with("```"))
+        .filter(|line| fence_marker(line).is_none())
         .any(|line| line.contains(code))
 }
 
@@ -974,6 +1167,54 @@ mod tests {
         assert!(problems.is_empty(), "got: {problems:?}");
     }
 
+    /// The exemption above is from registration only, and it is one-way. A page
+    /// in the pinned tree that no mechanism compiles is exactly what AC-005
+    /// refuses — and the index is the one page the harness never registers, so
+    /// an example on it would be compiled by nothing and reported by nothing.
+    #[test]
+    fn a_rust_class_fence_on_the_index_is_a_problem() {
+        for text in [
+            "```rust\nfn main() {}\n```\n",
+            "```\nfn main() {}\n```\n",
+            "```rust,ignore\n```\n",
+        ] {
+            let found = walk(&[page_with("README.md", text)], &[]);
+
+            assert_eq!(found.len(), 1, "`{text}` got: {found:?}");
+            assert!(
+                found[0].starts_with("docs/README.md:1 — ")
+                    && found[0].contains("never registered"),
+                "the problem must name the index and say why it cannot carry an example, \
+                 got: {}",
+                found[0]
+            );
+        }
+    }
+
+    /// Prose on the index is still prose: the rule is about what a compiler
+    /// would be handed, not about fences.
+    #[test]
+    fn a_text_fence_on_the_index_is_not_a_problem() {
+        let found = walk(&[page_with("README.md", "```text\nnot rust\n```\n")], &[]);
+
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    /// And the real index, as it stands, carries no example at all.
+    #[test]
+    fn the_real_index_carries_no_rust_fence() {
+        let index = read(INDEX);
+        let mut usage: Vec<Usage> = Vec::new();
+        let mut found = Vec::new();
+
+        check_fences(&page_with("README.md", &index), &[], &mut usage, &mut found);
+
+        assert!(
+            found.is_empty(),
+            "{INDEX} carries a fence problem: {found:?}"
+        );
+    }
+
     // ---- AC-004: a registration nobody deleted is named --------------------
 
     /// The direction that earns the check its keep. `cfg(doctest)` hides a
@@ -1321,6 +1562,118 @@ mod tests {
         }
     }
 
+    /// rustdoc splits an info string on `,`, a space and a tab, so all of these
+    /// are one block to the compiler — measured with `rustdoc --test`, which
+    /// collects each of them and reports it *ignored*. A walk asking whether the
+    /// info string *starts with* `rust` calls the first three prose and walks
+    /// past, which is an `ignore` in rustdoc's own canonical spelling opting out
+    /// of the compiler with the gate green.
+    #[test]
+    fn every_ignore_spelling_rustdoc_accepts_needs_an_allowance() {
+        for info in [
+            "ignore",
+            "rust ignore",
+            "ignore,rust",
+            "rust,ignore",
+            "ignore rust",
+            "ignore,no_run",
+        ] {
+            let text = format!("```{info}\nfn f() {{}}\n```\n");
+            let found = walk(&[page_with("append-conditions.md", &text)], &[]);
+
+            assert_eq!(found.len(), 1, "`{info}` got: {found:?}");
+            assert!(
+                found[0].starts_with("docs/append-conditions.md:1 — ")
+                    && found[0].contains("IGNORE_ALLOWANCES"),
+                "`{info}` must need an allowance, naming file and line, got: {}",
+                found[0]
+            );
+        }
+    }
+
+    /// And one allowance permits the fence whichever spelling it was written in,
+    /// because the walk compares tokens rather than the string.
+    #[test]
+    fn an_allowance_permits_an_ignore_fence_in_any_of_those_spellings() {
+        let allowances = [(
+            "docs/append-conditions.md",
+            "fn needs_a_database",
+            "the example needs a running database",
+        )];
+
+        for info in ["ignore", "rust ignore", "ignore,rust"] {
+            let text = format!("```{info}\nfn needs_a_database() {{}}\n```\n");
+            let found = walk(&[page_with("append-conditions.md", &text)], &allowances);
+
+            assert!(found.is_empty(), "`{info}` got: {found:?}");
+        }
+    }
+
+    /// `rust` is not the only tag that makes rustdoc compile a block: `no_run`,
+    /// `compile_fail` and `should_panic` do it alone, and the probe collects all
+    /// three. So the rules apply to them, which the `,zzz` half proves — a walk
+    /// that skipped them would accept every unknown token beside them too.
+    #[test]
+    fn a_rust_class_tag_without_the_rust_token_is_still_walked() {
+        for info in ["no_run", "compile_fail", "should_panic"] {
+            let clean = format!("```{info}\n```\n");
+            assert!(
+                walk(&[page_with("append-conditions.md", &clean)], &[]).is_empty(),
+                "`{info}` should be accepted"
+            );
+
+            let novel = format!("```{info},zzz\n```\n");
+            let found = walk(&[page_with("append-conditions.md", &novel)], &[]);
+
+            assert_eq!(found.len(), 1, "`{info},zzz` got: {found:?}");
+            assert!(
+                found[0].contains("unrecognised fence info string"),
+                "got: {}",
+                found[0]
+            );
+        }
+    }
+
+    /// An error code alone is a Rust block to rustdoc, so the rule that an error
+    /// code needs its `compile_fail` reaches it too.
+    #[test]
+    fn a_bare_error_code_is_a_rust_fence() {
+        let page = page_with("append-conditions.md", "```E0277\n```\n");
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("an error code on a fence that is not `compile_fail`"),
+            "got: {}",
+            found[0]
+        );
+    }
+
+    /// Recognised by rustdoc and permitted here are two different sets, and the
+    /// asymmetry is the mechanism: a fence carrying one of these *is* a doctest,
+    /// so the closed match runs over it — and refuses it, because a page pinning
+    /// its own edition is a page that stopped being checked against the
+    /// workspace's.
+    #[test]
+    fn a_rustdoc_tag_this_tree_does_not_accept_is_unrecognised() {
+        for info in [
+            "edition2024",
+            "rust,edition2021",
+            "test_harness",
+            "ignore-x86",
+        ] {
+            let page = page_with("append-conditions.md", &format!("```{info}\n```\n"));
+            let found = walk(&[page], &[]);
+
+            assert_eq!(found.len(), 1, "`{info}` got: {found:?}");
+            assert!(
+                found[0].contains(&format!("unrecognised fence info string `{info}`")),
+                "got: {}",
+                found[0]
+            );
+        }
+    }
+
     #[test]
     fn an_error_code_without_compile_fail_is_a_problem() {
         let page = page_with("append-conditions.md", "```rust,E0277\n```\n");
@@ -1533,6 +1886,82 @@ mod tests {
         );
     }
 
+    /// The other half of that rule, and the one the precedent's unconditional
+    /// step-over got wrong. Four backticks are a fence like any other: `rustdoc
+    /// --test` collects `` ````ignore `` and reports it *ignored*, and compiles
+    /// an untagged four-backtick block. Stepping over both because of their
+    /// delimiter is an opt-out with the gate green.
+    #[test]
+    fn a_four_backtick_fence_carrying_its_own_info_string_is_an_example() {
+        for (text, expected) in [
+            ("````ignore\nfn f() {}\n````\n", "IGNORE_ALLOWANCES"),
+            ("````\nfn main() {}\n````\n", "an untagged fence"),
+        ] {
+            let found = walk(&[page_with("append-conditions.md", text)], &[]);
+
+            assert_eq!(found.len(), 1, "`{text}` got: {found:?}");
+            assert!(
+                found[0].starts_with("docs/append-conditions.md:1 — ")
+                    && found[0].contains(expected),
+                "got: {}",
+                found[0]
+            );
+        }
+    }
+
+    /// A quoted block that is never terminated is reported, rather than
+    /// disabling the walk for everything below it: the precedent toggled a flag
+    /// nothing ever checked at the end, so one stray line was a page-wide
+    /// opt-out that printed nothing.
+    #[test]
+    fn a_stray_four_backtick_opener_does_not_swallow_the_rest_of_the_page() {
+        let page = page_with(
+            "append-conditions.md",
+            "````markdown\n\nquoted prose\n\n```rust,ignore\n```\n",
+        );
+
+        let found = walk(&[page], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("docs/append-conditions.md:1 — ")
+                && found[0].contains("never closed"),
+            "the unterminated opener is what to report, got: {}",
+            found[0]
+        );
+    }
+
+    /// `CommonMark` allows three spaces of indentation and rustdoc compiles what
+    /// is inside them — measured. A `strip_prefix("```")` walk lets indentation
+    /// past the untagged rule.
+    #[test]
+    fn a_fence_indented_up_to_three_spaces_is_still_a_fence() {
+        for indent in ["", " ", "  ", "   "] {
+            let text = format!("{indent}```\nfn main() {{}}\n{indent}```\n");
+            let found = walk(&[page_with("append-conditions.md", &text)], &[]);
+
+            assert_eq!(found.len(), 1, "indent `{indent}` got: {found:?}");
+            assert!(found[0].contains("an untagged fence"), "got: {}", found[0]);
+        }
+    }
+
+    /// `~~~` is the other delimiter `CommonMark` defines, and the same probe
+    /// collects `` ~~~ignore `` and reports it ignored. A backtick-only parser is
+    /// a tilde-shaped way out of every rule above.
+    #[test]
+    fn a_tilde_fence_is_a_fence() {
+        let found = walk(
+            &[page_with(
+                "append-conditions.md",
+                "~~~ignore\nfn f() {}\n~~~\n",
+            )],
+            &[],
+        );
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].contains("IGNORE_ALLOWANCES"), "got: {}", found[0]);
+    }
+
     #[test]
     fn a_problem_names_the_page_and_the_fence_line() {
         let page = page_with("adapters/sqlite.md", "one\ntwo\nthree\n```\n```\n");
@@ -1615,6 +2044,32 @@ mod tests {
             assert!(
                 at < docs_end && at < first_check,
                 "`{sentence}` must be in the module docs, before the first check"
+            );
+        }
+    }
+
+    /// The claim the docs make has to be the coverage the walk has. They say how
+    /// an info string is read, that recognised and permitted are two sets, and
+    /// which hole the walk still leaves — the indented block rustdoc compiles
+    /// and this walk cannot see.
+    #[test]
+    fn the_module_docs_state_how_a_fence_is_read() {
+        let source = production_source();
+        let first_check = source
+            .find("fn check_fences")
+            .unwrap_or_else(|| panic!("this module declares no fence walk"));
+
+        for sentence in [
+            "split on `,`, a space",
+            "tag rustdoc itself defines",
+            "indented by four spaces or more",
+        ] {
+            let at = source
+                .find(sentence)
+                .unwrap_or_else(|| panic!("the module docs must state `{sentence}`"));
+            assert!(
+                at < first_check,
+                "`{sentence}` must precede the first check"
             );
         }
     }

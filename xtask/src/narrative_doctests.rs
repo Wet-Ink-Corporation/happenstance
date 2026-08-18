@@ -181,14 +181,19 @@ mod tests {
 
     use super::*;
     use crate::REQUIRED;
+    // The set is `lint_narrative`'s, pinned there against `_design.md` D2 by a
+    // test that names which token moved. This module's own copy is deleted
+    // rather than kept in step: a second spelling of a set that may only change
+    // by a new design record can satisfy the pin and drift anyway.
+    use crate::lint_narrative::HIDDEN_MARKERS;
     use crate::spec_trace::workspace_root;
 
     /// The fixture page this story authors, by path literal.
     ///
     /// A literal rather than a pinned constant on purpose: the tree-wide
-    /// `TREE` / `HARNESS` / `HIDDEN_MARKERS` constants and the sweep that uses
-    /// them are `narrative-checker-mounted-with-pinned-path`'s, and two
-    /// versions of one check in the tree is worse than one narrow check here.
+    /// `TREE` / `HARNESS` constants and the sweep that uses them are
+    /// `narrative-checker-mounted-with-pinned-path`'s, and two versions of one
+    /// check in the tree is worse than one narrow check here.
     const FIXTURE_PAGE: &str = "docs/append-conditions.md";
 
     /// The index the fixture page is routed from.
@@ -196,18 +201,6 @@ mod tests {
 
     /// The two new modules AC-008 holds to stating their limits first.
     const NEW_MODULES: &[&str] = &["xtask/src/narrative.rs", "xtask/src/narrative_doctests.rs"];
-
-    /// Every spelling of a control a reader would have to act on to read what is
-    /// behind it. `_design.md` D2/DT-7 forbids all of them under the tree.
-    const HIDDEN_MARKERS: &[&str] = &[
-        "<details",
-        "<summary",
-        "{{#tabs",
-        "{{#tab ",
-        "{{#endtabs",
-        "```admonish",
-        "<!-- tab",
-    ];
 
     /// The repo-relative path budget: 48 columns of terminal, less the
     /// 16-character `xtask\src\../../` prefix rustdoc puts in front of a
