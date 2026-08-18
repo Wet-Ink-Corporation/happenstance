@@ -40,7 +40,7 @@ go away.
 
 | SHA | Subject |
 | --- | ------- |
-| `STORY-2-SHA` | `feat(page-need-discipline): Router, precedence and announcement` |
+| `9dacc7d` | `feat(page-need-discipline): Router, precedence and announcement` |
 
 ## Changes
 

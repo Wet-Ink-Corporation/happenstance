@@ -38,7 +38,7 @@ whole tree rather than one atom. Each still fails if the words go away.
 
 | SHA | Subject |
 | --- | ------- |
-| `STORY-3-SHA` | `feat(page-need-discipline): Fold-line rule` |
+| `dec82c7` | `feat(page-need-discipline): Fold-line rule` |
 
 ## Changes
 

@@ -39,7 +39,7 @@ actually contiguous. Both still fail if the meaning goes away.
 
 | SHA | Subject |
 | --- | ------- |
-| `STORY-4-SHA` | `feat(page-need-discipline): Reviewer and citation procedures` |
+| `a349e04` | `feat(page-need-discipline): Reviewer and citation procedures` |
 
 ## Changes
 

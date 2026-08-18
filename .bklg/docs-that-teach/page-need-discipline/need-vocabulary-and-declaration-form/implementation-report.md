@@ -49,7 +49,7 @@ assertion.
 
 | SHA | Subject |
 | --- | ------- |
-| `STORY-1-SHA` | `feat(page-need-discipline): Need vocabulary and declaration form` |
+| `55b987b` | `feat(page-need-discipline): Need vocabulary and declaration form` |
 
 ## Changes
 
