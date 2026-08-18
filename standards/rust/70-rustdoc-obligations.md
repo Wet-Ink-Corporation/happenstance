@@ -145,7 +145,7 @@ for.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:71 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:77 (It is not linked because)` ·
-`xtask/src/main.rs:562 (no default features)` · `Cargo.toml:134 (broken_intra_doc_links)`
+`xtask/src/main.rs:589 (no default features)` · `Cargo.toml:134 (broken_intra_doc_links)`
 
 ---
 

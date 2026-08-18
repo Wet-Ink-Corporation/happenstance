@@ -47,13 +47,47 @@
 //! blockquotes, or one that requires front matter, invalidates this decision and
 //! **re-opens DR-05** — so a hosting choice that violates the assumption is a
 //! visible re-opening rather than a silent contradiction.
+//!
+//! # Three divergences from `lint_constitution`, stated rather than inherited
+//!
+//! This module copies `xtask/src/lint_constitution.rs`'s shape deliberately and
+//! shares no code with it. Three of its rules are *different* here, and each
+//! difference is a decision rather than an oversight.
+//!
+//! 1. **The fence rule inverts, and there is no `check_harness` equivalent.**
+//!    `check_fences` rejects an *untagged* fence because `standards/rust/` **is**
+//!    registered in the doctest harness, bidirectionally checked by
+//!    `lint_constitution::check_harness` (`xtask/src/lint_constitution.rs:423-458`).
+//!    This tree is deliberately **not** registered with any harness, so a
+//!    `rust`-tagged fence here is a Rust claim nothing in the workspace compiles.
+//!    Both `rust`-tagged and untagged fences are rejected; `text` and `markdown`
+//!    are permitted. **Nothing here corresponds to `check_harness`**, and the
+//!    absence is stated so the next reader does not see a checker that looks
+//!    like `lint_constitution` with a check missing.
+//! 2. **The generated region carries more weight here.** For `standards/rust/`
+//!    the router's index is a convenience over a corpus the compiler also reads.
+//!    Here it is the *only* mechanism preventing the router's index from
+//!    disagreeing with the corpus it indexes, so a `--write` diff on this tree
+//!    deserves more of a reviewer's attention than the same diff next door.
+//! 3. **No shared abstraction with `lint_constitution`.** Neither
+//!    `xtask/src/lint_constitution.rs` nor `xtask/src/constitution.rs` is
+//!    refactored to share this shape (RS-81-3,
+//!    `standards/rust/81-checks-that-cannot-be-types.md:209`). Copying the shape
+//!    is cheap; one error message answering two trees' questions is not.
+//!
+//! One agreement check here is deliberately **not** `--write`-repairable:
+//! `NEEDS` against `standards/pages/10-the-need-set.md`. That atom carries a
+//! third column — *success for the reader* — which is prose no `const` holds, so
+//! a generator would have to invent it.
 
-#![allow(
-    dead_code,
-    reason = "the membership accessor, `Need::job` and the two path pins are \
-              consumed by page-need-checker-mounted-in-the-gate, which deletes \
-              this line in the change that mounts the checker"
-)]
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result, bail};
+
+use crate::lint_narrative;
+use crate::spec_trace::workspace_root;
 
 /// One need a governed page may declare.
 ///
@@ -141,6 +175,1012 @@ fn need(token: &str) -> Option<&'static Need> {
     NEEDS.iter().find(|candidate| candidate.token == token)
 }
 
+/// The atom the need set is argued in, and the one [`NEEDS`] is checked against.
+const NEED_SET_ATOM: &str = "10-the-need-set.md";
+
+/// The gate step's name, which is also the claim it makes.
+///
+/// Named once, here, for the reason [`crate::lint_narrative::STEP`] is: `REQUIRED`
+/// and `lint_steps()` both depend on it by value and `steps_named` panics on a
+/// mismatch (`xtask/src/main.rs:816-826`). The *value* is pinned by the
+/// signed-off design (`_design.md`, `## Surfaces`, sign-off condition 2) and
+/// changing it is a design amendment, not an edit.
+pub(crate) const STEP: &str = "every page declares one need";
+
+/// The most rules one rule atom may carry.
+///
+/// Deliberately the same number as `lint_constitution::MAX_RULES_PER_ATOM`
+/// (`xtask/src/lint_constitution.rs:88`) and deliberately a second copy: RS-81-3
+/// scopes a scanner to the tree whose behaviour it constrains, and a shared
+/// constant would make one failure message answer two trees' questions. Two
+/// trees teaching two different numbers for the same idea would be its own
+/// defect, which is why the *value* agrees.
+const MAX_RULES_PER_ATOM: usize = 6;
+
+/// The largest a rule atom may be, in bytes.
+///
+/// Bytes rather than lines, for `lint_constitution::MAX_ATOM_BYTES`'s reason
+/// (`:95`): a line ceiling is satisfied by writing longer lines, which is worse
+/// for the token budget the cap protects.
+const MAX_ATOM_BYTES: usize = 16_384;
+
+/// The five section markers a rule carries, in the order they must appear.
+const SECTIONS: [&str; 5] = [
+    "**Why.**",
+    "**Do**",
+    "**Not**",
+    "**Rejects.**",
+    "**Evidence.**",
+];
+
+/// Whether to check the router's generated region or rewrite it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Fail when the region disagrees with the rule atoms.
+    Check,
+    /// Rewrite the region from the rule atoms.
+    Write,
+}
+
+/// One problem, before it is a line.
+///
+/// A small struct rather than a formatted `String` at the push site, so the
+/// sort and the composition contract live in one place each. Formatting at the
+/// push site spreads `_design.md`'s `## Composition` S4 across a dozen call
+/// sites and makes the density budget unmeasurable.
+///
+/// The derived `Ord` **is** the sort the design specifies — path, then line,
+/// then message — and `None` ordering before `Some(_)` is what puts a
+/// whole-file problem above the same file's line problems. The message is the
+/// tie-break so that two problems at one location never reshuffle between runs
+/// while a reader is working down the list.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Problem {
+    /// Repository-relative, `/`-separated.
+    path: String,
+    /// 1-based line, when there is an offending line.
+    ///
+    /// `Option`, not a faked line 0: a page with no declaration has no line to
+    /// point at, and the design's own S4 sample prints that problem as
+    /// `{path} — …`.
+    line: Option<usize>,
+    /// What is wrong, then why it matters or what to do.
+    message: String,
+}
+
+impl Problem {
+    /// A problem at one line of one file.
+    fn at(path: &str, line: usize, message: String) -> Self {
+        Self {
+            path: path.to_owned(),
+            line: Some(line),
+            message,
+        }
+    }
+
+    /// A problem about a whole file, or a whole directory.
+    fn whole(path: &str, message: String) -> Self {
+        Self {
+            path: path.to_owned(),
+            line: None,
+            message,
+        }
+    }
+
+    /// The one line this problem prints as.
+    ///
+    /// `{path}:{line} — {what is wrong}; {why it matters, or what to do}`, with
+    /// the location first and the repair inside the line rather than in a
+    /// footer (`_design.md`, `## Hierarchy` S4, `## Anti-patterns` 12).
+    fn render(&self) -> String {
+        match self.line {
+            Some(line) => format!("{}:{line} — {}", self.path, self.message),
+            None => format!("{} — {}", self.path, self.message),
+        }
+    }
+}
+
+/// One rule atom, parsed far enough to check it.
+#[derive(Debug)]
+struct Atom {
+    /// File name, e.g. `10-the-need-set.md`.
+    file: String,
+    /// The two-digit band, e.g. `10`.
+    band: String,
+    /// The whole file.
+    text: String,
+    /// The first `Load when:` source line, marker stripped.
+    load_when: String,
+    /// Every `## RP-` rule, as `(id, body)`.
+    rules: Vec<(String, String)>,
+}
+
+impl Atom {
+    /// Repository-relative path, which is what a problem line prints.
+    fn path(&self) -> String {
+        format!("{RULE_DIR}/{}", self.file)
+    }
+}
+
+/// One `> **Answers:**` line, as the parser met it.
+///
+/// A near miss is *not* degraded to "no declaration": an unbackticked token or a
+/// clause that does not end in `?` is reported at its own line as a malformed
+/// declaration, because sending the author to the wrong repair is worse than
+/// sending them to none.
+#[derive(Debug)]
+struct Declaration {
+    /// 1-based line of the `> **Answers:**` line itself.
+    line: usize,
+    /// The token between backticks, when the line matches the settled grammar.
+    token: Option<String>,
+    /// Which part of the grammar failed, when it does not.
+    malformed: Option<String>,
+}
+
+/// One governed page under the pinned pages tree.
+#[derive(Debug)]
+struct Page {
+    /// Repository-relative, `/`-separated: `docs/append-conditions.md`.
+    path: String,
+    /// The page's directory, repository-relative: `docs`, or `docs/guide`.
+    dir: String,
+    /// Every declaration on it, in source order.
+    declarations: Vec<Declaration>,
+}
+
+/// Runs every check, reporting all problems rather than the first.
+///
+/// # Errors
+///
+/// Fails when either pinned tree cannot be read, when either is empty, or when
+/// any check finds a problem.
+pub(crate) fn run(mode: Mode) -> Result<()> {
+    let root = workspace_root()?;
+
+    let atoms = rule_atoms(&root)?;
+    guard_rules_not_vacuous(&atoms)?;
+    let pages = governed_pages(&root)?;
+    guard_pages_not_vacuous(&pages)?;
+
+    let mut problems: Vec<Problem> = Vec::new();
+
+    check_router(&root, &atoms, mode, &mut problems)?;
+    check_need_set(&atoms, &mut problems);
+    for atom in &atoms {
+        check_atom_shape(atom, &mut problems);
+        check_atom_fences(atom, &mut problems);
+    }
+    check_declarations(&pages, &mut problems);
+    check_orientation_ceiling(&pages, &mut problems);
+
+    report(&pages, &atoms, problems)
+}
+
+/// Prints the run's outcome, and is the only place that decides how.
+///
+/// # Errors
+///
+/// When there is at least one problem.
+fn report(pages: &[Page], atoms: &[Atom], mut problems: Vec<Problem>) -> Result<()> {
+    if problems.is_empty() {
+        let rules: usize = atoms.iter().map(|atom| atom.rules.len()).sum();
+        println!("  {} pages, {rules} rules, all consistent", pages.len());
+        return Ok(());
+    }
+
+    problems.sort();
+    for problem in &problems {
+        eprintln!("  {}", problem.render());
+    }
+    bail!(
+        "{} problem(s) in {RULE_DIR} + {}",
+        problems.len(),
+        lint_narrative::TREE
+    )
+}
+
+/// Reads and parses every rule atom under [`RULE_DIR`].
+///
+/// Top-level `.md` files only, `README.md` excluded — the router is not an atom,
+/// and `examples/` holds the deliberately-broken worked example band 40 links,
+/// which must stay permanently breakable without making a gate red.
+///
+/// # Errors
+///
+/// When [`RULE_DIR`] cannot be read, naming the path the gate expected rather
+/// than reporting an empty tree; or when an atom is not named `NN-slug.md`.
+fn rule_atoms(root: &Path) -> Result<Vec<Atom>> {
+    let dir = root.join(RULE_DIR);
+    let entries = fs::read_dir(&dir).with_context(|| format!("reading {RULE_DIR}"))?;
+
+    let mut files: Vec<String> = Vec::new();
+    for entry in entries {
+        let entry = entry.with_context(|| format!("reading an entry of {RULE_DIR}"))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if is_markdown(&name) && !name.eq_ignore_ascii_case("README.md") {
+            files.push(name);
+        }
+    }
+    files.sort();
+
+    let mut out = Vec::new();
+    for file in files {
+        let text = fs::read_to_string(dir.join(&file))
+            .with_context(|| format!("reading {RULE_DIR}/{file}"))?;
+        let stem = file.strip_suffix(".md").unwrap_or(&file);
+        let Some((band, _)) = stem.split_once('-') else {
+            bail!("{RULE_DIR}/{file} — a rule atom is named `NN-slug.md`; this has no band");
+        };
+        if band.len() != 2 || !band.chars().all(|c| c.is_ascii_digit()) {
+            bail!("{RULE_DIR}/{file} — the band `{band}` is not two digits");
+        }
+        out.push(Atom {
+            band: band.to_owned(),
+            load_when: load_when(&text),
+            rules: rules(&text),
+            file,
+            text,
+        });
+    }
+    Ok(out)
+}
+
+/// Refuses a rules tree with no rule atoms in it.
+///
+/// # Errors
+///
+/// When [`RULE_DIR`] holds no rule atom.
+fn guard_rules_not_vacuous(atoms: &[Atom]) -> Result<()> {
+    if atoms.is_empty() {
+        bail!("{RULE_DIR} holds no rule atoms, so every check below is vacuous");
+    }
+    Ok(())
+}
+
+/// Every governed page under the pinned pages tree, in path order.
+///
+/// The tree is [`crate::lint_narrative::TREE`] and **no second constant names
+/// it**: moving the tree is one edit, and a `PAGE_DIR` declared here would be
+/// the *three lists that must agree* defect `xtask/src/spec_trace.rs:122-160`
+/// records, with the second copy drifting silently the day the tree moves.
+///
+/// The tree's index is not a page. That is not this module's judgement: the
+/// pinned tree's own checker states it — `xtask/src/lint_narrative.rs:232-241`
+/// ("the only file under `TREE` that is not a page") and `:486-491` ("a tree
+/// holding only its own routing table holds nothing to check").
+///
+/// # Errors
+///
+/// When the tree, or any directory or page under it, cannot be read — naming
+/// *that* path, because a file the checker cannot read is not a file with no
+/// problems.
+fn governed_pages(root: &Path) -> Result<Vec<Page>> {
+    let mut out = Vec::new();
+    collect_pages(root, "", &mut out)?;
+    out.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(out)
+}
+
+/// Every markdown page at or below `rel_dir`, which is tree-relative.
+fn collect_pages(root: &Path, rel_dir: &str, out: &mut Vec<Page>) -> Result<()> {
+    let tree = lint_narrative::TREE;
+    let here = if rel_dir.is_empty() {
+        tree.to_owned()
+    } else {
+        format!("{tree}/{rel_dir}")
+    };
+
+    let entries = fs::read_dir(root.join(&here)).with_context(|| format!("reading {here}"))?;
+
+    let mut found: Vec<(String, bool)> = Vec::new();
+    for entry in entries {
+        let entry = entry.with_context(|| format!("reading an entry of {here}"))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_dir = entry
+            .file_type()
+            .with_context(|| format!("reading the type of {here}/{name}"))?
+            .is_dir();
+        found.push((name, is_dir));
+    }
+    found.sort();
+
+    for (name, is_dir) in found {
+        let rel = if rel_dir.is_empty() {
+            name.clone()
+        } else {
+            format!("{rel_dir}/{name}")
+        };
+        if is_dir {
+            collect_pages(root, &rel, out)?;
+        } else if is_markdown(&name) && !name.eq_ignore_ascii_case("README.md") {
+            let path = format!("{tree}/{rel}");
+            let text =
+                fs::read_to_string(root.join(&path)).with_context(|| format!("reading {path}"))?;
+            out.push(Page {
+                dir: here.clone(),
+                declarations: declarations(&text),
+                path,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a pages tree with no governed page in it.
+///
+/// # Errors
+///
+/// When the pinned pages tree holds no page.
+fn guard_pages_not_vacuous(pages: &[Page]) -> Result<()> {
+    if pages.is_empty() {
+        bail!(
+            "{} holds no pages, so every check below is vacuous",
+            lint_narrative::TREE
+        );
+    }
+    Ok(())
+}
+
+/// Whether a file name is a markdown page, however it is cased.
+fn is_markdown(name: &str) -> bool {
+    name.len() > ".md".len()
+        && name
+            .get(name.len() - ".md".len()..)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(".md"))
+}
+
+/// Every `> **Answers:**` line in one page's text, with its 1-based line.
+///
+/// The one parser. The counting check, the membership check, the `orientation`
+/// ceiling and every test take their answer from here, because two parsers that
+/// agree today drift tomorrow.
+///
+/// Prose that merely *mentions* a need word is not a declaration: only a
+/// blockquote line whose content opens `**Answers:**` is one. Lines inside a
+/// fenced block are skipped, so a page that *teaches* the declaration form —
+/// band 00 does exactly this — is not read as declaring one. That is a stated
+/// blind spot rather than a silent one: a second declaration hidden inside a
+/// fence is invisible here, and the instrument for it is band 40's non-author
+/// walk.
+fn declarations(text: &str) -> Vec<Declaration> {
+    let mut out = Vec::new();
+    let mut fenced = false;
+    for (index, line) in text.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        let Some(rest) = line.trim_start().strip_prefix('>') else {
+            continue;
+        };
+        let Some(after) = rest.trim_start().strip_prefix("**Answers:**") else {
+            continue;
+        };
+        out.push(declaration(index + 1, after));
+    }
+    out
+}
+
+/// One `> **Answers:**` line's remainder, read against the settled grammar.
+///
+/// A backticked token, ` — `, and a clause ending `?`. Each half that fails
+/// names *itself*, because "malformed" without a part is the same non-answer as
+/// silently reporting the line as absent.
+fn declaration(line: usize, after: &str) -> Declaration {
+    let malformed = |why: &str| Declaration {
+        line,
+        token: None,
+        malformed: Some(why.to_owned()),
+    };
+
+    let Some(rest) = after.trim_start().strip_prefix('`') else {
+        return malformed("the token is not in backticks");
+    };
+    let Some((token, rest)) = rest.split_once('`') else {
+        return malformed("the token is not in backticks");
+    };
+    if token.is_empty() {
+        return malformed("the token is empty");
+    }
+    let Some(question) = rest.strip_prefix(" — ") else {
+        return malformed("no ` — ` between the token and the question");
+    };
+    if !question.trim_end().ends_with('?') {
+        return malformed("the question does not end in `?`");
+    }
+    Declaration {
+        line,
+        token: Some(token.to_owned()),
+        malformed: None,
+    }
+}
+
+/// The declared tokens, in the shape a problem line names them.
+fn listed(found: &[Declaration]) -> String {
+    let names: Vec<String> = found
+        .iter()
+        .map(|declaration| {
+            declaration.token.as_ref().map_or_else(
+                || "a malformed line".to_owned(),
+                |token| format!("`{token}`"),
+            )
+        })
+        .collect();
+    match names.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// The enumerated set, as a problem line spells it.
+fn enumerated() -> String {
+    NEEDS
+        .iter()
+        .map(|member| member.token)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// AC-004 — zero, two, malformed, and unenumerated declarations.
+fn check_declarations(pages: &[Page], problems: &mut Vec<Problem>) {
+    for page in pages {
+        if page.declarations.is_empty() {
+            problems.push(Problem::whole(
+                &page.path,
+                format!("no `> **Answers:**` line; see {RULE_DIR}/00-one-need.md"),
+            ));
+            continue;
+        }
+
+        // At the *second* declaration's line: the first one is not the mistake,
+        // and a page that strains to be two things is split rather than granted
+        // a fifth token.
+        if let Some(second) = page.declarations.get(1) {
+            problems.push(Problem::at(
+                &page.path,
+                second.line,
+                format!(
+                    "declares {}; a page answers one need",
+                    listed(&page.declarations)
+                ),
+            ));
+        }
+
+        for found in &page.declarations {
+            if let Some(why) = &found.malformed {
+                problems.push(Problem::at(
+                    &page.path,
+                    found.line,
+                    format!(
+                        "malformed `> **Answers:**` line: {why}; see {RULE_DIR}/00-one-need.md"
+                    ),
+                ));
+                continue;
+            }
+            if let Some(token) = &found.token
+                && need(token).is_none()
+            {
+                problems.push(Problem::at(
+                    &page.path,
+                    found.line,
+                    format!(
+                        "`{token}` is not a need: {}; see {RULE_DIR}/{NEED_SET_ATOM}",
+                        enumerated()
+                    ),
+                ));
+            }
+        }
+    }
+}
+
+/// RP-10-3 — at most one `orientation` page per directory level.
+///
+/// The ceiling that stops the one need this set *added* from becoming the sink
+/// the taxonomy it started from would have made it.
+fn check_orientation_ceiling(pages: &[Page], problems: &mut Vec<Problem>) {
+    let mut by_directory: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for page in pages {
+        for found in &page.declarations {
+            if found.token.as_deref() == Some("orientation") {
+                by_directory
+                    .entry(page.dir.as_str())
+                    .or_default()
+                    .push(format!("{}:{}", page.path, found.line));
+            }
+        }
+    }
+
+    for (directory, offenders) in by_directory {
+        if offenders.len() > 1 {
+            problems.push(Problem::whole(
+                directory,
+                format!(
+                    "{} `orientation` pages at one directory level ({}); RP-10-3 allows one",
+                    offenders.len(),
+                    offenders.join(", ")
+                ),
+            ));
+        }
+    }
+}
+
+/// The rule atom's own shape: head, sections, and the two ceilings.
+fn check_atom_shape(atom: &Atom, problems: &mut Vec<Problem>) {
+    let path = atom.path();
+
+    if !atom.text.starts_with(&format!("# {} — ", atom.band)) {
+        problems.push(Problem::at(
+            &path,
+            1,
+            format!("the title must read `# {} — <title>`", atom.band),
+        ));
+    }
+    if atom.load_when.is_empty() {
+        problems.push(Problem::whole(
+            &path,
+            "no `> **Load when:**` line; it is the router's index source".to_owned(),
+        ));
+    }
+    if !atom.text.contains("**See also:**") {
+        problems.push(Problem::whole(
+            &path,
+            "no `> **See also:**` line; a rule nobody can leave is a rule nobody re-enters"
+                .to_owned(),
+        ));
+    }
+    if atom.rules.is_empty() {
+        problems.push(Problem::whole(
+            &path,
+            "carries no `## RP-` rule; an atom with no rule states nothing".to_owned(),
+        ));
+    }
+    if atom.rules.len() > MAX_RULES_PER_ATOM {
+        problems.push(Problem::whole(
+            &path,
+            format!(
+                "{} rules, and the ceiling is {MAX_RULES_PER_ATOM}; split the atom",
+                atom.rules.len()
+            ),
+        ));
+    }
+    if atom.text.len() > MAX_ATOM_BYTES {
+        problems.push(Problem::whole(
+            &path,
+            format!(
+                "{} bytes, and the ceiling is {MAX_ATOM_BYTES}; an agent loading this pays \
+                 for all of it",
+                atom.text.len()
+            ),
+        ));
+    }
+
+    for (id, body) in &atom.rules {
+        let line = rule_line(&atom.text, id);
+        let mut previous = 0;
+        for marker in SECTIONS {
+            let Some(at) = body.lines().position(|line| line.starts_with(marker)) else {
+                problems.push(Problem::at(
+                    &path,
+                    line,
+                    format!("{id} has no `{marker}` section; a rule that names no wrong page is decorative"),
+                ));
+                continue;
+            };
+            if at < previous {
+                problems.push(Problem::at(
+                    &path,
+                    line,
+                    format!("{id} reaches `{marker}` out of order; the five sections run Why. · Do · Not · Rejects. · Evidence."),
+                ));
+            }
+            previous = at;
+        }
+    }
+}
+
+/// Fences: `rust`-tagged and untagged are both rejected, with the reason.
+fn check_atom_fences(atom: &Atom, problems: &mut Vec<Problem>) {
+    let path = atom.path();
+    for (line, why) in fence_problems(&atom.text) {
+        problems.push(Problem::at(&path, line, why));
+    }
+}
+
+/// The router's links resolve, and its `## Index` agrees with the atoms.
+///
+/// # Errors
+///
+/// When the router cannot be read, or cannot be rewritten under [`Mode::Write`].
+fn check_router(
+    root: &Path,
+    atoms: &[Atom],
+    mode: Mode,
+    problems: &mut Vec<Problem>,
+) -> Result<()> {
+    let path = root.join(ROUTER);
+    let router = fs::read_to_string(&path).with_context(|| format!("reading {ROUTER}"))?;
+
+    // Deliberately a link check and not a mention count: a markdown link spells
+    // its target twice, so counting mentions reports every correctly-linked atom
+    // as a duplicate — the mistake the constitution's own check made first
+    // (`xtask/src/lint_constitution.rs:339-343`).
+    for (index, line) in router.lines().enumerate() {
+        for target in markdown_link_targets(line) {
+            if !is_markdown(&target) {
+                continue;
+            }
+            if !root.join(RULE_DIR).join(&target).exists() {
+                problems.push(Problem::at(
+                    ROUTER,
+                    index + 1,
+                    format!("link `{target}` resolves to no file"),
+                ));
+            }
+        }
+    }
+
+    let generated = generated_index(atoms);
+    match region(&router) {
+        None => problems.push(Problem::whole(
+            ROUTER,
+            "no `<!-- BEGIN GENERATED -->` / `<!-- END GENERATED -->` region; the `## Index` \
+             is generated and cannot be checked without it"
+                .to_owned(),
+        )),
+        Some((start, end)) => {
+            let current: Vec<&str> = router.lines().collect();
+            if current[start..end].join("\n").trim() != generated.trim() {
+                if mode == Mode::Write {
+                    let mut rebuilt: Vec<String> =
+                        current[..start].iter().map(|l| (*l).to_owned()).collect();
+                    rebuilt.push(generated);
+                    rebuilt.extend(current[end..].iter().map(|l| (*l).to_owned()));
+                    fs::write(&path, rebuilt.join("\n") + "\n")
+                        .with_context(|| format!("writing {ROUTER}"))?;
+                    println!("  rewrote {ROUTER}'s generated `## Index`");
+                } else {
+                    problems.push(Problem::whole(
+                        ROUTER,
+                        "the generated `## Index` disagrees with the rule atoms; run \
+                         `cargo xtask lint-pages --write`"
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// What the router's `## Index` region must contain.
+///
+/// Byte for byte `lint_constitution::generated_region`'s format
+/// (`xtask/src/lint_constitution.rs:400-420`) — the shape
+/// `router-precedence-and-announcement` committed the region in, as a forward
+/// contract on this generator: the first `--write` against that router must
+/// produce no diff.
+fn generated_index(atoms: &[Atom]) -> String {
+    let mut out = vec![
+        "| Atom | Load when | Rules |".to_owned(),
+        "|---|---|---|".to_owned(),
+    ];
+    for atom in atoms {
+        let ids: Vec<&str> = atom.rules.iter().map(|(id, _)| id.as_str()).collect();
+        out.push(format!(
+            "| [`{}`]({}) | {} | {} |",
+            atom.file,
+            atom.file,
+            if atom.load_when.is_empty() {
+                "—".to_owned()
+            } else {
+                atom.load_when.replace('|', "\\|")
+            },
+            ids.join(", ")
+        ));
+    }
+    out.join("\n")
+}
+
+/// The line range strictly between the generated-region markers.
+fn region(router: &str) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = router.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| line.trim() == "<!-- BEGIN GENERATED -->")?;
+    let end = lines
+        .iter()
+        .position(|line| line.trim() == "<!-- END GENERATED -->")?;
+    (start < end).then_some((start + 1, end))
+}
+
+/// AC-008 — [`NEEDS`] and band 10's token table cannot disagree in silence.
+///
+/// Containment, exclusion, and the job cell — the two fields [`Need`] carries,
+/// each with the machine that reads it that band 10 claims exists. The failure
+/// names **which token moved** (RS-81-5,
+/// `standards/rust/81-checks-that-cannot-be-types.md:335`) and cites both paths.
+///
+/// Deliberately **not** `--write`-repairable, and the message says so: the atom
+/// carries a third column — *success for the reader* — that is prose no `const`
+/// holds, so a generator would have to invent it.
+///
+/// The exclusion half is scoped to the token *table*, not to the whole atom.
+/// Band 10 argues at length about `reference` in its prose, and an atom that may
+/// not name the token it subtracted cannot state why it subtracted it.
+fn check_need_set(atoms: &[Atom], problems: &mut Vec<Problem>) {
+    let Some(atom) = atoms.iter().find(|atom| atom.file == NEED_SET_ATOM) else {
+        problems.push(Problem::whole(
+            RULE_DIR,
+            format!("{NEED_SET_ATOM} is missing, so `NEEDS` is checked against nothing"),
+        ));
+        return;
+    };
+
+    let path = atom.path();
+    let rows = need_table_rows(&atom.text);
+    let two_part = "the const and the table move in one commit, and this one is not \
+                    `--write`-repairable";
+
+    for member in NEEDS {
+        match rows.iter().find(|(token, _)| token == member.token) {
+            None => problems.push(Problem::whole(
+                &path,
+                format!(
+                    "`{}` is in `NEEDS` (xtask/src/lint_pages.rs) and not in this table; \
+                     {two_part}",
+                    member.token
+                ),
+            )),
+            Some((_, job)) if job != member.job => problems.push(Problem::whole(
+                &path,
+                format!(
+                    "`{}`'s job cell disagrees with `NEEDS` (xtask/src/lint_pages.rs); \
+                     {two_part}",
+                    member.token
+                ),
+            )),
+            Some(_) => {}
+        }
+    }
+
+    for (token, _) in &rows {
+        if need(token).is_none() {
+            problems.push(Problem::whole(
+                &path,
+                format!(
+                    "`{token}` is in this table and not in `NEEDS` (xtask/src/lint_pages.rs); \
+                     {two_part}"
+                ),
+            ));
+        }
+    }
+}
+
+/// The `Load when:` triggers of an atom, or the empty string.
+///
+/// Mirrors `lint_constitution::load_when` (`xtask/src/lint_constitution.rs:247-257`)
+/// deliberately, including its limit: only the **first** source line of the
+/// block is read, and a continuation on the next `>` line is silently dropped.
+/// The router's `## The shape of a rule` states the one-source-line constraint
+/// precisely because this is what builds the index cell.
+fn load_when(text: &str) -> String {
+    for line in text.lines() {
+        let trimmed = line.trim_start_matches(['>', ' ']);
+        if let Some(rest) = trimmed.strip_prefix("**Load when:**") {
+            return rest.trim().to_owned();
+        }
+    }
+    String::new()
+}
+
+/// Every `## RP-` rule in an atom, as `(id, body)`.
+///
+/// Split at the next line beginning `## `, which is how
+/// `lint_constitution::rules` splits and why a `### ` sub-heading stays inside
+/// the rule it belongs to.
+fn rules(text: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        let Some(rest) = line.strip_prefix("## RP-") else {
+            continue;
+        };
+        let id: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '-')
+            .collect();
+        let end = lines
+            .iter()
+            .skip(index + 1)
+            .position(|l| l.starts_with("## "))
+            .map_or(lines.len(), |offset| index + 1 + offset);
+        out.push((
+            format!("RP-{}", id.trim_end_matches('-')),
+            lines[index..end].join("\n"),
+        ));
+    }
+    out
+}
+
+/// The 1-based line of the heading that opens `id`, or 1.
+fn rule_line(text: &str, id: &str) -> usize {
+    text.lines()
+        .position(|line| line.starts_with(&format!("## {id}.")))
+        .map_or(1, |index| index + 1)
+}
+
+/// Every `](target)` on one line, target only.
+///
+/// A markdown link spells its target twice, which is why this reads the
+/// parenthesised half rather than counting mentions — the mistake the
+/// constitution's own link check made first
+/// (`xtask/src/lint_constitution.rs:339-343`).
+fn markdown_link_targets(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(at) = rest.find("](") {
+        rest = &rest[at + 2..];
+        if let Some(close) = rest.find(')') {
+            out.push(rest[..close].split('#').next().unwrap_or("").to_owned());
+            rest = &rest[close + 1..];
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// The rows of the first markdown table whose header line is `header`.
+fn table_rows(text: &str, header: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        if line.starts_with(header) {
+            inside = true;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if !line.starts_with('|') {
+            break;
+        }
+        if line.starts_with("| ---") || line.starts_with("|---") {
+            continue;
+        }
+        out.push(line.to_owned());
+    }
+    out
+}
+
+/// Band 10's need table, as `(token, the page's job)` — its first two columns.
+///
+/// The third column, *success for the reader*, is read by nothing on purpose:
+/// it is the prose that makes this agreement check un-generatable, which is
+/// exactly why it is not a field of [`Need`].
+fn need_table_rows(text: &str) -> Vec<(String, String)> {
+    table_rows(text, "| Token |")
+        .iter()
+        .filter_map(|row| {
+            let token = cell(row, 0)?;
+            let token = token.strip_prefix('`')?.strip_suffix('`')?.to_owned();
+            Some((token, cell(row, 1).unwrap_or_default()))
+        })
+        .collect()
+}
+
+/// One cell of a markdown table row, zero-indexed, trimmed.
+fn cell(row: &str, index: usize) -> Option<String> {
+    row.trim_start_matches('|')
+        .split('|')
+        .nth(index)
+        .map(|cell| cell.trim().to_owned())
+}
+
+/// One fenced block, as a walk over the file meets it.
+struct Fence {
+    /// The 1-based line of the **opening** marker, so a failure message pastes
+    /// into an editor.
+    line: usize,
+    /// The opener's info string, trimmed. Empty means an untagged fence.
+    info: String,
+    /// Whether a closing marker was found before the end of the file.
+    closed: bool,
+}
+
+/// Every fence in `text`, judged by a state walk rather than line by line.
+///
+/// The walk is the whole point, and it is not defensive engineering. In
+/// `CommonMark` a fence's **closing** line is spelled exactly like an
+/// **untagged opener** — three backticks and nothing else — so no per-line
+/// predicate can tell them apart, and every shape that tries gets one of the
+/// two cases wrong:
+///
+/// * skip the empty info string, and an untagged opener is waved through along
+///   with the closers it is hiding among;
+/// * do not skip it, and the closer of a perfectly good `text` fence is judged
+///   as an opener and fails, blaming an untagged fence;
+/// * count the bare lines instead and check the count is even, and nothing can
+///   ever fail, because a well-formed untagged fence contributes exactly two of
+///   them.
+///
+/// This tree shipped the first two at once — the second in the router's copy —
+/// and then substituted the third for the untagged half. Toggling on each
+/// marker and reporting only the opening side is what makes the two spellings
+/// distinguishable, and is why there is one function rather than a copy per
+/// call site.
+///
+/// A fence marker is recognised by prefix rather than by exact match, so a
+/// longer run (` ```` `) or a trailing space still toggles the state; that is
+/// `CommonMark`'s own rule and it keeps the walk in phase.
+fn fences(text: &str) -> Vec<Fence> {
+    let mut out: Vec<Fence> = Vec::new();
+    let mut open = false;
+    for (index, line) in text.lines().enumerate() {
+        let Some(info) = line.strip_prefix("```") else {
+            continue;
+        };
+        if open {
+            open = false;
+            if let Some(last) = out.last_mut() {
+                last.closed = true;
+            }
+            continue;
+        }
+        open = true;
+        out.push(Fence {
+            line: index + 1,
+            info: info.trim().to_owned(),
+            closed: false,
+        });
+    }
+    out
+}
+
+/// Every wrongly tagged fence in one file, as `(line, why)`.
+///
+/// The single implementation of the fence rule, called by the checker over
+/// every rule atom **and** by the tests over the router. Two copies of this
+/// rule is how the tree came to hold two different wrong implementations of it.
+fn fence_problems(text: &str) -> Vec<(usize, String)> {
+    let mut wrong = Vec::new();
+    for fence in fences(text) {
+        let Fence { line, info, closed } = fence;
+        if !closed {
+            wrong.push((
+                line,
+                "a fence is opened here and never closed; every fence after it is read \
+                 inside-out, so this is named before its tag is judged"
+                    .to_owned(),
+            ));
+            continue;
+        }
+        if info.is_empty() {
+            wrong.push((
+                line,
+                "an untagged fence opener; a bare fence is as wrong as a `rust`-tagged \
+                 one, so that a future decision to register this tree with the doctest \
+                 harness cannot be undermined retroactively. Tag it `text` or `markdown`"
+                    .to_owned(),
+            ));
+        } else if info != "text" && info != "markdown" {
+            wrong.push((
+                line,
+                format!(
+                    "a fence tagged `{info}`; nothing in the workspace compiles this \
+                     tree, so `text` or `markdown` is the honest tag"
+                ),
+            ));
+        }
+    }
+    wrong
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
@@ -205,21 +1245,6 @@ mod tests {
     /// than a hand-maintained one.
     const TREE: &[&str] = &[BAND_00, BAND_10, BAND_20, BAND_30, BAND_40];
 
-    /// The five section markers a rule carries, in the order they must appear.
-    ///
-    /// The same list, in the same order, as `lint_constitution::SECTIONS`
-    /// (`xtask/src/lint_constitution.rs:67-81`). Deliberately a second copy and
-    /// not a shared import: RS-81-3 scopes a scanner to the directory whose
-    /// behaviour it constrains, and a shared constant would make one failure
-    /// message answer two trees' questions.
-    const SECTIONS: [&str; 5] = [
-        "**Why.**",
-        "**Do**",
-        "**Not**",
-        "**Rejects.**",
-        "**Evidence.**",
-    ];
-
     /// The precedence chain, copied from `standards/rust/README.md:25-26` —
     /// the chain's own words, without the closing period of the sentence that
     /// carries them.
@@ -245,7 +1270,29 @@ mod tests {
     const GENERATED_HEADER: [&str; 2] = ["| Atom | Load when | Rules |", "|---|---|---|"];
 
     fn root() -> PathBuf {
-        crate::spec_trace::workspace_root().unwrap()
+        workspace_root().unwrap()
+    }
+
+    /// [`fence_problems`], rendered as the `file:line — why` lines these tests
+    /// read.
+    ///
+    /// A test-side spelling of the checker's own formatter, so the specimens
+    /// that prove the fence rule can fail are ordinary assertions on ordinary
+    /// values — a `#[should_panic]` proves a panic happened somewhere and not
+    /// that it happened at the right line for the right reason.
+    fn fence_tag_problems(file: &str, text: &str) -> Vec<String> {
+        fence_problems(text)
+            .into_iter()
+            .map(|(line, why)| format!("{file}:{line} — {why}"))
+            .collect()
+    }
+
+    /// The tokens in the first column of band 10's need table.
+    fn need_table_tokens(text: &str) -> Vec<String> {
+        need_table_rows(text)
+            .into_iter()
+            .map(|(token, _)| token)
+            .collect()
     }
 
     /// One named atom under [`RULE_DIR`], read whole.
@@ -255,32 +1302,13 @@ mod tests {
     /// one here is the duplication this slice's ordering exists to prevent.
     fn atom(file: &str) -> String {
         let path = root().join(RULE_DIR).join(file);
-        std::fs::read_to_string(&path)
-            .unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        fs::read_to_string(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// The rules tree's router, read whole.
     fn router() -> String {
         let path = root().join(ROUTER);
-        std::fs::read_to_string(&path)
-            .unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
-    }
-
-    /// The `Load when:` triggers of an atom, or the empty string.
-    ///
-    /// Mirrors `lint_constitution::load_when` (`xtask/src/lint_constitution.rs:245-257`)
-    /// deliberately, including its limit: only the **first** source line of the
-    /// block is read, and a continuation on the next `>` line is silently
-    /// dropped. The router's `## The shape of a rule` states the one-source-line
-    /// constraint precisely because this is what builds the index cell.
-    fn load_when(text: &str) -> String {
-        for line in text.lines() {
-            let trimmed = line.trim_start_matches(['>', ' ']);
-            if let Some(rest) = trimmed.strip_prefix("**Load when:**") {
-                return rest.trim().to_owned();
-            }
-        }
-        String::new()
+        fs::read_to_string(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// The row the generator would emit for one atom.
@@ -324,151 +1352,6 @@ mod tests {
             .collect()
     }
 
-    /// Every `](target)` on one line, target only.
-    ///
-    /// A markdown link spells its target twice, which is why this reads the
-    /// parenthesised half rather than counting mentions — the mistake the
-    /// constitution's own link check made first
-    /// (`xtask/src/lint_constitution.rs:339-343`).
-    fn markdown_link_targets(line: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut rest = line;
-        while let Some(at) = rest.find("](") {
-            rest = &rest[at + 2..];
-            if let Some(close) = rest.find(')') {
-                out.push(rest[..close].split('#').next().unwrap_or("").to_owned());
-                rest = &rest[close + 1..];
-            } else {
-                break;
-            }
-        }
-        out
-    }
-
-    /// The rows of the first markdown table whose header line is `header`.
-    fn table_rows(text: &str, header: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut inside = false;
-        for line in text.lines() {
-            if line.starts_with(header) {
-                inside = true;
-                continue;
-            }
-            if !inside {
-                continue;
-            }
-            if !line.starts_with('|') {
-                break;
-            }
-            if line.starts_with("| ---") || line.starts_with("|---") {
-                continue;
-            }
-            out.push(line.to_owned());
-        }
-        out
-    }
-
-    /// One fenced block, as a walk over the file meets it.
-    struct Fence {
-        /// The 1-based line of the **opening** marker, so a failure message
-        /// pastes into an editor.
-        line: usize,
-        /// The opener's info string, trimmed. Empty means an untagged fence.
-        info: String,
-        /// Whether a closing marker was found before the end of the file.
-        closed: bool,
-    }
-
-    /// Every fence in `text`, judged by a state walk rather than line by line.
-    ///
-    /// The walk is the whole point, and it is not defensive engineering. In
-    /// `CommonMark` a fence's **closing** line is spelled exactly like an
-    /// **untagged opener** — three backticks and nothing else — so no per-line
-    /// predicate can tell them apart, and every shape that tries gets one of
-    /// the two cases wrong:
-    ///
-    /// * skip the empty info string, and an untagged opener is waved through
-    ///   along with the closers it is hiding among;
-    /// * do not skip it, and the closer of a perfectly good `text` fence is
-    ///   judged as an opener and fails, blaming an untagged fence;
-    /// * count the bare lines instead and check the count is even, and nothing
-    ///   can ever fail, because a well-formed untagged fence contributes
-    ///   exactly two of them.
-    ///
-    /// This tree shipped the first two at once — the second in the router's
-    /// copy — and then substituted the third for the untagged half. Toggling
-    /// on each marker and reporting only the opening side is what makes the
-    /// two spellings distinguishable, and is why there is now one function
-    /// rather than a copy per call site.
-    ///
-    /// A fence marker is recognised by prefix rather than by exact match, so a
-    /// longer run (` ```` `) or a trailing space still toggles the state; that
-    /// is `CommonMark`'s own rule and it keeps the walk in phase.
-    fn fences(text: &str) -> Vec<Fence> {
-        let mut out: Vec<Fence> = Vec::new();
-        let mut open = false;
-        for (index, line) in text.lines().enumerate() {
-            let Some(info) = line.strip_prefix("```") else {
-                continue;
-            };
-            if open {
-                open = false;
-                if let Some(last) = out.last_mut() {
-                    last.closed = true;
-                }
-                continue;
-            }
-            open = true;
-            out.push(Fence {
-                line: index + 1,
-                info: info.trim().to_owned(),
-                closed: false,
-            });
-        }
-        out
-    }
-
-    /// Every wrongly tagged fence in one file, as `file:line — why`.
-    ///
-    /// The single implementation of AC-014's fence rule, called by the whole
-    /// [`TREE`] **and** by [`ROUTER`]. Two copies of this rule is how the tree
-    /// came to hold two different wrong implementations of it, so the router
-    /// no longer carries its own.
-    ///
-    /// Returns the problems rather than asserting them so the specimens that
-    /// prove it can fail are ordinary assertions on ordinary values — a
-    /// `#[should_panic]` proves a panic happened somewhere and not that it
-    /// happened at the right line for the right reason.
-    fn fence_tag_problems(file: &str, text: &str) -> Vec<String> {
-        let mut wrong = Vec::new();
-        for fence in fences(text) {
-            let Fence { line, info, closed } = fence;
-            if !closed {
-                wrong.push(format!(
-                    "{file}:{line} — a fence is opened here and never closed; \
-                     every fence after it is read inside-out, so this is named \
-                     before its tag is judged"
-                ));
-                continue;
-            }
-            if info.is_empty() {
-                wrong.push(format!(
-                    "{file}:{line} — an untagged fence opener; a bare fence is \
-                     as wrong as a `rust`-tagged one, so that a future decision \
-                     to register this tree with the doctest harness cannot be \
-                     undermined retroactively. Tag it `text` or `markdown`"
-                ));
-            } else if info != "text" && info != "markdown" {
-                wrong.push(format!(
-                    "{file}:{line} — a fence tagged `{info}`; nothing in the \
-                     workspace compiles this tree, so `text` or `markdown` is \
-                     the honest tag"
-                ));
-            }
-        }
-        wrong
-    }
-
     /// This module's `//!` block, marker stripped, in source order.
     fn module_docs() -> String {
         THIS_FILE
@@ -477,35 +1360,6 @@ mod tests {
             .map(|line| line.trim_start_matches("//!").trim_start())
             .collect::<Vec<_>>()
             .join("\n")
-    }
-
-    /// Every `## RP-` rule in an atom, as `(id, body)`.
-    ///
-    /// Split at the next line beginning `## `, which is how
-    /// `lint_constitution::rules` splits and why a `### ` sub-heading stays
-    /// inside the rule it belongs to.
-    fn rules(text: &str) -> Vec<(String, String)> {
-        let lines: Vec<&str> = text.lines().collect();
-        let mut out: Vec<(String, String)> = Vec::new();
-        for (index, line) in lines.iter().enumerate() {
-            let Some(rest) = line.strip_prefix("## RP-") else {
-                continue;
-            };
-            let id: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_digit() || *c == '-')
-                .collect();
-            let end = lines
-                .iter()
-                .skip(index + 1)
-                .position(|l| l.starts_with("## "))
-                .map_or(lines.len(), |offset| index + 1 + offset);
-            out.push((
-                format!("RP-{}", id.trim_end_matches('-')),
-                lines[index..end].join("\n"),
-            ));
-        }
-        out
     }
 
     /// The paragraph a bold run-in marker opens, marker included.
@@ -521,37 +1375,6 @@ mod tests {
         let text = &body[from..];
         let taken: usize = lines[start..end].iter().map(|l| l.len() + 1).sum();
         Some(&text[..taken.min(text.len())])
-    }
-
-    /// The tokens in the first column of band 10's need table.
-    fn need_table_tokens(text: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut inside = false;
-        for line in text.lines() {
-            if line.starts_with("| Token |") {
-                inside = true;
-                continue;
-            }
-            if !inside {
-                continue;
-            }
-            if !line.starts_with('|') {
-                break;
-            }
-            if line.starts_with("| ---") {
-                continue;
-            }
-            let cell = line
-                .trim_start_matches('|')
-                .split('|')
-                .next()
-                .unwrap_or_default()
-                .trim();
-            if let Some(token) = cell.strip_prefix('`').and_then(|c| c.strip_suffix('`')) {
-                out.push(token.to_owned());
-            }
-        }
-        out
     }
 
     #[test]
@@ -814,17 +1637,20 @@ mod tests {
              (RS-81-1); so is a tree whose reader assumes the gate is watching it"
         );
         assert!(
-            text.contains("page-need-checker-mounted-in-the-gate"),
-            "the section names the story that adds the dedicated step"
+            prose.contains(&format!("`{STEP}` step reads this tree")),
+            "the router names the step by the name `REQUIRED` carries, so a reader \
+             can find it in the gate's own output"
         );
         assert!(
-            prose.contains("No **dedicated** gate step reads this tree yet"),
-            "what is missing is the *dedicated* step; the tree itself is read"
+            prose.contains("walking this directory"),
+            "and says *how* it reads the tree: the corpus reader is what makes a \
+             green run a statement about the directory rather than about a list"
         );
         assert!(
-            prose.contains("`cargo test --locked --workspace --all-features`"),
-            "and the router names what reads it today — the gate's mandatory \
-             `tests` step, which compiles and runs this module"
+            !prose.contains("No **dedicated** gate step reads this tree yet"),
+            "the dedicated step landed with `page-need-checker-mounted-in-the-gate`; \
+             a router that still says it has not is a false statement in the one \
+             place a reader meets the question — RS-81-1 inverted"
         );
 
         // This module's own tests read every atom named in `TREE` on every
@@ -845,7 +1671,7 @@ mod tests {
         // they wrap with CRLF. A phrase that spans a line break is still the
         // same phrase to a reader, so the assertion is about the words rather
         // than about where the author happened to break them.
-        let raw = std::fs::read_to_string(root().join("docs/README.md")).unwrap();
+        let raw = fs::read_to_string(root().join("docs/README.md")).unwrap();
         let index = raw.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
             index.contains("(../standards/pages/README.md)"),
@@ -862,16 +1688,25 @@ mod tests {
             "the repository index may not tell a reader the pages tree is \
              unread when `cargo xtask ci` reads it on every run"
         );
+        // The inversion `router-precedence-and-announcement` scheduled. That
+        // story wrote the marker as a dated claim with a named retirement
+        // rather than a TODO, and this is the story it named: the bracket is
+        // removed in the same commit that makes the sentence true, so no
+        // provisional claim outlives the change that discharges it.
         assert!(
-            index.contains("[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]"),
-            "the marker stays, and names what is provisional: a hand-written \
-             list of filenames inside a test module, not a dedicated step \
-             reading the directory"
+            !index.contains("PROVISIONAL"),
+            "the marker is retired in the commit that makes the sentence \
+             unconditionally true, not in a later tidy-up"
         );
         assert!(
-            index.contains("hand-written list of filenames inside a test module"),
-            "the bracket says what it is a placeholder for, so the reader \
-             learns which half is missing rather than that everything is"
+            index.contains("the mandatory `cargo xtask lint-pages` step walks that directory"),
+            "and what replaces it is the dedicated step, named, so a reader \
+             learns which command to run rather than which module to open"
+        );
+        assert!(
+            index.contains("fails by file and line"),
+            "the fourth reader reads this directory too, and the index says so \
+             where a reader of `docs/` will meet it"
         );
         assert!(
             index.contains("which is the point of pinning them by path rather than by convention"),
@@ -1600,7 +2435,7 @@ mod tests {
                     continue;
                 }
                 for target in markdown_link_targets(line) {
-                    let is_page = std::path::Path::new(&target)
+                    let is_page = Path::new(&target)
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
                     if !is_page {
@@ -1876,6 +2711,711 @@ mod tests {
                      comes before the dossier and before any URL"
                 );
             }
+        }
+    }
+
+    // ======================================================================
+    // page-need-checker-mounted-in-the-gate
+    // ======================================================================
+
+    /// A fabricated workspace root under `std::env::temp_dir()`.
+    ///
+    /// Never the workspace's own trees, and never `tempfile`: `xtask/Cargo.toml`
+    /// carries only `anyhow` and this story adds no dependency. The name carries
+    /// the caller's label and a nanosecond stamp, so the default parallel
+    /// harness cannot make two tests share a directory.
+    fn fabricated_root(label: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("hs-lint-pages-{label}-{stamp}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// Writes one file under a fabricated root, creating its parents.
+    fn write_at(root: &Path, rel: &str, text: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+
+    /// One synthetic page, parsed by the one parser.
+    fn synthetic_page(path: &str, text: &str) -> Page {
+        let dir = path
+            .rsplit_once('/')
+            .map_or(String::new(), |(dir, _)| dir.to_owned());
+        Page {
+            path: path.to_owned(),
+            dir,
+            declarations: declarations(text),
+        }
+    }
+
+    /// One synthetic rule atom, parsed exactly as [`rule_atoms`] parses a real one.
+    fn synthetic_atom(file: &str, text: &str) -> Atom {
+        Atom {
+            band: file[..2].to_owned(),
+            load_when: load_when(text),
+            rules: rules(text),
+            file: file.to_owned(),
+            text: text.to_owned(),
+        }
+    }
+
+    /// The problems, rendered as the lines a reader would meet.
+    fn rendered(problems: &[Problem]) -> Vec<String> {
+        problems.iter().map(Problem::render).collect()
+    }
+
+    /// A well-formed one-rule atom, as a base for the shape tests to perturb.
+    fn well_formed_atom(band: &str) -> String {
+        format!(
+            "# {band} — Title\n\n> **Load when:** doing a thing\n\n> **See also:** 00 (a band)\n\
+             \n---\n\nProse.\n\n## RP-{band}-1. Do the thing.\n\n**Why.** Because.\n\n\
+             **Do**\n\n```text\nright\n```\n\n**Not**\n\n```text\nwrong\n```\n\n\
+             **Rejects.** A page that could ship and should not.\n\n\
+             **Evidence.** `xtask/src/lint_pages.rs:1`\n"
+        )
+    }
+
+    // ---------- AC-002: both trees, both guards ----------
+
+    #[test]
+    fn a_missing_rules_tree_fails_and_names_the_path_it_expected() {
+        let root = fabricated_root("rules-missing");
+        let err = rule_atoms(&root).unwrap_err();
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains(RULE_DIR),
+            "the error names the tree the gate expected, in `lint_constitution.rs:212`'s \
+             shape; it reads {chain}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_empty_rules_tree_is_vacuous_rather_than_green() {
+        let root = fabricated_root("rules-empty");
+        fs::create_dir_all(root.join(RULE_DIR)).unwrap();
+        let atoms = rule_atoms(&root).unwrap();
+        let err = guard_rules_not_vacuous(&atoms).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains(RULE_DIR) && message.contains("vacuous"),
+            "an emptied tree bails in `lint_constitution.rs:176`'s spelling and never \
+             prints `0 rules, all consistent`; it reads {message}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_missing_pages_tree_fails_and_names_the_path_it_expected() {
+        let root = fabricated_root("pages-missing");
+        let err = governed_pages(&root).unwrap_err();
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains(lint_narrative::TREE),
+            "guarding its own tree and trusting the pages tree is the named wrong \
+             implementation; the error reads {chain}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_empty_pages_tree_is_vacuous_rather_than_green() {
+        let root = fabricated_root("pages-empty");
+        fs::create_dir_all(root.join(lint_narrative::TREE)).unwrap();
+        let pages = governed_pages(&root).unwrap();
+        let err = guard_pages_not_vacuous(&pages).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains(lint_narrative::TREE) && message.contains("vacuous"),
+            "the same guard on the other tree; it reads {message}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    // ---------- AC-003: one constant for the pages tree ----------
+
+    #[test]
+    fn the_pages_root_resolves_from_the_narrative_trees_own_constant() {
+        let root = fabricated_root("pages-root");
+        write_at(
+            &root,
+            &format!("{}/only.md", lint_narrative::TREE),
+            "# T\n\n> **Answers:** `how-to` — How do I do the thing?\n\nProse.\n",
+        );
+        let pages = governed_pages(&root).unwrap();
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.path.clone())
+                .collect::<Vec<_>>(),
+            [format!("{}/only.md", lint_narrative::TREE)],
+            "the checker addresses the pages tree through `lint_narrative::TREE` and \
+             declares no `PAGE_DIR` of its own"
+        );
+        assert!(
+            !THIS_FILE.contains(&format!("const PAGE_{}", "DIR")),
+            "a second constant naming the pages tree is the `three lists that must \
+             agree` defect, foreclosed rather than documented"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn the_index_is_not_a_governed_page() {
+        let root = fabricated_root("pages-index");
+        write_at(
+            &root,
+            &format!("{}/README.md", lint_narrative::TREE),
+            "# Index\n\nRouting.\n",
+        );
+        let pages = governed_pages(&root).unwrap();
+        assert!(
+            pages.is_empty(),
+            "the pinned tree's own checker says the index is not a page \
+             (`xtask/src/lint_narrative.rs:232-241`, `:486-491`); it found {pages:?}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    // ---------- AC-004: the declaration parser ----------
+
+    #[test]
+    fn one_declaration_parses_to_its_token_and_its_line() {
+        let found = declarations(
+            "# Append conditions\n\n> **Answers:** `explanation` — Why re-read?\n\nProse.\n",
+        );
+        assert_eq!(found.len(), 1, "one declaration");
+        assert_eq!(
+            found[0].line, 3,
+            "the 1-based line of the declaration itself"
+        );
+        assert_eq!(found[0].token.as_deref(), Some("explanation"));
+        assert!(found[0].malformed.is_none());
+    }
+
+    #[test]
+    fn a_page_with_no_declaration_is_one_problem_naming_band_zero() {
+        let page = synthetic_page(
+            "docs/getting-started.md",
+            "# Getting started\n\nProse about explanation and how-to.\n",
+        );
+        let mut problems = Vec::new();
+        check_declarations(&[page], &mut problems);
+        let lines = rendered(&problems);
+        assert_eq!(lines.len(), 1, "one problem per page: {lines:?}");
+        assert_eq!(
+            lines[0],
+            "docs/getting-started.md — no `> **Answers:**` line; see \
+             standards/pages/00-one-need.md",
+            "the file-level form, with no faked line 0, and the atom to read"
+        );
+    }
+
+    #[test]
+    fn a_second_declaration_is_reported_at_the_second_ones_line() {
+        let page = synthetic_page(
+            "docs/two.md",
+            "# Two\n\n> **Answers:** `explanation` — Why?\n> **Answers:** `how-to` — How?\n",
+        );
+        let mut problems = Vec::new();
+        check_declarations(&[page], &mut problems);
+        let lines = rendered(&problems);
+        assert_eq!(
+            lines,
+            ["docs/two.md:4 — declares `explanation` and `how-to`; a page answers one need"],
+            "at the line of the offending second declaration, naming both tokens"
+        );
+    }
+
+    #[test]
+    fn prose_that_mentions_a_need_word_is_never_a_declaration() {
+        let page = synthetic_page(
+            "docs/one.md",
+            "# One\n\n> **Answers:** `explanation` — Why?\n\nThis page is an explanation, \
+             not a how-to, and it is certainly not a `tutorial`.\n\n```text\n\
+             > **Answers:** `how-to` — How do I write one?\n```\n",
+        );
+        let mut problems = Vec::new();
+        check_declarations(&[page], &mut problems);
+        assert!(
+            problems.is_empty(),
+            "only a blockquote line opening `**Answers:**` outside a fence is a \
+             declaration: {:?}",
+            rendered(&problems)
+        );
+    }
+
+    #[test]
+    fn a_malformed_declaration_is_its_own_problem_not_a_missing_one() {
+        for (text, expect) in [
+            (
+                "# T\n\n> **Answers:** how-to — How?\n",
+                "the token is not in backticks",
+            ),
+            (
+                "# T\n\n> **Answers:** `how-to` How?\n",
+                "no ` — ` between the token and the question",
+            ),
+            (
+                "# T\n\n> **Answers:** `how-to` — How.\n",
+                "the question does not end in `?`",
+            ),
+        ] {
+            let page = synthetic_page("docs/near-miss.md", text);
+            let mut problems = Vec::new();
+            check_declarations(&[page], &mut problems);
+            let lines = rendered(&problems);
+            assert_eq!(lines.len(), 1, "one problem, not two: {lines:?}");
+            assert!(
+                lines[0].starts_with("docs/near-miss.md:3 — ") && lines[0].contains(expect),
+                "a near miss is reported at its own line, naming the part of the \
+                 grammar that failed, never degraded to `no declaration`: {lines:?}"
+            );
+        }
+    }
+
+    /// The three wrong pages, held as `&str` specimens rather than committed files.
+    ///
+    /// `CLAUDE.md`'s decorative-rule corollary paid in the currency it asks for:
+    /// name a plausible wrong implementation the rule rejects and write it down
+    /// where the suite can run it. None of the three is a file, which is what
+    /// makes the rejection permanent rather than a one-off observation.
+    #[test]
+    fn the_three_wrong_pages_are_each_rejected_at_the_right_line() {
+        let two = synthetic_page(
+            "docs/append-conditions.md",
+            "# Appending under a condition\n\n> **Answers:** `explanation` — Why re-read?\n\
+             > **Answers:** `how-to` — How do I append under a condition?\n",
+        );
+        let none = synthetic_page("docs/getting-started.md", "# Getting started\n\nProse.\n");
+        let unenumerated = synthetic_page(
+            "docs/store-api.md",
+            "# The store API\n\n> **Answers:** `reference` — What are the methods?\n",
+        );
+
+        let mut problems = Vec::new();
+        check_declarations(&[two, none, unenumerated], &mut problems);
+        problems.sort();
+        let lines = rendered(&problems);
+        assert_eq!(
+            lines.len(),
+            3,
+            "three wrong pages, three problems: {lines:?}"
+        );
+        assert!(
+            lines[0]
+                .starts_with("docs/append-conditions.md:4 — declares `explanation` and `how-to`"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[1].starts_with("docs/getting-started.md — no `> **Answers:**` line"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[2].starts_with("docs/store-api.md:3 — `reference` is not a need")
+                && lines[2].contains("explanation")
+                && lines[2].contains("10-the-need-set.md"),
+            "the offending token, the enumerated set, and where the set is argued: {lines:?}"
+        );
+    }
+
+    // ---------- AC-006: the orientation ceiling ----------
+
+    #[test]
+    fn two_orientation_pages_at_one_level_are_one_problem_naming_both() {
+        let pages = [
+            synthetic_page(
+                "docs/index.md",
+                "# Index\n\n> **Answers:** `orientation` — Where do I go?\n",
+            ),
+            synthetic_page(
+                "docs/start.md",
+                "# Start\n\n> **Answers:** `orientation` — Where do I start?\n",
+            ),
+        ];
+        let mut problems = Vec::new();
+        check_orientation_ceiling(&pages, &mut problems);
+        let lines = rendered(&problems);
+        assert_eq!(lines.len(), 1, "one problem for the directory: {lines:?}");
+        assert!(
+            lines[0].starts_with("docs — ")
+                && lines[0].contains("docs/index.md:3")
+                && lines[0].contains("docs/start.md:3")
+                && lines[0].contains("RP-10-3"),
+            "the directory, every offending `path:line`, and the rule: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn one_orientation_page_per_directory_passes() {
+        let pages = [
+            synthetic_page(
+                "docs/index.md",
+                "# Index\n\n> **Answers:** `orientation` — Where do I go?\n",
+            ),
+            synthetic_page(
+                "docs/guide/index.md",
+                "# Guide\n\n> **Answers:** `orientation` — Where in the guide?\n",
+            ),
+        ];
+        let mut problems = Vec::new();
+        check_orientation_ceiling(&pages, &mut problems);
+        assert!(
+            problems.is_empty(),
+            "the ceiling is per directory level, not per tree: {:?}",
+            rendered(&problems)
+        );
+    }
+
+    // ---------- AC-007: the router's generated index ----------
+
+    /// A fabricated rules tree with a router whose region is `region_body`.
+    fn router_root(label: &str, region_body: &str) -> PathBuf {
+        let root = fabricated_root(label);
+        write_at(
+            &root,
+            &format!("{RULE_DIR}/00-one-need.md"),
+            &well_formed_atom("00"),
+        );
+        write_at(
+            &root,
+            &format!("{RULE_DIR}/10-the-need-set.md"),
+            &well_formed_atom("10"),
+        );
+        write_at(
+            &root,
+            ROUTER,
+            &format!(
+                "# Page standards\n\n## Index\n\n<!-- BEGIN GENERATED -->\n{region_body}\n\
+                 <!-- END GENERATED -->\n"
+            ),
+        );
+        root
+    }
+
+    #[test]
+    fn a_router_index_disagreeing_by_one_atom_names_the_repair_in_the_line() {
+        let root = router_root(
+            "router-stale",
+            "| Atom | Load when | Rules |\n|---|---|---|\n\
+             | [`00-one-need.md`](00-one-need.md) | doing a thing | RP-00-1 |",
+        );
+        let atoms = rule_atoms(&root).unwrap();
+        let mut problems = Vec::new();
+        check_router(&root, &atoms, Mode::Check, &mut problems).unwrap();
+        let lines = rendered(&problems);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with(&format!("{ROUTER} — "))
+                && lines[0].contains("cargo xtask lint-pages --write"),
+            "the repair sits inside the problem line, never in a footer: {lines:?}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn write_mode_rewrites_only_the_region_and_reaches_equality() {
+        let root = router_root(
+            "router-write",
+            "| Atom | Load when | Rules |\n|---|---|---|",
+        );
+        let atoms = rule_atoms(&root).unwrap();
+        let mut problems = Vec::new();
+        check_router(&root, &atoms, Mode::Write, &mut problems).unwrap();
+        assert!(problems.is_empty(), "{:?}", rendered(&problems));
+
+        let rewritten = fs::read_to_string(root.join(ROUTER)).unwrap();
+        assert!(
+            rewritten.starts_with("# Page standards\n\n## Index\n"),
+            "everything outside the markers is untouched: {rewritten}"
+        );
+        let (start, end) = region(&rewritten).unwrap();
+        let lines: Vec<&str> = rewritten.lines().collect();
+        assert_eq!(lines[start..end].join("\n"), generated_index(&atoms));
+
+        let mut again = Vec::new();
+        check_router(&root, &atoms, Mode::Check, &mut again).unwrap();
+        assert!(
+            again.is_empty(),
+            "a second `--write` is idempotent: {:?}",
+            rendered(&again)
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_dangling_router_link_is_a_problem_at_its_own_line() {
+        let root = router_root(
+            "router-dangling",
+            "| Atom | Load when | Rules |\n|---|---|---|",
+        );
+        let atoms = rule_atoms(&root).unwrap();
+        let router = fs::read_to_string(root.join(ROUTER)).unwrap();
+        write_at(
+            &root,
+            ROUTER,
+            &format!("{router}\nSee [`99-gone.md`](99-gone.md).\n"),
+        );
+        let mut problems = Vec::new();
+        check_router(&root, &atoms, Mode::Check, &mut problems).unwrap();
+        let lines = rendered(&problems);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("99-gone.md") && line.contains("resolves to no file")),
+            "a router may not ship a dangling link: {lines:?}"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    // ---------- AC-008: NEEDS against band 10 ----------
+
+    /// Band 10, as a synthetic atom whose token table is `rows`.
+    fn band_ten_with(rows: &str) -> Atom {
+        synthetic_atom(
+            NEED_SET_ATOM,
+            &format!(
+                "# 10 — The need set\n\n> **Load when:** choosing\n\n> **See also:** 00\n\n\
+                 ---\n\n| Token | The page's job | Success for the reader |\n\
+                 | --- | --- | --- |\n{rows}\n"
+            ),
+        )
+    }
+
+    /// Every member's real row, so a test perturbs exactly one thing.
+    fn band_ten_rows() -> String {
+        NEEDS
+            .iter()
+            .map(|member| format!("| `{}` | {} | prose |", member.token, member.job))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn a_needs_member_missing_from_band_ten_names_which_token_moved() {
+        let rows = band_ten_rows()
+            .lines()
+            .filter(|row| !row.contains("`how-to`"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut problems = Vec::new();
+        check_need_set(&[band_ten_with(&rows)], &mut problems);
+        let lines = rendered(&problems);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].contains("`how-to`")
+                && lines[0].contains("xtask/src/lint_pages.rs")
+                && lines[0].starts_with(&format!("{RULE_DIR}/{NEED_SET_ATOM}")),
+            "the failure says which one moved and cites both paths: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn a_need_shaped_token_in_band_ten_that_is_not_a_member_is_named() {
+        let rows = format!(
+            "{}\n| `reference` | be a second spec | prose |",
+            band_ten_rows()
+        );
+        let mut problems = Vec::new();
+        check_need_set(&[band_ten_with(&rows)], &mut problems);
+        let lines = rendered(&problems);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].contains("`reference`") && lines[0].contains("not `--write`-repairable"),
+            "the exclusion half, and the sentence saying why no generator repairs it: \
+             {lines:?}"
+        );
+    }
+
+    #[test]
+    fn band_tens_job_column_cannot_drift_from_the_const() {
+        let rows = band_ten_rows().replace(
+            "carry a newcomer through one working thing, staged",
+            "something else entirely",
+        );
+        let mut problems = Vec::new();
+        check_need_set(&[band_ten_with(&rows)], &mut problems);
+        let lines = rendered(&problems);
+        assert!(
+            lines.iter().any(|line| line.contains("`tutorial`")),
+            "`Need::job` has a machine that reads it, which is what band 10 claims \
+             about both of its fields: {lines:?}"
+        );
+    }
+
+    // ---------- AC-009: the rule atom's own shape ----------
+
+    #[test]
+    fn a_well_formed_atom_reports_nothing() {
+        let mut problems = Vec::new();
+        let atom = synthetic_atom("00-one-need.md", &well_formed_atom("00"));
+        check_atom_shape(&atom, &mut problems);
+        check_atom_fences(&atom, &mut problems);
+        assert!(problems.is_empty(), "{:?}", rendered(&problems));
+    }
+
+    #[test]
+    fn an_atom_missing_a_section_is_one_problem_at_the_rules_line() {
+        let text = well_formed_atom("00").replace(
+            "**Rejects.** A page that could ship and should not.\n\n",
+            "",
+        );
+        let mut problems = Vec::new();
+        check_atom_shape(&synthetic_atom("00-one-need.md", &text), &mut problems);
+        let lines = rendered(&problems);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("**Rejects.**") && line.contains("RP-00-1")),
+            "a rule that names no wrong page is decorative: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn an_atom_with_no_rule_at_all_is_a_problem() {
+        let mut problems = Vec::new();
+        let text = "# 00 — Title\n\n> **Load when:** x\n\n> **See also:** 10\n\n---\n\nProse.\n";
+        check_atom_shape(&synthetic_atom("00-one-need.md", text), &mut problems);
+        let lines = rendered(&problems);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("carries no `## RP-` rule")),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn an_atom_over_the_rule_ceiling_is_a_problem_naming_the_ceiling() {
+        let extra: Vec<String> = (2..=(MAX_RULES_PER_ATOM + 1))
+            .map(|index| {
+                format!(
+                    "\n## RP-00-{index}. Another.\n\n**Why.** Because.\n\n**Do**\n\n\
+                     ```text\na\n```\n\n**Not**\n\n```text\nb\n```\n\n\
+                     **Rejects.** A page.\n\n**Evidence.** `x:1`\n"
+                )
+            })
+            .collect();
+        let text = well_formed_atom("00") + &extra.join("");
+        let mut problems = Vec::new();
+        check_atom_shape(&synthetic_atom("00-one-need.md", &text), &mut problems);
+        let lines = rendered(&problems);
+        assert!(
+            lines.iter().any(
+                |line| line.contains(&format!("{} rules", MAX_RULES_PER_ATOM + 1))
+                    && line.contains(&MAX_RULES_PER_ATOM.to_string())
+            ),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn an_atom_over_the_byte_ceiling_carries_the_measured_count() {
+        let mut text = well_formed_atom("00");
+        text.push_str(&"\nfiller filler filler\n".repeat(1_200));
+        let bytes = text.len();
+        assert!(
+            bytes > MAX_ATOM_BYTES,
+            "the specimen must exceed the ceiling"
+        );
+        let mut problems = Vec::new();
+        check_atom_shape(&synthetic_atom("00-one-need.md", &text), &mut problems);
+        let lines = rendered(&problems);
+        assert!(
+            lines.iter().any(|line| line.contains(&bytes.to_string())
+                && line.contains(&MAX_ATOM_BYTES.to_string())),
+            "the measured byte count is in the message, not just the ceiling: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn text_and_markdown_fences_pass_while_rust_and_untagged_fail() {
+        for (info, wrong) in [("text", false), ("markdown", false), ("rust", true)] {
+            let text = format!(
+                "# 00 — T\n\n> **Load when:** x\n\n> **See also:** 10\n\n---\n\n\
+                 ## RP-00-1. Do.\n\n**Why.** B.\n\n**Do**\n\n```{info}\na\n```\n\n\
+                 **Not**\n\n```text\nb\n```\n\n**Rejects.** A page.\n\n**Evidence.** `x:1`\n"
+            );
+            let mut problems = Vec::new();
+            check_atom_fences(&synthetic_atom("00-one-need.md", &text), &mut problems);
+            assert_eq!(
+                !problems.is_empty(),
+                wrong,
+                "`{info}` fence: {:?}",
+                rendered(&problems)
+            );
+            if wrong {
+                assert!(
+                    rendered(&problems)[0].contains("nothing in the workspace compiles"),
+                    "the message says *why*: {:?}",
+                    rendered(&problems)
+                );
+            }
+        }
+
+        let untagged = "# 00 — T\n\n> **Load when:** x\n\n> **See also:** 10\n\n---\n\n\
+             ## RP-00-1. Do.\n\n**Why.** B.\n\n**Do**\n\n```\na\n```\n\n\
+             **Not**\n\n```text\nb\n```\n\n**Rejects.** A page.\n\n**Evidence.** `x:1`\n";
+        let mut problems = Vec::new();
+        check_atom_fences(&synthetic_atom("00-one-need.md", untagged), &mut problems);
+        assert!(
+            rendered(&problems)
+                .iter()
+                .any(|line| line.contains("untagged")),
+            "untagged is rejected too, so a future decision to register this tree \
+             cannot be undermined retroactively: {:?}",
+            rendered(&problems)
+        );
+    }
+
+    // ---------- AC-010: the terminal surface ----------
+
+    #[test]
+    fn a_problem_line_is_path_line_dash_message_in_that_order() {
+        assert_eq!(
+            Problem::at("docs/a.md", 7, "what is wrong; what to do".to_owned()).render(),
+            "docs/a.md:7 — what is wrong; what to do",
+            "location primary, what-is-wrong secondary, the repair third and never removed"
+        );
+        assert_eq!(
+            Problem::whole("docs/a.md", "what is wrong; what to do".to_owned()).render(),
+            "docs/a.md — what is wrong; what to do",
+            "the whole-file form carries no faked line 0"
+        );
+    }
+
+    #[test]
+    fn problems_sort_by_path_then_line_whatever_order_they_arrive_in() {
+        let ordered = [
+            Problem::whole("docs/a.md", "file-level".to_owned()),
+            Problem::at("docs/a.md", 2, "second".to_owned()),
+            Problem::at("docs/a.md", 10, "aaa".to_owned()),
+            Problem::at("docs/a.md", 10, "bbb".to_owned()),
+            Problem::at("docs/b.md", 1, "first".to_owned()),
+        ];
+        let expected = rendered(&ordered);
+
+        for rotation in 0..expected.len() {
+            let mut shuffled: Vec<Problem> = vec![
+                Problem::at("docs/b.md", 1, "first".to_owned()),
+                Problem::at("docs/a.md", 10, "bbb".to_owned()),
+                Problem::whole("docs/a.md", "file-level".to_owned()),
+                Problem::at("docs/a.md", 10, "aaa".to_owned()),
+                Problem::at("docs/a.md", 2, "second".to_owned()),
+            ];
+            shuffled.rotate_left(rotation);
+            shuffled.sort();
+            assert_eq!(
+                rendered(&shuffled),
+                expected,
+                "`read_dir` order must not reach the output, and a tie on path and \
+                 line breaks on the message so a re-run never reshuffles the list"
+            );
         }
     }
 }

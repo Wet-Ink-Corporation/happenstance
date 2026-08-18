@@ -129,6 +129,14 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // a package-shaped gate reads nothing for, and `.redkiln/config.yaml` wires
     // this command as that story's grain.
     crate::lint_narrative::run()?;
+    // The page-need discipline, for the same reason and as one half of a pair.
+    // The other half is `"standards/pages/"` on `INERT` below: that tree reaches
+    // no package, so without this line a rules-only pull request would run
+    // *nothing*, which is strictly worse than the correct-but-slow widening it
+    // replaces. The pages tree has the same shape one step further on — `docs/`
+    // is on the `xtask` arm rather than `INERT`, but a pages-only diff would
+    // still never reach a page-need check without this call.
+    crate::lint_pages::run(crate::lint_pages::Mode::Check)?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;
@@ -283,6 +291,13 @@ pub(crate) fn affected_packages(
 fn is_inert(path: &str) -> bool {
     const INERT: &[&str] = &[
         "spec/",
+        // The page-need discipline's rules tree. Nothing compiles it — it is
+        // deliberately not registered with the doctest harness — so it reaches
+        // no package, exactly as `spec/` does. It is still *checked*: the
+        // unconditional list above runs `lint_pages` on every invocation, and
+        // that pairing is the whole entry. Adding this prefix without the call
+        // makes a rules-only pull request read nothing at all.
+        "standards/pages/",
         "references/",
         "experiments/",
         ".github/",
@@ -771,6 +786,37 @@ mod tests {
     fn the_narrative_tree_is_no_longer_inert() {
         assert!(!is_inert("docs/append-conditions.md"));
         assert!(!is_inert("docs/README.md"));
+    }
+
+    /// The page-need discipline's rules tree reaches no package, and it is the
+    /// half of a pair: `affected::run` calls `lint_pages::run` unconditionally,
+    /// so this prefix means "no package to build", never "nothing to check".
+    /// Dropping the call and keeping this entry would make a rules-only pull
+    /// request read nothing — strictly worse than the widening it replaces.
+    #[test]
+    fn the_rules_tree_selects_no_package() {
+        for path in [
+            "standards/pages/README.md",
+            "standards/pages/00-one-need.md",
+            "standards/pages/examples/two-needs.md",
+        ] {
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
+    }
+
+    /// And the sibling tree one directory over still selects `xtask`, so the
+    /// arm at `:214-221` was not lazily broadened from `standards/rust/` to
+    /// `standards/`. That widening is one keystroke and would silently
+    /// un-compile the constitution.
+    #[test]
+    fn the_pages_prefix_does_not_swallow_the_constitution() {
+        let affected = affected_packages(
+            &changed(&["standards/rust/81-checks-that-cannot-be-types.md"]),
+            &members(),
+        );
+        assert_eq!(affected, changed(&["xtask"]));
+        assert!(!is_inert("standards/rust/README.md"));
     }
 
     #[test]

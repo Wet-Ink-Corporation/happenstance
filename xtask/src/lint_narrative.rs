@@ -228,7 +228,15 @@ use crate::spec_trace::{clause_ids, workspace_root};
 /// Moving or renaming the tree without editing this line fails the gate: the
 /// read below is `?`-propagated, so the error names the path that was expected
 /// rather than reporting an empty tree.
-const TREE: &str = "docs";
+///
+/// `pub(crate)` for one reason: [`crate::lint_pages`] reads the same tree, and
+/// the *one* thing it must not do is declare a second constant naming it. That
+/// is the "three lists that must agree" defect `xtask/src/spec_trace.rs:122-160`
+/// records, and here the second copy would drift silently on the day the tree
+/// moves. Two scanners agreeing on where one tree is stays inside RS-81-3
+/// (`standards/rust/81-checks-that-cannot-be-types.md:209`), which forbids one
+/// scanner ranging over two trees.
+pub(crate) const TREE: &str = "docs";
 
 /// The tree's index, which is the only file under [`TREE`] that is not a page.
 ///

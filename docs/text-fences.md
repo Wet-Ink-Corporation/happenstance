@@ -1,6 +1,6 @@
 # Fences the compiler never sees
 
-*<!-- answered-need: reserved for HS-P0021 -->*
+> **Answers:** `explanation` — Which blocks on these pages does the gate never compile?
 
 A fenced block tagged `text` is prose as far as the toolchain is concerned. The
 gate compiles the Rust examples on the pages in this directory; it hands a

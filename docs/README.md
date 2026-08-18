@@ -36,14 +36,12 @@ under `standards/rust/`; the narrative pages in this directory are registered
 one by one in `xtask/src/narrative.rs`, where `cargo test -p xtask --doc` compiles
 their examples under the mandatory `cargo xtask narrative-doctests` step; and
 `standards/pages/` is pinned the same way — by path, in `xtask/src/lint_pages.rs`
-— whose own tests read every rule atom there by name under the gate's mandatory
-`tests` step, so a dangling index link or an over-budget atom fails `cargo xtask
-ci` today. That fourth reader is
-**[PROVISIONAL — settles at `page-need-checker-mounted-in-the-gate`]**: it is a
-hand-written list of filenames inside a test module rather than a dedicated
-`lint-pages` step reading the directory, so an atom nobody adds to the list is
-read by nothing — and that story is the one that replaces it and removes this
-bracket. Moving any of them
+— and the mandatory `cargo xtask lint-pages` step walks that directory, so a
+dangling index link, an over-budget atom or a generated index that has fallen
+behind the corpus fails `cargo xtask ci` today. That fourth reader also reads
+*this* directory, from the other side: it asks of every page here which one
+reader's question the page answers, and fails by file and line when the answer is
+absent, doubled or outside the closed set. Moving any of them
 means editing `xtask/src/` in the same change — which is the point of pinning
 them by path rather than by convention.
 

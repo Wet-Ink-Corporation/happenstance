@@ -77,22 +77,22 @@ compiles this tree.
 
 ## What checks this tree, and what does not
 
-No **dedicated** gate step reads this tree yet: the `lint-pages` step, and the
-corpus reader that walks this directory rather than a list of filenames, are
-`page-need-checker-mounted-in-the-gate`'s. What already reads it is the gate's
-mandatory `tests` step — `cargo test --locked --workspace --all-features`, which
-includes `xtask`, whose `xtask/src/lint_pages.rs` names every atom here and reads
-it. A dangling link in the index, a rule missing its `**Rejects.**`, a prose line
-past 96 columns, a `rust`-tagged fence, a router over 8,192 bytes and a token
-that disagrees with the `NEEDS` constant all turn `cargo xtask ci` red today.
+The mandatory `every page declares one need` step reads this tree —
+`cargo xtask lint-pages`, in `xtask/src/lint_pages.rs` — by **walking this
+directory** rather than a list of filenames, so an atom nobody registered
+anywhere is still read and an emptied tree fails rather than passing. A dangling
+link in the index, a rule missing its `**Rejects.**`, an atom past six rules or
+16,384 bytes, a `rust`-tagged or untagged fence, a generated index that has
+fallen behind the corpus and a token that disagrees with the `NEEDS` constant all
+turn `cargo xtask ci` red.
 
-The gap the checker closes is *which* files are read: the list of atoms is
-hand-written in that module, so an atom nobody adds to it is read by nothing and
-an empty tree would pass. A test module reading five named files is not a corpus
-reader, and only the second makes a green run a statement about the tree.
+The same step reads the pages this tree governs, from the other side, and fails
+by file and line when a page declares no need, two needs, or a need outside the
+set. Only that second half makes a green run a statement about the pages rather
+than only about the rules.
 
-After it lands, one thing still will not be checked, and it is the one that
-matters most: a check can see that a page **declares** a need, never that the
-page **answers** it. Band `40`'s non-author walk is the instrument for that, and
-band `30`'s spot check is the instrument for a page that cites a clause id
-correctly and restates its content in the paragraph underneath.
+One thing is still not checked, and it is the one that matters most: a check can
+see that a page **declares** a need, never that the page **answers** it. Band
+`40`'s non-author walk is the instrument for that, and band `30`'s spot check is
+the instrument for a page that cites a clause id correctly and restates its
+content in the paragraph underneath.

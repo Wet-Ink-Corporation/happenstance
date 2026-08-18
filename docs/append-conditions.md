@@ -1,6 +1,6 @@
 # Appending under a condition
 
-*<!-- answered-need: reserved for HS-P0021 -->*
+> **Answers:** `explanation` — Why does a write re-read what it decided on?
 
 An append condition is checked against the same boundary the query read, so a
 writer that saw a consistent view cannot be overtaken between reading and

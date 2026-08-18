@@ -553,6 +553,32 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The page-need discipline, read as files: `standards/pages/` — the
+        // rules — and the pinned narrative tree — the pages the rules govern.
+        // It sits directly after the step above because the two read the same
+        // tree from opposite sides: that one asks whether a page is registered
+        // and compiled, this one asks whether it says which reader's question
+        // it answers.
+        //
+        // `probe: None`, and that is not a formality. This is a directory read
+        // with no external tool and no compilation, so a probe would be a lie
+        // in the shape RS-80-2 names (`standards/rust/80-the-gate.md:98`): a
+        // step that can only be skipped for a reason that cannot occur.
+        name: lint_pages::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-pages",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // The step above passes with every feature on, which is the one
         // configuration where every intra-doc link resolves. Three links to
         // `MemoryEventStore` were broken without `memory` for as long as this
@@ -752,6 +778,15 @@ fn main() -> ExitCode {
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lint-pages") => match std::env::args().nth(2).as_deref() {
+            None => lint_pages::run(lint_pages::Mode::Check),
+            Some("--write") => lint_pages::run(lint_pages::Mode::Write),
+            Some(flag) => {
+                eprintln!("unknown flag for lint-pages: {flag}");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+        },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
             Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
@@ -837,6 +872,12 @@ fn print_help() {
     println!("         gate pins it and is not empty, every page is registered in");
     println!("         xtask/src/narrative.rs, every registration names a page that still");
     println!("         exists, and no page path is long enough to starve the report.");
+    println!("  lint-pages [--write]");
+    println!("         Check the page-need discipline: every governed page in the narrative");
+    println!("         tree declares exactly one need from the closed set, at a line number,");
+    println!("         and standards/pages/ — the rules that say so — keeps its own shape,");
+    println!("         its ceilings and a router index generated from the atoms. --write");
+    println!("         rewrites that index; nothing else in the tree is ever written.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");
@@ -881,6 +922,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "the testkit carries its own version",
         "the Rust constitution is internally consistent",
         lint_narrative::STEP,
+        lint_pages::STEP,
     ])
 }
 
