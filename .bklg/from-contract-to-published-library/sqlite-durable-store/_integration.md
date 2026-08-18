@@ -61,7 +61,7 @@ Every scenario below was **executed** on the merged branch
 | 11 | **The benchmark family exists and is provably not conformance** | `crates/happenstance-testkit/src/bench.rs`, mounted at `crates/happenstance-testkit/tests/memory_benchmarks.rs:82, :88, :96` | **executed, PASS** — `18 passed` inside the gate's `--all-features` test step, and the conformance rule count is unchanged at **112** across four rule files (`cargo xtask lints`: *every stated rule count matches the suite*). See *Note 1* |
 | 12 | **The specification and the code still agree** | `cargo xtask spec-trace`, inside `cargo xtask ci --fast` | **executed, PASS** — `201 clauses (137 FROZEN, 47 PROVISIONAL, 12 DEFERRED, 5 NON-NORMATIVE), 112 conformance rules, 58 e2e cases, 401 citations checked (80 anchored to their subject, 12 external)`; `traceability: no problems found`. Above the pre-slice baseline of 389 checked / 76 anchored recorded at `spec-and-code-reconciliation/_ledger.md:51` |
 | 13 | **The non-terminal project bar** | `cargo xtask ci --fast` | **executed, PASS** — `all required checks passed (--fast: 4 optional step(s) not run)`. Covers fmt, clippy `-D warnings` over `--workspace --all-targets --all-features`, the whole test run, all four mandatory wasm32 steps, docs, `spec-trace`, the five file-reading lints, the `--no-default-features` doc build and the `cargo package --list` licence/README assertion |
-| 14 | **Backlog and knowledge base clean** | `redkiln validate --kb && redkiln doctor` | **executed, PASS** — `validate passed` (exit 0); `doctor` exit 0 carrying exactly the six expected `template-drift` advisories (`discover.md`, `gates/discover.md`, `gates/intake.md`, `spec.md`, `_design.md`, `_intake-brief.md`) and no seventh |
+| 14 | **Backlog and knowledge base clean** | `redkiln validate --kb && redkiln doctor` | **executed, SPLIT — `validate` PASS, `doctor` FAIL. Corrected 2026-08-18; see *Note 3*.** `redkiln validate --kb` → `validate passed`, exit **0**. `redkiln doctor` → exit **1**: the six expected `template-drift` advisories *and* **nine `unconsumed-foundation` errors** — `HS-S0002`, `HS-S0034`, `HS-S0035`, `HS-S0067`, `HS-S0074`, `HS-S0075`, `HS-S0100`, `HS-S0108`, `HS-S0120` |
 
 **The whole gate, in its own words:**
 `all required checks passed (--fast: 4 optional step(s) not run)`.
@@ -149,6 +149,55 @@ was written to produce. The supersession is stated at
 `crates/happenstance-sqlite/Cargo.toml:16-21` and in
 [`crates-io-name-and-packaging-facts/_ledger.md`](crates-io-name-and-packaging-facts/_ledger.md),
 so a closeout audit reading phase 8 finds a decision rather than a silence.
+
+### Note 3 — row 14 was wrong, and this is the correction
+
+**As first written, row 14 claimed `doctor` exited 0 "carrying exactly the six expected
+`template-drift` advisories … and no seventh". That was false.** The orchestrator ran both halves
+against this tree on 2026-08-18, before advancing anything:
+
+```console
+$ redkiln validate --kb
+redkiln: validate passed.                     # exit 0
+
+$ redkiln doctor
+… six template-drift warnings …
+… nine "foundation story 'HS-S####' is consumed by no capability slice" errors …
+                                              # exit 1
+```
+
+The wrong sentence is quoted above rather than deleted, because a proof artifact that silently
+acquires a different claim is worth less than one that shows what it got wrong. This is the same
+defect class the project's own premise names — something that looks like evidence and is not — landing
+in the project's own integration proof, and it was caught by re-running the command rather than by
+reading the report.
+
+**What is actually true, and why `dod_green` is retained rather than flipped.**
+
+- The **declared** project-scoped bar is `verify.integration_scoped` in
+  [`.redkiln/config.yaml`](../../../.redkiln/config.yaml) — `cargo xtask ci --fast` — and that is
+  **row 13**. The orchestrator re-ran it independently at the same commit: exit **0**,
+  `all required checks passed (--fast: 4 optional step(s) not run)`. Row 13 is first-hand, not
+  relayed.
+- `redkiln doctor` is **not** one of this repo's declared `verify:` commands (the four are
+  `affected_gate`, `reachability_static`, `integration_scoped`, `e2e`). Row 14 is an extra check
+  this run chose to make. Its failure is real and is recorded as a failure — it does not retroactively
+  redden the bar the project is actually held to.
+
+**The nine errors are pre-existing and are not this project's code.** They are redkiln
+**[#122](https://github.com/Wet-Ink-Corporation/redkiln/issues/122)** — `diagnoseUnconsumedFoundations`
+answers a reachability question with a single-hop predicate, so a foundation story feeding capability
+work through one intermediate foundation story is indistinguishable from one feeding nothing; seven of
+the nine are false positives by transitive reachability. Verified pre-existing three separate times:
+by the 2026-08-15 wave (stash-and-reset to `HEAD`, and a second worktree at the same commit), and by
+this initiative's orchestrator via `redkiln doctor --cwd` against a tree carrying none of the
+intervening changes.
+
+**Two of the nine are this project's own stories** — `HS-S0034` `benchmark-harness` and `HS-S0035`
+`adr-0022-append-condition-strategy`. And **CI's `backlog` job asserts the list is empty**
+(`.github/workflows/ci.yml:177`), which makes this a **release blocker for the initiative**, owed
+before `publication-and-positioning` (HS-P0016) rather than at the PR. It is disclosed here so the
+project's review gate is answered with it in view rather than around it.
 
 ## Missing dependencies
 
