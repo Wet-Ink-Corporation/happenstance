@@ -25,24 +25,13 @@ human-readable record, the trailer is what resume greps.
 | durable-event-store | approved | schema-migration-and-identity 8381c89, append-atomicity-and-store-limits 23bc776, lazy-read-with-snapshot-ceiling 0c6ce2b, wide-query-chunked-not-refused 11596b4, sqlite-fixture-and-whole-suite 41a2064 | (this commit) |
 | race-model-and-durability | approved | concurrency-family-and-contender-count 995b987, model-family-and-mutant-pass-column 0ad702f, reopen-negative-control-and-durability-verdicts 2d08e0d | (this commit) |
 | sqlite-projection-store | approved | projection-store-passes-the-borrowed-suite 1afb47b | (this commit) |
-| publishable-and-reconciled | changes-requested | instrument-markers-removed-and-gate-green 62a05dd, crates-io-name-and-packaging-facts ada4962, spec-and-code-reconciliation 54df29a | (this commit) |
+| publishable-and-reconciled | approved | instrument-markers-removed-and-gate-green 62a05dd, crates-io-name-and-packaging-facts ada4962, spec-and-code-reconciliation 54df29a | (this commit) |
 
 ## Surviving findings
 
 For each slice whose verdict is `changes-requested`, the findings that survived the in-slice fix
 pass, with the `file:line` evidence the reviewer cited. These are the prescription a resumed run —
 or a human — starts from. They are hypotheses for the next reviewer to verify, not facts to trust.
-
-### publishable-and-reconciled
-
-- **Issue:** BLOCKING — the deterministic gate is red for HS-S0047. `redkiln verify --item HS-S0047 --grain story` returns `{"pass":false, ... {"name":"boundary","pass":false,"detail":"changed outside declared boundary: standards/rust/01-standard-of-evidence.md"}}`. The edit is correct and forced — the pass moved `silently ignores` from `spec/SPECIFICATION.md:5926` to `:5984`, past `lint_constitution`'s 10-line window (`xtask/src/lint_constitution.rs:111`) — and it is reasoned in `_reconciliation.md:192-211`, but no story's declared boundary admits `standards/`. HS-S0045 and HS-S0046 both return `pass:true`; only this one fails.
-  **Fix:** Add `standards/rust/01-standard-of-evidence.md` to the fenced PR-boundary block in `.bklg/from-contract-to-published-library/sqlite-durable-store/spec-and-code-reconciliation/spec.md:199-205`, carrying the one-line reason already written in `_reconciliation.md` (citation-line repair only, the same principle HS-S0045's spec applies to `spec/SPECIFICATION.md`), then re-run `redkiln verify --item HS-S0047 --grain story` and confirm `pass:true`. Do not revert the digit — that would red a REQUIRED gate step.
-
-- **Issue:** HS-S0047's `_ledger.md` AC-005 evidence is stale by the fix commit: it reads `396 citations checked (78 anchored ...)` and `checked 389 to 396 (+7)`, while the tree emits 398 and `_reconciliation.md:32` records 398 (+9). `c510468`'s own message says '396 -> 398' and updated `_reconciliation.md` but not the ledger row. Both numbers clear the baseline, so the criterion still holds, but the story's primary evidence artifact now misquotes the tree it measures — the exact hand-maintained-count-beside-the-list failure this story is about.
-  **Fix:** Update the AC-005 evidence string in `.bklg/.../spec-and-code-reconciliation/_ledger.md` to `398 citations checked (78 anchored to their subject, 12 external)` and `checked 389 to 398 (+9)`, matching `_reconciliation.md` and the live run.
-
-- **Issue:** One same-class marker survives the pass and is absent from the verdict table. CF-39's `[PROVISIONAL]` falsifier at `spec/SPECIFICATION.md:8053-8058` still ends 'The instruments are the rusqlite adapter at phase 8 and the Postgres adapter at phase 10, and no adapter has armed a fault yet' — the only remaining sentence in the specification that names phase 8 in the future tense (every other 'phase 8' mention is past tense). Its substantive claim is still true (`SqliteFixture` declines `MID_BATCH_FAULT` by scope, `crates/happenstance-sqlite/tests/support/mod.rs:173-183`), which is why this is a finding rather than a false clause — but `c510468` widened `_reconciliation.md`'s inclusion rule to 'the crate's identity — path or name, prose, Rejects: or maturity marker' precisely to catch markers like this, and the widened rule was not re-run to exhaustion, so CF-39 has no verdict row.
-  **Fix:** Add a CF-39 row to `_reconciliation.md`'s 'Clauses naming this crate' table. `unchanged` is a legitimate verdict here if the reason is stated (the injectable trigger fault is available and unabsorbed per `tests/append.rs::a_failure_mid_batch_leaves_nothing`, but arming it belongs to ES-35's owner, so the falsifier is still live); alternatively restate the instrument list inside the same level as ES-41 and CF-40 were. Either way, record it rather than leaving the table's coverage claim over-stated.
 
 ## Carried outside the slice loop — a finding a re-launch cannot reach
 
