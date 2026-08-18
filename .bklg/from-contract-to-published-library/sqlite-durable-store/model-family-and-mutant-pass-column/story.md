@@ -20,14 +20,14 @@ archetype: capability
 slice: race-model-and-durability
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-18T13:29:26.353Z
+updated: 2026-08-18T13:29:28.342Z
 links:
   pr: null
   commits:
     - 0ad702f
     - 5651fd9
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
