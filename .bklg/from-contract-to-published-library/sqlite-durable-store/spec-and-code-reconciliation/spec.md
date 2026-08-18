@@ -200,9 +200,27 @@ This story is delivered mounted: the deliverable is not a report about
 spec/SPECIFICATION.md
 spec/E2E-CASES.md
 xtask/src/spec_trace.rs
+standards/rust/01-standard-of-evidence.md
 .kb/_intake/**
 .bklg/from-contract-to-published-library/sqlite-durable-store/spec-and-code-reconciliation/**
 ```
+
+**`standards/rust/01-standard-of-evidence.md` was added on 2026-08-18, and it admits citation
+re-anchoring ONLY.** The constitution cites `spec/SPECIFICATION.md` by `file:line`, and this story's
+whole deliverable is editing that file — so the two are structurally coupled: the reconciliation
+pass moved the phrase *"silently ignores"* from `:5926` to `:5984`, 58 lines, and
+`xtask/src/lint_constitution.rs:111` matches a cited phrase within a **10-line window**. The
+citation at `01-standard-of-evidence.md:128` therefore stopped resolving, and `cargo xtask lints`
+is a REQUIRED gate step — so the story is forced across its boundary or into a red gate, with no
+third option. Reverting the digit is not the alternative; it is the red gate.
+
+This entry permits **line-number repair to existing citations and nothing else**: rule text,
+evidence selection, rule retirement and new atoms all stay outside, so the widening cannot later be
+cited to justify editing a rule. This story's actual use is **one** citation in one atom. It is the
+same principle this spec already applies to `spec/SPECIFICATION.md` itself, and the twentieth
+instance of the class in this initiative — HS-P0010 settled the first three at `aef8990` and
+predicted the recurrence, HS-P0011 settled four through seven at `34d5311`, and
+`benchmark-harness` settled the eighteenth at `e020276` on these same terms.
 
 **Merge DoD.** `cargo xtask spec-trace` green on the merged tree, its citation `checked` and
 `anchored` figures both at or above the recorded pre-slice baseline, every clause in phase 8's
