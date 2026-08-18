@@ -7,9 +7,9 @@ title: "Migration 1: the amended schema, persisted StoreId, and idempotent concu
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: in-review
+status: in-progress
 process: story
-stage: report
+stage: implement
 automation: HITL
 severity: null
 blocked_by:
@@ -22,13 +22,13 @@ archetype: foundation
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-18T03:27:22.807Z
+updated: 2026-08-18T03:27:23.902Z
 links:
   pr: null
   commits:
     - 8381c89
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
