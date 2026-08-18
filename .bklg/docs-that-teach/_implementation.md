@@ -103,3 +103,40 @@ earlier.
 
 The two-story boundary escape (HS-S0136, HS-S0138) is left recorded and unrepaired here
 so that whoever resolves #136 has a live case the fixed check must still catch.
+
+#### Resolved, 2026-08-18 — redkiln 0.19.0
+
+**#136 was closed as a duplicate of redkiln#94; the fix had already shipped in
+0.19.0.** `boundaryCheck` is now called as `boundaryCheck(located.dir, ownScope ??
+changed)`, where `ownScope = ownChangedFiles(root, commitLinks(...))` derives the
+window from the story's own `links.commits` plus the working tree
+(`src/store/verify.ts:135-160`, `:917-935`). The scoping is deliberately confined to
+this one check: `affected-gate` and `provenance` keep the broad set, `ledger` keeps
+`base`. The rationale at `:110-134` names the same failure this run hit — "the gate was
+strictest on the most disciplined specs: declaring no fence passed, declaring a precise
+one blocked you."
+
+Leaving the two-story escape unrepaired was worth it: under the fixed check HS-S0136 and
+HS-S0138 failed `boundary` naming **exactly** the four `standards/rust/*.md` files and
+nothing else, independently reproducing the finding this ledger recorded, while the
+other eight passed all four checks. The fix was verified against a real case rather than
+taken on trust.
+
+**Boundary amendment (`c52b031`).** `standards/rust/**` added to both stories' `## PR
+boundary` fences, each with an inline note giving the reason: mounting a `REQUIRED` step
+into `xtask/src/main.rs` shifts every line number the constitution's Evidence lines cite
+into that file, and `cargo xtask lint-constitution` fails until they are re-pointed. The
+declarations were incomplete; no claim, rule or example in any atom changed. Recorded as
+an amendment rather than a quiet edit, because widening a fence to clear a red gate is
+the one move this check exists to make visible.
+
+**Verdicts executed** (the ones given before the blocker, unchanged by it):
+
+- All 10 stories: `plan` -> `report`, `--verdict approved --stay`. All now
+  `report`/`in-review`, holding for closeout.
+- HS-P0020: `implementation` -> `integration` -> `review`, `--verdict approved --stay`.
+  Now `review`/`in-review`. The integration gate ran `integration_scoped`
+  (`cargo xtask ci --fast`) green — once on retry after a first-run flake, which redkiln
+  reported rather than hid.
+
+Project 1 state: **done**.
