@@ -10,6 +10,10 @@ Everything else that used to live under `docs/` was moved out, because a directo
 holding both "how to use this library" and "the 9,000-line normative specification"
 serves neither reader.
 
+It routes rather than teaches: the library is explained on the pages below and
+not here, because [`RP-10-2`](../standards/pages/10-the-need-set.md) is the rule
+that shapes a page whose job is orientation.
+
 | Page | Read it at |
 | --- | --- |
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |

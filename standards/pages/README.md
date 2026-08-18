@@ -4,7 +4,8 @@ What makes a narrative page teach, as rules a page author and a non-author
 reviewer can both apply. Five bands, a handful of rules each; every rule names a
 wrong page that could ship. The instruction is the same one the sibling tree
 gives: **load one rule, never the tree** — find yours in the band table, or guess
-the filename from the band, because the numbering is stable.
+the filename from the band, because the numbering is stable. The material these
+rules govern is the narrative tree at [`docs/`](../../docs/README.md).
 
 | Band | Owns |
 |---|---|

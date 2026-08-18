@@ -6,6 +6,9 @@ An append condition is checked against the same boundary the query read, so a
 writer that saw a consistent view cannot be overtaken between reading and
 appending (ES-40).
 
+It answers the one question its declaration names and no second one, because
+[`RP-00-1`](../standards/pages/00-one-need.md) is the rule that shaped it.
+
 ```rust
 use happenstance_core::MemoryEventStore;
 
