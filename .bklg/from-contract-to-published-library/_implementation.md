@@ -1321,3 +1321,96 @@ re-enters `durable-event-store` at Review, hands them to a new reviewer as hypot
 fix→re-review→seal tail, and continues into slices 3–5. The two approved M1 stories are skipped as
 sealed. Still expected downstream: slice 5 halts at `cargo publish` for the owner, after HS-S0046
 reconciles `reserve.rs`'s `0.1.0-alpha.1` claim.
+
+### HS-P0012 `sqlite-durable-store` — run 4, 2026-08-18 (`wf_02cca7ea-70f`)
+
+baseRef **`90cbca5`**, held unchanged for the fourth time. `degradedSummary: none`, `degraded: []`,
+no `baselineRepairs`. 19 agents, 0 errors, ~4.3 hours. **14 of 14 stories committed.** Every
+prediction made at launch held.
+
+| Slice | Verdict |
+|-------|---------|
+| `bench-harness-and-adr` · `durable-event-store` · `race-model-and-durability` · `sqlite-projection-store` | **approved** |
+| `publishable-and-reconciled` | **committed, unsealed** — halted before its review |
+
+`durable-event-store` flipped from `changes-requested` to `approved` (`728998d`) after two failed
+reviews. Halted at HS-S0046 `crates-io-name-and-packaging-facts`, `blocked-dependency` — the
+`cargo publish` handoff, exactly as run 3's ledger entry predicted it would.
+
+### `happenstance-sqlite` is reserved on crates.io
+
+**`0.0.0`, published 2026-08-18T13:16:06.844473Z, `yanked: false`.** The repository owner authorised
+the act explicitly at the run-4 gate and the orchestrator executed it — the authority AC-001 requires
+is the authorisation, not the keystroke. Verified from the registry rather than from the upload's own
+claim: `GET https://crates.io/api/v1/crates/happenstance-sqlite` returns the name, `max_version 0.0.0`
+and the corrected description. The transcript is recorded verbatim in HS-S0046's `_ledger.md` AC-001,
+which is now `satisfied: true`; it existed only in the terminal that ran it, which is why it was
+written down before anything else, on HS-P0011's precedent.
+
+**The blocked evidence was kept, not overwritten.** AC-001's row still carries, verbatim, everything
+established while it was blocked — that is the verification chain the upload rested on, and replacing
+it would discard the record of what was known *before* the irreversible act rather than after.
+
+**Nothing in the workspace tree changed.** The placeholder is generated under `target/` and declares
+its own empty `[workspace]`; `publish = false` and `PUBLISHABLE` are untouched, which is AC-015's
+second half and the thing `_decomposition.md` §8 says must not be tidied up here.
+
+### The precondition was met, and the story went further than asked
+
+Run 3's ledger entry required `reserve.rs:258` and `:275` reconciled from `0.1.0-alpha.1` to
+`0.2.0-alpha.1` **before** any upload, since `0.2.0-alpha.1` shipped on 2026-08-16 and a crates.io
+version can be yanked but never removed. Both are reconciled — and the story added a **red-first
+test**, `every_placeholder_names_the_release_this_project_will_ship`, which renders both templates
+for **all ten** `RESERVABLE` rows and asserts neither surface names the superseded version. So
+cloudflare, neon, ladybug, postgres and sync inherit the correction *mechanically* rather than by
+anyone remembering, which is more than the criterion asked for. `SUPERSEDED_RELEASE_CLAIM` (`:304`)
+holds `0.1.0-alpha.1` deliberately, as the value a regression would reintroduce.
+
+The artefact was regenerated and **inspected before upload** — `0.0.0`, both licence files present,
+the stale *"Not yet implemented."* gone from the description, and both surfaces naming
+`0.2.0-alpha.1` — then dry-run green, then published.
+
+### The one thing that did not land, and was added at the gate
+
+Run 3's ledger entry asked HS-S0046 to record that it is **knowingly** shipping a README whose three
+`github.com/Wet-Ink-Corporation/happenstance` links return HTTP 404 to an anonymous client. No such
+disclosure existed anywhere in its ledger — checked for `404`, `private`, `N-3` and `dead link`, all
+zero. It is not blocking and not HS-S0046's to fix: the links are identical strings that begin
+resolving the moment the repository is public, with no republish and no version bump, and that is
+**N-3**, owned by HS-P0016. But a fourth crates.io page now carries them, so the disclosure was
+written into AC-001's evidence when the upload was recorded. **The decision was taken knowingly at
+the gate rather than discovered afterwards** — which is the whole point of the disclosure.
+
+### Story gate — 11 approved, 3 held (human, batched)
+
+**HS-S0034–HS-S0044 are at `report`/`in-review` with `approved` recorded.** That includes the five
+run 3 had bounced back to `implement`: their slice has since sealed `approved`, so the rejection
+was answered by work rather than left standing.
+
+**HS-S0045, HS-S0046 and HS-S0047 were deliberately left at `plan`/`ready`.** Their slice never
+reached review, so no adversarial reviewer has looked at them, and advancing them would put a human
+gate over unchecked work — one of them carrying an AC that was unsatisfied until an hour ago. Same
+refusal HS-P0011 made twice, for the same reason.
+
+Provenance was recorded first, one call per story, each carrying **only its own two commits** — the
+`feat` checkpoint and the `docs` follow-up that cites it. The three slice-wide fix commits
+(`9a10dbf`, `2172b40`, `897ae70`) were withheld from every story, which matters more on 0.19.0 than
+it did when the rule was written: the boundary check now reads `links.commits` directly, so a
+slice-wide commit recorded against one story would feed every file it touched straight into that
+story's own fence.
+
+### Boundary instance twenty, in a story that is not advancing
+
+`spec-and-code-reconciliation` (HS-S0047) strays into `standards/rust/01-standard-of-evidence.md`.
+It blocks nothing today because the story stays at `plan`, but run 5 must settle it before HS-S0047
+can be verdicted. Same compelled class as the nineteen before it. `wide-query-chunked-not-refused`
+and `reopen-negative-control-and-durability-verdicts` still report **no boundary parsed** (#135), so
+their gates prove nothing about scope — HS-S0039's was hand-verified by run 3's reviewer.
+
+### Next — run 5
+
+Slice 5 is committed but unsealed, so a fresh re-launch re-enters it at **Review** with no
+implementer dispatched, seals it, then runs Integration and the project review for the first time in
+this project. AC-001 is now satisfiable, so the halt that stopped run 4 is gone. Expect the
+`unconsumed-foundation` pair (HS-S0034, HS-S0035) to persist — that is **#122**, still the release
+blocker, and still owed before `publication-and-positioning`.
