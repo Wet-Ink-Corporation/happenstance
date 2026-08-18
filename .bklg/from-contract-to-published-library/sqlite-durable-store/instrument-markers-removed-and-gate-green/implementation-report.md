@@ -44,7 +44,7 @@ other half is a review obligation recorded as one in `_ledger.md`'s AC-003 row.
 
 ## Commits
 
-- `4f92c42` — `feat(sqlite-durable-store): The instrument markers come out and the gate is green`
+- `62a05dd` — `feat(sqlite-durable-store): The instrument markers come out and the gate is green`
 
 One commit, which is the point rather than a convenience: `#![allow]` is silent
 in both directions, so a split that leaves the attribute behind in a second
