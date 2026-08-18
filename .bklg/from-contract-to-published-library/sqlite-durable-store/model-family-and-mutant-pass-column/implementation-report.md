@@ -64,7 +64,7 @@ positions that may gap.
 
 ## Commits
 
-- `<checkpoint>` — `feat(sqlite-durable-store): The model family green, and SQLite in the mutant pass column`
+- `0ad702f` — `feat(sqlite-durable-store): The model family green, and SQLite in the mutant pass column`
 
 ## Changes
 
