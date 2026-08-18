@@ -23,6 +23,7 @@ human-readable record, the trailer is what resume greps.
 | ----- | ------- | ----------------- | --------- |
 | bench-harness-and-adr | approved | benchmark-harness 2665883, adr-0022-append-condition-strategy 791b929 | (this commit) |
 | durable-event-store | approved | schema-migration-and-identity 8381c89, append-atomicity-and-store-limits 23bc776, lazy-read-with-snapshot-ceiling 0c6ce2b, wide-query-chunked-not-refused 11596b4, sqlite-fixture-and-whole-suite 41a2064 | (this commit) |
+| race-model-and-durability | approved | concurrency-family-and-contender-count 995b987, model-family-and-mutant-pass-column 0ad702f, reopen-negative-control-and-durability-verdicts 2d08e0d | (this commit) |
 
 ## Surviving findings
 
