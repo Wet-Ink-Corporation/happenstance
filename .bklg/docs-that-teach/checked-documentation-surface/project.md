@@ -9,7 +9,7 @@ initiative: docs-that-teach
 project: checked-documentation-surface
 status: implementing
 process: project
-stage: implementation
+stage: integration
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T00:10:13.548Z
+updated: 2026-08-18T15:22:27.107Z
 links:
   pr: null
   commits: []
