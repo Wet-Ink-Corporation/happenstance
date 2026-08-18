@@ -64,7 +64,7 @@ being trusted to fall out of it. The patch was reverted; `git diff` on
 
 ## Commits
 
-- `0b0e29f` — `feat(sqlite-durable-store): The concurrency family, at the contender count the DoD asks for`
+- `995b987` — `feat(sqlite-durable-store): The concurrency family, at the contender count the DoD asks for`
 
 ## Changes
 
