@@ -46,7 +46,7 @@ for the reason D11 exists. These tests are that comment, enforced.
 
 ## Commits
 
-- `12ac09f` — `feat(sqlite-durable-store): The name reserved and the manifest publishable`
+- `ada4962` — `feat(sqlite-durable-store): The name reserved and the manifest publishable`
 
 ## Changes
 
