@@ -1125,3 +1125,77 @@ handling.
 
 **Five of the seven committed stories are now verdictable** (HS-S0034–HS-S0038, HS-S0040).
 HS-S0039's boundary is still never parsed (#135), so its gate passing means only that no check ran.
+
+### Wave `2026-08-17-adr-0022-append-condition` merged — DoD 3 unblocked, 2026-08-17
+
+Merged into this branch at **`83b0ce9`** (wave commit `2abb99f`); both wave worktrees and branches
+removed, including the stale `kb-intake-2026-08-15` left over from the previous wave. Fourteen
+operations from six intake documents, eleven atom files created, four mutated, three maps synced,
+twelve backlinks wired. **Fifteen agents, zero errors, `degraded: []`** — the largest wave in this
+corpus and the first with no drops. `redkiln validate --kb` passes on the merged branch.
+
+**`kb-decision-0022` is `status: accepted`.** Project DoD 3 is satisfied, so run 3 no longer halts
+at Integration for want of it. Its measurements live in a separate atom
+(`kb-reference-append-condition-experiment-001`) so the decision can be superseded later without
+invalidating the numbers — which is what `crates-io-name-and-packaging-facts`' AC-008 inverted
+staging test was written for.
+
+**PS-32's correction is performed at last**, after ADR-0007's own wave, ADR-0017's and ADR-0030's
+each closed the *record* of the obligation while the false sentence stood. The mechanism is the part
+worth keeping: five line-anchored citations point into
+`references/adr/0007-projection-runner-decodes.md` — `:44-50`, `:62-67`, `:76-81` from
+`spec/SPECIFICATION.md`, plus `:62-67` and `:118-121` from two backlog specs — and `spec-trace` is a
+gate step, so **an insertion anywhere above them would have silently re-pointed all five**. The
+marker went *into* line 38 with the line count preserved, and the substance was appended below the
+last citation. All five anchors verified byte-identical; `spec-trace` reports 389 citations checked,
+no traceability problems. `RUNBOOK.md:3885` was already correct, so only `:4025` needed the matching
+edit. The 2026-06 reasoning is annotated, never rewritten.
+
+**A rule that generalises, and nothing enforces it:** in this repository an *append* to a cited
+long-form record is safe and an *insertion* is not. This is the same cross-reference class the
+initiative has now hit six times, and a `references/`-directed citation is checked by no instrument.
+
+**#122 stopped a third consecutive wave.** `redkiln doctor` exits 1 on the same nine
+`unconsumed-foundation` errors; I verified them pre-existing by a new route — `doctor --cwd` against
+this worktree, which carried none of the wave's changes — same exit 1, same nine. Finished by hand
+by explicit decision, as both prior waves were. The 2026-08-13 retrospective predicted a gate that
+can establish innocence but not act on it would be routed around every time; that is now three waves
+in five days, and CI's `backlog` job keeps it a **release blocker** rather than tidiness.
+
+Owed and recorded in the wave's `04-retrospective.md`, all correctly refused as KB atoms because
+they are tasks rather than knowledge: the `domain-map.md` phase-8 placement decision, **N2**
+(`read_through` dead in eight wasm32 combinations, a CI failure under ambient `-D warnings`),
+**ES-17** (ADR-0012's two-build falsifier, owned by nobody), and **N3** (module-name glob shadowing,
+destined for `standards/rust/`, not `.kb/`).
+
+### The crates.io reservation is NOT a standalone act — deferred to slice 5, 2026-08-17
+
+Run 1's note said reserving `happenstance-sqlite` by hand up front would *"convert a probable mid-run
+halt into a precondition"*, on the model of HS-P0011's `cargo publish`. **That model does not
+transfer, and the attempt found three reasons why.** Deferred to slice 5 by human decision; nothing
+was published and nothing was changed.
+
+1. **The reservation is coupled to code HS-S0046 itself owns.** It is not an external act on a
+   finished tree: it is `cargo publish` against a `0.0.0` placeholder that `cargo xtask reserve`
+   generates, and the generator — `xtask/src/reserve.rs` — is one of the four files the story's own
+   PR boundary names. Doing it up front means landing the story's deliverable by hand before the
+   story runs, which is the trap the HS-S0034 fence decision had already sprung once this session.
+2. **The placeholder text is wrong, exactly as the spec predicted.** `reserve.rs:258` (the generated
+   README) and `:275` (the generated `lib.rs` doc) both promise *"The first functional release will
+   be `0.1.0-alpha.1`"*, while `0.2.0-alpha.1` went live on 2026-08-16. The spec is explicit that
+   this is reconciled **before** the upload — *"a crates.io version can be yanked and never
+   removed"*. The generator is shared by all six reservable crates, so the correction also covers
+   cloudflare, neon, ladybug, postgres and sync.
+3. **Every link in the generated README 404s.** It embeds
+   `https://github.com/Wet-Ink-Corporation/happenstance` three times (`reserve.rs:38`, used at
+   `:249`, `:254`, `:256`); checked anonymously, the repository page and the `SPECIFICATION.md` deep
+   link both return **HTTP 404** because the repository is private. That is finding **N-3**, already
+   routed to HS-P0016. Publishing now would add a **fourth** permanently dead-linked crates.io page
+   to a defect that already has an owner. It is **not HS-S0046's to fix** — the links resolve the
+   moment the repository goes public, with no republish — but slice 5 should ship them knowingly.
+
+The name is confirmed **free and unclaimed** (`crate 'happenstance-sqlite' does not exist`), and a
+crates.io token is configured on this machine, so the act itself is one command whenever the
+precondition is met. The HS-P0011 pattern still applies to the *upload*: the story reconciles the
+generator as AC work with ledger evidence, generates, and halts; the owner runs the one
+`cargo publish`.

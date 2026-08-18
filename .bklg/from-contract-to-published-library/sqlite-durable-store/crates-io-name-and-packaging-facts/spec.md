@@ -513,3 +513,47 @@ Everything above is enough to start. Open these at the moment named, and never i
    invisible to `EventStore`, so any rule written for it would be a rule no adapter can fail — the
    decorative gate `CLAUDE.md` forbids. The substitute instrument is the recorded `cargo package --list`
    run, whose named wrong implementation is the workspace's own current state.
+
+## Verified against the live registry — 2026-08-17, before this story runs
+
+An attempt to reserve the name by hand ahead of slice 5 was **stopped and deferred back to this
+story** by human decision. Nothing was published and no tracked file was changed. Three facts were
+established against the live registry and the tree, so this story starts from observation rather
+than from the spec's prediction.
+
+**1. The name is free.** `GET https://crates.io/api/v1/crates/happenstance-sqlite` returns
+`crate 'happenstance-sqlite' does not exist`. Nothing is competing for it, and a crates.io token is
+configured on the repository owner's machine, so the upload is one command once the precondition
+below is met.
+
+**2. The version defect this spec predicted is real, and it is now understating.** `reserve.rs:258`
+(the generated README) and `reserve.rs:275` (the generated `lib.rs` doc) **both** carry *"The first
+functional release will be `0.1.0-alpha.1`"*. The executive summary above cites `:258` and `:276`
+and calls this a version claim "this initiative still believes"; it is worse than that — the three
+core crates published **`0.2.0-alpha.1` on 2026-08-16**, so the sentence is already false at time of
+writing rather than merely mis-predicting. Reconcile **both** sites before the upload, per this
+spec's own reasoning that a version can be yanked and never removed.
+
+The generator is shared by all six reservable crates, so this correction is not
+`happenstance-sqlite`'s alone — it also fixes the placeholder text for cloudflare, neon, ladybug,
+postgres and sync. Worth stating in the implementation report as a deliberate consequence rather
+than leaving it to look like scope drift.
+
+**3. Every link in the generated README 404s, and it is NOT this story's to fix.** `reserve.rs:38`
+sets `REPOSITORY = "https://github.com/Wet-Ink-Corporation/happenstance"`, interpolated three times
+at `:249`, `:254` and `:256`. Checked anonymously on 2026-08-17: the repository page and the
+`spec/SPECIFICATION.md` deep link both return **HTTP 404**, because the repository is private.
+
+That is finding **N-3** from HS-P0011's review, already routed to **HS-P0016**
+(`publication-and-positioning`), which owns the visibility decision. It is correctly *not* a yank
+and not a version bump: the links are identical strings that start resolving the moment the
+repository is public, with no republish. **This story should not attempt to fix them.** What it
+should do is record that it is knowingly shipping a fourth crates.io page carrying them, so the
+decision is taken rather than discovered — the same disclosure discipline the ledger contract asks
+for elsewhere.
+
+**Ordering consequence.** The reservation is not a standalone external act that can be lifted out of
+this story to de-risk the run: it is `cargo publish` against a placeholder **this story's own
+`reserve.rs` edit generates**. So the HS-P0011 `cargo publish` pattern applies to the *upload* only —
+this story reconciles the generator as AC work with ledger evidence, generates, verifies, and halts;
+the repository owner runs the single `cargo publish`.
