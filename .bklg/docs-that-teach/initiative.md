@@ -7,9 +7,9 @@ title: From Accurate to Teachable
 parent: null
 initiative: docs-that-teach
 project: null
-status: planning
+status: implementing
 process: initiative
-stage: storymap
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 tier: standard
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T03:02:30.946Z
+updated: 2026-08-18T00:09:33.481Z
 links:
   pr: null
   commits: []
