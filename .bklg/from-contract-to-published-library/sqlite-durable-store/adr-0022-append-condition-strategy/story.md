@@ -7,9 +7,9 @@ title: ADR-0022, written first and carrying a measured number
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: foundation
 slice: bench-harness-and-adr
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-17T12:59:43.124Z
+updated: 2026-08-18T03:26:35.944Z
 links:
   pr: null
   commits:
     - 791b929
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
