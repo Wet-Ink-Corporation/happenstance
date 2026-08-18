@@ -21,10 +21,24 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| discipline-on-disk | changes-requested | need-vocabulary-and-declaration-form@55b987b, router-precedence-and-announcement@9dacc7d, fold-line-rule@dec82c7, reviewer-and-citation-procedures@a349e04 | (this commit) |
 
 ## Surviving findings
 
 For each slice whose verdict is `changes-requested`, the findings that survived the in-slice fix
 pass, with the `file:line` evidence the reviewer cited. These are the prescription a resumed run —
 or a human — starts from. They are hypotheses for the next reviewer to verify, not facts to trust.
+
+### discipline-on-disk
+
+- **no-op-seam** — `xtask/src/lint_pages.rs:1689-1700` — the untagged-fence half of
+  `no_rust_tagged_and_no_untagged_fence_in_the_rules_tree` counts lines equal to a bare triple-backtick
+  fence marker and asserts `openers % 2 == 0`. Those lines are the CLOSERS of correctly tagged fences,
+  so an untagged fence adds one opener and one closer and parity never changes. Proved by mutation: a
+  bare triple-backtick block appended to `standards/pages/40-reviewing-a-page.md` left all 51
+  `lint_pages` tests green, while a `rust`-tagged fence in the same place went red at `:1681` with a
+  file:line message. `need-vocabulary-and-declaration-form` AC-014 names the untagged half explicitly
+  and names this test as its verification;
+  `.bklg/docs-that-teach/page-need-discipline/need-vocabulary-and-declaration-form/_ledger.md` AC-014
+  flips the row citing exactly this parity reasoning ("an even number of closers matching four tagged
+  openers").
