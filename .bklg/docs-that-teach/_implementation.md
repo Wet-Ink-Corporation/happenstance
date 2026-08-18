@@ -32,3 +32,57 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 - Scope: all 10 stories, 4 slices (`compiled-narrative-tree`, `narrative-checker-discipline`,
   `specification-pin`, `falsification-and-limits`).
 - baseRef: recorded at launch below.
+
+### Run 1 result — HS-P0020, workflow `wf_4df07ef2-47d`
+
+- baseRef: `6d56d0dc77b2a079c96233c91332a54f16dc0136`
+- 10/10 stories, 4/4 slices sealed `approved`, `degradedSummary: none`, no blockers,
+  no baseline repairs. Project review verdict `approved`, overall 3
+  (`_review.md`); DoD bar green (`_integration.md`, project-scoped — the 15
+  whole-initiative scenarios deferred to HS-P0025).
+- Rubric: ac-coverage 3, integration-reachability 3, test-integrity 3,
+  gate-greenness 3, brief-fidelity 3, intent-fidelity 2, presentation-fidelity 0.
+- `presentation-fidelity` is 0 on every project of this initiative by construction:
+  `.redkiln/config.yaml` declares no `design:` block, so no surface is ever captured.
+  Adjudicated 2026-08-18: **left as-is** — the written `_design.md` record is the
+  record, per `_design.md:775-777` and CLAUDE.md. Not to be re-raised per project.
+- Human verdicts given 2026-08-18: all 10 stories **approved**, project **approved**.
+  NEITHER IS RECORDED YET — blocked, see below.
+
+#### BLOCKER — the story-grain boundary gate cannot be satisfied in this lane
+
+`redkiln advance <story> --to report` runs `implement`'s command gate,
+`redkiln verify --item <id> --grain story`. Its `boundary` check compares the story's
+declared `## PR boundary` against `changedFiles(root, base)`, and `base` is
+`DEFAULT_BASE = "main"` — hardcoded at `src/store/verify.ts:110`, with no `--base` in
+`.redkiln/processes/story.yaml:32`'s gate command and no `--base` on `advance`. After a
+ten-story project run the whole project's cumulative diff is on the branch, so every
+story is measured against every other story's files. Stories 1-9 cannot pass regardless
+of quality.
+
+Evidence it is the base and not the work: `redkiln verify --item HS-S0145 --grain story
+--base b0bb9bd` (that story's own parent) passes all four checks, including `boundary`.
+The same command for HS-S0136 fails `boundary` naming eight files belonging to later
+stories. `affected-gate`, `ledger` and `provenance` pass throughout.
+
+Not worked around. The fixes available are all governance calls: a redkiln change
+(scope `boundary` to the story's own `links.commits`, which `provenance` already reads),
+a pack edit that cannot express a per-story base anyway, or deleting boundary blocks to
+make the check a no-op. None is mine to make.
+
+#### FINDING — two stories did escape their declared boundary
+
+Independent of the base problem, and found by mirroring `verify.ts`'s own
+`declaredBoundary`/`boundaryRegExp`/`REDKILN_MANAGED` logic against each story's OWN
+commits rather than `base...HEAD`:
+
+| story | commit | outside its boundary |
+| --- | --- | --- |
+| HS-S0136 pinned-narrative-tree-and-compiling-step | `7020c4c` | `standards/rust/{51,52,70,80}-*.md` |
+| HS-S0138 narrative-checker-mounted-with-pinned-path | `b62de17` | `standards/rust/{51,52,70,80}-*.md` |
+
+The other eight are clean. Both edits are line-number citation repairs (8 lines each,
+`xtask/src/main.rs:784` -> `:820` and so on) forced by inserting a REQUIRED step into
+`main.rs`, without which `cargo xtask lint-constitution` fails. Mechanically necessary
+collateral, not scope creep — but a real escape the two specs' boundaries did not
+anticipate, and the escape the check exists to surface.
