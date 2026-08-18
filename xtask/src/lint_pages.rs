@@ -368,6 +368,107 @@ mod tests {
         out
     }
 
+    /// One fenced block, as a walk over the file meets it.
+    struct Fence {
+        /// The 1-based line of the **opening** marker, so a failure message
+        /// pastes into an editor.
+        line: usize,
+        /// The opener's info string, trimmed. Empty means an untagged fence.
+        info: String,
+        /// Whether a closing marker was found before the end of the file.
+        closed: bool,
+    }
+
+    /// Every fence in `text`, judged by a state walk rather than line by line.
+    ///
+    /// The walk is the whole point, and it is not defensive engineering. In
+    /// `CommonMark` a fence's **closing** line is spelled exactly like an
+    /// **untagged opener** — three backticks and nothing else — so no per-line
+    /// predicate can tell them apart, and every shape that tries gets one of
+    /// the two cases wrong:
+    ///
+    /// * skip the empty info string, and an untagged opener is waved through
+    ///   along with the closers it is hiding among;
+    /// * do not skip it, and the closer of a perfectly good `text` fence is
+    ///   judged as an opener and fails, blaming an untagged fence;
+    /// * count the bare lines instead and check the count is even, and nothing
+    ///   can ever fail, because a well-formed untagged fence contributes
+    ///   exactly two of them.
+    ///
+    /// This tree shipped the first two at once — the second in the router's
+    /// copy — and then substituted the third for the untagged half. Toggling
+    /// on each marker and reporting only the opening side is what makes the
+    /// two spellings distinguishable, and is why there is now one function
+    /// rather than a copy per call site.
+    ///
+    /// A fence marker is recognised by prefix rather than by exact match, so a
+    /// longer run (` ```` `) or a trailing space still toggles the state; that
+    /// is `CommonMark`'s own rule and it keeps the walk in phase.
+    fn fences(text: &str) -> Vec<Fence> {
+        let mut out: Vec<Fence> = Vec::new();
+        let mut open = false;
+        for (index, line) in text.lines().enumerate() {
+            let Some(info) = line.strip_prefix("```") else {
+                continue;
+            };
+            if open {
+                open = false;
+                if let Some(last) = out.last_mut() {
+                    last.closed = true;
+                }
+                continue;
+            }
+            open = true;
+            out.push(Fence {
+                line: index + 1,
+                info: info.trim().to_owned(),
+                closed: false,
+            });
+        }
+        out
+    }
+
+    /// Every wrongly tagged fence in one file, as `file:line — why`.
+    ///
+    /// The single implementation of AC-014's fence rule, called by the whole
+    /// [`TREE`] **and** by [`ROUTER`]. Two copies of this rule is how the tree
+    /// came to hold two different wrong implementations of it, so the router
+    /// no longer carries its own.
+    ///
+    /// Returns the problems rather than asserting them so the specimens that
+    /// prove it can fail are ordinary assertions on ordinary values — a
+    /// `#[should_panic]` proves a panic happened somewhere and not that it
+    /// happened at the right line for the right reason.
+    fn fence_tag_problems(file: &str, text: &str) -> Vec<String> {
+        let mut wrong = Vec::new();
+        for fence in fences(text) {
+            let Fence { line, info, closed } = fence;
+            if !closed {
+                wrong.push(format!(
+                    "{file}:{line} — a fence is opened here and never closed; \
+                     every fence after it is read inside-out, so this is named \
+                     before its tag is judged"
+                ));
+                continue;
+            }
+            if info.is_empty() {
+                wrong.push(format!(
+                    "{file}:{line} — an untagged fence opener; a bare fence is \
+                     as wrong as a `rust`-tagged one, so that a future decision \
+                     to register this tree with the doctest harness cannot be \
+                     undermined retroactively. Tag it `text` or `markdown`"
+                ));
+            } else if info != "text" && info != "markdown" {
+                wrong.push(format!(
+                    "{file}:{line} — a fence tagged `{info}`; nothing in the \
+                     workspace compiles this tree, so `text` or `markdown` is \
+                     the honest tag"
+                ));
+            }
+        }
+        wrong
+    }
+
     /// This module's `//!` block, marker stripped, in source order.
     fn module_docs() -> String {
         THIS_FILE
@@ -850,18 +951,10 @@ mod tests {
             "`## Start here` is the filter; an empty one routes nobody"
         );
 
-        for (index, line) in text.lines().enumerate() {
-            let Some(info) = line.strip_prefix("```") else {
-                continue;
-            };
-            let info = info.trim();
-            assert!(
-                info == "text" || info == "markdown",
-                "{ROUTER}:{} — a fence tagged `{info}`; nothing in the workspace \
-                 compiles this tree, so `text` or `markdown` is the honest tag",
-                index + 1
-            );
-        }
+        // The same rule the rules tree is held to, through the same function:
+        // the router is a page in this tree and nothing here compiles either.
+        let wrong = fence_tag_problems(ROUTER, &text);
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     }
 
     #[test]
@@ -1669,35 +1762,98 @@ mod tests {
     #[test]
     fn no_rust_tagged_and_no_untagged_fence_in_the_rules_tree() {
         for &file in TREE {
-            let text = atom(file);
-            for (index, line) in text.lines().enumerate() {
-                let Some(info) = line.strip_prefix("```") else {
-                    continue;
-                };
-                let info = info.trim();
-                if info.is_empty() {
-                    continue;
-                }
-                assert!(
-                    info == "text" || info == "markdown",
-                    "{file}:{} — a fence here is tagged `{info}`; nothing in the \
-                     workspace compiles this tree, so `text` or `markdown` is \
-                     the honest tag",
-                    index + 1
-                );
-            }
-            let openers = text
-                .lines()
-                .filter(|line| line.starts_with("```"))
-                .filter(|line| line.trim() == "```")
-                .count();
-            assert_eq!(
-                openers % 2,
-                0,
-                "{file} has an untagged fence opener; a future decision to \
-                 register this tree must not be undermined retroactively"
+            let wrong = fence_tag_problems(file, &atom(file));
+            assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+        }
+    }
+
+    /// The three wrong fences, held as specimens rather than as tree edits.
+    ///
+    /// This is CLAUDE.md's decorative-rule corollary paid in the currency it
+    /// asks for: *name a plausible wrong implementation the rule rejects, and
+    /// write it down where the suite can run it.* Without these three strings
+    /// the untagged half of AC-014 is verified only by a corpus that happens to
+    /// be clean, and the day the corpus stops being clean is the only day the
+    /// check is exercised.
+    ///
+    /// Each specimen also names the implementation it forbids. The bare fence
+    /// is what a per-line scan that `continue`s on an empty info string waves
+    /// through, and what a parity count over bare lines can never see, because
+    /// a well-formed untagged fence contributes exactly two of them and
+    /// `2 % 2 == 0`. The unterminated opener is what any per-line scan misses
+    /// entirely.
+    #[test]
+    fn the_fence_check_rejects_the_three_wrong_fences() {
+        let untagged = fence_tag_problems("specimen.md", "# T\n\n```\nbare\n```\n");
+        assert_eq!(
+            untagged.len(),
+            1,
+            "one untagged fence is one problem, reported once: {untagged:?}"
+        );
+        assert!(
+            untagged[0].starts_with("specimen.md:3 —") && untagged[0].contains("untagged"),
+            "the message must open on the opener's own `file:line` and say \
+             which case failed: {untagged:?}"
+        );
+
+        let rust = fence_tag_problems("specimen.md", "# T\n\n```rust\nfn main() {}\n```\n");
+        assert_eq!(rust.len(), 1, "one `rust` fence is one problem: {rust:?}");
+        assert!(
+            rust[0].starts_with("specimen.md:3 —") && rust[0].contains("`rust`"),
+            "the message must name the tag it rejected: {rust:?}"
+        );
+
+        let unclosed = fence_tag_problems("specimen.md", "# T\n\n```text\nno closer\n");
+        assert_eq!(
+            unclosed.len(),
+            1,
+            "an opener with no closer is one problem: {unclosed:?}"
+        );
+        assert!(
+            unclosed[0].starts_with("specimen.md:3 —") && unclosed[0].contains("never closed"),
+            "an unterminated fence makes every fence after it read inside-out, \
+             so it is named rather than silently re-phased: {unclosed:?}"
+        );
+    }
+
+    /// The right fence, and the reason the walk is a walk.
+    ///
+    /// A closing fence marker is spelled exactly like an untagged opener, so
+    /// any predicate applied line by line judges closers as openers. The router
+    /// half of this rule did precisely that until this change: it asserted
+    /// `info == "text" || info == "markdown"` on every line starting with a
+    /// fence marker, and passed only because `standards/pages/README.md` had no
+    /// fence at all — the first legitimately tagged fence added to the router
+    /// would have failed on its own closing line, blaming an untagged fence.
+    /// That is the specimen below, and it must stay silent.
+    #[test]
+    fn the_fence_check_never_judges_a_closing_marker() {
+        for (info, text) in [
+            ("text", "# T\n\n```text\nbody\n```\n"),
+            (
+                "markdown",
+                "# T\n\n```markdown\n> **Answers:** `how-to` — ?\n```\n",
+            ),
+        ] {
+            let clean = fence_tag_problems("specimen.md", text);
+            assert!(
+                clean.is_empty(),
+                "a `{info}` fence and its closer are both well-formed: {clean:?}"
             );
         }
+
+        let two = fence_tag_problems("specimen.md", "```text\na\n```\n\n```\nb\n```\n");
+        assert_eq!(
+            two.len(),
+            1,
+            "the second block's opener is the only problem; the first block's \
+             closer is not an opener and the second block's closer is not \
+             either: {two:?}"
+        );
+        assert!(
+            two[0].starts_with("specimen.md:5 —"),
+            "and it is reported at the untagged opener's line, not at a closer's: {two:?}"
+        );
     }
 
     #[test]
