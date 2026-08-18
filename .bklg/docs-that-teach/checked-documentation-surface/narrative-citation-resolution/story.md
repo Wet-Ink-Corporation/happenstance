@@ -21,10 +21,11 @@ archetype: capability
 slice: specification-pin
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:17.033Z
+updated: 2026-08-18T05:51:54.410Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 6c2a412
   kb: []
 gate_open: false
 schema: 1
