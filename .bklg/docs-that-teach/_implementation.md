@@ -86,3 +86,20 @@ The other eight are clean. Both edits are line-number citation repairs (8 lines 
 `main.rs`, without which `cargo xtask lint-constitution` fails. Mechanically necessary
 collateral, not scope creep — but a real escape the two specs' boundaries did not
 anticipate, and the escape the check exists to surface.
+
+#### Disposition, 2026-08-18
+
+Filed as **Wet-Ink-Corporation/redkiln#136** — "Story-grain boundary check is
+unsatisfiable in the implement lane (hardcoded main base vs. stacked story commits)",
+carrying the reproduction, the two contrasting `verify` runs, and the
+`links.commits`-scoped fix sketch.
+
+Human decision: **file it, and leave the stories on `plan`.** No boundary block is
+widened and no verdict is forced. The ten approved stories keep their recorded
+`links.commits` provenance and their green slice seals; their stage transitions wait on
+the fix. HS-P0020 is NOT advanced past `implementation` — parking a project at
+`in-review` over ten stranded stories would only move the closeout audit failure
+earlier.
+
+The two-story boundary escape (HS-S0136, HS-S0138) is left recorded and unrepaired here
+so that whoever resolves #136 has a live case the fixed check must still catch.
