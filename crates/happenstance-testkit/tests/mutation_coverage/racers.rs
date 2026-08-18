@@ -377,7 +377,9 @@ racing_fixture!(LockedFixture, LockedStore, "LockedStore");
 /// There is deliberately **no `REGISTRY` row** for this store: `fails` would be
 /// empty, because it fails no sequential rule by construction, and
 /// `mutant_registry_is_exhaustive` rejects that. See the comment on its `RACERS`
-/// row.
+/// row, and `crates/happenstance-testkit/README.md:187-190`, which is where that
+/// rule is stated in prose — a concurrency rule's wrong store goes in
+/// `racers.rs` and `RACERS` precisely because it can have no `REGISTRY` row.
 #[derive(Debug)]
 pub(crate) struct RacingProbeStore(Arc<Shared>);
 

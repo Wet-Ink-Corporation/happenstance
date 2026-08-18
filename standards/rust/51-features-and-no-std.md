@@ -52,7 +52,7 @@ a feature line to blame. The gate's `--all-features` steps only ever see the
 "on" configuration, so the combination that fails is the one nothing runs.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:36 (serde?/std)` ·
-`spec/SPECIFICATION.md:355 (Cargo features are additive)` ·
+`spec/SPECIFICATION.md:366 (Cargo features are additive)` ·
 [Cargo Book — feature unification](https://doc.rust-lang.org/cargo/reference/features.html#feature-unification) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-51-2. Reach an optional dependency with `dep:` and `?/`; a bare `dep/feature` in a default feature enables the dependency.

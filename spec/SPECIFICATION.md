@@ -229,16 +229,21 @@ declaring a port frozen while an axis of §6.5's instrument portfolio has no
 passing implementation at its far end, unless the freeze names the axis and the
 ADR accepting the risk.
 
-**Seven axes, and not one of them has an adapter instrument at its far end.**
-Phase 3 produced none, and could not have: it builds fixtures. What it did move
-is the other half. Four axes — async flavour, handle multiplicity, durability
-and, since CF-13's fixture landed, position allocation — now carry a **fixture**
-instrument, which by CF-26 discharges CF-25's falsifiability half and explicitly
-not its implementability half. The remaining three — transport, batch shape and
-completeness — have nothing at either end. So the qualification is not
-hypothetical, it is not discharged by asserting it, and it is not discharged by a
-fixture tick either; §6.5 says which axes are which and why the distinction is
-the whole point of that table.
+**Seven axes, and exactly one of them — durability — has an adapter instrument at
+its far end.** Phase 3 produced none, and could not have: it builds fixtures.
+What it did move is the other half. Four axes — async flavour, handle
+multiplicity, durability and, since CF-13's fixture landed, position allocation —
+carry a **fixture** instrument, which by CF-26 discharges CF-25's falsifiability
+half and explicitly not its implementability half. Phase 8 moved durability's
+other half and only durability's: `happenstance-sqlite`'s `SqliteFixture` runs
+the reopen rules against a real file on disk, so that axis has a passing
+implementation at its far end — of the *reopen* half of it, and not of the
+*fault* half, which is what ES-35 stays `[PROVISIONAL]` against. The remaining
+three — transport, batch shape and completeness — have nothing at either end. So
+the qualification is not hypothetical, it is not discharged by asserting it, and
+it is not discharged by a fixture tick either; §6.5 says which axes are which,
+how far the adapter column has got, and why the distinction is the whole point of
+that table.
 
 It is discharged three ways, and the split matters more than the total:
 
@@ -263,8 +268,11 @@ It is discharged three ways, and the split matters more than the total:
   markers** rather than in a preamble a reader skips: **ES-11** and **ES-12**
   (transport — a one-shot-HTTP adapter that self-paginates may be unable to meet
   either), **ES-35** (durability) and **ES-40** (completeness). Each is
-  `[PROVISIONAL]` with its axis named and its falsifier the far-end adapter that
-  has not been built. ES-10 was the fifth until phase 4 froze it.
+  `[PROVISIONAL]` with its axis named and its falsifier the far end that has not
+  been built — for ES-11, ES-12 and ES-40 that far end is still an adapter; for
+  ES-35 it is narrower since phase 8 built the adapter, and is now a fixture that
+  arms a real fault against a real medium. ES-10 was the fifth until phase 4
+  froze it.
 - **The remaining axes are accepted in the ADRs that land this document.**
   ADR-0013 accepts four by name — position allocation, async flavour, handle
   multiplicity, and batch shape *pro forma*, that last one because
@@ -371,7 +379,7 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:93-268` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and no adapter instrument at any far end**. Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; three — transport, batch shape, completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:93-268` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put one there, at durability's, and nowhere else. Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; three — transport, batch shape, completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five skeleton impls straddling the batch-shape axis — owned write sets in `happenstance-sqlite`, `happenstance-neon` and `happenstance-ladybug`, a live borrowed handle in `live_handle.rs:174`, a `Transaction<'static, Postgres>` in `happenstance-postgres`. **Two** of the five are `todo!()` throughout — `LadybugProjectionStore` (`crates/happenstance-ladybug/src/projection_store.rs:270-292`) and `PostgresProjectionStore` (`crates/happenstance-postgres/src/projection_store.rs:105-127`). The other three carry real bodies: `NeonProjectionStore` in all four methods (`crates/happenstance-neon/src/projection_store.rs:164-202` — its two `todo!()`s are in the free functions `decode_checkpoint` and `decode_commit`, which are not port methods), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in `begin` and `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:235-260`). That distinction is the whole reason the count is stated: a `todo!()` has type `!` and coerces to anything, so a body of them proves a signature is nameable, not that it can be satisfied. Nothing runs against any of the five | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
@@ -447,13 +455,16 @@ answer.
   not omitted.
 
 **And the honest caveat that outranks all of them.** Section 6.5's portfolio has
-seven axes and **not one adapter instrument at a far end**. Four of the seven —
+seven axes and **one adapter instrument at one far end**. Four of the seven —
 async flavour, handle multiplicity, durability and position allocation — carry a
 *fixture* instrument, which proves the rules at that end can fail and says
-nothing about whether a real implementation there can pass (CF-26). The other
-three — transport, batch shape and completeness — are empty at both ends. Every
+nothing about whether a real implementation there can pass (CF-26). Durability is
+the one that also carries the other kind: since phase 8 `happenstance-sqlite`
+passes the reopen rules against a real file, which is a real implementation at
+that far end and still not a store that has met a *fault*. The other three —
+transport, batch shape and completeness — are empty at both ends. Every
 port in this document has been checked against a population of implementations
-that agree with it: `MemoryEventStore`, a rusqlite skeleton and a planned Durable
+that agree with it: `MemoryEventStore`, a rusqlite adapter and a planned Durable
 Object all serialise their writers and assign positions under a lock they hold
 until commit. That is one storage shape wearing several hats. The clauses that
 will turn out to be wrong are the clauses that assume a property all of them
@@ -8443,15 +8454,30 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter no.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object, so no *connection* has ever been opened twice | Fixture (CF-16) — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
-Seven axes, and **the adapter column is empty on every one of them**. Three far
-ends are empty at both ends — transport, batch shape and completeness. The other
-four — async flavour, handle multiplicity, durability and, since CF-13's fixture
-landed, position allocation — have a **fixture** instrument and no adapter one,
-which by CF-26 satisfies the falsifiability half and not the implementability
-half. Phase 3 produced four fixture instruments and zero adapter instruments,
-which is the most it could produce; the adapter column moves at phases 8, 9, 10,
-11 and 14 and nowhere earlier. That is the honest state, and it is the reason
-this section exists before the freeze rather than after it.
+Seven axes, and **the adapter column carries exactly one tick: durability**.
+Three are empty at both ends — transport, batch shape and completeness. Three
+carry a **fixture** instrument and, as their rows stand, no adapter one — async
+flavour, handle multiplicity and, since CF-13's fixture landed, position
+allocation — which by CF-26 satisfies the falsifiability half and not the
+implementability half. Durability carries both ticks, and only for the half phase
+8 could buy: `SqliteFixture` runs the three reopen rules against a real file, so
+the axis has a passing implementation at its far end, while a store that loses a
+write to a *fault* rather than to an instruction is supplied by nothing. Phase 3
+produced four fixture instruments and zero adapter instruments, which is the most
+it could produce; phase 8 produced the first adapter one, and the rest of that
+column moves at phases 9, 10, 11 and 14 and nowhere earlier. That is the honest
+state, and it is the reason this section exists before the freeze rather than
+after it.
+
+**One entry in the count above is under re-reading and should not be leaned on
+here.** The handle-multiplicity row says no *connection* has ever been opened
+twice, and `SqliteFixture::connect` opens a second `rusqlite::Connection` onto
+one file — the row predates it. Whether that puts an adapter instrument at that
+axis's far end, or only a second handle that still shares a process, is
+`spec-and-code-reconciliation`'s to settle by re-reading every §6.5 row against
+the whole phase-8 tree. It is not settled here, because a row moved in passing by
+the story that happened to notice it is exactly the drift that reconciliation
+pass exists to catch.
 
 The distinction is worth holding on to now that four rows have moved, because the
 temptation is to read the first tick as the axis being covered.
@@ -8464,7 +8490,10 @@ replaying a `Vec` has never met a fault, and a store that suspends between
 allocating and publishing because a rule polled it that way has never met a
 transaction. ES-6 was settled on a purpose-built instrument rather than on this
 store for the same reason: a reference store's error type is chosen by whoever
-wrote the reference store.
+wrote the reference store. CF-17's is the one of those three rows that has since
+gained a second tick, and the second is a different claim rather than a stronger
+version of the first: `SqliteFixture` reopens a real file instead of replaying a
+`Vec`, and has still never met a fault.
 
 **Position allocation is the row where the gap between the two halves is widest,
 and it is worth saying so where the tick is.** It is the axis the pressure test

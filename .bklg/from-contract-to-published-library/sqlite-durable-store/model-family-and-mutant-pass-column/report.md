@@ -32,7 +32,7 @@ dependency's feature.
 | **AC-004** — a generated disagreement is fixed in the adapter | **Met, vacuously and honestly** | **No disagreement was found** and no line of `crates/happenstance-sqlite/src/**` changed. The instrument's liveness is carried by the deliberate mutation instead of by a fix. No literal position is asserted anywhere this story adds |
 | **AC-005** — the pass-column claim is discharged where it honestly can be | **Met** | `tests/conformance.rs:60-73` carries the verdict and **both** refusal reasons. `cargo run -p xtask -- proof-artefact` re-runs the harness: `conformant_variants_pass_everything ... ok`, `the_model_rule_rejects_exactly_what_it_claims ... ok`, 10 passed |
 | **AC-006** — the racing falsifier reads in this adapter's spelling | **Met** | `mutation_coverage.rs:2564` opens with `BEGIN DEFERRED` and explains why the verb is load-bearing; the matching paragraph is at `racers.rs:362-381`. `fails` and both `expect` pins byte-identical. `the_concurrency_rules_reject_exactly_what_they_claim` and `every_mutant_states_its_provenance` green; `spec-trace` green, so ES-25 is discharged rather than edited |
-| **AC-007** — the impossible instruction is corrected in the tree | **Met** | `mutation_coverage.rs:2548-2557`, a comment on the `RACERS` row, citing `README.md:106-113` and `mutant_registry_is_exhaustive`; repeated at `racers.rs:378-381`. `mutant_registry_is_exhaustive` green with **79 registry rows, unchanged** |
+| **AC-007** — the impossible instruction is corrected in the tree | **Met** | `mutation_coverage.rs:2548-2557`, a comment on the `RACERS` row, citing `README.md:187-190` and `mutant_registry_is_exhaustive`; repeated at `racers.rs:377-382`, which now carries the README anchor itself. `mutant_registry_is_exhaustive` green with **79 registry rows, unchanged**. The range was `:106-113` when this story merged and was corrected after review — see *The citation that did not resolve* below |
 
 ## The check, and why a first-run green needed one
 
@@ -69,9 +69,29 @@ there since phase 3 as `RacingProbeStore`, named by ES-25 `[FROZEN]` itself.
 The deliverable is therefore the **correction**, written where the next reader meets
 it rather than in a commit message: a comment on the `RACERS` row and a closing
 paragraph in the store's doc comment, both citing
-`crates/happenstance-testkit/README.md:106-113`. Discharging the story map's *"the
+`crates/happenstance-testkit/README.md:187-190`. Discharging the story map's *"the
 registry row that proves the rejection is live"* by silence is indistinguishable
 from not having looked.
+
+### The citation that did not resolve
+
+Both places first cited `crates/happenstance-testkit/README.md:106-113`, and that
+range is the README's *"### The projection suite"* section — not the sentence
+about where a concurrency rule's wrong store goes, which is at `:187-190` under
+*"Two rules govern what goes in it"*. AC-007 is written from the persona of the
+next reader six months on, and that reader follows the citation; a correction
+that sends them to the wrong section fails at the one thing it exists to do. Both
+were re-anchored after review, and `racers.rs` now carries the README range
+itself instead of forwarding to the `RACERS` comment for it.
+
+The stale range was not invented here: it is what this story's own `spec.md`
+carries at `:33`, `:95`, `:125`, `:151` and in the Context pack's reading table
+at `:260`, and it is quoted inside the AC-007 criterion, which a ledger may never
+edit. The same is true of the code half it pairs with,
+`mutation_coverage.rs:3389-3395` — `mutant_registry_is_exhaustive` is at `:2826`,
+which is why the in-tree comment names the test rather than a line. Both stale
+spec ranges are flagged in the ledger for `spec-and-code-reconciliation` so the
+next story that reads this spec does not copy them forward again.
 
 The **provenance** amendment beside it is the other half. The row described the
 autocommit spelling only — `SELECT 1 … then INSERT, with no BEGIN between them`.

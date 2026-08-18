@@ -2589,7 +2589,7 @@ const RACERS: &[Racer] = &[
     // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
     // empty, and a probe-then-insert store fails *no* sequential rule — that is
     // the entire content of the defect. A concurrency rule's wrong store belongs
-    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:106-113` says
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:187-190` says
     // so in prose where the harness says it in code
     // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
     // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is

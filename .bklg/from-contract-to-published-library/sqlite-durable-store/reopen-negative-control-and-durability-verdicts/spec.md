@@ -337,8 +337,51 @@ crates/happenstance-testkit/tests/mutation_coverage.rs
 crates/happenstance-testkit/tests/mutation_coverage/**
 spec/SPECIFICATION.md
 CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/sqlite-durable-store/reopen-negative-control-and-durability-verdicts/**
 ```
+
+**`standards/rust/**` was added on 2026-08-17, and it admits citation
+re-anchoring ONLY** — the same terms as `benchmark-harness`'s entry (`e020276`),
+which is this initiative's precedent for the class. Two constitution atoms cite
+this slice's files by `file:line`:
+`23-streams-and-state-machines.md:191` cites
+`crates/happenstance-testkit/tests/mutation_coverage.rs` for `RefetchingPagedStore`,
+and `41-declarative-macros.md:197` cites
+`crates/happenstance-testkit/src/concurrency.rs` for the `ConcurrentFixture`
+impl. This slice's `Declared` row and its slice-mate's `CONTENDERS` doc comment
+moved both subjects, and `cargo xtask lint-constitution` — reached by
+`cargo xtask lints`, the first half of the `reachability_static` grain — fails on
+a citation that no longer lands within ten lines of its subject. The story is
+therefore forced across its boundary or into a red gate, with no third option.
+This entry permits **line-number repair to existing citations and nothing else**:
+rule text, evidence selection, rule retirement and new atoms all stay outside, so
+the widening cannot later be cited to justify editing a rule. Actual use is four
+citations in four atoms, each a balanced one-line insertion and deletion with no
+prose changed: `23-streams-and-state-machines.md:191`
+(`mutation_coverage.rs:1585→1619`), `41-declarative-macros.md:197`
+(`concurrency.rs:1144→1176`), and — because the same review's correction to
+§6.5's summary and §1.3's qualification moved lines in the specification itself —
+`01-standard-of-evidence.md:127` (`SPECIFICATION.md:5910→5926`) and
+`51-features-and-no-std.md:55` (`SPECIFICATION.md:355→366`). The last two are the
+same mechanism arriving from the other side: this story edits `spec/SPECIFICATION.md`
+inside its boundary, and two atoms cite that file by `file:line`.
+
+**Where this block sits, and why it is not moved.** `redkiln verify --grain
+story` reads the **first fenced block under the `## PR boundary` heading**, and
+it stops at the next heading — so this block, which lives under the `### Merge
+DoD` subheading, is not read: the check reports `no boundary declared` and skips,
+and so does the `provenance` check behind it. Moving the block up to sit directly
+under `## PR boundary` makes both run and both **fail** while `links.commits` is
+empty, because the boundary check then diffs the whole initiative branch against
+`main` and every sibling story's file is outside this story's globs. Recording
+the checkpoint SHA is `redkiln record-links`' job and the orchestrating command's
+to run — an implementer may not write an item's `links` — so the placement is
+left as planning authored it and the parser behaviour is **routed** rather than
+worked around here: it belongs to whoever owns the story template, alongside the
+observation in this story's implementation report that `cargo xtask affected`
+does not run `lint-constitution`. Both are the same class of gap — a check that
+reports green because it never looked.
 
 ## Behavior and interfaces
 

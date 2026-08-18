@@ -106,10 +106,25 @@ subject had ever reached. The swap was reverted.
 longer landed within ten lines of their subject — because this slice's edits
 moved lines in `mutation_coverage.rs` (the new `Declared` row) and in
 `concurrency.rs` (the rewritten `CONTENDERS` doc comment). Both were re-anchored
-in this change. `standards/rust/` is outside every story's declared PR boundary,
-and re-anchoring is the maintenance that lint exists to force: a citation that
-points at the wrong place is worse than none, and leaving it would hand the next
-story a red gate it did not cause.
+in this change. Re-anchoring is the maintenance that lint exists to force: a
+citation that points at the wrong place is worse than none, and leaving it would
+hand the next story a red gate it did not cause. `standards/rust/` was outside
+every story's declared PR boundary when this was written; after review it is an
+entry in **this** story's boundary block, admitting citation re-anchoring only,
+on the terms `benchmark-harness` set at `e020276` — the initiative's precedent
+for a compelled excursion of exactly this class. The excursion is therefore
+admitted rather than merely disclosed.
+
+**And a third check that reports green without looking**, found while proving the
+widening works: `redkiln verify --item HS-S0043 --grain story` prints
+`[skip] boundary — no boundary declared`. The block is declared; the parser reads
+the first fenced block under `## PR boundary` and stops at the next heading, and
+this spec's block sits under the `### Merge DoD` subheading. Moving it up makes
+`boundary` and `provenance` both run and both fail while `links.commits` is
+empty — the boundary check then diffs the whole initiative branch — and
+`redkiln record-links` is the orchestrating command's write, not an
+implementer's. Recorded in the spec beside the block and routed, not worked
+around.
 
 Worth recording separately: **`cargo xtask affected --base main` does not run
 `lint-constitution`**, so it reported `affected gate passed` while
