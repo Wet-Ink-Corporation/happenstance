@@ -13,7 +13,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 
 | # | project | id | dependsOn | terminal | state | verdict | review |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | checked-documentation-surface | HS-P0020 | — | no | in-progress | — | — |
+| 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
 | 2 | page-need-discipline | HS-P0021 | 1 | no | pending | — | — |
 | 3 | application-author-path | HS-P0022 | 1, 2 | no | pending | — | — |
 | 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
