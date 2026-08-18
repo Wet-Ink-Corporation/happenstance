@@ -11,8 +11,8 @@ updated: "2026-08-18T00:00:00.000Z"
 
 **Outcome: delivered, eight of eight ACs satisfied, no AC deferred and none blocked.** One
 pre-decided conditional fired at implementation time (EC-001) and is recorded rather than
-re-litigated; three residuals are non-author walks owed at review, each named below with the
-evidence that carries its row in the meantime.
+re-litigated; the three non-author judgements this report first listed as owed have since been
+performed at review and all three **PASS**, so nothing is outstanding.
 
 **Mount points.** `docs/README.md:13-15` (the repository's documentation index — this story's stated
 composition root), `docs/append-conditions.md:9-10` (EC-001's tie-break: the governed page the
@@ -47,19 +47,37 @@ that page, which is precisely the decorative outcome this story exists to refuse
 
 ### Deferred, and by whom
 
-Nothing is deferred as *behaviour*. Three **judgements** are owed to a non-author and are named in
-the ledger rather than hidden:
+**Nothing is deferred.** Three **judgements** required a non-author. All three were performed by the
+**adversarial slice reviewer for `binding-beyond-this-project`** — the review pass that produced this
+slice's findings, which wrote no part of this story's diff, its ledger or this report — on
+**2026-08-18**, and all three **PASS**. Their verdicts are transcribed into the ledger rows and
+tabulated in `_ledger.md` `## The three non-author judgements, run at review`:
 
-1. **AC-001's read-back** — a person who did not write the sentence stating, from the sentence
-   alone, which property of the page RP-10-2 dictates. Run by the implementer and labelled as such;
-   the mechanical assertions and the recorded traverse carry the row.
-2. **AC-003's paraphrase spot check** — run by the implementer against RP-10-2's and RP-00-1's
-   shipped text; no rule text is reproduced by either sentence.
-3. **AC-008's blind-spot read-back** — someone else restating which half of the relationship is
-   mechanically checked. The gate-state diffs carry the row.
+1. **AC-001's read-back** — *from `docs/README.md:13-15` alone the property RP-10-2 dictates is
+   nameable (the page routes; the library is explained on the pages below, not here) — it is a
+   reason, not a see-also.*
+2. **AC-003's paraphrase spot check** — *neither citation reproduces RP-10-2's or RP-00-1's rule
+   text; the only shared token is the need name being pointed at.*
+3. **AC-008's blind-spot read-back** — *from the ledger's blind-spot section alone I can state which
+   half is checked (the back-link, by the copied link half at `xtask/src/lint_pages.rs:817`) and
+   which is not (both outbound citations).*
 
-All three are the same residual this project's earlier stories recorded and routed to the review and
-integration stages; none of them is a licence to skip that walk.
+The implementer-run captures those rows previously carried are superseded rather than kept, which is
+what the precedent one slice back does with an author-run walk
+(`reviewer-and-citation-procedures/_ledger.md:84`).
+
+### One thing carried forward rather than fixed here
+
+`docs/README.md:13-15` asserts *"It routes rather than teaches"* on a page that also carries an
+explanatory paragraph at `:36-55` and a `## What belongs here` section at `:57-62`, and that carries
+no `> **Answers:**` declaration because the checker's walk excludes it. **Nothing binds or falsifies
+that claim**, so the governed half of DoD-14's third clause rests entirely on
+`docs/append-conditions.md:9-10`, not on the index. No change is made: the prose at `:36-62` predates
+this story and rewriting a referent to make this story's reasoning read better is what
+`.kb/governance/rewrite-the-referent-never-the-reasoning.md` forbids, and EC-001's tie-break already
+covered the gap. When HS-P0022 adds a teaching page the walk *does* report, that page's citation
+should become the primary citer of DoD-14's third clause. Recorded in `_ledger.md`
+`## Carried forward, not fixed here`.
 
 ### Boundary promises the diff itself keeps
 
