@@ -164,6 +164,24 @@ mod tests {
     /// Band 10 — the closed need set and the two `orientation` ceilings.
     const BAND_10: &str = "10-the-need-set.md";
 
+    /// Band 20 — the fold line: the deletion test, the closed never-fold list,
+    /// and the permission gate that ships empty.
+    const BAND_20: &str = "20-the-fold-line.md";
+
+    /// Words a rule may never use, because each hands the reader back the
+    /// judgement the rule exists to replace.
+    ///
+    /// `_design.md` anti-pattern 15. Matched case-insensitively over whole
+    /// atoms: a walk step that says "consider" yields an impression, and two
+    /// strangers reading it reach two verdicts.
+    const HEDGES: [&str; 5] = [
+        "consider",
+        "use judgement",
+        "use judgment",
+        "as appropriate",
+        "if it seems",
+    ];
+
     /// The atoms filed into the tree, in filename order.
     ///
     /// A deliberate list rather than a `read_dir`: the directory-reading corpus
@@ -172,7 +190,7 @@ mod tests {
     /// Each story in the slice appends its own band as that band lands, which
     /// is what keeps the router's generated region a *derived* region rather
     /// than a hand-maintained one.
-    const TREE: &[&str] = &[BAND_00, BAND_10];
+    const TREE: &[&str] = &[BAND_00, BAND_10, BAND_20];
 
     /// The five section markers a rule carries, in the order they must appear.
     ///
@@ -447,6 +465,9 @@ mod tests {
 
     #[test]
     fn rule_dir_holds_this_storys_two_atoms() {
+        // Deliberately these two and not `TREE`: this assertion belongs to
+        // `need-vocabulary-and-declaration-form`, and widening it would quietly
+        // re-point that story's ledger evidence at a later story's files.
         for file in [BAND_00, BAND_10] {
             assert!(
                 !atom(file).trim().is_empty(),
@@ -865,7 +886,7 @@ mod tests {
 
     #[test]
     fn the_rules_tree_contains_no_disclosure_markup() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             for marker in ["<details", "<summary", "role=\"tab\"", "{{#tab"] {
                 assert!(
@@ -957,9 +978,231 @@ mod tests {
         );
     }
 
+    /// One whitespace-separated line, for matching prose that wraps.
+    ///
+    /// A sentence is the same sentence to a reader whether or not the author
+    /// broke it at column 80, and on this Windows checkout it wraps with CRLF
+    /// besides. Flattening first keeps these assertions about the words rather
+    /// than about where the line ended.
+    fn flat(text: &str) -> String {
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    /// One `## RP-` rule's body, by id.
+    fn rule_body(text: &str, id: &str) -> String {
+        let found = rules(text).into_iter().find(|(found, _)| found == id);
+        let Some((_, body)) = found else {
+            panic!("no {id} rule");
+        };
+        body
+    }
+
+    #[test]
+    fn band_twenty_hands_the_reviewer_the_deletion_test() {
+        let text = atom(BAND_20);
+        assert!(
+            flat(&text).contains("would the page still teach the constraint correctly"),
+            "band 20 carries the deletion test verbatim, as the rule's spirit"
+        );
+        let body = flat(&rule_body(&text, "RP-20-1"));
+        assert!(
+            body.contains("may not be collapsed"),
+            "the test is a question with a yes/no answer and a stated \
+             consequence, not an invitation to weigh"
+        );
+    }
+
+    #[test]
+    fn no_rule_in_the_tree_hands_back_the_judgement_it_replaces() {
+        for &file in TREE {
+            let text = atom(file).to_lowercase();
+            for hedge in HEDGES {
+                assert!(
+                    !text.contains(hedge),
+                    "{RULE_DIR}/{file} says `{hedge}`: two strangers applying \
+                     that reach two impressions, and the rule exists because \
+                     'use good judgment' is the non-answer that let an \
+                     invariant drift here once already"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn band_twenty_closes_the_never_fold_list_at_five() {
+        let body = rule_body(&atom(BAND_20), "RP-20-2");
+        let classes = body
+            .lines()
+            .filter(|line| line.starts_with(|c: char| c.is_ascii_digit()) && line.contains(". "))
+            .count();
+        assert_eq!(
+            classes, 5,
+            "the never-fold list is five enumerated classes; RP-20-2 lists {classes}"
+        );
+        assert!(
+            body.contains("no reviewer may grant an exception"),
+            "the letter of the rule admits no exception — that is what makes it \
+             a letter rather than a preference"
+        );
+        assert!(
+            body.contains("closed") && body.contains("sign-off condition 3"),
+            "the list is closed, and growing it is a disagreement with the \
+             signed-off design rather than an authoring choice"
+        );
+    }
+
+    #[test]
+    fn band_twenty_pays_band_zeros_deferral() {
+        let twenty = atom(BAND_20);
+        let see = twenty
+            .lines()
+            .find(|line| line.starts_with("> **See also:**"))
+            .unwrap_or_else(|| panic!("{BAND_20} carries no `> **See also:**` line"));
+        assert!(
+            see.contains(" 00 ") || see.contains(" 00("),
+            "band 20's `See also` names band 00 by number, so the pairing is \
+             findable from either side; it reads {see}"
+        );
+        assert!(
+            atom(BAND_00).contains(" 20 "),
+            "band 00 already points forward at band 20; this story does not \
+             edit band 00 to say so"
+        );
+        assert!(
+            rule_body(&twenty, "RP-20-2").contains("**Answers:**"),
+            "class 1 of the never-fold list *is* the declaration — the deferral \
+             band 00 wrote is paid here, not restated there"
+        );
+    }
+
+    #[test]
+    fn band_twenty_ships_an_empty_permitted_mechanism_table() {
+        let text = atom(BAND_20);
+        let rows = table_rows(&text, "| Mechanism |");
+        assert!(
+            rows.is_empty(),
+            "the permitted-mechanism table ships with zero data rows, which is \
+             what makes folding forbidden in practice; it holds {rows:?}"
+        );
+        assert!(
+            text.contains("| Mechanism |"),
+            "the table exists, with its header and separator: an absent table \
+             reads as an oversight, an empty one reads as a decision"
+        );
+        assert!(
+            text.contains("forbidden in practice"),
+            "the atom says what an empty list means, in those words"
+        );
+        assert!(
+            text.contains("DT-7"),
+            "and it names what would lift it — HS-P0020's demonstration"
+        );
+    }
+
+    #[test]
+    fn band_twenty_holds_a_mechanism_to_four_recorded_observations() {
+        let body = rule_body(&atom(BAND_20), "RP-20-3");
+        for observation in ["accessibility tree", "keyboard", "Ctrl-F", "print"] {
+            assert!(
+                body.contains(observation),
+                "the entry procedure names all four observations; `{observation}` \
+                 is missing"
+            );
+        }
+        assert!(
+            body.contains("unverified"),
+            "an unverified property counts as unmet (UX-011)"
+        );
+        assert!(
+            body.contains("upstream"),
+            "upstream documentation is not an observation — the sentence that \
+             stops a mechanism being admitted on someone else's assurance"
+        );
+    }
+
+    #[test]
+    fn band_twenty_answers_the_renderer_supplied_wrapper_in_both_halves() {
+        let text = flat(&atom(BAND_20));
+        assert!(
+            text.contains("toggle top-doc") || text.contains("toggle-all-docs"),
+            "the wrapper the mock actually found is named, not gestured at"
+        );
+        assert!(
+            text.contains("the author's own markup"),
+            "half one: RP-20-2 binds what the author wrote, so a renderer's own \
+             open-by-default wrapper puts no page in breach"
+        );
+        assert!(
+            text.contains("unmet property"),
+            "half two: nobody here has observed what survives closing it, so it \
+             is recorded as an unmet property owed by the hosting decision. \
+             Saying only half one turns 'we did not check' into 'it is fine'"
+        );
+    }
+
+    #[test]
+    fn band_twenty_states_what_this_rule_does_not_do() {
+        let text = flat(&atom(BAND_20));
+        assert!(
+            text.contains("What this rule does not do"),
+            "the atom states its own limits, unfolded, because that statement is \
+             never-fold class 5 applied to the atom that wrote the class"
+        );
+        for limit in [
+            "No gate step reads this rule",
+            "DT-7",
+            "band 40",
+            "not a `const`",
+        ] {
+            assert!(
+                text.contains(limit),
+                "the closing statement names all four limits; `{limit}` is missing"
+            );
+        }
+
+        // Assembled at run time from two halves, and anchored on `const `.
+        // `THIS_FILE` is this module's own source: a whole literal here would
+        // match itself — the one shape of self-reading test that is always
+        // red — and a bare name would match band 00's guard, which asserts the
+        // identifier is *absent* from band 00 and so must spell it.
+        let forbidden = format!("const {}{}", "PERMITTED_", "FOLD_MECHANISMS");
+        assert!(
+            !THIS_FILE.contains(&forbidden),
+            "the permitted-mechanism list is a table in the rules tree and not a \
+             `const` here: nothing enforces it, and an unenforced const beside an \
+             enforced one reads as a check that exists"
+        );
+    }
+
+    #[test]
+    fn every_atom_is_reachable_from_both_router_regions() {
+        let router = router();
+        let filter: Vec<String> = table_rows(&router, "| You are");
+        let indexed: Vec<String> = generated_region(&router);
+        for &file in TREE {
+            let band = &file[..2];
+            assert!(
+                filter.iter().any(|row| row.contains(&format!("`{band}`"))),
+                "no `## Start here` row routes to band {band}; an atom reachable \
+                 only by reading the index is an atom the filter failed"
+            );
+            assert!(
+                indexed
+                    .iter()
+                    .any(|row| row.contains(&format!("]({file})"))),
+                "{file} has no row in the generated index; an atom absent from \
+                 the index is occluded by omission"
+            );
+        }
+    }
+
     #[test]
     fn both_atoms_carry_the_atom_head_grammar() {
-        for (file, band) in [(BAND_00, "00"), (BAND_10, "10")] {
+        for &file in TREE {
+            // The band is the filename's own first two characters, so an atom
+            // whose head disagrees with its address fails here rather than
+            // being tolerated by a hand-written pair.
+            let band = &file[..2];
             let text = atom(file);
             let lines: Vec<&str> = text.lines().collect();
             assert!(
@@ -996,7 +1239,7 @@ mod tests {
 
     #[test]
     fn both_atoms_carry_the_five_sections_in_order() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             let found = rules(&text);
             assert!(
@@ -1022,7 +1265,7 @@ mod tests {
 
     #[test]
     fn both_atoms_are_inside_the_rule_and_byte_ceilings() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             let count = rules(&text).len();
             assert!(
@@ -1040,7 +1283,7 @@ mod tests {
 
     #[test]
     fn prose_lines_stay_within_ninety_six_columns() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             let over: Vec<String> = text
                 .lines()
@@ -1057,7 +1300,7 @@ mod tests {
 
     #[test]
     fn every_rejects_section_names_a_wrong_page() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             for (id, body) in rules(&text) {
                 let rejects = section(&body, "**Rejects.**")
@@ -1074,7 +1317,7 @@ mod tests {
 
     #[test]
     fn no_rust_tagged_and_no_untagged_fence_in_the_rules_tree() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             for (index, line) in text.lines().enumerate() {
                 let Some(info) = line.strip_prefix("```") else {
@@ -1108,7 +1351,7 @@ mod tests {
 
     #[test]
     fn evidence_sections_cite_the_repository_first() {
-        for file in [BAND_00, BAND_10] {
+        for &file in TREE {
             let text = atom(file);
             for (id, body) in rules(&text) {
                 let evidence = section(&body, "**Evidence.**")
