@@ -123,6 +123,12 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     crate::lints::testkit_version()?;
     crate::lints::core_alloc_features()?;
     crate::spec_trace::run(crate::spec_trace::Mode::Check)?;
+    // The narrative tree, on this list and not `lint-constitution`. The
+    // divergence is deliberate and is argued in `lint_narrative`'s own docs: a
+    // story whose whole deliverable is a page under `docs/` is exactly the case
+    // a package-shaped gate reads nothing for, and `.redkiln/config.yaml` wires
+    // this command as that story's grain.
+    crate::lint_narrative::run()?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;

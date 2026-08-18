@@ -63,6 +63,7 @@ use anyhow::{Context, Result, bail};
 
 mod affected;
 mod lint_constitution;
+mod lint_narrative;
 mod lints;
 mod narrative_doctests;
 mod package;
@@ -522,6 +523,35 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // Compile, then check: the tree's second banner. The step above hands
+        // every registered page to rustdoc; this one reads the tree and the
+        // harness as *files* and answers what `cfg(doctest)` hides — a page
+        // nobody registered, a registration nobody deleted, a tree someone
+        // moved, and a tree someone emptied. Each of those is green under every
+        // other step in this array.
+        //
+        // It sits after `the constitution's examples compile` rather than
+        // between the two compile steps, because those two are adjacent on
+        // purpose and `narrative_doctests`' own test pins the adjacency: the
+        // constitution's step is unfiltered and compiles the narrative pages
+        // too, so their order is the whole of what keeps a broken narrative
+        // fence under the narrative banner. Compile-then-check survives the
+        // move; the compile pair's adjacency would not.
+        name: lint_narrative::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "narrative",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // The step above passes with every feature on, which is the one
         // configuration where every intra-doc link resolves. Three links to
         // `MemoryEventStore` were broken without `memory` for as long as this
@@ -710,6 +740,10 @@ fn main() -> ExitCode {
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
         Some("narrative-doctests") => narrative_doctests::run(),
+        // Read-only, and no `--write` arm: unlike `lint-constitution` there is
+        // nothing here a checker could rewrite, so the surface is safe to invoke
+        // at any time and nothing needs undoing.
+        Some("narrative") => lint_narrative::run(),
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),
@@ -797,6 +831,11 @@ fn print_help() {
     println!("         of xtask's lib target. Same argument as above, one corpus further on:");
     println!("         a filtered `cargo test --doc` exits 0 over `running 0 tests`, so the");
     println!("         pages are asserted out of `--list` and counted before they are run.");
+    println!("  narrative");
+    println!("         Check docs/, the narrative tree, as files: the tree is where this");
+    println!("         gate pins it and is not empty, every page is registered in");
+    println!("         xtask/src/narrative.rs, every registration names a page that still");
+    println!("         exists, and no page path is long enough to starve the report.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");
@@ -840,6 +879,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "every conformance rule has a changelog entry",
         "the testkit carries its own version",
         "the Rust constitution is internally consistent",
+        lint_narrative::STEP,
     ])
 }
 

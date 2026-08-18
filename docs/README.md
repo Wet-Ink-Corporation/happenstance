@@ -36,6 +36,11 @@ their examples under the mandatory `cargo xtask narrative-doctests` step. Moving
 any of the three means editing `xtask/src/` in the same change — which is the
 point of pinning them by path rather than by convention.
 
+This directory has a second gate-side reader: `cargo xtask narrative` opens it as
+*files* rather than as doctests, and fails by name when a page here is missing
+from that harness, when a registration outlives the page it named, or when the
+directory itself has moved out from under the constant that pins it.
+
 ## What belongs here
 
 Guides, tutorials, how-to pages, and reference material addressed to someone

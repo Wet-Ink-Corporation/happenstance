@@ -55,12 +55,14 @@
 //! they concatenate into a single doc string, so a failure on the nineteenth
 //! page reports a line counted from the first.
 //!
-//! The module name is the page's filename with any `NN-` ordering prefix and
-//! the `.md` suffix removed, and `-` replaced by `_`: `append-conditions.md`
-//! becomes `append_conditions`. One pure rule, stated here rather than left to
-//! be inferred, because the bidirectional page-to-module registration check
-//! (`narrative-checker-mounted-with-pinned-path`) has to agree with it by
-//! construction.
+//! The module name is the page's path below `docs/` with the `.md` suffix
+//! removed and both `/` and `-` replaced by `_`: `append-conditions.md` becomes
+//! `append_conditions`, and `adapters/sqlite.md` would become
+//! `adapters_sqlite`. One pure rule, and it is now *computed* rather than only
+//! stated: `xtask::lint_narrative::module_name` is the single derivation the
+//! bidirectional page-to-module registration check compares against in both
+//! directions, and this paragraph is its prose mirror rather than a second
+//! spelling of it.
 
 // Each module exists only while rustdoc is collecting doctests, so a normal
 // build carries neither the module nor the included prose.
