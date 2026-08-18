@@ -168,6 +168,19 @@ mod tests {
     /// and the permission gate that ships empty.
     const BAND_20: &str = "20-the-fold-line.md";
 
+    /// Band 30 — a page cites a clause id and never restates the clause.
+    const BAND_30: &str = "30-citing-the-specification.md";
+
+    /// Band 40 — the non-author verdict walk, and the paraphrase spot check.
+    const BAND_40: &str = "40-reviewing-a-page.md";
+
+    /// The worked example band 40's walk is calibrated against.
+    ///
+    /// Deliberately inert: it sits under `examples/`, so a corpus reader that
+    /// takes top-level `.md` files only never sees it, and it can stay
+    /// permanently broken without ever making a gate red.
+    const FIXTURE: &str = "examples/two-needs.md";
+
     /// Words a rule may never use, because each hands the reader back the
     /// judgement the rule exists to replace.
     ///
@@ -190,7 +203,7 @@ mod tests {
     /// Each story in the slice appends its own band as that band lands, which
     /// is what keeps the router's generated region a *derived* region rather
     /// than a hand-maintained one.
-    const TREE: &[&str] = &[BAND_00, BAND_10, BAND_20];
+    const TREE: &[&str] = &[BAND_00, BAND_10, BAND_20, BAND_30, BAND_40];
 
     /// The five section markers a rule carries, in the order they must appear.
     ///
@@ -285,6 +298,27 @@ mod tests {
             .iter()
             .map(|line| (*line).to_owned())
             .collect()
+    }
+
+    /// Every `](target)` on one line, target only.
+    ///
+    /// A markdown link spells its target twice, which is why this reads the
+    /// parenthesised half rather than counting mentions — the mistake the
+    /// constitution's own link check made first
+    /// (`xtask/src/lint_constitution.rs:339-343`).
+    fn markdown_link_targets(line: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = line;
+        while let Some(at) = rest.find("](") {
+            rest = &rest[at + 2..];
+            if let Some(close) = rest.find(')') {
+                out.push(rest[..close].split('#').next().unwrap_or("").to_owned());
+                rest = &rest[close + 1..];
+            } else {
+                break;
+            }
+        }
+        out
     }
 
     /// The rows of the first markdown table whose header line is `header`.
@@ -1172,6 +1206,247 @@ mod tests {
              `const` here: nothing enforces it, and an unenforced const beside an \
              enforced one reads as a check that exists"
         );
+    }
+
+    #[test]
+    fn band_thirty_gives_the_clause_or_page_test() {
+        let text = flat(&atom(BAND_30));
+        assert!(
+            text.contains(
+                "could a conformant adapter written in another language violate this sentence"
+            ),
+            "band 30 hands the author a falsifiable test, not a preference"
+        );
+        assert!(
+            text.to_lowercase().contains("never restate"),
+            "the rule is cite-never-restate; without the second half a page \
+             becomes a second specification"
+        );
+        assert!(
+            text.contains("visible link text"),
+            "the citation is the stable clause id as visible link text, so a \
+             later reader can see they are being handed to the specification"
+        );
+        assert!(
+            text.contains("never renumbered") && text.contains("spec/SPECIFICATION.md:280"),
+            "clause ids are stable names, and the atom cites where that is said"
+        );
+    }
+
+    #[test]
+    fn band_thirty_states_its_blind_spots_before_its_first_rule() {
+        let text = atom(BAND_30);
+        let blind = text
+            .find("clause_ids")
+            .unwrap_or_else(|| panic!("{BAND_30} does not name HS-P0020's `clause_ids`"));
+        let first_rule = text
+            .find("## RP-30-1")
+            .unwrap_or_else(|| panic!("{BAND_30} carries no `## RP-30-1` rule"));
+        assert!(
+            blind < first_rule,
+            "the blind spots come first: a reader must not reach a rule before \
+             learning that resolution is checked elsewhere and paraphrase by \
+             nothing (RS-81-1)"
+        );
+        assert!(
+            flat(&text).contains("checked by nothing mechanical"),
+            "the sharper half — a page can cite a real id and restate it \
+             underneath, and nothing sees that"
+        );
+    }
+
+    #[test]
+    fn band_forty_names_who_walks_and_what_they_may_consult() {
+        let text = atom(BAND_40);
+        let walk = text
+            .lines()
+            .position(|line| line.trim() == "### The walk")
+            .unwrap_or_else(|| panic!("{BAND_40} carries no `### The walk` heading"));
+        let one = text
+            .lines()
+            .position(|line| line.starts_with("## RP-40-1"))
+            .unwrap_or_else(|| panic!("{BAND_40} carries no `## RP-40-1` rule"));
+        let two = text
+            .lines()
+            .position(|line| line.starts_with("## RP-40-2"))
+            .unwrap_or_else(|| panic!("{BAND_40} carries no `## RP-40-2` rule"));
+        assert!(
+            one < walk && walk < two,
+            "`### The walk` is the anchor the router points at, and it sits \
+             inside RP-40-1's body"
+        );
+        assert_eq!(
+            text.matches("### The walk").count(),
+            1,
+            "one anchor, so the fragment resolves to one heading"
+        );
+
+        let flattened = flat(&text).to_lowercase();
+        assert!(
+            flattened.contains("not the author"),
+            "the walk is performed by someone who did not write the page — the \
+             whole point of DoD-8"
+        );
+        assert!(
+            flattened.contains("git history"),
+            "and it forbids repository archaeology, so the verdict does not \
+             depend on what the author remembers"
+        );
+    }
+
+    #[test]
+    fn the_walk_is_answerable_steps_only() {
+        let text = atom(BAND_40);
+        let lines: Vec<&str> = text.lines().collect();
+        let start = lines
+            .iter()
+            .position(|line| line.trim() == "### The walk")
+            .unwrap_or_else(|| panic!("{BAND_40} carries no `### The walk` heading"));
+        let end = lines
+            .iter()
+            .skip(start)
+            .position(|line| line.starts_with("## RP-40-2"))
+            .map_or(lines.len(), |offset| start + offset);
+        let steps: Vec<&&str> = lines[start..end]
+            .iter()
+            .filter(|line| line.starts_with(|c: char| c.is_ascii_digit()) && line.contains(". "))
+            .collect();
+        assert!(
+            steps.len() >= 3,
+            "the walk is an ordered list a stranger executes; it holds {} steps",
+            steps.len()
+        );
+        for step in steps {
+            assert!(
+                step.trim_end().ends_with('?'),
+                "every step is a question with a yes/no answer; this one is not: {step}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_walk_closes_in_a_four_row_verdict_table() {
+        let text = atom(BAND_40);
+        let rows = table_rows(&text, "| Verdict");
+        assert_eq!(
+            rows.len(),
+            4,
+            "four verdicts, so a reviewer never has a soft pass available; the \
+             table holds {rows:?}"
+        );
+        for verdict in [
+            "`pass`",
+            "`fail — two needs`",
+            "`fail — need not answered`",
+            "`indeterminate`",
+        ] {
+            assert!(
+                rows.iter().any(|row| row.contains(verdict)),
+                "the verdict table carries {verdict}"
+            );
+        }
+        assert!(
+            flat(&text).contains("defect in the page"),
+            "`indeterminate` is recorded as a defect in the page, never in the \
+             procedure"
+        );
+    }
+
+    #[test]
+    fn the_walk_records_an_empty_corpus_as_vacuous() {
+        let text = flat(&atom(BAND_40)).to_lowercase();
+        assert!(
+            text.contains("vacuous"),
+            "an empty governed set is recorded as vacuous, in those words, and \
+             never as a pass — the decorative-green failure one medium over"
+        );
+        assert!(
+            text.contains("never as a pass"),
+            "the instruction says what the reviewer must not write down, not \
+             merely what they may"
+        );
+    }
+
+    #[test]
+    fn the_walk_is_calibrated_against_a_two_need_fixture() {
+        let fixture = atom(FIXTURE);
+        let declarations = fixture
+            .lines()
+            .filter(|line| line.starts_with("> **Answers:**"))
+            .count();
+        assert_eq!(
+            declarations, 2,
+            "a procedure that has never returned `fail` is decorative; the \
+             fixture carries two declarations so the walk can reach one"
+        );
+        let body = rule_body(&atom(BAND_40), "RP-40-1");
+        assert!(
+            body.contains(&format!("]({FIXTURE})")),
+            "the worked example is linked from RP-40-1, not inlined: it is long, \
+             it is genuinely an aside, and a link is the one opened-on-demand \
+             mechanism this repository does not have to verify"
+        );
+        assert!(
+            !TREE.contains(&FIXTURE),
+            "the fixture is inert — outside the atom namespace, so it can be \
+             permanently broken without ever making a gate red"
+        );
+    }
+
+    #[test]
+    fn band_forty_carries_the_paraphrase_spot_check() {
+        let body = flat(&rule_body(&atom(BAND_40), "RP-40-2"));
+        assert!(
+            body.contains("sentence"),
+            "the spot check is per normative sentence, not per page"
+        );
+        assert!(
+            body.contains("restate") || body.contains("restatement"),
+            "it asks whether a sentence's authority is a citation or a \
+             restatement — the thing no parser reaches"
+        );
+        assert!(
+            body.contains("standards/pages"),
+            "the corpus it is run over is named, so the run is repeatable"
+        );
+    }
+
+    #[test]
+    fn every_markdown_link_in_the_tree_resolves() {
+        let mut checked = 0_usize;
+        for file in TREE.iter().copied().chain([ROUTER]) {
+            // The router is addressed from the workspace root and the atoms
+            // from `RULE_DIR`; both resolve against `RULE_DIR` because that is
+            // the directory every link in this tree is relative to.
+            let text = if file == ROUTER { router() } else { atom(file) };
+            let mut fenced = false;
+            for line in text.lines() {
+                if line.starts_with("```") {
+                    fenced = !fenced;
+                    continue;
+                }
+                if fenced {
+                    // A fence shows a *specimen* page; its links are examples
+                    // and are not this tree's to resolve.
+                    continue;
+                }
+                for target in markdown_link_targets(line) {
+                    let is_page = std::path::Path::new(&target)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
+                    if !is_page {
+                        continue;
+                    }
+                    checked += 1;
+                    assert!(
+                        root().join(RULE_DIR).join(&target).exists(),
+                        "{file} links `{target}`, which resolves to no file — a \
+                         dangling link is the one state this tree may not ship in"
+                    );
+                }
+            }
+        }
+        assert!(checked > 0, "the link check found no link to check");
     }
 
     #[test]

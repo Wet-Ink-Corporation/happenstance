@@ -51,6 +51,8 @@ tree. The equality is the check; the generator is not.
 | [`00-one-need.md`](00-one-need.md) | starting a narrative page · a page that seems to answer two questions | RP-00-1, RP-00-2, RP-00-3 |
 | [`10-the-need-set.md`](10-the-need-set.md) | choosing which need a page declares · a page that fits no token | RP-10-1, RP-10-2, RP-10-3, RP-10-4 |
 | [`20-the-fold-line.md`](20-the-fold-line.md) | about to collapse part of a page · reviewing a page that hides a claim | RP-20-1, RP-20-2, RP-20-3, RP-20-4 |
+| [`30-citing-the-specification.md`](30-citing-the-specification.md) | writing a sentence that sounds normative · reaching for a `MUST` | RP-30-1, RP-30-2, RP-30-3 |
+| [`40-reviewing-a-page.md`](40-reviewing-a-page.md) | reviewing a page you did not write · sweeping a set for paraphrase | RP-40-1, RP-40-2 |
 <!-- END GENERATED -->
 
 ## The shape of a rule
