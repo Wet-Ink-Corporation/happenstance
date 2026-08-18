@@ -22,6 +22,7 @@ human-readable record, the trailer is what resume greps.
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
 | discipline-on-disk | approved | need-vocabulary-and-declaration-form@55b987b, router-precedence-and-announcement@9dacc7d, fold-line-rule@dec82c7, reviewer-and-citation-procedures@a349e04 | (this commit) |
+| page-need-gate-step | approved | page-need-checker-mounted-in-the-gate@ee0a500, declaration-check-seen-to-fail@d7d27c5 | (this commit) |
 
 ## Surviving findings
 
