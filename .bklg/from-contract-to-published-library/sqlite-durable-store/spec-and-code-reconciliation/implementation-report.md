@@ -44,7 +44,7 @@ mechanising away. That argument is staged, not settled.
 
 ## Commits
 
-- `PLACEHOLDER` — `feat(sqlite-durable-store): The specification and the code, reconciled`
+- `54df29a` — `feat(sqlite-durable-store): The specification and the code, reconciled`
 
 ## Changes
 
