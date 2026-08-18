@@ -21,13 +21,13 @@ archetype: capability
 slice: compiled-narrative-tree
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T15:13:57.562Z
+updated: 2026-08-18T15:14:03.842Z
 links:
   pr: null
   commits:
     - 7020c4c
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
