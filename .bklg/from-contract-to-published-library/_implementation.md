@@ -1199,3 +1199,125 @@ crates.io token is configured on this machine, so the act itself is one command 
 precondition is met. The HS-P0011 pattern still applies to the *upload*: the story reconciles the
 generator as AC work with ledger evidence, generates, and halts; the owner runs the one
 `cargo publish`.
+
+### HS-P0012 `sqlite-durable-store` — run 3, 2026-08-17/18 (`wf_e3b90a08-ee2`)
+
+baseRef **`90cbca5`**, held unchanged for the third time. `degradedSummary: none`, `degraded: []`,
+no `baselineRepairs`. 6 agents, 0 errors, ~86 minutes. **7 of 14 stories — unchanged, and correctly
+so:** git truth re-entered `durable-event-store` at Review with no implementer dispatched, which is
+the two-axis resume working. Halted at that review again, verdict `changes-requested` (`82496ed`).
+Slices 3–5 never ran; no `_integration.md`, no `_review.md`; HS-P0012 stays at `implementation`.
+
+**Preflight found the baseline RED, and the ingest wave had broken it by succeeding.**
+`no_checkpoint_pump_exists_in_the_contract_crate` asserted
+`.kb/_intake/0032-adr-0031-the-runner-collapses-upward.md` **is a file**. Staging exists to be
+consumed, so the assertion had an expiry date: the wave ingested that document and cleared
+`_intake`, and the test went red the moment the thing it was waiting for finally happened. Repaired
+at **`938a537`** — it now pins the **accepted atom** at `.kb/decisions/0031-…` and additionally
+asserts `status: accepted`, which is strictly stronger, since an unaccepted atom is exactly what
+blocked this verdict for four waves and the old assertion could not tell the two apart. PS-33's
+verdict paragraph was updated to match, **ten lines replaced by exactly ten**, because
+`SPECIFICATION.md` is the most line-cited file in the repository and `spec-trace` is a gate step.
+That is the append-not-insert rule from the wave's own retrospective, applied to itself within the
+hour. Green after: 227 passed, exit 0.
+
+**baseRef was deliberately NOT re-captured after that repair**, against this command's stated
+default. Moving it to `938a537` would empty the resume window — the workflow reads `baseRef..HEAD`
+for both axes — hiding run 2's seven story commits and two slice seals and causing a full
+re-implementation. The repair lands inside the cumulative review diff instead, which is what
+`baselineRepairs` is for.
+
+### The fix pass was real, and the gate was hiding a second failure behind the first
+
+`2172b40` cleared run 2's six findings and one more that only became visible once the first stopped
+aborting the gate:
+
+- The `rustdoc::private_intra_doc_links` failure now points at the public `SqliteEventStore::open`.
+- **Masked behind it:** the slice grew `event_store.rs` from a 420-line skeleton to ~1,500 lines,
+  moving **fifteen** constitution citations across four atoms and reddening `lint-constitution`.
+  Re-anchored, phrase unchanged, `standards/rust/**` admitted to `sqlite-fixture-and-whole-suite`'s
+  fence for line-number repair only. **Nineteenth instance** of the class.
+- **A real performance defect, not a documentation one.** Every append ran
+  `UPDATE event SET … WHERE origin_position IS NULL` — a predicate no index can seek, since the only
+  index over the column leads with `origin_store` — over the whole log *inside* `BEGIN IMMEDIATE`.
+  That is precisely the class ADR-0022 §7's amendment exists to remove and NF-001 forbids in the
+  write path, and the cost would have landed on `concurrency-family-and-contender-count`, which is
+  blocked on this slice. Now bounded by the batch's own first assigned position — a rowid seek,
+  because `position` is the `INTEGER PRIMARY KEY` — with the `IS NULL` marker kept beside the bound
+  so a replication ingest row carrying another store's origin is not restamped.
+- Three ledger rows that credited `cargo xtask affected` with a rustdoc build it never runs
+  (`affected.rs:38-44`) now record what was observed.
+
+### It failed on the artifacts, not the code — and that is now the pattern
+
+The adapter passes **89 conformance rules against a real SQLite file**. Both blocking findings are
+evidence-quality:
+
+1. **A falsification experiment that does not reproduce**, on the row carrying the slice's headline
+   criterion. `sqlite-fixture-and-whole-suite/_ledger.md` AC-001 claims that changing
+   `MAX_EVENT_DATA_LEN` by one byte turns `append_reports_exceeded_store_limits` red. The reviewer
+   **ran it** — `89 passed; 0 failed` — and diagnosed why from the ledger's own AC-005 two rows
+   later: the fixture **mirrors** the constant (`conformance.rs:177-183`), so the mutation moves the
+   declared and the enforced number together. It supplied a verified working alternative: `>` → `>=`
+   at `event_store.rs:482` gives `88 passed; 1 failed` naming the rule. **The liveness probe has to
+   sit at the enforcement site, not at the declaration** — and the mirror is AC-005's design, not a
+   defect.
+2. **Four citations drifted 31 lines** in that same ledger, introduced by the slice's *own* earlier
+   fix commit `9a10dbf` — while `2172b40`'s message asserts *"Every `file:line` in the five ledgers
+   is re-derived against HEAD"*, which is false for exactly this file. It matters because
+   AC-002/AC-003/AC-004 are the three rows the spec says a green rule **cannot** discharge: their
+   evidence *is* the pointer at the fixture body, and all four now land on unrelated text.
+
+This is the third consecutive review of this slice whose blocking findings are self-contradicting
+artifacts rather than broken code — the same class as run 2's `wide-query` AC-007 and
+`schema-migration` AC-008. In a project whose stated premise is that things can look like evidence
+and not be, the ledgers keep being where that happens.
+
+### #135 was found independently, from the opposite direction
+
+The reviewer reported `redkiln verify --item HS-S0039 --grain story` returning
+`{"name":"boundary","ran":false,"pass":true,"detail":"no boundary declared"}` despite
+`wide-query-chunked-not-refused/spec.md:292-298` declaring a fence structurally identical to its
+four checked siblings — and verified `11596b4` by hand instead, finding no drift. That is the defect
+filed this morning as **redkiln #135**, reached by a reviewer who did not know it had been filed.
+Two independent routes to the same finding, which is the strongest evidence either is real.
+
+### Story gate — 2 approved, 5 held (human, batched)
+
+**All seven passed their deterministic gate**, so for the first time in this project both an
+approval and a rejection were recordable. That is the 0.19.0 fix plus `e020276`'s fence widening
+landing together.
+
+| Story | Stage now | Verdict |
+|-------|-----------|---------|
+| `benchmark-harness` HS-S0034 | `report` / `in-review` | **approved** |
+| `adr-0022-append-condition-strategy` HS-S0035 | `report` / `in-review` | **approved** |
+| `schema-migration-and-identity` HS-S0036 | `implement` / `in-progress` | changes-requested |
+| `append-atomicity-and-store-limits` HS-S0037 | `implement` / `in-progress` | changes-requested |
+| `lazy-read-with-snapshot-ceiling` HS-S0038 | `implement` / `in-progress` | changes-requested |
+| `wide-query-chunked-not-refused` HS-S0039 | `implement` / `in-progress` | changes-requested |
+| `sqlite-fixture-and-whole-suite` HS-S0040 | `implement` / `in-progress` | changes-requested |
+
+**The first evaluated story-gate pass in this initiative.** The memo now reports *"reusing the
+verified 'story' result … tree unchanged since 2026-08-18T03:25:40"* — a replay of a pass that was
+actually computed, rather than of one no evaluation ever recorded. The 0-evaluated/37-memoized
+census that could not be explained on 0.18.0 has resolved in the direction predicted: it was the
+boundary defect all along, and there is nothing to file.
+
+**No `record-links` was issued.** Run 2 already recorded each story's own checkpoint (`694dccd`), and
+run 3's two commits are slice-wide — `2172b40` spans several stories' files plus `standards/rust/**`
+and five ledgers, `82496ed` is the seal. Adding either to a story's `links.commits` would now feed
+those files straight into that story's boundary check, which on 0.19.0 reads exactly that field.
+HS-P0010 run 2's rule, applied pre-emptively and for a sharper reason than when it was written.
+
+**HS-S0039's verdict should be read as unverified rather than checked**: its boundary was never
+parsed, so its green gate means only that no check ran. The reviewer's hand-verification is what
+stands behind it.
+
+### Next — run 4, fresh at `90cbca5`
+
+Both blocking findings are small and one arrives with a verified mutation, so a fresh re-launch
+re-enters `durable-event-store` at Review, hands them to a new reviewer as hypotheses, runs the
+fix→re-review→seal tail, and continues into slices 3–5. The two approved M1 stories are skipped as
+sealed. Still expected downstream: slice 5 halts at `cargo publish` for the owner, after HS-S0046
+reconciles `reserve.rs`'s `0.1.0-alpha.1` claim.
