@@ -32,9 +32,22 @@
 //!   legitimate tag for prose, so an author who wants a Rust block the compiler
 //!   never sees can still have one by calling it something else. This list
 //!   narrows that hole and does not close it.
-//! * **A hidden panel and an unresolvable clause id are still invisible here.**
-//!   Those are `hidden-content-resolution`'s and the `specification-pin`
-//!   milestone's, and both land in this same module.
+//! * **A disclosure marker in a spelling this set does not carry is invisible.**
+//!   [`HIDDEN_MARKERS`] is seven tokens, and a renderer that folds content on
+//!   some eighth directive — a `<div>` with a theme's collapse class, a
+//!   generator's own shortcode — passes untouched. The set is a closed
+//!   enumeration of what DT-7 was decided against, not a proof that nothing can
+//!   fold.
+//! * **Disclosure produced outside the pinned tree is not this scan's
+//!   business.** The rule is scoped to [`TREE`], deliberately: a scanner is
+//!   scoped to the directory whose behaviour it constrains. Prose elsewhere in
+//!   the repository may use `<details>` and this step will never say so.
+//! * **The scan reads source, and cannot know what a renderer does with it.**
+//!   It reports the bytes a page carries. Whether a particular host collapses,
+//!   ignores or escapes them is outside anything this repository can observe,
+//!   which is the whole reason the markers are rejected rather than measured.
+//! * **An unresolvable clause id is still invisible here.** That is the
+//!   `specification-pin` milestone's, landing in this same module.
 //! * **The harness is matched as text, so reformatting it can break this check
 //!   without breaking the compile.** Splitting an `include_str!` across lines, or
 //!   writing a `mod` line that does not start with `mod ` after trimming, makes a
@@ -168,6 +181,39 @@ const CHECKER: &str = "xtask/src/lint_narrative.rs";
 /// It ships empty, and it grows by review rather than as the repair for a
 /// failing gate.
 const IGNORE_ALLOWANCES: &[(&str, &str, &str)] = &[];
+
+/// Hidden-content markers rejected anywhere under [`TREE`].
+///
+/// DT-7's resolution, as a token set. `_design.md` `## Pattern decision` D2,
+/// signed off 2026-08-17 with no conditions, settled that scoped divergence is
+/// written as visible level-3 subsections while it stays small and becomes one
+/// page per scope past the threshold — and that hidden panels are rejected by
+/// this checker, by file and line. There is no third state where scoped content
+/// is present but hidden.
+///
+/// There is deliberately **no allowance list** for these, and that is a decision
+/// rather than an omission. [`IGNORE_ALLOWANCES`] exists because the need for an
+/// uncompiled fence is real, enumerable, and detectable when it goes stale; a
+/// hidden-panel allowance would be permission to reintroduce, one page at a
+/// time, a mechanism whose behaviour nothing in this repository can observe —
+/// and no sweep can detect that.
+///
+/// Shrinking this set re-opens DT-7 and requires a new design record, not an
+/// edit. A test pins it and names which token moved.
+///
+/// Every token is ASCII-lowercase, which is what makes the case-folded match in
+/// [`check_hidden_markers`] correct rather than accidentally correct. The
+/// trailing space in `{{#tab ` is load-bearing: without it the token shadows
+/// `{{#tabs` and one `{{#tabs}}` line would report twice.
+const HIDDEN_MARKERS: &[&str] = &[
+    "<details",
+    "<summary",
+    "{{#tabs",
+    "{{#tab ",
+    "{{#endtabs",
+    "```admonish",
+    "<!-- tab",
+];
 
 /// The gate step's name, which is also the claim it makes.
 ///
@@ -663,6 +709,35 @@ fn check_allowances(
     }
 }
 
+/// Every hidden-content marker on a page.
+///
+/// Line-based over the **whole** page, fenced blocks and the index included, and
+/// ASCII-case-insensitive because HTML tag names are: a case-sensitive
+/// `contains` accepts `<Details>` and `<DETAILS open>`, which is the same class
+/// of hole as the elaborate spellings of `ignore` this repository has already
+/// been bitten by. A fence-aware or comment-aware scan is the most plausible
+/// refinement available and it is refused — a marker quoted in a fence still
+/// renders as a page telling a reader to fold something, and there is no
+/// allowance path to exempt it.
+///
+/// One problem per occurrence rather than per line or per page, so the count in
+/// the terminal `bail!` is the number of things to fix. `to_ascii_lowercase`
+/// leaves non-ASCII bytes alone, so the lowered copy is the same length as the
+/// original and no offset can land inside a character.
+fn check_hidden_markers(page: &Page, found: &mut Vec<Found>) {
+    for (index, line) in page.text.lines().enumerate() {
+        let lowered = line.to_ascii_lowercase();
+        for token in HIDDEN_MARKERS {
+            for _ in lowered.matches(token) {
+                found.push((
+                    index + 1,
+                    format!("`{token}` is a hidden panel; DT-7 forbids it in {TREE}"),
+                ));
+            }
+        }
+    }
+}
+
 /// Every problem one page carries, composed and in line order.
 fn check_page(
     page: &Page,
@@ -672,6 +747,9 @@ fn check_page(
 ) {
     let mut found: Vec<Found> = Vec::new();
     check_fences(page, allowances, usage, &mut found);
+    check_hidden_markers(page, &mut found);
+    // Stable, so two problems on one line keep the order they were found in and
+    // a marker interleaves with a fence problem by line rather than by check.
     found.sort_by_key(|(line, _)| *line);
     for (line, message) in found {
         problems.push(format!("{}:{line} — {message}", page.path));
@@ -1537,6 +1615,354 @@ mod tests {
             assert!(
                 at < docs_end && at < first_check,
                 "`{sentence}` must be in the module docs, before the first check"
+            );
+        }
+    }
+
+    // ======================================================================
+    // hidden-content-resolution
+    // ======================================================================
+
+    /// The fixture page from `_design.md` `## The doctest`, verbatim — including
+    /// the corrected `happenstance_core::MemoryEventStore` spelling, because
+    /// `memory` is a private module and the type is re-exported.
+    ///
+    /// It is test material and never a file under `docs/`: the wrapped form
+    /// below would fail `cargo xtask ci` forever if it were committed, which is
+    /// exactly why it is the named wrong implementation.
+    const FIXTURE_PAGE: &str = "\
+# Appending under a condition
+
+*<!-- answered-need: reserved for HS-P0021 -->*
+
+An append condition is checked against the same boundary the query read, so a
+writer that saw a consistent view cannot be overtaken between reading and
+appending (ES-40).
+
+```rust
+use happenstance_core::MemoryEventStore;
+
+let store = MemoryEventStore::new();
+assert_eq!(store.len(), 0);
+```
+
+## Per-adapter notes
+
+### happenstance-postgres
+
+Positions are assigned outside the transaction.
+
+### happenstance-sqlite
+
+One writer at a time.
+";
+
+    /// The same page with a disclosure wrapper around its scope band.
+    ///
+    /// Derived from the clean form rather than hand-copied beside it, so the
+    /// pair cannot drift into testing two different pages.
+    fn wrapped_fixture() -> String {
+        format!(
+            "{}\n</details>\n",
+            FIXTURE_PAGE.replace(
+                "## Per-adapter notes",
+                "<details>\n<summary>Per-adapter notes</summary>\n\n## Per-adapter notes",
+            )
+        )
+    }
+
+    // ---- AC-001: every marker is a problem, from inside the same walk ------
+
+    #[test]
+    fn every_hidden_marker_is_reported_once_per_occurrence() {
+        for token in HIDDEN_MARKERS {
+            // A closing fence, because ```admonish is itself a fence opener and
+            // an unpaired one is separately a problem — the two checks are
+            // independent and both are right.
+            let text = format!("a claim\n{token}\n```\n");
+            let markers: Vec<String> = walk(&[page_with("append-conditions.md", &text)], &[])
+                .into_iter()
+                .filter(|problem| problem.contains("is a hidden panel"))
+                .collect();
+
+            assert_eq!(markers.len(), 1, "`{token}` got: {markers:?}");
+            assert!(
+                markers[0].starts_with("docs/append-conditions.md:2 — "),
+                "the problem must name the page and the line, got: {}",
+                markers[0]
+            );
+        }
+    }
+
+    /// EC-004: two markers on one line are two problems, so the count in the
+    /// `bail!` is the number of things to fix.
+    #[test]
+    fn two_markers_on_one_line_are_two_problems() {
+        let found = walk(
+            &[page_with(
+                "append-conditions.md",
+                "<details><summary>notes</summary>\n",
+            )],
+            &[],
+        );
+        assert_eq!(found.len(), 2, "got: {found:?}");
+    }
+
+    /// The marker problem joins the walk's existing accumulator, so a
+    /// contributor's other problems on the same page are reported in the same
+    /// run and in source order.
+    #[test]
+    fn marker_and_fence_problems_arrive_in_one_list_in_source_order() {
+        let text = "```\nfn main() {}\n```\n\n<details>\n";
+        let found = walk(&[page_with("append-conditions.md", text)], &[]);
+
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found[0].starts_with("docs/append-conditions.md:1 — "));
+        assert!(found[1].starts_with("docs/append-conditions.md:5 — "));
+    }
+
+    // ---- AC-002: the named wrong implementation, both halves ---------------
+
+    #[test]
+    fn the_wrapped_fixture_page_fails_by_file_and_line() {
+        let found = walk(
+            &[page_with("append-conditions.md", &wrapped_fixture())],
+            &[],
+        );
+
+        assert_eq!(
+            found.len(),
+            2,
+            "the `<details` and the `<summary` lines, and nothing else: {found:?}"
+        );
+        assert!(found[0].contains("`<details`"), "got: {}", found[0]);
+        assert!(found[1].contains("`<summary`"), "got: {}", found[1]);
+
+        let lines: Vec<&str> = found
+            .iter()
+            .map(|problem| problem.split_once(" — ").unwrap().0)
+            .collect();
+        assert_ne!(lines[0], lines[1], "each occurrence names its own line");
+    }
+
+    /// Without the clean half the rule cannot be distinguished from one that
+    /// rejects every page.
+    #[test]
+    fn the_same_fixture_page_without_its_wrapper_is_clean() {
+        assert!(
+            walk(&[page_with("append-conditions.md", FIXTURE_PAGE)], &[]).is_empty(),
+            "the fixture page is the artifact the gate compiles; it must pass"
+        );
+    }
+
+    // ---- AC-003: every spelling a renderer accepts, and no exemption -------
+
+    /// HTML tag names are case-insensitive, so a case-sensitive `contains`
+    /// accepts `<Details>` — the same class of hole as the elaborate spellings
+    /// of `ignore` this repository has already been bitten by.
+    #[test]
+    fn a_hidden_marker_is_matched_whatever_its_case() {
+        for spelling in ["<details>", "<Details>", "<DETAILS open>", "{{#TABS}}"] {
+            let found = walk(&[page_with("append-conditions.md", spelling)], &[]);
+            assert_eq!(found.len(), 1, "`{spelling}` got: {found:?}");
+        }
+    }
+
+    /// EC-003. A fence-aware scan is the most plausible refinement available and
+    /// it is refused: a marker quoted in a fence still renders as a page telling
+    /// a reader to fold something, and there is no allowance path to exempt it.
+    #[test]
+    fn a_marker_inside_a_fence_is_still_reported() {
+        let found = walk(
+            &[page_with(
+                "append-conditions.md",
+                "```text\n<details>\n```\n",
+            )],
+            &[],
+        );
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].starts_with("docs/append-conditions.md:2 — "));
+    }
+
+    /// The index is scanned like every other file, and it is clean today.
+    #[test]
+    fn the_real_index_carries_no_hidden_marker() {
+        let index = read(INDEX);
+        let mut found = Vec::new();
+        check_hidden_markers(&page_with("README.md", &index), &mut found);
+
+        assert!(
+            found.is_empty(),
+            "{INDEX} carries a hidden marker: {found:?}"
+        );
+    }
+
+    // ---- AC-004: the set is pinned, and the failure names which token moved -
+
+    /// RS-81-5. `_design.md` D2 was signed off by a human on 2026-08-17 with no
+    /// conditions; shrinking this set re-opens DT-7 and requires a new design
+    /// record, not an edit to a `const`.
+    #[test]
+    fn the_hidden_marker_set_is_pinned_to_the_design() {
+        const PINNED: &[&str] = &[
+            "<details",
+            "<summary",
+            "{{#tabs",
+            "{{#tab ",
+            "{{#endtabs",
+            "```admonish",
+            "<!-- tab",
+        ];
+
+        for token in HIDDEN_MARKERS {
+            assert!(
+                PINNED.contains(token),
+                "`{token}` is in HIDDEN_MARKERS and not in the pin; widening the set is \
+                 still a design change"
+            );
+        }
+        for token in PINNED {
+            assert!(
+                HIDDEN_MARKERS.contains(token),
+                "`{token}` left HIDDEN_MARKERS; shrinking it re-opens DT-7 and requires a \
+                 new design record, not an edit"
+            );
+        }
+        assert_eq!(HIDDEN_MARKERS.len(), PINNED.len());
+    }
+
+    /// What makes the case-folding in `check_hidden_markers` correct rather than
+    /// accidentally correct.
+    #[test]
+    fn every_hidden_marker_is_already_lowercase() {
+        for token in HIDDEN_MARKERS {
+            assert_eq!(
+                *token,
+                token.to_ascii_lowercase(),
+                "a token that is not lowercase can never match a lowered line"
+            );
+        }
+    }
+
+    // ---- AC-005: the composed line, unbounded, ordered, and no new chrome ---
+
+    /// The `_design.md` `## States` message form, verbatim.
+    #[test]
+    fn a_marker_problem_is_the_composed_line_the_design_specifies() {
+        let found = walk(
+            &[page_with("adapters/sqlite.md", "a\n\n\n<details>\n")],
+            &[],
+        );
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(
+            found[0],
+            "docs/adapters/sqlite.md:4 — `<details` is a hidden panel; DT-7 forbids it in docs"
+        );
+    }
+
+    #[test]
+    fn forty_markers_print_as_forty_lines() {
+        let mut text = String::new();
+        for _ in 0..40 {
+            text.push_str("<details>\n");
+        }
+        let found = walk(&[page_with("append-conditions.md", &text)], &[]);
+
+        assert_eq!(found.len(), 40);
+        assert!(found.iter().all(|problem| !problem.contains("more")));
+    }
+
+    #[test]
+    fn marker_problems_are_ordered_by_page_then_line() {
+        let found = walk(
+            &[
+                page_with("adapters/sqlite.md", "\n<details>\n"),
+                page_with("append-conditions.md", "<summary>\n"),
+            ],
+            &[],
+        );
+
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found[0].starts_with("docs/adapters/sqlite.md:2 — "));
+        assert!(found[1].starts_with("docs/append-conditions.md:1 — "));
+    }
+
+    /// This story adds no step, banner, subcommand or spinner of its own: the
+    /// composition root does not mention it at all.
+    #[test]
+    fn the_marker_scan_adds_no_step_or_banner_of_its_own() {
+        let main = read(ROOT_MODULE);
+
+        for spelling in ["HIDDEN_MARKERS", "hidden panel", "hidden marker"] {
+            assert!(
+                !main.contains(spelling),
+                "`{spelling}` in the composition root means a second step or banner"
+            );
+        }
+    }
+
+    // ---- AC-006: no allowance path, and no hook for one --------------------
+
+    /// The executable form of "there is no allowance path": no input, however it
+    /// is dressed, makes a marker pass.
+    #[test]
+    fn no_input_makes_a_hidden_marker_pass() {
+        for text in [
+            "<details>",
+            "<!-- allow: this fold is deliberate -->\n<details>",
+            "IGNORE_ALLOWANCES names this page\n<details>",
+            "```text\n<details>\n```",
+            "````markdown\n<details>\n````",
+            "prose before <details> and prose after",
+        ] {
+            let found = walk(&[page_with("append-conditions.md", text)], &[]);
+            assert!(
+                !found.is_empty(),
+                "`{text}` must still be a problem; the absence of an allowance path is \
+                 the decision"
+            );
+        }
+    }
+
+    /// And the scan itself carries no escape hatch to reach for.
+    #[test]
+    fn the_marker_scan_has_no_allowance_environment_or_cfg_hook() {
+        let source = production_source();
+        let start = source
+            .find("fn check_hidden_markers")
+            .unwrap_or_else(|| panic!("this module declares no marker scan"));
+        let body = &source[start..];
+        let end = body.find("\n}\n").map_or(body.len(), |at| at + 3);
+        let body = &body[..end];
+
+        for hook in ["IGNORE_ALLOWANCES", "env::var", "cfg(", "feature ="] {
+            assert!(
+                !body.contains(hook),
+                "`{hook}` in the marker scan would be a way to permit a hidden panel"
+            );
+        }
+    }
+
+    /// The three limits this check creates, stated first, in the module's docs.
+    #[test]
+    fn the_module_docs_state_the_marker_scans_limits() {
+        let source = production_source();
+        let first_check = source
+            .find("fn check_fences")
+            .unwrap_or_else(|| panic!("this module declares no fence walk"));
+
+        for sentence in [
+            "a spelling this set does not carry",
+            "outside the pinned tree",
+            "reads source",
+        ] {
+            let at = source
+                .find(sentence)
+                .unwrap_or_else(|| panic!("the module docs must state `{sentence}`"));
+            assert!(
+                at < first_check,
+                "`{sentence}` must precede the first check"
             );
         }
     }
