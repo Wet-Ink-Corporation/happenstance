@@ -4269,11 +4269,24 @@ most-selective-tag-first, and SQLite cannot supply per-value cardinality —
       have an adapter that can actually supply the fixture's second handle.
 
 **Proof artefact.** The concurrency macro green under a multi-thread runtime at 64
-contenders across 25 rounds — a read-then-write adapter fails that within a handful
-of iterations and passes the sequential rule forever — plus an acknowledged write
-surviving a genuine process reopen, which is the first time the workspace can even
-ask the question. Third: the phase-3 mutant harness re-run with
-`SqliteEventStore` in the pass column.
+contenders — a read-then-write adapter fails that within a handful of iterations
+and passes the sequential rule forever — plus an acknowledged write surviving a
+genuine process reopen, which is the first time the workspace can even ask the
+question. Third: the phase-3 mutant harness re-run with `SqliteEventStore` in the
+pass column.
+
+**The 64 is now the code's number too, and the "25 rounds" that used to sit beside
+it is gone rather than carried forward.** `concurrency::CONTENDERS` was 8 for two
+phases while this line and the status table both read 64; the discrepancy is stated
+at `:2686-2696` above, along with the observation that leaving it is the option that
+rots. It was resolved by *raising the constant* — ADR-0022 §12 measured sixty-four
+`rusqlite::Connection`s on one file with no ceiling reached, exactly one winner per
+race and `busy = 0`, at a cost of one order of magnitude in wall time — and the doc
+comment at `crates/happenstance-testkit/src/concurrency.rs` now carries that reason
+and the workspace-wide cost. The *rounds* half was the other error and had no fixing
+by a number: the only `ROUNDS` in the family is a rule-local `4` inside
+`a_concurrent_reader_never_sees_a_partial_batch`, which is one rule's shape rather
+than a property of the family, so the phrase is struck instead of restated.
 
 **Exit criteria**
 

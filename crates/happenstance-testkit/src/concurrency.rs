@@ -199,11 +199,43 @@ where
 /// failing, and the suite has no way to tell them apart (CF-33 — there is no
 /// watchdog).
 ///
-/// Eight rather than two, because two threads on a multi-core host frequently
-/// do not overlap at all, and eight is enough that the operating system has to
-/// preempt somewhere. It is not a tuning knob: the rules assert set properties —
-/// *exactly one*, *all distinct* — that hold at any size above one.
-pub const CONTENDERS: usize = 8;
+/// **It is not a tuning knob.** The rules assert *set* properties — exactly one
+/// winner, k boundaries admit exactly k, all positions distinct — and every one
+/// of them holds at any size above one. Moving this number therefore changes how
+/// hard the operating system is asked to interleave, and nothing else. That is
+/// what makes it movable at all, and it is also why moving it "to see" is the
+/// wrong move: the cost is real and lands somewhere else.
+///
+/// # Why sixty-four, and what it costs
+///
+/// It was **eight** for two phases, on the argument that two threads on a
+/// multi-core host frequently do not overlap and eight is enough that the
+/// operating system has to preempt somewhere. That argument is still true and it
+/// is not the reason this number is now 64. Two of the repository's stated proof
+/// artefacts read *64 contenders* (`RUNBOOK.md:159`, `:4217-4218`), so an
+/// evaluator reading the plan and an adapter author reading this line were told
+/// different things — a discrepancy that had been carried for three phases, and
+/// the third option, leaving it, is the one that rots.
+///
+/// ADR-0022 §12 measured the raise against the first file-backed adapter rather
+/// than arguing it: sixty-four `rusqlite::Connection`s on one file opened on
+/// every one of thirty races with no file-descriptor or connection ceiling
+/// reached, exactly one winner per race at both counts, and `busy = 0` and
+/// `failed = 0` throughout. **The cost is wall time and it is one order of
+/// magnitude** — roughly 10x to 20x per race — which for a five-rule family is
+/// the difference between a fraction of a second and a handful of seconds per
+/// adapter per CI run.
+///
+/// The cost is also **workspace-wide**, and that is the part worth stating here
+/// rather than in a commit message: this constant is what
+/// `crates/happenstance-testkit/tests/memory_concurrency_conformance.rs`, the
+/// five racing stores behind
+/// `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`,
+/// and every future fixture in any adapter crate run at. A fixture whose backing
+/// store cannot open sixty-five handles onto one medium now deadlocks where it
+/// used to pass — which is precisely what the first paragraph says this number
+/// is for.
+pub const CONTENDERS: usize = 64;
 
 /// What one contender's `append` produced, collapsed to something `Send`.
 ///
