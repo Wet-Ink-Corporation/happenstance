@@ -14,7 +14,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | # | project | id | dependsOn | terminal | state | verdict | review |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
-| 2 | page-need-discipline | HS-P0021 | 1 | no | pending | — | — |
+| 2 | page-need-discipline | HS-P0021 | 1 | no | in-progress | — | — |
 | 3 | application-author-path | HS-P0022 | 1, 2 | no | pending | — | — |
 | 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
@@ -140,3 +140,81 @@ the one move this check exists to make visible.
   reported rather than hid.
 
 Project 1 state: **done**.
+
+### Run 2 — HS-P0021 page-need-discipline
+
+- Entry preflight: tree clean after `36b8c19` (two CLI-written telemetry lines committed);
+  branch and worktree confirmed; `entry_baseline` already green so the full-suite gate was
+  skipped; affected baseline `cargo xtask ci --fast` green.
+- baseRef: `b23b238d` — captured after the `design` -> `implementation` advance, so the
+  project's cumulative review diff carries implementation work only. **Held stable across
+  re-launches of this project.**
+- Scope: all 8 stories, 3 slices (`discipline-on-disk`, `page-need-gate-step`,
+  `binding-beyond-this-project`). `terminal: false` — HS-P0025 owns the whole-initiative DoD.
+
+### Run 2 result — HS-P0021, workflow `wf_750dc77d-4e9` — HALTED
+
+- 4/8 stories committed (`55b987b`, `9dacc7d`, `dec82c7`, `a349e04`). Slice
+  `discipline-on-disk` sealed **`changes-requested`** (`9b173b2`); slices 2 and 3 never
+  opened. `degradedSummary: none`; no baseline repairs. Integration, design review and
+  project review did not run — the halt is upstream of them.
+- One API server error hit the slice implementer and was retried green on attempt 2
+  (`_obs.phases`: Stories, retried 1, failed 0). Nothing was dropped; the run is complete
+  in the sense that everything it claims to have produced exists.
+- The in-slice fix pass had already run (`gate` -> `re-review`) and the finding survived it,
+  which is why the seal is a rejection rather than a repair.
+
+#### The blocking finding — a guard that cannot fail
+
+`xtask/src/lint_pages.rs:1689-1700`, the untagged-fence half of
+`no_rust_tagged_and_no_untagged_fence_in_the_rules_tree`. It counts lines whose trimmed
+content is exactly a bare fence marker and asserts `openers % 2 == 0`. Those lines are the
+*closers* of correctly tagged fences, so an untagged fence contributes one opener and one
+closer and parity never moves. Proved by mutation: a bare fence appended to
+`standards/pages/40-reviewing-a-page.md` left all 51 `lint_pages` tests green, while a
+`rust`-tagged fence in the same place went red at `:1681` with a file:line message.
+
+Verified independently at the orchestrator before accepting the halt, by reading the source
+rather than relaying the claim. It is CLAUDE.md's *"a rule that no adapter can fail is
+decorative"*, and three ACs rest on it — `need-vocabulary` AC-014, `reviewer` AC-009,
+`fold-line` AC-008. The `_ledger.md` AC-014 row flips on exactly the unsound parity argument
+("an even number of closers matching four tagged openers"), so the evidence has to be
+rewritten, not just the test.
+
+A second, **inverse** error sits in the same module: `router_is_inside_its_budgets`
+(`:853-864`) asserts every line starting with a fence marker carries info `text` or
+`markdown`, but a legitimate *closing* fence has an empty info string — so the first fence
+ever added to `standards/pages/README.md` fails it spuriously. Vacuous today only because the
+router has no fence. Both are the same mistake about what a bare fence line means, made in
+opposite directions, and both take the same fix: track open/close state and bind the
+assertion to the opener. The working `fenced` toggle already exists at `:1498-1508`.
+
+#### Non-blocking findings carried forward
+
+- `need-vocabulary-and-declaration-form/_ledger.md` AC-005 `verifying_test` names
+  `router_is_not_created_by_this_story`, which no longer exists — the slice-mate inverted it to
+  `router_is_created_by_the_router_story` (`xtask/src/lint_pages.rs:544`). The body explains the
+  inversion; the field does not.
+- `fold-line-rule/_ledger.md` AC-007 `verifying_test` still claims a grep with no matches and an
+  empty `git diff main -- xtask`; both are now false (`xtask/src/lint_pages.rs:966`, and the
+  slice does touch `xtask/src`). Recorded correctly in the body and in the report's Deviation 1.
+- `router-precedence-and-announcement/spec.md` AC-006's THEN row requires the router to say
+  "no gate step reads `standards/pages/` yet", which the delivered router correctly contradicts.
+  The correction is recorded at `:170-182`; the row itself needs marking as superseded.
+- `reviewer-and-citation-procedures` AC-007/AC-004 owe a named human non-author. The review
+  independently re-executed the walk and reached the same verdict, which is a second
+  reproducible run but not a human name.
+- Risk note, no change owed: the fix pass inlined `PRECEDENCE_CHAIN` and `GENERATED_HEADER` as
+  literals (`:235-245`) rather than reading `standards/rust/README.md` live. That is what the
+  testing brief prescribes for AC-002 and it satisfies RS-81-3, but an edit to the constitution's
+  precedence block would no longer redden anything here. `git diff main -- standards/rust/README.md`
+  stays a standing ledger command at integration.
+
+#### Disposition
+
+Human decision 2026-08-18: **re-launch fresh.** No story advanced, no verdict recorded, and
+HS-P0021 stays on `implementation` — parking it at `in-review` over a slice its own reviewer
+rejected is the self-certification this loop exists to prevent. Preflight reads both resume
+axes from git, so the relaunch re-enters `discipline-on-disk` at Review with the findings
+above as hypotheses, runs the fix -> re-review -> re-seal tail, and then opens slices 2 and 3.
+`baseRef` is unchanged at `b23b238d`.
