@@ -41,7 +41,7 @@ all still present, which is what AC-006, AC-007 and AC-009's checks confirm belo
 
 | SHA | subject |
 | --- | --- |
-| `PENDING` | `feat(page-need-discipline): Playbook atom staged for ingest` |
+| `dc58e80` | `feat(page-need-discipline): Playbook atom staged for ingest` |
 
 One checkpoint commit carrying `<atom>` plus this story's `_ledger.md`, `implementation-report.md`
 and `report.md`. Trailer: `Story: page-need-discipline/playbook-atom-staged-for-ingest`. The

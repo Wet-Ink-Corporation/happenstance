@@ -78,7 +78,7 @@ the `.with_context()` at `xtask/src/lint_pages.rs:395` naming the pinned path; a
 
 | SHA | subject |
 | --- | --- |
-| `062785b` | `feat(page-need-discipline): Governed page cites the discipline` |
+| `263dc7b` | `feat(page-need-discipline): Governed page cites the discipline` |
 
 One checkpoint commit, carrying the three edited files plus this story's `_ledger.md`,
 `implementation-report.md` and `report.md`. Trailer: `Story: page-need-discipline/governed-page-cites-the-discipline`.
