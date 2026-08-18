@@ -1767,6 +1767,83 @@ pub(crate) fn collect_rules(suite: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// The clause ids `spec/SPECIFICATION.md` defines, resolved through the existing parser.
+///
+/// Sibling of [`all_rules`], in the same file and for the same stated reason: a list kept
+/// next to the function that parses it cannot drift from it (`spec_trace.rs:83-84`).
+///
+/// # What this does not verify
+///
+/// Stated before the guarantee, because a check whose limits are undocumented is read as
+/// one — `lint_constitution.rs:9-13`'s argument, one function over.
+///
+/// * **A doubly-declared id collapses to one entry, and nothing notices.** The return is a
+///   [`BTreeSet`], so a document declaring `ES-1` twice is indistinguishable here from one
+///   declaring it once, and nothing in this repository looks for the duplicate today. If
+///   that is ever wanted it is a check beside §1.3's census, not a wider return type.
+/// * **Existence is not appropriateness.** An id in this set is an id the document
+///   declares. Whether the sentence citing that clause *should* cite it, or has quietly
+///   restated it instead of deferring to it, is a judgement no parser makes.
+/// * **It parses no citations.** Finding the ids a page cites is the narrative checker's;
+///   this answers only which ids exist.
+///
+/// The accepted prefixes are [`SECTIONS`]', by way of [`clause_id`], so a seventh family
+/// added in that one place needs no second edit here. A literal prefix list in the caller
+/// was the alternative and it lost: it would be the fourth list of the six families, which
+/// [`SECTIONS`]' own doc comment already explains is the one that can half-land. Returning
+/// `Vec<Clause>` lost for a neighbouring reason — it would make a thirteen-field
+/// parser-internal struct crate-visible to callers that only ever wanted a name.
+///
+/// # Errors
+///
+/// When `spec/SPECIFICATION.md` cannot be read, or when it declares no clause at all. The
+/// second condition is deliberate and belongs here rather than in a caller: an empty set
+/// would report every citation and every pinned id as missing, which is this function being
+/// broken rather than the document.
+// `not(test)` because the test module below is already a caller, so under `cfg(test)` the
+// item is live and the expectation would be unfulfilled — the same self-erasure firing one
+// configuration early, and clippy runs over every target.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the two consumers land later in this same slice — \
+                  `narrative-citation-resolution` resolves the ids a page cites and \
+                  `frozen-documentation-must-pin` resolves the pinned set, both in \
+                  `lint_narrative`. `expect` rather than `allow` so the first call site \
+                  makes this expectation unfulfilled, which `-D warnings` turns into a \
+                  failure that forces the attribute out"
+    )
+)]
+pub(crate) fn clause_ids(root: &Path) -> Result<BTreeSet<String>> {
+    collect_clause_ids(&read(root, SPEC)?)
+}
+
+/// The clause ids a specification's text declares.
+///
+/// Split from [`clause_ids`] exactly as [`collect_rules`] is split from [`all_rules`], so
+/// the decision is assertable against a `&str` with no filesystem, no fixture tree and no
+/// temp-directory dependency.
+///
+/// # Errors
+///
+/// When the text declares no clause at all — the condition [`clause_ids`] documents.
+fn collect_clause_ids(spec: &str) -> Result<BTreeSet<String>> {
+    let ids: BTreeSet<String> = parse_clauses(spec)
+        .into_iter()
+        .map(|clause| clause.id)
+        .collect();
+
+    if ids.is_empty() {
+        bail!(
+            "{SPEC} declares no clause ids — every citation a page makes and every id the \
+             pin enumerates would report as missing, which is the checker being broken \
+             rather than the document"
+        );
+    }
+    Ok(ids)
+}
+
 /// Every `wire::`-qualified test name a clause may resolve against.
 ///
 /// # Errors
@@ -2313,4 +2390,239 @@ pub(crate) fn workspace_root() -> Result<PathBuf> {
         .parent()
         .map(Path::to_path_buf)
         .context("xtask must live one level below the workspace root")
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
+
+    use std::fmt::Write as _;
+
+    use super::*;
+
+    /// This module's own path, read as text the way [`crate::lint_constitution`]
+    /// reads a source file rather than through `include_str!`, so the assertion
+    /// is about the file a contributor opens.
+    const THIS_FILE: &str = "xtask/src/spec_trace.rs";
+
+    /// The doc block attached to [`clause_ids`], attributes included.
+    ///
+    /// Everything after the last blank line before the definition. A doc comment
+    /// and its attributes carry no blank line inside them and are separated from
+    /// the item above by one, so the rule is exact — and cheaper than a
+    /// line-shape predicate, which the multi-line `#[expect(…)]` already broke
+    /// once. Splitting on the definition rather than searching the file for a
+    /// heading is what keeps this module's own prose, which names both headings,
+    /// out of the haystack.
+    fn clause_ids_doc_block(source: &str) -> String {
+        let head = source
+            .split("pub(crate) fn clause_ids(")
+            .next()
+            .expect("split always yields a first part");
+        let mut block: Vec<&str> = head
+            .lines()
+            .rev()
+            .take_while(|line| !line.trim().is_empty())
+            .collect();
+        block.reverse();
+        block.join("\n")
+    }
+
+    // ---- AC-001: the accessor exists and reads the pinned document ----------
+
+    /// The only test that touches the real tree, and it touches it through the
+    /// existing helpers rather than around them. `ES-1` and `VT-1` are declared
+    /// at `spec/SPECIFICATION.md:2460` and `:563`.
+    #[test]
+    fn clause_ids_reads_the_pinned_specification() {
+        let ids = clause_ids(&workspace_root().unwrap())
+            .expect("the pinned specification must resolve against the real workspace root");
+
+        assert!(
+            !ids.is_empty(),
+            "the real document declares clauses; an empty set is the checker being broken"
+        );
+        for id in ["ES-1", "VT-1"] {
+            assert!(
+                ids.contains(id),
+                "the real document declares {id}; got {} ids",
+                ids.len()
+            );
+        }
+    }
+
+    // ---- AC-002: prefixes come from `SECTIONS`, forms from the parser -------
+
+    /// Iterating [`SECTIONS`] rather than a literal list of six prefixes is the
+    /// whole point: a seventh family added in that one place cannot leave this
+    /// test green by omission.
+    #[test]
+    fn every_section_family_resolves() {
+        let mut document = String::from("## A slice shaped like the document\n\n");
+        for section in SECTIONS {
+            let _ = write!(
+                document,
+                "#### {}1 — a declaration in the {} family\n\n[FROZEN]\n\n\
+                 **Rule:** none. Prose follows the declaration, as it does in the document.\n\n",
+                section.prefix, section.prefix
+            );
+        }
+
+        let ids = collect_clause_ids(&document).unwrap();
+
+        for section in SECTIONS {
+            assert!(
+                ids.contains(&format!("{}1", section.prefix)),
+                "the {} family must resolve; got {ids:?}",
+                section.prefix
+            );
+        }
+        assert_eq!(ids.len(), SECTIONS.len(), "got {ids:?}");
+    }
+
+    /// Both declaration forms are the parser's, inherited rather than
+    /// re-implemented — and a bold run that closes immediately is a
+    /// cross-reference, of which §1 is full.
+    #[test]
+    fn both_declaration_forms_resolve_and_a_cross_reference_does_not() {
+        let document = "\
+#### ES-1 — the heading form, which the earlier sections use
+
+[FROZEN]
+
+**Rule:** `es_1_two_flavours`.
+
+**PS-1 — the bold-run form, which the later sections use.**
+
+[DEFERRED — settled when the first projection adapter is built]
+
+**CF-30 is [NON-NORMATIVE] and is prose.**
+
+**ES-40** is named here the way §1 names a clause it is pointing at.
+";
+
+        let ids = collect_clause_ids(document).unwrap();
+
+        for id in ["ES-1", "PS-1", "CF-30"] {
+            assert!(ids.contains(id), "{id} is a declaration; got {ids:?}");
+        }
+        assert!(
+            !ids.contains("ES-40"),
+            "a bold run that closes immediately is a cross-reference, not a declaration; \
+             got {ids:?}"
+        );
+    }
+
+    // ---- AC-003: existence, never eligibility -------------------------------
+
+    /// Applying [`has_suite`] here would silently dangle every `PS-` and `SY-`
+    /// citation, so the test asserts both halves: the id resolves, *and* the
+    /// filter that must not be on the path would have excluded it.
+    #[test]
+    fn a_deferred_clause_without_a_suite_still_resolves() {
+        let document = "\
+#### SY-7 — ingest re-checks the append condition against the receiving store
+
+[DEFERRED — settled by the first peer adapter]
+
+**Rule:** none. No `SyncPeer` conformance suite exists yet.
+";
+
+        let ids = collect_clause_ids(document).unwrap();
+
+        assert!(
+            ids.contains("SY-7"),
+            "a deferred clause is declared, so its id resolves; got {ids:?}"
+        );
+        assert!(
+            !has_suite("SY-7"),
+            "if this ever becomes true the test above stops rejecting a maturity filter"
+        );
+    }
+
+    // ---- AC-004: two hard errors, each naming the artifact that broke -------
+
+    #[test]
+    fn an_unreadable_specification_names_the_file_it_could_not_read() {
+        let err = clause_ids(Path::new("no/such/root"))
+            .expect_err("an unreadable document must never degrade to an empty set");
+
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains(&format!("reading {SPEC}")),
+            "the chain must carry `read`'s context naming the document, got: {chain}"
+        );
+    }
+
+    /// The failure `wire_rules` already refuses to defer: a document that parses
+    /// to nothing is the checker being broken, and saying so here is what stops
+    /// both consumers naming real pages and real pinned ids instead.
+    #[test]
+    fn a_specification_that_declares_nothing_blames_the_checker() {
+        let err = collect_clause_ids("# A document with no declarations\n\nProse only.\n")
+            .expect_err("a document that declares nothing must be a hard error");
+
+        let message = err.to_string();
+        assert!(
+            message.starts_with(SPEC),
+            "the artifact comes first, so soft-wrap cannot push it off the first visual \
+             row, got: {message}"
+        );
+        assert!(
+            message.contains("the checker being broken rather than the document"),
+            "the message must blame the checker rather than the document, got: {message}"
+        );
+        assert!(
+            !message.contains("more"),
+            "one composed sentence, never an elided list, got: {message}"
+        );
+    }
+
+    // ---- AC-005: the limits are proven, then stated, and stated first -------
+
+    /// RS-81-1's order: prove the blind spot in the tests, then state it in the
+    /// documentation. A `BTreeSet` cannot see the second declaration, and
+    /// nothing in this repository checks for one.
+    #[test]
+    fn a_doubly_declared_id_collapses_to_one() {
+        let document = "\
+#### ES-1 — declared once
+
+**Rule:** `es_1_two_flavours`.
+
+#### ES-1 — and declared a second time, which nothing here notices
+
+**Rule:** `es_1_two_flavours`.
+";
+
+        let ids = collect_clause_ids(document).unwrap();
+
+        assert_eq!(ids.len(), 1, "got {ids:?}");
+        assert!(ids.contains("ES-1"));
+    }
+
+    #[test]
+    fn the_accessor_documents_its_limits_before_its_errors() {
+        let source = read(&workspace_root().unwrap(), THIS_FILE).unwrap();
+        let block = clause_ids_doc_block(&source);
+
+        let limits = block
+            .find("does not verify")
+            .unwrap_or_else(|| panic!("the doc block states no limits at all: {block}"));
+        let errors = block
+            .find("# Errors")
+            .unwrap_or_else(|| panic!("the doc block has no `# Errors` section: {block}"));
+
+        assert!(
+            limits < errors,
+            "the limits must come before the errors; a check whose limits are undocumented \
+             is read as a guarantee: {block}"
+        );
+        for claim in ["badge", "shield", "✓"] {
+            assert!(
+                !block.contains(claim),
+                "`{claim}` would claim a resolving citation is a correct one"
+            );
+        }
+    }
 }
