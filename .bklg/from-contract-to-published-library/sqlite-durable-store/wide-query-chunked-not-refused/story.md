@@ -7,9 +7,9 @@ title: A wide Query is chunked and merged, never refused
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: capability
 slice: durable-event-store
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-17T12:59:55.921Z
+updated: 2026-08-18T03:29:52.157Z
 links:
   pr: null
   commits:
     - 11596b4
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
