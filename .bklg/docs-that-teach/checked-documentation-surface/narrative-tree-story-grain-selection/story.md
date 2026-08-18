@@ -7,9 +7,9 @@ title: A prose-only change selects the package that compiles it
 parent: HS-P0020
 initiative: docs-that-teach
 project: checked-documentation-surface
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -19,13 +19,13 @@ archetype: capability
 slice: compiled-narrative-tree
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T05:51:47.929Z
+updated: 2026-08-18T15:14:32.420Z
 links:
   pr: null
   commits:
     - 2a388ec
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
