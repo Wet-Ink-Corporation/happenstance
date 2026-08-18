@@ -7,9 +7,9 @@ title: The concurrency family green, and the 8-versus-64 discrepancy closed
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,12 +20,14 @@ archetype: capability
 slice: race-model-and-durability
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:43.982Z
+updated: 2026-08-18T13:28:18.115Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 995b987
+    - 071bc2f
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
