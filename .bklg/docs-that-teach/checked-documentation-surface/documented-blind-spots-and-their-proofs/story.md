@@ -22,14 +22,14 @@ archetype: capability
 slice: falsification-and-limits
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T15:18:55.179Z
+updated: 2026-08-18T15:18:56.233Z
 links:
   pr: null
   commits:
     - 5ecce36
     - 431c8b0
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
