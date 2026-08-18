@@ -1,8 +1,10 @@
-//! Type-level assertions about the SQLite skeleton's real associated types.
+//! Type-level assertions about the SQLite adapter's associated types.
 //!
-//! Nothing here runs a query — every body is `todo!()` in the crate under test.
-//! These are compile-time obligations, and the whole point of the skeleton is
-//! that the compiler is the instrument.
+//! Nothing here runs a query, and that is still the point: every obligation
+//! below is discharged by the compiler rather than by an execution, so it holds
+//! for code paths no test happens to take. The bodies these types belong to are
+//! real now and `tests/conformance.rs` runs them; what this target guards is the
+//! shape, which a green suite would not notice losing.
 //!
 //! Each half is gated on the feature that provides it, so that the feature
 //! powerset `cargo hack` runs does not compile a test against a module that was

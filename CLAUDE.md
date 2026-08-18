@@ -30,7 +30,7 @@ When a construct is unusual, say what the alternative was and why it lost.
 crates/happenstance-core/        the contract. types, ports, errors, in-memory store.
 crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
-crates/happenstance-sqlite/      🔩 skeleton. event store + projection store.
+crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  🔩 skeleton. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
 crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.

@@ -1,27 +1,22 @@
 //! SQLite adapters for happenstance: an event store and a projection store.
 //!
-//! # Status: an instrument, not yet an adapter
+//! # Status: an adapter, and it has run the suite
 //!
-//! Every operation that touches SQL is `todo!()` — migration, `append`, the
-//! page query, `checkpoint` and `commit`. Two are **not**, and the exception is
-//! worth stating rather than rounding off:
-//! [`begin`](happenstance_core::SendProjectionStore::begin) and
-//! [`rollback`](happenstance_core::SendProjectionStore::rollback) have real
-//! bodies, because an
-//! owned buffer batch is created and discarded without the database being
-//! involved at all. That is a consequence of the batch shape this crate adopted,
-//! so a blanket "every operation is `todo!()`" would hide the one place the
-//! shape already shows through. The **types are real**: a live
-//! [`rusqlite::Connection`], error enums that wrap [`rusqlite::Error`], a read
-//! stream that is a genuine state machine, and a batch that owns
-//! [`rusqlite::types::Value`]. That distinction is the whole point — a skeleton
-//! that stubs its associated types has stubbed the only part of it a type
-//! checker can disagree with, so the associated types are exactly what is not
-//! stubbed here.
+//! Every operation that touches SQL has a real body — migration, `append`,
+//! [`read`](happenstance_core::SendEventStore::read), `head`,
+//! `contains_event_id`, `checkpoint` and `commit` — and each of them is executed
+//! against a real file on disk rather than against something standing in for
+//! one. [`happenstance-testkit`](https://docs.rs/happenstance-testkit)'s
+//! conformance suite is mounted twice, at `tests/conformance.rs` for the event
+//! store and `tests/projection.rs` for the projection store, with the
+//! concurrency and model families beside them at `tests/concurrency.rs`. Passing
+//! that suite is what makes an adapter in this workspace rather than an
+//! instrument, and it is the bar this crate has now cleared.
 //!
-//! It is `publish = false` until it passes
-//! [`happenstance-testkit`](https://docs.rs/happenstance-testkit)'s conformance suite —
-//! which is the bar for any adapter in this workspace, not a formality.
+//! Whether the crate is *published* is a different question with a different
+//! owner: it still carries `publish = false`, and lifting that is the
+//! publication pass's decision rather than this crate's. Having passed the suite
+//! and being on a registry are two claims, and only the first is made here.
 //!
 //! # The shape this crate represents
 //!
@@ -47,24 +42,31 @@
 //!   SqliteBatch;` and `commit(&self, batch: Self::Batch, …)` now compile —
 //!   this crate is one of the impls that shows it.
 //!
-//! # Open decisions
+//! # What is settled, and what is still open
 //!
-//! The **driver** is no longer one of them: `rusqlite` is what this crate is
-//! built on, chosen for the synchronous, bundled, local-first shape it gives —
-//! and it is `rusqlite` *without* a pool, because one `Mutex`-guarded connection
-//! is the serialising instrument the portfolio needs. `sqlx` is not discarded;
-//! it is where `happenstance-postgres` sits, at the other end of that axis.
+//! The **driver** is `rusqlite`, chosen for the synchronous, bundled,
+//! local-first shape it gives — and it is `rusqlite` *without* a pool, because
+//! one `Mutex`-guarded connection is the serialising instrument the portfolio
+//! needs. `sqlx` is not discarded; it is where `happenstance-postgres` sits, at
+//! the other end of that axis.
 //!
-//! These are settled in the pass that implements this crate, not before:
+//! The **append-condition strategy** and **tag storage** were the two decisions
+//! this page listed as open, and ADR-0022 settled both against measurement
+//! rather than preference. A guard is one `SELECT max(position)` over the
+//! guard's derived query inside a transaction opened `BEGIN IMMEDIATE`; tags
+//! live in `event_tag(tag, position)`, `WITHOUT ROWID`, with `event_type`
+//! carried as a covering column and a `tag_cardinality` table supplying the
+//! per-value selectivity SQLite's `ANALYZE` cannot. [`Tags`](happenstance_core::Tags)
+//! is still canonically sorted, and [`event_store`] carries the schema those
+//! decisions produced with the measurements that chose it.
 //!
-//! * **Append-condition strategy.** The append must evaluate the condition and
-//!   write in one atomic step. Candidates: `BEGIN IMMEDIATE` plus an
-//!   `EXISTS` probe; a conditional `INSERT ... SELECT ... WHERE NOT EXISTS`; or
-//!   a monotonic-position guard. Which one wins depends on how tag matching is
-//!   indexed.
-//! * **Tag storage.** A join table against a canonical serialised blob against
-//!   SQLite's JSON1 functions. [`Tags`](happenstance_core::Tags) is canonically
-//!   sorted precisely so that the blob option stays open.
+//! Two subjects the same ADR left open are recorded here rather than answered,
+//! each with an open-question atom of its own in the repository's knowledge
+//! base: whether ES-17's `&[Event]` marker on `append` can be lifted, which
+//! wants a second adapter's measurement this crate cannot supply alone
+//! (`es-17-two-adapter-measurement-is-unscheduled`), and which document owns a
+//! fixture-constant clause (`cf-40-fixture-limits-ownership`). Neither is a
+//! property of this crate's code, and neither is waiting on it.
 //!
 //! # Not the Cloudflare adapter
 //!
@@ -76,11 +78,6 @@
 //! one.
 
 #![doc(html_no_source)]
-// `clippy::todo` is denied workspace-wide. This crate is the one exception, and
-// the exception is scoped here rather than left open in the workspace manifest so
-// that it is visible in review and disappears with the last `todo!()` rather than
-// outliving it. Phase 8 removes both the bodies and this line.
-#![allow(clippy::todo)]
 
 #[cfg(any(feature = "event-store", feature = "projection-store"))]
 pub mod connection;
