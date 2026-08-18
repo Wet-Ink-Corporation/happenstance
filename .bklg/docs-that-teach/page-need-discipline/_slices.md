@@ -23,6 +23,7 @@ human-readable record, the trailer is what resume greps.
 | ----- | ------- | ----------------- | --------- |
 | discipline-on-disk | approved | need-vocabulary-and-declaration-form@55b987b, router-precedence-and-announcement@9dacc7d, fold-line-rule@dec82c7, reviewer-and-citation-procedures@a349e04 | (this commit) |
 | page-need-gate-step | approved | page-need-checker-mounted-in-the-gate@ee0a500, declaration-check-seen-to-fail@d7d27c5 | (this commit) |
+| binding-beyond-this-project | approved | governed-page-cites-the-discipline@263dc7b, playbook-atom-staged-for-ingest@dc58e80 | (this commit) |
 
 ## Surviving findings
 
