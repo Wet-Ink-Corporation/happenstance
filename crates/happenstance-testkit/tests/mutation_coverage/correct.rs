@@ -461,6 +461,23 @@ impl Log {
         }
     }
 
+    /// A log seeded with what some durable medium already held.
+    ///
+    /// The **replay** half of a reopen, and the seam a fixture whose defect is
+    /// what a reopen reconstructs needs. `new` plus [`append`](Self::append)
+    /// cannot express it: `append` re-allocates positions and re-spends
+    /// [`stamp`], so replaying through it would hand every event a *fresh*
+    /// position and the same constant time — the opposite of both halves of what
+    /// a replay is supposed to do.
+    ///
+    /// Nothing here validates `events`. A caller replaying a medium that lost
+    /// something, or that reconstructed a store-assigned fact wrongly, is the
+    /// point rather than the risk: `LosingFixture` is the first shape and
+    /// `RestampingFixture` is the second.
+    pub(crate) fn replayed(allocate: Allocate, events: Vec<SequencedEvent>) -> Self {
+        Self { events, allocate }
+    }
+
     /// The correct read path over this log.
     pub(crate) fn select(&self, query: &Query, options: ReadOptions) -> Vec<SequencedEvent> {
         select(&self.events, query, options)

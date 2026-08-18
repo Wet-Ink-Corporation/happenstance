@@ -4149,7 +4149,7 @@ readable after the backing store is closed and reopened. Durability is a declare
 capability: an adapter that does not claim it MUST document that it does not, and
 MUST NOT be presented as an event store of record.
 
-**[PROVISIONAL — axis: **durability**. The question became expressible at CF-17: `Fixture::REOPEN` and `acknowledged_writes_survive_a_reopen` exist, and `DurableFixture` in the testkit's own `tests/` supplies the capability, so a store that returns `Ok` from `append` and loses the write now fails a named rule rather than passing everything. What is still unbuilt is the *adapter* far end — a real store that can lose a write under a real fault, rather than one instructed to. Falsified by the first file-backed adapter.]**
+**[PROVISIONAL — axis: **durability**. The question became expressible at CF-17: `Fixture::REOPEN` and `acknowledged_writes_survive_a_reopen` exist, and `DurableFixture` in the testkit's own `tests/` supplies the capability, so a store that returns `Ok` from `append` and loses the write now fails a named rule rather than passing everything. The first file-backed adapter has now answered *half* of it: `happenstance-sqlite`'s `SqliteFixture` closes every connection and checkpoints the write-ahead log, and all three reopen rules run and pass against a real file on disk. What remains unbuilt is the **fault** far end, and it is narrower than "the adapter far end" was: a store that loses a write to a *fault* — a process killed mid-commit, a disk that lied about `fsync` — rather than to an instruction. `SqliteFixture` declines `MID_BATCH_FAULT` **by scope, not by incapacity**, and says so in its own words. Falsified by an adapter fixture that arms a real fault against a real medium and observes what survives.]**
 
 Opt-in rather than universal, because `MemoryEventStore` must keep passing and is
 by construction not durable (`memory.rs:14-33`). A capability that the reference
@@ -4170,13 +4170,18 @@ implementation cannot have is a capability the base suite cannot require.
   Nothing in the workspace could express the question until CF-17: the rule, the
   `REOPEN` capability and `DurableFixture` landed together, and `LosingFixture`
   in the mutant registry is a store that returns `Ok` from `append` and loses the
-  write, failing a named rule rather than passing everything. What is still
-  missing is the *adapter* end, and it is missing in a specific way worth stating
-  rather than generalising: no fixture in that binary has a medium outside the
-  process, so `LosingFixture` **models** acknowledge-before-commit and does not
-  test it — a store that survives `reopen` there has survived a pointer swap.
-  The axis has an instrument at one end and nothing at the other, which is what
-  the marker above says and this paragraph used to contradict.
+  write, failing a named rule rather than passing everything. **No fixture in
+  that binary has a medium outside the process**, and that is still true of it:
+  `LosingFixture` and `RestampingFixture` both **model** their defect rather
+  than testing it, and a store that survives `reopen` there has survived a
+  pointer swap. What has changed is the sentence that used to follow — *the axis
+  has an instrument at one end and nothing at the other*. It has an adapter at
+  the other end now: `happenstance-sqlite`'s `SqliteFixture` closes every
+  `rusqlite::Connection`, checkpoints the write-ahead log with `TRUNCATE` so a
+  commit that lives in the `-wal` sidecar is folded into the file, and never
+  deletes or recreates it, and all three reopen rules run and pass across that
+  boundary. What is *still* missing is narrower and is named in the marker
+  above: the **fault** end, not the adapter end.
 
 #### ES-36 — Two `append` futures on one `&self` interleave safely
 
@@ -7788,7 +7793,14 @@ leaves only what was durably committed. `[DEFERRED — the rule itself has lande
 early, as the named exception recorded below; what is still deferred is the
 experiment, which is whether a `reopen` capability can be honoured by rusqlite,
 a Durable Object and a one-shot HTTP client with one shape, or whether "durable"
-needs to be graded. Falsified by the first adapter that cannot express it.]`
+needs to be graded. **One of the three has now answered**: `happenstance-sqlite`
+honours it with the one shape — close every connection, checkpoint the
+write-ahead log, do not touch the file — and needed no grading. The deferral is
+therefore confirmed and narrowed to the two implementations that have not:
+`happenstance-cloudflare` (HS-P0013), where a "reopen" is a Durable Object's
+storage surviving an eviction rather than a file being closed, and
+`happenstance-neon` (HS-P0014), which has no connection to close at all.
+Falsified by the first of those two that cannot express it with this shape.]`
 Rule: `acknowledged_writes_survive_a_reopen` (new; ES-35 specifies it and names
 it, and this clause is the obligation to have it).
 Cases: E2E-07.
@@ -7806,9 +7818,19 @@ because without it the fixture contract shipped with one capability-gated rule
 and no second one to observe, leaving `REOPEN`'s provisional marker and the skip
 machinery both untested. `DurableFixture` in the testkit's own `tests/` supplies
 `REOPEN`, and `LosingFixture` beside it acknowledges before recording, so the
-rule both runs and is shown to fail. What stays deferred to phase 8 is the
+rule both runs and is shown to fail. What stayed deferred to phase 8 was the
 adapter far end: a store that loses a write because of a real fault rather than
 because a test told it to.
+
+Phase 8 answered the *adapter* half and left the *fault* half open, and the two
+are worth keeping apart because they were one sentence until now.
+`happenstance-sqlite` runs all three reopen rules against a real file across a
+real close-and-reopen, so a store whose durability claim is false now fails a
+rule that has been driven against a medium outside the process. `SqliteFixture`
+declines `MID_BATCH_FAULT` by scope rather than by incapacity — the trigger-based
+injection the fixture contract names is demonstrably available to it — so the
+fault far end is still supplied by nothing. That is ES-35's residual falsifier and
+it is stated there rather than duplicated here.
 
 ---
 
@@ -7888,11 +7910,21 @@ observes only what was durably committed. The capability constant is `REOPEN`.
 express even a reopen through this contract. The Durable Object is why the weaker
 half is the one named: its storage outlives the isolate, so it can discard handle
 state and read the store again, and its isolate cannot be restarted from inside a
-test at all.]`
+test at all. **The rule shape is confirmed against the first real one.**
+`happenstance-sqlite` is durable, file-backed, and expresses a reopen through this
+contract with nothing added to it — close every `rusqlite::Connection`,
+checkpoint the write-ahead log, leave the file alone — so the weaker operation was
+sufficient for the first adapter that could have forced the split and did not. The
+marker stays at this level rather than moving, because one adapter is not the
+spread that freezes a capability: the two the deferral was written against
+(HS-P0013, HS-P0014) have not answered, and moving a maturity marker is an ADR's
+act.]`
 Rule: `acknowledged_writes_survive_a_reopen` — the same rule CF-14 and ES-35
-name. `DurableFixture` in the testkit's own `tests/` is the only fixture in the
-workspace that supplies this capability, and therefore the only reason the rule
-executes rather than reporting a skip everywhere.
+name. `DurableFixture` in the testkit's own `tests/` was for two phases the only
+fixture in the workspace supplying this capability, and therefore the only reason
+the rule executed rather than reporting a skip everywhere; since phase 8
+`SqliteFixture` in `crates/happenstance-sqlite/tests/support/mod.rs` supplies it
+too, and it is the first that supplies it over a medium outside the process.
 Cases: E2E-07.
 Rejects: nothing on its own — it is an enabling clause, and CF-14 carries the
 rejection. It is `SHOULD` rather than `MUST` because `MemoryEventStore` is
@@ -8409,7 +8441,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Skeletons at both ends, a passing implementation at neither.** Five impls, of which only two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, `SqliteProjectionStore` in `begin` and `rollback`. The far end is therefore better evidenced than the near one, and still there is no suite to run any of them against (`references/adapter-shapes.md:297`) | The projection conformance suite, which does not exist |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |
 | **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter no.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object, so no *connection* has ever been opened twice | Fixture (CF-16) — **done**; then a pool-backed adapter |
-| **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter no.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; then any file-backed adapter |
+| **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
 Seven axes, and **the adapter column is empty on every one of them**. Three far
 ends are empty at both ends — transport, batch shape and completeness. The other

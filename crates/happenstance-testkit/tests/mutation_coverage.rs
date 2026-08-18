@@ -1230,6 +1230,37 @@ const REGISTRY: &[Declared] = &[
             ),
         ],
     },
+    Declared {
+        name: "RestampingFixture",
+        kind: Kind::Mutant,
+        // **One** rule, and the count is the content. `LosingFixture` above
+        // fails all three reopen rules and fails `recorded_time_survives_a_reopen`
+        // at its *survival* anchor — its events are gone, so the stamp comparison
+        // is never reached. Since phase 4 that has left the rule's headline
+        // sentence with no negative control at all (`RUNBOOK.md:3205-3207`). This
+        // row is that control: it must reach the third assertion and fail there,
+        // and it must pass the two survival rules beside it, or it is a second
+        // `LosingFixture` wearing a different name.
+        fails: &["recorded_time_survives_a_reopen"],
+        provenance: "a migration that stores payload, type and tags and no `recorded_at` \
+             column, so `open` reconstructs the log by replaying rows and stamping \
+             them at open time. It is the first schema somebody writes — the \
+             column reads like metadata until an auditor has to answer *when did \
+             this happen* out of the log rather than out of a backup — and it is \
+             the exact mirror of what a correct migration does: persist the \
+             column and read it back, never re-derive it. Every event still \
+             returns, at its own position, under its own identity; the one clock \
+             reading whose provenance the log itself attested is what is gone.",
+        mode: FailureMode::Assertion,
+        // The pin is the whole point of this row. Quoting the *headline* message
+        // is what makes a failure at the survival anchor — which is where the
+        // only other candidate for this rule dies — get reported as the wrong
+        // failure rather than counted as a pass.
+        expect: &[(
+            "recorded_time_survives_a_reopen",
+            "a `RecordedAt` is persisted alongside the event, not recomputed when",
+        )],
+    },
     // --- Head -------------------------------------------------------------
     Declared {
         name: "EmptyHeadIsFirstStore",
@@ -2142,6 +2173,7 @@ macro_rules! for_each_mutant {
             crate::mutants::CachedHeadFixture,
             crate::mutants::LastWrittenHeadFixture,
             crate::mutants::LosingFixture,
+            crate::mutants::RestampingFixture,
             crate::mutants::SharedBackingFixture,
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
@@ -2289,12 +2321,13 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// that actually matters — *what is this test blind to* — and it answers it in a
 /// form that goes red when the answer changes.
 ///
-/// # The twenty it does not catch are three shapes, not twenty
+/// # The twenty-one it does not catch are three shapes, not twenty-one
 ///
-/// Twenty-two rows below are marked [`ModelOutcome::Agreed`]. Two of those are
-/// the conformant controls and *must* be, which leaves **twenty misses** — a
+/// Twenty-three rows below are marked [`ModelOutcome::Agreed`]. Two of those are
+/// the conformant controls and *must* be, which leaves **twenty-one misses** — a
 /// number that has more than doubled since stage 5, when this heading last said
-/// eight and the table it documents said eighteen. Every one of the twenty
+/// eight and the table it documents said eighteen, and that gained one at phase 8
+/// when `RestampingFixture` arrived. Every one of the twenty-one
 /// carries a defect the model **cannot
 /// express**, and the boundary is sharp enough to state in one line: the model
 /// drives *one handle*, on *one fixture*, through a *strictly sequential* stream
@@ -2309,7 +2342,13 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   read.
 /// * `CachedHeadFixture`, `SharedBackingFixture` — defects that need a second
 ///   handle or a second fixture instance.
-/// * `LosingFixture` — a defect that is only visible across a reopen.
+/// * `LosingFixture`, `RestampingFixture` — defects that are only visible across
+///   a reopen. Two names rather than one since phase 8, and the pair is worth
+///   reading together: the model misses the second for a *sharper* reason than
+///   the first. `LosingFixture` loses every event, which a model that reopened
+///   would notice immediately; `RestampingFixture` loses one field of one
+///   store-assigned fact, so even a model that reopened would have to be
+///   comparing `recorded_at` across the boundary to see it.
 /// * `PreCommitPositionStore`, `BorrowHoldingStore`, `AwaitAcrossBorrowStore` —
 ///   defects whose content is a *window*: two futures overlapping on one handle.
 ///   The model awaits each operation to completion before starting the next, so
@@ -2442,6 +2481,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("CachedHeadFixture", ModelOutcome::Agreed),
     ("LastWrittenHeadStore", ModelOutcome::Agreed),
     ("LosingFixture", ModelOutcome::Agreed),
+    ("RestampingFixture", ModelOutcome::Agreed),
     ("SharedBackingFixture", ModelOutcome::Agreed),
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),

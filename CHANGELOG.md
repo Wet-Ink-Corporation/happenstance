@@ -26,6 +26,30 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`recorded_time_survives_a_reopen` finally has a negative control that reaches
+  its own sentence.** The rule asserts three things in order — the event survived
+  the reopen, it is at the same position, and *`recorded_at` is unchanged* — and
+  only the third is its reason for existing. Until now the one registered store
+  that failed it, `LosingFixture`, failed at the **first** assertion: its events
+  are gone, so the stamp comparison never executed and the rule's headline
+  sentence had never been shown to bite. `RestampingFixture` is the control that
+  does. The defect it encodes is a real first schema: a migration that stores
+  payload, type and tags and **no `recorded_at` column**, so opening the store
+  reconstructs the log by replaying rows and stamping them at open time. Every
+  event still returns, at its own position, under its own identity — the single
+  thing lost is the one clock reading whose provenance the log itself attested,
+  and an adapter that ships it hands every auditor the time of the last restart
+  with no error and no symptom. It fails exactly that one rule and passes
+  `acknowledged_writes_survive_a_reopen` and
+  `reopened_store_does_not_reissue_an_event_id` beside it, which is what makes it
+  a scalpel rather than a second `LosingFixture`; its registry row pins the
+  headline message, so a failure at the survival anchor is reported as the wrong
+  failure instead of counted as a pass. The re-stamped value is derived from a
+  per-fixture reopen generation rather than from a clock: the binary's correct
+  stamp is a **constant**, so a naive re-stamp lands on the value it replaced and
+  is invisible — that run happened, and the harness reported the store as
+  *declared to fail and passed* — while a wall clock would both violate the
+  no-clock rule and make the comparison a race at millisecond resolution.
 - **`happenstance-testkit` ships a benchmark harness, behind an off-by-default
   `bench` feature — and it is deliberately not part of the bar.**
   `event_store_benchmarks!(MyFixture::new())` is inherited exactly as
