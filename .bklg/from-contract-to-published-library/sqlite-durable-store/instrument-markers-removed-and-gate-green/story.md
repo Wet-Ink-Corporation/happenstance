@@ -7,9 +7,9 @@ title: The last todo!() and the scoped allow go together, and the gate is green
 parent: HS-P0012
 initiative: from-contract-to-published-library
 project: sqlite-durable-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,14 +23,14 @@ archetype: capability
 slice: publishable-and-reconciled
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-18T13:20:25.225Z
+updated: 2026-08-19T13:44:34.663Z
 links:
   pr: null
   commits:
     - 62a05dd
     - d2d1f73
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
