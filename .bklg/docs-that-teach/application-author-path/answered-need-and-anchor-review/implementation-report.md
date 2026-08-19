@@ -47,7 +47,7 @@ pattern `3e0a71e`, `a78ca36`, `b4c0c52` and `17f14b5` already established in thi
 
 | SHA | Subject |
 | --- | ------- |
-| `4dedf8a` | `feat(application-author-path): Answered-need and anchor review` |
+| `b7addcf` | `feat(application-author-path): Answered-need and anchor review` |
 
 ## Changes
 
