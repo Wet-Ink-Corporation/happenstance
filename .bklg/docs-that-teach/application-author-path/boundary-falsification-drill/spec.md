@@ -199,11 +199,37 @@ slice-mate; this story consumes it and must not add it twice.
 ```
 docs/**
 xtask/src/narrative.rs
+xtask/tests/**
 crates/happenstance/src/lib.rs
 crates/happenstance/tests/**
 crates/happenstance/Cargo.toml
 .bklg/docs-that-teach/application-author-path/boundary-falsification-drill/**
 ```
+
+> **Amended 2026-08-19, after implementation — `xtask/tests/**` added.** The original
+> six entries are left standing above; this note is the seventh's reason, stated in
+> place, in the form `a41a1a5` used ("amend five PR boundaries, with the reason inline").
+>
+> **What landed outside the fence.** `xtask/tests/falsification_drill.rs`, at checkpoint
+> `cc9c4a4` — nine source-reading assertions over the drill. The fence already authorised
+> `crates/happenstance/tests/**`, which is why the twin was in scope and this file was
+> not; the omission was `xtask`'s test directory, not a decision to exclude it.
+> `report.md` recorded the overrun and neither reverted nor routed it, which is the same
+> gap the slice-mate's EC-010 names. This amendment is the decision that was owed, taken
+> on **its own commit** so the widening is a choice rather than a consequence of the files
+> already existing.
+>
+> **Why widen rather than revert.** The assertions are the only mechanical instrument for
+> AC-001, AC-006 and AC-007 — where the drill sits, that its three parts are labelled and
+> in order, that it is persistent rather than folded, and the byte comparison between the
+> failure the page quotes and the failure `_drill-observation.md` recorded. That last one
+> is the check that catches a drill written from imagination, which this story's own risk
+> table ranks first, and nothing else in the repository can make it.
+>
+> **Why `xtask/tests/**` and not wider.** Tests only. `xtask/src/**` stays outside this
+> fence exactly as before, so the Merge DoD clause that no gate step, `REQUIRED` entry or
+> `xtask/src/affected.rs` arm was added is untouched — and is itself asserted from inside
+> the admitted file, by `falsification_drill.rs::no_gate_step_was_added_for_the_drill`.
 
 **In this PR**
 

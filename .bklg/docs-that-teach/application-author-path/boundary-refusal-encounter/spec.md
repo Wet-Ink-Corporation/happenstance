@@ -303,9 +303,46 @@ re-open DT-1, DT-4, DT-5 or DT-6.
 docs/first-encounter.md
 docs/README.md
 xtask/src/narrative.rs
+xtask/tests/**
 crates/happenstance/src/lib.rs
 .bklg/docs-that-teach/application-author-path/boundary-refusal-encounter/**
 ```
+
+> **Amended 2026-08-19, after implementation — `xtask/tests/**` added.** The original
+> five entries are left standing above, and the sentence below still says *five*; both
+> are the audit trail. This note is the sixth entry's reason, stated in place, which is
+> the form this repository already used at `a41a1a5` ("amend five PR boundaries, with the
+> reason inline").
+>
+> **What landed outside the fence.** `xtask/tests/first_encounter.rs`, at checkpoint
+> `9493276` — eighteen source-reading assertions over `docs/first-encounter.md` and the
+> crate root. It was recorded at the time as observation O4 in `_conditions.md` and not
+> reverted, which EC-010 does not sanction: it names exactly two responses, *revert it* or
+> *route it as its own story*, and recording a violation is neither. This amendment is the
+> decision that was owed then, taken now and taken **on its own commit** so that widening
+> the fence is a choice rather than a consequence of having already written the files —
+> the failure mode `6d44316` names.
+>
+> **Why widen rather than revert.** The file is the only mechanical instrument for AC-003,
+> AC-005, AC-006 and AC-007, every one of which is a *composition* criterion no compiler
+> can reach: a page whose three fences all pass, whose steps open on a wall of prose and
+> whose boundary hides behind `#`, is green under every other check in this repository.
+> Reverting it would leave four criteria with a tier-5 reviewer walk and nothing else, and
+> a criterion whose only instrument is a reviewer's memory is the shape this initiative
+> exists to fix. The repository already carries the precedent three times over —
+> `crates/happenstance/tests/doc_budget.rs`, `doc_surface.rs` and `docs_composition.rs`
+> are source-reading composition checks colocated with the crate they read.
+>
+> **Why `xtask/tests/**` and not wider.** `xtask` is the crate that owns the narrative tree
+> and already carries this page's mount (`xtask/src/narrative.rs`, in the fence from the
+> start); it is `publish = false`, so nothing here reaches a consumer. The entry admits
+> **tests only**: `xtask/src/**` stays outside the fence, so no production path, gate step,
+> `REQUIRED` entry or dispatch arm is admitted by this widening, and the two Merge DoD
+> clauses about `REQUIRED` and `xtask/src/affected.rs` are untouched and still hold.
+>
+> **What is still refused.** EC-010's reasoning about a *second page under `docs/`* is
+> unchanged and unweakened. `docs/first-encounter.md` remains the only page this story may
+> author; a second one would still be a page nobody decided to write.
 
 `redkiln verify --grain story` reads the first fenced block above and fails on any file changed
 outside it. Three of the five entries are wiring the Integration contract names — the page, its
