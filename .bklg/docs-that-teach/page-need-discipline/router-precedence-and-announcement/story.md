@@ -7,9 +7,9 @@ title: The rules tree, its router, its rank in the chain, and its announcement
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,13 +23,13 @@ archetype: capability
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:26:34.458Z
+updated: 2026-08-19T00:46:51.367Z
 links:
   pr: null
   commits:
     - 9dacc7d
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
