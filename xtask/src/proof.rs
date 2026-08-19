@@ -65,6 +65,14 @@
 //! before HS-S0048 the gate compiled that harness and never ran it, so an
 //! emptied file passed a step whose name promised conformance.
 //!
+//! Each row names its [`RuleFamily`], and that field is what let the list hold
+//! *every* `wasm32`-capable target in `happenstance-testkit` rather than the
+//! event-store ones alone. The first cut of this file hard-coded the event-store
+//! enumeration into both entry points, which made a projection row inexpressible
+//! — and the projection harness was, at that moment, the only executed `wasm32`
+//! target left with nowhere to run. A list that can hold only one family is a
+//! list that decides coverage by omission.
+//!
 //! [ADR-0010]: ../../.kb/decisions/0010-the-suite-must-prove-itself.md
 //! [ADR-0016]: ../../.kb/decisions/0016-the-wire-format.md
 
@@ -327,10 +335,75 @@ pub(crate) struct WasmTarget {
     pub(crate) module: &'static str,
     /// The target's own source, read by the runner-free guard.
     pub(crate) source: &'static str,
+    /// Which suite this target runs, and therefore which enumeration it is held
+    /// to.
+    ///
+    /// A field rather than a constant read by both entry points, and that is the
+    /// whole reason `projection_conformance_wasm` has a row. See [`RuleFamily`].
+    pub(crate) family: &'static RuleFamily,
     /// The rules that must still be present, by the name `--list` prints them
     /// under, without the module prefix.
     pub(crate) rules: &'static [&'static str],
 }
+
+/// One conformance suite: its rule enumeration, the macro that invokes it, and
+/// the `wasm32` emitter it must go through.
+///
+/// The workspace has two, and before this type existed the wasm checks knew only
+/// about the first. That was not a simplification: `projection_conformance_wasm`
+/// could not be registered without failing the event-store enumeration check on
+/// every one of its seventeen rules, so the only expressible answers were *drop
+/// it* or *weaken the check*. Naming the family per row makes the third answer —
+/// hold each target to its own enumeration, exhaustively — the cheap one.
+///
+/// It carries the *suite macro* and the *emitter* as well as the enumeration
+/// because both are family-specific: a projection target that invoked
+/// `event_store_conformance!`, or emitted through `__emit_wasm`, would not
+/// compile, and a guard that looked for the event-store spellings in a
+/// projection source would fail for a reason that is not the reader's.
+pub(crate) struct RuleFamily {
+    /// The enumeration macro's name, as a failure message should spell it.
+    pub(crate) enumeration: &'static str,
+    /// Where that enumeration lives.
+    pub(crate) source: &'static str,
+    /// The line the enumeration opens with.
+    pub(crate) head: &'static str,
+    /// The suite-invoking macro a target of this family must call.
+    pub(crate) suite: &'static str,
+    /// The `wasm32` emitter a target of this family must go through.
+    ///
+    /// `__emit_projection_tokio` type-checks for this target and then cannot run
+    /// on it, exactly as `__emit_tokio` does for the event-store family — which
+    /// is the failure CF-23 is about, and it has one spelling per family.
+    pub(crate) emitter: &'static str,
+}
+
+/// The event-store suite: eighty-nine rules, one enumeration.
+static EVENT_STORE_FAMILY: RuleFamily = RuleFamily {
+    enumeration: "for_each_event_store_rule!",
+    source: "crates/happenstance-testkit/src/registry.rs",
+    head: "macro_rules! for_each_event_store_rule {",
+    suite: "event_store_conformance!",
+    emitter: "__emit_wasm",
+};
+
+/// The projection suite: a second enumeration, in a second file, with its own
+/// emitter.
+///
+/// Registered for execution rather than dropped. The `wasm-conformance` CI job
+/// this seam retired ran `cargo test -p happenstance-testkit --target
+/// wasm32-unknown-unknown`, which is *every* `wasm32`-capable target in the
+/// package — so retiring it without this row would have moved eighty-nine
+/// executions into the gate and deleted seventeen, while the retirement note
+/// claimed the gate was strictly more. A coverage decision taken by omission is
+/// the shape the deployment brief's DEPLOY-AC-05 forecloses.
+static PROJECTION_FAMILY: RuleFamily = RuleFamily {
+    enumeration: "for_each_projection_store_rule!",
+    source: "crates/happenstance-testkit/src/projection.rs",
+    head: "macro_rules! for_each_projection_store_rule {",
+    suite: "projection_store_conformance!",
+    emitter: "__emit_projection_wasm",
+};
 
 /// The rules a wasm32-only subset would reach for first.
 ///
@@ -373,20 +446,90 @@ const MEMORY_WASM_RULES: &[&str] = &[
     "append_reports_exceeded_store_limits",
 ];
 
+/// The rules a `!Send` store is the only thing in the workspace that can lose.
+///
+/// The same argument [`MEMORY_WASM_RULES`] makes, aimed one axis over.
+/// `LocalMemoryEventStore` is the workspace's only genuinely `!Send` event store
+/// — an `Rc<RefCell<Vec<_>>>`, which is the shape a Durable Object has — and
+/// this row is the only place the bare port flavour is *executed* on the target
+/// it exists for. Every other wasm32 row drives a `Send` store that happens to
+/// be running single-threaded.
+///
+/// The three re-entrancy and concurrency rules are why: they are the rules whose
+/// pass depends on the store's borrow discipline rather than on a lock, and
+/// `AwaitAcrossBorrowStore` in the testkit's own `tests/` is the registered
+/// wrong implementation each of them rejects. The three fixture-contract rules
+/// are `LocalFixture`'s own seam — including `acknowledged_writes_survive_a_reopen`,
+/// which this fixture **declines**, and which is therefore the row's one visible
+/// `SKIP <rule>: <reason>` line under `--nocapture`.
+const LOCAL_WASM_RULES: &[&str] = &[
+    "a_live_read_stream_does_not_block_an_append",
+    "interleaved_appends_on_one_handle_elect_one_winner",
+    "read_result_is_stable_under_concurrent_append",
+    "two_fixture_instances_observe_none_of_each_others_appends",
+    "two_handles_observe_each_others_appends",
+    "acknowledged_writes_survive_a_reopen",
+];
+
+/// The projection rules a single-threaded runtime would break first.
+///
+/// The atomicity pair is the projection port's whole invariant — read-model write
+/// and checkpoint write in one transaction — and it is the pair a store that
+/// buffers writes and replays them at commit gets wrong in a way no `cargo check`
+/// sees. The two failure paths beside it are where an adapter that treats a
+/// rollback as a no-op passes everything else. `rebuild_is_chunk_size_invariant`
+/// is named because it is the one rule here that drives a loop long enough for a
+/// stubbed `Instant::now()` to be reached, which RS-52-1 says is observable only
+/// under execution.
+const PROJECTION_WASM_RULES: &[&str] = &[
+    "commit_advances_the_checkpoint",
+    "commit_is_atomic_with_the_read_model",
+    "failed_commit_leaves_both_unchanged",
+    "rollback_leaves_both_unchanged",
+    "rebuild_is_chunk_size_invariant",
+    "rebuilding_is_distinguishable_from_live",
+];
+
 /// Every conformance target the gate executes on `wasm32-unknown-unknown`.
 ///
-/// One row today, and the shape is the deliverable. `every-rule-under-workerd`
+/// Three rows, and the shape is the deliverable. `every-rule-under-workerd`
 /// (HS-S0054) adds the Cloudflare conformance target here — a package, a target,
-/// the module its emitter wraps and the rules worth naming — and inherits the
-/// runner wiring, the version check, the exhaustive enumeration check and both
-/// gate steps without writing any of them again.
-pub(crate) const WASM_TARGETS: &[WasmTarget] = &[WasmTarget {
-    package: REGISTRY_PACKAGE,
-    target: "memory_conformance_wasm",
-    module: "dcb_conformance_wasm",
-    source: "crates/happenstance-testkit/tests/memory_conformance_wasm.rs",
-    rules: MEMORY_WASM_RULES,
-}];
+/// the module its emitter wraps, its family and the rules worth naming — and
+/// inherits the runner wiring, the version check, the exhaustive enumeration
+/// check and both gate steps without writing any of them again.
+///
+/// The three are the whole of what `cargo test -p happenstance-testkit --target
+/// wasm32-unknown-unknown` used to run in the retired `wasm-conformance` job,
+/// and that is the bar this list is held to rather than a coincidence: the job
+/// was retired *because* the gate subsumes it, and one row short of the package
+/// the claim would have been false. `every_wasm32_capable_harness_has_a_row`
+/// below is what keeps it true when a fourth harness lands.
+pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
+    WasmTarget {
+        package: REGISTRY_PACKAGE,
+        target: "memory_conformance_wasm",
+        module: "dcb_conformance_wasm",
+        source: "crates/happenstance-testkit/tests/memory_conformance_wasm.rs",
+        family: &EVENT_STORE_FAMILY,
+        rules: MEMORY_WASM_RULES,
+    },
+    WasmTarget {
+        package: REGISTRY_PACKAGE,
+        target: "local_conformance",
+        module: "local_wasm",
+        source: "crates/happenstance-testkit/tests/local_conformance.rs",
+        family: &EVENT_STORE_FAMILY,
+        rules: LOCAL_WASM_RULES,
+    },
+    WasmTarget {
+        package: REGISTRY_PACKAGE,
+        target: "projection_conformance_wasm",
+        module: "projection_conformance_wasm",
+        source: "crates/happenstance-testkit/tests/projection_conformance_wasm.rs",
+        family: &PROJECTION_FAMILY,
+        rules: PROJECTION_WASM_RULES,
+    },
+];
 
 /// The runner that executes a `wasm-bindgen-test` harness.
 ///
@@ -413,19 +556,6 @@ const WASM_TRIPLE: &str = "wasm32-unknown-unknown";
 /// The crate whose version the installed runner must match exactly.
 const WASM_BINDGEN: &str = "wasm-bindgen";
 
-/// The emitter a wasm32 conformance harness must go through.
-///
-/// `__emit_tokio` type-checks for this target and then cannot run on it, which is
-/// the failure CF-23 is about; a target that emitted through it would compile
-/// under the `cargo check` step above and fail here.
-const WASM_EMITTER: &str = "__emit_wasm";
-
-/// Where the one event-store rule enumeration lives.
-const RULE_ENUMERATION: &str = "crates/happenstance-testkit/src/registry.rs";
-
-/// The line the enumeration opens with.
-const ENUMERATION_HEAD: &str = "macro_rules! for_each_event_store_rule {";
-
 /// A workspace file, read through the root rather than `include_str!`.
 ///
 /// The same reasoning [`registry_len`] is reached through: this file is
@@ -438,7 +568,116 @@ fn read_source(file: &str) -> Result<String> {
     fs::read_to_string(root.join(file)).with_context(|| format!("reading {file}"))
 }
 
-/// Every rule `for_each_event_store_rule!` declares.
+/// The parts of a source that are not comments.
+///
+/// Written because the single-sourcing guard in [`wasm_enumeration`] was a bare
+/// `source.contains(rule)` over the whole file, and that is a substring search
+/// which cannot tell a rule *list* from a sentence about a rule.
+/// `local_conformance.rs` names rules in its documentation and in a capability
+/// comment — it is explaining where they moved to, and which one its fixture
+/// declines — and every `wasm32` harness worth registering is one whose prose
+/// discusses its own rules. A guard that a correct file fails is not a stricter
+/// guard; it is one whose next reader deletes it. Deliberately no count in that
+/// sentence: it is a second copy of a list, and it drifts the first time the
+/// list moves.
+///
+/// The truncation is at the first `//` on each line, so a trailing comment is
+/// cut as well as a whole-line one. Two limits, both stated rather than left to
+/// be discovered: a `//` inside a string literal truncates that line early, which
+/// can only ever make this scan miss a rule name it should have seen — and block
+/// comments it cannot read at all, which is why [`wasm_enumeration`] refuses a
+/// source containing one rather than scanning past it.
+fn code_only(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Where the `wasm32`-capable conformance harnesses live.
+///
+/// A directory rather than a list, and that is the point of it. See
+/// [`unregistered_wasm_harnesses`].
+const HARNESS_DIR: &str = "crates/happenstance-testkit/tests";
+
+/// Test targets that drive a suite through a `wasm32` emitter and have no row in
+/// [`WASM_TARGETS`].
+///
+/// The retired `wasm-conformance` CI job ran `cargo test -p happenstance-testkit
+/// --target wasm32-unknown-unknown` — *every* `wasm32`-capable target in the
+/// package, named individually nowhere, so it could not fall behind the tree.
+/// [`WASM_TARGETS`] names each one, so it can, and the first cut of this seam
+/// did: the job was retired with one row registered and two harnesses left
+/// executing nowhere, while the note replacing it said the gate was strictly
+/// more. This is the check that makes that sentence true rather than hopeful,
+/// and it is why the claim is allowed to be written down at all.
+///
+/// A harness is `wasm32`-capable if its **code** names an emitter spelled
+/// `__emit…wasm`. Derived from the spelling rather than from the registered
+/// families, because a check that looked only for emitters already in
+/// [`WASM_TARGETS`] could never notice a third family arriving unregistered —
+/// which is the exact shape of the miss it exists to prevent.
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be read, if a source in it cannot be
+/// read, or if it holds fewer capable harnesses than there are registered rows —
+/// which means this scan is reading somewhere the rows are not.
+fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
+    let dir = workspace_root()?.join(HARNESS_DIR);
+    let entries = fs::read_dir(&dir).with_context(|| format!("reading {HARNESS_DIR}"))?;
+
+    let mut capable = Vec::new();
+    for entry in entries {
+        let path = entry
+            .with_context(|| format!("reading an entry of {HARNESS_DIR}"))?
+            .path();
+        if path.extension().is_none_or(|ext| ext != "rs") {
+            continue;
+        }
+
+        let source =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let code = code_only(&source);
+        let emits_to_wasm = code
+            .match_indices("__emit")
+            .map(|(at, _)| {
+                code[at..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect::<String>()
+            })
+            .any(|name| name.ends_with("wasm"));
+
+        if emits_to_wasm {
+            capable.push(
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or_default()
+                    .to_owned(),
+            );
+        }
+    }
+    capable.sort();
+
+    if capable.len() < WASM_TARGETS.len() {
+        bail!(
+            "{HARNESS_DIR} holds {} wasm32-capable harness(es) — {capable:?} — and \
+             {} row(s) are registered. This scan is reading somewhere the rows are \
+             not, so its silence would mean nothing.",
+            capable.len(),
+            WASM_TARGETS.len()
+        );
+    }
+
+    Ok(capable
+        .into_iter()
+        .filter(|target| !WASM_TARGETS.iter().any(|wasm| wasm.target == *target))
+        .collect())
+}
+
+/// Every rule a [`RuleFamily`]'s enumeration declares.
 ///
 /// Derived rather than transcribed, and that is the opposite of the choice
 /// [`META_TESTS`] makes one screen up — deliberately, because the two lists are
@@ -448,17 +687,25 @@ fn read_source(file: &str) -> Result<String> {
 /// `wasm32` still fails: an exhaustive check that a hand-list could only
 /// approximate, over a set that grows.
 ///
+/// Parameterised by family rather than reading one fixed path, for the reason
+/// [`RuleFamily`] gives: the parser is identical for both enumerations — the two
+/// macros have the same body shape — and it was only the hard-coded path that
+/// made the projection harness unregisterable.
+///
 /// # Errors
 ///
 /// Returns an error if the enumeration cannot be read, if it has moved, or if it
 /// parses to fewer than two names — all three of which would otherwise silently
 /// weaken every check built on it into a check of nothing.
-fn enumerated_rules() -> Result<Vec<String>> {
-    let body = read_source(RULE_ENUMERATION)?;
+fn enumerated_rules(family: &RuleFamily) -> Result<Vec<String>> {
+    let RuleFamily {
+        source: file, head, ..
+    } = *family;
+    let body = read_source(file)?;
 
-    let mut lines = body.lines().skip_while(|l| l.trim() != ENUMERATION_HEAD);
+    let mut lines = body.lines().skip_while(|l| l.trim() != head);
     if lines.next().is_none() {
-        bail!("{RULE_ENUMERATION} has no `{ENUMERATION_HEAD}` — the enumeration has moved or gone");
+        bail!("{file} has no `{head}` — the enumeration has moved or gone");
     }
 
     let mut rules = Vec::new();
@@ -488,7 +735,7 @@ fn enumerated_rules() -> Result<Vec<String>> {
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         {
             bail!(
-                "{RULE_ENUMERATION} lists `{name}`, which is not a snake_case rule \
+                "{file} lists `{name}`, which is not a snake_case rule \
                  name. The enumeration's shape has changed; a name this scan cannot \
                  read is a rule silently missing from every check built on it."
             );
@@ -499,9 +746,9 @@ fn enumerated_rules() -> Result<Vec<String>> {
 
     if rules.len() < 2 {
         bail!(
-            "{RULE_ENUMERATION}'s `for_each_event_store_rule!` parsed to {} rule(s); \
-             the enumeration's shape has changed and every check built on it is now \
-             checking nothing",
+            "{file}'s `{}` parsed to {} rule(s); the enumeration's shape has \
+             changed and every check built on it is now checking nothing",
+            family.enumeration,
             rules.len()
         );
     }
@@ -726,10 +973,13 @@ fn first_few(names: &[String]) -> String {
 /// against is a green exit over nothing:
 ///
 /// 1. The installed runner matches the lock file.
-/// 2. Every rule `for_each_event_store_rule!` declares appears in the target's
+/// 2. Every rule the row's own [`RuleFamily`] declares appears in the target's
 ///    own `--list`. Exhaustive and derived, so a rule added upstream needs no
 ///    edit here, and a rule `#[cfg]`-ed out of the wasm harness — the shape
-///    project AC-002 forbids — fails.
+///    project AC-002 forbids — fails. **Per row**, not once for the array: a
+///    projection target held to the event-store enumeration fails on all
+///    seventeen of its rules, which is what made the earlier one-enumeration
+///    version of this function unable to hold a projection row at all.
 /// 3. Every rule the row *names* appears too. Transcribed, so a rename has
 ///    something to disagree with; see [`MEMORY_WASM_RULES`].
 ///
@@ -748,10 +998,10 @@ fn first_few(names: &[String]) -> String {
 pub(crate) fn wasm_run() -> Result<()> {
     check_wasm_runner_version()?;
 
-    let enumerated = enumerated_rules()?;
     let env = [(WASM_RUNNER_VAR, WASM_RUNNER)];
 
     for wasm in WASM_TARGETS {
+        let enumerated = enumerated_rules(wasm.family)?;
         let label = format!("`{}`'s `{}` on {WASM_TRIPLE}", wasm.package, wasm.target);
         let args = wasm_cargo_args(wasm);
         let listed = list(&args, &env, &label)?;
@@ -765,15 +1015,15 @@ pub(crate) fn wasm_run() -> Result<()> {
 
         if !absent.is_empty() {
             bail!(
-                "{label} is missing {} of the {} rules `for_each_event_store_rule!` \
-                 declares: {}\n\n\
+                "{label} is missing {} of the {} rules `{}` declares: {}\n\n\
                  The target builds, so `cargo test` would have exited 0 with nothing \
-                 to say. The rule set is single-sourced through the one enumeration \
+                 to say. The rule set is single-sourced through that one enumeration \
                  — a rule that reaches the host harnesses and not this one is a \
                  wasm32-only subset, which is the outcome this step exists to \
                  forbid. Listed: {} name(s).",
                 absent.len(),
                 enumerated.len(),
+                wasm.family.enumeration,
                 first_few(&absent),
                 listed.len()
             );
@@ -791,7 +1041,7 @@ pub(crate) fn wasm_run() -> Result<()> {
                 "{label} is missing {} of the rules the gate names: {unnamed:?}\n\n\
                  These are named in `xtask/src/proof.rs` rather than derived, so \
                  that a rename has something to disagree with. If one moved \
-                 deliberately, update `MEMORY_WASM_RULES` in the same change.",
+                 deliberately, update this row's `rules` list in the same change.",
                 unnamed.len()
             );
         }
@@ -821,7 +1071,7 @@ pub(crate) fn wasm_run() -> Result<()> {
     Ok(())
 }
 
-/// Asserts the executed targets exist and are wired to the one rule set — with
+/// Asserts the executed targets exist and are wired to their own rule set — with
 /// no runner, on every machine.
 ///
 /// This is the compensating half of the shape `main.rs` chose for the execution
@@ -840,8 +1090,9 @@ pub(crate) fn wasm_run() -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error if no target is registered, if a target's source is missing
-/// or no longer invokes the suite through [`WASM_EMITTER`], if a row names no
+/// Returns an error if no target is registered, if a target's source is missing,
+/// carries a block comment the code scan cannot read, or no longer invokes its
+/// family's suite through that family's `wasm32` emitter, if a row names no
 /// rules, if a named rule is absent from the enumeration, or if a target writes
 /// a rule list of its own.
 pub(crate) fn wasm_enumeration() -> Result<()> {
@@ -853,28 +1104,62 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
         );
     }
 
-    let enumerated = enumerated_rules()?;
+    // Before the rows are checked, the *set* of rows is. Everything below asks
+    // whether a registered target is honest; this asks whether the registration
+    // is complete, which is the question a per-row loop cannot reach and the one
+    // that was got wrong. See `unregistered_wasm_harnesses`.
+    let unregistered = unregistered_wasm_harnesses()?;
+    if !unregistered.is_empty() {
+        bail!(
+            "{HARNESS_DIR} holds {} wasm32 conformance harness(es) with no row in \
+             WASM_TARGETS: {unregistered:?}\n\n\
+             Each drives a suite through a wasm32 emitter, so each compiles for \
+             that target — and nothing executes it. The retired `wasm-conformance` \
+             CI job ran the whole package and named no target individually; the \
+             note that retired it claims this gate is strictly more, and a row \
+             short that is false rather than approximate.",
+            unregistered.len()
+        );
+    }
 
     for wasm in WASM_TARGETS {
+        let enumerated = enumerated_rules(wasm.family)?;
         let source = read_source(wasm.source)?;
+
+        // The needles are looked for in the *code*, not in the file. A harness
+        // whose module documentation quotes `__emit_wasm` while its expansion
+        // goes through `__emit_tokio` is precisely the target this guard exists
+        // to fail, and a whole-file `contains` passes it on the strength of the
+        // prose.
+        if source.contains("/*") {
+            bail!(
+                "{} carries a block comment, which `code_only` cannot read — so \
+                 every check below it would be scanning text this guard believes \
+                 is code. Use line comments here, or teach `code_only` to strip \
+                 block ones before this file needs them.",
+                wasm.source
+            );
+        }
+        let code = code_only(&source);
 
         for (needle, complaint) in [
             (
-                "event_store_conformance!",
+                wasm.family.suite,
                 "no longer invokes the conformance suite; an emptied target exits 0 \
                  on `running 0 tests`",
             ),
             (
-                WASM_EMITTER,
-                "does not emit through `__emit_wasm`, so whatever it runs is not the \
-                 wasm32 harness — `__emit_tokio` type-checks here and cannot run here",
+                wasm.family.emitter,
+                "does not emit through its family's wasm32 emitter, so whatever it \
+                 runs is not the wasm32 harness — the tokio emitter type-checks \
+                 here and cannot run here",
             ),
             (
                 wasm.module,
                 "no longer declares the module the gate expects its rules under",
             ),
         ] {
-            if !source.contains(needle) {
+            if !code.contains(needle) {
                 bail!("{} {complaint} (looked for `{needle}`)", wasm.source);
             }
         }
@@ -890,37 +1175,45 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
         for rule in wasm.rules {
             if !enumerated.iter().any(|name| name == rule) {
                 bail!(
-                    "{}'s row names `{rule}`, which `for_each_event_store_rule!` \
-                     does not declare. Either the rule was renamed and this list \
-                     was not, or this list names a rule that never existed.",
-                    wasm.target
+                    "{}'s row names `{rule}`, which `{}` does not declare. Either \
+                     the rule was renamed and this list was not, or this list names \
+                     a rule that never existed.",
+                    wasm.target,
+                    wasm.family.enumeration
                 );
             }
         }
 
-        // Single-sourcing, checked at the one place a subset would be written.
+        // Single-sourcing, checked at the one place a subset would be written —
+        // and over the code alone, because a harness is *expected* to discuss its
+        // own rules in prose. `local_conformance.rs` names some by hand — where
+        // they moved to when they became suite rules, and which one `LocalFixture`
+        // declines — and a whole-file scan reads that prose as a subset list and
+        // refuses a correct file.
         let hand_written: Vec<&String> = enumerated
             .iter()
-            .filter(|rule| source.contains(rule.as_str()))
+            .filter(|rule| code.contains(rule.as_str()))
             .collect();
 
         if !hand_written.is_empty() {
             bail!(
-                "{} names {} conformance rule(s) itself: {hand_written:?}\n\n\
-                 The rule set is single-sourced through \
-                 `for_each_event_store_rule!`. A list here is a wasm32-only subset \
-                 — a second enumeration that can drift from the first, which is \
-                 the outcome the project's AC-002 forbids by construction.",
+                "{} names {} conformance rule(s) in its own code: {hand_written:?}\n\n\
+                 The rule set is single-sourced through `{}`. A list here is a \
+                 wasm32-only subset — a second enumeration that can drift from the \
+                 first, which is the outcome the project's AC-002 forbids by \
+                 construction.",
                 wasm.source,
-                hand_written.len()
+                hand_written.len(),
+                wasm.family.enumeration
             );
         }
 
         println!(
-            "{}/{}: {} named rules, all declared by the one enumeration of {}",
+            "{}/{}: {} named rules, all declared by `{}`'s enumeration of {}",
             wasm.package,
             wasm.target,
             wasm.rules.len(),
+            wasm.family.enumeration,
             enumerated.len()
         );
     }
@@ -1268,27 +1561,33 @@ mod tests {
         }
     }
 
-    /// AC-003. The names the gate asserts are names the one enumeration emits.
+    /// AC-003. The names the gate asserts are names the row's own enumeration
+    /// emits.
     ///
     /// The duplication is the mechanism, exactly as it is for [`META_TESTS`]: a
     /// rule renamed in `registry.rs` and not here fails at this test rather than
     /// drifting into an expectation list that quietly matches nothing.
+    ///
+    /// Resolved per row rather than once. Held to a single enumeration this
+    /// assertion would fail every projection row on every one of its rules — an
+    /// answer that reads as *the projection harness must not be registered* when
+    /// it means *this test read the wrong file*.
     #[test]
     fn every_named_wasm_rule_is_one_the_enumeration_declares() {
-        let enumerated = enumerated_rules().unwrap();
-        assert!(
-            enumerated.len() > 1,
-            "the rule enumeration parsed to {} names, which is a parser failure \
-             rather than a rule set",
-            enumerated.len()
-        );
-
         assert!(
             !WASM_TARGETS.is_empty(),
             "no executed wasm32 target is registered, so this check has nothing \
              to disagree with"
         );
         for wasm in WASM_TARGETS {
+            let enumerated = enumerated_rules(wasm.family).unwrap();
+            assert!(
+                enumerated.len() > 1,
+                "`{}` parsed to {} names, which is a parser failure rather than a \
+                 rule set",
+                wasm.family.enumeration,
+                enumerated.len()
+            );
             assert!(
                 !wasm.rules.is_empty(),
                 "`{}` names no rules, so an emptied target would pass its own \
@@ -1298,54 +1597,139 @@ mod tests {
             for rule in wasm.rules {
                 assert!(
                     enumerated.iter().any(|name| name == rule),
-                    "`{}` names `{rule}`, which `for_each_event_store_rule!` does \
-                     not declare — a rename that reached the enumeration and not \
-                     this list",
-                    wasm.target
+                    "`{}` names `{rule}`, which `{}` does not declare — a rename \
+                     that reached the enumeration and not this list",
+                    wasm.target,
+                    wasm.family.enumeration
                 );
             }
         }
     }
 
-    /// AC-005. The executed target delegates wholly to the one enumeration.
+    /// AC-005. The executed target delegates wholly to its family's enumeration.
     ///
     /// A wasm-only subset list would fail project AC-002 by construction, and
-    /// the place it would be written is the target's own source — a
-    /// `for_each_event_store_rule!`-free hand-rolled list of the rules someone
-    /// judged safe on a single-threaded runtime. So the target may name the
-    /// emitter, the fixture and the module, and no individual rule at all.
+    /// the place it would be written is the target's own source — an
+    /// enumeration-free hand-rolled list of the rules someone judged safe on a
+    /// single-threaded runtime. So the target may name the emitter, the fixture
+    /// and the module, and no individual rule in its **code** at all.
+    ///
+    /// In its code, and that qualifier is load-bearing rather than a softening.
+    /// The scan this test and [`wasm_enumeration`] share reads
+    /// [`code_only`] — see [`prose_naming_a_rule_is_not_a_subset_list`] for the
+    /// wrong implementation the qualifier rejects, and for what would go on
+    /// passing if the scan were widened back to the whole file.
     #[test]
     fn the_executed_wasm_targets_name_no_rule_of_their_own() {
-        let enumerated = enumerated_rules().unwrap();
         assert!(
             !WASM_TARGETS.is_empty(),
             "no executed wasm32 target is registered, so this check reads nothing"
         );
 
         for wasm in WASM_TARGETS {
+            let enumerated = enumerated_rules(wasm.family).unwrap();
             let source = read_source(wasm.source).unwrap();
             assert!(
-                source.contains("event_store_conformance!"),
-                "`{}` no longer invokes the conformance suite; an emptied target \
-                 exits 0 on `running 0 tests`",
+                !source.contains("/*"),
+                "`{}` carries a block comment, which `code_only` cannot read",
                 wasm.source
             );
+            let code = code_only(&source);
             assert!(
-                source.contains(WASM_EMITTER),
-                "`{}` does not emit through `{WASM_EMITTER}`, so whatever it runs \
-                 is not the wasm32 harness",
-                wasm.source
+                code.contains(wasm.family.suite),
+                "`{}` no longer invokes `{}`; an emptied target exits 0 on \
+                 `running 0 tests`",
+                wasm.source,
+                wasm.family.suite
+            );
+            assert!(
+                code.contains(wasm.family.emitter),
+                "`{}` does not emit through `{}`, so whatever it runs is not the \
+                 wasm32 harness",
+                wasm.source,
+                wasm.family.emitter
             );
             for rule in &enumerated {
                 assert!(
-                    !source.contains(rule.as_str()),
-                    "`{}` names the rule `{rule}` itself. The rule set is \
-                     single-sourced through `for_each_event_store_rule!`; a \
-                     hand-written list here is a wasm-only subset",
-                    wasm.source
+                    !code.contains(rule.as_str()),
+                    "`{}` names the rule `{rule}` in its own code. The rule set is \
+                     single-sourced through `{}`; a hand-written list here is a \
+                     wasm-only subset",
+                    wasm.source,
+                    wasm.family.enumeration
                 );
             }
         }
+    }
+
+    /// The wrong implementation [`code_only`] exists to stop being written.
+    ///
+    /// Two of them, and they fail in opposite directions. A whole-file
+    /// `contains` refuses `local_conformance.rs`, whose prose names rules while
+    /// explaining where they moved to — so the guard reds on a correct file and
+    /// its next reader deletes the guard. A scan that stripped *nothing but*
+    /// whole-line comments still reads a trailing one, so
+    /// `let f = fixture(); // drives two_handles_observe_each_others_appends`
+    /// would red as well.
+    ///
+    /// What must keep failing is the real subset: a rule name in code. Both
+    /// halves are asserted, because a `code_only` that returned the empty string
+    /// would satisfy the first on its own.
+    #[test]
+    fn prose_naming_a_rule_is_not_a_subset_list() {
+        let rule = "two_handles_observe_each_others_appends";
+
+        for prose in [
+            format!("//! `{rule}` used to live here as a `reentrancy` module."),
+            format!("    // Moved into the suite: {rule}."),
+            format!("let fixture = LocalFixture::new(); // drives {rule}"),
+        ] {
+            assert!(
+                !code_only(&prose).contains(rule),
+                "the scan read a rule name out of a comment: {prose}"
+            );
+        }
+
+        for code in [
+            format!("const WASM_RULES: &[&str] = &[\"{rule}\"];"),
+            format!("#[wasm_bindgen_test] async fn {rule}() {{}}"),
+        ] {
+            assert!(
+                code_only(&code).contains(rule),
+                "the scan missed a hand-written rule list, which is the whole \
+                 subject of the guard: {code}"
+            );
+        }
+    }
+
+    /// AC-007. Every `wasm32`-capable harness in the package has a row.
+    ///
+    /// The retired `wasm-conformance` CI job ran `cargo test -p
+    /// happenstance-testkit --target wasm32-unknown-unknown`, which is *every*
+    /// target in the package that compiles for `wasm32` — it named none of them
+    /// individually and therefore could not fall behind. [`WASM_TARGETS`] names
+    /// each one, so it can, and the first version of this seam did: it retired
+    /// the job with one row registered and two harnesses left executing nowhere,
+    /// while the retirement note claimed the gate was strictly more.
+    ///
+    /// So the list is checked against the directory rather than against itself,
+    /// by [`unregistered_wasm_harnesses`] — in `cargo test -p xtask` here, and
+    /// in the gate's own mandatory compensator row, which is what makes the
+    /// claim in `ci.yml` a checked one rather than a hopeful one.
+    ///
+    /// The three rows this currently holds are exactly the three targets
+    /// `cargo test -p happenstance-testkit --target wasm32-unknown-unknown`
+    /// built: `memory_conformance_wasm`, `local_conformance` and
+    /// `projection_conformance_wasm`. Adding a fourth harness without a row
+    /// fails here rather than at review.
+    #[test]
+    fn every_wasm32_capable_harness_has_a_row() {
+        let unregistered = unregistered_wasm_harnesses().unwrap();
+        assert!(
+            unregistered.is_empty(),
+            "{unregistered:?} drive a conformance suite through a wasm32 emitter \
+             and have no row in WASM_TARGETS, so nothing executes them"
+        );
     }
 
     /// What the run does **not** cover, stated rather than left to be assumed.

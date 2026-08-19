@@ -30,9 +30,10 @@ assert_eq!(stamp(RecordedAt::from_millis(1_700_000_000_000)), 1_700_000_000_000)
 ```
 
 **Not** — compiles for every target in the workspace, including the one it
-cannot run on. All four mandatory wasm32 steps are `cargo check`, so nothing in
-`cargo xtask ci` observes it; only the `wasm-conformance` job can, and only if
-some rule drives this path:
+cannot run on. The wasm32 *check* steps are compiles and see none of this; what
+observes a panicking stub is `cargo xtask ci`'s `wasm32 run of the conformance
+rules` step, wherever the runner is installed — which is every CI runner — and
+only if some rule drives this path:
 
 ```rust
 fn elapsed_ms() -> u128 {

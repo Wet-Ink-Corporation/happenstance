@@ -16,7 +16,7 @@
 //! store is not (`crates/happenstance/tests/flavours.rs` is that instrument);
 //! two further `wasm32` rows that are a different claim from those five, because
 //! they **execute** rather than compile — the conformance targets are held to
-//! the one rule enumeration by a step nothing can skip, and then the rules are
+//! their own rule enumerations by a step nothing can skip, and then the rules are
 //! run on the target under `wasm-bindgen-test-runner`, which is where CF-23
 //! stops being a compile (see `proof::wasm_run` for why the run is probed and
 //! the guard beside it is not);
@@ -341,12 +341,20 @@ const REQUIRED: &[Step] = &[
     Step {
         // Mandatory, and it is the half that makes the step below allowed to
         // carry a probe at all. It needs no runner: it reads the executed
-        // targets' own sources and the one rule enumeration, so an emptied
+        // targets' own sources and the enumeration each is held to, so an emptied
         // target, one rewired to `__emit_tokio`, one carrying a hand-written
         // wasm32-only rule list, or a row deleted outright fails here on every
         // machine — including the machines where the run below prints
         // `skipped:`. Without this row the pair would be a bare probe-gated
         // step, which is the one configuration the project's AC-004 forbids.
+        //
+        // It also holds `WASM_TARGETS` to the *directory*: a harness in
+        // `happenstance-testkit/tests` that drives a suite through a wasm32
+        // emitter and has no row fails here. That is the check the first cut of
+        // this seam did not have, and it is what the retirement note in
+        // `ci.yml` now rests on — the job it replaced ran the whole package and
+        // named no target, so a list that names them can fall a row behind it
+        // silently, and did.
         //
         // Its stated limit: it cannot say the rules *passed*, and it cannot see
         // an `#[ignore]` on a macro-generated test. Both need the runner, and
@@ -942,10 +950,10 @@ fn print_help() {
     println!("         and the typed layer (happenstance, the crate a Workers application");
     println!("         installs) — none of which says which port flavour the code bound,");
     println!("         because Send exists on that target. Then two rows that are a");
-    println!("         different claim: the conformance targets are held to the one rule");
-    println!("         enumeration, and the rules are EXECUTED on the target under");
-    println!("         wasm-bindgen-test-runner. Also available on their own as");
-    println!("         wasm-conformance-enumeration and wasm-conformance.");
+    println!("         different claim: every wasm32-capable conformance target is held");
+    println!("         to its own rule enumeration, and the rules are EXECUTED on the");
+    println!("         target under wasm-bindgen-test-runner. Also available on their own");
+    println!("         as wasm-conformance-enumeration and wasm-conformance.");
     println!("  spec-trace [--write]");
     println!("         Check the specification's clauses against the suite and the e2e");
     println!("         cases: markers, falsifiers, rule names, case numbers, citations.");

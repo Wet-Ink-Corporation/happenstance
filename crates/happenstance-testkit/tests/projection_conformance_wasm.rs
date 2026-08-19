@@ -12,9 +12,20 @@
 //! `__emit_projection_wasm` calls `skip_line` and hands the string to
 //! `console_log!` instead.
 //!
-//! Compiled for `wasm32-unknown-unknown`; run with `wasm-bindgen-test-runner`
-//! under a headless browser or node. The mandatory *wasm32 check of the
-//! conformance harnesses* step type-checks it, which is the part that can rot.
+//! Compiled for `wasm32-unknown-unknown` and **run** with
+//! `wasm-bindgen-test-runner` under node. Both halves are `cargo xtask ci`'s:
+//! the mandatory *wasm32 check of the conformance harnesses* step type-checks
+//! it, and the *wasm32 run of the conformance rules* step executes it. Which is
+//! how the skip lines above become observable rather than merely emitted —
+//! `MemoryProjectionFixture` declines two capabilities, and their stated reasons
+//! reach the gate's own scroll through `--nocapture`.
+//!
+//! This file is a row in `xtask/src/proof.rs`'s `WASM_TARGETS`, held to
+//! `for_each_projection_store_rule!` — its own enumeration, not the event
+//! store's. That per-row family is what made the row expressible: the seam's
+//! first cut hard-coded the event-store enumeration into both wasm32 entry
+//! points, which left this harness compiled by the gate and executed by nothing
+//! at all.
 
 #![cfg(target_arch = "wasm32")]
 

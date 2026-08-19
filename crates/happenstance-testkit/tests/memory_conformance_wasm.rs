@@ -25,11 +25,12 @@
 //! is a different claim — `#[tokio::test]` type-checks for this target and then
 //! cannot run on it, and that is the whole of what CF-23 is about.
 //!
-//! The gate holds this file to the one rule enumeration in both directions:
+//! The gate holds this file to its own rule enumeration in both directions:
 //! every rule `for_each_event_store_rule!` declares must appear in this target's
-//! own `--list`, and this file may name no rule of its own. A wasm32-only subset
-//! is the failure both halves exist to refuse. See `xtask/src/proof.rs`'s
-//! `WASM_TARGETS`.
+//! own `--list`, and this file's code may name no rule of its own. A wasm32-only
+//! subset is the failure both halves exist to refuse. See `xtask/src/proof.rs`'s
+//! `WASM_TARGETS`, which holds a row for every `wasm32`-capable harness in this
+//! directory — this one, `local_conformance` and `projection_conformance_wasm`.
 
 #![cfg(target_arch = "wasm32")]
 

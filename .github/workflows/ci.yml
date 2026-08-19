@@ -226,17 +226,44 @@ jobs:
 
   # RETIRED at HS-S0048: the `wasm-conformance` job that used to sit here.
   #
-  # It executed the conformance suite on `wasm32-unknown-unknown` against the
-  # `!Send` reference store, and it is the job that turned ADR-0001 from a design
-  # argument into precedent — before it, the entire evidence base for the
-  # two-flavour port design was a `cargo check`. It is retired rather than kept
-  # because the thing it proved now happens *inside* `cargo xtask ci`, which is
-  # strictly more: the `wasm32 run of the conformance rules` step runs the same
-  # target under the same runner, on all three `gate` matrix runners rather than
-  # on `ubuntu-latest` alone, in the same command a contributor runs locally, and
-  # behind an anti-vacuity guard the old job never had — it ran
-  # `cargo test -p happenstance-testkit --target wasm32-unknown-unknown` and
-  # would have exited 0 on `running 0 tests`.
+  # It ran `cargo test --locked -p happenstance-testkit --target
+  # wasm32-unknown-unknown` on `ubuntu-latest` — every `wasm32`-capable target in
+  # that package, named individually nowhere. It is the job that turned ADR-0001
+  # from a design argument into precedent, because among those targets is
+  # `local_conformance`, whose store is the workspace's only genuinely `!Send`
+  # one; before this job, the entire evidence base for the two-flavour port
+  # design was a `cargo check`.
+  #
+  # WHAT MOVED, and where it now runs. All of it, into `cargo xtask ci`'s
+  # `wasm32 run of the conformance rules` step, which drives the declared list in
+  # `xtask/src/proof.rs`'s `WASM_TARGETS`. That list holds a row per target:
+  #
+  #   memory_conformance_wasm        — the event-store rules against MemoryFixture
+  #   local_conformance              — the same rules against the !Send store
+  #   projection_conformance_wasm    — the projection rules, its own enumeration
+  #
+  # The set is not maintained by hand alone. The mandatory `wasm32 conformance
+  # targets are non-vacuous` row scans `crates/happenstance-testkit/tests` and
+  # fails if a harness there drives a suite through a `wasm32` emitter and has no
+  # row — which is what makes "the gate runs what the job ran" a checked claim.
+  # This comment's first draft asserted it while the seam registered one row of
+  # the three, and 106 executions had quietly stopped happening anywhere.
+  #
+  # WHAT THE GATE ADDS beyond the job: it runs on all three `gate` matrix runners
+  # rather than on `ubuntu-latest` alone; it runs in the same command a
+  # contributor runs locally; and it runs behind an anti-vacuity guard the job
+  # never had — `cargo test` exits 0 on `running 0 tests`, so the job would have
+  # passed over an emptied harness.
+  #
+  # WHAT THE GATE DOES NOT ADD, stated because a retirement note that lists only
+  # gains is the reason the first one was wrong: the job was mandatory on its
+  # runner, and the in-gate execution step is PROBED — it prints `skipped:` where
+  # `wasm-bindgen-cli` is absent. That costs nothing in CI, because the `gate`
+  # job installs the runner on all three runners (below), and it is why removing
+  # that install turns this note into a lie rather than into a warning. On a
+  # contributor's machine without the runner, the compensator row still runs and
+  # the rules do not; `xtask/src/main.rs`'s comment on the run row argues that
+  # trade in full.
   #
   # Keeping both would have left two wasm32 execution paths with no stated
   # division of labour, the weaker one shadowing the stronger. What moved into
@@ -245,8 +272,8 @@ jobs:
   #
   # The sentence this comment replaces said "No Cloudflare and no `workerd`.
   # Those arrive at phase 9." Half of that is now stale and half is still true.
-  # The gate executes the testkit's own harness against `MemoryFixture`, which
-  # needs no platform SDK; a Cloudflare conformance target under a Durable
+  # The gate executes the testkit's own harnesses against in-process fixtures,
+  # which need no platform SDK; a Cloudflare conformance target under a Durable
   # Object runtime is `every-rule-under-workerd` (HS-S0054), and it arrives as a
   # ROW in `xtask/src/proof.rs`'s `WASM_TARGETS` — not as a second job here and
   # not as a second gate step.

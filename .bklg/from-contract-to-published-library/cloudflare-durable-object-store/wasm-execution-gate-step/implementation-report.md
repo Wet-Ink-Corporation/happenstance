@@ -167,10 +167,12 @@ plus this story's `_ledger.md`, `report.md` and the run's telemetry.
 | `xtask/src/proof.rs` | The deliverable. `WasmTarget` (:320) and `WASM_TARGETS` (:383) — a declared list of rows; `MEMORY_WASM_RULES` (:364) — nine named rules with the argument for each group; `wasm_cargo_args` (:620) — **no `--all-features`**, EC-004; `locked_wasm_bindgen_version` (:647) and `check_wasm_runner_version` (:675) — EC-002, derived from `Cargo.lock`, never pinned; `wasm_run` (:748) — enumerate, assert exhaustively and by name, then execute under `--nocapture`; `wasm_enumeration` (:847) — the runner-free compensator; `enumerated_rules` (:456) — the one enumeration, parsed and **refusing** what it cannot read. `list` was generalised from `&Artefact` to `(&[&str], &[(&str,&str)], &str)` so the wasm rows share the libtest parsing; the host rows' arguments are byte-identical, which the risk register asked for explicitly. |
 | `xtask/src/main.rs` | Two `REQUIRED` rows — `wasm32 conformance targets are non-vacuous` (:354, `probe: None`) and `wasm32 run of the conformance rules` (:412, probed) — both names added to `wasm_steps()` (:1009); two subcommands (:884-885); the `wasm` help rewritten (:934-942); the module doc's account of the gate updated; five new `#[cfg(test)]` tests. |
 | `crates/happenstance-testkit/tests/memory_conformance_wasm.rs` | Module doc only. Its claim that `cargo xtask wasm` merely type-checks it is now false; and its opening *"The same 30 rules"* was stale against 89, so it now states no count at all and says why. |
+| `crates/happenstance-testkit/tests/local_conformance.rs` | Module doc only — harness 4's comment. It named CI's `wasm-conformance` job as its executor, and that job is retired here; it now names the gate step that executes it. |
+| `crates/happenstance-testkit/tests/projection_conformance_wasm.rs` | Module doc only. It said the *check* step type-checks it, *"which is the part that can rot"*; the run step now executes it, and the doc says so and says which enumeration holds it. |
 | `.github/workflows/ci.yml` | The `wasm-conformance` job retired in place, replaced by a retirement note that says what it proved and what subsumes it; its `Cargo.lock` version resolution and `wasm-bindgen-cli` install moved into the three-runner `gate` job, with `shell: bash` for Windows. |
 | `CHANGELOG.md` | One `[Unreleased] / Added` entry. |
-| `spec/SPECIFICATION.md` | CF-23's `Rule:` line only, plus the regenerated §7.1 row. `[FROZEN]` marker and every normative sentence untouched (NF-006). |
-| `standards/rust/*.md` (5 files, 13 citations) | Line-number repointing only, forced by the insertions into `main.rs`. See ## Notes. |
+| `spec/SPECIFICATION.md` | CF-23's `Rule:` line only, plus the regenerated §7.1 row. `[FROZEN]` marker and every normative sentence untouched (NF-006). The portfolio's *`LocalMemoryEventStore` passes the suite natively and on `wasm32`* (`:8541`) is left as written, because after the amendment below it is checked again. |
+| `standards/rust/*.md` (4 files — 51, 52, 70, 80 — 13 citations) | Line-number repointing, forced by the insertions into `main.rs`, plus one prose correction in 52. See ## Notes. |
 
 ## Gates
 
@@ -289,13 +291,26 @@ the rules fails on registration rather than passing quietly.
    and their absent probes — plus the two new names. A count in a test name is a second copy
    of the list it describes. HS-S0031's own report and spec cite the old name; this note is
    the forwarding address.
-5. **13 line-number citations in `standards/rust/` were repointed.** Inserting ~90 lines
-   into `main.rs` moved every anchor below them and `lint-constitution` went red with
-   `the citation points at the wrong place`. `--write` only regenerates the router's
-   region, so the citations were repaired by hand against the anchors' new lines; no atom's
-   prose was edited. RS-80-2's claim that *CI installs every probed tool on every runner, so
-   the step is not skipped there* stays true precisely because the `wasm-bindgen-cli` install
-   was added to the `gate` job rather than left in the retired one.
+5. **13 line-number citations in `standards/rust/` were repointed, and one atom's prose
+   was corrected.** Inserting ~90 lines into `main.rs` moved every anchor below them and
+   `lint-constitution` went red with `the citation points at the wrong place`. `--write`
+   only regenerates the router's region, so the citations were repaired by hand against
+   the anchors' new lines. **Four** files carry them — 51, 52, 70 and 80 — and the spec's
+   PR boundary named none of them; the boundary has been widened, because
+   `cargo xtask lint-constitution` is a gate step and a boundary that forbids the edit it
+   forces is a boundary that cannot be kept. RS-80-2's claim that *CI installs every
+   probed tool on every runner, so the step is not skipped there* stays true precisely
+   because the `wasm-bindgen-cli` install was added to the `gate` job rather than left in
+   the retired one.
+
+   **The prose correction is the amendment's, not the original pass's.** RS-52-1 read
+   *"All four mandatory wasm32 steps are `cargo check`, so nothing in `cargo xtask ci`
+   observes it; only the `wasm-conformance` job can"*. Both halves were false after this
+   story — the count was already stale at five, and the job it points at is the one this
+   story retires — and the first pass repointed that file's citations without reading the
+   sentence three lines above them. It now says the wasm32 *checks* are compiles and that
+   the `wasm32 run of the conformance rules` step is what can observe a panicking stub,
+   wherever the runner is installed, which is every CI runner.
 
 **What this story did not do, checked rather than assumed.** No file under
 `crates/happenstance-cloudflare/`. No `.kb/` write — ADR-0023, CF-40 and WF-11 remain
@@ -303,3 +318,137 @@ HS-S0057's, through the ingest path. No conformance rule added, removed or `#[cf
 no second enumeration: `registry::no_orphan_rules` and `for_each_event_store_rule!` are
 untouched by this diff, which is what AC-005 asks for and what the derived check now
 enforces from the other direction.
+
+## Amendment — the retirement was not yet a subsumption (slice review, AC-007)
+
+**What was wrong.** The first pass retired the `wasm-conformance` CI job with **one** row
+in `WASM_TARGETS`. That job ran `cargo test --locked -p happenstance-testkit --target
+wasm32-unknown-unknown` — *every* `wasm32`-capable target in the package, named
+individually nowhere. There are three. So the commit moved 89 executions into the gate and
+**deleted 106**: `local_conformance`'s `local_wasm` harness (89 rules against
+`LocalMemoryEventStore`, the `Rc`-backed `!Send` reference store) and
+`projection_conformance_wasm` (17). Both went on compiling under the *check* step and were
+executed by nothing. Meanwhile `ci.yml`'s retirement note said the in-gate step *"runs the
+same target under the same runner … which is strictly more"*, and its own first paragraph
+credited the retired job with proving the suite *"against the `!Send` reference store"* —
+the exact execution that had just stopped happening. `spec/SPECIFICATION.md:8541`'s
+*`LocalMemoryEventStore` passes the suite natively and on `wasm32`* was, for that commit,
+checked by nothing.
+
+That is a claim the diff falsified in the same breath as making it, which is what
+DEPLOY-AC-05 forecloses: a coverage decision may be taken, but not by omission.
+
+**What the amendment does.**
+
+1. **Two more rows, and the enumeration became per-row.** `WasmTarget` gains a
+   `family: &'static RuleFamily` — the enumeration a row is held to, its `head`, its suite
+   macro and its `wasm32` emitter. That field is what made the projection row
+   *expressible*: `wasm_run` and `wasm_enumeration` both hard-coded
+   `for_each_event_store_rule!`, so a projection target would have failed the exhaustive
+   check on all seventeen of its rules, and the only answers available were *drop it* or
+   *weaken the check*. With the family per row, each target is held exhaustively to its own
+   enumeration — 89 for the two event-store rows, 17 for the projection row.
+2. **The single-sourcing scan now reads code, not prose.** `wasm_enumeration`'s
+   hand-written-rule guard was `source.contains(rule)` over the whole file. Measured
+   against the real tree, that scan flags **three** rules in `local_conformance.rs` — all
+   three in `//!` or `//` comments explaining where the re-entrancy rules moved to and
+   which capability `LocalFixture` declines — so it would have refused a correct file.
+   `code_only` truncates each line at its first `//`; a source containing `/*` is
+   **refused** rather than scanned past, because a scan that cannot read block comments
+   must not pretend it read them.
+3. **The list is now held to the directory.** `unregistered_wasm_harnesses` scans
+   `crates/happenstance-testkit/tests` and fails any target whose code names an emitter
+   spelled `__emit…wasm` and has no row. It runs inside the **mandatory** compensator step,
+   so it needs no runner. This is the check whose absence is the whole defect: the retired
+   job named no target and therefore could not fall behind the tree, and a hand-maintained
+   list can. Derived from the emitter *spelling* rather than from the registered families,
+   so a third family arriving unregistered fails too.
+4. **Three module docs, one atom and the retirement note corrected.**
+   `local_conformance.rs`'s harness 4 comment ("executed by CI's `wasm-conformance` job")
+   and `projection_conformance_wasm.rs`'s ("the *check* step type-checks it, which is the
+   part that can rot") both now name the step that executes them.
+   `standards/rust/52-wasm32-and-target-cfg.md` RS-52-1 — see Note 5. `ci.yml`'s
+   retirement note now lists what moved, what did not, and where each runs; *"the same
+   target"* and *"strictly more"* are gone, replaced by a **WHAT THE GATE DOES NOT ADD**
+   paragraph naming the one thing the job had that the step does not — it was mandatory on
+   its runner, and the step is probed.
+
+**The gate's own scroll, after.**
+
+```
+=== wasm32 conformance targets are non-vacuous ===
+happenstance-testkit/memory_conformance_wasm: 9 named rules, all declared by `for_each_event_store_rule!`'s enumeration of 89
+happenstance-testkit/local_conformance: 6 named rules, all declared by `for_each_event_store_rule!`'s enumeration of 89
+happenstance-testkit/projection_conformance_wasm: 6 named rules, all declared by `for_each_projection_store_rule!`'s enumeration of 17
+=== wasm32 run of the conformance rules ===
+happenstance-testkit/memory_conformance_wasm: 89 rules enumerated, 9 named, executing on wasm32-unknown-unknown
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.11s
+happenstance-testkit/local_conformance: 89 rules enumerated, 6 named, executing on wasm32-unknown-unknown
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.20s
+happenstance-testkit/projection_conformance_wasm: 17 rules enumerated, 6 named, executing on wasm32-unknown-unknown
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.03s
+```
+
+195 rule executions on `wasm32-unknown-unknown` in one `cargo xtask ci --fast`, against
+three fixtures — up from 89 in the first pass, and on three runners rather than the retired
+job's one. The `!Send` store's own `SKIP` line is in that scroll under `--nocapture`, which
+is `LocalFixture`'s declined `REOPEN`:
+
+```
+SKIP acknowledged_writes_survive_a_reopen: fixture declines `REOPEN` — LocalMemoryEventStore
+is a Vec behind an Rc<RefCell<_>>, so there is no durable medium to reopen over
+```
+
+### Negative control 5 — a harness with no row (the amendment's own defect)
+
+The projection row deleted from `WASM_TARGETS`, everything else unchanged. The mandatory,
+runner-free row fails:
+
+```
+=== wasm32 conformance targets are non-vacuous ===
+xtask failed: crates/happenstance-testkit/tests holds 1 wasm32 conformance harness(es) with
+no row in WASM_TARGETS: ["projection_conformance_wasm"]
+
+Each drives a suite through a wasm32 emitter, so each compiles for that target — and nothing
+executes it. The retired `wasm-conformance` CI job ran the whole package and named no target
+individually; the note that retired it claims this gate is strictly more, and a row short
+that is false rather than approximate.
+```
+
+That is the exact configuration the first pass shipped, now a build failure. The row was
+restored immediately afterwards.
+
+### Negative control 6 — prose is not a subset list
+
+Measured against the tree rather than argued. Over the 89 parsed rule names:
+
+| scan | flags in `local_conformance.rs` |
+| --- | --- |
+| `source.contains(rule)` (whole file) | `["acknowledged_writes_survive_a_reopen", "interleaved_appends_on_one_handle_elect_one_winner", "a_live_read_stream_does_not_block_an_append"]` |
+| `code_only(source).contains(rule)` | `[]` |
+
+`prose_naming_a_rule_is_not_a_subset_list` in `xtask/src/proof.rs` is the standing form of
+both halves: three comment shapes that must **not** flag — a `//!` doc line, an indented
+`//` line and a *trailing* `//` on a code line — and two code shapes that must, a
+`const … &[&str]` list and a hand-written `#[wasm_bindgen_test] async fn <rule>`. Both
+halves are asserted, because a `code_only` that returned the empty string would satisfy the
+first on its own.
+
+### Gates, re-run after the amendment
+
+| gate | result |
+| --- | --- |
+| `cargo test --locked -p xtask --bins` | `64 passed; 0 failed` |
+| `cargo clippy --locked -p xtask -p happenstance-testkit -p happenstance-cloudflare --all-targets --all-features -- -D warnings` | clean |
+| `cargo test --locked -p xtask -p happenstance-testkit -p happenstance-cloudflare --all-features` | all targets green, `0 failed` throughout |
+| `cargo fmt --all -- --check` | green (formatter run last) |
+| `cargo xtask affected --base main` | `affected gate passed` |
+| `cargo xtask ci --fast` | `all required checks passed (--fast: 4 optional step(s) not run)`, with 195 wasm32 rule executions in the scroll |
+| `cargo xtask spec-trace` | `traceability: no problems found; §7.1–§7.2 matches the checker` |
+| `cargo xtask lint-constitution` | `27 atoms, all consistent` |
+
+**Two more tests than the first pass, and they are the two the defect needed.**
+`every_wasm32_capable_harness_has_a_row` and `prose_naming_a_rule_is_not_a_subset_list`. The
+first is `cargo test -p xtask`'s copy of the gate's own directory scan; the second names its
+two wrong implementations, per CLAUDE.md's rule that a check no implementation can fail is
+decorative.

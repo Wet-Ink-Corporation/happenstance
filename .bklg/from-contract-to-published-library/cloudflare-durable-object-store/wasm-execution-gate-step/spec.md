@@ -78,7 +78,7 @@ The delta is narrow and deliberate. **No adapter code, no fixture, no Cloudflare
 
 - One new `Step` in `xtask/src/main.rs`'s `REQUIRED`, its name in `wasm_steps()`, its argument for mandatory-versus-probe-plus-compensator written as a comment in the file (the house habit: the gate carries its own argument), and `print_help`'s `wasm` description (`:735-737`) corrected to say what now executes.
 - The anti-vacuity guard: a fourth registered entry in the `xtask/src/proof.rs` shape, plus whatever widening of `Artefact`/`cargo_args` a `--target`-bearing, feature-flag-free, env-carrying invocation needs — or, if the runner cannot enumerate its tests, an equivalent mandatory assertion derived from the run's own output, with the reason recorded in the file.
-- The executed target's module doc (`crates/happenstance-testkit/tests/memory_conformance_wasm.rs:15-17`), whose claim that `cargo xtask wasm` only type-checks it stops being true.
+- The executed targets' module docs, whose claim that `cargo xtask wasm` only type-checks them stops being true. **Amended after the slice review:** the boundary named `memory_conformance_wasm.rs` alone, and that was a boundary drawn around one row rather than around the change. `local_conformance.rs` and `projection_conformance_wasm.rs` are the package's two other `wasm32`-capable harnesses; the retired job ran all three, so all three carry a sentence about where they are executed and all three are in scope. Leaving one out is how `local_conformance.rs` came to advertise execution by a job that no longer exists.
 - `.github/workflows/ci.yml`: the `wasm-conformance` job retired in favour of the in-gate step (with the `wasm-bindgen-cli`-version-from-`Cargo.lock` resolution and any toolchain install preserved wherever the work now lives), or kept with its continuing purpose stated in its own comment. Whichever way, the stale *"Those arrive at phase 9"* sentence is corrected.
 - A `CHANGELOG.md` entry under `[Unreleased]` naming what the gate now does that it did not.
 - Optionally, CF-23's `Rule:` line in `spec/SPECIFICATION.md`, under the constraint stated in the Integration contract, with `cargo xtask spec-trace` green.
@@ -97,12 +97,23 @@ The delta is narrow and deliberate. **No adapter code, no fixture, no Cloudflare
 
 ```
 xtask/src/**
-crates/happenstance-testkit/tests/memory_conformance_wasm.rs
+crates/happenstance-testkit/tests/*_conformance*.rs
+standards/rust/*.md
 .github/workflows/ci.yml
 spec/SPECIFICATION.md
 CHANGELOG.md
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/wasm-execution-gate-step/**
 ```
+
+**Two globs were widened after the slice review, and both were forced rather than
+chosen.** `standards/rust/*.md` because `cargo xtask lint-constitution` holds every
+`xtask/src/main.rs:NNN` citation in the corpus to its anchor's current line, and this
+story inserts ~90 lines into that file — so a green gate is unreachable without touching
+four atoms. The original boundary omitted a file class the gate *requires*, which is a
+defect in the boundary and not in the diff; one of those atoms (52, RS-52-1) also carried
+prose this change falsifies, and a boundary that forbade the edit would have left it
+false. `crates/happenstance-testkit/tests/*_conformance*.rs` for the reason stated
+above.
 
 ## Behavior and interfaces
 

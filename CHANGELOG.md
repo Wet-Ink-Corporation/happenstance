@@ -27,31 +27,37 @@ not the same as what a user needed to be told.
 ### Added
 
 - **`cargo xtask ci` now *executes* the conformance rules on
-  `wasm32-unknown-unknown`, rather than compiling a harness that runs
+  `wasm32-unknown-unknown`, rather than compiling harnesses that run
   elsewhere.** Two rows join the gate. `wasm32 run of the conformance rules`
-  drives `crates/happenstance-testkit/tests/memory_conformance_wasm.rs` through
-  `wasm-bindgen-test-runner`, so the whole event-store rule set runs against
-  `MemoryFixture` on a single-threaded, `!Send` target — in the same command a
-  contributor types, and on all three runners the CI `gate` job matrices over
-  rather than on `ubuntu-latest` alone. Before this, every wasm32 step in the
-  gate was a `cargo check`, and `#[tokio::test]` type-checks for that target and
-  then cannot run on it: precisely the gap CF-23 is about. The standalone
-  `wasm-conformance` GitHub Actions job that used to carry this claim is retired
-  in favour of the in-gate step, and its `Cargo.lock`-resolved
-  `wasm-bindgen-cli` version and install moved into the `gate` job.
+  drives every `wasm32`-capable conformance target in `happenstance-testkit`
+  through `wasm-bindgen-test-runner`: the event-store rules against
+  `MemoryFixture` (`memory_conformance_wasm`), the same rules against
+  `LocalMemoryEventStore` — the workspace's only genuinely `!Send` store
+  (`local_conformance`) — and the projection rules against
+  `MemoryProjectionFixture` (`projection_conformance_wasm`), each held to its own
+  enumeration. In the same command a contributor types, and on all three runners
+  the CI `gate` job matrices over rather than on `ubuntu-latest` alone. Before
+  this, every wasm32 step in the gate was a `cargo check`, and `#[tokio::test]`
+  type-checks for that target and then cannot run on it: precisely the gap CF-23
+  is about. The standalone `wasm-conformance` GitHub Actions job that used to
+  carry this claim is retired in favour of the in-gate step, and its
+  `Cargo.lock`-resolved `wasm-bindgen-cli` version and install moved into the
+  `gate` job.
 
   The second row, `wasm32 conformance targets are non-vacuous`, is what makes
   the first safe to probe. `cargo test` exits 0 on `running 0 tests`, so naming
   a target is checking a filename — the argument `xtask/src/proof.rs` was
-  written for, now applied to a target nobody was running. Before anything
-  executes, every rule `for_each_event_store_rule!` declares must appear in the
-  target's own `--list`, which is what a wasm32-only subset would fail; and a
-  second, **mandatory** step reads the target's source with no runner at all, so
-  an emptied file, one rewired away from `__emit_wasm`, one carrying a
+  written for, now applied to targets nobody was running. Before anything
+  executes, every rule the target's own enumeration declares must appear in its
+  `--list`, which is what a wasm32-only subset would fail; and a second,
+  **mandatory** step reads each target's source with no runner at all, so an
+  emptied file, one rewired away from its `wasm32` emitter, one carrying a
   hand-written rule list, or a deleted registration fails on every machine —
-  including the machines where the run itself prints `skipped:`. The executed
-  targets are a declared list, so the Cloudflare conformance target arrives as a
-  row rather than as a second step.
+  including the machines where the run itself prints `skipped:`. That row also
+  scans the harness directory and fails a `wasm32` harness with no registration,
+  which is what holds the list to the retired job's coverage rather than to
+  whoever last edited it. The executed targets are a declared list, so the
+  Cloudflare conformance target arrives as a row rather than as a second step.
 
   The run passes `--nocapture`, and that is not verbosity: `println!` is a
   silent discard on `wasm32-unknown-unknown`, so a fixture's
