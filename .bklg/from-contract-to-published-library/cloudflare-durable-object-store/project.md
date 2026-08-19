@@ -7,9 +7,9 @@ title: The edge store, run rather than asserted
 parent: HS-I0006
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: in-review
+status: implementing
 process: project
-stage: design
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-12T12:57:12.587Z
+updated: 2026-08-19T14:43:59.389Z
 links:
   pr: null
   commits: []
