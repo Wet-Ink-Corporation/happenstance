@@ -7,9 +7,9 @@ title: The worked example surfaced in its own words
 parent: HS-P0022
 initiative: docs-that-teach
 project: application-author-path
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: conceptual-bridge
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T19:50:39.841Z
+updated: 2026-08-19T20:04:29.080Z
 links:
   pr: null
   commits:
     - "5805623"
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
