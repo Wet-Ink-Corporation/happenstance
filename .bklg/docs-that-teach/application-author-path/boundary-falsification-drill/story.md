@@ -21,10 +21,11 @@ archetype: capability
 slice: opening-encounter
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:03:06.312Z
+updated: 2026-08-19T13:56:44.660Z
 links:
   pr: null
-  commits: []
+  commits:
+    - cc9c4a4
   kb: []
 gate_open: false
 schema: 1
