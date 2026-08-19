@@ -7,9 +7,9 @@ title: Merge forward and record the baseline before authoring
 parent: HS-P0022
 initiative: docs-that-teach
 project: application-author-path
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -20,13 +20,13 @@ archetype: foundation
 slice: preflight-and-anchor
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T19:50:34.903Z
+updated: 2026-08-19T19:57:44.603Z
 links:
   pr: null
   commits:
     - 63fa959
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
