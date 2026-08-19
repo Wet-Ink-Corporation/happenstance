@@ -22,13 +22,13 @@ archetype: capability
 slice: page-set-assurance
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T20:06:31.896Z
+updated: 2026-08-19T20:06:35.878Z
 links:
   pr: null
   commits:
     - a189aa2
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
