@@ -52,7 +52,7 @@ four green wasm32 steps as "it runs on Workers" ships an adapter that aborts the
 module on its first recorded timestamp, found by a user in a Worker — where
 `println!` writes nowhere, so nothing says why.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:117 (The host build is a convenience rather than evidence)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:133 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
 `xtask/src/main.rs:215 (wasm32 build of the contract crate)` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -106,7 +106,7 @@ asked for.
 
 **Evidence.** `crates/happenstance-testkit/Cargo.toml:99 (optional = true)` ·
 `crates/happenstance-testkit/src/fixtures.rs:487 (feature is not target-scoped)` ·
-`xtask/src/main.rs:771 (feature is not target-scoped)`
+`xtask/src/main.rs:799 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 
@@ -155,9 +155,9 @@ step — goes red on a lint, in a crate whose bodies are all `todo!()`, with a
 message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:154 (Left un-gated it is dead code on wasm)` ·
-`crates/happenstance-cloudflare/src/lib.rs:157 (mod not_send_probe)` ·
-`xtask/src/main.rs:264 (wasm32 build of the Cloudflare adapter)`
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:158 (Left un-gated it is dead code on wasm)` ·
+`crates/happenstance-cloudflare/src/lib.rs:190 (mod not_send_probe)` ·
+`xtask/src/main.rs:289 (wasm32 build of the Cloudflare adapter)`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
 

@@ -75,7 +75,7 @@ pub fn assert_future_is_send<F: Future + Send>(future: F) -> F {
 /// ```compile_fail,E0277
 /// use happenstance_cloudflare::send_shape::{AppendFutureShape, assert_output_is_send};
 ///
-/// // error[E0277]: `Rc<str>` cannot be sent between threads safely
+/// // error[E0277]: `Rc<worker::Error>` cannot be sent between threads safely
 /// let _future = assert_output_is_send(AppendFutureShape);
 /// ```
 pub fn assert_output_is_send<F: Future>(future: F) -> F

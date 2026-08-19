@@ -1,9 +1,10 @@
 //! A Durable Object-backed [`EventStore`], in the bare `!Send` flavour.
 //!
-//! # Status: not implemented
+//! # Status: bound, bodies pending
 //!
-//! The types below are real and the bodies are `todo!()`. See the [crate
-//! documentation](crate) for what that buys.
+//! The types below are real, the storage they reach is a real Durable Object's
+//! `SqlStorage`, and the `EventStore` bodies are still `todo!()`. See the
+//! [crate documentation](crate) for what that buys.
 //!
 //! # Intended schema
 //!
@@ -61,16 +62,19 @@ pub struct CloudflareEventStore {
     sql: SqlStorage,
 }
 
-impl Default for CloudflareEventStore {
-    fn default() -> Self {
-        Self::new(SqlStorage::new())
-    }
-}
+// There is deliberately no `impl Default`. It used to exist, and it could only
+// exist while `SqlStorage::new()` minted empty storage out of nothing. A real
+// Durable Object's storage comes off `State::storage().sql()` and cannot be
+// conjured, so a `Default` that returned one would be a second construction
+// path the fixture's "one instance, one object" invariant does not cover.
 
 impl CloudflareEventStore {
     /// Wraps a Durable Object's SQL storage.
     ///
-    /// In phase 9 this takes `worker::SqlStorage` off `State::storage().sql()`.
+    /// Injection, never construction: in production the handle comes off
+    /// `State::storage().sql()` inside a `#[durable_object]` class, and in a
+    /// test it comes off whatever the harness has. One constructor means one
+    /// path for both.
     #[must_use]
     pub fn new(sql: SqlStorage) -> Self {
         Self { sql }
@@ -298,11 +302,9 @@ impl Stream for SqlRowStream {
 /// error: the port's signature is satisfied either way, and only a conformance
 /// rule can tell the difference.
 fn check_cursor_still_valid(cursor: &SqlCursor) -> Result<(), CloudflareEventStoreError> {
-    let len = cursor.source_len()?;
-    if cursor.offset() > len {
-        return Err(SqlError::CursorInvalidated.into());
-    }
-    Ok(())
+    cursor
+        .still_valid()
+        .map_err(CloudflareEventStoreError::from)
 }
 
 /// Renders a [`Query`] and [`ReadOptions`] into one statement and its bindings.

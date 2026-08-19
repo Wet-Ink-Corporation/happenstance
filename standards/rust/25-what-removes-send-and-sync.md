@@ -42,7 +42,7 @@ passes either way, and only an *absence* probe (61), or the `Rc` the reference
 store actually holds, would have reported it.
 
 **Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:77 (RefCell<Vec<SequencedEvent>>)` ·
-`crates/happenstance-cloudflare/src/js.rs:46 (is what surrenders)` ·
+`crates/happenstance-cloudflare/src/js.rs:77 (is what surrenders)` ·
 [CF-28](../../spec/SPECIFICATION.md) ·
 [std::cell::RefCell](https://doc.rust-lang.org/std/cell/struct.RefCell.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -245,7 +245,7 @@ learns it on the day Workers enables threads — after the bound it was cited fo
 frozen.
 
 **Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
-`crates/happenstance-cloudflare/src/js.rs:38 (anything. What it costs is stated rather than hidden — see the crate)` ·
-`crates/happenstance-cloudflare/src/lib.rs:60 (can only ever *inherit*)` ·
+`crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
+`crates/happenstance-cloudflare/src/lib.rs:70 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

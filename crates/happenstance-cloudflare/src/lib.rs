@@ -1,13 +1,18 @@
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: not implemented
+//! # Status: bound, not yet complete
 //!
-//! Every type here is real and every body is `todo!()`. That is the whole
-//! design: a skeleton exists to be disagreed with by a type checker, and a
-//! skeleton that stubs its associated types has stubbed the only part a type
-//! checker can disagree about. Phase 9 fills the bodies in and swaps
-//! [`sql_storage`] for the real `worker` bindings.
+//! This crate depends on [`worker`] and talks to a real Durable Object's
+//! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
+//! `exec` is `worker::SqlStorage::exec`, a cursor is a `SqlStorageCursor`, and
+//! a thrown value is a `worker::Error` kept live behind an [`Rc`](std::rc::Rc).
+//!
+//! What is still `todo!()` is the [`EventStore`](happenstance_core::EventStore)
+//! implementation itself — `migrate`, `append`, `head`, `contains_event_id`,
+//! and the read path's `render_read` / `decode_row`. The scoped
+//! `#![allow(clippy::todo)]` below is scoped to exactly those and leaves with
+//! the last of them.
 //!
 //! # What this crate is for
 //!
@@ -15,22 +20,18 @@
 //! [`EventStore`](happenstance_core::EventStore) rather than the derived
 //! `SendEventStore`, and the only one whose `Error` is genuinely `!Send`. That
 //! makes it the sole instrument for ES-6 — "whether `Error` gains `Send +
-//! Sync`" — which the specification defers precisely because the two in-tree
-//! confirmations are free by construction: `MemoryStoreError` is uninhabited and
-//! `SqliteEventStoreError` has one placeholder variant, so neither could fail
-//! the bound if the bound were wrong.
-//!
-//! # What is modelled, and what is not
-//!
-//! There is no dependency on `worker`. [`js::JsHandle`] and [`sql_storage`]
-//! reproduce the four properties of a Durable Object's storage that any
-//! signature can see — `!Send`, `!Sync`, a **synchronous** `exec`, and a cursor
-//! that is not a snapshot — and nothing else. See [`sql_storage`] for why each
-//! one is load-bearing.
+//! Sync`" — which the specification settles precisely because the two other
+//! in-tree confirmations are free by construction: `MemoryStoreError` is
+//! uninhabited and `SqliteEventStoreError` has one placeholder variant, so
+//! neither could fail the bound if the bound were wrong.
 //!
 //! # Findings
 //!
-//! ## 1. A real `JsValue` is `Send + Sync` on the target Workers builds
+//! Made against a stand-in, and each one now either **confirmed** against the
+//! real API or corrected in place with the correction stated. A finding quietly
+//! deleted is a finding that will be re-discovered.
+//!
+//! ## 1. A real `JsValue` is `Send + Sync` — and so is `worker`'s own storage
 //!
 //! `wasm-bindgen` 0.2.126, `src/lib.rs:168-176`:
 //!
@@ -46,31 +47,43 @@
 //! unsafe impl Sync for JsValue {}
 //! ```
 //!
-//! Workers builds `wasm32-unknown-unknown` without `atomics`, so `JsValue` —
-//! and therefore `worker::Error`, including its `Internal(JsValue)` and
-//! `UnknownJsError { original: JsValue, .. }` variants — is `Send + Sync`
-//! there. The specification's premise for ES-6, that "an adapter error holding
-//! a `JsValue` or an `Rc<str>` satisfies [the unbounded type] `so a spawned
-//! handler's error cannot cross a JoinHandle`", is half wrong: the `JsValue`
-//! half costs nothing, the `Rc` half costs everything.
+//! **Confirmed, and it is worse than the stand-in recorded.** Workers builds
+//! `wasm32-unknown-unknown` without `atomics`, so `JsValue` — and therefore
+//! `worker::Error`, including its `Internal(JsValue)` and `UnknownJsError {
+//! original: JsValue, .. }` variants — is `Send + Sync` there; and the host
+//! build, where `target_feature = "atomics"` is likewise unset, gets the same
+//! two impls. `worker` then writes two more of its own, on the storage handle
+//! and on its cursor (`worker-0.8.5/src/sql.rs`). Four `unsafe impl`s in the
+//! dependency graph, all of which this crate would inherit by holding one of
+//! those types bare. The specification's premise for ES-6, that "an adapter
+//! error holding a `JsValue` or an `Rc<str>` satisfies [the unbounded type] so
+//! a spawned handler's error cannot cross a `JoinHandle`", is half wrong: the
+//! `JsValue` half costs nothing, the `Rc` half costs everything.
 //!
-//! That is why [`js::JsHandle`] holds an `Rc<str>` rather than mimicking the
-//! `unsafe impl`. An instrument whose `!Send`-ness disappears under a `cfg`
-//! cannot falsify a bound. It is also not an option here: this workspace sets
-//! `unsafe_code = "forbid"`, so an adapter can only ever *inherit* that escape
-//! hatch by holding a `JsValue`, never write it.
+//! That is why every JS-side value in this crate is reached through an `Rc` —
+//! [`js::JsHandle`] holds `Rc<JsValue>`, [`js::JsThrow`] holds
+//! `Rc<worker::Error>`, [`sql_storage::SqlStorage`] holds
+//! `Rc<worker::SqlStorage>`. `Rc<T>` is `!Send` for **every** `T`, including a
+//! `T` that carries an `unsafe impl Send`. The thrown value stays live; the
+//! auto trait does not come with it. It is also not an option to mimic the
+//! hatch: this workspace sets `unsafe_code = "forbid"`, so an adapter
+//! can only ever *inherit* that escape hatch, never write it.
 //!
-//! ## 2. Stringifying a `JsValue` loses a capability, not information the
+//! ## 2. Stringifying a thrown value loses a capability, not information the
 //!    caller needs
 //!
 //! [`js::JsThrow`] keeps the thrown value and can call
-//! [`js::JsHandle::property`]; [`js::StringifiedThrow`] keeps
-//! `String(value)` and cannot. On the one question the port makes a caller ask
-//! — was this a conflict? — they answer identically, because a Durable Object
-//! surfaces SQLite's own text (`UNIQUE constraint failed: event.position`)
-//! through the thrown `Error`'s `message` and exposes no numeric code. The
-//! capability that is genuinely lost is *forward* compatibility: a caller
-//! holding the live value can read a field nobody has thought of yet.
+//! [`js::JsHandle::property`]; [`js::StringifiedThrow`] keeps `String(value)`
+//! and cannot. On the one question the port makes a caller ask — was this a
+//! conflict? — they answer identically, because a Durable Object surfaces
+//! SQLite's own text (`UNIQUE constraint failed: event.position`) through the
+//! thrown `Error`'s `message` and exposes no numeric code. **Confirmed against
+//! the real API**: `worker` caches `name`, `message` and `code` at conversion
+//! and finds no SQLite code to cache, which is why
+//! [`js::JsThrow::is_constraint_violation`] probes `code` and then falls
+//! through to the message every time. The capability that is genuinely lost is
+//! *forward* compatibility: a caller holding the live value can read a field
+//! nobody has thought of yet.
 //!
 //! ## 3. The conflict signal never travels in `Self::Error` anyway
 //!
@@ -101,34 +114,53 @@
 //!   a `SqlStorageCursor` held across an `await` "does not provide a stable
 //!   snapshot of query results". ES-9 requires the stream to be lazy, so this
 //!   adapter has to choose between honouring laziness and honouring snapshot
-//!   isolation. [`event_store::SqlRowStream`] models the detection rather than
-//!   the fix; the fix is either buffering the whole result set at first poll
-//!   (which defeats streaming a large replay) or a rule that says a read is a
-//!   snapshot only until the first `await`.
+//!   isolation. [`sql_storage::SqlCursor`] reports the collision as
+//!   [`sql_storage::SqlError::CursorInvalidated`] rather than returning torn
+//!   rows; ADR-0011's ceiling-and-page mechanism is what
+//!   [`event_store::SqlRowStream`] uses so the collision does not arise.
 //! * **Positions are bounded by 2^53, not 2^64.** Workers SQL widens integers
 //!   through a JS number on the way out, so a `SequencePosition` above
 //!   `Number.MAX_SAFE_INTEGER` is not round-trippable even though
-//!   `NonZeroU64` permits it. Reported as
+//!   `NonZeroU64` permits it. A stored value that crossed the line arrives back
+//!   as [`sql_storage::SqlValue::Real`] rather than as a narrowed integer, and
+//!   is reported as
 //!   [`event_store::CloudflareEventStoreError::StoredPosition`].
 //!
 //! # Targets
 //!
-//! Compiles on `wasm32-unknown-unknown`, which is the target it exists for, and
-//! on the host. The host build is a convenience rather than evidence: nothing in
-//! the stand-in is `cfg`-gated, so it says only that the crate is portable, not
-//! that a Durable Object adapter is.
+//! `wasm32-unknown-unknown` is the target this crate exists for and the only
+//! one where its bindings resolve to a live JavaScript heap. It also compiles
+//! on the host. The host build is a convenience rather than evidence: nothing
+//! outside this crate's tests is `cfg`-gated, so it says only that the crate is
+//! portable, not that a Durable Object adapter is — every `worker` binding it
+//! links resolves to a stub that panics rather than to a JavaScript heap.
+//!
+//! What the host build *is* good for is the one thing a contributor needs in
+//! their inner loop: the `!Send` probes below run there, under an ordinary
+//! `cargo test`, with no wasm toolchain at all. They run on `wasm32` too — see
+//! the twin below for why one target is not enough.
 
 #![doc(html_no_source)]
 // `clippy::todo` is denied workspace-wide. Scoped here rather than left open in
 // the workspace manifest so that it is visible in review and disappears with the
-// last `todo!()` rather than outliving it. Phase 9 removes both the bodies and
-// this line.
+// last `todo!()` rather than outliving it. What it covers now is the
+// `EventStore` bodies and nothing else: the bindings in `js` and `sql_storage`
+// have none left.
 #![allow(clippy::todo)]
 
 pub mod event_store;
 pub mod js;
 pub mod send_shape;
 pub mod sql_storage;
+
+// The same condition on the definition and on every caller. Gate only the
+// caller and the module survives where nothing calls it.
+// Left un-gated it is dead code on wasm, and `dead_code` is an error under the
+// gate's `-D warnings` — a failure that lands on the mandatory `wasm32 build of
+// the Cloudflare adapter` step, with a message about an unused function that
+// says nothing about targets.
+#[cfg(all(test, target_arch = "wasm32"))]
+mod test_object;
 
 pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStream};
 pub use js::{JsHandle, JsThrow, StringifiedThrow};
@@ -146,14 +178,15 @@ pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
 /// Lifted from `happenstance-testkit/tests/local_conformance.rs:266-289`, which
 /// is where the workspace first needed it.
 ///
-/// Gated off `wasm32` alongside its only caller. The probe reports a
-/// compile-time fact through a runtime `bool`, so it needs a test harness to
-/// report it, and `wasm32-unknown-unknown` has none without `wasm-bindgen-test`
-/// — which this crate does not depend on, because a dev-dependency that only
-/// exists to run four assertions is a dev-dependency `cargo deny` has to clear
-/// on every run. Left un-gated it is dead code on wasm, and `dead_code` is an
-/// error under the gate's `-D warnings`.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+/// **No longer gated off `wasm32`.** It used to be, on the argument that "a
+/// dev-dependency that only exists to run four assertions is a dev-dependency
+/// `cargo deny` has to clear on every run". That argument inverted the moment
+/// `worker` landed: `wasm-bindgen-test` is a target-scoped dev-dependency this
+/// crate needs anyway, and — decisively — the auto-trait leak these assertions
+/// exist to catch is written `#[cfg(not(target_feature = "atomics"))]`, so it
+/// can only be observed on the target it is compiled for. A host-only probe
+/// would have been a detector pointing away from the thing it detects.
+#[cfg(test)]
 mod not_send_probe {
     use core::marker::PhantomData;
 
@@ -177,8 +210,14 @@ mod not_send_probe {
     }
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
+/// The four assertions, written once and run on both targets.
+///
+/// A twin is only worth having if it fails for the same reasons, so the two
+/// test modules below are wrappers over these four functions rather than two
+/// copies of them. The names are the test names, so a failure names the same
+/// fact wherever it happens.
+#[cfg(test)]
+mod not_send_assertions {
     use core::marker::PhantomData;
 
     use super::not_send_probe::{NotSend as _, Probe};
@@ -207,8 +246,7 @@ mod tests {
     /// Without a positive control this whole module would also pass if the probe
     /// were simply broken and always answered `false` — which is exactly the
     /// vacuity ES-6 exists to remove.
-    #[test]
-    fn the_probe_is_not_vacuous() {
+    pub(crate) fn the_probe_is_not_vacuous() {
         assert_send!(
             happenstance_core::SequencePosition,
             "it is a NonZeroU64 and the probe is meant to say so"
@@ -217,11 +255,17 @@ mod tests {
             StringifiedThrow,
             "it holds a String, which is the entire point of the stringified shape"
         );
+        assert_send!(
+            worker::SqlStorage,
+            "worker writes `unsafe impl Send` on it, which is the hatch this crate must not inherit"
+        );
     }
 
-    #[test]
-    fn the_js_boundary_types_are_not_send() {
-        assert_not_send!(JsHandle, "it holds an Rc<str>, and Rc is what removes Send");
+    pub(crate) fn the_js_boundary_types_are_not_send() {
+        assert_not_send!(
+            JsHandle,
+            "it holds an Rc<JsValue>, and Rc is what removes Send from a value that has it"
+        );
         assert_not_send!(
             CloudflareEventStore,
             "a Durable Object is a single-threaded actor reached through a JS handle"
@@ -234,8 +278,7 @@ mod tests {
 
     /// ES-6, stated as an assertion. This is the only error type in the
     /// workspace that can fail a `Send + Sync` bound on `EventStore::Error`.
-    #[test]
-    fn the_error_type_is_not_send() {
+    pub(crate) fn the_error_type_is_not_send() {
         assert_not_send!(
             CloudflareEventStoreError,
             "ES-6 is undecidable against error types that are Send by construction"
@@ -244,8 +287,7 @@ mod tests {
 
     /// Finding 4: the derived flavour's obligations are all satisfied and the
     /// error is still `!Send`.
-    #[test]
-    fn the_send_flavour_does_not_imply_a_send_error() {
+    pub(crate) fn the_send_flavour_does_not_imply_a_send_error() {
         assert_send!(SendStoreWithLocalError, "the trait has a Send supertrait");
         assert_send!(
             SendStreamWithLocalError,
@@ -255,5 +297,66 @@ mod tests {
             <SendStoreWithLocalError as happenstance_core::SendEventStore>::Error,
             "and yet the error it yields cannot cross a thread"
         );
+    }
+}
+
+/// The host half, reachable by a plain `cargo test -p happenstance-cloudflare`
+/// with no wasm toolchain installed at all.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::not_send_assertions as probe;
+
+    #[test]
+    fn the_probe_is_not_vacuous() {
+        probe::the_probe_is_not_vacuous();
+    }
+
+    #[test]
+    fn the_js_boundary_types_are_not_send() {
+        probe::the_js_boundary_types_are_not_send();
+    }
+
+    #[test]
+    fn the_error_type_is_not_send() {
+        probe::the_error_type_is_not_send();
+    }
+
+    #[test]
+    fn the_send_flavour_does_not_imply_a_send_error() {
+        probe::the_send_flavour_does_not_imply_a_send_error();
+    }
+}
+
+/// The target half — the twin, and the reason a host-only probe was not enough.
+///
+/// `unsafe impl Send for JsValue` is written `#[cfg(not(target_feature =
+/// "atomics"))]`, so whether this crate's types are `Send` is a question with
+/// two answers until both targets are asked. The positive control travels with
+/// the twin: a control that only runs on the host proves nothing about a probe
+/// compiled for another target.
+#[cfg(all(test, target_arch = "wasm32"))]
+mod wasm_tests {
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::not_send_assertions as probe;
+
+    #[wasm_bindgen_test]
+    fn the_probe_is_not_vacuous() {
+        probe::the_probe_is_not_vacuous();
+    }
+
+    #[wasm_bindgen_test]
+    fn the_js_boundary_types_are_not_send() {
+        probe::the_js_boundary_types_are_not_send();
+    }
+
+    #[wasm_bindgen_test]
+    fn the_error_type_is_not_send() {
+        probe::the_error_type_is_not_send();
+    }
+
+    #[wasm_bindgen_test]
+    fn the_send_flavour_does_not_imply_a_send_error() {
+        probe::the_send_flavour_does_not_imply_a_send_error();
     }
 }

@@ -53,9 +53,39 @@ allow-wildcard-paths = true
 # into the graph — a manifest that names the crate itself, or any other crate
 # that pulls it in — is a new wrapper this list does not carry, and the check
 # fails until someone decides it should.
+#
+# That second route arrived at phase 9, and this is the decision the sentence
+# above asked for. `worker` 0.8.5 — the Cloudflare Workers SDK that
+# `happenstance-cloudflare` now binds — depends on `async-trait 0.1.91`
+# unconditionally, and `worker-macros` reaches it as well. The check failed, as
+# designed, and the finding is recorded in
+# `.bklg/from-contract-to-published-library/cloudflare-durable-object-store/worker-binding-layer/_ledger.md`
+# (AC-008) and is owed ratification in ADR-0023.
+#
+# What the two new wrappers permit, stated precisely so the exemption cannot be
+# read wider than it is:
+#
+#   * `worker` uses `#[async_trait]` for **its own** `DurableObject` trait. The
+#     attribute injects `+ Send` into the methods *it* desugars — that is a
+#     property of `worker`'s trait, not of happenstance's ports.
+#   * No happenstance port gains a bound from it. ADR-0001's derivation is
+#     untouched: `happenstance-core` still declares each port once without a
+#     `Send` bound and lets `trait_variant` derive the second flavour.
+#   * The substantive guard is not this line and never was — the file already
+#     says so. `crates/happenstance/tests/flavours.rs` instantiates every typed
+#     entry point against a genuinely `!Send` store, and phase 9 added a second:
+#     `happenstance-cloudflare`'s `!Send` probes now run on `wasm32` as well as
+#     on the host, so a `+ Send` reaching this adapter's error, store or stream
+#     fails a test on the target the bound would foreclose.
+#
+# A third route is still a failure. Anything other than these three names
+# reaching `async-trait` fails this check until someone decides it should not,
+# which is the sentence above, unchanged.
 deny = [
     { crate = "async-trait", wrappers = [
         "wasm-bindgen-test",
+        "worker",
+        "worker-macros",
     ], reason = "ADR-0001: injects `+ Send`, which forecloses wasm32" },
 ]
 

@@ -265,8 +265,27 @@ const REQUIRED: &[Step] = &[
         // Its own rustdoc claims it compiles for this target; until this step
         // existed nothing checked that, which is the decorative-gate shape this
         // file's module documentation warns about — asserted in prose, guarded by
-        // nothing. Phase 9 swaps the stand-in for the real `worker` bindings and
-        // this step is what will notice if that stops being true.
+        // nothing. Phase 9 swapped the stand-in for the real `worker` bindings
+        // and this step is what notices if that stops being true.
+        //
+        // `--tests`, and it is not tidiness. The adapter's `!Send` probes gained
+        // a `wasm32` twin when `worker` landed, because the auto-trait leak they
+        // exist to catch is written `#[cfg(not(target_feature = "atomics"))]` in
+        // `wasm-bindgen` and can therefore only be observed on the target it is
+        // compiled for. Without this flag `#[cfg(test)]` code is not compiled at
+        // all, and the twin would have been built by nothing in this gate on the
+        // day it merged — a decoration rather than a detector. `--tests` and not
+        // `--all-targets` for the reason the sibling step at `:219-244` gives:
+        // `--all-targets` reaches benchmark and example targets that have no
+        // wasm story.
+        //
+        // Compiling is not executing. The run is the `wasm32 run of the
+        // conformance rules` step below, which reaches this crate's harness once
+        // `every-rule-under-workerd` registers a `WASM_TARGETS` row for it.
+        //
+        // The **name** is unchanged, deliberately: `wasm_steps()` selects by
+        // name, and an index-selected step once pointed `cargo xtask wasm` at
+        // clippy while printing green.
         name: "wasm32 build of the Cloudflare adapter",
         program: "cargo",
         args: &[
@@ -274,6 +293,7 @@ const REQUIRED: &[Step] = &[
             "--locked",
             "-p",
             "happenstance-cloudflare",
+            "--tests",
             "--target",
             "wasm32-unknown-unknown",
         ],

@@ -2690,18 +2690,19 @@ twelve real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode failures
 (`crates/happenstance-sqlite/src/event_store.rs:857-950`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
-`SqlError::Thrown` carries a `JsHandle`, whose payload is an `Rc<str>`
-(`crates/happenstance-cloudflare/src/js.rs:45-58`).
+`SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
+(`crates/happenstance-cloudflare/src/js.rs:168-173`).
 
 **The `Rc` is the instrument, and it is not what this clause first assumed.** A
 real `JsValue` **is** `Send + Sync` on the target Workers actually builds:
 `wasm-bindgen` carries an `unsafe impl` of each under
 `cfg(not(target_feature = "atomics"))`, and Workers builds
 `wasm32-unknown-unknown` without atomics
-(`crates/happenstance-cloudflare/src/js.rs:29-39`). So `worker::Error` is not the
+(`crates/happenstance-cloudflare/src/js.rs:28-35`). So `worker::Error` is not the
 hazard — an instrument whose `!Send`-ness is one `cfg` away from evaporating
-cannot falsify a bound, which is why the stand-in holds an `Rc<str>` rather than
-mimicking the `unsafe impl`. Nor is that hatch available here: the workspace sets
+cannot falsify a bound, which is why phase 9's real bindings hold every JS-side
+value behind an `Rc` rather than bare, keeping the thrown value live and the
+auto trait off it. Nor is that hatch available here: the workspace sets
 `unsafe_code = "forbid"`, so an adapter can only ever *inherit* it by holding a
 `JsValue`, never write it.
 

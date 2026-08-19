@@ -212,7 +212,23 @@ are already modelled. What they spend is a `wasm-bindgen` licence graph on every
 crate stops building on the host, which removes the only `!Send` error type in
 the tree from the native test run — and with it the only instrument ES-6 has.
 
-**Evidence.** `crates/happenstance-cloudflare/Cargo.toml:19 (deliberately NOT a dependency)` ·
-`crates/happenstance-cloudflare/src/lib.rs:153 (exists to run four assertions)` ·
+**The trade this workspace later reversed, and what survives it.** Phase 9 added
+`worker` to `happenstance-cloudflare` — not to run four assertions, but because
+the crate stopped modelling a Durable Object and started binding one: the bodies
+execute real SQL, and an instrument that models the runtime cannot be falsified
+by the runtime. The rule is unchanged, and its *predictions* are worth reading
+against what happened. The licence graph did widen, by 40 crates, and
+`cargo deny check licenses` stayed green. The prediction that the crate would
+stop building on the host was wrong: `wasm-bindgen` externs link on the host as
+panicking stubs, so `cargo test -p happenstance-cloudflare` still runs the four
+assertions in a contributor's inner loop. And the one cost the rule did not name
+turned up anyway — `worker` depends on `async-trait`, which `deny.toml` bans, so
+the swap needed a decision rather than a dependency line. The note it replaced is
+kept in the manifest for the same reason this paragraph is kept here: the
+reasoning for the state you are leaving is what a reviewer checks the change
+against.
+
+**Evidence.** `crates/happenstance-cloudflare/Cargo.toml:22 (was deliberately absent)` ·
+`crates/happenstance-cloudflare/src/lib.rs:182 (exists to run four assertions)` ·
 `crates/happenstance-cloudflare/src/sql_storage.rs:4 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

@@ -106,6 +106,20 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 # something actually dials out.
 sqlx = { version = "0.8", default-features = false }
 thiserror = { version = "2", default-features = false }
+# The Cloudflare Workers SDK, and the reason `happenstance-cloudflare` stopped
+# being a stand-in. Taken at **minimum width**: `worker` declares no `default`
+# feature set at all, so `default-features = false` here is a statement rather
+# than a change, and none of `axum`, `d1`, `http`, `queue`, `timezone` or
+# `tokio-postgres` is named — every one of them is licence surface, advisory
+# surface and compile time for a crate that needs exactly two things from this
+# SDK: `worker::Error` and the Durable Object `SqlStorage` binding.
+#
+# Priced at merge rather than on a Tuesday cron (ADR-0029's discipline): it
+# declares `rust-version = "1.75"`, comfortably under this workspace's 1.97.1
+# floor, and `cargo deny check licenses advisories bans` is green against
+# `deny.toml`'s unmodified allowlist — `worker` itself is Apache-2.0. The
+# measurements are written up in the `worker-binding-layer` story ledger.
+worker = { version = "0.8.5", default-features = false }
 # No longer dev-only, and the move is the point: `happenstance-sqlite` names
 # `JoinError` and `JoinHandle` in its error enum and its read stream, and
 # `happenstance-postgres` reaches tokio through `sqlx`'s `runtime-tokio`. Left

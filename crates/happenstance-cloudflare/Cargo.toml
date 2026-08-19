@@ -15,13 +15,42 @@ publish = false
 happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 thiserror.workspace = true
+# NOTE, replacing the note that used to stand here rather than deleting it. The
+# reversed trade, both halves, because a reviewer checks the swap against the
+# reasoning for the state it replaced:
+#
+# *What the stand-in bought.* `worker` was deliberately absent, on the argument
+# that it drags a large `wasm-bindgen`/`js-sys`/`web-sys` surface and its own
+# licence graph through `cargo deny` on every run of the gate "for no
+# type-checking benefit": the shape the skeleton had to pin was `!Send`,
+# `!Sync`, a synchronous `exec` and a cursor that is not a snapshot, and
+# `js::JsHandle` plus `sql_storage` modelled exactly that and nothing else.
+#
+# *What reversing it costs, measured rather than feared.* The graph gains 40
+# crates (`http`, `matchit`, `strum`, `serde-wasm-bindgen`, `wasm-streams`,
+# `web-sys`, `url` and their leaves); `wasm-bindgen`, `js-sys` and
+# `wasm-bindgen-futures` were already there as `wasm-bindgen-test`'s transitive
+# dependencies, so those three are new *edges* to existing *nodes*.
+# `cargo deny check licenses advisories bans` is green against `deny.toml`'s
+# unmodified eight-licence allowlist, and `worker`'s declared
+# `rust-version = "1.75"` sits well under ADR-0029's 1.97.1 floor.
+#
+# *What it buys.* The argument that this dependency has no type-checking
+# benefit was true of a crate whose every body was `todo!()` and false of one
+# that talks to a Durable Object. `worker::Error` is the real thrown value ES-6
+# is a claim about, and `worker::SqlStorage` is the API the four modelled
+# properties were modelling. An instrument that models the runtime cannot be
+# falsified by the runtime.
+worker.workspace = true
 
-# NOTE: the `worker` crate is deliberately NOT a dependency. It drags a large
-# `wasm-bindgen`/`js-sys`/`web-sys` surface and its own licence graph through
-# `cargo deny` on every run of the gate, for no type-checking benefit: the shape
-# this skeleton has to pin is `!Send`, `!Sync`, synchronous `exec`, a cursor that
-# is not a snapshot. `js::JsHandle` and `sql_storage` model exactly that and
-# nothing else. Phase 9 swaps them for the real thing.
+# `wasm-bindgen-test` is target-scoped for the reason
+# `crates/happenstance-testkit/Cargo.toml`'s block gives: the runtime attribute
+# resolves in the caller's crate, never in the testkit, and a host `cargo test`
+# must not have to resolve it at all. It is what emits the `wasm32` twin of the
+# `!Send` probes — the detector has to live on the target where the auto-trait
+# leak it exists to catch can actually appear.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true
