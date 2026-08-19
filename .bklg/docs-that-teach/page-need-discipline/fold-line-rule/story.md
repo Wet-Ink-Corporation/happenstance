@@ -7,9 +7,9 @@ title: DT-8 resolved as a rule a reviewer can apply without the author
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:26:36.088Z
+updated: 2026-08-19T00:48:19.633Z
 links:
   pr: null
   commits:
     - dec82c7
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
