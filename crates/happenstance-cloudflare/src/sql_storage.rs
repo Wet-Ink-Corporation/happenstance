@@ -184,7 +184,11 @@ impl SqlError {
     }
 
     /// An adapter-side failure with no JS value behind it.
-    fn internal(message: &str) -> Self {
+    ///
+    /// `worker::Error::RustError` rather than an invented `JsValue`: there was no
+    /// throw, and manufacturing one would put a fabricated value where
+    /// [`JsThrow::thrown`](crate::js::JsThrow::thrown) promises a real one.
+    pub(crate) fn internal(message: &str) -> Self {
         Self::Thrown(JsThrow::from_error(worker::Error::RustError(
             message.to_owned(),
         )))

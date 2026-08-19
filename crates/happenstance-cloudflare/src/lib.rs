@@ -150,6 +150,7 @@
 
 pub mod event_store;
 pub mod js;
+mod query_sql;
 pub mod send_shape;
 pub mod sql_storage;
 
