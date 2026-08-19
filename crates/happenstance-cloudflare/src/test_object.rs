@@ -38,7 +38,7 @@
 //! where `require` is not in scope.
 
 use worker::js_sys;
-use worker::wasm_bindgen::JsValue;
+use worker::wasm_bindgen::{JsCast, JsValue};
 
 use crate::sql_storage::{SqlStorage, storage_from_durable_object_state};
 
@@ -106,9 +106,17 @@ const DURABLE_OBJECT_STATE: &str = r"
     };
   }
 
+  const issued = [];
+
   const sql = {
     get databaseSize() { return scalar('PRAGMA page_count') * scalar('PRAGMA page_size'); },
+    // Every statement the adapter issued, in order. Read by
+    // `statements()` below, which is how a test counts *how many times* the
+    // adapter asked a question rather than only what it got back — the
+    // difference between one ceiling per read and one per query item.
+    get issuedStatements() { return issued.slice(); },
     exec(query, ...bindings) {
+      issued.push(query);
       let statement;
       try {
         statement = db.prepare(query);
@@ -149,4 +157,30 @@ pub(crate) fn durable_object() -> SqlStorage {
     let state: JsValue = js_sys::eval(DURABLE_OBJECT_STATE)
         .expect("the Durable Object shim evaluates on a Node host with `node:sqlite`");
     storage_from_durable_object_state(state)
+}
+
+/// Every statement this object has been asked to run, oldest first.
+///
+/// Read off the shim's own log through the public `SqlStorage::handle`, so a
+/// test can assert on *how many times* the adapter asked a question — the
+/// difference between one ceiling capture per `read` and one per `QueryItem` is
+/// invisible in the rows that come back and obvious here.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims, which means the caller built
+/// the storage some other way.
+pub(crate) fn statements(sql: &SqlStorage) -> Vec<String> {
+    let log = sql
+        .handle()
+        .property("issuedStatements")
+        .expect("reading the log does not throw")
+        .expect("this module's shim always carries a log");
+    log.as_js()
+        .clone()
+        .dyn_into::<js_sys::Array>()
+        .expect("the log is an array")
+        .iter()
+        .filter_map(|value| value.as_string())
+        .collect()
 }

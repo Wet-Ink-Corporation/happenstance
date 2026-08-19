@@ -50,7 +50,7 @@ impl Future for AppendFutureShape {
     type Output = Result<SequencePosition, AppendError<CloudflareEventStoreError>>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        todo!("phase 9: this probe exists for its type, not its behaviour")
+        unreachable!("this probe exists for its type, not its behaviour")
     }
 }
 
@@ -150,21 +150,27 @@ pub mod send_flavour {
             _events: &[Event],
             _condition: Option<&AppendCondition>,
         ) -> Result<SequencePosition, AppendError<Self::Error>> {
-            todo!("phase 9: this probe exists for its type, not its behaviour")
+            unreachable!("this probe exists for its type, not its behaviour")
         }
 
         // `head` and `contains_event_id` are here because the trait requires
         // them, and they are worth having: both return `Self::Error` *bare*,
         // without `AppendError` wrapping it, so they widen finding 4 — the
         // derived flavour does not imply a `Send` error on any method, not just
-        // on the one whose error is wrapped. Bodies stay `todo!()` so the probe
-        // keeps proving a fact about types and nothing about behaviour.
+        // on the one whose error is wrapped.
+        //
+        // The bodies are `unreachable!` rather than `todo!`, and the difference
+        // is a claim rather than a spelling. `todo!` says "this is unfinished
+        // and someone will finish it"; nobody will, because this type is an
+        // instrument and calling it is a category error. Saying so also let the
+        // crate's scoped `#![allow(clippy::todo)]` leave with the last real
+        // `todo!()` instead of outliving it here.
         async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-            todo!("phase 9: this probe exists for its type, not its behaviour")
+            unreachable!("this probe exists for its type, not its behaviour")
         }
 
         async fn contains_event_id(&self, _id: EventId) -> Result<bool, Self::Error> {
-            todo!("phase 9: this probe exists for its type, not its behaviour")
+            unreachable!("this probe exists for its type, not its behaviour")
         }
     }
 }

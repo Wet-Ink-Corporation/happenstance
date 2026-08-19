@@ -2,10 +2,9 @@
 //!
 //! # Status
 //!
-//! The write path is real: `migrate`, `append`, `head` and `contains_event_id`
-//! execute SQL against a Durable Object's own storage. The read path — the
-//! private `render_read` and `decode_row` that [`SqlRowStream`] drives — is
-//! still `todo!()`.
+//! Complete. `migrate`, `append`, `head`, `contains_event_id` and `read` all
+//! execute SQL against a Durable Object's own storage, and no body in this
+//! crate is `todo!()` any more.
 //!
 //! # Schema
 //!
@@ -84,6 +83,7 @@
 //! guarantee the single-threaded turn already gives.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -91,11 +91,11 @@ use futures_core::Stream;
 use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, InvalidEventType,
     InvalidTag, Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
-    StoreLimit, Tags,
+    StoreLimit, Tag, Tags,
 };
 
 use crate::query_sql;
-use crate::sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
+use crate::sql_storage::{SqlError, SqlRow, SqlStorage, SqlValue};
 
 /// The schema, one statement per [`SqlStorage::exec`] call.
 ///
@@ -193,6 +193,8 @@ pub struct CloudflareEventStore {
     identity: RefCell<Option<StoreId>>,
     /// What this store refuses a batch against.
     ceilings: Ceilings,
+    /// How many rows one page of a read asks for.
+    page_size: usize,
 }
 
 // There is deliberately no `impl Default`. It used to exist, and it could only
@@ -214,6 +216,7 @@ impl CloudflareEventStore {
             sql,
             identity: RefCell::new(None),
             ceilings: Ceilings::UNMEASURED,
+            page_size: PAGE_SIZE,
         }
     }
 
@@ -226,6 +229,24 @@ impl CloudflareEventStore {
     #[must_use]
     pub(crate) fn with_ceilings(mut self, ceilings: Ceilings) -> Self {
         self.ceilings = ceilings;
+        self
+    }
+
+    /// The same store, paging its reads `page_size` rows at a time.
+    ///
+    /// Crate-private, and it exists so a test can make paging *happen* over a
+    /// handful of events instead of over [`PAGE_SIZE`] of them. The mechanism
+    /// under test is identical at any size — which is the property
+    /// `read_pages_at_the_shipped_page_size` checks by not using this seam.
+    ///
+    /// # Panics
+    ///
+    /// If `page_size` is zero: a page that asks for no rows never terminates.
+    #[cfg(all(test, target_arch = "wasm32"))]
+    #[must_use]
+    pub(crate) fn with_page_size(mut self, page_size: usize) -> Self {
+        assert!(page_size > 0, "a page must ask for at least one row");
+        self.page_size = page_size;
         self
     }
 
@@ -570,18 +591,21 @@ impl EventStore for CloudflareEventStore {
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
         // No `+ Send`, and no `async`. Both matter, and for once they are cheap
         // rather than merely required: `SqlStorage::exec` is synchronous, so
-        // there is nothing to await before the cursor exists, and the object is
+        // there is nothing to await before a cursor exists, and the object is
         // single-threaded, so there is nothing to send it to.
         //
-        // `exec` is still deferred to the first poll. ES-9 requires the stream
-        // to be lazy, and here that is not a nicety either: a cursor opened at
-        // `read` time and never polled would be a live cursor the object had to
-        // keep valid across every subsequent await.
+        // Nothing is executed here. ES-11's promise is that the events a read
+        // yields are the events that existed at **one moment no later than the
+        // first poll** — laziness is permitted and never required — so the
+        // sample point is where the ceiling is captured, which is the first
+        // poll. A caller may not depend on whether an event appended between
+        // this call and that poll appears.
         SqlRowStream {
             state: StreamState::Deferred {
                 sql: self.sql.clone(),
                 query: query.clone(),
                 options,
+                page_size: self.page_size,
             },
         }
     }
@@ -624,20 +648,11 @@ impl EventStore for CloudflareEventStore {
         // Workers SQL API is synchronous, so this adapter never holds the
         // storage handle across a suspension point and never needs the `Sync`
         // bound the provided body would have wanted.
-        let mut cursor = self
-            .sql
-            .exec("SELECT max(position) AS position FROM event", &[])?;
-        let Some(row) = cursor.next_row().transpose()? else {
-            return Ok(None);
-        };
-        match row.values() {
-            [SqlValue::Null] => Ok(None),
-            [value] => decode_position(value, "position").map(Some),
-            values => Err(CloudflareEventStoreError::RowShape {
-                expected: 1,
-                actual: values.len(),
-            }),
-        }
+        //
+        // The same statement the read path captures its ceiling with, and the
+        // same function: "the highest position this store holds" is one
+        // question, and two spellings of it would be two answers.
+        max_position(&self.sql)
     }
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
@@ -762,13 +777,68 @@ fn encode_tags(tags: &Tags) -> Vec<u8> {
     out
 }
 
+/// The columns a stored row is rebuilt from, in the order [`decode_row`] reads
+/// them.
+///
+/// Spelled once so the `SELECT` list and the decode cannot drift apart, which is
+/// the same one-codec discipline [`encode_tags`] and [`decode_tags`] follow one
+/// level down. A disagreement between this list and what `migrate` created is
+/// reported as [`CloudflareEventStoreError::RowShape`] rather than mis-decoded.
+const READ_COLUMNS: &str =
+    "position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at";
+
+/// How many rows one page of a read asks for.
+///
+/// The one number the ceiling-and-page mechanism costs, and it is a trade rather
+/// than a tuning knob: a Durable Object bills by rows read, so a small page
+/// multiplies round trips over a long replay and a large one holds more memory
+/// than a constrained runtime wants. 128 is the same order as the contract's own
+/// `MIN_SUPPORTED_EVENTS_PER_BATCH`, so a replay of a batch-sized consistency
+/// boundary is one page. `measured-store-limits` is where a number measured
+/// against the real runtime would replace it.
+const PAGE_SIZE: usize = 128;
+
+/// Reads the canonical tag column back.
+///
+/// The decode half lives beside its encode rather than in the read path,
+/// because a decode that disagrees with its encode by one byte produces a store
+/// that passes `append_preserves_event_payload` and fails
+/// `append_preserves_event_type_and_tags_byte_for_byte`, and the diagnosis costs
+/// a day. `Tags` is canonically sorted, so the round trip is order-preserving
+/// rather than merely set-preserving.
+fn decode_tags(raw: &[u8]) -> Result<Tags, CloudflareEventStoreError> {
+    let text = core::str::from_utf8(raw).map_err(|_| CloudflareEventStoreError::CorruptTags)?;
+    text.split(UNIT as char)
+        .filter(|part| !part.is_empty())
+        .map(|part| Tag::new(part).map_err(CloudflareEventStoreError::StoredTag))
+        .collect::<Result<Vec<Tag>, _>>()
+        .map(|tags| tags.into_iter().collect())
+}
+
 /// The stream [`CloudflareEventStore::read`] returns.
 ///
-/// A real cursor-backed stream, not a placeholder: it holds the storage handle
-/// until the first poll, then the live [`SqlCursor`], and it is `!Send` because
-/// both of those are. Nothing about it is `Pin`-sensitive — the state machine is
-/// written by hand precisely so that it is not a coroutine and its `Send`-ness
-/// is decided by its fields rather than by inference.
+/// **ADR-0011's ceiling-and-page, and the state machine is hand-written on
+/// purpose.** A generator (`async_stream::stream!`) is the natural spelling of a
+/// chunked-cursor read, and ADR-0011 deliberately declined an `Unpin` bound so
+/// one would stay legal — but a coroutine's auto traits are *inferred*, and this
+/// crate's whole value is that its `Send`-ness is decided by its **fields**.
+/// The probe at the crate root asserts `SqlRowStream: !Send`, and it means
+/// something only while that remains a property of what this type holds.
+///
+/// # Why no cursor is held between polls
+///
+/// Cloudflare documents that a `SqlStorageCursor` held across an `await` "does
+/// not provide a stable snapshot of query results". The caller's suspension
+/// points are *between polls*, which is exactly where a cursor would have to
+/// span. So each page is `exec`-ed, drained into memory immediately, and yielded
+/// from there; the next page is a fresh statement bounded by the ceiling and by
+/// the last position yielded. Nothing is held across a poll boundary, which is
+/// also what stops a live replay from wedging an object that is single-threaded
+/// but re-entrant.
+///
+/// The predecessor of this design opened one cursor at the first poll and
+/// checked afterwards whether the storage had moved under it. That detected a
+/// torn read rather than preventing one, and it is gone.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct SqlRowStream {
@@ -778,7 +848,9 @@ pub struct SqlRowStream {
 /// Where the stream has got to.
 #[derive(Debug)]
 enum StreamState {
-    /// `exec` has not run yet. ES-9's laziness lives here.
+    /// Nothing has been executed. ES-11 permits laziness and never requires it;
+    /// deferring here is what makes "no later than the first poll" the sample
+    /// point rather than the call.
     Deferred {
         /// The storage to execute against.
         sql: SqlStorage,
@@ -787,12 +859,37 @@ enum StreamState {
         query: Query,
         /// `Copy`, so nothing is cloned.
         options: ReadOptions,
+        /// How many rows one page asks for.
+        page_size: usize,
     },
-    /// A cursor is open.
-    Draining {
-        /// The live cursor.
-        cursor: SqlCursor,
+    /// The sample is fixed and a page is in hand.
+    Paging {
+        /// The storage to execute against.
+        sql: SqlStorage,
+        /// The caller's query.
+        query: Query,
+        /// The caller's options.
+        options: ReadOptions,
+        /// The position ceiling captured at the first poll. **Every** statement
+        /// after the first is bounded by it, which is what makes one `read` one
+        /// sample — and, because it is one ceiling rather than one per item,
+        /// what makes every item of one query share that sample.
+        ceiling: SequencePosition,
+        /// The last position yielded, which is where the next page resumes.
+        cursor: Option<SequencePosition>,
+        /// The rows of the current page, oldest first in the caller's own
+        /// direction. Bounded by `page_size`, so the working set is one page
+        /// however large the result is.
+        page: VecDeque<SqlRow>,
+        /// Whether the last page came back full. A short page is the end of the
+        /// result set and saves a statement that would return nothing.
+        page_was_full: bool,
+        /// How many rows one page asks for.
+        page_size: usize,
         /// What is left of [`ReadOptions::limit`], or `None` when unlimited.
+        /// Spent on **matched** rows only: the page statement carries the
+        /// caller's predicate, so a row that reaches this counter is a row the
+        /// caller asked for.
         remaining: Option<usize>,
     },
     /// Terminal.
@@ -811,43 +908,98 @@ impl Stream for SqlRowStream {
                     sql,
                     query,
                     options,
+                    page_size,
                 } => {
-                    let (statement, bindings) = render_read(&query, options);
-                    match sql.exec(&statement, &bindings) {
-                        Ok(cursor) => {
-                            this.state = StreamState::Draining {
-                                cursor,
+                    // `limit(0)` reads nothing, deliberately — the contract
+                    // diverges from the DCB reference implementation's falsy
+                    // zero here — so there is nothing to sample either.
+                    if options.limit == Some(0) {
+                        return Poll::Ready(None);
+                    }
+                    // The ceiling. An empty store has none, and that is not an
+                    // error: it is the state every adapter is in on its first
+                    // run, and arithmetic on it is the registered failure mode
+                    // of this very mechanism.
+                    match max_position(&sql) {
+                        Err(err) => return Poll::Ready(Some(Err(err))),
+                        Ok(None) => return Poll::Ready(None),
+                        Ok(Some(ceiling)) => {
+                            this.state = StreamState::Paging {
+                                sql,
+                                query,
+                                options,
+                                ceiling,
+                                cursor: None,
+                                page: VecDeque::new(),
+                                page_was_full: true,
+                                page_size,
                                 remaining: options.limit,
                             };
                         }
-                        Err(err) => return Poll::Ready(Some(Err(err.into()))),
                     }
                 }
 
-                StreamState::Draining {
-                    mut cursor,
+                StreamState::Paging {
+                    sql,
+                    query,
+                    options,
+                    ceiling,
+                    cursor,
+                    mut page,
+                    page_was_full,
+                    page_size,
                     remaining,
                 } => {
-                    if remaining == Some(0) {
+                    if let Some(row) = page.pop_front() {
+                        let decoded = match decode_row(&row) {
+                            // A row this store cannot represent ends the
+                            // replay rather than being skipped: the position is
+                            // what the next page resumes from, so a row whose
+                            // position did not decode leaves nowhere to resume.
+                            // The error is an item on the stream, never a panic
+                            // and never a narrowed value.
+                            Err(err) => return Poll::Ready(Some(Err(err))),
+                            Ok(decoded) => decoded,
+                        };
+                        this.state = StreamState::Paging {
+                            sql,
+                            query,
+                            options,
+                            ceiling,
+                            cursor: Some(decoded.position),
+                            page,
+                            page_was_full,
+                            page_size,
+                            remaining: remaining.map(|left| left.saturating_sub(1)),
+                        };
+                        return Poll::Ready(Some(Ok(decoded)));
+                    }
+
+                    if !page_was_full || remaining == Some(0) {
                         return Poll::Ready(None);
                     }
 
-                    if let Err(err) = check_cursor_still_valid(&cursor) {
-                        return Poll::Ready(Some(Err(err)));
+                    let want = remaining.map_or(page_size, |left| left.min(page_size));
+                    let (statement, bindings) = render_read(&query, options, ceiling, cursor, want);
+                    let rows = match drain_page(&sql, &statement, &bindings) {
+                        Err(err) => return Poll::Ready(Some(Err(err))),
+                        Ok(rows) => rows,
+                    };
+                    let filled = rows.len() >= want;
+                    if rows.is_empty() {
+                        return Poll::Ready(None);
                     }
-
-                    match cursor.next_row() {
-                        None => return Poll::Ready(None),
-                        Some(Err(err)) => return Poll::Ready(Some(Err(err.into()))),
-                        Some(Ok(row)) => {
-                            let decoded = decode_row(&row);
-                            this.state = StreamState::Draining {
-                                cursor,
-                                remaining: remaining.map(|left| left.saturating_sub(1)),
-                            };
-                            return Poll::Ready(Some(decoded));
-                        }
-                    }
+                    this.state = StreamState::Paging {
+                        sql,
+                        query,
+                        options,
+                        ceiling,
+                        cursor,
+                        page: rows,
+                        page_was_full: filled,
+                        page_size,
+                        remaining,
+                    };
                 }
 
                 StreamState::Done => return Poll::Ready(None),
@@ -856,28 +1008,197 @@ impl Stream for SqlRowStream {
     }
 }
 
-/// Rejects a cursor whose storage moved under it.
+/// The highest position the store holds, or `None` on an empty store.
 ///
-/// Cloudflare documents that a `SqlStorageCursor` held across an `await` "does
-/// not provide a stable snapshot of query results". A lazy stream is exactly
-/// that, so the check belongs on every poll rather than once at open. It is the
-/// clearest example in this crate of a **capability** limit rather than a type
-/// error: the port's signature is satisfied either way, and only a conformance
-/// rule can tell the difference.
-fn check_cursor_still_valid(cursor: &SqlCursor) -> Result<(), CloudflareEventStoreError> {
-    cursor
-        .still_valid()
-        .map_err(CloudflareEventStoreError::from)
+/// The ceiling capture and `head`'s body are the same question, so they are the
+/// same statement. A failure here fails the read **loudly** rather than falling
+/// back to unbounded paging: a read that quietly drops its ceiling is the wrong
+/// implementation ES-11 and ES-12 exist to reject, and it would pass every other
+/// assertion this adapter carries.
+fn max_position(sql: &SqlStorage) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
+    let mut cursor = sql.exec("SELECT max(position) AS position FROM event", &[])?;
+    let Some(row) = cursor.next_row().transpose()? else {
+        return Ok(None);
+    };
+    match row.values() {
+        [SqlValue::Null] => Ok(None),
+        [value] => decode_position(value, "position").map(Some),
+        values => Err(CloudflareEventStoreError::RowShape {
+            expected: 1,
+            actual: values.len(),
+        }),
+    }
 }
 
-/// Renders a [`Query`] and [`ReadOptions`] into one statement and its bindings.
-fn render_read(_query: &Query, _options: ReadOptions) -> (String, Vec<SqlValue>) {
-    todo!("durable-object-read-path: ADR-0011's ceiling-and-page render")
+/// Runs one page statement and drains its cursor completely.
+///
+/// Draining before returning is the whole point: the cursor is dead before this
+/// function returns, so nothing of it can be held across the caller's next
+/// suspension point.
+fn drain_page(
+    sql: &SqlStorage,
+    statement: &str,
+    bindings: &[SqlValue],
+) -> Result<VecDeque<SqlRow>, CloudflareEventStoreError> {
+    let mut cursor = sql.exec(statement, bindings)?;
+    let mut rows = VecDeque::new();
+    while let Some(row) = cursor.next_row() {
+        rows.push_back(row?);
+    }
+    Ok(rows)
+}
+
+/// Renders one page of a read: the caller's query and options, the sample
+/// ceiling, and where the previous page stopped.
+///
+/// Four bounds compose into one `WHERE`, and every one of them is `AND`-ed
+/// rather than chosen between:
+///
+/// * **the ceiling** — `position <= H` in *both* directions. The events a
+///   ceiling excludes are the ones appended after the sample, and those are
+///   above `H` whichever way the read walks; a `>= H` bound under `backwards`
+///   would exclude the log instead of the future.
+/// * **`from`** — a threshold, not a seek. Forwards it is a lower bound,
+///   backwards an upper one; a position nothing occupies simply yields the next
+///   match past it.
+/// * **`to`** — inclusive, and the caller-side spelling of a window. It
+///   composes with the ceiling rather than replacing it, so the effective bound
+///   is the tighter of the two by construction.
+/// * **the page cursor** — strict, so the row already yielded is not yielded
+///   twice.
+///
+/// `position IN (…)` rather than a join is what makes "no event is yielded
+/// twice across items" true by construction: the query's arms are `UNION`-ed and
+/// `IN` is a membership test, so an event matching three items is one row.
+fn render_read(
+    query: &Query,
+    options: ReadOptions,
+    ceiling: SequencePosition,
+    cursor: Option<SequencePosition>,
+    limit: usize,
+) -> (String, Vec<SqlValue>) {
+    let mut bindings = Vec::new();
+    let matched = query_sql::positions_matching(query, &mut bindings);
+
+    let mut sql = format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched})");
+
+    sql.push_str(" AND position <= ?");
+    bindings.push(SqlValue::Integer(position_as_i64(ceiling)));
+
+    if let Some(from) = options.from {
+        sql.push_str(if options.backwards {
+            " AND position <= ?"
+        } else {
+            " AND position >= ?"
+        });
+        bindings.push(SqlValue::Integer(position_as_i64(from)));
+    }
+    if let Some(to) = options.to {
+        sql.push_str(if options.backwards {
+            " AND position >= ?"
+        } else {
+            " AND position <= ?"
+        });
+        bindings.push(SqlValue::Integer(position_as_i64(to)));
+    }
+    if let Some(cursor) = cursor {
+        sql.push_str(if options.backwards {
+            " AND position < ?"
+        } else {
+            " AND position > ?"
+        });
+        bindings.push(SqlValue::Integer(position_as_i64(cursor)));
+    }
+
+    sql.push_str(if options.backwards {
+        " ORDER BY position DESC LIMIT ?"
+    } else {
+        " ORDER BY position ASC LIMIT ?"
+    });
+    bindings.push(SqlValue::Integer(i64::try_from(limit).unwrap_or(i64::MAX)));
+
+    (sql, bindings)
 }
 
 /// Decodes one raw row into a [`SequencedEvent`].
-fn decode_row(_row: &SqlRow) -> Result<SequencedEvent, CloudflareEventStoreError> {
-    todo!("durable-object-read-path: decode position, event_type, data, metadata, tags")
+///
+/// Three things here are decisions rather than plumbing:
+///
+/// * **`metadata` keeps `NULL` and an empty blob apart.** They are two values
+///   the contract keeps apart, and coercing one into the other loses a state a
+///   caller can observe.
+/// * **The [`EventId`] is reconstructed from the *stored* origin pair**, never
+///   from this object's own incarnation plus the row's own position. Those agree
+///   for a locally appended event and disagree for every ingested one, so the
+///   shortcut is correct exactly until replication exists.
+/// * **`recorded_at` is returned as stored.** A read that stamps `now()` is a
+///   store that loses the time it accepted the event at.
+fn decode_row(row: &SqlRow) -> Result<SequencedEvent, CloudflareEventStoreError> {
+    let values = row.values();
+    let [
+        position,
+        event_type,
+        data,
+        metadata,
+        tags,
+        origin_store,
+        origin_position,
+        recorded_at,
+    ] = values
+    else {
+        return Err(CloudflareEventStoreError::RowShape {
+            expected: 8,
+            actual: values.len(),
+        });
+    };
+
+    let position = decode_position(position, "position")?;
+
+    let SqlValue::Text(event_type) = event_type else {
+        return Err(CloudflareEventStoreError::ColumnType {
+            column: "event_type",
+        });
+    };
+    let SqlValue::Blob(data) = data else {
+        return Err(CloudflareEventStoreError::ColumnType { column: "data" });
+    };
+    let SqlValue::Blob(tags) = tags else {
+        return Err(CloudflareEventStoreError::ColumnType { column: "tags" });
+    };
+    let SqlValue::Integer(recorded_at) = recorded_at else {
+        return Err(CloudflareEventStoreError::ColumnType {
+            column: "recorded_at",
+        });
+    };
+
+    let mut event = Event::new(event_type.clone(), data.clone())?.with_tags(decode_tags(tags)?);
+    match metadata {
+        SqlValue::Null => {}
+        SqlValue::Blob(metadata) => event = event.with_metadata(metadata.clone()),
+        _ => {
+            return Err(CloudflareEventStoreError::ColumnType { column: "metadata" });
+        }
+    }
+
+    let SqlValue::Blob(origin_store) = origin_store else {
+        return Err(CloudflareEventStoreError::UnstampedEvent { position });
+    };
+    let origin_store = <[u8; 16]>::try_from(origin_store.as_slice())
+        .map(StoreId::from_bytes)
+        .map_err(|_| CloudflareEventStoreError::ColumnType {
+            column: "origin_store",
+        })?;
+    if matches!(origin_position, SqlValue::Null) {
+        return Err(CloudflareEventStoreError::UnstampedEvent { position });
+    }
+    let origin_position = decode_position(origin_position, "origin_position")?;
+
+    Ok(SequencedEvent::new(
+        position,
+        EventId::new(origin_store, origin_position),
+        RecordedAt::from_millis(*recorded_at),
+        event,
+    ))
 }
 
 #[cfg(all(test, target_arch = "wasm32"))]
@@ -1496,5 +1817,987 @@ mod write_path_tests {
             at_ceiling.ok().map(SequencePosition::get),
             u64::try_from(super::MAX_SAFE_POSITION).ok()
         );
+    }
+}
+
+/// ADR-0011's ceiling-and-page, observed the way a caller observes it.
+///
+/// Every test here reaches the store through the one construction root
+/// `CloudflareEventStore::new(sql)` and reads through `EventStore::read`, and
+/// every assertion about position compares against positions the store actually
+/// assigned — never a literal, because the specification permits gaps and a
+/// conformant adapter may leave them.
+#[cfg(all(test, target_arch = "wasm32"))]
+mod read_path_tests {
+    use core::future::poll_fn;
+    use core::pin::{Pin, pin};
+
+    use futures_core::Stream;
+    use happenstance_core::{
+        Event, EventId, EventStore, Query, QueryItem, ReadOptions, RecordedAt, SequencePosition,
+        SequencedEvent, StoreId, Tag, Tags,
+    };
+    use wasm_bindgen_test::wasm_bindgen_test;
+    use worker::wasm_bindgen::JsValue;
+
+    use super::{CloudflareEventStore, CloudflareEventStoreError, PAGE_SIZE};
+    use crate::js::JsHandle;
+    use crate::sql_storage::{SqlRow, SqlStorage, SqlValue};
+    use crate::test_object::{durable_object, statements};
+
+    /// One fresh Durable Object, migrated, reached through the one constructor —
+    /// the same shape the write path's tests use, because a read reachable only
+    /// through a second construction path would be unmounted.
+    fn open() -> (SqlStorage, CloudflareEventStore) {
+        let sql = durable_object();
+        let store = CloudflareEventStore::new(sql.clone());
+        store.migrate().expect("the schema applies");
+        (sql, store)
+    }
+
+    /// The same object, paging a handful of rows at a time so that paging
+    /// *happens* over a test-sized log. The mechanism is identical at any page
+    /// size, which is what `read_pages_at_the_shipped_page_size` checks by not
+    /// using this seam.
+    fn open_paged(page_size: usize) -> (SqlStorage, CloudflareEventStore) {
+        let sql = durable_object();
+        let store = CloudflareEventStore::new(sql.clone()).with_page_size(page_size);
+        store.migrate().expect("the schema applies");
+        (sql, store)
+    }
+
+    fn event(event_type: &str) -> Event {
+        Event::new(event_type.to_owned(), &b"payload"[..]).expect("a valid event type")
+    }
+
+    fn tagged(event_type: &str, tags: &[&str]) -> Event {
+        event(event_type).with_tags(tag_set(tags))
+    }
+
+    fn tag_set(tags: &[&str]) -> Tags {
+        tags.iter()
+            .map(|tag| Tag::new((*tag).to_owned()).expect("a valid tag"))
+            .collect()
+    }
+
+    fn of_types(types: &[&str]) -> QueryItem {
+        QueryItem::of_types(types.iter().map(|value| (*value).to_owned()))
+            .expect("a valid query item")
+    }
+
+    /// Advances a pinned stream by one item.
+    ///
+    /// Hand-rolled because this crate carries no `futures-util`, and useful for
+    /// that reason: `read` returns `impl Stream` at the top level, so a caller
+    /// reaches the next item through `poll_next` and nothing else. It is also
+    /// the shape the interleaving tests need — they suspend *between* polls,
+    /// which is exactly where a held cursor would have to span.
+    async fn step<S: Stream + ?Sized>(stream: &mut Pin<&mut S>) -> Option<S::Item> {
+        poll_fn(|cx| stream.as_mut().poll_next(cx)).await
+    }
+
+    /// Drains a stream to exhaustion.
+    async fn drain<S: Stream>(stream: S) -> Vec<S::Item> {
+        let mut stream = pin!(stream);
+        let mut out = Vec::new();
+        while let Some(item) = step(&mut stream).await {
+            out.push(item);
+        }
+        out
+    }
+
+    /// The positions a read yields, in the order it yielded them.
+    async fn read_positions(
+        store: &CloudflareEventStore,
+        query: &Query,
+        options: ReadOptions,
+    ) -> Vec<SequencePosition> {
+        drain(store.read(query, options))
+            .await
+            .into_iter()
+            .map(|item| item.expect("every row decodes").position)
+            .collect()
+    }
+
+    /// The same replay, reached through **generic code binding the bare
+    /// [`EventStore`]** — the weaker of the two flavours, which accepts both.
+    ///
+    /// Its value is entirely at compile time: `read` is called *without*
+    /// `.await` and the stream it returns is pinned at the top level. An
+    /// `async fn read` refactor, or a `+ Send` appearing on the stream, stops
+    /// this function compiling.
+    async fn replay_through_the_port<S: EventStore>(
+        store: &S,
+        query: &Query,
+        options: ReadOptions,
+    ) -> Vec<SequencePosition> {
+        let stream = store.read(query, options);
+        let mut stream = pin!(stream);
+        let mut out = Vec::new();
+        while let Some(item) = step(&mut stream).await {
+            let Ok(event) = item else {
+                panic!("every row decodes");
+            };
+            out.push(event.position);
+        }
+        out
+    }
+
+    /// Appends `types` one at a time, returning the position each landed at.
+    async fn append_each(store: &CloudflareEventStore, types: &[&str]) -> Vec<SequencePosition> {
+        let mut out = Vec::new();
+        for event_type in types {
+            out.push(
+                store
+                    .append(&[event(event_type)], None)
+                    .await
+                    .expect("the append lands"),
+            );
+        }
+        out
+    }
+
+    fn event_types(items: &[Result<SequencedEvent, CloudflareEventStoreError>]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| {
+                item.as_ref()
+                    .expect("every row decodes")
+                    .event_type()
+                    .as_str()
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    fn positions_of(
+        items: &[Result<SequencedEvent, CloudflareEventStoreError>],
+    ) -> Vec<SequencePosition> {
+        items
+            .iter()
+            .map(|item| item.as_ref().expect("every row decodes").position)
+            .collect()
+    }
+
+    /// A row built by hand, for the decoder's own boundary cases.
+    fn row(values: Vec<SqlValue>) -> SqlRow {
+        SqlRow::new(JsHandle::new(JsValue::NULL), values)
+    }
+
+    /// A well-formed stored row, which each decode test breaks in exactly one
+    /// place — so a failure names the break rather than the scaffolding.
+    fn well_formed_row() -> Vec<SqlValue> {
+        vec![
+            SqlValue::Integer(1),
+            SqlValue::Text("SeatMapPublished".to_owned()),
+            SqlValue::Blob(b"payload".to_vec()),
+            SqlValue::Null,
+            SqlValue::Blob(vec![super::UNIT]),
+            SqlValue::Blob(vec![0_u8; 16]),
+            SqlValue::Integer(1),
+            SqlValue::Integer(0),
+        ]
+    }
+
+    /// AC-001. The backbone activity's second half: store **and replay** events
+    /// inside a Durable Object. Every appended event comes back, in ascending
+    /// position order, at the positions the store itself assigned.
+    #[wasm_bindgen_test]
+    async fn read_all_replays_every_appended_event() {
+        let (_sql, store) = open();
+        let assigned = append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        let replayed = drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        assert_eq!(
+            positions_of(&replayed),
+            assigned,
+            "a replay yields exactly the positions the store assigned, in order"
+        );
+        assert_eq!(event_types(&replayed), ["One", "Two", "Three", "Four"]);
+    }
+
+    /// AC-001. Everything a replayed event carries survives the round trip:
+    /// type, opaque payload, tags in canonical order, and the identity the store
+    /// stamped.
+    #[wasm_bindgen_test]
+    async fn a_replayed_event_carries_everything_it_was_appended_with() {
+        let (_sql, store) = open();
+        let written =
+            tagged("SeatReserved", &["seat:A1", "order:7"]).with_metadata(&b"trace-id"[..]);
+        let position = store
+            .append(core::slice::from_ref(&written), None)
+            .await
+            .expect("the append lands");
+        let store_id = store.store_id().expect("the incarnation is readable");
+
+        let replayed = drain(store.read(&Query::all(), ReadOptions::new())).await;
+        let [Ok(only)] = replayed.as_slice() else {
+            panic!("exactly one event was appended: {replayed:?}");
+        };
+
+        assert_eq!(only.position, position);
+        assert_eq!(only.id, EventId::new(store_id, position));
+        assert_eq!(only.event.event_type(), written.event_type());
+        assert_eq!(only.event.data(), written.data());
+        assert_eq!(only.event.tags(), written.tags());
+        assert_eq!(only.event.metadata(), written.metadata());
+    }
+
+    /// AC-001. A sibling handle built the same way over the same object replays
+    /// the same log — "one instance, many handles", from the read side.
+    #[wasm_bindgen_test]
+    async fn read_reaches_the_store_only_through_new() {
+        let (sql, store) = open();
+        let assigned = append_each(&store, &["One", "Two"]).await;
+
+        let second = CloudflareEventStore::new(sql.clone());
+        assert_eq!(
+            read_positions(&second, &Query::all(), ReadOptions::new()).await,
+            assigned,
+            "a sibling handle over the same object sees the same log"
+        );
+    }
+
+    /// AC-001. Paging at the shipped [`PAGE_SIZE`] rather than through the test
+    /// seam, so the mechanism is exercised at the size that actually ships.
+    #[wasm_bindgen_test]
+    async fn read_pages_at_the_shipped_page_size() {
+        let (_sql, store) = open();
+        let mut assigned = Vec::new();
+        for index in 0..=PAGE_SIZE {
+            assigned.push(
+                store
+                    .append(&[event(&format!("Event{index}"))], None)
+                    .await
+                    .expect("the append lands"),
+            );
+        }
+
+        assert_eq!(
+            read_positions(&store, &Query::all(), ReadOptions::new()).await,
+            assigned,
+            "a log longer than one page replays completely"
+        );
+    }
+
+    /// AC-002. `read` is reachable from generic code binding the **bare**
+    /// `EventStore`, and the stream comes back at the top level rather than
+    /// inside a future. The proof is that [`replay_through_the_port`] compiles.
+    #[wasm_bindgen_test]
+    async fn read_is_usable_from_generic_code_binding_the_bare_port() {
+        let (_sql, store) = open();
+        let assigned = append_each(&store, &["One", "Two", "Three"]).await;
+
+        assert_eq!(
+            replay_through_the_port(&store, &Query::all(), ReadOptions::new()).await,
+            assigned
+        );
+    }
+
+    /// AC-003. The ceiling as a caller observes it: drain part of a paged read,
+    /// append, drain the rest — and the late event is absent. A paging read that
+    /// re-`exec`s *without* a ceiling picks it up on the next page, which is the
+    /// wrong implementation this rejects.
+    #[wasm_bindgen_test]
+    async fn read_is_stable_under_an_interleaved_append() {
+        let (_sql, store) = open_paged(2);
+        append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        // Bound to a local rather than written inline: `read` returns
+        // `impl Stream` capturing the query's lifetime, so a temporary would be
+        // dropped while the stream still holds it.
+        let all = Query::all();
+        let stream = store.read(&all, ReadOptions::new());
+        let mut stream = pin!(stream);
+        let mut seen = vec![
+            step(&mut stream).await.expect("a first event"),
+            step(&mut stream).await.expect("a second event"),
+        ];
+
+        let late = store
+            .append(&[event("AppendedMidDrain")], None)
+            .await
+            .expect("an append during a live read lands");
+
+        while let Some(item) = step(&mut stream).await {
+            seen.push(item);
+        }
+
+        assert_eq!(
+            event_types(&seen),
+            ["One", "Two", "Three", "Four"],
+            "a read is one sample: nothing appended mid-drain appears part-way through"
+        );
+        assert!(
+            !positions_of(&seen).contains(&late),
+            "and the late event is absent by position too"
+        );
+    }
+
+    /// AC-003. The sample point is *the first poll*, not the call. An event
+    /// appended between the two may appear; everything appended after the first
+    /// poll may not.
+    #[wasm_bindgen_test]
+    async fn the_ceiling_is_captured_no_later_than_the_first_poll() {
+        let (_sql, store) = open_paged(1);
+        append_each(&store, &["Before"]).await;
+
+        let all = Query::all();
+        let stream = store.read(&all, ReadOptions::new());
+        let mut stream = pin!(stream);
+
+        // Between the call and the first poll. A caller may not depend on
+        // whether this one appears, so nothing is asserted about it.
+        store
+            .append(&[event("BetweenCallAndPoll")], None)
+            .await
+            .expect("the append lands");
+
+        let first = step(&mut stream).await.expect("a first event");
+        assert!(first.is_ok(), "the first poll yields an event: {first:?}");
+
+        // After the sample. This one may not appear.
+        let after = store
+            .append(&[event("AfterTheFirstPoll")], None)
+            .await
+            .expect("the append lands");
+
+        let mut seen = vec![first];
+        while let Some(item) = step(&mut stream).await {
+            seen.push(item);
+        }
+
+        assert!(
+            !positions_of(&seen).contains(&after),
+            "nothing appended after the first poll may appear: {:?}",
+            event_types(&seen)
+        );
+    }
+
+    /// AC-003. The ceiling is not decoration: **every** page statement carries
+    /// it, so a page issued after the caller suspended cannot reach past the
+    /// sample. This is the committed detector for a paging read that drops it.
+    #[wasm_bindgen_test]
+    async fn every_page_statement_carries_the_ceiling_bound() {
+        let (sql, store) = open_paged(1);
+        append_each(&store, &["One", "Two", "Three"]).await;
+
+        drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        let pages: Vec<String> = statements(&sql)
+            .into_iter()
+            .filter(|statement| statement.contains("FROM event WHERE position IN ("))
+            .collect();
+        assert!(
+            pages.len() > 1,
+            "the read must have paged for this assertion to mean anything: {pages:?}"
+        );
+        for page in &pages {
+            assert!(
+                page.contains("AND position <= ?"),
+                "every page statement is bounded by the ceiling: {page}"
+            );
+        }
+    }
+
+    /// AC-004. A multi-item query is served by one ceiling, so an event matching
+    /// an early item that lands between two statements is excluded by the same
+    /// predicate that bounds every other statement.
+    #[wasm_bindgen_test]
+    async fn all_items_of_one_query_share_one_ceiling() {
+        let (_sql, store) = open_paged(1);
+        append_each(&store, &["Alpha", "Beta", "Alpha", "Beta"]).await;
+        let query =
+            Query::from_items([of_types(&["Alpha"]), of_types(&["Beta"])]).expect("a valid query");
+
+        let stream = store.read(&query, ReadOptions::new());
+        let mut stream = pin!(stream);
+        let mut seen = vec![step(&mut stream).await.expect("a first event")];
+
+        let late_alpha = store
+            .append(&[event("Alpha")], None)
+            .await
+            .expect("the append lands");
+        let late_beta = store
+            .append(&[event("Beta")], None)
+            .await
+            .expect("the append lands");
+
+        while let Some(item) = step(&mut stream).await {
+            seen.push(item);
+        }
+
+        let positions = positions_of(&seen);
+        assert_eq!(
+            positions.len(),
+            4,
+            "the four events that existed at the sample, and only those: {:?}",
+            event_types(&seen)
+        );
+        assert!(
+            !positions.contains(&late_alpha) && !positions.contains(&late_beta),
+            "neither item picks up an event that landed after the sample"
+        );
+    }
+
+    /// AC-004. One ceiling capture per `read`, not one per `QueryItem` — counted
+    /// at the storage seam, because on a store nobody is writing to the rows
+    /// that come back look identical either way.
+    #[wasm_bindgen_test]
+    async fn one_ceiling_is_captured_per_read_not_one_per_item() {
+        let (sql, store) = open_paged(1);
+        append_each(&store, &["Alpha", "Beta", "Gamma"]).await;
+        let query = Query::from_items([
+            of_types(&["Alpha"]),
+            of_types(&["Beta"]),
+            of_types(&["Gamma"]),
+        ])
+        .expect("a valid query");
+
+        let before = statements(&sql).len();
+        drain(store.read(&query, ReadOptions::new())).await;
+
+        let captures = statements(&sql)
+            .into_iter()
+            .skip(before)
+            .filter(|statement| statement.contains("max(position)"))
+            .count();
+        assert_eq!(
+            captures, 1,
+            "a three-item query samples the store once, not three times"
+        );
+    }
+
+    /// AC-004. `UNION` and not `UNION ALL`: an event matching two items of one
+    /// query is one event on the stream.
+    #[wasm_bindgen_test]
+    async fn query_union_is_item_concatenation() {
+        let (_sql, store) = open();
+        let both = store
+            .append(&[tagged("Alpha", &["shared"])], None)
+            .await
+            .expect("the append lands");
+        let query = Query::from_items([
+            of_types(&["Alpha"]),
+            QueryItem::tagged(tag_set(&["shared"])).expect("a valid item"),
+        ])
+        .expect("a valid query");
+
+        assert_eq!(
+            read_positions(&store, &query, ReadOptions::new()).await,
+            [both],
+            "an event matching two items is yielded once"
+        );
+    }
+
+    /// AC-005. A suspended read holds no borrow of the object and no live
+    /// cursor, so an `append` on the same handle completes mid-drain.
+    #[wasm_bindgen_test]
+    async fn a_live_read_stream_does_not_block_an_append_on_one_handle() {
+        let (_sql, store) = open_paged(1);
+        append_each(&store, &["One", "Two"]).await;
+
+        let all = Query::all();
+        let stream = store.read(&all, ReadOptions::new());
+        let mut stream = pin!(stream);
+        step(&mut stream)
+            .await
+            .expect("a first event")
+            .expect("which decodes");
+
+        store
+            .append(&[event("WhileTheReadIsLive")], None)
+            .await
+            .expect("an append must not be blocked by a suspended read");
+
+        while step(&mut stream).await.is_some() {}
+    }
+
+    /// AC-005. The other direction, and the obligation no clause states: a read
+    /// issued while an `append` future on the same handle is suspended
+    /// completes.
+    #[wasm_bindgen_test]
+    async fn a_read_issued_during_a_suspended_append_completes() {
+        let (_sql, store) = open();
+        let assigned = append_each(&store, &["One"]).await;
+
+        // Created and deliberately not polled: the append is suspended at its
+        // very first suspension point, holding nothing.
+        let batch = [event("Suspended")];
+        let suspended = store.append(&batch, None);
+
+        assert_eq!(
+            read_positions(&store, &Query::all(), ReadOptions::new()).await,
+            assigned,
+            "a read issued during a suspended append completes"
+        );
+
+        suspended.await.expect("and the append still lands");
+    }
+
+    /// AC-005. Two live reads over one object interleave. If either held the
+    /// object's SQL state across a poll boundary the other would be refused with
+    /// `SqlError::AlreadyBorrowed`; if either held a cursor, the other's
+    /// statement would invalidate it.
+    #[wasm_bindgen_test]
+    async fn two_live_reads_interleave_without_borrowing_the_object() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three"]).await;
+
+        let all = Query::all();
+        let first = store.read(&all, ReadOptions::new());
+        let second = store.read(&all, ReadOptions::new());
+        let mut first = pin!(first);
+        let mut second = pin!(second);
+
+        let mut left = Vec::new();
+        let mut right = Vec::new();
+        loop {
+            let a = step(&mut first).await;
+            let b = step(&mut second).await;
+            if a.is_none() && b.is_none() {
+                break;
+            }
+            left.extend(a);
+            right.extend(b);
+        }
+
+        for side in [&left, &right] {
+            assert_eq!(
+                positions_of(side),
+                assigned,
+                "both interleaved reads complete in full"
+            );
+        }
+    }
+
+    /// AC-006. An empty store reads as empty, with no error — the state every
+    /// adapter is in on its first run, and the registered failure mode of
+    /// ceiling arithmetic on `head() == None`. The options are exercised against
+    /// it rather than short-circuited.
+    #[wasm_bindgen_test]
+    async fn reading_an_empty_store_yields_nothing() {
+        let (_sql, store) = open();
+
+        for options in [
+            ReadOptions::new(),
+            ReadOptions::new().backwards(),
+            ReadOptions::new().limit(3),
+            ReadOptions::new().from(SequencePosition::new(1).expect("one is a position")),
+            ReadOptions::new().to(SequencePosition::new(9).expect("nine is a position")),
+        ] {
+            let items = drain(store.read(&Query::all(), options)).await;
+            assert!(
+                items.is_empty(),
+                "an empty store yields nothing and no error under {options:?}: {items:?}"
+            );
+        }
+    }
+
+    /// AC-006. `from` is inclusive.
+    #[wasm_bindgen_test]
+    async fn read_from_is_inclusive() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three"]).await;
+
+        assert_eq!(
+            read_positions(&store, &Query::all(), ReadOptions::new().from(assigned[1])).await,
+            assigned[1..],
+            "the event at `from` is included"
+        );
+    }
+
+    /// AC-006. `from` is a threshold, not a seek: a position nothing occupies
+    /// yields the next match above it rather than erroring or coming back empty.
+    #[wasm_bindgen_test]
+    async fn read_from_a_gap_position() {
+        let (sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two"]).await;
+
+        // A gap this store is allowed to leave, arranged store-side rather than
+        // asserted as a literal.
+        sql.exec(
+            "DELETE FROM event WHERE position = ?",
+            &[SqlValue::Integer(super::position_as_i64(assigned[0]))],
+        )
+        .expect("the row is removed");
+
+        assert_eq!(
+            read_positions(&store, &Query::all(), ReadOptions::new().from(assigned[0])).await,
+            assigned[1..],
+            "a read from a gap yields the next match above it"
+        );
+    }
+
+    /// AC-006. `to` is inclusive, and composes with the internal ceiling as the
+    /// tighter of the two.
+    #[wasm_bindgen_test]
+    async fn read_to_is_inclusive() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three"]).await;
+
+        assert_eq!(
+            read_positions(&store, &Query::all(), ReadOptions::new().to(assigned[1])).await,
+            assigned[..2],
+            "the event at `to` is included and nothing above it is"
+        );
+    }
+
+    /// AC-006. `from` and `to` bound a closed window.
+    #[wasm_bindgen_test]
+    async fn read_from_and_to_bound_a_closed_window() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        assert_eq!(
+            read_positions(
+                &store,
+                &Query::all(),
+                ReadOptions::new().from(assigned[1]).to(assigned[2]),
+            )
+            .await,
+            assigned[1..3]
+        );
+    }
+
+    /// AC-006. Backwards: `from` stays the higher bound, and the order reverses.
+    #[wasm_bindgen_test]
+    async fn read_backwards_from_with_limit() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        assert_eq!(
+            read_positions(
+                &store,
+                &Query::all(),
+                ReadOptions::new().backwards().from(assigned[2]).limit(2),
+            )
+            .await,
+            [assigned[2], assigned[1]],
+            "backwards from the third event, two of them, newest first"
+        );
+    }
+
+    /// AC-006. Backwards, `to` is the *older* end.
+    #[wasm_bindgen_test]
+    async fn read_to_under_backwards_bounds_the_older_end() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two", "Three"]).await;
+
+        assert_eq!(
+            read_positions(
+                &store,
+                &Query::all(),
+                ReadOptions::new().backwards().to(assigned[1]),
+            )
+            .await,
+            [assigned[2], assigned[1]],
+            "`to` stops the walk at the older end"
+        );
+    }
+
+    /// AC-006. The caller's budget is spent on **matched** events only: a page
+    /// that scanned rows the query item excluded must not consume it.
+    #[wasm_bindgen_test]
+    async fn read_limit_applies_after_filtering() {
+        let (_sql, store) = open_paged(1);
+        let mut wanted = Vec::new();
+        for event_type in ["Skip", "Want", "Skip", "Want", "Skip", "Want"] {
+            let position = store
+                .append(&[event(event_type)], None)
+                .await
+                .expect("the append lands");
+            if event_type == "Want" {
+                wanted.push(position);
+            }
+        }
+        let query = Query::from_item(of_types(&["Want"]));
+
+        assert_eq!(
+            read_positions(&store, &query, ReadOptions::new().limit(2)).await,
+            wanted[..2],
+            "two matched events, not two scanned rows"
+        );
+    }
+
+    /// AC-006. The same, backwards.
+    #[wasm_bindgen_test]
+    async fn read_backwards_limit_applies_after_filtering() {
+        let (_sql, store) = open_paged(1);
+        let mut wanted = Vec::new();
+        for event_type in ["Want", "Skip", "Want", "Skip", "Want"] {
+            let position = store
+                .append(&[event(event_type)], None)
+                .await
+                .expect("the append lands");
+            if event_type == "Want" {
+                wanted.push(position);
+            }
+        }
+        let query = Query::from_item(of_types(&["Want"]));
+
+        assert_eq!(
+            read_positions(&store, &query, ReadOptions::new().backwards().limit(2)).await,
+            [wanted[2], wanted[1]]
+        );
+    }
+
+    /// AC-006. `limit(0)` yields nothing — the deliberate divergence from the
+    /// reference implementation's falsy zero, and the one that stops a paging
+    /// loop turning into a full scan at parity.
+    #[wasm_bindgen_test]
+    async fn read_limit_zero_yields_nothing() {
+        let (sql, store) = open();
+        append_each(&store, &["One", "Two"]).await;
+
+        let before = statements(&sql).len();
+        let items = drain(store.read(&Query::all(), ReadOptions::new().limit(0))).await;
+
+        assert!(items.is_empty(), "limit(0) reads nothing: {items:?}");
+        assert_eq!(
+            statements(&sql).len(),
+            before,
+            "and it reads nothing by not asking the store at all"
+        );
+    }
+
+    /// AC-006. The budget is the query's, not each item's.
+    #[wasm_bindgen_test]
+    async fn limit_applies_across_items_not_per_item() {
+        let (_sql, store) = open_paged(1);
+        append_each(&store, &["Alpha", "Beta", "Alpha", "Beta"]).await;
+        let query =
+            Query::from_items([of_types(&["Alpha"]), of_types(&["Beta"])]).expect("a valid query");
+
+        assert_eq!(
+            read_positions(&store, &query, ReadOptions::new().limit(3))
+                .await
+                .len(),
+            3,
+            "three events across the whole query, not three per item"
+        );
+    }
+
+    /// AC-006. Tags AND within an item with **superset** matching, and types OR
+    /// within an item.
+    #[wasm_bindgen_test]
+    async fn tags_and_within_an_item_types_or_within_an_item() {
+        let (_sql, store) = open_paged(1);
+        let superset = store
+            .append(&[tagged("Alpha", &["seat:A1", "order:7", "extra:1"])], None)
+            .await
+            .expect("the append lands");
+        store
+            .append(&[tagged("Alpha", &["seat:A1"])], None)
+            .await
+            .expect("the append lands");
+        let other_type = store
+            .append(&[tagged("Beta", &["seat:A1", "order:7"])], None)
+            .await
+            .expect("the append lands");
+
+        let query = Query::from_item(
+            QueryItem::new(
+                ["Alpha".to_owned(), "Beta".to_owned()],
+                tag_set(&["seat:A1", "order:7"]),
+            )
+            .expect("a valid item"),
+        );
+
+        assert_eq!(
+            read_positions(&store, &query, ReadOptions::new()).await,
+            [superset, other_type],
+            "a superset matches, a partial overlap does not, and both types match"
+        );
+    }
+
+    /// AC-006. An item naming no tags still matches an untagged event — which is
+    /// why `Query::all` does not go through the tag index at all.
+    #[wasm_bindgen_test]
+    async fn an_item_naming_no_tags_matches_an_untagged_event() {
+        let (_sql, store) = open_paged(1);
+        let untagged = store
+            .append(&[event("Alpha")], None)
+            .await
+            .expect("the append lands");
+
+        assert_eq!(
+            read_positions(
+                &store,
+                &Query::from_item(of_types(&["Alpha"])),
+                ReadOptions::new(),
+            )
+            .await,
+            [untagged]
+        );
+    }
+
+    /// AC-007. A column count that disagrees with the `SELECT` is reported, not
+    /// mis-decoded: the schema on disk is not the schema this build expects.
+    #[wasm_bindgen_test]
+    fn decode_row_reports_row_shape() {
+        let mut values = well_formed_row();
+        values.pop();
+
+        assert!(
+            matches!(
+                super::decode_row(&row(values)),
+                Err(CloudflareEventStoreError::RowShape { .. })
+            ),
+            "a short row is reported"
+        );
+    }
+
+    /// AC-007. An undecodable `SqlValue` names its column.
+    #[wasm_bindgen_test]
+    fn decode_row_reports_column_type() {
+        let mut values = well_formed_row();
+        values[2] = SqlValue::Text("not a blob".to_owned());
+
+        assert!(
+            matches!(
+                super::decode_row(&row(values)),
+                Err(CloudflareEventStoreError::ColumnType { column: "data" })
+            ),
+            "the offending column is named"
+        );
+    }
+
+    /// AC-007. A stored event type that no longer validates is reported rather
+    /// than handed back.
+    #[wasm_bindgen_test]
+    fn decode_row_reports_stored_event_type() {
+        let mut values = well_formed_row();
+        values[1] = SqlValue::Text(String::new());
+
+        assert!(
+            matches!(
+                super::decode_row(&row(values)),
+                Err(CloudflareEventStoreError::StoredEventType(_))
+            ),
+            "a stored type that fails validation is reported"
+        );
+    }
+
+    /// AC-007. The 2^53 boundary on the way *out*, constructed rather than
+    /// asserted as a number: a stored position Workers SQL cannot round-trip
+    /// arrives back as [`SqlValue::Real`], and the decoder reports it.
+    #[wasm_bindgen_test]
+    fn decode_row_reports_stored_position_at_the_boundary() {
+        let mut values = well_formed_row();
+        #[allow(clippy::cast_precision_loss)]
+        let above = (super::MAX_SAFE_POSITION as f64) + 2.0;
+        values[0] = SqlValue::Real(above);
+
+        assert!(
+            matches!(
+                super::decode_row(&row(values)),
+                Err(CloudflareEventStoreError::StoredPosition { .. })
+            ),
+            "a position this runtime cannot round-trip is reported, never narrowed"
+        );
+    }
+
+    /// AC-007. The same fact reached the way a caller reaches it — as an **error
+    /// item on the stream**, never a panic and never a narrowed position.
+    #[wasm_bindgen_test]
+    async fn an_unrepresentable_position_is_an_error_item_on_the_stream() {
+        let (sql, store) = open();
+        // A literal rather than a binding: binding it would widen it through a
+        // JS number on the way *in*, and the fact under test is the way out.
+        sql.exec(
+            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
+             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0)",
+            &[],
+        )
+        .expect("the seeded row lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new())).await;
+        assert!(
+            items
+                .iter()
+                .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
+            "the caller receives the error rather than a narrowed position: {items:?}"
+        );
+    }
+
+    /// AC-007. Payloads stay opaque, and `metadata: None` and `Some(<empty>)`
+    /// stay two distinguishable values.
+    #[wasm_bindgen_test]
+    async fn metadata_none_and_some_empty_stay_distinguishable() {
+        let (_sql, store) = open_paged(1);
+        store
+            .append(&[event("NoMetadata")], None)
+            .await
+            .expect("the append lands");
+        store
+            .append(&[event("EmptyMetadata").with_metadata(&b""[..])], None)
+            .await
+            .expect("the append lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new())).await;
+        let [Ok(none), Ok(empty)] = items.as_slice() else {
+            panic!("two events were appended: {items:?}");
+        };
+
+        assert!(none.event.metadata().is_none(), "absent stays absent");
+        assert_eq!(
+            empty
+                .event
+                .metadata()
+                .map(happenstance_core::bytes::Bytes::len),
+            Some(0),
+            "and an empty payload stays present and empty"
+        );
+    }
+
+    /// AC-007. `recorded_at` is returned **as stored**. A read that stamped
+    /// `now()` would lose the time the store accepted the event at.
+    #[wasm_bindgen_test]
+    fn decode_row_returns_recorded_at_as_stored() {
+        let mut values = well_formed_row();
+        values[7] = SqlValue::Integer(1_700_000_000_000);
+
+        let decoded = super::decode_row(&row(values)).expect("the row decodes");
+        assert_eq!(
+            decoded.recorded_at,
+            RecordedAt::from_millis(1_700_000_000_000)
+        );
+    }
+
+    /// AC-007. The identity comes from the *stored* origin pair, not from this
+    /// object's incarnation plus the row's own position — the two agree for a
+    /// locally appended event and disagree for every ingested one.
+    #[wasm_bindgen_test]
+    fn decode_row_rebuilds_the_identity_from_the_stored_origin() {
+        let mut values = well_formed_row();
+        values[0] = SqlValue::Integer(9);
+        values[5] = SqlValue::Blob(vec![7_u8; 16]);
+        values[6] = SqlValue::Integer(4);
+
+        let decoded = super::decode_row(&row(values)).expect("the row decodes");
+        assert_eq!(
+            decoded.id,
+            EventId::new(
+                StoreId::from_bytes([7_u8; 16]),
+                SequencePosition::new(4).expect("four is a position"),
+            ),
+        );
+        assert_ne!(
+            decoded.id.position(),
+            decoded.position,
+            "an ingested row's identity is not its local coordinate"
+        );
+    }
+
+    /// The control on the whole decode-error family: the well-formed row the
+    /// tests above break one field of at a time really does decode, so those
+    /// assertions are not a decoder that refuses everything.
+    #[wasm_bindgen_test]
+    fn the_well_formed_row_decodes() {
+        let decoded = super::decode_row(&row(well_formed_row())).expect("the control row decodes");
+        assert_eq!(decoded.event_type().as_str(), "SeatMapPublished");
+        assert!(decoded.event.tags().is_empty());
     }
 }

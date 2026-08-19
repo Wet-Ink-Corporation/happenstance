@@ -123,6 +123,18 @@ not the same as what a user needed to be told.
   `tests/memory_benchmarks.rs` runs the whole family against `MemoryFixture` on
   every `cargo test --features bench`, so it ships having been executed rather
   than merely compiled.
+- **The Durable Object adapter reads.** `happenstance-cloudflare` — still
+  `publish = false`, and noted here because it is the workspace's `!Send`
+  instrument rather than because it ships — implements `EventStore::read` as
+  ADR-0011's **ceiling-and-page**: a position ceiling captured no later than the
+  first poll, every statement after the first bounded by it, and no
+  `SqlStorageCursor` held across a suspension point. That one mechanism is what
+  makes a read on a runtime whose cursor is documented as *not* a stable
+  snapshot still be **one sample** (ES-11) that **all items of one query share**
+  (ES-12); both clauses name this adapter as the falsifier they were most at
+  risk from, and it does not bite. No conformance rule was added or changed, so
+  nothing an adapter author is held to moved. With it the crate's last
+  `todo!()` is gone and the scoped `#![allow(clippy::todo)]` left with it.
 
 ## [0.2.0-alpha.1] — 2026-08-16
 

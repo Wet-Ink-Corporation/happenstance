@@ -1,18 +1,24 @@
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: bound, not yet complete
+//! # Status: bound, and implemented
 //!
 //! This crate depends on [`worker`] and talks to a real Durable Object's
 //! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
 //! `exec` is `worker::SqlStorage::exec`, a cursor is a `SqlStorageCursor`, and
 //! a thrown value is a `worker::Error` kept live behind an [`Rc`](std::rc::Rc).
 //!
-//! What is still `todo!()` is the [`EventStore`](happenstance_core::EventStore)
-//! implementation itself — `migrate`, `append`, `head`, `contains_event_id`,
-//! and the read path's `render_read` / `decode_row`. The scoped
-//! `#![allow(clippy::todo)]` below is scoped to exactly those and leaves with
-//! the last of them.
+//! Every [`EventStore`](happenstance_core::EventStore) body is real —
+//! `migrate`, `append`, `head`, `contains_event_id` and `read` all execute SQL
+//! against the object's own storage — and **no `todo!()` remains anywhere in
+//! the crate**. The scoped `#![allow(clippy::todo)]` that used to stand below
+//! the module list left with the last of them, which is what it was written to
+//! do.
+//!
+//! What has *not* happened yet is the conformance suite: this adapter has not
+//! run `happenstance_testkit::event_store_conformance!` on `workerd`, and
+//! until it has, it is an implementation rather than a conformant adapter. The
+//! fixture, the host and the gate step are the next three stories'.
 //!
 //! # What this crate is for
 //!
@@ -110,14 +116,27 @@
 //!
 //! Two, and neither shows up as an `error[E….]`:
 //!
-//! * **A lazy read stream is not a stable snapshot.** Cloudflare documents that
-//!   a `SqlStorageCursor` held across an `await` "does not provide a stable
-//!   snapshot of query results". ES-9 requires the stream to be lazy, so this
-//!   adapter has to choose between honouring laziness and honouring snapshot
-//!   isolation. [`sql_storage::SqlCursor`] reports the collision as
-//!   [`sql_storage::SqlError::CursorInvalidated`] rather than returning torn
-//!   rows; ADR-0011's ceiling-and-page mechanism is what
-//!   [`event_store::SqlRowStream`] uses so the collision does not arise.
+//! * **A cursor is not a stable snapshot — and it did not have to be.**
+//!   Cloudflare documents that a `SqlStorageCursor` held across an `await`
+//!   "does not provide a stable snapshot of query results", and this crate used
+//!   to record that as an unresolved choice between laziness and isolation,
+//!   citing ES-9. **Both halves of that were wrong, and the correction is the
+//!   finding.** ES-9 is `from` *names a position, not an index*; the clauses
+//!   that carry the sample obligation are **ES-11** (a read is one sample) and
+//!   **ES-12** (all items of one query share it), and ES-11 states outright
+//!   that "laziness is therefore permitted and never required". So there was no
+//!   dilemma to resolve, only a mechanism to implement: ADR-0011's
+//!   ceiling-and-page, which [`event_store::SqlRowStream`] uses. A position
+//!   ceiling is captured no later than the first poll, every statement after
+//!   the first is bounded by it, and each page is drained into memory before
+//!   the caller can suspend — so no cursor ever spans a suspension point and
+//!   the collision does not arise. [`sql_storage::SqlError::CursorInvalidated`]
+//!   remains as the report for a cursor that *is* outlived by another
+//!   statement, which is now only reachable by a caller driving `exec`
+//!   directly. ES-11 and ES-12 name **this adapter** as the falsifier they were
+//!   most at risk from; the ceiling is affordable here, so it does not bite,
+//!   and what it costs is one extra statement per page and the rows those pages
+//!   re-read.
 //! * **Positions are bounded by 2^53, not 2^64.** Workers SQL widens integers
 //!   through a JS number on the way out, so a `SequencePosition` above
 //!   `Number.MAX_SAFE_INTEGER` is not round-trippable even though
@@ -141,12 +160,6 @@
 //! the twin below for why one target is not enough.
 
 #![doc(html_no_source)]
-// `clippy::todo` is denied workspace-wide. Scoped here rather than left open in
-// the workspace manifest so that it is visible in review and disappears with the
-// last `todo!()` rather than outliving it. What it covers now is the
-// `EventStore` bodies and nothing else: the bindings in `js` and `sql_storage`
-// have none left.
-#![allow(clippy::todo)]
 
 pub mod event_store;
 pub mod js;
