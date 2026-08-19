@@ -40,7 +40,12 @@ was pinned backwards.
 
 | SHA | Subject |
 | --- | ------- |
-| `b64448a` | feat(application-author-path): Boundary falsification drill |
+| `cc9c4a4` | feat(application-author-path): Boundary falsification drill |
+
+The checkpoint was amended once, to fold in the clean-tree re-run recorded in
+`_drill-observation.md` § Re-run at the story checkpoint. That re-run was performed against the
+pre-amend sha `b64448a`, which is the sha the transcript quotes; the two trees differ only in
+that record.
 
 ## Changes
 
