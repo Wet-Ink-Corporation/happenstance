@@ -21,7 +21,7 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| wasm-execution-seam | approved | wasm-execution-gate-step 8ea7bb7 | (this commit) |
 
 ## Surviving findings
 
