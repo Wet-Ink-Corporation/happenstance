@@ -10,10 +10,11 @@
 //!
 //! Every [`EventStore`](happenstance_core::EventStore) body is real —
 //! `migrate`, `append`, `head`, `contains_event_id` and `read` all execute SQL
-//! against the object's own storage — and **no `todo!()` remains anywhere in
-//! the crate**. The scoped `#![allow(clippy::todo)]` that used to stand below
-//! the module list left with the last of them, which is what it was written to
-//! do.
+//! against the object's own storage — and **no unimplemented body remains
+//! anywhere in the crate**. The scoped allow of the `clippy::todo` lint that
+//! used to stand below the module list left with the last of them, which is
+//! what it was written to do; the lint is denied workspace-wide, so the gate
+//! now fails on the first one that comes back.
 //!
 //! What has *not* happened yet is the conformance suite: this adapter has not
 //! run `happenstance_testkit::event_store_conformance!` on `workerd`, and
@@ -91,6 +92,15 @@
 //! *forward* compatibility: a caller holding the live value can read a field
 //! nobody has thought of yet.
 //!
+//! **Now observed rather than predicted, and from the caller's seat rather than
+//! this module's.** The `es6_reconstruction` tests in this file drive a
+//! constructed thrown value through `worker`'s real bindings, this crate's real
+//! classifier and
+//! [`EventStore::append`](happenstance_core::EventStore::append), and rebuild
+//! the one fact a caller must branch on — conflict versus transport fault — out
+//! of the public surface alone. They carry their own positive control, so they
+//! are assertions that can fail rather than assertions that cannot.
+//!
 //! ## 3. The conflict signal never travels in `Self::Error` anyway
 //!
 //! `happenstance-core` lifts the DCB concurrency signal out of the adapter's
@@ -103,6 +113,13 @@
 //! structural. Stringification therefore cannot cost the caller the conflict
 //! signal, because the conflict signal is not in the error type on any adapter.
 //!
+//! What the error type *does* owe a caller is the other half of the same
+//! branch: enough to tell a transport fault from a conflict, from a capacity
+//! refusal, from a binding nobody wired up. A classifier that picks the right
+//! `AppendError` arm and then discards the evidence satisfies every other check
+//! in this repository and leaves that caller with nothing to act on;
+//! the `es6_reconstruction` tests name that shape and reject it.
+//!
 //! ## 4. The `Send` flavour does not imply a `Send` error either
 //!
 //! [`send_shape::send_flavour::SendStoreWithLocalError`] implements
@@ -111,6 +128,22 @@
 //! `store_error_crosses_a_join_handle` is unwritable against today's port for
 //! *every* adapter, not merely for this one. See [`send_shape`] for the probe
 //! that separates "the future is `Send`" from "the error is `Send`".
+//!
+//! # The ES-6 verdict
+//!
+//! **Recorded here; minted elsewhere.** On the four findings above, ADR-0009's
+//! decision holds and this adapter is the evidence for it rather than the
+//! exception to it: a caller recovers conflict-versus-transport from what
+//! `append` hands back *without* `Error` carrying a `Send + Sync` bound, so the
+//! strength belongs in a downstream marker rather than in the port. Both halves
+//! of the clause now have an artefact in this file — the auto-trait half in the
+//! `!Send` probes, the information half in `es6_reconstruction` — and a reader
+//! asking what ES-6 resolved to finds both without leaving the page.
+//!
+//! The decision atom that states it, with the alternatives that lost, is
+//! `adr-0023-and-atom-resolutions`', authored through `/redkiln:kb-ingest`.
+//! Nothing under `.kb/` is written by this crate, and
+//! `.kb/decisions/0009-error-send-sync.md` is accepted and immutable.
 //!
 //! # Capability limits that are not type errors
 //!
@@ -372,5 +405,317 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn the_send_flavour_does_not_imply_a_send_error() {
         probe::the_send_flavour_does_not_imply_a_send_error();
+    }
+}
+
+/// ES-6's **other** half: not "can the error cross a thread", but "does the
+/// error still say anything a caller can act on".
+///
+/// The auto-trait half lives above and is a fact about types. This module is a
+/// fact about *contents*, and it is deliberately in the same file: a reader who
+/// comes to this crate asking what ES-6 resolved to should find both answers
+/// without leaving the page.
+///
+/// # What a caller is actually deciding
+///
+/// Someone holding an [`AppendError`](happenstance_core::AppendError) at the
+/// edge of their own handler has exactly one branch to take, and the two arms
+/// are expensive in opposite directions:
+///
+/// * **A conflict** — another writer got there first. Retrying the same batch
+///   is wrong; the decision model has to be re-read and rebuilt.
+/// * **A transport fault** — the store failed for a reason that has nothing to
+///   do with the caller's condition. Rebuilding the decision model is wasted
+///   work; the right move is to retry.
+///
+/// Getting that backwards costs either a livelock against a condition that will
+/// never pass, or a silently dropped command. So the question this module asks
+/// is whether a caller can *recover* the distinction from what `append` hands
+/// back — reading only what a downstream crate could read.
+///
+/// # Why this cannot be a conformance rule
+///
+/// Every event-store rule asserts on the success path or on a store-produced
+/// `AppendError`, and none reads an adapter error's *contents* — a portable rule
+/// could not, without asserting on some particular adapter's internals. The
+/// portable neighbour is already covered elsewhere:
+/// `ViolationAsStoreErrorStore` in the testkit's mutation coverage rejects a
+/// violation reported on the wrong `AppendError` arm, for every adapter. What is
+/// left is unportable by construction, which is exactly why the workspace's only
+/// `!Send` adapter is the only instrument for the clause.
+///
+/// # Why the tier is `wasm32`
+///
+/// `worker`'s bindings resolve to panicking stubs off the target, so a store
+/// cannot be *driven* on the host at all — only the type-level probes above can
+/// run there, and they do. Everything here needs a live JS heap.
+#[cfg(all(test, target_arch = "wasm32"))]
+mod es6_reconstruction {
+    use happenstance_core::{AppendCondition, AppendError, Event, EventStore, Query, QueryItem};
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::event_store::{CloudflareEventStore, CloudflareEventStoreError};
+    use crate::sql_storage::SqlError;
+    use crate::test_object::{arm_throw, durable_object};
+
+    /// The exact text a Durable Object's SQLite surfaces through the thrown
+    /// `Error`'s `message` when the uniqueness an append condition rests on is
+    /// violated. Constructed here rather than round-tripped through a live
+    /// object, so this artefact does not wait on the `workerd` runner.
+    const CONSTRAINT_TEXT: &str = "UNIQUE constraint failed: event.position";
+
+    /// A failure that is emphatically *not* a conflict.
+    const TRANSPORT_TEXT: &str = "network connection lost";
+
+    /// One migrated store over a fresh object, reached the only way there is.
+    fn open() -> (crate::sql_storage::SqlStorage, CloudflareEventStore) {
+        let sql = durable_object();
+        let store = CloudflareEventStore::new(sql.clone());
+        store.migrate().expect("the schema applies");
+        (sql, store)
+    }
+
+    fn event(event_type: &str) -> Event {
+        Event::new(event_type.to_owned(), &b"payload"[..]).expect("a valid event type")
+    }
+
+    fn condition_on(event_type: &str) -> AppendCondition {
+        AppendCondition::new(Query::from_item(
+            QueryItem::of_types([event_type.to_owned()]).expect("a valid query item"),
+        ))
+    }
+
+    /// **The predicate the whole artefact turns on**, and the reason AC-004 can
+    /// fail: everything below reads the error through this one function, and it
+    /// touches nothing a downstream crate could not.
+    ///
+    /// `Display` on the public error plus the public
+    /// [`source`](core::error::Error::source) chain — no private field, no
+    /// `pub(crate)` helper, no `#[cfg(test)]` back door. A test that reached
+    /// into the type would keep passing after the information stopped being
+    /// recoverable, which is precisely the regression it exists to catch.
+    ///
+    /// `None` means "this did not arrive on the `Store` channel at all".
+    fn what_the_store_said(error: &AppendError<CloudflareEventStoreError>) -> Option<String> {
+        let AppendError::Store(store) = error else {
+            return None;
+        };
+        let mut rendered = store.to_string();
+        let mut source = core::error::Error::source(store);
+        while let Some(link) = source {
+            rendered.push_str(" | ");
+            rendered.push_str(&link.to_string());
+            source = link.source();
+        }
+        Some(rendered)
+    }
+
+    /// Whether a caller can recover, from the error alone, *which* failure this
+    /// was — not merely that one happened.
+    fn names_the_underlying_failure(
+        error: &AppendError<CloudflareEventStoreError>,
+        expected: &str,
+    ) -> bool {
+        what_the_store_said(error).is_some_and(|said| said.contains(expected))
+    }
+
+    /// AC-001. A constraint violation reaches the caller on the
+    /// **`ConditionViolated` channel**, so their next move is "re-read and
+    /// rebuild the decision model" and never "retry the transport".
+    ///
+    /// Note what is *not* asserted: a `ConditionViolated` variant on
+    /// `CloudflareEventStoreError`. There is none, and adding one would look
+    /// like the fix and be the defect — the contract lifts the conflict signal
+    /// out of every adapter's error type before `Self::Error` is constructed.
+    #[wasm_bindgen_test]
+    async fn constraint_violation_reaches_the_caller_as_condition_violated() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event", CONSTRAINT_TEXT);
+
+        let failure = store
+            .append(
+                &[event("SeatReserved")],
+                Some(&condition_on("SeatReserved")),
+            )
+            .await
+            .expect_err("the armed constraint violation refuses the write");
+
+        assert!(
+            failure.is_condition_violated(),
+            "a constraint violation must arrive as a conflict, not as a transport fault: {failure:?}"
+        );
+        assert!(
+            what_the_store_said(&failure).is_none(),
+            "and therefore not on the Store channel at all: {failure:?}"
+        );
+    }
+
+    /// AC-002. A transport fault reaches the caller **distinguishably**: on the
+    /// `Store` channel, still carrying what the store said, so the caller can
+    /// retry rather than rebuild.
+    ///
+    /// The second assertion is the one that matters. An error that arrives on
+    /// the right arm and says nothing is indistinguishable from a network fault,
+    /// a storage cap, or a binding nobody wired up — and a caller who cannot
+    /// tell those apart cannot choose a recovery.
+    #[wasm_bindgen_test]
+    async fn transport_fault_reaches_the_caller_distinguishably() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event", TRANSPORT_TEXT);
+
+        let failure = store
+            .append(
+                &[event("SeatReserved")],
+                Some(&condition_on("SeatReserved")),
+            )
+            .await
+            .expect_err("the armed transport fault refuses the write");
+
+        assert!(
+            !failure.is_condition_violated(),
+            "a transport fault is not a conflict: {failure:?}"
+        );
+        assert!(
+            matches!(
+                &failure,
+                AppendError::Store(CloudflareEventStoreError::Sql(SqlError::Thrown(_)))
+            ),
+            "it arrives on the Store channel as a live throw: {failure:?}"
+        );
+        assert!(
+            names_the_underlying_failure(&failure, TRANSPORT_TEXT),
+            "and the caller can recover what the store said: {:?}",
+            what_the_store_said(&failure)
+        );
+        assert!(
+            !names_the_underlying_failure(&failure, "constraint failed"),
+            "without it reading as a conflict"
+        );
+    }
+
+    /// AC-004. The named wrong error shape, and the same predicate rejecting it.
+    ///
+    /// This is **not** the blunt mutant — an error whose `Display` renders "a SQL
+    /// error occurred" — but the subtle one a careful implementer reaches
+    /// honestly: a classifier that distinguishes correctly *inside* `append`,
+    /// uses the answer to pick the right `AppendError` arm, and then throws the
+    /// evidence away. It satisfies AC-001, it satisfies the `Store`-arm half of
+    /// AC-002, and every other check in this repository passes against it.
+    ///
+    /// Without this control the two tests above are a rule no adapter can fail,
+    /// which is the decorative shape the house rules name. It is the same reason
+    /// `the_probe_is_not_vacuous` exists one module up.
+    #[wasm_bindgen_test]
+    async fn an_evidence_discarding_classifier_is_rejected() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event", TRANSPORT_TEXT);
+
+        let real = store
+            .append(
+                &[event("SeatReserved")],
+                Some(&condition_on("SeatReserved")),
+            )
+            .await
+            .expect_err("the armed transport fault refuses the write");
+
+        // The wrong shape: right arm, evidence discarded. Built *from* the real
+        // failure so the only difference between them is the thing under test.
+        let flattened: AppendError<CloudflareEventStoreError> =
+            AppendError::Store(CloudflareEventStoreError::CorruptTags);
+
+        assert!(
+            names_the_underlying_failure(&real, TRANSPORT_TEXT),
+            "the real error names the failure"
+        );
+        assert!(
+            !names_the_underlying_failure(&flattened, TRANSPORT_TEXT),
+            "and the evidence-discarding shape does not — so the assertion can fail"
+        );
+        assert_eq!(
+            flattened.is_condition_violated(),
+            real.is_condition_violated(),
+            "even though the wrong shape picks the same arm, which is why the arm alone is not enough"
+        );
+    }
+
+    /// AC-003. The reconstruction is reachable by a **downstream** consumer:
+    /// generic code binding the bare `EventStore` — the weaker flavour, which
+    /// accepts both — over nothing but this crate's public surface.
+    ///
+    /// Its value is at compile time. If the fact stopped being reachable without
+    /// a private field or a `pub(crate)` helper, this function would stop
+    /// compiling rather than quietly keep passing.
+    #[wasm_bindgen_test]
+    async fn the_distinction_is_reachable_from_outside_the_crate() {
+        async fn classify_like_a_consumer<S: EventStore>(
+            store: &S,
+            events: &[Event],
+            condition: &AppendCondition,
+        ) -> &'static str
+        where
+            S::Error: core::fmt::Display,
+        {
+            match store.append(events, Some(condition)).await {
+                Ok(_) => "accepted",
+                Err(error) if error.is_condition_violated() => "rebuild",
+                Err(AppendError::Store(error)) if !error.to_string().is_empty() => "retry",
+                Err(_) => "cannot tell",
+            }
+        }
+
+        let (sql, store) = open();
+        let batch = [event("SeatReserved")];
+        let condition = condition_on("SeatReserved");
+
+        arm_throw(&sql, "INSERT INTO event", CONSTRAINT_TEXT);
+        assert_eq!(
+            classify_like_a_consumer(&store, &batch, &condition).await,
+            "rebuild"
+        );
+
+        arm_throw(&sql, "INSERT INTO event", TRANSPORT_TEXT);
+        assert_eq!(
+            classify_like_a_consumer(&store, &batch, &condition).await,
+            "retry"
+        );
+
+        assert_eq!(
+            classify_like_a_consumer(&store, &batch, &condition).await,
+            "accepted",
+            "and with nothing armed the write simply lands"
+        );
+    }
+
+    /// EC-001, as an assertion. An *unclassifiable* throw must not collapse into
+    /// a silent "not a violation" — a caller who is told "transport" about a
+    /// conflict retries forever against a condition that will never pass.
+    ///
+    /// The shape that reaches this is a thrown value `worker` builds out of Rust
+    /// rather than out of a throw: there is no live JS value behind it, so the
+    /// property lookup has nothing to interrogate and the cached message is all
+    /// there is. It still arrives on the `Store` channel carrying that message,
+    /// which is the honest answer — "the store failed and this is what it said"
+    /// — rather than a fabricated verdict.
+    #[wasm_bindgen_test]
+    async fn an_unclassifiable_throw_still_says_what_happened() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event", "");
+
+        let failure = store
+            .append(
+                &[event("SeatReserved")],
+                Some(&condition_on("SeatReserved")),
+            )
+            .await
+            .expect_err("the armed throw refuses the write");
+
+        assert!(
+            !failure.is_condition_violated(),
+            "an empty message is not evidence of a conflict: {failure:?}"
+        );
+        assert!(
+            what_the_store_said(&failure).is_some(),
+            "and it still arrives on the Store channel rather than vanishing: {failure:?}"
+        );
     }
 }

@@ -4,7 +4,7 @@
 //!
 //! Complete. `migrate`, `append`, `head`, `contains_event_id` and `read` all
 //! execute SQL against a Durable Object's own storage, and no body in this
-//! crate is `todo!()` any more.
+//! crate is unimplemented any more.
 //!
 //! # Schema
 //!

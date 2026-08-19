@@ -163,8 +163,8 @@ pub mod send_flavour {
         // is a claim rather than a spelling. `todo!` says "this is unfinished
         // and someone will finish it"; nobody will, because this type is an
         // instrument and calling it is a category error. Saying so also let the
-        // crate's scoped `#![allow(clippy::todo)]` leave with the last real
-        // `todo!()` instead of outliving it here.
+        // crate's scoped allow of the `clippy::todo` lint leave with the last
+        // real unimplemented body instead of outliving it here.
         async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
             unreachable!("this probe exists for its type, not its behaviour")
         }

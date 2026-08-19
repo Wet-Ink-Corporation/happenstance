@@ -238,9 +238,9 @@ that its error type cannot cross a thread, and the claim is discovered to be
 untested when someone adds a `Send` bound to `EventStore::Error` and nothing
 fails.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:207 (struct Probe)` ·
-`crates/happenstance-cloudflare/src/lib.rs:263 (fn the_probe_is_not_vacuous)` ·
-`crates/happenstance-cloudflare/src/lib.rs:218 (is the entire mechanism)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:239 (struct Probe)` ·
+`crates/happenstance-cloudflare/src/lib.rs:295 (fn the_probe_is_not_vacuous)` ·
+`crates/happenstance-cloudflare/src/lib.rs:250 (is the entire mechanism)` ·
 `crates/happenstance-testkit/tests/local_conformance.rs:426 (is the entire mechanism)` ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md)
 

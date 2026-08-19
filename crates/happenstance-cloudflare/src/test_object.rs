@@ -107,9 +107,16 @@ const DURABLE_OBJECT_STATE: &str = r"
   }
 
   const issued = [];
+  let armed = null;
 
   const sql = {
     get databaseSize() { return scalar('PRAGMA page_count') * scalar('PRAGMA page_size'); },
+    // Arms exactly one throw, on the next statement whose text contains
+    // `match`. It is how a test constructs the thrown value a Durable Object's
+    // SQLite would produce and then delivers it down the *production* path —
+    // through `worker`'s real bindings and this crate's real classifier —
+    // without needing a `workerd` runner or a race to lose.
+    armThrow(match, message) { armed = { match, message }; },
     // Every statement the adapter issued, in order. Read by
     // `statements()` below, which is how a test counts *how many times* the
     // adapter asked a question rather than only what it got back — the
@@ -117,6 +124,11 @@ const DURABLE_OBJECT_STATE: &str = r"
     get issuedStatements() { return issued.slice(); },
     exec(query, ...bindings) {
       issued.push(query);
+      if (armed !== null && query.includes(armed.match)) {
+        const thrown = armed;
+        armed = null;
+        throw new Error(thrown.message);
+      }
       let statement;
       try {
         statement = db.prepare(query);
@@ -157,6 +169,42 @@ pub(crate) fn durable_object() -> SqlStorage {
     let state: JsValue = js_sys::eval(DURABLE_OBJECT_STATE)
         .expect("the Durable Object shim evaluates on a Node host with `node:sqlite`");
     storage_from_durable_object_state(state)
+}
+
+/// Arms one throw, on the next statement whose text contains `matching`.
+///
+/// This is how a test *constructs* a thrown value — `new Error(message)`, the
+/// shape a Durable Object's SQLite produces — and then delivers it down the
+/// production path: through `worker`'s real `wasm-bindgen` externs, into
+/// [`SqlError::from_worker`](crate::sql_storage::SqlError), and out through this
+/// crate's own classification. Nothing is mocked between the throw and the
+/// caller, and no `workerd` runner is needed to observe it.
+///
+/// One arming is one throw: it disarms as it fires, so the statement that
+/// follows behaves normally and a test can show the same store both failing and
+/// succeeding.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims, which means the caller built
+/// the storage some other way.
+pub(crate) fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
+    let arm = sql
+        .handle()
+        .property("armThrow")
+        .expect("reading the arming hook does not throw")
+        .expect("this module's shim always carries the hook");
+    let arm: js_sys::Function = arm
+        .as_js()
+        .clone()
+        .dyn_into()
+        .expect("the arming hook is a function");
+    arm.call2(
+        sql.handle().as_js(),
+        &JsValue::from_str(matching),
+        &JsValue::from_str(message),
+    )
+    .expect("arming a throw does not itself throw");
 }
 
 /// Every statement this object has been asked to run, oldest first.
