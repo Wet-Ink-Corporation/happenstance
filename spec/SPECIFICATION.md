@@ -8371,8 +8371,10 @@ is the runtime-free `__emit_blocking` one whose own comment reads *"No async
 runtime is involved at all"*: in range, so `check_citations` was silent, and
 pointing at the harness that proves nothing about tokio. What no tokio attribute can do is exist on a
 target that has no tokio. `[FROZEN]`
-Rule: the wasm32 build step of `cargo xtask ci`, extended to compile a
-`wasm-bindgen-test` harness over the same rule set.
+Rule: the wasm32 steps of `cargo xtask ci`, which compile a `wasm-bindgen-test`
+harness over the same rule set and then execute it under
+`wasm-bindgen-test-runner`, behind a mandatory guard that an emptied or
+subsetted target fails.
 Cases: E2E-52, E2E-30.
 Rejects: a runtime attribute emitted from the testkit's own expansion — the
 shape, not a line, because the line moves and the shape is the defect.
@@ -9224,7 +9226,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:192-283`), extended to… | E2E-52, E2E-30 |
 | CF-21 | FROZEN | a doctest in `fixtures` constructing a strategy, which fails to compile if the… | E2E-32 |
 | CF-22 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | E2E-52, E2E-30, E2E-09 |
-| CF-23 | FROZEN | the wasm32 build step of `cargo xtask ci`, extended to compile a `wasm-bindgen… | E2E-52, E2E-30 |
+| CF-23 | FROZEN | the wasm32 steps of `cargo xtask ci`, which compile a `wasm-bindgen-test` harn… | E2E-52, E2E-30 |
 | CF-24 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | *all* |
 | CF-25 | FROZEN | `cargo xtask spec-trace` (CF-38), which reads the portfolio table and the matu… | E2E-01, E2E-02, E2E-24, E2E-46, E2E-52 |
 | CF-26 | FROZEN | the portfolio table's `Far end exists` column, checked by `cargo xtask spec-tr… | E2E-01, E2E-24 |

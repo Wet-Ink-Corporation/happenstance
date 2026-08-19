@@ -84,6 +84,44 @@ jobs:
         with:
           tool: cargo-hack,cargo-deny
 
+      # `wasm-bindgen-cli` must match the `wasm-bindgen` version in the
+      # dependency graph *exactly* — the runner refuses to run against a
+      # mismatched schema, and it is right to. Reading it out of Cargo.lock
+      # rather than hard-coding it means a `cargo update` cannot leave this job
+      # installing a runner that no longer matches, which would fail as a
+      # confusing runtime error rather than as a version bump. The gate makes
+      # the same comparison itself (`xtask/src/proof.rs`'s
+      # `check_wasm_runner_version`), so a drift between these two is reported
+      # by name rather than part way through a test binary.
+      #
+      # `shell: bash` because the default shell on `windows-latest` is
+      # PowerShell and this is one script for three runners. `jq` ships on all
+      # three GitHub-hosted images.
+      #
+      # Moved here from the standalone `wasm-conformance` job this replaces, and
+      # the move is the point: that job ran on `ubuntu-latest` alone while this
+      # one matrices over three. See the retirement note below.
+      - name: Resolve the wasm-bindgen version from Cargo.lock
+        id: wasm-bindgen
+        shell: bash
+        run: |
+          version=$(cargo metadata --locked --format-version 1 \
+            | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
+          test -n "$version" || { echo "wasm-bindgen absent from the graph"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # What this buys, stated because it is easy to read as optional: the
+      # gate's `wasm32 run of the conformance rules` step is PROBED, so a runner
+      # that is absent makes it print `skipped:` rather than fail. Installing it
+      # on every matrix runner is what makes "the conformance rules execute on
+      # wasm32" a claim CI actually makes. Deleting this step does not turn the
+      # gate red — it turns that claim into a lie, silently, which is why the
+      # step's own comment in `xtask/src/main.rs` points back here.
+      - name: Install the wasm32 conformance runner
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+
       - name: Run the gate
         run: cargo xtask ci
 
@@ -186,55 +224,32 @@ jobs:
             ]
           ' doctor.json
 
-  # The conformance suite, executed on `wasm32-unknown-unknown` against the
-  # `!Send` reference store. This is the job that turns ADR-0001 from a design
-  # argument into precedent: until it existed, the entire evidence base for the
-  # two-flavour port design was a `cargo check` — a compile of the *trait*, with
-  # no implementation of the bare flavour anywhere and nothing ever run on the
-  # target the flavour exists for.
+  # RETIRED at HS-S0048: the `wasm-conformance` job that used to sit here.
   #
-  # The gate's `wasm32 check of the conformance harnesses` step type-checks this
-  # same code on every runner. That is not the same claim: `#[tokio::test]`
-  # type-checks for wasm32 and then cannot run there, which is precisely the
-  # failure CF-23 is about. Only this job actually executes the rules.
+  # It executed the conformance suite on `wasm32-unknown-unknown` against the
+  # `!Send` reference store, and it is the job that turned ADR-0001 from a design
+  # argument into precedent — before it, the entire evidence base for the
+  # two-flavour port design was a `cargo check`. It is retired rather than kept
+  # because the thing it proved now happens *inside* `cargo xtask ci`, which is
+  # strictly more: the `wasm32 run of the conformance rules` step runs the same
+  # target under the same runner, on all three `gate` matrix runners rather than
+  # on `ubuntu-latest` alone, in the same command a contributor runs locally, and
+  # behind an anti-vacuity guard the old job never had — it ran
+  # `cargo test -p happenstance-testkit --target wasm32-unknown-unknown` and
+  # would have exited 0 on `running 0 tests`.
   #
-  # No Cloudflare and no `workerd`. Those arrive at phase 9; the property under
-  # test here is the target's single-threaded, `!Send` execution model, and
-  # `wasm-bindgen-test` on node exercises that without a platform SDK.
-  wasm-conformance:
-    name: conformance on wasm32
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # rust-toolchain.toml already pins the wasm32-unknown-unknown target.
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      # `wasm-bindgen-cli` must match the `wasm-bindgen` version in the
-      # dependency graph *exactly* — the runner refuses to run against a
-      # mismatched schema, and it is right to. Reading it out of Cargo.lock
-      # rather than hard-coding it means a `cargo update` cannot leave this job
-      # installing a runner that no longer matches, which would fail as a
-      # confusing runtime error rather than as a version bump.
-      - name: Resolve the wasm-bindgen version from Cargo.lock
-        id: wasm-bindgen
-        run: |
-          version=$(cargo metadata --locked --format-version 1 \
-            | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
-          test -n "$version" || { echo "wasm-bindgen absent from the graph"; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Install the test runner
-        uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
-
-      # `wasm-bindgen-test` drives the tests under node by default; the runner
-      # is selected through cargo's per-target runner variable.
-      - name: Run the conformance suite on wasm32
-        env:
-          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
-        run: cargo test --locked -p happenstance-testkit --target wasm32-unknown-unknown
+  # Keeping both would have left two wasm32 execution paths with no stated
+  # division of labour, the weaker one shadowing the stronger. What moved into
+  # the `gate` job above rather than being deleted: the `Cargo.lock`-resolved
+  # `wasm-bindgen` version and the `wasm-bindgen-cli` install.
+  #
+  # The sentence this comment replaces said "No Cloudflare and no `workerd`.
+  # Those arrive at phase 9." Half of that is now stale and half is still true.
+  # The gate executes the testkit's own harness against `MemoryFixture`, which
+  # needs no platform SDK; a Cloudflare conformance target under a Durable
+  # Object runtime is `every-rule-under-workerd` (HS-S0054), and it arrives as a
+  # ROW in `xtask/src/proof.rs`'s `WASM_TARGETS` — not as a second job here and
+  # not as a second gate step.
 
   # Verifies the MSRV claimed in Cargo.toml. This is the only place it is
   # checked, so a change that silently requires a newer compiler fails here.

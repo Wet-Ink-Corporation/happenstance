@@ -14,6 +14,12 @@
 //! actually installs — and none of which says anything about *which* flavour the
 //! code bound, because `Send` is available on that target and only a `Send`
 //! store is not (`crates/happenstance/tests/flavours.rs` is that instrument);
+//! two further `wasm32` rows that are a different claim from those five, because
+//! they **execute** rather than compile — the conformance targets are held to
+//! the one rule enumeration by a step nothing can skip, and then the rules are
+//! run on the target under `wasm-bindgen-test-runner`, which is where CF-23
+//! stops being a compile (see `proof::wasm_run` for why the run is probed and
+//! the guard beside it is not);
 //! the documentation, both with every feature and with
 //! none, because a broken intra-doc link is a hard rustdoc error and the
 //! `no_std` configuration had three of them; `cargo xtask proof-artefact`, which
@@ -331,6 +337,91 @@ const REQUIRED: &[Step] = &[
         ],
         env: &[],
         probe: None,
+    },
+    Step {
+        // Mandatory, and it is the half that makes the step below allowed to
+        // carry a probe at all. It needs no runner: it reads the executed
+        // targets' own sources and the one rule enumeration, so an emptied
+        // target, one rewired to `__emit_tokio`, one carrying a hand-written
+        // wasm32-only rule list, or a row deleted outright fails here on every
+        // machine — including the machines where the run below prints
+        // `skipped:`. Without this row the pair would be a bare probe-gated
+        // step, which is the one configuration the project's AC-004 forbids.
+        //
+        // Its stated limit: it cannot say the rules *passed*, and it cannot see
+        // an `#[ignore]` on a macro-generated test. Both need the runner, and
+        // both are the step below's.
+        name: "wasm32 conformance targets are non-vacuous",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "wasm-conformance-enumeration",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // The step that makes the five above mean what a reader assumes they
+        // mean. They *compile* the wasm32 harnesses; nothing in this gate ever
+        // executed a conformance rule on the target the two-flavour port design
+        // exists for, and `#[tokio::test]` type-checks for wasm32 and then
+        // cannot run there — precisely the failure CF-23 is about. Until this
+        // row landed, the only place a rule actually ran on wasm32 was a
+        // GitHub Actions job on one of the three runners the gate matrices
+        // over, which is a claim about CI rather than about the gate.
+        //
+        // `--nocapture` reaches the runner through `proof.rs`, and it is load-
+        // bearing rather than verbose: `println!` is a silent discard on
+        // `wasm32-unknown-unknown`, so a declined capability's
+        // `SKIP <rule>: <reason>` line is written through `console_log!` and
+        // swallowed unless the runner is told not to capture. It is this
+        // target's idiom for the `--show-output` the `tests` step above
+        // carries — and not a synonym for it: this runner rejects
+        // `--show-output` outright.
+        //
+        // PROBED, and the argument is owed because a probe is normally the
+        // weaker choice. The rule this file states at `:192-202` — a constraint
+        // whose only check is skippable is unguarded on every machine that
+        // lacks one tool — is honoured by the mandatory row above, not waived
+        // here. What decides the shape is which class of tool this is. Every
+        // mandatory step in this array needs only what `rust-toolchain.toml`
+        // pins, and that file pins the `wasm32-unknown-unknown` *target*;
+        // `wasm-bindgen-cli` is a separately installed binary that must match
+        // the `wasm-bindgen` schema version in `Cargo.lock` exactly, so a
+        // `cargo update` can invalidate an installed one. rustup cannot supply
+        // it, which puts it in the same class as `cargo hack` and nightly and
+        // not in the same class as a target.
+        //
+        // The rejected alternative, stated because it was close: shape (i), a
+        // mandatory row with `probe: None`. It buys a stronger local guarantee
+        // and costs every contributor a `cargo install wasm-bindgen-cli` plus a
+        // node host before `cargo xtask ci --fast` can pass at all — a bar this
+        // project's own eleven remaining stories would pay at every seam, and
+        // one that breaks on a dependency bump rather than on a code change. It
+        // was declined because the row above recovers the part of it that is
+        // about *this repository's* code, and CI recovers the rest: the gate
+        // job installs the runner on all three matrix runners, so nothing is
+        // skipped where the claim is made. That last sentence is a property of
+        // `.github/workflows/ci.yml`, and removing the install there turns it
+        // into a lie rather than into a warning.
+        name: "wasm32 run of the conformance rules",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "wasm-conformance",
+        ],
+        env: &[],
+        probe: Some(&[proof::WASM_RUNNER, "--version"]),
     },
     Step {
         // `RUSTDOCFLAGS` rather than the ambient `RUSTFLAGS: -D warnings` that
@@ -790,6 +881,8 @@ fn main() -> ExitCode {
         },
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
+        Some("wasm-conformance") => proof::wasm_run(),
+        Some("wasm-conformance-enumeration") => proof::wasm_enumeration(),
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),
@@ -844,11 +937,15 @@ fn print_help() {
     println!("         broken and everything depending on them. Base defaults to `main`.");
     println!("         Errs toward more packages — see the module docs for the two ways it");
     println!("         can be wrong and why only one of them is allowed to happen.");
-    println!("  wasm   Check that happenstance-core, the conformance harnesses, the two");
-    println!("         wasm32 adapters (cloudflare, neon) and the typed layer");
-    println!("         (happenstance, the crate a Workers application installs) build");
-    println!("         for wasm32-unknown-unknown. Five checks; none of them says which");
-    println!("         port flavour the code bound — Send exists on that target.");
+    println!("  wasm   The whole wasm32-unknown-unknown family. Five builds — happenstance-core,");
+    println!("         the conformance harnesses, the two wasm32 adapters (cloudflare, neon)");
+    println!("         and the typed layer (happenstance, the crate a Workers application");
+    println!("         installs) — none of which says which port flavour the code bound,");
+    println!("         because Send exists on that target. Then two rows that are a");
+    println!("         different claim: the conformance targets are held to the one rule");
+    println!("         enumeration, and the rules are EXECUTED on the target under");
+    println!("         wasm-bindgen-test-runner. Also available on their own as");
+    println!("         wasm-conformance-enumeration and wasm-conformance.");
     println!("  spec-trace [--write]");
     println!("         Check the specification's clauses against the suite and the e2e");
     println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
@@ -901,6 +998,13 @@ fn print_help() {
 /// the crate furthest from the port — and because it is the one a Workers
 /// application installs, which is the gap the other four left open.
 ///
+/// Seven since HS-S0048, and the last two are a different kind of claim rather
+/// than two more compilations. Everything above them type-checks; the pair below
+/// asserts that the wasm32 conformance targets are wired to the one rule set and
+/// then **executes** those rules on the target. Appended for the same reason the
+/// fifth was, and in that order: the guard that cannot be skipped comes before
+/// the run that can.
+///
 /// [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 fn wasm_steps() -> Vec<&'static Step> {
     steps_named(&[
@@ -909,6 +1013,8 @@ fn wasm_steps() -> Vec<&'static Step> {
         "wasm32 build of the Cloudflare adapter",
         "wasm32 build of the Neon adapter",
         "wasm32 build of the typed layer",
+        "wasm32 conformance targets are non-vacuous",
+        "wasm32 run of the conformance rules",
     ])
 }
 
@@ -1067,6 +1173,31 @@ mod tests {
         "wasm32 check of the conformance harnesses",
         "wasm32 build of the Cloudflare adapter",
         "wasm32 build of the Neon adapter",
+    ];
+
+    /// The step that **executes** conformance rules on `wasm32`, spelled once.
+    const WASM_CONFORMANCE_RUN: &str = "wasm32 run of the conformance rules";
+
+    /// Its mandatory compensator, spelled once.
+    ///
+    /// The half of shape (ii) that may never be skipped: an emptied, rewired or
+    /// hand-subsetted wasm32 conformance target fails on every machine, whether
+    /// or not the runner that would have executed it is installed.
+    const WASM_CONFORMANCE_SHAPE: &str = "wasm32 conformance targets are non-vacuous";
+
+    /// The `wasm32` family as `cargo xtask wasm` runs it, in order.
+    ///
+    /// The five checks keep their position — a reader who knows the transcript
+    /// should still recognise it — and the two rows that turn the family from a
+    /// compile into a run are appended after them, never interleaved.
+    const WASM_STEPS: &[&str] = &[
+        "wasm32 build of the contract crate",
+        "wasm32 check of the conformance harnesses",
+        "wasm32 build of the Cloudflare adapter",
+        "wasm32 build of the Neon adapter",
+        TYPED_LAYER_WASM,
+        WASM_CONFORMANCE_SHAPE,
+        WASM_CONFORMANCE_RUN,
     ];
 
     /// The named step, out of a compile-time step table.
@@ -1312,24 +1443,31 @@ mod tests {
         );
     }
 
-    /// AC-002. Removing the step is loud, and the four originals keep their
-    /// position so a reader who knows the transcript still recognises it.
+    /// AC-002 (HS-S0031, and HS-S0048 after it). Removing a step is loud, and
+    /// the originals keep their position so a reader who knows the transcript
+    /// still recognises it.
+    ///
+    /// Renamed from `wasm_steps_resolve_and_number_five` when the two execution
+    /// rows landed: a count in a test name is a second copy of the list it
+    /// describes, and it drifts the first time the list moves. Every assertion
+    /// the old name carried is still here.
     #[test]
-    fn wasm_steps_resolve_and_number_five() {
+    fn wasm_steps_resolve_and_the_check_family_keeps_its_order() {
         // `wasm_steps` resolves by name through `steps_named`, which panics on a
         // name that resolves to nothing. Calling it *is* the assertion.
         let steps = wasm_steps();
 
+        let resolved: Vec<&str> = steps.iter().map(|step| step.name).collect();
         assert_eq!(
-            steps.len(),
-            5,
-            "the typed layer is not in `cargo xtask wasm`"
+            resolved, WASM_STEPS,
+            "`cargo xtask wasm` no longer runs the designed family in the \
+             designed order"
         );
         for (at, expected) in ORIGINAL_WASM_STEPS.iter().enumerate() {
             assert_eq!(
                 steps[at].name, *expected,
-                "the four original wasm32 steps moved; the fifth is appended, \
-                 never interleaved"
+                "the four original wasm32 steps moved; everything since is \
+                 appended, never interleaved"
             );
         }
         assert_eq!(
@@ -1383,5 +1521,160 @@ mod tests {
             probe.contains(&"hack"),
             "the powerset's probe no longer names the tool it needs: {probe:?}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // HS-S0048 AC-001, AC-002, AC-004, AC-006 — the wasm32 execution seam
+    // -----------------------------------------------------------------------
+
+    /// AC-001. The gate *runs* rules on `wasm32`, and runs them legibly.
+    ///
+    /// The wrong implementation this rejects is a sixth `cargo check`: a step
+    /// whose name promises execution and whose arguments type-check. It also
+    /// rejects the run that captures its own output, because `println!` is a
+    /// silent discard on this target and a declined capability's reason reaches
+    /// the terminal only under the runner's `--nocapture`.
+    #[test]
+    fn the_wasm32_conformance_run_executes_rather_than_checks() {
+        let step = step(REQUIRED, WASM_CONFORMANCE_RUN);
+
+        assert_eq!(step.program, "cargo");
+        assert!(
+            step.args.contains(&"wasm-conformance"),
+            "the step does not drive the executed-target list: {:?}",
+            step.args
+        );
+        assert!(
+            !step.args.contains(&"check"),
+            "the step is a `cargo check`, which is the claim it exists to \
+             replace: {:?}",
+            step.args
+        );
+        assert!(
+            step.args.contains(&"--locked"),
+            "a gate step that resolves dependencies without `--locked` tested a \
+             graph nobody committed"
+        );
+
+        let comment = step_comment(WASM_CONFORMANCE_RUN).to_lowercase();
+        assert!(
+            comment.contains("nocapture"),
+            "the comment does not say why the run is uncaptured — `println!` is a \
+             silent discard on this target: {comment}"
+        );
+        assert!(
+            comment.contains("execut"),
+            "the comment does not distinguish executing from type-checking, \
+             which is the whole of what this step adds: {comment}"
+        );
+    }
+
+    /// AC-004. The chosen shape is (ii), and both halves of it are real.
+    ///
+    /// A bare probe-gated step with no compensator is precisely the
+    /// configuration project AC-004 forbids: on a machine without the runner it
+    /// prints `skipped:` and the gate still goes green over a target that could
+    /// have been emptied. So the probe is admissible only while a `probe: None`
+    /// row asserts the target and its rule enumeration regardless.
+    #[test]
+    fn the_wasm32_run_is_probed_and_its_compensator_never_is() {
+        let run = step(REQUIRED, WASM_CONFORMANCE_RUN);
+        let shape = step(REQUIRED, WASM_CONFORMANCE_SHAPE);
+
+        let probe = run
+            .probe
+            .expect("shape (i) was chosen; then the comment and this test disagree");
+        assert!(
+            probe
+                .iter()
+                .any(|arg| arg.contains("wasm-bindgen-test-runner")),
+            "the run's probe does not name the runner it needs: {probe:?}"
+        );
+
+        assert!(
+            shape.probe.is_none(),
+            "the compensator is skippable, which makes the pair a bare \
+             probe-gated step — the one configuration AC-004 forbids"
+        );
+        assert!(
+            shape.args.contains(&"wasm-conformance-enumeration"),
+            "the compensator does not assert the executed targets: {:?}",
+            shape.args
+        );
+
+        // The argument is written down, not merely acted on: the house habit is
+        // that the gate carries its own reasoning, and a step whose comment
+        // restates its arguments is the decorative shape this file warns about.
+        let comment = step_comment(WASM_CONFORMANCE_RUN).to_lowercase();
+        assert!(
+            comment.contains("mandatory"),
+            "the comment does not name the rejected alternative — shape (i), a \
+             mandatory step: {comment}"
+        );
+        assert!(
+            comment.contains("rust-toolchain.toml"),
+            "the comment does not say why this tool is in a different class from \
+             the wasm32 target the other steps rely on: {comment}"
+        );
+        assert!(
+            step_comment(WASM_CONFORMANCE_SHAPE)
+                .to_lowercase()
+                .contains("skip"),
+            "the compensator does not say what it compensates for"
+        );
+    }
+
+    /// AC-002. `cargo xtask --help` stops claiming the wasm32 tasks only build.
+    ///
+    /// Read off the source for the reason [`step_comment`] is: `print_help`
+    /// writes to stdout, and the sentence a reader is misled by is a string
+    /// literal rather than a value anything can observe at runtime.
+    #[test]
+    fn the_help_text_says_the_wasm32_tasks_execute_rules() {
+        let source = read("xtask/src/main.rs");
+        let help = source
+            .split("println!(\"  wasm")
+            .nth(1)
+            .expect("no `wasm` entry in print_help")
+            .split("println!(\"  spec-trace")
+            .next()
+            .expect("the `wasm` help entry runs to the end of the file")
+            .to_lowercase();
+
+        assert!(
+            help.contains("execut") || help.contains(" run"),
+            "the `wasm` help still describes the family as builds and checks \
+             alone: {help}"
+        );
+        assert!(
+            !help.contains("five checks"),
+            "the `wasm` help still counts five checks, which is the sentence the \
+             execution rows falsify: {help}"
+        );
+    }
+
+    /// AC-006. No gate step hard-codes the executed target.
+    ///
+    /// The named wrong implementation: `-p happenstance-testkit --test
+    /// memory_conformance_wasm` inside a `Step`'s own `args`. It passes every
+    /// other criterion here and forces HS-S0054 to write a second execution
+    /// step, a second runner variable and a second anti-vacuity guard to add one
+    /// row's worth of coverage.
+    #[test]
+    fn no_gate_step_hard_codes_an_executed_wasm_target() {
+        for table in [REQUIRED, OPTIONAL] {
+            for step in table {
+                for wasm in crate::proof::WASM_TARGETS {
+                    assert!(
+                        !step.args.contains(&wasm.target),
+                        "`{}` names the executed target `{}` in its own \
+                         arguments; the targets are a declared list so a second \
+                         one is a row, not a step",
+                        step.name,
+                        wasm.target
+                    );
+                }
+            }
+        }
     }
 }

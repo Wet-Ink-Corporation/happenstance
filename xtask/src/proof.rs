@@ -49,6 +49,22 @@
 //! silence. What differs is only *which* names earn a row, and that is argued at
 //! [`WIRE_NEGATIVE_CONTROLS`] and [`SYNC_WIRE_TESTS`].
 //!
+//! # The wasm32 targets are a second shape, in the same file for one reason
+//!
+//! [`WASM_TARGETS`] carries the conformance targets the gate **executes** on
+//! `wasm32-unknown-unknown`. It is a separate array rather than three optional
+//! fields on [`Artefact`] because [`cargo_args`]'s `--all-features` is
+//! load-bearing for the host rows and does not compile on that target, and
+//! because the wasm flow has two entry points instead of one: [`wasm_run`]
+//! enumerates and executes, and [`wasm_enumeration`] asserts the same targets
+//! with no runner at all.
+//!
+//! They live here anyway, beside [`ARTEFACTS`], because they are the same
+//! argument. `cargo test` exits 0 on `running 0 tests` whichever target it is
+//! pointed at, and the wasm32 case is the one where nobody would have noticed:
+//! before HS-S0048 the gate compiled that harness and never ran it, so an
+//! emptied file passed a step whose name promised conformance.
+//!
 //! [ADR-0010]: ../../.kb/decisions/0010-the-suite-must-prove-itself.md
 //! [ADR-0016]: ../../.kb/decisions/0016-the-wire-format.md
 
@@ -284,6 +300,215 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
     },
 ];
 
+/// One conformance target that is **executed** on `wasm32-unknown-unknown`.
+///
+/// A separate shape beside [`Artefact`] rather than three optional fields on it,
+/// and the reason is the one the risk register named: [`cargo_args`]'s
+/// `--all-features` is load-bearing for the host rows' *fingerprint sharing*
+/// (`:287-299`) and is outright wrong here — `happenstance-testkit`'s `proptest`
+/// feature maps to a dependency declared only under
+/// `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`, so a wasm row that
+/// inherited the flag would not compile. Widening `Artefact` to make that flag
+/// optional would have put a per-row conditional inside the args the host rows
+/// depend on being identical. Two shapes, each internally uniform, is the cheaper
+/// honesty.
+///
+/// It is a **list of rows** for the reason [`ARTEFACTS`] is: the Cloudflare
+/// conformance target (HS-S0054) joins by adding a row here, carrying its own
+/// package, target and module, and writes no second gate step, no second runner
+/// wiring and no second environment variable.
+pub(crate) struct WasmTarget {
+    /// The package holding it.
+    pub(crate) package: &'static str,
+    /// Its test target, as `--test` names it.
+    pub(crate) target: &'static str,
+    /// The module the emitting macro wraps its rules in — `mod_name` at the
+    /// invocation, and the prefix libtest prints in front of every name.
+    pub(crate) module: &'static str,
+    /// The target's own source, read by the runner-free guard.
+    pub(crate) source: &'static str,
+    /// The rules that must still be present, by the name `--list` prints them
+    /// under, without the module prefix.
+    pub(crate) rules: &'static [&'static str],
+}
+
+/// The rules a wasm32-only subset would reach for first.
+///
+/// Transcribed rather than derived, and the two lists in this row do different
+/// jobs on purpose. [`wasm_conformance`] already asserts the **whole**
+/// enumeration against the listing, which no hand-list could keep up with; what
+/// that derived check cannot do is notice a *rename*, because a name changed in
+/// `registry.rs` is changed on both sides of the comparison at once. These nine
+/// are the ones where a rename or a quiet removal would cost the most, and the
+/// reasons are three:
+///
+/// The re-entrancy, concurrency and read-isolation rules are the reason this
+/// target exists at all. `wasm32-unknown-unknown` is single-threaded and its
+/// futures are `!Send`, so these are the rules that look hardest here and are
+/// the first any narrowing would reach for — and they are the only place
+/// [ADR-0001]'s bare flavour is observed under execution rather than under a
+/// `cargo check`.
+///
+/// The two fixture-contract rules are the seam's consumer. The isolation rule is
+/// the one genuinely new failure mode a Cloudflare fixture can have — a fixture
+/// pointing every fresh instance at the same Durable Object storage passes
+/// everything else — and it is what HS-S0054's row is being registered to run.
+///
+/// The three capability-declining rules pass while doing nothing visible unless
+/// the runner is told not to capture. That makes them the ones a reader with a
+/// dead-code instinct calls decorative, and they are exactly the rules whose
+/// `SKIP <rule>: <reason>` lines the `--nocapture` argument exists to keep
+/// legible.
+///
+/// [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
+const MEMORY_WASM_RULES: &[&str] = &[
+    "a_live_read_stream_does_not_block_an_append",
+    "interleaved_appends_on_one_handle_elect_one_winner",
+    "racing_conditional_appends_elect_one_winner",
+    "read_result_is_stable_under_concurrent_append",
+    "two_fixture_instances_observe_none_of_each_others_appends",
+    "two_handles_observe_each_others_appends",
+    "acknowledged_writes_survive_a_reopen",
+    "append_is_atomic_under_a_mid_batch_fault",
+    "append_reports_exceeded_store_limits",
+];
+
+/// Every conformance target the gate executes on `wasm32-unknown-unknown`.
+///
+/// One row today, and the shape is the deliverable. `every-rule-under-workerd`
+/// (HS-S0054) adds the Cloudflare conformance target here — a package, a target,
+/// the module its emitter wraps and the rules worth naming — and inherits the
+/// runner wiring, the version check, the exhaustive enumeration check and both
+/// gate steps without writing any of them again.
+pub(crate) const WASM_TARGETS: &[WasmTarget] = &[WasmTarget {
+    package: REGISTRY_PACKAGE,
+    target: "memory_conformance_wasm",
+    module: "dcb_conformance_wasm",
+    source: "crates/happenstance-testkit/tests/memory_conformance_wasm.rs",
+    rules: MEMORY_WASM_RULES,
+}];
+
+/// The runner that executes a `wasm-bindgen-test` harness.
+///
+/// Spelled once and shared with the gate step's probe in `main.rs`: a step that
+/// probes for one tool and runs another is a step that skips for the wrong
+/// reason.
+pub(crate) const WASM_RUNNER: &str = "wasm-bindgen-test-runner";
+
+/// Cargo's per-target runner variable.
+///
+/// Set on the inner `cargo test` here rather than on the gate step's `env`, and
+/// the choice is deliberate. `Step.env` would set it on the `cargo run -p xtask`
+/// process and reach the real invocation only by inheritance — which works
+/// inside the gate and leaves `cargo xtask wasm-conformance` broken as a
+/// standalone command. Setting it per-`Command` honours the reason `Step.env`
+/// exists (`main.rs:89-97`: a per-target variable must not become a
+/// process-wide one) more strictly than `Step.env` itself would, because the
+/// variable never touches this process's own environment at all.
+const WASM_RUNNER_VAR: &str = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER";
+
+/// The target triple the conformance rules are executed on.
+const WASM_TRIPLE: &str = "wasm32-unknown-unknown";
+
+/// The crate whose version the installed runner must match exactly.
+const WASM_BINDGEN: &str = "wasm-bindgen";
+
+/// The emitter a wasm32 conformance harness must go through.
+///
+/// `__emit_tokio` type-checks for this target and then cannot run on it, which is
+/// the failure CF-23 is about; a target that emitted through it would compile
+/// under the `cargo check` step above and fail here.
+const WASM_EMITTER: &str = "__emit_wasm";
+
+/// Where the one event-store rule enumeration lives.
+const RULE_ENUMERATION: &str = "crates/happenstance-testkit/src/registry.rs";
+
+/// The line the enumeration opens with.
+const ENUMERATION_HEAD: &str = "macro_rules! for_each_event_store_rule {";
+
+/// A workspace file, read through the root rather than `include_str!`.
+///
+/// The same reasoning [`registry_len`] is reached through: this file is
+/// `xtask`'s and the sources it reads are the testkit's, so a compile-time
+/// include would make a `publish = false` tool's build depend on a crate it has
+/// no other relationship with — and would freeze the read at `xtask`'s own
+/// compilation rather than the gate's run.
+fn read_source(file: &str) -> Result<String> {
+    let root = workspace_root()?;
+    fs::read_to_string(root.join(file)).with_context(|| format!("reading {file}"))
+}
+
+/// Every rule `for_each_event_store_rule!` declares.
+///
+/// Derived rather than transcribed, and that is the opposite of the choice
+/// [`META_TESTS`] makes one screen up — deliberately, because the two lists are
+/// answering different questions. `META_TESTS` is transcribed so that a rename
+/// has something to disagree with. This is derived so that **adding** a rule
+/// needs no edit here while a rule that exists on the host and never reaches
+/// `wasm32` still fails: an exhaustive check that a hand-list could only
+/// approximate, over a set that grows.
+///
+/// # Errors
+///
+/// Returns an error if the enumeration cannot be read, if it has moved, or if it
+/// parses to fewer than two names — all three of which would otherwise silently
+/// weaken every check built on it into a check of nothing.
+fn enumerated_rules() -> Result<Vec<String>> {
+    let body = read_source(RULE_ENUMERATION)?;
+
+    let mut lines = body.lines().skip_while(|l| l.trim() != ENUMERATION_HEAD);
+    if lines.next().is_none() {
+        bail!("{RULE_ENUMERATION} has no `{ENUMERATION_HEAD}` — the enumeration has moved or gone");
+    }
+
+    let mut rules = Vec::new();
+    for line in lines {
+        let trimmed = line.trim();
+        // The macro body ends at the first `}` in column zero.
+        if line.starts_with('}') {
+            break;
+        }
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        let Some(name) = trimmed.strip_suffix(',') else {
+            continue;
+        };
+
+        // Refused rather than skipped, and the difference is the whole value of
+        // this parser. A name it cannot read is silently *absent* from every
+        // check built on this list — so a rule renamed into a spelling the scan
+        // does not recognise would shrink the enumeration and pass, which is the
+        // vacuity failure one level in from the one this file exists for. The
+        // suite's rules are `snake_case` without exception; anything else here
+        // is a shape change that has to be looked at.
+        if name.is_empty()
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        {
+            bail!(
+                "{RULE_ENUMERATION} lists `{name}`, which is not a snake_case rule \
+                 name. The enumeration's shape has changed; a name this scan cannot \
+                 read is a rule silently missing from every check built on it."
+            );
+        }
+
+        rules.push(name.to_owned());
+    }
+
+    if rules.len() < 2 {
+        bail!(
+            "{RULE_ENUMERATION}'s `for_each_event_store_rule!` parsed to {} rule(s); \
+             the enumeration's shape has changed and every check built on it is now \
+             checking nothing",
+            rules.len()
+        );
+    }
+
+    Ok(rules)
+}
+
 /// The arguments both cargo invocations for one artefact share.
 ///
 /// `--all-features` matters for a reason that is not about coverage: the `tests`
@@ -333,7 +558,11 @@ fn check(artefact: &Artefact) -> Result<()> {
         registry,
     } = *artefact;
 
-    let listed = list(artefact)?;
+    let listed = list(
+        &cargo_args(artefact),
+        &[],
+        &format!("`{package}`'s `{target}`"),
+    )?;
 
     let absent: Vec<&str> = tests
         .iter()
@@ -372,6 +601,328 @@ fn check(artefact: &Artefact) -> Result<()> {
 
     if !status.success() {
         bail!("`{package}`'s `{target}` proof artefact failed with {status}");
+    }
+
+    Ok(())
+}
+
+/// The arguments one wasm32 target's two cargo invocations share.
+///
+/// **No `--all-features`**, and this is the one flag whose absence is worth a
+/// comment. [`cargo_args`] carries it for a fingerprint-sharing reason that is
+/// entirely about the host, and here it does not merely fail to help — it does
+/// not compile. `happenstance-testkit`'s `proptest` feature maps to a dependency
+/// declared only under `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`,
+/// and a Cargo feature is not target-scoped, so `--all-features` sets it on this
+/// target too. The two existing `wasm32` steps pass no feature flags for exactly
+/// this reason (`main.rs:231-243`), and this matches them — which is also what
+/// keeps their build artifacts shared rather than rebuilt (NF-001).
+fn wasm_cargo_args(wasm: &WasmTarget) -> [&'static str; 8] {
+    [
+        "test",
+        "--locked",
+        "-p",
+        wasm.package,
+        "--test",
+        wasm.target,
+        "--target",
+        WASM_TRIPLE,
+    ]
+}
+
+/// The `wasm-bindgen` version the committed lock file resolves.
+///
+/// Derived, never hard-coded. `wasm-bindgen-cli` must match the `wasm-bindgen`
+/// in the dependency graph *exactly* — the runner refuses a mismatched schema,
+/// and is right to — so a pinned number here would mean a `cargo update` leaves
+/// a runner that no longer matches, failing as a confusing runtime error instead
+/// of as a version bump. `.github/workflows/ci.yml` reads it out of
+/// `cargo metadata` for the same reason; this reads `Cargo.lock` directly so the
+/// check costs no dependency resolution.
+///
+/// # Errors
+///
+/// Returns an error if `Cargo.lock` cannot be read or if `wasm-bindgen` is not
+/// in it — which would mean the harness this step executes no longer exists.
+fn locked_wasm_bindgen_version() -> Result<String> {
+    let lock = read_source("Cargo.lock")?;
+
+    let mut lines = lock
+        .lines()
+        .skip_while(|l| l.trim() != format!("name = \"{WASM_BINDGEN}\""));
+    if lines.next().is_none() {
+        bail!(
+            "`{WASM_BINDGEN}` is absent from Cargo.lock, so there is no wasm32 test \
+             harness for the gate to execute"
+        );
+    }
+
+    for line in lines.take(4) {
+        if let Some(version) = line.trim().strip_prefix("version = ") {
+            return Ok(version.trim_matches('"').to_owned());
+        }
+    }
+
+    bail!("Cargo.lock's `{WASM_BINDGEN}` package declares no version")
+}
+
+/// Refuses a runner whose schema does not match the graph (EC-002).
+///
+/// The mismatch is otherwise reported by the runner as an opaque failure part
+/// way through a test binary, which reads as *the conformance suite broke* when
+/// it means *reinstall one tool*. Naming the two versions and the command that
+/// reconciles them is the difference.
+fn check_wasm_runner_version() -> Result<()> {
+    let expected = locked_wasm_bindgen_version()?;
+
+    let output = Command::new(WASM_RUNNER)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("failed to launch `{WASM_RUNNER} --version`"))?;
+
+    let reported = String::from_utf8_lossy(&output.stdout).into_owned();
+    let installed = reported.split_whitespace().last().unwrap_or_default();
+
+    if installed != expected {
+        bail!(
+            "`{WASM_RUNNER}` is {installed} and Cargo.lock resolves `{WASM_BINDGEN}` \
+             {expected}. The runner refuses a mismatched schema, so this would fail \
+             part way through a test binary as though the suite had broken.\n\n\
+             \tcargo install wasm-bindgen-cli --version {expected} --locked"
+        );
+    }
+
+    println!("{WASM_RUNNER} {installed} matches Cargo.lock's {WASM_BINDGEN} {expected}");
+    Ok(())
+}
+
+/// The head of a list of missing names, with the rest counted rather than
+/// printed.
+///
+/// An emptied target is missing *every* rule, and a failure message carrying 89
+/// fully-qualified names is one a reader scrolls past rather than reads —
+/// which costs the message the one property a build failure has to have, that
+/// the reader can act on it without re-running anything. Ten names and a count
+/// says both *what* is missing and *how much*.
+fn first_few(names: &[String]) -> String {
+    const SHOWN: usize = 10;
+
+    let head = names
+        .iter()
+        .take(SHOWN)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    match names.len().checked_sub(SHOWN) {
+        Some(rest) if rest > 0 => format!("{head}, and {rest} more"),
+        _ => head,
+    }
+}
+
+/// Executes every registered conformance target on `wasm32-unknown-unknown`.
+///
+/// Three assertions before anything runs, because the failure this guards
+/// against is a green exit over nothing:
+///
+/// 1. The installed runner matches the lock file.
+/// 2. Every rule `for_each_event_store_rule!` declares appears in the target's
+///    own `--list`. Exhaustive and derived, so a rule added upstream needs no
+///    edit here, and a rule `#[cfg]`-ed out of the wasm harness — the shape
+///    project AC-002 forbids — fails.
+/// 3. Every rule the row *names* appears too. Transcribed, so a rename has
+///    something to disagree with; see [`MEMORY_WASM_RULES`].
+///
+/// Then the rules run under `--nocapture`. That flag is not noise: `println!` is
+/// a silent discard on this target, so `__emit_wasm` reports a declined
+/// capability's `SKIP <rule>: <reason>` through `console_log!`, and without the
+/// flag the runner swallows it. It is the target's own idiom for the
+/// `--show-output` the gate's host `tests` step carries — and it is not a
+/// synonym: `--show-output` is rejected outright by this runner.
+///
+/// # Errors
+///
+/// Returns an error if the runner is absent or mismatched, if a target cannot be
+/// built or enumerated, if any rule the enumeration declares is missing from a
+/// target's listing, or if the rules themselves fail.
+pub(crate) fn wasm_run() -> Result<()> {
+    check_wasm_runner_version()?;
+
+    let enumerated = enumerated_rules()?;
+    let env = [(WASM_RUNNER_VAR, WASM_RUNNER)];
+
+    for wasm in WASM_TARGETS {
+        let label = format!("`{}`'s `{}` on {WASM_TRIPLE}", wasm.package, wasm.target);
+        let args = wasm_cargo_args(wasm);
+        let listed = list(&args, &env, &label)?;
+
+        let qualified = |rule: &str| format!("{}::{rule}", wasm.module);
+        let absent: Vec<String> = enumerated
+            .iter()
+            .map(|rule| qualified(rule))
+            .filter(|name| !listed.iter().any(|line| line == name))
+            .collect();
+
+        if !absent.is_empty() {
+            bail!(
+                "{label} is missing {} of the {} rules `for_each_event_store_rule!` \
+                 declares: {}\n\n\
+                 The target builds, so `cargo test` would have exited 0 with nothing \
+                 to say. The rule set is single-sourced through the one enumeration \
+                 — a rule that reaches the host harnesses and not this one is a \
+                 wasm32-only subset, which is the outcome this step exists to \
+                 forbid. Listed: {} name(s).",
+                absent.len(),
+                enumerated.len(),
+                first_few(&absent),
+                listed.len()
+            );
+        }
+
+        let unnamed: Vec<&str> = wasm
+            .rules
+            .iter()
+            .copied()
+            .filter(|rule| !listed.iter().any(|line| *line == qualified(rule)))
+            .collect();
+
+        if !unnamed.is_empty() {
+            bail!(
+                "{label} is missing {} of the rules the gate names: {unnamed:?}\n\n\
+                 These are named in `xtask/src/proof.rs` rather than derived, so \
+                 that a rename has something to disagree with. If one moved \
+                 deliberately, update `MEMORY_WASM_RULES` in the same change.",
+                unnamed.len()
+            );
+        }
+
+        println!(
+            "{}/{}: {} rules enumerated, {} named, executing on {WASM_TRIPLE}",
+            wasm.package,
+            wasm.target,
+            enumerated.len(),
+            wasm.rules.len()
+        );
+
+        let status = Command::new("cargo")
+            .args(args)
+            // `--nocapture` and not `--show-output`: the host flavour of this
+            // flag is rejected by `wasm-bindgen-test-runner` outright.
+            .args(["--", "--nocapture"])
+            .envs(env)
+            .status()
+            .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
+
+        if !status.success() {
+            bail!("{label} failed with {status}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Asserts the executed targets exist and are wired to the one rule set — with
+/// no runner, on every machine.
+///
+/// This is the compensating half of the shape `main.rs` chose for the execution
+/// step, and the reason that step is allowed a probe at all. `wasm-bindgen-cli`
+/// is a `cargo install`ed binary pinned to a schema version;
+/// `rust-toolchain.toml` can pin a *target* and cannot install a *binary*, so
+/// the runner is genuinely absent on some machines and a mandatory step there
+/// fails for a reason that is not about the code. What may **not** happen is the
+/// skip taking the guard with it: everything below runs whether or not the
+/// runner exists, and an emptied, rewired or hand-subsetted target fails here.
+///
+/// What it deliberately does not claim: that the rules *passed*, or that any
+/// individual rule is not `#[ignore]`d. Those need the runner, and
+/// [`wasm_run`] is where they are checked. A guard whose limits are undocumented
+/// is read as a guarantee.
+///
+/// # Errors
+///
+/// Returns an error if no target is registered, if a target's source is missing
+/// or no longer invokes the suite through [`WASM_EMITTER`], if a row names no
+/// rules, if a named rule is absent from the enumeration, or if a target writes
+/// a rule list of its own.
+pub(crate) fn wasm_enumeration() -> Result<()> {
+    if WASM_TARGETS.is_empty() {
+        bail!(
+            "no conformance target is registered for execution on {WASM_TRIPLE}. \
+             Removing the last row silently reduces the gate's wasm32 claim to a \
+             `cargo check`, which is what this check exists to refuse."
+        );
+    }
+
+    let enumerated = enumerated_rules()?;
+
+    for wasm in WASM_TARGETS {
+        let source = read_source(wasm.source)?;
+
+        for (needle, complaint) in [
+            (
+                "event_store_conformance!",
+                "no longer invokes the conformance suite; an emptied target exits 0 \
+                 on `running 0 tests`",
+            ),
+            (
+                WASM_EMITTER,
+                "does not emit through `__emit_wasm`, so whatever it runs is not the \
+                 wasm32 harness — `__emit_tokio` type-checks here and cannot run here",
+            ),
+            (
+                wasm.module,
+                "no longer declares the module the gate expects its rules under",
+            ),
+        ] {
+            if !source.contains(needle) {
+                bail!("{} {complaint} (looked for `{needle}`)", wasm.source);
+            }
+        }
+
+        if wasm.rules.is_empty() {
+            bail!(
+                "{}'s row names no rules, so a rename would have nothing to \
+                 disagree with",
+                wasm.target
+            );
+        }
+
+        for rule in wasm.rules {
+            if !enumerated.iter().any(|name| name == rule) {
+                bail!(
+                    "{}'s row names `{rule}`, which `for_each_event_store_rule!` \
+                     does not declare. Either the rule was renamed and this list \
+                     was not, or this list names a rule that never existed.",
+                    wasm.target
+                );
+            }
+        }
+
+        // Single-sourcing, checked at the one place a subset would be written.
+        let hand_written: Vec<&String> = enumerated
+            .iter()
+            .filter(|rule| source.contains(rule.as_str()))
+            .collect();
+
+        if !hand_written.is_empty() {
+            bail!(
+                "{} names {} conformance rule(s) itself: {hand_written:?}\n\n\
+                 The rule set is single-sourced through \
+                 `for_each_event_store_rule!`. A list here is a wasm32-only subset \
+                 — a second enumeration that can drift from the first, which is \
+                 the outcome the project's AC-002 forbids by construction.",
+                wasm.source,
+                hand_written.len()
+            );
+        }
+
+        println!(
+            "{}/{}: {} named rules, all declared by the one enumeration of {}",
+            wasm.package,
+            wasm.target,
+            wasm.rules.len(),
+            enumerated.len()
+        );
     }
 
     Ok(())
@@ -432,25 +983,22 @@ fn registry_len(file: &str) -> Result<usize> {
 /// suffix is stripped rather than the line split on `:`, because a test name
 /// contains `::` and a split would take the wrong half; lines that do not carry
 /// the suffix are the summary and are dropped.
-fn list(artefact: &Artefact) -> Result<Vec<String>> {
-    let Artefact {
-        package, target, ..
-    } = *artefact;
-
+/// Takes the invocation as arguments rather than as an [`Artefact`] because the
+/// wasm32 rows share the parsing and share none of the flags: a different
+/// target, no `--all-features`, and a runner variable the host rows must never
+/// see. Generalising the parameter is what let the wasm entry reuse this without
+/// touching what the host rows pass.
+fn list(args: &[&str], env: &[(&str, &str)], label: &str) -> Result<Vec<String>> {
     let output = Command::new("cargo")
-        .args(cargo_args(artefact))
+        .args(args)
         .args(["--", "--list"])
+        .envs(env.iter().copied())
         .output()
-        .with_context(|| {
-            format!("failed to launch `cargo test -- --list` for `{package}`'s `{target}`")
-        })?;
+        .with_context(|| format!("failed to launch `cargo test -- --list` for {label}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!(
-            "could not enumerate `{package}`'s `{target}` tests:\n{}",
-            stderr.trim()
-        );
+        bail!("could not enumerate {label}'s tests:\n{}", stderr.trim());
     }
 
     let listing = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -676,12 +1224,142 @@ mod tests {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // HS-S0048 AC-003, AC-005, AC-006 — the executed wasm32 conformance targets
+    // -----------------------------------------------------------------------
+
+    /// AC-006. The executed targets are rows, not arguments.
+    ///
+    /// The named wrong implementation this rejects is a `Step` carrying
+    /// `-p happenstance-testkit --test memory_conformance_wasm` in its own
+    /// `args`: it satisfies every other criterion here and forces HS-S0054 to
+    /// duplicate the whole design — a second step, a second runner variable and
+    /// a second anti-vacuity guard — to run one more target.
+    #[test]
+    fn every_executed_wasm_target_carries_its_own_package_and_target() {
+        assert!(
+            !WASM_TARGETS.is_empty(),
+            "no conformance target is registered for execution on wasm32, so the \
+             gate's wasm32 story is still a `cargo check`"
+        );
+
+        let mut seen: Vec<(&str, &str)> = Vec::new();
+        for wasm in WASM_TARGETS {
+            for (label, value) in [
+                ("package", wasm.package),
+                ("target", wasm.target),
+                ("module", wasm.module),
+                ("source", wasm.source),
+            ] {
+                assert!(
+                    !value.is_empty(),
+                    "`{}` carries an empty {label}, so the row cannot address a \
+                     target on its own",
+                    wasm.target
+                );
+            }
+            assert!(
+                !seen.contains(&(wasm.package, wasm.target)),
+                "`{}`'s `{}` is registered twice",
+                wasm.package,
+                wasm.target
+            );
+            seen.push((wasm.package, wasm.target));
+        }
+    }
+
+    /// AC-003. The names the gate asserts are names the one enumeration emits.
+    ///
+    /// The duplication is the mechanism, exactly as it is for [`META_TESTS`]: a
+    /// rule renamed in `registry.rs` and not here fails at this test rather than
+    /// drifting into an expectation list that quietly matches nothing.
+    #[test]
+    fn every_named_wasm_rule_is_one_the_enumeration_declares() {
+        let enumerated = enumerated_rules().unwrap();
+        assert!(
+            enumerated.len() > 1,
+            "the rule enumeration parsed to {} names, which is a parser failure \
+             rather than a rule set",
+            enumerated.len()
+        );
+
+        assert!(
+            !WASM_TARGETS.is_empty(),
+            "no executed wasm32 target is registered, so this check has nothing \
+             to disagree with"
+        );
+        for wasm in WASM_TARGETS {
+            assert!(
+                !wasm.rules.is_empty(),
+                "`{}` names no rules, so an emptied target would pass its own \
+                 anti-vacuity guard",
+                wasm.target
+            );
+            for rule in wasm.rules {
+                assert!(
+                    enumerated.iter().any(|name| name == rule),
+                    "`{}` names `{rule}`, which `for_each_event_store_rule!` does \
+                     not declare — a rename that reached the enumeration and not \
+                     this list",
+                    wasm.target
+                );
+            }
+        }
+    }
+
+    /// AC-005. The executed target delegates wholly to the one enumeration.
+    ///
+    /// A wasm-only subset list would fail project AC-002 by construction, and
+    /// the place it would be written is the target's own source — a
+    /// `for_each_event_store_rule!`-free hand-rolled list of the rules someone
+    /// judged safe on a single-threaded runtime. So the target may name the
+    /// emitter, the fixture and the module, and no individual rule at all.
+    #[test]
+    fn the_executed_wasm_targets_name_no_rule_of_their_own() {
+        let enumerated = enumerated_rules().unwrap();
+        assert!(
+            !WASM_TARGETS.is_empty(),
+            "no executed wasm32 target is registered, so this check reads nothing"
+        );
+
+        for wasm in WASM_TARGETS {
+            let source = read_source(wasm.source).unwrap();
+            assert!(
+                source.contains("event_store_conformance!"),
+                "`{}` no longer invokes the conformance suite; an emptied target \
+                 exits 0 on `running 0 tests`",
+                wasm.source
+            );
+            assert!(
+                source.contains(WASM_EMITTER),
+                "`{}` does not emit through `{WASM_EMITTER}`, so whatever it runs \
+                 is not the wasm32 harness",
+                wasm.source
+            );
+            for rule in &enumerated {
+                assert!(
+                    !source.contains(rule.as_str()),
+                    "`{}` names the rule `{rule}` itself. The rule set is \
+                     single-sourced through `for_each_event_store_rule!`; a \
+                     hand-written list here is a wasm-only subset",
+                    wasm.source
+                );
+            }
+        }
+    }
+
     /// What the run does **not** cover, stated rather than left to be assumed.
     ///
-    /// The local gate never checks the MSRV and never *executes* a wasm test; both
-    /// are CI jobs. An artefact that claims coverage it does not have is worse
-    /// than none, because its whole value to a reader is that they do not have to
-    /// trust a summary.
+    /// An artefact that claims coverage it does not have is worse than none,
+    /// because its whole value to a reader is that they do not have to trust a
+    /// summary.
+    ///
+    /// One of the three limits it names has since been closed and the document
+    /// is **not** edited to say so: `references/evaluation/` artefacts are
+    /// immutable and superseded rather than corrected, and this one is a true
+    /// record of the tree at phase 6. The local gate did not execute a
+    /// conformance rule on `wasm32` then; since HS-S0048 it does, through
+    /// [`wasm_run`]. The MSRV limit still holds.
     #[test]
     fn the_artefact_states_what_the_run_does_not_cover() {
         let doc = proof_document();

@@ -26,6 +26,44 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`cargo xtask ci` now *executes* the conformance rules on
+  `wasm32-unknown-unknown`, rather than compiling a harness that runs
+  elsewhere.** Two rows join the gate. `wasm32 run of the conformance rules`
+  drives `crates/happenstance-testkit/tests/memory_conformance_wasm.rs` through
+  `wasm-bindgen-test-runner`, so the whole event-store rule set runs against
+  `MemoryFixture` on a single-threaded, `!Send` target — in the same command a
+  contributor types, and on all three runners the CI `gate` job matrices over
+  rather than on `ubuntu-latest` alone. Before this, every wasm32 step in the
+  gate was a `cargo check`, and `#[tokio::test]` type-checks for that target and
+  then cannot run on it: precisely the gap CF-23 is about. The standalone
+  `wasm-conformance` GitHub Actions job that used to carry this claim is retired
+  in favour of the in-gate step, and its `Cargo.lock`-resolved
+  `wasm-bindgen-cli` version and install moved into the `gate` job.
+
+  The second row, `wasm32 conformance targets are non-vacuous`, is what makes
+  the first safe to probe. `cargo test` exits 0 on `running 0 tests`, so naming
+  a target is checking a filename — the argument `xtask/src/proof.rs` was
+  written for, now applied to a target nobody was running. Before anything
+  executes, every rule `for_each_event_store_rule!` declares must appear in the
+  target's own `--list`, which is what a wasm32-only subset would fail; and a
+  second, **mandatory** step reads the target's source with no runner at all, so
+  an emptied file, one rewired away from `__emit_wasm`, one carrying a
+  hand-written rule list, or a deleted registration fails on every machine —
+  including the machines where the run itself prints `skipped:`. The executed
+  targets are a declared list, so the Cloudflare conformance target arrives as a
+  row rather than as a second step.
+
+  The run passes `--nocapture`, and that is not verbosity: `println!` is a
+  silent discard on `wasm32-unknown-unknown`, so a fixture's
+  `SKIP <rule>: <reason>` line reaches the terminal only when the runner is told
+  not to capture. It is this target's idiom for the `--show-output` the host
+  `tests` step carries, and not a synonym — `wasm-bindgen-test-runner` rejects
+  `--show-output` outright. The gate also refuses a runner whose version does
+  not match the `wasm-bindgen` in `Cargo.lock`, naming both versions and the
+  `cargo install` line that reconciles them, because the alternative is a schema
+  mismatch surfacing part way through a test binary as though the suite had
+  broken.
+
 - **`recorded_time_survives_a_reopen` finally has a negative control that reaches
   its own sentence.** The rule asserts three things in order — the event survived
   the reopen, it is at the same position, and *`recorded_at` is unchanged* — and
