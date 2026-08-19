@@ -47,7 +47,7 @@ pattern `3e0a71e`, `a78ca36` and `b4c0c52` already established in this project.
 
 | SHA | Subject |
 | --- | ------- |
-| `1c65cf5` | `feat(application-author-path): Fence inventory and clause audit` |
+| `a189aa2` | `feat(application-author-path): Fence inventory and clause audit` |
 
 ## Changes
 
