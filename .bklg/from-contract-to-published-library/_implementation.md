@@ -25,7 +25,7 @@ attributable to the initiative rather than inherited.
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **done** | approved 2026-08-19 · `_review.md` · 14/14 · 6 runs · `overall: 3` · `happenstance-sqlite 0.0.0` reserved |
-| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
+| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | run 1 halted at slice 2 boundary · 5/12 · slice 1 approved · fences amended, gate now green · re-launched |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
 | 7 | `publication-and-positioning` | HS-P0016 | 2, 3, 4, 5, 6 | pending | |
@@ -1495,3 +1495,72 @@ Six runs, and the shape of the last four is worth keeping: runs 3 and 5 each spe
 surface a fence line and two stale digits, because the loop re-runs a full adversarial review to find
 artifact defects a fix pass clears in minutes. **Every blocking finding after run 2 was an artifact
 defect, never broken code** — the adapter passed 89 then 90 conformance rules throughout.
+
+---
+
+## HS-P0013 `cloudflare-durable-object-store` — run 1, 2026-08-19 (`wf_e8cbc0ee-b9a`)
+
+baseRef `156cd27`. Halted at slice `real-worker-bindings`, step `verify`, kind `story-gate`.
+5 of 12 stories committed. `degradedSummary: none`; no baseline repairs.
+**Keep baseRef stable across re-launches of this project.**
+
+| Slice | Verdict | Stories |
+|-------|---------|---------|
+| `wasm-execution-seam` | **approved** | `wasm-execution-gate-step` `8ea7bb7` + `d1bae6d` — 89 conformance rules now *execute* on `wasm32` inside one `cargo xtask ci`, guarded by a fourth `xtask/src/proof.rs` `Artefact` row so an emptied target fails rather than passing on `running 0 tests`. AC-004 closed. |
+| `real-worker-bindings` | **changes-requested** | `worker-binding-layer` `310a4c8`, `durable-object-write-path` `3eb91cf`, `durable-object-read-path` `9891320`, `caller-visible-error-verdict` `5955cb3`, slice repair `2ea99fd` |
+
+Slices 3–5 (`durable-object-conformance-run`, `evidence-and-verdicts`, `publish-readiness`)
+were never entered — 7 stories outstanding.
+
+### The blocker was two stacked causes, and the first hid the second
+
+**Cause one is plumbing, and it is the command's to fix, not the workflow's.**
+`.redkiln/config.yaml` sets `require_commit_provenance: true`, so a story whose
+`links.commits` is empty fails provenance. redkiln then *falls back from the story's own
+fence to the whole `main...HEAD` diff* (redkiln **#94**) and judges that fence against every
+sibling project's files — which is why the halt reported *"130+ other files"* against a
+25-file commit. `redkiln record-links` is the fix, and it is `/redkiln:implement`'s step 6,
+which by construction runs *after* the workflow has already failed the gate.
+
+Slice 1 diagnosed this itself and repaired it in `8a1b802`, citing #94 by number; that is
+why it sealed `approved`. Slice 2's repair pass (`2ea99fd`) spent itself on ledgers,
+reports and code instead, so all four of its stories stayed red on the untouched root
+cause. Recording each story's checkpoint plus `2ea99fd` collapsed the complaint from 130+
+files to 13.
+
+**Cause two is real, and it is a planning defect rather than an implementation one.**
+`standards/rust/**` and `spec/SPECIFICATION.md` carry `file:line` citations pointing *into*
+the files this slice rewrites — `src/js.rs` most of all — and `cargo xtask
+lint-constitution` and `cargo xtask spec-trace` are both gate steps. A diff that moves a
+cited line and leaves the citation stale is red; a diff that repairs it was out of bounds.
+**There was no third option: the fence as written was not satisfiable by a correct
+implementation.** Every one of the eleven constitution and specification edits in `310a4c8`
+is of that kind (`js.rs:31` → `js.rs:33`, `js.rs:46` → `js.rs:77`, nine more). `deny.toml`
+is the same shape one level out — adding `worker` fires `cargo deny`'s `async-trait` ban.
+
+Resolved at the human gate by widening the four fences (`8fa4d06`), each carrying a
+**Fence amendment** section recording why the original was wrong, which rows arrive only
+through the shared repair commit rather than the story's own checkpoint, and what the
+amendment does **not** license: normative clause text still needs a new ADR, not an edit.
+The only `spec/SPECIFICATION.md` change in the slice is to ES-6's *non-normative*
+explanatory paragraph, which described the `Rc<str>` stand-in the story replaced.
+
+`redkiln verify --grain story` now passes **all four checks** on HS-S0049, HS-S0050,
+HS-S0051 and HS-S0052.
+
+### Recorded at the gate
+
+- **HS-S0048 approved** by the human and held on `report` (`--stay`), gate green on all four checks.
+- The other four stories stayed on `plan` while their gate was red, and are carried into run 2.
+- One agent died on `ECONNRESET` during slice 2 and was retried; `degraded` is empty.
+
+### Carried forward
+
+1. **Attribution of `2ea99fd` is deliberately over-broad.** The slice-wide repair commit is
+   recorded against all four stories, because attributing it to one loses the provenance of
+   the other three. It widens each story's boundary evaluation by `deny.toml`,
+   `xtask/src/{main,proof}.rs` and `CHANGELOG.md`, and `record-links` only appends — there
+   is no CLI verb to narrow it. Each amended fence says so in its own words.
+2. **This will recur.** Every remaining story in this project that touches cited code faces
+   the same unsatisfiable-fence shape. The amendment fixed four specs, not the pattern; the
+   seven outstanding stories' fences have not been checked against it.
