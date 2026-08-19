@@ -23,14 +23,14 @@ archetype: capability
 slice: publishable-and-reconciled
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-19T13:44:34.663Z
+updated: 2026-08-19T13:44:38.741Z
 links:
   pr: null
   commits:
     - 62a05dd
     - d2d1f73
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
