@@ -17,12 +17,12 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-19T13:28:32.112Z
+updated: 2026-08-19T13:49:19.827Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: 7289a0c4
 ---
