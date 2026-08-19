@@ -35,39 +35,6 @@ implementation report and cited from the `evidence` field by name plus `file:lin
 
 `<atom>` stands for `.kb/_intake/lesson-page-need-declaration-discipline.md` throughout.
 
-## Where the two non-author walks stand
-
-**Both have now been run by a non-author, and the author-run captures have been removed from the
-rows.** AC-007's rejection cross-walk and AC-009's portability walk were both performed at first
-merge by the implementer, who drafted the atom. AC-007 requires a walker who did not draft the atom
-and AC-009 requires the walker's identity recorded here, so an author-run walk is not evidence for
-either — the precedent one slice back is explicit about that
-(`reviewer-and-citation-procedures/_ledger.md:84`, where an author-run calibration was struck from
-the row and the report's residual paragraph kept as the audit trail).
-
-**Walker for both: the adversarial slice reviewer for `binding-beyond-this-project`** — the review
-pass that produced this slice's findings, which drafted no part of the atom, of `_ledger.md` or of
-`implementation-report.md`. **Date: 2026-08-18.**
-
-| walk | AC | verdict | recorded at |
-| --- | --- | --- | --- |
-| rejection cross-walk | AC-007 | **PASS** — five families, each mapping to a real design rejection at the cited ranges; no sixth family invented; none attributed a reason the design does not state | `implementation-report.md:216` §Rejection cross-walk |
-| portability walk (`.kb/playbooks/README.md:33-35`) | AC-009 | **PASS** — the subject is the shape, happenstance is the cited instance, and RS-81-1 is a genuine recurrence on a subject that is not documentation | `implementation-report.md:313` §Portability |
-
-The superseded author-run captures are kept unedited in those two report sections, under
-**What this replaced, and why**, so the state each row was in stays auditable.
-
-## What the review pass changed in the atom itself
-
-The same pass found AC-008 unmet in a way no transcript in this ledger could have caught. The atom
-cited `standards/pages/*.md` **paths** but not one `RP-NN-N` **id**, so AC-008's second clause —
-*every `RP-` id in the atom checked against the shipped rule text for restatement* — had nothing to
-run over, and it was hiding a genuine restatement: RP-00-2's own italicised reader's test
-(`standards/pages/00-one-need.md:52-53`) reproduced verbatim in the atom's step 1, with RP-00-2's
-imperative paraphrased beside it. Ten ids are now cited and none is restated; the audit is at
-`implementation-report.md:248` §Commitment audit, and it cost a fourth compression pass, so AC-011's
-two budgets were re-measured from scratch rather than carried forward.
-
 ```yaml
 - id: AC-001
   criterion: "GIVEN the ingest operator runs /redkiln:kb-ingest with no argument at initiative closeout, WHEN the default glob .kb/_intake/*.md is expanded (.kb/_intake/README.md:3-5), THEN exactly one new payload file — .kb/_intake/lesson-page-need-declaration-discipline.md — is swept in beside the directory's README, under a `lesson-` name the operator reads as payload rather than scaffolding, and it is registered in no manifest, index or config anywhere else"
@@ -146,3 +113,47 @@ two budgets were re-measured from scratch rather than carried forward.
   mount_point: ".kb/_intake/lesson-page-need-declaration-discipline.md"
   verifying_test: "§Composition — the atom's heading inventory; wc -c <atom> <= 8192 against the measured corpus (six playbook atoms run 5,161-7,137 bytes, largest .kb/playbooks/repairing-a-frozen-clause-without-amending-it.md); awk '{if(length($0)>m)m=length($0)}END{print m}' <atom> <= 100 against the corpus maximum of 100; rg -n '^> \\*\\*Answers:\\*\\*' <atom> no hit; greyscale legibility confirmed by inspection (_design.md 'Density budget', 'Hierarchy', anti-patterns 2 and 3)"
 ```
+
+## Where the two non-author walks stand
+
+**Both have now been run by a non-author, and the author-run captures have been removed from the
+rows.** AC-007's rejection cross-walk and AC-009's portability walk were both performed at first
+merge by the implementer, who drafted the atom. AC-007 requires a walker who did not draft the atom
+and AC-009 requires the walker's identity recorded here, so an author-run walk is not evidence for
+either — the precedent one slice back is explicit about that
+(`reviewer-and-citation-procedures/_ledger.md:84`, where an author-run calibration was struck from
+the row and the report's residual paragraph kept as the audit trail).
+
+**Walker for both: the adversarial slice reviewer for `binding-beyond-this-project`** — the review
+pass that produced this slice's findings, which drafted no part of the atom, of `_ledger.md` or of
+`implementation-report.md`. **Date: 2026-08-18.**
+
+| walk | AC | verdict | recorded at |
+| --- | --- | --- | --- |
+| rejection cross-walk | AC-007 | **PASS** — five families, each mapping to a real design rejection at the cited ranges; no sixth family invented; none attributed a reason the design does not state | `implementation-report.md:216` §Rejection cross-walk |
+| portability walk (`.kb/playbooks/README.md:33-35`) | AC-009 | **PASS** — the subject is the shape, happenstance is the cited instance, and RS-81-1 is a genuine recurrence on a subject that is not documentation | `implementation-report.md:313` §Portability |
+
+The superseded author-run captures are kept unedited in those two report sections, under
+**What this replaced, and why**, so the state each row was in stays auditable.
+
+## What the review pass changed in the atom itself
+
+The same pass found AC-008 unmet in a way no transcript in this ledger could have caught. The atom
+cited `standards/pages/*.md` **paths** but not one `RP-NN-N` **id**, so AC-008's second clause —
+*every `RP-` id in the atom checked against the shipped rule text for restatement* — had nothing to
+run over, and it was hiding a genuine restatement: RP-00-2's own italicised reader's test
+(`standards/pages/00-one-need.md:52-53`) reproduced verbatim in the atom's step 1, with RP-00-2's
+imperative paraphrased beside it. Ten ids are now cited and none is restated; the audit is at
+`implementation-report.md:248` §Commitment audit, and it cost a fourth compression pass, so AC-011's
+two budgets were re-measured from scratch rather than carried forward.
+
+> The machine-readable acceptance block that used to sit here has been **moved up**,
+> to immediately below this file's opening prose. Nothing in it changed — not a row,
+> not a criterion, not a byte of evidence. `redkiln verify --grain story` locates the
+> block by scanning from the `# … ledger` heading for the first fence and **abandons
+> the search the moment it meets another heading** (`ledgerBlock`, redkiln 0.19.0
+> `dist/index.js:14761-14779`), so the two sections standing between the heading and
+> the fence made this ledger read as *having no acceptance block at all* rather than
+> as having a malformed one. It read that way from `dc58e80`, this story's own
+> checkpoint, and nothing before the story gate looked. The narrative sections below
+> are the story's evidence and keep their order; only the fenced block moved.
