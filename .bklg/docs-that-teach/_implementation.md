@@ -15,7 +15,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
 | 2 | page-need-discipline | HS-P0021 | 1 | no | done | approved | `page-need-discipline/_review.md` |
-| 3 | application-author-path | HS-P0022 | 1, 2 | no | in-progress | — | — |
+| 3 | application-author-path | HS-P0022 | 1, 2 | no | done | approved | `application-author-path/_review.md` |
 | 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
 | 6 | durable-audience-closeout | HS-P0025 | 5 | **yes** | pending | — | — |
@@ -470,3 +470,76 @@ and found no real escape, so nothing is known to be hiding behind the skipped ch
 
 Two PR boundaries were also amended inside the run (`4232b34`) to admit `xtask/tests/**`, each
 with its reason inline — the same disposition as `a41a1a5` one project back.
+
+### Run 6 result — HS-P0022, workflow `wf_7502f9c7-31c` — COMPLETE
+
+Third launch of this project, fresh each time. Preflight skipped the two sealed slices and
+re-entered `opening-encounter` at Review with the orchestrator's fixes in hand.
+
+- 8/8 stories, all four slices sealed **`approved`**. `degradedSummary: none`; no baseline
+  repairs; 18 agents, 0 errors. Project review **`approved`**, overall **3**, 0 uncovered ACs,
+  0 missing artifacts.
+- Rubric: ac-coverage 3, integration-reachability 3, test-integrity 3, gate-greenness 3,
+  **brief-fidelity 3** (recovered from HS-P0021's 2), intent-fidelity 2,
+  presentation-fidelity 0 (exempt).
+- Integration: `dodGreen: true`, `reachabilityOk: true`, 0 fixme'd, 0 unmounted. **The DoD was
+  executed, not read** — the audit ran the falsification drill live in *both* directions rather
+  than accepting the story's recorded capture, and `spec-trace` resolved 201 clauses and 401
+  citations. 9 project DoD items passed; 13 initiative journeys deferred to named owners.
+- Scope clean: the production diff is exactly the four declared surfaces, three harness
+  registrations, one `docs/README.md` index row, the byte-identical `overview.md` extraction and
+  four new test files. `.kb/`, `spec/SPECIFICATION.md`, `.redkiln/config.yaml`,
+  `.redkiln/templates/` and `main.rs`'s `REQUIRED` array untouched.
+
+#### Why intent-fidelity is 2 — two deferrals, both stated rather than scored around
+
+- **F-A — the two new pages have no front door.** `docs/carry-your-invariant.md` and
+  `docs/read-the-worked-example.md` link only to each other; nothing reaches them from
+  `docs/README.md`'s index, from `docs/first-encounter.md`, or from the crate-root pointer. The
+  asymmetry the reviewer named is the uncomfortable part: **this same project added a
+  narrative-index row** for the opening encounter (`docs/README.md:20`, per
+  `boundary-refusal-encounter/spec.md:412`), and its own test at
+  `xtask/tests/first_encounter.rs:479-484` calls an unindexed page *"compiled but unreachable"* —
+  then two later stories treated the identical act as pointer policy and declined it. Deferred
+  initiative DoD-7/DoD-9, owned by **HS-P0023**, scoped out at spec time, so not drift.
+- **BC-002's cost, still standing.** The docs.rs reader meets HS-P0016's `commit` program, not a
+  refusal. `_design.md:471` records that the stronger reading *"is not delivered and is not
+  deemed delivered."*
+
+#### F-B — routed onto HS-B0001 as F-4 (`0110f78`)
+
+The pointer this project added at `crates/happenstance/src/lib.rs:66` (*"To watch that boundary
+refuse a write instead"*) sits one line beneath an inherited fence calling `Tags::empty()` twice
+(`:40`, `:57`) — the call `initiative.md:51-53` describes as **zeroing out the consistency
+boundary**. The landing page therefore demonstrates the boundary being zeroed and, immediately
+below, promises a boundary that holds. Both true alone; read top to bottom they teach against
+each other.
+
+Not a `docs-that-teach` defect — AC-006 binds pages this initiative *authored* and the fence is
+HS-P0016's — but recorded with the finding that matters for next time: **`boundary-refusal-
+encounter`'s O2 check cleared AC-006 by reading only the lead-in above the fence and never the
+sentence added below it.** The criterion was not unmet; the check was narrower than the page.
+Filed onto the existing bug rather than a second item, since it is the same file and the same
+root cause.
+
+#### Verdicts executed, 2026-08-19
+
+- All 8 stories: provenance recorded first, then `plan` -> `report`, `--verdict approved --stay`.
+  All now `report`/`in-review`, holding for closeout.
+- HS-P0022: `implementation` -> `integration` -> `review`, then `--verdict approved --stay`
+  (`66335bbd`). Now `review`/`in-review`.
+
+Project 3 state: **done**.
+
+### Carried into HS-P0023 `reach-and-adapter-path`
+
+1. **F-A** — give `docs/carry-your-invariant.md` and `docs/read-the-worked-example.md` an
+   entrance. This is initiative DoD-7/DoD-9 and HS-P0023 owns it.
+2. **The residuals HS-P0021 assigned to HS-P0022 are still open** and move forward again: the
+   `README.md` exclusion from the governed set (`xtask/src/lint_pages.rs:496`), which leaves the
+   `orientation` token with no live subject, and the two rotted Evidence citations in
+   `standards/pages/10-the-need-set.md:72` and `:169`.
+3. **Per-story fences inside a shared module.** Three projects running, three sets of boundary
+   amendments. Stories are implemented one whole slice per context, so a fence that partitions one
+   Rust module between slice-mates cannot be satisfied by a story that writes any test. Worth
+   fixing at plan grain rather than amending per project a fourth time.
