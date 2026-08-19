@@ -61,7 +61,7 @@ Every scenario below was **executed** on the merged branch
 | 11 | **The benchmark family exists and is provably not conformance** | `crates/happenstance-testkit/src/bench.rs`, mounted at `crates/happenstance-testkit/tests/memory_benchmarks.rs:82, :88, :96` | **executed, PASS** — `18 passed` inside the gate's `--all-features` test step, and the conformance rule count is unchanged at **112** across four rule files (`cargo xtask lints`: *every stated rule count matches the suite*). See *Note 1* |
 | 12 | **The specification and the code still agree** | `cargo xtask spec-trace`, inside `cargo xtask ci --fast` | **executed, PASS** — `201 clauses (137 FROZEN, 47 PROVISIONAL, 12 DEFERRED, 5 NON-NORMATIVE), 112 conformance rules, 58 e2e cases, 401 citations checked (80 anchored to their subject, 12 external)`; `traceability: no problems found`. Above the pre-slice baseline of 389 checked / 76 anchored recorded at `spec-and-code-reconciliation/_ledger.md:51` |
 | 13 | **The non-terminal project bar** | `cargo xtask ci --fast` | **executed, PASS** — `all required checks passed (--fast: 4 optional step(s) not run)`. Covers fmt, clippy `-D warnings` over `--workspace --all-targets --all-features`, the whole test run, all four mandatory wasm32 steps, docs, `spec-trace`, the five file-reading lints, the `--no-default-features` doc build and the `cargo package --list` licence/README assertion |
-| 14 | **Backlog and knowledge base clean** | `redkiln validate --kb && redkiln doctor` | **executed, SPLIT — `validate` PASS, `doctor` FAIL. Corrected 2026-08-18; see *Note 3*.** `redkiln validate --kb` → `validate passed`, exit **0**. `redkiln doctor` → exit **1**: the six expected `template-drift` advisories *and* **nine `unconsumed-foundation` errors** — `HS-S0002`, `HS-S0034`, `HS-S0035`, `HS-S0067`, `HS-S0074`, `HS-S0075`, `HS-S0100`, `HS-S0108`, `HS-S0120` |
+| 14 | **Backlog and knowledge base clean** | `redkiln validate --kb && redkiln doctor` | **executed, SPLIT — `validate` PASS, `doctor` FAIL, and NOTHING FAILING IS THIS PROJECT'S. Corrected twice; see *Note 3*.** `redkiln validate --kb` → `validate passed`, exit **0**. `redkiln doctor` on redkiln **0.20.0** → exit **1**: the six expected `template-drift` advisories and **two** `unconsumed-foundation` errors, `HS-S0100` and `HS-S0108` — both in `replication-identity-and-ingest` (HS-P0017), a project that has not started |
 
 **The whole gate, in its own words:**
 `all required checks passed (--fast: 4 optional step(s) not run)`.
@@ -184,20 +184,40 @@ reading the report.
   this run chose to make. Its failure is real and is recorded as a failure — it does not retroactively
   redden the bar the project is actually held to.
 
-**The nine errors are pre-existing and are not this project's code.** They are redkiln
-**[#122](https://github.com/Wet-Ink-Corporation/redkiln/issues/122)** — `diagnoseUnconsumedFoundations`
-answers a reachability question with a single-hop predicate, so a foundation story feeding capability
-work through one intermediate foundation story is indistinguishable from one feeding nothing; seven of
-the nine are false positives by transitive reachability. Verified pre-existing three separate times:
-by the 2026-08-15 wave (stash-and-reset to `HEAD`, and a second worktree at the same commit), and by
-this initiative's orchestrator via `redkiln doctor --cwd` against a tree carrying none of the
-intervening changes.
+**Second correction, 2026-08-19 — redkiln 0.20.0 changed the answer.** The row above first read nine
+errors, and the paragraph here first said *"two of the nine are this project's own stories —
+`HS-S0034` and `HS-S0035`"*. Both statements were true of redkiln 0.19.0 and are false now, so both
+are superseded rather than deleted.
 
-**Two of the nine are this project's own stories** — `HS-S0034` `benchmark-harness` and `HS-S0035`
-`adr-0022-append-condition-strategy`. And **CI's `backlog` job asserts the list is empty**
-(`.github/workflows/ci.yml:177`), which makes this a **release blocker for the initiative**, owed
-before `publication-and-positioning` (HS-P0016) rather than at the PR. It is disclosed here so the
+**0.20.0 remediates [#122](https://github.com/Wet-Ink-Corporation/redkiln/issues/122)**, whose
+`diagnoseUnconsumedFoundations` answered a reachability question with a single-hop predicate — a
+foundation story feeding capability work through one intermediate foundation story was
+indistinguishable from one feeding nothing. Re-run on 0.20.0 against this same tree, the count drops
+from **nine to two**, which is the seven transitive-reachability false positives clearing exactly as
+that issue predicted.
+
+**Neither survivor is this project's.** `HS-S0100` (`open-questions-resolved-and-indexed`) and
+`HS-S0108` (`adr-0003-provisional-lift`) both sit in `replication-identity-and-ingest` (HS-P0017),
+which has not started. `HS-S0034` and `HS-S0035` are now **clean** — they were false positives, and
+the assertion that this project was generating the errors it had to clear was an artifact of the
+predicate rather than of the backlog.
+
+**CI's `backlog` job still asserts the list is empty** (`.github/workflows/ci.yml:177`), so two
+genuine wiring problems remain owed before `publication-and-positioning` (HS-P0016). What changed is
+whose they are: this is now HS-P0017's story-map debt, not a defect in phase 8. Disclosed here so the
 project's review gate is answered with it in view rather than around it.
+
+**Also fixed in 0.20.0 and worth recording, because it changes what row 8's evidence is worth.**
+[#135](https://github.com/Wet-Ink-Corporation/redkiln/issues/135) — `declaredBoundary` matched the
+first heading containing "boundary" anywhere and then failed open silently — is remediated, so two
+stories whose fences were never machine-checked now are. `redkiln verify --item HS-S0039 --grain
+story` returns `{"name":"boundary","ran":true,"pass":true}`: `wide-query-chunked-not-refused`'s fence
+is enforced and clean, confirming by machine what the slice reviewer had verified by hand against
+`11596b4`. `HS-S0043` `reopen-negative-control-and-durability-verdicts` returns `ran: true` with
+*"a boundary heading is present but declares nothing parseable"* — its fence is still unenforced, but
+the tool now says so instead of reporting a pass. **That is an open item against HS-S0043's spec, not
+against its code**, and it is named here so the story is not verdicted as boundary-checked when it is
+not.
 
 ## Missing dependencies
 
