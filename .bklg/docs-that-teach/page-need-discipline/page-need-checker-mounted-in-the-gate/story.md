@@ -7,9 +7,9 @@ title: The page-need checker, mounted as an ordinary gate step
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,13 +23,13 @@ archetype: capability
 slice: page-need-gate-step
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:26:51.134Z
+updated: 2026-08-19T00:50:29.155Z
 links:
   pr: null
   commits:
     - ee0a500
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
