@@ -7,9 +7,9 @@ title: Page-Need Discipline
 parent: HS-I0007
 initiative: docs-that-teach
 project: page-need-discipline
-status: implementing
+status: in-review
 process: project
-stage: integration
+stage: review
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,12 +17,12 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T01:03:19.607Z
+updated: 2026-08-19T01:03:37.462Z
 links:
   pr: null
   commits: []
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: 7289a0c4
 ---
