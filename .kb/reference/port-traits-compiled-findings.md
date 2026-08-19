@@ -15,7 +15,10 @@ summary: >-
   is half wrong. #[tokio::test] drives a !Send store because it expands to Runtime::block_on. The
   associated type cannot be varied between flavours — five spellings, five diagnostics. And
   dynosaur does not erase this port (error[E0277]), against ADR-0001's stated consequence; a
-  hand-written wrapper does, with no unsafe.
+  hand-written wrapper does, with no unsafe. And ADR-0009's marker-trait shape has now been
+  exercised by a real consumer — run_projection cannot be spawned without a caller-side bound,
+  which is ES-6 working as frozen rather than a defect, with the consequence finally written
+  where a caller meets it, on run_projection's own page at crates/happenstance/src/runner.rs:297-310.
 depends_on: []
 related:
   - kb-decision-0001
@@ -23,6 +26,8 @@ related:
   - kb-decision-0009
   - kb-decision-0010
   - kb-decision-0011
+  - kb-decision-0017
+  - kb-decision-0031
   - kb-open-question-es-6-unwritable-rule-001
   - kb-open-question-provisional-falsifiers-001
 source_paths:
@@ -31,16 +36,19 @@ source_paths:
   - .kb/_intake/0009-error-send-sync.md
   - .kb/_intake/0010-the-suite-must-prove-itself.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
+  - .kb/_intake/contract-defect-log-phase-7.md
   - references/adr/0001-async-port-flavours.md
   - references/adr/0008-one-derivation-for-both-ports.md
   - references/adr/0009-error-send-sync.md
   - references/adr/0010-the-suite-must-prove-itself.md
   - references/adr/0011-read-laziness-and-isolation.md
+  - references/evaluation/phase-7-contract-defects.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/projection.rs
+  - crates/happenstance/src/runner.rs
   - crates/happenstance-testkit/src/fixtures.rs
   - references/evaluation/phase-4-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-17
 ---
 
 # What the compiler said about the two port flavours
@@ -54,6 +62,11 @@ the trait's text, and several of the resulting facts were then cited again by la
 atom is the register those facts live in — cite it by id rather than re-deriving the compile.
 The full reasoning for each stays in its own ADR; nothing here is a second copy of an argument,
 only of the finding.
+
+One entry arrived by a different route. Phase 7 built the typed layer *against* the frozen
+contract, and what a first consumer finds is the same class of fact reached the same way — by
+compiling — so it belongs in the same register even though its source is a defect log rather
+than an ADR.
 
 ## The findings
 
@@ -100,6 +113,20 @@ wrapper trait with a blanket impl over `EventStore`, boxing and pinning at both 
 'a>>` is itself `Stream` via the standard blanket impl, and `Pin<Box<T>>` is `Unpin` whatever `T`
 is. This corrects ADR-0001's consequences paragraph; the correction is ADR-0011's (E11).
 
+**The caller-side `Send` obligation ADR-0009 assigned has now been discharged by a real consumer,
+and it is not a defect.** `run_projection` binds the bare `EventStore` flavour, and on a failure it
+holds the stop — which carries `S::Error` — across the port's `rollback` await; so spawning the
+returned future onto a multi-threaded runtime requires `S::Error: Send + Sync` written at the
+*caller's* own signature, or a bound on the marker trait ADR-0009 records. ES-6 `[FROZEN]` leaves
+`Error` unbounded deliberately and ADR-0009 declined to ship that marker in `happenstance-core`;
+both held under the first consumer that had to spawn (ADR-0031). This is the register's only entry
+reporting a promise **kept** rather than a premise half wrong, and it is listed here for that
+reason: the other six each correct something, and a register that records only corrections reads as
+a defect list. What was actually missing was that nobody had written the consequence where a caller
+meets it, which is now on `run_projection`'s own page
+(`crates/happenstance/src/runner.rs:297-310`), with the worked shape in
+`crates/happenstance/tests/flavours.rs`.
+
 ## Provenance
 
 Every claim above was reproduced against `trait-variant 0.1.3` on rustc 1.97.1, the pinned
@@ -109,3 +136,11 @@ and ADR-0010's, reached independently and stated identically; the `JsValue`/`Rc`
 ADR-0009's; the associated-type finding is ADR-0008's, extended by ADR-0009's compiled
 confirmation that the same bound reports against `SendEventStore::Error` as well; the `dynosaur`
 correction is ADR-0011's E11.
+
+The `run_projection` finding is phase 7's, logged as N1 in
+`references/evaluation/phase-7-contract-defects.md` — which stages it *deliberately as not a
+claim*, alongside the four findings that are. It lands here rather than as an amendment to
+ADR-0009's atom, which the log itself floated as the most it might want: an accepted decision atom
+is immutable and takes no amendment either, and nothing in ADR-0009 needs changing, because the
+finding is that it was right. The call site, the attempted code and the compiler's actual response
+stay in the long form, which is never cleared; cite it by `file:line`.

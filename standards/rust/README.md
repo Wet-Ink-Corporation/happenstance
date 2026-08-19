@@ -75,7 +75,7 @@ generator is not.
 | [`13-sealing-and-exhaustiveness.md`](13-sealing-and-exhaustiveness.md) | adding a public struct or enum that will grow · E0603, E0616, | RS-13-1, RS-13-2, RS-13-3, RS-13-4, RS-13-5 |
 | [`20-two-flavour-ports.md`](20-two-flavour-ports.md) | writing a new store or projection adapter · deciding which | RS-20-1, RS-20-2, RS-20-3, RS-20-4, RS-20-5 |
 | [`21-send-is-not-inherited.md`](21-send-is-not-inherited.md) | a generic runner will not compile · `S::Error` is not `Send` · | RS-21-1, RS-21-2, RS-21-3 |
-| [`22-rpitit-and-lifetime-capture.md`](22-rpitit-and-lifetime-capture.md) | declaring a method on a port · an `async_fn_in_trait` warning | RS-22-1, RS-22-2, RS-22-3, RS-22-4 |
+| [`22-rpitit-and-lifetime-capture.md`](22-rpitit-and-lifetime-capture.md) | declaring a method on a port · an `async_fn_in_trait` warning | RS-22-1, RS-22-2, RS-22-3 |
 | [`23-streams-and-state-machines.md`](23-streams-and-state-machines.md) | writing `poll_next` by hand · E0507 moving a cursor out of a | RS-23-1, RS-23-2, RS-23-3, RS-23-4, RS-23-5 |
 | [`24-the-blocking-bridge.md`](24-the-blocking-bridge.md) | calling a synchronous driver from async code · `spawn_blocking` | RS-24-1, RS-24-2, RS-24-3, RS-24-4 |
 | [`25-what-removes-send-and-sync.md`](25-what-removes-send-and-sync.md) | "cannot be sent between threads safely" · "cannot be shared | RS-25-1, RS-25-2, RS-25-3, RS-25-4, RS-25-5 |
@@ -93,7 +93,7 @@ generator is not.
 | [`81-checks-that-cannot-be-types.md`](81-checks-that-cannot-be-types.md) | writing a `cargo xtask` lint · a check must read Rust source, a | RS-81-1, RS-81-2, RS-81-3, RS-81-4, RS-81-5 |
 | [`90-skeletons-and-todo.md`](90-skeletons-and-todo.md) | starting an adapter crate before its driver exists · deciding | RS-90-1, RS-90-2, RS-90-3, RS-90-4 |
 | [`91-adapter-authoring-recipe.md`](91-adapter-authoring-recipe.md) | starting a new event store adapter · asked to "wire up" a | RS-91-1, RS-91-3, RS-91-4 |
-| [`92-toolchain-limits-and-dead-ends.md`](92-toolchain-limits-and-dead-ends.md) | `thread 'rustc' panicked` on an adapter impl · a store that | RS-92-1, RS-92-2, RS-92-3 |
+| [`92-toolchain-limits-and-dead-ends.md`](92-toolchain-limits-and-dead-ends.md) | `thread 'rustc' panicked` on an adapter impl · a panic naming | RS-92-2, RS-92-3 |
 <!-- END GENERATED -->
 
 ## The shape of an atom

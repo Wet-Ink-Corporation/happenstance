@@ -39,7 +39,7 @@ use std::cell::{Cell, RefCell};
 use std::panic;
 use std::sync::Once;
 
-use happenstance_testkit::{Capability, Fixture, RuleOutcome};
+use happenstance_testkit::{Capability, Fixture, ProjectionFixture, RuleOutcome};
 
 // =====================================================================
 // What a store must supply to be driven
@@ -170,6 +170,18 @@ impl Origin {
     /// falling over. The distinction is the whole content of
     /// `the_model_rule_rejects_exactly_what_it_claims`: a store that panics on a
     /// borrow conflict would otherwise be counted as a store the *model* caught.
+    ///
+    /// Gated on the feature for the reason [`model_probes`] is, and it was
+    /// missing that gate from the day it landed. Its only caller is
+    /// `model_outcome`, which is `#[cfg(feature = "proptest")]` because the
+    /// family it classifies is — so without the feature there is no model rule
+    /// for this to classify and the method is dead in fact, which `-D warnings`
+    /// reports as an error in any clippy run that is not `--all-features`.
+    /// `#[expect(dead_code)]` is the wrong repair twice over: it would go on
+    /// hiding the method once it became dead for real, and it would itself fire
+    /// `unfulfilled_lint_expectation` under `--all-features`, where the method
+    /// *is* used.
+    #[cfg(feature = "proptest")]
     pub(crate) fn is_a_model_rule_body(&self) -> bool {
         self.is_in("model.rs")
     }
@@ -518,6 +530,105 @@ pub(crate) fn run_subject<S: Subject>() -> SubjectReport {
         outcomes,
         declines: declines::<S>(),
     }
+}
+
+// =====================================================================
+// The same three things, for the projection family
+// =====================================================================
+
+/// A [`ProjectionFixture`] this binary can open by name, with no arguments.
+///
+/// [`Subject`]'s sibling, and a second trait for the reason
+/// [`ProjectionFixture`] is a second trait: `Subject: Fixture` binds the
+/// event-store port in its own supertrait, so a projection instrument cannot
+/// satisfy it and inventing an `EventStore` for one would be a fixture written
+/// to satisfy a bound no projection rule reads.
+pub(crate) trait ProjectionSubject: ProjectionFixture + Sized {
+    /// The name this instrument is reported under.
+    const NAME: &'static str;
+
+    /// A fresh, isolated backing projection store.
+    ///
+    /// Called **inside** the caught closure, never hoisted out of it — see
+    /// [`run_probe`].
+    fn open() -> Self;
+}
+
+/// The opener every projection rule is handed.
+///
+/// A free `async fn` for [`open_subject`]'s reason: an `async fn` *item*
+/// satisfies `impl AsyncFn() -> F` as a zero-sized value, so it passes by value
+/// into every rule with no borrow and no higher-ranked obligation.
+async fn open_projection_subject<S: ProjectionSubject>() -> S {
+    S::open()
+}
+
+/// Every registered projection rule, bound to `S`.
+///
+/// [`probes`] one enumeration over, and a second function rather than a
+/// parameter of the first for the reason [`model_probes`] and
+/// [`concurrency_probes`] are: the two families' rules live in two modules and a
+/// `macro_rules!` expansion cannot take a module path from a `$rule:ident`
+/// fragment.
+pub(crate) fn projection_probes<S: ProjectionSubject>() -> Vec<Probe> {
+    macro_rules! probe {
+        ($($rule:ident),* $(,)?) => {
+            ::std::vec![ $(
+                Probe {
+                    name: ::core::stringify!($rule),
+                    run: || happenstance_testkit::block_on(
+                        happenstance_testkit::projection::rules::$rule(
+                            open_projection_subject::<S>
+                        )
+                    ),
+                }
+            ),* ]
+        };
+    }
+
+    happenstance_testkit::for_each_projection_store_rule!(probe)
+}
+
+/// Drives every projection rule against `S` and collects the verdicts.
+pub(crate) fn run_projection_subject<S: ProjectionSubject>() -> SubjectReport {
+    let outcomes = projection_probes::<S>()
+        .into_iter()
+        .map(|probe| (probe.name, run_probe(probe)))
+        .collect();
+
+    SubjectReport {
+        name: S::NAME,
+        outcomes,
+        declines: projection_declines::<S>(),
+    }
+}
+
+/// Every projection capability `S` declines, with the reason it gave.
+///
+/// [`declines`]'s sibling, and it carries the same warning: the names are
+/// written out because a trait's associated items cannot be enumerated from
+/// outside it, so a constant that arrives on `ProjectionFixture` without a line
+/// here shows up as a skip the meta-tests cannot account for.
+///
+/// There is no projection counterpart to the `NO_STORE_LIMITS` branch below,
+/// and that is a property of the port rather than an omission: `CommitError` and
+/// `ResetError` carry no capacity variant, so the projection family declares no
+/// numeric-limit constants and never reaches the surface CF-40 is about.
+fn projection_declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static str)> {
+    [
+        S::SECOND_HANDLE
+            .reason()
+            .map(|reason| ("SECOND_HANDLE", reason)),
+        S::RESET_REFUSAL
+            .reason()
+            .map(|reason| ("RESET_REFUSAL", reason)),
+        S::COMMIT_FAULT
+            .reason()
+            .map(|reason| ("COMMIT_FAULT", reason)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// Every capability `S` declines, with the reason it gave.

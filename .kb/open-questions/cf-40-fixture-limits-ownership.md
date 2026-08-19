@@ -11,6 +11,7 @@ related:
   - kb-decision-0015
   - kb-decision-0012
   - kb-decision-0010
+  - kb-decision-0022
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - .kb/_intake/0012-append-shape-and-preconditions.md

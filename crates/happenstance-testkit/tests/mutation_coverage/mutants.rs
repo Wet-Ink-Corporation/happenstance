@@ -26,12 +26,13 @@
 //! port operation with a body of its own that no other step can reach, and both
 //! became steps only once a rule read the answer.
 //!
-//! Eight stores cannot be expressed that way and are written out longhand, each
+//! Nine stores cannot be expressed that way and are written out longhand, each
 //! for a stated reason: [`CachedHeadFixture`] and [`LastWrittenHeadFixture`]
 //! because each carries its defect per *handle* rather than per store — the
 //! first in what its condition probe can see, the second in what its `head`
-//! reports — [`LosingFixture`] because its defect is what a reopen
-//! finds, [`SharedBackingFixture`] because its defect is that two fixture
+//! reports — [`LosingFixture`] and [`RestampingFixture`] because each defect is
+//! what a reopen finds, and reopen is a fixture operation with no `Defect` step
+//! to override, [`SharedBackingFixture`] because its defect is that two fixture
 //! instances are one, [`PreCommitPositionStore`] and [`AwaitAcrossBorrowStore`]
 //! because each defect is a *window* — a suspension between two halves of an
 //! append — and [`Defect::commit`] is a synchronous function with nowhere to put
@@ -3641,6 +3642,107 @@ impl Subject for LosingFixture {
     fn open() -> Self {
         Self {
             live: RefCell::new(Rc::new(RefCell::new(Log::new(dense)))),
+        }
+    }
+}
+
+/// A store whose schema has no `recorded_at` column, so a reopen re-stamps.
+///
+/// [`LosingFixture`]'s opposite, and reading the two together is what makes
+/// either legible: that one loses **everything** across a reopen, this one loses
+/// **exactly one field**. Every event still reads back, at the position the store
+/// assigned it, under the identity it was minted with; only the one clock reading
+/// whose provenance the log itself attested is silently replaced.
+///
+/// # The defect somebody would ship
+///
+/// A migration that stores payload, type and tags and nothing else, so `open`
+/// reconstructs `SequencedEvent`s by replaying rows and stamping them at open
+/// time. It is a natural first schema — `recorded_at` reads like metadata until
+/// somebody has to answer *when did this happen* from the log rather than from a
+/// backup — and it is the exact mirror of what `happenstance-sqlite`'s migration
+/// 1 does instead: persist the column and **read it back**, never re-derive it.
+///
+/// # Why it is written longhand rather than as a [`Defect`] step
+///
+/// Same reason as [`LosingFixture`]: `Defect` is a trait of *store* steps, and
+/// reopen is a *fixture* operation. There is no step to override.
+///
+/// # Why the new stamp is a generation counter and not a clock
+///
+/// A naive re-stamp is **invisible in this binary**. [`correct::stamp`] spends
+/// the constant [`correct::TEST_RECORDED_AT`] — fixed rather than read from a
+/// clock, because CF-33 forbids one — so a replay that re-stamps through the
+/// correct path lands on the same value it replaced and nothing can see it.
+/// `GappedPositionStore`'s doc comment already records exactly this: it restamps
+/// on replay and passes `recorded_time_survives_a_reopen` anyway.
+///
+/// So the new value is derived from a per-fixture **reopen generation**:
+/// deterministic, so the harness stays reproducible run to run; strictly
+/// monotone, so the value is *never* equal to the one it replaced; and not a
+/// clock, so CF-33 is untouched and the row cannot go flaky on a fast machine.
+/// A wall-clock stamp would fail on both counts — millisecond resolution makes
+/// "the two stamps differ" a race this test would lose intermittently.
+#[derive(Debug)]
+pub(crate) struct RestampingFixture {
+    /// Replaced wholesale by `reopen` with a log replayed out of the same
+    /// events, exactly as a real reopen replaces a connection.
+    live: RefCell<Rc<RefCell<Log>>>,
+    /// How many times this fixture has been reopened. The stamp is a function of
+    /// it, which is what makes the new value differ from the old one *by
+    /// construction* rather than by luck.
+    generation: Cell<i64>,
+}
+
+impl Fixture for RestampingFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LogStore::over(&self.live.borrow())
+    }
+
+    async fn reopen(&self) {
+        let generation = self.generation.get() + 1;
+        self.generation.set(generation);
+
+        // The durable medium, read back the way a replay reads it. Everything
+        // is here: payloads, types, tags, positions and identities.
+        let held = {
+            let live = self.live.borrow();
+            let log = live.borrow();
+            log.select(&Query::all(), ReadOptions::new())
+        };
+
+        // THE DEFECT: every store-assigned fact is restored except the stamp,
+        // which is recomputed at open time because no column held it.
+        //
+        // The generation is what makes "recomputed" *observable* in a binary
+        // whose correct clock is a constant. Written the naive way —
+        // `with_recorded_at(correct::TEST_RECORDED_AT)` — this fixture passes
+        // `recorded_time_survives_a_reopen` perfectly, and
+        // `mutants_fail_exactly_their_declared_rules` reports it as *"declares
+        // that it fails … but the rule passed"*. That run happened; this line is
+        // its answer.
+        let restamped = RecordedAt::from_millis(correct::TEST_RECORDED_AT.as_millis() + generation);
+        let replayed = held
+            .into_iter()
+            .map(|event| event.with_recorded_at(restamped))
+            .collect();
+
+        *self.live.borrow_mut() = Rc::new(RefCell::new(Log::replayed(dense, replayed)));
+    }
+}
+
+impl Subject for RestampingFixture {
+    const NAME: &'static str = "RestampingFixture";
+
+    fn open() -> Self {
+        Self {
+            live: RefCell::new(Rc::new(RefCell::new(Log::new(dense)))),
+            generation: Cell::new(0),
         }
     }
 }

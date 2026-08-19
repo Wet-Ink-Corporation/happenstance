@@ -15,8 +15,12 @@ pass.
 >
 > What is still early is everything around that. **No adapter has run this
 > suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
-> port has no suite at all, and several axes of the instrument portfolio have
-> no implementation at their far end — see
+> suite is now all seventeen rules the specification names, each with a wrong
+> store in this crate's `tests/` that fails it — but the port it checks is still
+> `[PROVISIONAL]` and ships behind an off-by-default feature, because both
+> fixtures that clear the suite are instruments this workspace wrote rather than
+> adapters over storage it does not control. Several axes of the instrument
+> portfolio also have no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > §6.2 and §6.5, which name them rather than summarising them.
 
@@ -94,6 +98,80 @@ Two contenders' `Result`s never meet, either. `EventStore::Error` carries no
 `Send` bound, so each contender collapses its outcome to *committed*, *rejected*
 or *failed, here is the message* before its thread ends.
 
+### The projection suite
+
+```rust,ignore
+happenstance_testkit::projection_store_conformance!(MyProjectionFixture::new());
+```
+
+A fourth family, and the only one that checks a **different port**. It takes a
+`ProjectionFixture` rather than a `Fixture` — one isolated projection store per
+instance, each `connect()` one handle onto it — and expands to one test per
+projection rule through its own single enumeration.
+
+`ProjectionFixture::Store` is bound on `ProjectionProbe`, not on
+`ProjectionStore`, and that is the load-bearing part. The probe is the write seam
+the suite drives your read model through; without it, generic code holding your
+batch can only commit it or roll it back, and the rule carrying this port's whole
+reason for existing degenerates into a checkpoint test that a store writing
+*only* checkpoints passes. Implement it beside your `ProjectionStore` impl —
+it lives in `happenstance-core` behind the off-by-default `conformance` feature,
+so it costs one flag on a dependency you already have and no new edge in your
+dependency graph.
+
+Pick a harness exactly as you would for the event-store family: the default arm
+is `#[tokio::test]`, `__emit_projection_blocking` needs no runtime at all, and
+`__emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
+rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
+default module name differs from the event-store family's, so one file may invoke
+both. `fixtures::MemoryProjectionFixture` is the worked example.
+
+**All seventeen rules §4.11 names, today**, each with a wrong store in this
+crate's own `tests/` that fails it and is asserted to fail *exactly* the rules its
+registry row declares. The port is still `[PROVISIONAL]` and lives behind
+`happenstance-core`'s off-by-default `unstable-projection` feature: this suite is
+what will freeze it, and what would clear that bar is an adapter over storage
+this workspace does not control — which neither fixture shipped here is.
+
+### The benchmark harness — which is *not* the bar
+
+```rust,ignore
+happenstance_testkit::event_store_benchmarks!(MyFixture::new());
+```
+
+Behind this crate's off-by-default `bench` feature, and absent on
+`wasm32-unknown-unknown`. It is the one family that checks nothing: it adds no
+conformance rule, it changes no adapter's bar, and **no result it produces can
+fail a merge** — there is no threshold in it, at any budget. The specification
+requires performance to be measured by a separate harness which is not part of
+the conformance bar, and this is that harness.
+
+Where the four families differ:
+
+| Family | Feature | Checks | Can fail a merge |
+| --- | --- | --- | --- |
+| `event_store_conformance!` | — | the event-store bar | yes, and that is the point |
+| `event_store_model_conformance!` | `proptest` | the same bar, over generated sequences | yes |
+| `event_store_concurrency_conformance!` | — (opt-in, `Send`) | the bar under contention | yes |
+| `event_store_benchmarks!` | `bench` | **nothing** — it measures | **no** |
+
+Three scenarios: append throughput over a batch of *n*; conditional append under
+*k* contenders, reporting the committed and rejected counts separately so that a
+run in which nobody collided is legible as such; and replay of *N* events, once
+unfiltered and once behind a tag filter. *n*, *k* and *N* are yours, at the call
+site, because no constant here could be right for both an in-process `Vec` and a
+file under a write lock.
+
+**You bring the clock, and with it the measurement crate.** Nothing in this
+crate's `src/` may read one, so the harness reports counts — events appended,
+batches acknowledged, committed, rejected, refused, failed, events matched on
+replay — and the per-scenario wrapper is the `emit` parameter, exactly as it is
+for the other three families. `criterion`, `divan` or a line of CSV goes in
+*your* `dev-dependencies`; this crate's stay `happenstance-core` and
+`futures-core`. `tests/memory_benchmarks.rs` writes such an emitter and runs the
+whole family against `fixtures::MemoryFixture` on every `cargo test --features
+bench`, so the harness ships having been executed rather than merely compiled.
+
 ## Why this exists as a published crate
 
 A claim about behaviour is worth exactly as much as the test that checks it.
@@ -109,10 +187,15 @@ wrong implementation it rejects has to be named — and written into
 `REGISTRY` declaring the exact set of rules it fails. (A *concurrency* rule's
 wrong store goes in `tests/mutation_coverage/racers.rs` and `RACERS`, because a
 store that fails only a racing rule fails none of the named rules and cannot have
-a `REGISTRY` row.) That is not a convention:
+a `REGISTRY` row. A *projection* rule's goes in the sibling registry under
+`tests/projection_mutation_coverage/`, which is a second registry rather than a
+second table in the first one — a count printed beside the wrong target is a
+number about neither.) That is not a convention:
 `mutation_coverage::every_rule_has_a_mutant` fails until the row exists, so the
-rule is demonstrated to fail before it is trusted to pass. `CONTRIBUTING.md`'s
-"Conformance rules" section is the checklist.
+rule is demonstrated to fail before it is trusted to pass, and
+`projection_mutation_coverage::every_projection_rule_has_a_mutant` says the same
+thing for the other port. `CONTRIBUTING.md`'s "Conformance rules" section is the
+checklist.
 
 **Never assert on literal position values.** The specification permits gaps, and a
 conformant adapter may leave them. Rules compare against positions the store

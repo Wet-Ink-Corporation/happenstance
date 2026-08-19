@@ -1,0 +1,109 @@
+---
+item: "HS-S0059"
+stage: implement
+created: "2026-08-12"
+updated: "2026-08-12"
+---
+
+# Acceptance ledger — happenstance-cloudflare becomes a crate someone can depend on
+
+The machine-checkable Definition-of-Done ledger for this story (RFC §6.5). One row per spec
+`AC-###`. Planning authors every row with `satisfied: false`; the implementer may only flip a row to
+`satisfied: true` and MUST cite real evidence (a `file:line` and/or the verifying test id) — never
+edit, remove, or re-word a criterion, and never flip a satisfied row back. `redkiln verify --grain
+story` reads the fenced block below and blocks `implement → report` unless every spec AC is present,
+`satisfied: true`, and carries non-placeholder evidence (and no AC that was satisfied on the base
+branch has regressed). Scope changes are a human decision recorded through `redkiln advance`, not a
+quiet ledger edit.
+
+Two rows carry a review obligation alongside their command, because no runner covers the whole of
+them and the spec says so rather than pretending otherwise: **AC-008**'s "no literal position value"
+half and **AC-009**'s "true but narrower than it sounds" half (`spec.md`, *Tests and CI*, **Review
+obligations**; `discover.md:116-119`). Evidence for those two must cite the reviewed transcript or
+diff, not only a green command.
+
+```yaml
+- id: AC-001
+  criterion: "GIVEN an evaluator whose adoption question includes \"may my employer use this\", WHEN they unpack the crate's published artifact — not the repository — THEN both LICENSE-MIT and LICENSE-APACHE are inside it, byte-identical to the repository root's copies, because license = \"MIT OR Apache-2.0\" is a choice the consumer makes and a choice needs both texts to be makeable (xtask/src/package.rs:88-94)"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/package.rs:86 (PUBLISHABLE), reconciled at :172-218, executed at :103-161"
+  verifying_test: "cargo xtask package-check — the `packaged artifacts carry their licences and README` step, xtask/src/main.rs:515-532; plus `git diff --no-index LICENSE-MIT crates/happenstance-cloudflare/LICENSE-MIT` and the Apache pair reporting no difference"
+
+- id: AC-002
+  criterion: "GIVEN the constrained-runtime developer landing on the crate's registry page as their first contact, WHEN the page renders, THEN a README.md that belongs to this crate is there to render — present beside Cargo.toml, named explicitly by readme = \"README.md\" rather than left to auto-discovery, and inside the packaged artifact, because a readme key pointing outside the artifact fails silently (xtask/src/package.rs:90-94; precedent and its reason at crates/happenstance-core/Cargo.toml:12-15)"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/package.rs:86 (PUBLISHABLE), reconciled at :172-218, executed at :103-161"
+  verifying_test: "cargo xtask package-check — `cargo package -p happenstance-cloudflare --list --allow-dirty --locked` lists README.md (xtask/src/package.rs:110-161); crates/happenstance-cloudflare/Cargo.toml carries `readme = \"README.md\"`"
+
+- id: AC-003
+  criterion: "GIVEN a maintainer who will later ship this crate, WHEN publish = false is deleted from crates/happenstance-cloudflare/Cargo.toml:12, THEN \"happenstance-cloudflare\" is added to PUBLISHABLE in the same change, so the crate never exists in the state \"Cargo will publish it and nothing checks it\" — reconcile fails in both directions and names which artefact moved (xtask/src/package.rs:172-218)"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/package.rs:86 (PUBLISHABLE) paired with crates/happenstance-cloudflare/Cargo.toml:12"
+  verifying_test: "cargo xtask package-check exits zero and its `publishable set agrees with the manifests:` line (xtask/src/package.rs:210-214) names four crates including happenstance-cloudflare"
+
+- id: AC-004
+  criterion: "GIVEN a future contributor who adds a file to this crate a year from now, WHEN they run the gate, THEN the licence-and-README guarantee is held for happenstance-cloudflare by the same mechanism that holds it for the other three — not by a fact about today's working tree — because the crate is now inside REQUIRED's packaging step and therefore inside every `cargo xtask ci` and every `cargo xtask ci --fast` (xtask/src/main.rs:515-532, :853-860)"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/main.rs:515-532 — the `packaged artifacts carry their licences and README` REQUIRED step"
+  verifying_test: "the negative run: `cargo xtask ci --fast` with one of the three files temporarily removed fails naming the missing filename (xtask/src/package.rs:150-161), and passes once restored — transcript recorded in the implementation report"
+
+- id: AC-005
+  criterion: "GIVEN the evaluator scanning search results, WHEN they read the one-line description crates.io shows beside the name, THEN it does not say \"Not yet implemented.\" (crates/happenstance-cloudflare/Cargo.toml:3) and it is the same sentence the reserved placeholder already promises — \"Cloudflare Durable Object event store adapter for happenstance.\" (xtask/src/reserve.rs:93) — so the reservation and the crate describe one thing, not two"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/Cargo.toml:3 (description), read against xtask/src/reserve.rs:92-97 (the RESERVABLE row)"
+  verifying_test: "the manifest description read against xtask/src/reserve.rs:93; the same string appears in the cargo package --list run's manifest and in `cargo publish --dry-run` output for the placeholder"
+
+- id: AC-006
+  criterion: "GIVEN the constrained-runtime developer following the docs.rs link, WHEN the front page renders, THEN the first thing they read is what the crate is, not `# Status: not implemented … every body is a todo!()` (crates/happenstance-cloudflare/src/lib.rs:4-10), and the page renders at all — [package.metadata.docs.rs] is declared to match what the crate actually builds on after worker landed, following crates/happenstance-core/Cargo.toml:54-56. The four findings, the two capability limits and the Targets note survive, updated where the bindings changed them"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/src/lib.rs:1-135 (crate-root rustdoc) and crates/happenstance-cloudflare/Cargo.toml ([package.metadata.docs.rs])"
+  verifying_test: "the `docs` step of cargo xtask ci with RUSTDOCFLAGS=-D warnings, plus the nightly --cfg docsrs OPTIONAL step where the toolchain resolves; `rg -n \"Status: not implemented\" crates/happenstance-cloudflare/` returns nothing"
+
+- id: AC-007
+  criterion: "GIVEN the constrained-runtime developer doing the one thing every reader does — copying the README's example into their Worker — WHEN they paste it, THEN it compiles, because it was compiled by the gate: #![cfg_attr(doctest, doc = include_str!(\"../README.md\"))] on the crate root type-checks every README code block while keeping the prose out of the rendered docs, and includes only this crate's own README because the repository README would not resolve once published (crates/happenstance/src/lib.rs:1-10)"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/src/lib.rs — the #![cfg_attr(doctest, doc = include_str!(\"../README.md\"))] crate attribute"
+  verifying_test: "cargo test -p happenstance-cloudflare --doc compiles and runs the README's blocks; cargo package --list confirms the included path is inside the package. Any degradation follows EC-004 and is recorded, never silent"
+
+- id: AC-008
+  criterion: "GIVEN an adapter author who learns this repository's conventions from its most-read page, WHEN they read the README example, THEN it teaches them nothing false about positions: no assertion compares against a literal position value such as [1, 2, 3], because the specification permits gaps and a conformant adapter may leave them — every position in the example is bound from what the store actually assigned (CLAUDE.md, The rule that matters; discover.md:137-141)"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/README.md — the usage example, compiled through crates/happenstance-cloudflare/src/lib.rs's doctest attribute"
+  verifying_test: "cargo test -p happenstance-cloudflare --doc passes with assertions written against bindings returned by append/head; plus the stated review obligation — reviewer grep of crates/happenstance-cloudflare/README.md for literal position arrays and bare numeric position comparisons returns nothing (evidence must cite the reviewed diff, not only the green command)"
+
+- id: AC-009
+  criterion: "GIVEN the evaluator whose entire method is checking a compliance claim instead of trusting it (initiative.md:330-332, AC-08), WHEN they read the README's conformance sentence, THEN it is not \"passes the DCB conformance suite\" flat: it names the event-store family as what was run, the event_store_concurrency_conformance! family as a documented non-invocation with its reason (F::Store: EventStore + Send, cfg-ed off wasm32 — crates/happenstance-testkit/src/lib.rs:101-118), each declined Capability in the fixture's own words, and the 2^53 position ceiling as a declared store limit — written in the same words the run prints, so it can be diffed rather than believed"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/README.md — the conformance paragraph, packaged by xtask/src/package.rs:103-161"
+  verifying_test: "diff of the README's qualifier list against the workerd execution step's `SKIP <rule>: <reason>` output (crates/happenstance-testkit/src/contract.rs:473-483) and against CloudflareFixture's Capability constants from measured-store-limits — every README qualifier appears in the run or a fixture constant and every declined capability in the run appears in the README; plus the stated review obligation against initiative.md:330-332 (evidence must cite the transcript and the review, not only a green command)"
+
+- id: AC-010
+  criterion: "GIVEN the maintainer protecting the project's own name, WHEN phase 9 is under way, THEN happenstance-cloudflare on crates.io is held by the documented 0.0.0 placeholder — a standalone crate sharing nothing with the workspace but its metadata, carrying both licence texts and a README that says plainly it contains no functionality — and never by the real crate at a real version, which would cascade version pins through every dependent manifest or freeze the API before the contract-freeze phases (xtask/src/reserve.rs:12-30). If the name was already claimed when the phase opened, that state is recorded and not re-claimed"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/reserve.rs:92-97 — the happenstance-cloudflare RESERVABLE row (phase 9); generation at :130-191, out of tree under target/reserve/"
+  verifying_test: "cargo xtask reserve happenstance-cloudflare writes target/reserve/happenstance-cloudflare/; `cargo publish --manifest-path target/reserve/happenstance-cloudflare/Cargo.toml --dry-run` green; the publish, or the already-held finding, recorded verbatim in the implementation report"
+
+- id: AC-011
+  criterion: "GIVEN the adapter author who was promised a real adapter by this project, WHEN they grep the crate before depending on it, THEN neither todo!() nor #![allow(clippy::todo)] is left — the scoped allow is documented to disappear with the last todo!() rather than outlive it (crates/happenstance-cloudflare/src/lib.rs:122-126) — and this story verifies that rather than causing it: a survivor means worker-binding-layer, durable-object-write-path or durable-object-read-path did not finish, and this story halts (EC-006)"
+  satisfied: false
+  evidence: ""
+  mount_point: "crates/happenstance-cloudflare/src/lib.rs:122-126 — the scoped #![allow(clippy::todo)] and the crate tree it covers"
+  verifying_test: "`rg -n \"todo!\\(\\)\" crates/happenstance-cloudflare/` and `rg -n \"allow\\(clippy::todo\\)\" crates/happenstance-cloudflare/` both return nothing; independently the clippy step `cargo clippy --workspace --all-targets --all-features -- -D warnings` (xtask/src/main.rs) fails on any todo!() once the scoped allow is gone"
+
+- id: AC-012
+  criterion: "GIVEN the maintainer about to hand this project to publication-and-positioning, WHEN the full gate is run on a clean checkout of the merged tree, THEN cargo xtask ci is green including every step wasm_steps() names — enumerated by reading steps_named([…]) at xtask/src/main.rs:784-791 at merge time, four today and five once wasm-execution-gate-step has landed, never against a remembered count — and cargo xtask spec-trace is green with no citation moved"
+  satisfied: false
+  evidence: ""
+  mount_point: "xtask/src/main.rs:784-791 (wasm_steps/steps_named) and :835-860 (ci vs run_fast) — the gate this claim is about"
+  verifying_test: "one `cargo xtask ci` run on a clean checkout, its step list transcribed into the implementation report and checked name-by-name against wasm_steps(); `cargo xtask spec-trace` green; `cargo xtask affected --base main` green at the story grain during implementation"
+```

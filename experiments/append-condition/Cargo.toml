@@ -1,0 +1,37 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/wire-format/Cargo.toml` uses and for the
+# same reason. No entry in the root `members` list changes, no workspace
+# `Cargo.toml` or `Cargo.lock` moves, and nothing here ever runs under
+# `cargo xtask ci`.
+#
+# That matters more here than it usually does: this crate exists to produce a
+# *number*, and CF-34 says a benchmark may not be part of the conformance bar.
+# A crate cargo cannot see is a crate no gate step can accidentally start
+# depending on.
+[workspace]
+
+[package]
+name = "append-condition-probes"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, and only the parts a store needs. `memory` is absent on purpose:
+# the point of this crate is that nothing here is the reference store.
+happenstance-core = { path = "../../crates/happenstance-core", features = ["std"] }
+futures-core = "0.3"
+# The driver ADR-0022 ratifies rather than decides — `rusqlite`, bundled, and
+# without a pool. Pinned to the same version the workspace names so the figures
+# are produced by the SQLite the adapter will actually link.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+thiserror = "2"
+
+[dev-dependencies]
+# Both suites this crate is driven by, and it takes them exactly as an adapter
+# outside this repository would: as dev-dependencies, one macro invocation each.
+# `bench` is the feature HS-S0034 added; without it `event_store_benchmarks!`
+# does not exist.
+happenstance-testkit = { path = "../../crates/happenstance-testkit", features = ["bench"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

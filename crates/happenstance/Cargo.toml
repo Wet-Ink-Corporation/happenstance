@@ -18,12 +18,102 @@ readme = "README.md"
 # about what `default-features = false` means, which is the kind of difference
 # nobody discovers until a no_std build fails three crates away.
 happenstance-core = { workspace = true }
+# The typed layer's whole job is encoding, so `serde` is a real, unconditional
+# dependency here. ADR-0003 forbids it in `happenstance-core`'s defaults and says
+# nothing about this crate; ADR-0006 made this the typed layer. Both are already
+# `[workspace.dependencies]`, so no new crate enters the graph.
+serde = { workspace = true }
+thiserror = { workspace = true }
+# One optional crate per codec, each reached only through the feature that names
+# it with `dep:` below. A bare `serde_json/std` inside a feature would enable the
+# dependency as a side effect, which is how a feature ends up shipping a crate
+# nobody asked for.
+serde_json = { workspace = true, optional = true }
+postcard = { workspace = true, optional = true }
+ciborium = { workspace = true, optional = true }
+# Naming `Stream` is unavoidable for a runner that pulls a replay item by item
+# instead of buffering it, and `EventStore::read` returns the stream at the top
+# level precisely so it can be pulled. Optional and reached only through
+# `unstable-projection`, so the crate links it exactly where it is used.
+#
+# It adds no node to any dependency graph: `happenstance-core` already depends on
+# it unconditionally, and this crate already depends on `happenstance-core`
+# unconditionally, so `cargo tree` is unchanged by this line (RS-50-1 counts
+# nodes, not manifest entries).
+futures-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Also a real dependency below, behind `json`. Declared here as well so this
+# crate's own test targets link it in *every* feature configuration — a test
+# that only compiles when a feature is on is a test the powerset drops.
+serde_json = { workspace = true }
+# The async harness the store-facing tests and the crate root's first program
+# run on. Dev-only: nothing a consumer links, and no `Send` bound reaches the
+# port through it. `rt-multi-thread` because `tests/flavours.rs` spawns the
+# command loop onto a real work-stealing runtime, which is the only place the
+# `Send` flavour's bounds are actually tested rather than asserted.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+# Naming `Stream` is unavoidable in a hand-written `impl EventStore`, and the
+# command loop's recording/violating wrapper is one. Dev-only.
+futures-core = { workspace = true }
+# `FaultyStore`, for the retry demonstration that needs no database.
+#
+# Deliberately **not** `{ workspace = true }`, and this is NF-006 rather than an
+# oversight. `[workspace.dependencies]` carries a version requirement on this
+# crate, and a dev-dependency carrying a version has to resolve from the
+# registry at publish time — which would make `happenstance-testkit` publish
+# *before* `happenstance`, a coupling CF-32's independent version number exists
+# to avoid. Cargo strips a versionless dev-dependency from the published
+# manifest entirely, so the path-only spelling is what keeps the two crates'
+# release order free. It is a path within this workspace, so no third-party
+# version escapes the single source of truth above.
+happenstance-testkit = { path = "../happenstance-testkit" }
 
 [features]
-default = ["std", "memory"]
-std = ["happenstance-core/std"]
+# `json` joins the defaults so a first program names a domain before it names an
+# encoding. It adds a type and takes nothing away.
+default = ["std", "memory", "json"]
+std = ["happenstance-core/std", "thiserror/std", "serde/std"]
+# Unchanged in meaning: it forwards the *contract crate's* envelope `serde`,
+# which is what replication needs. It is deliberately not repurposed to gate this
+# crate's own `serde` dependency — a feature only ever adds, and turning this one
+# into a switch over `Codec` would change what an existing flag means.
+#
+# Read the two spellings carefully, because they share a name and are not the
+# same thing. `serde` the *crate* is an unconditional dependency above: the
+# `Codec` trait's bounds are ungated, so every build has it. `serde` the
+# *feature*, here, is `happenstance-core`'s wire-format derives and nothing else.
 serde = ["happenstance-core/serde"]
 memory = ["happenstance-core/memory"]
+# The three codecs. Each turns on exactly one optional dependency and one unit
+# struct; none of them changes what any other feature means.
+json = ["dep:serde_json"]
+postcard = ["dep:postcard"]
+# `cbor` ships because the verdict came back before the dependency landed:
+# `cargo deny check licenses` passes for `ciborium`'s whole subtree against this
+# workspace's allowlist, which was read and not widened. Had it refused, the
+# alpha would have shipped `json` + `postcard` and this line would be the reason
+# it did not.
+cbor = ["dep:ciborium"]
+# The typed projection runner: `Projection`, `run_projection`, `Progressed` and
+# `ProjectionError`. **Off by default**, and the name is the promise: the port
+# beneath it — `happenstance-core`'s `ProjectionStore` — is not frozen, so these
+# four items make no semver promise at all. A reader has to type the word
+# `unstable` before any of them is in their build.
+#
+# It forwards, and the forwarding is not optional: `ProjectionStore`,
+# `ProjectionId`, `Checkpoint` and `Authority` all live behind the contract
+# crate's own `unstable-projection` gate, so the runner cannot compile without
+# it. `MemoryProjectionStore` needs `memory` as well, which stays a separate
+# switch here for the same reason it is one there — a fixture is not a port.
+#
+# `dep:futures-core` is the one dependency this feature turns on. See the
+# `[dependencies]` comment above for why it adds no node to the graph.
+unstable-projection = ["happenstance-core/unstable-projection", "dep:futures-core"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

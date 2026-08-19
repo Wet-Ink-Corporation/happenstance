@@ -70,22 +70,26 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 
 /// Every file a conformance rule may be defined in.
 ///
-/// Three, not one. Since stage 5 rules live in three files: the event-store
-/// family in `suite.rs`, the proptest family in `model.rs` and the threaded
-/// family in `concurrency.rs`. [`run`]'s clause checks stay scoped to [`SUITE`]
-/// on purpose — only that family's rules are claimed by clauses today — but
-/// anything asking *does this rule exist* must ask all three, or it answers a
-/// narrower question than its own message claims. Both callers of [`all_rules`]
-/// were doing exactly that until stage 6's review: `retired_rules` printed "none
-/// naming a rule still in the suite" having looked in one file of three, and
-/// CF-29 let a model or concurrency rule land with no changelog entry at all.
+/// **Four, not one.** Rules live in four files: the event-store family in
+/// `suite.rs`, the proptest family in `model.rs`, the threaded family in
+/// `concurrency.rs` and the projection family in `projection.rs`. [`run`]'s
+/// clause checks stay scoped to [`SUITE`] on purpose — only that family's rules
+/// are claimed by *event-store* clauses — but anything asking *does this rule
+/// exist* must ask all four, or it answers a narrower question than its own
+/// message claims. Both callers of [`all_rules`] were doing exactly that until
+/// stage 6's review: `retired_rules` printed "none naming a rule still in the
+/// suite" having looked in one file of three, and CF-29 let a model or
+/// concurrency rule land with no changelog entry at all. A fourth family absent
+/// from this array reproduces that defect one family later, which is why
+/// `projection.rs` joins it in the same change that creates it.
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 3] = [
+pub(crate) const RULE_FILES: [&str; 4] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
+    "crates/happenstance-testkit/src/projection.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1728,12 +1732,26 @@ fn case_ids(text: &str) -> Vec<String> {
 
 /// Whether a clause's rules would live in a conformance suite that exists today.
 ///
-/// The event store's suite does. The projection store's and the replication
-/// port's do not, and will not until the phases that build those ports. Until
-/// then their rule names are scheduled work, and the honest answer is that
-/// nothing can check them rather than that they are all wrong.
+/// The event store's suite does, and so does the projection store's, as of the
+/// phase that built it. The replication port's does not and will not until the
+/// phase that builds it — until then `SY` rule names are scheduled work, and the
+/// honest answer is that nothing can check them rather than that they are all
+/// wrong. Checking them against the suites that *do* exist would report every one
+/// as missing, which is noise indistinguishable from a real typo.
+///
+/// `PS-` was excluded for exactly that reason and the exclusion outlived it. The
+/// projection family's rules live in
+/// `crates/happenstance-testkit/src/projection.rs`, which [`RULE_FILES`] has
+/// named since the file was created; what was missing was any clause-side check
+/// that a `PS` citation resolves to one of them. Until this line changed, a `PS`
+/// clause could cite a rule that had never existed and every gate in the
+/// repository stayed green — the seventeen `†` marks §7.2 printed against the
+/// family were an accurate statement rather than a checked one.
 fn has_suite(clause_id: &str) -> bool {
-    clause_id.starts_with("ES-") || clause_id.starts_with("VT-") || clause_id.starts_with("WF-")
+    clause_id.starts_with("ES-")
+        || clause_id.starts_with("VT-")
+        || clause_id.starts_with("WF-")
+        || clause_id.starts_with("PS-")
 }
 
 /// Every rule defined anywhere in [`RULE_FILES`].
@@ -2093,7 +2111,8 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 ///
 /// The document cites by bare name on purpose — `event.rs:215` reads better in
 /// a sentence than the path does, and most of the 200 bare citations resolve
-/// uniquely. Four do not, and **the obvious default is wrong for half of them**,
+/// uniquely. A handful do not, and **the obvious default is wrong for some of
+/// them**,
 /// which is why this is a table rather than a "prefer `happenstance-core`" rule:
 /// bare `lib.rs` means the *sync* crate at both of its sites (§1.6's port table
 /// and §5), and `happenstance-core` also has a `lib.rs`. A preference rule would
@@ -2106,16 +2125,40 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 /// backstop for this table being wrong: if a citation mapped here to `core`
 /// really meant `sync`, the anchor it names will not be found in the file this
 /// sends it to.
-const BARE_NAME_MAP: [(&str, &str); 5] = [
+const BARE_NAME_MAP: [(&str, &str); 7] = [
     ("memory.rs", "crates/happenstance-core/src/memory.rs"),
     ("error.rs", "crates/happenstance-core/src/error.rs"),
     ("identity.rs", "crates/happenstance-core/src/identity.rs"),
     ("lib.rs", "crates/happenstance-sync/src/lib.rs"),
+    // The collision the projection rule family created, and the entry the
+    // paragraph above promises: `crates/happenstance-testkit/src/projection.rs`
+    // is the fourth rule file, so the basename stopped resolving uniquely the
+    // day it landed and thirteen citations failed at once. Every one of them
+    // predates that file and names the **port**: they cite the GAT that used to
+    // be at `:97-99`, the module doc's batch paragraph, `ProjectionId`, and
+    // `rollback`'s declaration — items that exist only in the contract crate.
+    // The anchor check is the backstop, and it is a real one here rather than a
+    // formality: the two files overlap in length, so a citation that meant the
+    // suite would be sent to the port and its anchor would not be found.
+    (
+        "projection.rs",
+        "crates/happenstance-core/src/projection.rs",
+    ),
     // Fourteen manifests carry this name and the root's own relative path *is*
     // the bare name, so qualifying the two citations would not have changed the
     // string they contain. Both mean the workspace root, and §8036 says so in
     // the sentence around it: "inheriting `version` from the workspace root".
     ("Cargo.toml", "Cargo.toml"),
+    // The collision phase 8 created, and the same shape as the projection one
+    // above: `crates/happenstance-sqlite/tests/append.rs` is the adapter's own
+    // append target, so the basename stopped resolving uniquely the day it
+    // landed and **twenty-four** citations failed at once. Every one of them
+    // predates that file and names the **contract**: `AppendCondition`, `Guard`,
+    // `guards()`, `after`, `is_violated_by` and the module doc's precedence
+    // paragraph — items that exist only in `happenstance-core`. A test file that
+    // did not exist when the sentences were written cannot be what they meant,
+    // and the anchor check is the backstop if any of them is.
+    ("append.rs", "crates/happenstance-core/src/append.rs"),
 ];
 
 /// What a citation's file name resolved to.
@@ -2609,5 +2652,60 @@ mod tests {
                 "`{claim}` would claim a resolving citation is a correct one"
             );
         }
+    }
+
+    /// Check 4 abstains on any family [`has_suite`] does not know, so the set of
+    /// prefixes it names is the set of clause families whose rule citations are
+    /// checked at all. `PS` was excluded for a true reason — the projection
+    /// suite did not exist — and the exclusion outlived it.
+    ///
+    /// Asserted rather than reviewed because the failure is silence: a `PS`
+    /// clause could name `commit_is_atomik_with_the_read_model` and every gate in
+    /// the repository would stay green.
+    #[test]
+    fn the_projection_family_is_checked_against_its_suite() {
+        assert!(
+            has_suite("PS-1"),
+            "the projection suite exists in `crates/happenstance-testkit/src/projection.rs`, \
+             so check 4 must resolve `PS` rule citations rather than abstain on them"
+        );
+        assert!(has_suite("PS-37"));
+    }
+
+    /// The other half of the same constant, and the reason this test is not
+    /// merely `assert!(has_suite(..))` four times: the families that already had
+    /// a suite must keep one, and the family that still has none must keep
+    /// abstaining. Widening the prefix set to everything would make check 4
+    /// report every unwritten replication rule as a typo — noise indistinguishable
+    /// from the real thing, which is the defect the exclusion was written to avoid.
+    #[test]
+    fn the_replication_family_still_abstains_and_the_rest_do_not() {
+        for existing in ["ES-1", "VT-3", "WF-8"] {
+            assert!(
+                has_suite(existing),
+                "{existing} has had a suite since phase 3"
+            );
+        }
+        assert!(
+            !has_suite("SY-1"),
+            "`happenstance-sync-testkit` does not exist; checking `SY` rule names against \
+             the suites that do exist would report all of them as missing"
+        );
+        assert!(
+            !has_suite("CF-1"),
+            "`CF` clauses are about the suite, not checked by it"
+        );
+    }
+
+    /// [`RULE_FILES`] is what `all_rules` sweeps, and check 6 demands every rule
+    /// in it be claimed by a clause, retired by one, or on record as owing a
+    /// decision. A projection family absent from the array is a family no clause
+    /// is obliged to claim — the same hole `concurrency.rs` sat in for a phase.
+    #[test]
+    fn the_projection_rules_file_is_swept_for_ownership() {
+        assert!(
+            RULE_FILES.contains(&"crates/happenstance-testkit/src/projection.rs"),
+            "check 6 sweeps only {RULE_FILES:?}"
+        );
     }
 }

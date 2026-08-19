@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wet-ink.net/happenstance/experiments/polling-cost/result-record.schema.json",
+  "title": "polling-cost result record",
+  "description": "One swept cell of the polling-cost measurement: every condition it ran under, and what it measured. Results are only reproducible if the thing they must conform to is committed beside them, so this document lives in the tree with the corpus and every committed line is checked against it by experiments/polling-cost/tests/schema.rs.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "phase",
+    "fan_out",
+    "log_size",
+    "poll_interval_ms",
+    "chunk",
+    "arm",
+    "repeat",
+    "seed",
+    "projection_store",
+    "reads_issued",
+    "events_delivered",
+    "events_applied_total",
+    "events_applied_distinct",
+    "delivery_amplification",
+    "elapsed_ns"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "The record contract's version. A change of shape bumps it; a file is never re-interpreted under a version it was not written for."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["record"],
+      "description": "Distinguishes a record from the manifest line at the head of the same file."
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["amplification", "staleness"],
+      "description": "Which quantity the cell measured."
+    },
+    "fan_out": {
+      "type": "integer",
+      "description": "How many views polled the same log."
+    },
+    "log_size": {
+      "type": "integer",
+      "description": "How many events the log held before the cell ran."
+    },
+    "poll_interval_ms": {
+      "type": "integer",
+      "description": "The interval the driver waited between polls. Meaningful in the staleness phase; recorded in both so a reader never has to know which fields apply."
+    },
+    "chunk": {
+      "type": "integer",
+      "description": "Events per begin/commit pair, passed to run_projection as its NonZeroUsize chunk."
+    },
+    "arm": {
+      "type": "string",
+      "enum": ["overlapping", "disjoint"],
+      "description": "Selectivity. Overlapping: every view's query selects the whole log, which is ES-32's worst case. Disjoint: each view selects about one Nth."
+    },
+    "repeat": {
+      "type": "integer",
+      "description": "Which repeat of this cell. Raw per-repeat rows are committed rather than summaries, because a summary cannot be re-analysed."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "The seed this cell's choices derived from, written into the file rather than described in prose."
+    },
+    "projection_store": {
+      "type": "string",
+      "enum": [
+        "happenstance_core::MemoryProjectionStore",
+        "polling-cost::LocalProjectionStore"
+      ],
+      "description": "Which projection store held the read models. Exactly two values are admissible and the field is never free text."
+    },
+    "reads_issued": {
+      "type": "integer",
+      "description": "How many EventStore::read calls the views issued between them. The N-independent-reads number, observed."
+    },
+    "events_delivered": {
+      "type": "integer",
+      "description": "How many events the store yielded, summed across every view and every poll. Counted by the instrument at the moment each event was handed over."
+    },
+    "events_applied_total": {
+      "type": "integer",
+      "description": "How many times a projection's apply ran, summed across views."
+    },
+    "events_applied_distinct": {
+      "type": "integer",
+      "description": "How many DISTINCT log positions were delivered to at least one view, every one of which was applied. The headline's denominator. Under a derived query and a filtering store every delivery is applied, so events_delivered divided by events_applied_total is identically one and says nothing; deduplicating asks the question ES-32 is about."
+    },
+    "delivery_amplification": {
+      "type": "number",
+      "description": "events_delivered divided by events_applied_distinct. Dimensionless, machine-independent, and the headline. In the overlapping arm it equals the fan-out by construction; in the disjoint arm it is one."
+    },
+    "staleness_ns_p50": {
+      "type": ["integer", "null"],
+      "description": "Median nanoseconds from an event's append instant to the instant an observing view's checkpoint reached or passed it. Null outside the staleness phase. Never derived from a position."
+    },
+    "staleness_ns_p95": {
+      "type": ["integer", "null"],
+      "description": "The same at the 95th percentile."
+    },
+    "pending_at_poll_max": {
+      "type": ["integer", "null"],
+      "description": "The largest backlog seen at a poll boundary: events appended and not yet observed by a view, counted by COMPARING positions. head() minus checkpoint appears nowhere."
+    },
+    "elapsed_ns": {
+      "type": "integer",
+      "description": "How long the cell took. Secondary, and only meaningful beside the machine in the manifest."
+    }
+  }
+}

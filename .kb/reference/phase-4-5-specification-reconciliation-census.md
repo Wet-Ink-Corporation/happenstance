@@ -27,6 +27,7 @@ related:
   - kb-decision-0013
   - kb-open-question-query-union-rule-unowned-001
   - kb-open-question-es-38-and-gap-read-unowned-001
+  - kb-reference-spec-trace-has-suite-001
 source_paths:
   - .kb/_intake/2026-08-10-phase-4-5-pressure-test.md
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md

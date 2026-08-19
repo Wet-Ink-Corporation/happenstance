@@ -14,6 +14,17 @@
 //! backing store; each [`connect`](Fixture::connect) returns a handle onto that
 //! store; two fixture instances share nothing.
 //!
+//! # Two fixture traits, one contract
+//!
+//! [`ProjectionFixture`] says the same three things about a **projection**
+//! store. It is a separate trait rather than a second associated type on
+//! [`Fixture`] because the associated type is where the port is named:
+//! `Fixture::Store: EventStore` binds the wrong one, and an adapter that
+//! implements only one of the two ports would otherwise have to invent the
+//! other. Everything below the two traits — [`Capability`], [`RuleOutcome`],
+//! the one-line skip shape — is shared unchanged, so an author reading one CI
+//! log never has to learn two vocabularies.
+//!
 //! # A rule is handed how to make a fixture, not a made one
 //!
 //! Every rule takes `impl AsyncFn() -> F`. That is deliberate, and it is what
@@ -64,7 +75,7 @@
 
 use core::future::Future;
 
-use happenstance_core::EventStore;
+use happenstance_core::{EventStore, ProjectionId, ProjectionProbe};
 
 /// One isolated backing store, plus the ways a rule is allowed to reach it.
 ///
@@ -352,6 +363,376 @@ pub trait Fixture {
     }
 }
 
+/// One isolated **projection** store, plus the ways a projection rule is
+/// allowed to reach it.
+///
+/// [`Fixture`]'s sibling, and a second trait rather than a second associated
+/// type on the first, because [`Fixture::Store`] binds [`EventStore`] — the
+/// wrong port. An adapter may implement one of the two ports and not the other,
+/// and a single trait would oblige a projection-only adapter to invent an event
+/// store to satisfy a bound no projection rule reads.
+///
+/// Implement it for whatever a rule should be given a fresh instance of: a
+/// temporary directory holding a SQLite file, a connection pool aimed at a
+/// throwaway schema, a `MemoryProjectionStore` behind an `Arc`. Each instance is
+/// one store. Each [`connect`](Self::connect) is one handle onto it.
+///
+/// # Why `Store` is bound on the **probe** rather than on the port
+///
+/// [`ProjectionProbe`] is the write seam the suite drives an adapter's read
+/// model through, and it is a supertrait of `ProjectionStore` — so one bound
+/// buys both. Binding the port instead would compile and would quietly buy a
+/// suite that cannot see a read model at all: with `ProjectionStore` alone, the
+/// only things generic code can do with a batch are commit it and roll it back,
+/// and the rule carrying this port's entire reason for existing degenerates into
+/// a checkpoint test that a store writing *only* checkpoints passes.
+///
+/// Binding the probe here is what turns "your store must be observable" from a
+/// convention into a compile error: an adapter that has not implemented
+/// [`ProjectionProbe`] cannot name a type that satisfies this trait, so it
+/// cannot invoke the suite, and by CLAUDE.md's rule it does not exist.
+///
+/// # No `Send` bound, and no `trait_variant`
+///
+/// The bare flavour, never `SendProjectionStore`: it is the weaker requirement
+/// and accepts both kinds of adapter, and only one of the two names may be in
+/// scope per module. Nothing ever spawns a fixture — the harness owns the
+/// executor — so the argument that gives the *port* two flavours (ADR-0001) does
+/// not reach here, and a second flavour would double the surface to buy a
+/// property no caller wants.
+///
+/// # Why the methods are spelled `-> impl Future` rather than `async fn`
+///
+/// [`Fixture`]'s reason, unchanged: `async fn` in a *public* trait fires rustc's
+/// `async_fn_in_trait` lint and the gate runs `-D warnings`. The desugared form
+/// also puts the **absence** of `+ Send` at the declaration, where a reader can
+/// see it. An implementation may still write `async fn` — the two are the same
+/// signature after desugaring, and the lint fires only on the declaration.
+///
+/// # Why `Store` is an owned associated type and not a GAT
+///
+/// The same rustc ICE [`Fixture`] records, for the same five ingredients, still
+/// reproducing on 1.97.1 (`experiments/rustc-ice-gat-foreign-trait/`). Hand back
+/// an owned handle holding a refcount;
+/// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture) is the
+/// worked example.
+///
+/// # Capability constants, and where an empty reason fires
+///
+/// Three constants, all required and all answered deliberately:
+/// [`SECOND_HANDLE`](Self::SECOND_HANDLE) is a MUST, and
+/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) and
+/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) are the port's two genuinely
+/// declinable capabilities. A declined one must name a reason —
+/// [`Capability::declined`] rejects the empty string in a `const fn` `assert!`
+/// — but on an **associated** const that rejection arrives later than one would
+/// like. An associated const is evaluated lazily, only when monomorphised code
+/// reads it, which is *after* `cargo check` and `cargo clippy` have both
+/// stopped. **It fails at codegen, so `cargo build` and `cargo test` catch it
+/// and `cargo check` and `cargo clippy` do not** — a green `check` is not
+/// evidence here.
+///
+/// This is that failure, and reading the constant is the load-bearing line: a
+/// fixture nobody ever looks at compiles perfectly well.
+///
+/// ```compile_fail
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
+///
+/// struct Reasonless(std::sync::Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for Reasonless {
+///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     // The whole difference from the block below.
+///     const RESET_REFUSAL: Capability = Capability::declined("");
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store cannot make a commit fail once it has been accepted",
+///     );
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
+///     }
+/// }
+///
+/// fn main() {
+///     let _ = <Reasonless as ProjectionFixture>::RESET_REFUSAL;
+/// }
+/// ```
+///
+/// The doctest above is spelled bare `compile_fail`, never
+/// `compile_fail,E0080`: rustdoc on 1.97.1 silently ignores an error-code
+/// annotation it cannot match, so the stricter-looking spelling is the weaker
+/// check (`Capability::declined` records the measurement).
+///
+/// Bare `compile_fail` passes when the snippet fails to compile for *any*
+/// reason, so the **twin** below is what makes the pair sound. It is the same
+/// snippet with one expression changed — the empty string becomes a sentence —
+/// and it must compile. A typo, a renamed item or a wrong path breaks the twin,
+/// and a broken twin is a hard test failure, so the only thing the pair can be
+/// reporting is the one expression that differs between them.
+///
+/// ```
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
+///
+/// struct Reasoned(std::sync::Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for Reasoned {
+///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     const RESET_REFUSAL: Capability = Capability::declined(
+///         "this store holds no protection policy, so there is no projection it \
+///          could decline to reset",
+///     );
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store cannot make a commit fail once it has been accepted",
+///     );
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
+///     }
+/// }
+///
+/// let _ = <Reasoned as ProjectionFixture>::RESET_REFUSAL;
+/// ```
+///
+/// # Examples
+///
+/// The whole trait, over the reference store — this is what
+/// [`projection_store_conformance!`](crate::projection_store_conformance) is
+/// handed:
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use happenstance_core::MemoryProjectionStore;
+/// use happenstance_testkit::fixtures::MemoryProjectionHandle;
+/// use happenstance_testkit::{Capability, ProjectionFixture};
+///
+/// struct MyFixture(Arc<MemoryProjectionStore>);
+///
+/// impl ProjectionFixture for MyFixture {
+///     type Store = MemoryProjectionHandle;
+///
+///     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+///     const RESET_REFUSAL: Capability = Capability::declined(
+///         "this store protects nothing, so it has no reset to refuse",
+///     );
+///     const COMMIT_FAULT: Capability = Capability::declined(
+///         "this store applies both halves of a commit under one lock and has \
+///          no write it can be made to fail between them",
+///     );
+///
+///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
+///         core::future::ready(MemoryProjectionHandle::new(Arc::clone(&self.0)))
+///     }
+/// }
+/// ```
+pub trait ProjectionFixture {
+    /// A handle onto this fixture's backing projection store.
+    ///
+    /// Bound on [`ProjectionProbe`], which implies `ProjectionStore` — see the
+    /// trait documentation for why the *probe* is the bound that earns its keep
+    /// and the port is the one that does not.
+    type Store: ProjectionProbe;
+
+    /// Whether this fixture can hand out a **second, independent handle** onto
+    /// the one backing projection store.
+    ///
+    /// **This one is a MUST**, as it is on [`Fixture`], and for a sharper
+    /// reason. PS-1 — the read-model write and the checkpoint write become
+    /// durable together or not at all — is only observable from *outside* the
+    /// connection that made the commit: a store whose commit is visible only to
+    /// its own session satisfies every single-handle assertion and loses the
+    /// row, or the checkpoint, or both, the moment anything else looks. So
+    /// every rule in this family reads back through a fresh
+    /// [`connect`](Self::connect), and a fixture that cannot open one cannot
+    /// observe the invariant this port exists for at all.
+    ///
+    /// Declining it is therefore **not a trade** the suite may record as a skip
+    /// — it is a fixture that does not meet the contract — and the type cannot
+    /// tell the two apart, because both spell [`Capability`].
+    ///
+    /// # What enforces it
+    ///
+    /// The rules themselves, through `must!` rather than `require!`, so the
+    /// enforcement is on the path an adapter's own CI executes. An adapter
+    /// author who meets a red rule, writes
+    /// `const SECOND_HANDLE: Capability = Capability::declined("…")` and re-runs
+    /// gets a red rule again, quoting their own stated reason back at them — not
+    /// a green suite and one `SKIP` line. The second line is
+    /// `mutation_coverage::projection_capability_skips_are_reported`, which
+    /// drives the whole enumeration against a fixture declining everything and
+    /// asserts each of those rules *rejects* it.
+    ///
+    /// It stays spelled as a [`Capability`] rather than as a `bool` so the
+    /// failure carries the fixture's own words.
+    const SECOND_HANDLE: Capability;
+
+    /// Whether this fixture's store can be made to **refuse** a reset for a
+    /// projection it protects.
+    ///
+    /// The projection port's one genuinely declinable capability, and a real
+    /// trade rather than a fact: PS-18 makes refusal a *mechanism* the port
+    /// supplies and leaves what to protect to the domain, so a store with no
+    /// protection policy has nothing to refuse and declining is the honest
+    /// answer. `MemoryProjectionStore` is exactly that store, and
+    /// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture)
+    /// declines with the real reason.
+    ///
+    /// It is **required rather than defaulted**, unlike
+    /// [`Fixture::MID_BATCH_FAULT`], and that is a deliberate difference of one
+    /// line per fixture. A default would have to carry a *testkit-written*
+    /// reason, and the projection family's declension policy is that the fixture
+    /// writes the reason — a store's account of a trade only it can describe.
+    /// The one standing exception to that policy on the event-store side
+    /// ([`NO_CEILING_REASON`]) exists because "this store has no ceiling" is the
+    /// same sentence for every store that says it; "this store refuses no reset"
+    /// is not, because *why* it refuses none is the interesting half.
+    ///
+    /// It is read by exactly one rule,
+    /// [`refused_reset_changes_nothing`](crate::projection::rules::refused_reset_changes_nothing),
+    /// which is PS-18's; a fixture that declines it gets that rule as a reported
+    /// skip carrying its own stated reason, and a fixture that declares it must
+    /// also override [`protect_from_reset`](Self::protect_from_reset), which is
+    /// the mechanism this constant gates.
+    const RESET_REFUSAL: Capability;
+
+    /// Whether this fixture can make a `commit` **report failure**.
+    ///
+    /// PS-1's second conjunct is a claim about a commit that failed: the read
+    /// model and the checkpoint must be exactly as they were. Nothing a caller
+    /// holds can make a conformant `commit` fail — that is the property under
+    /// test — so, exactly as with [`Fixture::MID_BATCH_FAULT`], the injection
+    /// belongs to the adapter: a trigger that raises on the third row, a `CHECK`
+    /// armed for one write, a connection killed between the read-model write and
+    /// the checkpoint write. Every store that can do it does it differently,
+    /// which is what makes it a capability rather than testkit machinery.
+    ///
+    /// # Why it is *required* rather than defaulted
+    ///
+    /// [`Fixture::MID_BATCH_FAULT`] carries a default declension and this one
+    /// deliberately does not, for [`RESET_REFUSAL`](Self::RESET_REFUSAL)'s
+    /// reason: a default has to carry a *testkit-written* reason, and this
+    /// family's declension policy is that the fixture writes it. "This store has
+    /// no ceiling" is the same sentence for every store that says it, which is
+    /// why [`NO_CEILING_REASON`] exists; *why a particular store cannot make a
+    /// commit fail* is not — an in-memory map applies both halves under one lock,
+    /// a one-shot HTTP backend has no interactive transaction to abort, and a
+    /// pooled adapter usually can. The cost is one line per fixture and the
+    /// return is that no fixture author is left un-asked.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// [`failed_commit_leaves_both_unchanged`](crate::projection::rules::failed_commit_leaves_both_unchanged)
+    /// arms the fault and requires the next `commit` to answer `Err`. A fixture
+    /// whose [`arm_commit_fault`](Self::arm_commit_fault) does nothing would
+    /// otherwise turn that rule into a green result about a store nothing ever
+    /// faulted, which is CF-39's argument one port over. So a store that can
+    /// absorb every fault its fixture is able to arm MUST **decline** this
+    /// capability with that as its stated reason, rather than declare it and
+    /// contribute an `Ok`.
+    const COMMIT_FAULT: Capability;
+
+    /// Arms the store so that the **next** `commit` fails.
+    ///
+    /// The fault fires once, and where inside the commit it fires is the
+    /// adapter's business: what PS-1's second conjunct requires is that a commit
+    /// which reported failure left the read model and the checkpoint exactly as
+    /// they were, whichever half the store had got to.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for
+    /// [`Fixture::arm_mid_batch_fault`]'s reason and with the same two ways of
+    /// reaching it: a fixture that declares [`COMMIT_FAULT`](Self::COMMIT_FAULT)
+    /// supported and forgets the override, or a rule that reached here without a
+    /// gate. That is what stops "declared and never implemented" from passing
+    /// vacuously — it aborts loudly instead.
+    fn arm_commit_fault(&self) -> impl Future<Output = ()> {
+        let _ = self;
+        async move {
+            panic!(
+                "`ProjectionFixture::arm_commit_fault` was called but not \
+                 implemented: either this fixture declares COMMIT_FAULT \
+                 supported and does not override it, or a rule reached it \
+                 without a `require!(F: COMMIT_FAULT)` gate"
+            );
+        }
+    }
+
+    /// Puts `id` under this store's protection, so the next
+    /// [`reset`](happenstance_core::ProjectionStore::reset) of it is refused.
+    ///
+    /// [`arm_commit_fault`](Self::arm_commit_fault)'s sibling, and it exists for
+    /// the same reason: the capability above is a claim, and a rule cannot
+    /// *exercise* the claim without telling the store which projection to
+    /// protect. Nothing a caller holds can make a conformant `reset` answer
+    /// [`ResetError::Refused`](happenstance_core::ResetError::Refused) —
+    /// PS-18's own words are that the port supplies the mechanism and the domain
+    /// decides what to protect, so the domain is where the choice lives and a
+    /// fixture is how a suite reaches it.
+    ///
+    /// It takes the [`ProjectionId`] rather than declaring a protected one,
+    /// which is the difference between a rule that can name its own subject and
+    /// a rule that has to share one id with every other rule in the family. An
+    /// adapter implements it however its policy is spelled: a row in a
+    /// protected-projections table, a `CHECK`, a `beforeDelete` trigger, a
+    /// hard-coded list.
+    ///
+    /// **This is not a fourth capability**, and deliberately so. The projection
+    /// family's declension set is the three constants above; this is the
+    /// *mechanism* the second of them gates, exactly as `arm_commit_fault` is
+    /// the mechanism the third gates. A fixture that declines
+    /// [`RESET_REFUSAL`](Self::RESET_REFUSAL) never has it called.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for
+    /// [`arm_commit_fault`](Self::arm_commit_fault)'s reason and with the same
+    /// two ways of reaching it: a fixture that declares `RESET_REFUSAL`
+    /// supported and forgets the override, or a rule that reached here without a
+    /// `require!(F: RESET_REFUSAL)` gate. "Declared and never implemented" then
+    /// aborts loudly rather than passing vacuously — a fixture whose body did
+    /// nothing would leave
+    /// [`refused_reset_changes_nothing`](crate::projection::rules::refused_reset_changes_nothing)
+    /// asserting about a store nothing had ever asked to protect anything.
+    fn protect_from_reset(&self, id: &ProjectionId) -> impl Future<Output = ()> {
+        let _ = (self, id);
+        async move {
+            panic!(
+                "`ProjectionFixture::protect_from_reset` was called but not \
+                 implemented: either this fixture declares RESET_REFUSAL \
+                 supported and does not override it, or a rule reached it \
+                 without a `require!(F: RESET_REFUSAL)` gate"
+            );
+        }
+    }
+
+    /// Opens a handle onto this fixture's backing store.
+    ///
+    /// Async because a real fixture acquires its handle over I/O — a pool
+    /// checkout, a connection, an HTTP client's first request. A fixture whose
+    /// `connect` is a refcount bump should return [`core::future::ready`]
+    /// rather than an `async move` block, so it does not pretend to do I/O it
+    /// does not do.
+    ///
+    /// # Panics
+    ///
+    /// Implementations panic rather than returning `Result`, for
+    /// [`Fixture::connect`]'s reason and it is worth restating here rather than
+    /// linking: a fixture that cannot connect is a broken **test environment**,
+    /// not a non-conformant adapter, and a `Result` would put "the database is
+    /// down" into the same channel as "the adapter is wrong" — where the suite's
+    /// own messages would then have to guess which one they were reading.
+    fn connect(&self) -> impl Future<Output = Self::Store>;
+}
+
 /// Whether a fixture supports one optional operation, and if not, why not.
 ///
 /// # Why this is an opaque struct rather than a public enum
@@ -441,6 +822,38 @@ impl Capability {
 /// they did set.
 pub const NO_STORE_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH";
 
+/// The `capability` name a rule reports when an adapter's **batch offers no read
+/// path** at all.
+///
+/// Not a [`ProjectionFixture`] associated const, and that is the whole reason it
+/// is spelled as a string rather than `stringify!`-ed from one:
+/// [`ProjectionProbe::READS_THROUGH_BATCH`]
+/// lives on the **probe**, beside the store, because whether a batch can be read
+/// through is a property of the batch type rather than of the fixture's
+/// environment. A skip that named a fixture const would send an adapter author
+/// looking for a constant that does not exist in their code, so this names the
+/// one they can actually go and change, path and all.
+pub const NO_BATCH_READ_PATH: &str = "ProjectionProbe::READS_THROUGH_BATCH";
+
+/// The reason a rule reports when an adapter's batch offers no read path.
+///
+/// Written by the testkit rather than by the fixture, and it is the second and
+/// last instance of [`NO_CEILING_REASON`]'s exception rather than a new policy:
+/// a declined [`Capability`]'s reason is an adapter's account of a trade only it
+/// can describe, while *"this batch exposes no read path"* is the same sentence
+/// for every store that says it — PS-12's second arm, which the clause permits
+/// outright. Asking each fixture to phrase it would buy a paraphrase per adapter
+/// and no information.
+///
+/// **What a skip carrying this reason does not cover** is stated here rather
+/// than left to be inferred: chunk-size invariance is *unverified* for such an
+/// adapter, because a projection's read-modify-write has no read path to use in
+/// the first place.
+pub const NO_BATCH_READ_PATH_REASON: &str = "this adapter's batch exposes no read path, which PS-12 permits outright: \
+     `READS_THROUGH_BATCH` is `false`, so `probe_read_through` is never called \
+     and the rules that would have used it report this instead of asserting \
+     over a store that cannot answer them";
+
 /// The reason a rule reports when a fixture states no ceiling on any store
 /// limit.
 ///
@@ -475,9 +888,20 @@ pub enum RuleOutcome {
     Ran,
     /// The rule required a capability this fixture declines, and did nothing.
     Skipped {
-        /// The name of the [`Fixture`] associated const, e.g. `"REOPEN"`.
+        /// The associated const that was declined, as its own identifier —
+        /// `"REOPEN"` on a [`Fixture`], `"RESET_REFUSAL"` on a
+        /// [`ProjectionFixture`] — so a reader is told the name of the thing
+        /// they can go and change rather than a paraphrase of it. Both fixture
+        /// traits report into this one field, and a test asserting on a skip can
+        /// therefore spell the constant's name directly.
+        ///
+        /// Two values here are **not** fixture consts and are spelled with their
+        /// path for that reason: [`NO_STORE_LIMITS`] and [`NO_BATCH_READ_PATH`].
         capability: &'static str,
-        /// The fixture's stated reason, from [`Capability::declined`].
+        /// The fixture's stated reason, from [`Capability::declined`] — except
+        /// for the two testkit-written reasons, [`NO_CEILING_REASON`] and
+        /// [`NO_BATCH_READ_PATH_REASON`], which each say on their own page why
+        /// the fixture is not asked to phrase it.
         reason: &'static str,
     },
 }

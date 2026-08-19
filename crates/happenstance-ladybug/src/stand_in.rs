@@ -152,7 +152,8 @@ pub struct SystemConfig {
 /// its database **by value** and opens a connection per batch, rather than
 /// holding one open. An earlier draft gave the store a lifetime instead and this
 /// paragraph described it; the lifetime is what produced the rustc ICE recorded
-/// in [`live_handle`](crate::live_handle), and it went. The sentence survived
+/// in `experiments/live-handle-projection-batch/` (spelled plainly, because that
+/// module is no longer in this crate), and it went. The sentence survived
 /// the code it described by one revision, which is the reason it is spelled out
 /// here rather than quietly corrected.
 #[derive(Debug)]

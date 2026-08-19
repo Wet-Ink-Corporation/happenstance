@@ -296,9 +296,11 @@ scheduling defect.
 | **0017** | 6 | What does a projection batch own, what vocabulary writes into it, and what happens when it is dropped? (PS-4 – PS-15) |
 | **0018** | 6 | How is a projection returned to "never run", what is that operation's transactional scope, and what may refuse it? (PS-16 – PS-20) |
 | **0019** | 6 | What happens when `apply` fails? (PS-26 – PS-30) |
+| **0030** | 6 | *(unscheduled — the queue had no number for it)* Which clause states that a successful `commit` advances the checkpoint, given that four rules already enforce it and PS-1's `MUST` is a coupling rather than a progress obligation? [ADR-0030](references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md): **a clause of its own, PS-38**, minted `[PROVISIONAL]` in §4.7. PS-1, PS-19, PS-21 and PS-22 are byte-identical across it |
 | **0020** | 7 | How does a decision model guarantee that its query and its fold cannot disagree? |
 | **0021** | 7 | How does a payload's shape evolve — codec tag, versioned event types, upcasting, and does the read path need a hook it does not have? |
-| **0022** | 8 | SQLite: driver, schema, tag storage, and the append-condition strategy. |
+| ~~**0022**~~ | 8 | ~~SQLite: driver, schema, tag storage, and the append-condition strategy.~~ **Written**, as [ADR-0022](references/adr/0022-append-condition-strategy.md), and staged for ingest at `.kb/_intake/0033-adr-0022-append-condition-strategy.md`. The **driver** half was stale on arrival — `rusqlite` without a pool was already settled at `crates/happenstance-sqlite/src/lib.rs:47-53` — so it is ratified rather than decided, in the shape row 0008 already uses. The rest is one question with seven consequences: the append condition is a `max(position)` guard inside `BEGIN IMMEDIATE`, which **reverses the architecture brief's recommendation on a measurement** (23 µs against the `EXISTS` probe's 32 and the conditional insert's 45 on the rejection path over a 5,000-event log; 213 against 311 and 306 over 50,000); tags go in `event_tag(tag, position)` with `event_type` covering (a selective read 3.16x and 4.63x faster than a canonical blob and JSON1); three pragma values; the runtime seam; `index_arms()` rejected. Measured in `experiments/append-condition/`, out of the workspace and out of the gate, because `append` is still `todo!()` and AC-013 puts the record first. Two non-verdicts are fenced with owners — **ES-17 is not lifted**, and the gap is escalated on the row below |
+| **—** | 8 → ? | *(escalated by ADR-0022 §13, and owned by nobody yet)* ADR-0012 names phase 8 as the measurement that could lift `append`'s `&[Event]` marker, and its falsifier item 1 requires *"two builds of the **same** SQLite adapter differing only in `append`'s ownership, measured on the same harness."* Three candidate stores in an experiment crate are not that, and no story in phase 8's map produces it — the four implementation stories build **one** adapter. Items 2 to 5 are also unproduced, and item 5 is a *design* obligation (*"a cheap way to keep a copy for retry"*) no measurement alone supplies. This needs a number and an owner, or an explicit deferral with a new phase; what it must not have is a silence |
 | **0023** | 9 | Cloudflare: the `SqlStorage` mapping and the off-tokio conformance harness. |
 | **0024** | 10 | Postgres: how does the adapter buy the position-visibility invariant when `nextval()` allocates outside the transaction — measured, not preferred? |
 | **0025** | 11 | Ladybug: checkpoint placement, how a projection expresses graph mutations, and the blocking API. |
@@ -516,12 +518,12 @@ ADR-0026 must be written against two unlike peers, not one.
 |---|---|---|---|
 | What is a store permitted to forget, and how does it say so | 14 | **deferred — ES-39, CF-27, SY-32.** A store that has been deleted from is currently indistinguishable from a young one at every value in §2, and four of the six scenarios reach that from unrelated doors. An explicit written refusal — deletion is out of scope for `EventStore`, and here is what a deleted-from store may look like — is a legitimate answer | 0028 |
 | A projection's `Query` changed under its checkpoint | 6 | **provisional — PS-25** | 0018 |
-| SQLite driver, append-condition strategy, tag storage | 8 | **decided** — `rusqlite`; `BEGIN IMMEDIATE` plus a probe returning the conflicting position; blob on `event` with `event_tag` as a derived index carrying `event_type` as a covering column | 0022 |
+| SQLite driver, append-condition strategy, tag storage | 8 | **decided, and one third of this row was wrong before it was measured.** `rusqlite` without a pool — ratified, stale on arrival. `BEGIN IMMEDIATE`, yes; a **`max(position)` guard**, not a probe, because `max()` answers *whether* and *by which event* in one statement where `EXISTS` needs a second query to name the conflict, and on the rejection path it measured 23 µs against the probe's 32 at 5,000 events and 213 against 311 at 50,000. Tags in `event_tag(tag, position)` `WITHOUT ROWID` with `event_type` covering — a selective read 3.16x faster than a canonical blob and 4.63x faster than JSON1, paid for with a 1.5-2.1x more expensive write. `tag_cardinality` is promoted from a nicety to a requirement: a two-tag boundary costs ~200x a single-tag one | 0022 |
 | How a Postgres adapter buys position visibility | 10 | **measured at phase 2 — `xid8` + `pg_snapshot_xmin`, at 0.99–1.03× baseline and blocking nobody.** The other two are correct and 16×/30× slower at 64 writers; the cheap fourth (advisory locks keyed by tags) is cheap because it buys a *per-boundary* invariant where ES-10 states a global one. The mechanism is settled and its **structural** costs are not — `head` becomes a frontier, read-your-own-writes does not hold, and staleness is bounded by the longest write transaction anywhere in the cluster. ADR-0024 records the choice; phase 10 pays for it | 0024 |
 | Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do | 4 | **open, and newly so.** Raised by the phase-2 measurement rather than by a reader: the per-boundary mechanism is nearly free and the global one is not. DCB evaluates conditions against a boundary, so the question is not rhetorical. It is a clause question, not a measurement, and it is phase 4's | 0013 |
-| Benchmark harness | 8 | **decided** — `event_store_benchmarks!`, so adapters inherit it. Not a conformance rule: complexity is a benchmark, not an assertion, and a suite that asserted on timings would be flaky (CF-34) | 0022 |
+| Benchmark harness | 8 | **decided, and landed early** — `event_store_benchmarks!` is on disk in `crates/happenstance-testkit/src/bench.rs` behind an off-by-default, target-gated `bench` feature, because ADR-0022 is its first paying customer. Adapters inherit it in one line. Not a conformance rule (CF-34): the rule-name count is byte-for-byte unchanged by its arrival, it carries its own enumeration, and it has no threshold at any budget. It reads **no clock** either (CF-33): the harness reports counts and the caller's emitter reports durations, which is the same seam CF-23 already makes a parameter | 0022 |
 | A store holding only a suffix of its own log, as a testkit instrument | 14 | **deferred — CF-27.** The completeness axis has nothing at its far end | 0028 |
-| Is `happenstance-macros` in scope for 0.1 | 7 | open — the criterion is stated in phase 7 and evaluated in its session log | 0020 |
+| Is `happenstance-macros` in scope for 0.1 | 7 | **no — measured at phase 7 and out.** The rewritten example is 40 lines of mapping ceremony against 249 of domain; even counting the whole contested identity block (`CourseId`/`StudentId`, 85 lines) as ceremony it is 0.50:1, and the threshold is 1:1. This **contradicts** the design's own 2.4:1 prediction, which was taken over a minimal doctest: the `DomainEvent` impl is a fixed cost that barely grows with the domain, so the ratio is a function of how much domain the artefact has. `references/evaluation/phase-7-macros-verdict.md` publishes the classification range by range. Reopen only if the `DomainEvent::tags` defect is settled with an infallible `Tags` path | 0020 |
 | Snapshotting decision-model state | post-0.1 | deferred — DCB queries are narrow by construction; revisit if replay cost is measured | — |
 | `tracing` spans and metrics | post-0.1 | deferred — purely additive, no port change | — |
 | Is `happenstance-runtime` the right name and the right seam | 0 | **settled — ADR-0006**, executed in phase 0 | 0006 |
@@ -1584,7 +1586,7 @@ ES-10 is frozen at phase 4 and an invariant nothing can afford is not an invaria
       fixture pass", and three things were wrong with that. The fixture does not
       exist: neither spelling of the rule, nor `PreCommitPositionStore`, has a
       single hit in any crate. Its ownership is disputed on the record — CF-13's
-      own deferral marker (`SPECIFICATION.md:5765-5772`) assigns it to "the
+      own deferral marker (`SPECIFICATION.md:5767-5774`) assigns it to "the
       instrument-portfolio pass", which is this phase, while the [deferred-clause
       table](#the-10-deferred-clauses) assigns it to phase 3. And it would have
       been the **wrong instrument** either way: `PreCommitPositionStore` is an
@@ -4020,8 +4022,8 @@ mapping, which is what makes deferring `happenstance-macros` past 0.1 defensible
       guarantees and collapsing them is a lost update.
 - [ ] **The application-facing projection runner** — the `Projection` trait an
       application implements (decoded events, the projection's `Query`, the store's
-      own `Batch`), layered over the checkpoint pump that stays in the contract
-      crate, per ADR-0007. A projection nominates its events with `Query`, the same
+      own `Batch`). **Corrected 2026-08-17 by ADR-0031, which superseded ADR-0007's
+      allocation: no checkpoint pump stays in the contract crate — it collapsed upward and none was ever written.** A projection nominates its events with `Query`, the same
       type a decision model uses; there is no second filter vocabulary. **This is
       the half that had no owning phase in either previous plan**
       (`PRESSURE-TEST.md:270-272`).
@@ -4075,9 +4077,11 @@ fail to compile* is the whole claim.
       settled here, on a count: name the callers, or promote the clause to a
       documented exclusion. A provisional marker nobody ever evaluates is the
       failure mode §1.3 forbids, arriving by patience instead of by intent.
-- [ ] The `happenstance-macros` criterion is evaluated in the session log: *if the
+- [x] The `happenstance-macros` criterion is evaluated in the session log: *if the
       rewritten example carries more mapping boilerplate than domain logic, the
-      derive is in scope for 0.1.* Record the answer either way.
+      derive is in scope for 0.1.* Record the answer either way. **Answered: out.**
+      See the session log below and
+      [`references/evaluation/phase-7-macros-verdict.md`](references/evaluation/phase-7-macros-verdict.md).
 - [ ] **PS-32, PS-33 and PS-35 leave the clause space.**
       `SPECIFICATION.md` §7.3 states that all three are instructions to
       the pass that lands the specification rather than constraints on any
@@ -4102,6 +4106,56 @@ phase.
 **Estimate.** 8 days.
 
 **Session log**
+
+**2026-08-16 — the two records BR-01 asked for. Two documents, no code.** Pinned to
+`78a2170`, and the diff touches no path under `crates/**` or `spec/**` — which is
+the mechanical form of *a defect is logged and routed, never absorbed*.
+
+- [`references/evaluation/phase-7-contract-defects.md`](references/evaluation/phase-7-contract-defects.md)
+  — five entries, each naming a clause ID with its maturity marker, what was
+  attempted with the call site, what the contract did, why it is a defect rather
+  than a misuse, and the routing. **D-1** and **D-2** are two faces of **VT-18**
+  `[FROZEN]`: no infallible `QueryItem` constructor for pre-validated inputs, and
+  an infallible `DomainEvent::tags` over a `Tags` with no infallible constructor —
+  the second costing the worked example 81 lines of identity newtype. **D-3** and
+  **D-4** are the traceability step's own: **CF-36** `[FROZEN]` names a
+  cross-reference `spec_trace.rs` does not perform, and check 4's short-circuit
+  means no `PS` clause's rule name is resolved at all, so a green `spec-trace` is
+  not evidence that a `PS` rule exists. **D-5** records `&mut P`'s N-reads-for-N-views
+  shape as evidence for the tail-seam decision rather than as a wrong answer. Two
+  further findings are recorded as explicitly *not* entries — one ES-6 and ADR-0009
+  already answer, one with no clause ID that is classified `support` at the moment
+  of finding rather than promoted by inventing a citation. A reconciliation table
+  gives every M2–M6 story that declared a routing an explicit disposition, because
+  silence and a dropped finding look identical.
+- [`references/evaluation/phase-7-macros-verdict.md`](references/evaluation/phase-7-macros-verdict.md)
+  — the macros criterion, answered **out**, and the exit box above is ticked on it.
+  The classification is published range by range over
+  `examples/course-subscriptions/src/main.rs` and the 29 ranges partition the file
+  exactly, 532 of 532, so the totals are re-derivable rather than asserted: 40 lines
+  of ceremony against 249 of domain, and 125 : 249 even with the whole contested
+  identity block counted as ceremony. **Both extremes are out**, so the contested
+  block is a footnote rather than the decision.
+
+  **This contradicts the design's own recorded prediction**, which was 2.4 : 1 and
+  *in*, and that is a successful outcome rather than a problem: the prediction was
+  written down as falsifiable so a measurement could falsify it. The two disagree
+  because the design counted a minimal doctest, where the domain is almost absent —
+  the `DomainEvent` impl is a fixed cost that grows barely at all (26 lines for two
+  variants, 40 for three) while the domain grows with every consistency concern,
+  refusal and handler. Both numbers are true; they answer different questions, and
+  the decision-table row at the head of this file now says which is which.
+
+Both records are staged for `/redkiln:kb-ingest` at
+`.kb/_intake/contract-defect-log-phase-7.md` and
+`.kb/_intake/happenstance-macros-verdict.md`, carrying **proposed** frontmatter for
+the wave to author from. **No `.kb/` atom was hand-written and no ingest was run** —
+that is a human handoff. In particular the macros verdict is staged as its own claim
+and **ADR-0020 was not edited**: it is accepted and therefore immutable, and its own
+spec assigned this verdict elsewhere. Whether the wave produces a supersession is
+the wave's adjudication.
+
+No `crates/happenstance-macros/` was created. An *out* verdict escalates nothing.
 
 ---
 
@@ -4215,11 +4269,24 @@ most-selective-tag-first, and SQLite cannot supply per-value cardinality —
       have an adapter that can actually supply the fixture's second handle.
 
 **Proof artefact.** The concurrency macro green under a multi-thread runtime at 64
-contenders across 25 rounds — a read-then-write adapter fails that within a handful
-of iterations and passes the sequential rule forever — plus an acknowledged write
-surviving a genuine process reopen, which is the first time the workspace can even
-ask the question. Third: the phase-3 mutant harness re-run with
-`SqliteEventStore` in the pass column.
+contenders — a read-then-write adapter fails that within a handful of iterations
+and passes the sequential rule forever — plus an acknowledged write surviving a
+genuine process reopen, which is the first time the workspace can even ask the
+question. Third: the phase-3 mutant harness re-run with `SqliteEventStore` in the
+pass column.
+
+**The 64 is now the code's number too, and the "25 rounds" that used to sit beside
+it is gone rather than carried forward.** `concurrency::CONTENDERS` was 8 for two
+phases while this line and the status table both read 64; the discrepancy is stated
+at `:2686-2696` above, along with the observation that leaving it is the option that
+rots. It was resolved by *raising the constant* — ADR-0022 §12 measured sixty-four
+`rusqlite::Connection`s on one file with no ceiling reached, exactly one winner per
+race and `busy = 0`, at a cost of one order of magnitude in wall time — and the doc
+comment at `crates/happenstance-testkit/src/concurrency.rs` now carries that reason
+and the workspace-wide cost. The *rounds* half was the other error and had no fixing
+by a number: the only `ROUNDS` in the family is a rule-local `4` inside
+`a_concurrent_reader_never_sees_a_partial_batch`, which is one rule's shape rather
+than a property of the family, so the phrase is struck instead of restated.
 
 **Exit criteria**
 
@@ -4233,6 +4300,61 @@ ask the question. Third: the phase-3 mutant harness re-run with
 precondition; E2E-08 against a real second handle.
 
 **Estimate.** 10 days.
+
+**Session log**
+
+**2026-08-16 — the ADR pass. ADR-0022 written and measured; no SQLite code.**
+State stays `not started`, because a phase is done when its proof artefact exists
+and phase 8's does not: no macro has been run against `SqliteEventStore`, every
+`todo!()` is still there and `#![allow(clippy::todo)]` is still at the top of
+`crates/happenstance-sqlite/src/lib.rs`. Nothing under `crates/happenstance-sqlite/`
+moved at all, which is the ordering AC-013 exists to prove.
+
+What exists is
+[`references/adr/0022-append-condition-strategy.md`](references/adr/0022-append-condition-strategy.md),
+`experiments/append-condition/` and two files staged in `.kb/_intake/` for a
+human-invoked `/redkiln:kb-ingest`, plus the benchmark family the record was
+measured through — `happenstance_testkit::bench`, behind an off-by-default
+`bench` feature, which is the phase's `event_store_benchmarks!` work item landed
+early because ADR-0022 is its first paying customer.
+
+**The exit criterion "a benchmark *number*, not a claim" is met, and the number
+overturned this phase body's own recommendation.** The append condition is a
+`SELECT max(position)` guard inside `BEGIN IMMEDIATE` rather than the `EXISTS`
+probe the schema amendment above assumes: on the rejection path — the one a DCB
+loop takes whenever it loses a race — the guard costs 23 µs against the probe's
+32 and the conditional insert's 45 over a 5,000-event log, and 213 against 311
+and 306 over 50,000. On the accepted-append path and under contention at 8 and 64
+connections the three arms are a **tie within measurement noise**, and the record
+says so rather than manufacturing a margin.
+
+**Three things this pass found that this phase body did not anticipate.**
+
+- **`GROUP BY … HAVING COUNT(DISTINCT tag)` is an optimisation barrier.** SQLite
+  cannot push an append condition's `position > ?` boundary through an aggregate,
+  so the probe materialises every matching position and discards the ones below
+  it. Skipping the aggregate for a single-tag item halved the probe (1,093 µs →
+  556 µs, measured against its own negative control). A **two-tag** boundary
+  costs roughly **200x** a single-tag one at 50,000 events, which promotes
+  `tag_cardinality` and most-selective-tag-first probing from the amendment's
+  "add a table" to a hard requirement of migration 1.
+- **64 contenders is supportable and costs one order of magnitude.** Sixty-four
+  `rusqlite::Connection`s opened on one file on every race, with `busy = 0` and
+  exactly one winner each; a race goes from ~130 ms at 8 to 1.4-2.7 s at 64. The
+  proof artefact above reads 64 while `concurrency::CONTENDERS` is 8, and that
+  raise now has a measured claim behind it. This pass **did not apply it** —
+  `crates/happenstance-testkit/**` is untouched by the ADR change.
+- **ES-17 cannot be lifted here, and nothing in this phase's plan lifts it.**
+  ADR-0012's falsifier item 1 wants two builds of the *same* adapter; three
+  candidate stores are not that. Escalated to the ADR queue as a row of its own
+  rather than absorbed — see the queue, immediately under row 0022.
+
+The measurement's own limitation is recorded rather than hidden: on a shared
+developer host the harness's per-scenario timer gives each arm its own time slot
+and two runs an hour apart disagreed by up to 45%, so the two figures the record
+decides on come from caller-side controls that interleave the arms round-robin in
+one process. That is the emitter's job by design (CF-23), and it is the strongest
+argument this pass produced for the wrapper being a parameter.
 
 **Session log**
 

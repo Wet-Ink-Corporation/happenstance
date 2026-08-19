@@ -20,6 +20,7 @@ related:
   - kb-open-question-disjoint-boundaries-no-clause-001
   - kb-open-question-model-family-rule-no-clause-001
   - kb-open-question-post-phase-reconciliation-001
+  - kb-reference-spec-trace-has-suite-001
 source_paths:
   - .kb/_intake/lesson-landing-a-stricter-gate-without-a-red-baseline.md
   - xtask/src/spec_trace.rs

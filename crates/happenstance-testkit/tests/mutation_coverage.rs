@@ -197,8 +197,11 @@ struct Declared {
 /// **Scope: the event-store port only.** Every store here implements
 /// `EventStore`, and every rule it is driven through comes from
 /// `for_each_event_store_rule!`. The projection store port owes its own CF-1 –
-/// CF-5 obligation and has neither a suite nor a mutant yet; `SPECIFICATION.md`
-/// §4 is where that is tracked, and nothing below says anything about it.
+/// CF-5 obligation and now discharges it in a registry of its own,
+/// `tests/projection_mutation_coverage.rs` — same six `Declared` fields, same
+/// semantics, its own rule universe taken from `for_each_projection_store_rule!`.
+/// CF-5's projection half is still open there and is named in that file rather
+/// than tracked here. Nothing below says anything about either.
 ///
 /// ADR-0010 requires both halves of that sentence and forbids the third thing
 /// anyone would write instead. **Never quote a pass rate over this table.** The
@@ -1227,6 +1230,37 @@ const REGISTRY: &[Declared] = &[
             ),
         ],
     },
+    Declared {
+        name: "RestampingFixture",
+        kind: Kind::Mutant,
+        // **One** rule, and the count is the content. `LosingFixture` above
+        // fails all three reopen rules and fails `recorded_time_survives_a_reopen`
+        // at its *survival* anchor — its events are gone, so the stamp comparison
+        // is never reached. Since phase 4 that has left the rule's headline
+        // sentence with no negative control at all (`RUNBOOK.md:3205-3207`). This
+        // row is that control: it must reach the third assertion and fail there,
+        // and it must pass the two survival rules beside it, or it is a second
+        // `LosingFixture` wearing a different name.
+        fails: &["recorded_time_survives_a_reopen"],
+        provenance: "a migration that stores payload, type and tags and no `recorded_at` \
+             column, so `open` reconstructs the log by replaying rows and stamping \
+             them at open time. It is the first schema somebody writes — the \
+             column reads like metadata until an auditor has to answer *when did \
+             this happen* out of the log rather than out of a backup — and it is \
+             the exact mirror of what a correct migration does: persist the \
+             column and read it back, never re-derive it. Every event still \
+             returns, at its own position, under its own identity; the one clock \
+             reading whose provenance the log itself attested is what is gone.",
+        mode: FailureMode::Assertion,
+        // The pin is the whole point of this row. Quoting the *headline* message
+        // is what makes a failure at the survival anchor — which is where the
+        // only other candidate for this rule dies — get reported as the wrong
+        // failure rather than counted as a pass.
+        expect: &[(
+            "recorded_time_survives_a_reopen",
+            "a `RecordedAt` is persisted alongside the event, not recomputed when",
+        )],
+    },
     // --- Head -------------------------------------------------------------
     Declared {
         name: "EmptyHeadIsFirstStore",
@@ -2139,6 +2173,7 @@ macro_rules! for_each_mutant {
             crate::mutants::CachedHeadFixture,
             crate::mutants::LastWrittenHeadFixture,
             crate::mutants::LosingFixture,
+            crate::mutants::RestampingFixture,
             crate::mutants::SharedBackingFixture,
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
@@ -2190,6 +2225,18 @@ fn registered_second_handle() -> Vec<(&'static str, happenstance_testkit::Capabi
 /// against. There is no second list of rule names anywhere here, on purpose.
 fn all_rules() -> Vec<&'static str> {
     happenstance_testkit::for_each_event_store_rule!(happenstance_testkit::__emit_rule_names)
+        .to_vec()
+}
+
+/// Every projection rule name, from the projection family's own single
+/// enumeration.
+///
+/// [`all_rules`] one enumeration over, and the same discipline: the projection
+/// meta-tests resolve every membership check against this and never against a
+/// list of their own, so a rule added to the family arrives in them without an
+/// edit here.
+fn all_projection_rules() -> Vec<&'static str> {
+    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__emit_rule_names)
         .to_vec()
 }
 
@@ -2274,12 +2321,13 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// that actually matters — *what is this test blind to* — and it answers it in a
 /// form that goes red when the answer changes.
 ///
-/// # The twenty it does not catch are three shapes, not twenty
+/// # The twenty-one it does not catch are three shapes, not twenty-one
 ///
-/// Twenty-two rows below are marked [`ModelOutcome::Agreed`]. Two of those are
-/// the conformant controls and *must* be, which leaves **twenty misses** — a
+/// Twenty-three rows below are marked [`ModelOutcome::Agreed`]. Two of those are
+/// the conformant controls and *must* be, which leaves **twenty-one misses** — a
 /// number that has more than doubled since stage 5, when this heading last said
-/// eight and the table it documents said eighteen. Every one of the twenty
+/// eight and the table it documents said eighteen, and that gained one at phase 8
+/// when `RestampingFixture` arrived. Every one of the twenty-one
 /// carries a defect the model **cannot
 /// express**, and the boundary is sharp enough to state in one line: the model
 /// drives *one handle*, on *one fixture*, through a *strictly sequential* stream
@@ -2294,7 +2342,13 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   read.
 /// * `CachedHeadFixture`, `SharedBackingFixture` — defects that need a second
 ///   handle or a second fixture instance.
-/// * `LosingFixture` — a defect that is only visible across a reopen.
+/// * `LosingFixture`, `RestampingFixture` — defects that are only visible across
+///   a reopen. Two names rather than one since phase 8, and the pair is worth
+///   reading together: the model misses the second for a *sharper* reason than
+///   the first. `LosingFixture` loses every event, which a model that reopened
+///   would notice immediately; `RestampingFixture` loses one field of one
+///   store-assigned fact, so even a model that reopened would have to be
+///   comparing `recorded_at` across the boundary to see it.
 /// * `PreCommitPositionStore`, `BorrowHoldingStore`, `AwaitAcrossBorrowStore` —
 ///   defects whose content is a *window*: two futures overlapping on one handle.
 ///   The model awaits each operation to completion before starting the next, so
@@ -2427,6 +2481,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("CachedHeadFixture", ModelOutcome::Agreed),
     ("LastWrittenHeadStore", ModelOutcome::Agreed),
     ("LosingFixture", ModelOutcome::Agreed),
+    ("RestampingFixture", ModelOutcome::Agreed),
     ("SharedBackingFixture", ModelOutcome::Agreed),
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
@@ -2530,17 +2585,32 @@ const RACERS: &[Racer] = &[
              `MemoryEventStore` itself",
         expect: &[],
     },
+    // **There is no `REGISTRY` row for this defect and there cannot be one.**
+    // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
+    // empty, and a probe-then-insert store fails *no* sequential rule — that is
+    // the entire content of the defect. A concurrency rule's wrong store belongs
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:187-190` says
+    // so in prose where the harness says it in code
+    // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
+    // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is
+    // an instruction that has been written down once already and will read as an
+    // unfilled gap to the next person who looks for it.
     Racer {
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
             "k_disjoint_boundaries_admit_exactly_k_commits",
         ],
-        provenance: "`SELECT 1 FROM events WHERE …` and then `INSERT`, with no `BEGIN` between \
-             them and no `SERIALIZABLE` under them — what an adapter writes when its \
-             driver's convenience API is one statement per call. It is \
-             `WriteThenCheckStore` with the two halves the other way round, which is \
-             what makes it invisible to `append_is_atomic`",
+        provenance: "`BEGIN DEFERRED` — or no `BEGIN` at all — then `SELECT 1 FROM events \
+             WHERE …`, then `INSERT`, with nothing holding a write lock across the \
+             two and no `SERIALIZABLE` under them. `BEGIN DEFERRED` is the SQLite \
+             spelling and it is the default one: rusqlite's `Connection::transaction` \
+             opens deferred, so the read lock is taken at the probe and promoted at \
+             the insert, and between those two SQLite lets another connection \
+             commit. The autocommit form is the same defect with the driver's \
+             convenience API — one statement per call — supplying the gap instead. \
+             It is `WriteThenCheckStore` with the two halves the other way round, \
+             which is what makes it invisible to `append_is_atomic`",
         // Both pins name the *too many winners* side. That is the whole content
         // of this defect: every contender's probe was answered before any of
         // them acted on it, so the answers were all stale together.
@@ -2700,13 +2770,15 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 mod mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, Origin, RACERS, REGISTRY, RUNTIME_PANICS, RacerOutcome,
-        Verdict, all_concurrency_rules, all_rules, declared, racer_names, racer_reports,
-        registered_names, registered_second_handle, reports,
+        Verdict, all_concurrency_rules, all_projection_rules, all_rules, declared, racer_names,
+        racer_reports, registered_names, registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
     use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
-    use crate::harness::run_subject;
-    use crate::variants::{DecliningFixture, GappedPositionFixture};
+    use happenstance_testkit::fixtures::MemoryProjectionFixture;
+
+    use crate::harness::{run_projection_subject, run_subject};
+    use crate::variants::{DecliningFixture, DecliningProjectionFixture, GappedPositionFixture};
 
     /// Every rule the registry claims a mutant for.
     fn covered() -> Vec<&'static str> {
@@ -3313,6 +3385,378 @@ mod mutation_coverage {
              const: {:?}",
             capable.name,
             capable.skipped()
+        );
+    }
+
+    /// The projection family's [`MUST_REJECT`]: every projection rule that
+    /// spells `must!` rather than `require!`.
+    ///
+    /// Thirteen of the family's seventeen rules are on it, and every one belongs
+    /// there rather than being gated with `require!`, because every one reads
+    /// the read model or the checkpoint back through a **fresh handle**. A
+    /// projection fixture that cannot open a second handle cannot observe PS-1 —
+    /// the coupling the whole port exists for — at all, so declining it is a
+    /// fixture that does not meet the contract rather than a trade the suite may
+    /// record and move past.
+    ///
+    /// Two rules on it *also* spell a `require!` — `failed_commit_leaves_both_unchanged`
+    /// on `COMMIT_FAULT`, and `refused_reset_changes_nothing` on
+    /// `RESET_REFUSAL`, which are the family's two declinable gates. Both are
+    /// here rather than in [`PROJECTION_MUST_SKIP`] because both spell the
+    /// `must!` **first**, deliberately: a fixture declining both is failing the
+    /// contract, and reporting that as a skip would file a broken fixture under
+    /// a trade it was entitled to make. The skip path is therefore demonstrated
+    /// against the *reference* fixture, which supports `SECOND_HANDLE` and
+    /// declines both of the others — see the tail of
+    /// [`projection_capability_skips_are_reported`].
+    ///
+    /// **The four absentees are absent on purpose, and the absence is the
+    /// interesting part.** `commit_rejects_a_foreign_batch` wants two *isolated
+    /// stores*, not two handles onto one, and two `open()` calls on the
+    /// `impl AsyncFn() -> F` every rule is handed already produce them (PS-15
+    /// says so in as many words). `batch_reads_reflect_pending_writes` reads
+    /// through the *same* handle that owns the batch, by construction, and
+    /// `rebuild_is_chunk_size_invariant` opens a fixture per run and connects
+    /// once to each. The fourth is `fresh_projection_has_no_checkpoint`, the
+    /// rule that landed last: it reads one checkpoint through one handle and
+    /// writes nothing at all, so the capabilities a fixture might decline are
+    /// not the ones it spends. All four therefore spell no `must!`, run against
+    /// a fixture declining everything, and **pass** — which is what this list
+    /// asserts by omission, through the `Verdict::Passed` arm of
+    /// [`assert_projection_declension`]. A rule added to this list "for safety"
+    /// would make that assertion unreachable.
+    ///
+    /// A slice rather than a constant for [`MUST_REJECT`]'s reason.
+    const PROJECTION_MUST_REJECT: &[&str] = &[
+        "commit_advances_the_checkpoint",
+        "commit_is_atomic_with_the_read_model",
+        "failed_commit_leaves_both_unchanged",
+        "rollback_leaves_both_unchanged",
+        "dropped_batch_leaves_store_usable",
+        "commit_accepts_a_position_the_batch_did_not_write",
+        "commit_rejects_a_regressing_position",
+        "distinct_projections_advance_independently",
+        "reset_clears_rows_and_checkpoint_together",
+        "reset_is_scoped_to_one_projection",
+        "refused_reset_changes_nothing",
+        "reset_is_not_commit_at_first",
+        "rebuilding_is_distinguishable_from_live",
+    ];
+
+    /// [`PROJECTION_MUST_REJECT`]'s mirror **against this instrument**, and it
+    /// is empty for a reason that is now about ordering rather than about
+    /// absence.
+    ///
+    /// Two projection rules spell `require!` —
+    /// `failed_commit_leaves_both_unchanged`, gated on `COMMIT_FAULT`, and
+    /// `refused_reset_changes_nothing`, gated on `RESET_REFUSAL` — and neither
+    /// skips here, because both spell `must!(F: SECOND_HANDLE)` first and this
+    /// instrument declines that too. So against a fixture that declines
+    /// everything they panic, which is the correct answer and why they are in
+    /// [`PROJECTION_MUST_REJECT`] instead.
+    ///
+    /// **The skip arm is therefore demonstrated at the other end of this test,
+    /// against the reference fixture**, on real values: `MemoryProjectionFixture`
+    /// supports `SECOND_HANDLE`, declines `COMMIT_FAULT` and `RESET_REFUSAL`
+    /// with its own stated reasons, and reports exactly two skips. That is a
+    /// change from the state this list was written in, when nothing in the
+    /// workspace could demonstrate a projection skip at all.
+    ///
+    /// This list stays, and stays empty, as the guard on the *next* gate. It was
+    /// written expecting `RESET_REFUSAL`'s rule to be the first entry, and that
+    /// prediction was wrong for a reason worth keeping: the rule that arrived
+    /// spells the MUST first, so it rejects this instrument rather than skipping
+    /// against it. The next candidate is a rule gated on a declinable capability
+    /// **without** a `must!` above it — `ProjectionProbe::READS_THROUGH_BATCH`'s
+    /// `batch_reads_reflect_pending_writes` (`read-through-and-rebuild-rules`)
+    /// is the nearest — which starts skipping here and fails the two-direction
+    /// check below until it is listed.
+    const PROJECTION_MUST_SKIP: &[&str] = &[];
+
+    /// Every outcome against the declining instrument is one that instrument's
+    /// own declarations explain.
+    ///
+    /// A free function rather than a block inside
+    /// [`projection_capability_skips_are_reported`] for the reason
+    /// [`assert_undeclared_outcome`] is one: with it inlined the test body
+    /// crossed `clippy::too_many_lines`, and a lint suppression there would be
+    /// the wrong trade — the arms below are the content of CF-18 and each of
+    /// them names what a green build would otherwise have hidden.
+    fn assert_projection_declension(rule: &str, verdict: &Verdict) {
+        match verdict {
+            Verdict::Passed => assert!(
+                !PROJECTION_MUST_REJECT.contains(&rule),
+                "`{rule}` is listed in `PROJECTION_MUST_REJECT` and passed \
+                 against a fixture declining `SECOND_HANDLE`, so its `must!` \
+                 gate has been deleted or reads the wrong const"
+            ),
+            Verdict::Skipped { reason, .. } => {
+                assert!(
+                    PROJECTION_MUST_SKIP.contains(&rule),
+                    "`{rule}` reported a skip and is not in \
+                     `PROJECTION_MUST_SKIP`. A rule that gains a `require!` gate \
+                     has to be listed there, or the list rots into decoration as \
+                     later stories add rules"
+                );
+                assert!(
+                    *reason == DecliningProjectionFixture::SECOND_HANDLE_REASON
+                        || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON
+                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON,
+                    "`{rule}` skipped with a reason the fixture never gave: \
+                     {reason:?}. The reason is the only record of the trade, so \
+                     it has to be the adapter's own words"
+                );
+            }
+            Verdict::Panicked { message, .. } => {
+                assert!(
+                    PROJECTION_MUST_REJECT.contains(&rule),
+                    "`{rule}` panicked against a fixture that is correct in every \
+                     respect except its declared capabilities. If it opened a \
+                     second handle, it ignored its gate. Message: {message}"
+                );
+                assert!(
+                    message.contains(DecliningProjectionFixture::SECOND_HANDLE_REASON),
+                    "`{rule}` must reject a projection fixture declining the \
+                     `SECOND_HANDLE` MUST *and carry the fixture's own stated \
+                     reason*, so the failing build says why. Message: {message}"
+                );
+            }
+        }
+    }
+
+    /// CF-18, on the projection family. A capability-gated rule is still
+    /// emitted, still answered, and reports the fixture's own reason.
+    ///
+    /// The projection sibling of [`capability_skips_are_reported`], and it
+    /// proves and fails to prove exactly the same halves: libtest exposes
+    /// nothing programmatically, so this drives the enumeration itself and
+    /// asserts on [`Verdict`] **values**. That covers the *answering* half —
+    /// every registered projection rule produces an outcome against a fixture
+    /// that declines everything, and none of them silently passes. It does not
+    /// cover the *emission* half, which is only checkable from outside the
+    /// process via `cargo test -- --list`.
+    #[test]
+    fn projection_capability_skips_are_reported() {
+        let rules = all_projection_rules();
+
+        // ---- A fixture that declines everything still answers everything ----
+        let declining = run_projection_subject::<DecliningProjectionFixture>();
+
+        let answered: Vec<&str> = declining.outcomes.iter().map(|(rule, _)| *rule).collect();
+        assert_eq!(
+            answered.len(),
+            rules.len(),
+            "a projection fixture declining every capability must still produce \
+             an outcome for every registered rule; `#[cfg]`-ing one out would \
+             make it indistinguishable in CI output from a rule that passed"
+        );
+        for rule in &rules {
+            assert!(
+                answered.contains(rule),
+                "`{rule}` produced no outcome against a projection fixture that \
+                 declines everything"
+            );
+        }
+
+        // ---- Every outcome is one this fixture's own declarations explain ----
+        for (rule, verdict) in &declining.outcomes {
+            assert_projection_declension(rule, verdict);
+        }
+
+        // The demonstrated half. Every rule in the list, not just the first: a
+        // second `must!` that quietly skipped would be a MUST enforced on one
+        // rule and stated on the other.
+        for rule in PROJECTION_MUST_REJECT {
+            assert!(
+                matches!(declining.verdict(rule), Some(Verdict::Panicked { .. })),
+                "`{rule}` must *fail* a projection fixture that declines \
+                 `SECOND_HANDLE`, not skip it. A skip there is the outcome CF-18 \
+                 names as the thing to prevent: a green suite plus one SKIP line \
+                 for an adapter nothing reached through two connections, and for \
+                 a projection that means PS-1 was never observed at all. Saw: \
+                 {:?}",
+                declining.verdict(rule)
+            );
+        }
+
+        let skipped = declining.skipped();
+        for rule in PROJECTION_MUST_SKIP {
+            assert!(
+                skipped.contains(rule),
+                "`{rule}` is gated on a capability this fixture declines, so it \
+                 must report a skip rather than pass. Saw {skipped:?}"
+            );
+        }
+        for rule in PROJECTION_MUST_REJECT {
+            assert!(
+                !skipped.contains(rule),
+                "`{rule}` reported a skip, so `must!` has been downgraded back \
+                 to `require!` and the MUST is unenforced again"
+            );
+        }
+
+        // ---- And the reference fixture skips exactly what it declines ------
+        assert_reference_projection_declensions();
+    }
+
+    /// The skip arm of [`projection_capability_skips_are_reported`],
+    /// demonstrated against the reference fixture on real values.
+    ///
+    /// A free function rather than the tail of that test for
+    /// [`assert_projection_declension`]'s reason, and it crossed
+    /// `clippy::too_many_lines` at the same place: the second declinable
+    /// capability's rule arrived and the body grew past a hundred lines. A lint
+    /// suppression there would be the wrong trade — every assertion below names
+    /// something a green build would otherwise have hidden.
+    fn assert_reference_projection_declensions() {
+        // An *equality* rather than an emptiness check on purpose. "Skips
+        // nothing" was the assertion while every capability a rule read was
+        // supported; relaxing it to "may skip" the moment a rule acquired a gate
+        // would have turned it into a check that passes however many rules
+        // quietly stop running. So the set is pinned: exactly the rules gated on
+        // a capability this fixture declines, and nothing else.
+        let capable = run_projection_subject::<MemoryProjectionFixture>();
+        assert_eq!(
+            capable.skipped(),
+            vec![
+                "failed_commit_leaves_both_unchanged",
+                "refused_reset_changes_nothing",
+            ],
+            "`{}` supports every capability the registered rules ask for except \
+             `COMMIT_FAULT`, which the reference store cannot offer — it applies \
+             both halves of a commit under one write lock — and `RESET_REFUSAL`, \
+             which it cannot offer either, because it holds no protection policy. \
+             So exactly two rules may skip against it, in enumeration order. A \
+             rule that joined this set means a gate reads the wrong const or a \
+             capability was declined to turn a red build green; a rule that left \
+             it means the gate went away",
+            capable.name
+        );
+
+        // And each skip carries the capability an author can change and the
+        // fixture's own words, rather than a testkit paraphrase.
+        for (rule, capability, stated) in [
+            (
+                "failed_commit_leaves_both_unchanged",
+                "COMMIT_FAULT",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
+                    .reason()
+                    .expect("the reference fixture declines COMMIT_FAULT"),
+            ),
+            (
+                "refused_reset_changes_nothing",
+                "RESET_REFUSAL",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::RESET_REFUSAL
+                    .reason()
+                    .expect("the reference fixture declines RESET_REFUSAL"),
+            ),
+        ] {
+            assert_eq!(
+                capable.verdict(rule).map(Verdict::describe),
+                Some(
+                    Verdict::Skipped {
+                        capability,
+                        reason: stated,
+                    }
+                    .describe()
+                ),
+                "the skip must name the associated const an adapter author can \
+                 actually change and carry the fixture's own stated reason — \
+                 compared against the fixture's own `const`, never against a \
+                 literal repeated here, which is what would let the report carry \
+                 someone else's sentence while this test stayed green"
+            );
+        }
+
+        for (rule, verdict) in &capable.outcomes {
+            assert!(
+                matches!(verdict, Verdict::Passed | Verdict::Skipped { .. }),
+                "`{rule}` did not pass against the reference projection fixture, \
+                 which is the oracle: {}",
+                verdict.describe()
+            );
+        }
+    }
+
+    /// Every projection capability reason is written by whoever DT-3 said writes
+    /// it, and is not empty.
+    ///
+    /// The projection family's capability set is
+    /// `SECOND_HANDLE`, `RESET_REFUSAL` and `COMMIT_FAULT` on the fixture, all
+    /// three with **fixture-written** reasons, plus `READS_THROUGH_BATCH` on
+    /// `ProjectionProbe` rather than on the fixture — which is why no assertion
+    /// here mentions it. The family therefore adds **no** testkit-written
+    /// reason: there is no projection counterpart to `NO_CEILING_REASON`,
+    /// because the projection port declares no numeric limits and never reaches
+    /// the surface that constant exists for. `COMMIT_FAULT` is the amendment
+    /// DT-3 took on 2026-08-14, and it arrived under the same one policy — it is
+    /// required rather than defaulted precisely so no testkit sentence has to
+    /// stand in for a store's own account of why it cannot fail a commit.
+    ///
+    /// What this can and cannot check. `Capability::declined("")` is rejected by
+    /// a `const fn` `assert!`, but on an *associated* const that fires at
+    /// **codegen** — so `cargo test` catches it and `cargo check` and
+    /// `cargo clippy` do not. This test runs in a built binary, which is
+    /// precisely why it is a `#[test]` rather than a review note: it forces
+    /// every constant below to be evaluated.
+    #[test]
+    fn projection_capability_reasons_are_authored_once() {
+        let declining = run_projection_subject::<DecliningProjectionFixture>();
+        let capable = run_projection_subject::<MemoryProjectionFixture>();
+
+        for report in [&declining, &capable] {
+            for (capability, reason) in &report.declines {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "`{}` declines `{capability}` with an empty reason, and the \
+                     reason is the only record of the trade",
+                    report.name
+                );
+            }
+        }
+
+        // The fixture's own words reach the report, rather than a copy of them.
+        // Compared against the fixture's `const` — never against a literal
+        // repeated here, which is what would let the report carry someone
+        // else's sentence while this test stayed green.
+        assert_eq!(
+            declining.declines,
+            vec![
+                (
+                    "SECOND_HANDLE",
+                    DecliningProjectionFixture::SECOND_HANDLE_REASON
+                ),
+                (
+                    "RESET_REFUSAL",
+                    DecliningProjectionFixture::RESET_REFUSAL_REASON
+                ),
+                (
+                    "COMMIT_FAULT",
+                    DecliningProjectionFixture::COMMIT_FAULT_REASON
+                ),
+            ],
+            "the declining instrument's reported declensions must be its own \
+             three constants, in the order `projection_declines` lists them"
+        );
+
+        // The reference fixture declines exactly two things and supports the
+        // MUST. A `RESET_REFUSAL` that started reading as supported would mean
+        // `MemoryProjectionStore` had grown a protection policy, and a
+        // `COMMIT_FAULT` that did would mean it had grown fault injection —
+        // either is a change to the oracle rather than to this test.
+        let names: Vec<&str> = capable
+            .declines
+            .iter()
+            .map(|(capability, _)| *capability)
+            .collect();
+        assert_eq!(
+            names,
+            ["RESET_REFUSAL", "COMMIT_FAULT"],
+            "`MemoryProjectionFixture` must support `SECOND_HANDLE` — it is a \
+             MUST — and decline `RESET_REFUSAL`, because the store under it has \
+             no protection policy and cannot honestly claim one, and \
+             `COMMIT_FAULT`, because that store applies both halves of a commit \
+             under one write lock and has no write that can be made to fail"
         );
     }
 

@@ -1,5 +1,6 @@
-//! The gate's five grep-shaped lints (CF-6, CF-29, CF-32, CF-33, and D12, which
-//! is the one with no clause — ADR-0016 §14 gives it a lint rather than a WF-13).
+//! The gate's grep-shaped lints (CF-6, CF-29, CF-32, CF-33, D12 — which has no
+//! clause, ADR-0016 §14 gives it a lint rather than a WF-13 — and the README
+//! count check, which has no clause either and says why in its own docs).
 //!
 //! # Why a grep is in the gate at all
 //!
@@ -11,6 +12,16 @@
 //! and this module keeps that honest: every check below states what it does
 //! *not* verify, because a check whose limits are undocumented is read as a
 //! guarantee.
+//!
+//! # The direction this repository is weak in
+//!
+//! Every other step in the gate holds *code* to a document: the suite to the
+//! specification, the rules to the changelog, the manifests to their features.
+//! [`stated_rule_counts`] runs the other way, and it exists because the failure
+//! it catches happened three times before anything could see it — a document
+//! shipped to crates.io describing a suite two thirds smaller than the one in
+//! the package beside it. `cargo package --list` asserts a README is *present*;
+//! nothing asserted it was *true*.
 //!
 //! # The one thing they all share
 //!
@@ -28,7 +39,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
-use crate::spec_trace::{RULE_FILES, all_rules, workspace_root};
+use crate::spec_trace::{RULE_FILES, all_rules, collect_rules, workspace_root};
 
 /// The directory CF-33 is scoped to.
 ///
@@ -49,6 +60,18 @@ const CHANGELOG: &str = "CHANGELOG.md";
 
 /// `happenstance-core`'s manifest, for the D12 lint.
 const CORE_MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
+
+/// The page crates.io renders, which no other step reads for content.
+///
+/// It is the first document an adapter author meets and the last one this
+/// workspace held to anything. Between `79df6b7` and this check it told
+/// crates.io that the projection suite "is two rules of seventeen, and neither
+/// has been shown to reject a wrong store yet — the hostile stores that will are
+/// named in the specification and not yet written", while seventeen rules drove
+/// the port and eighteen wrong stores sat in
+/// `crates/happenstance-testkit/tests/projection_mutation_coverage/mutants.rs`.
+/// The same commit range that falsified the sentence also shipped it.
+const TESTKIT_README: &str = "crates/happenstance-testkit/README.md";
 
 /// Every line of a Rust source file with comments removed and string-literal
 /// contents blanked, one output line per input line.
@@ -777,4 +800,436 @@ fn scan_for_position_literals(file: &str, body: &str, problems: &mut Vec<String>
     }
 
     Ok(())
+}
+
+/// Words that make a paragraph a claim about the conformance suite.
+///
+/// Matched as lower-cased substrings, so `ProjectionStore` and `projection`
+/// both hit. The scope is what keeps the check installable: the testkit's README
+/// says *"Two rules govern what goes in it, both learned expensively"* about its
+/// own contribution rules, in a paragraph naming none of these words, and a
+/// check that fired there would be uninstallable for a true sentence.
+const SUITE_WORDS: [&str; 3] = ["suite", "conformance", "projection"];
+
+/// A number a document might spell as a word, `zero` through `ninety`.
+///
+/// Compounds are summed across hyphens, which is the only spelling English
+/// writes them in: `eighty-nine` is 80 + 9, and the testkit's README opens on
+/// exactly that word. Anything at or above one hundred must be written in
+/// digits to be read — stated here rather than left as a surprise, because a
+/// count this workspace could reach (`one hundred and twelve` rules across the
+/// four files) is on the far side of that line.
+fn cardinal(word: &str) -> Option<usize> {
+    /// The words, paired with their values.
+    const WORDS: [(&str, usize); 28] = [
+        ("zero", 0),
+        ("one", 1),
+        ("two", 2),
+        ("three", 3),
+        ("four", 4),
+        ("five", 5),
+        ("six", 6),
+        ("seven", 7),
+        ("eight", 8),
+        ("nine", 9),
+        ("ten", 10),
+        ("eleven", 11),
+        ("twelve", 12),
+        ("thirteen", 13),
+        ("fourteen", 14),
+        ("fifteen", 15),
+        ("sixteen", 16),
+        ("seventeen", 17),
+        ("eighteen", 18),
+        ("nineteen", 19),
+        ("twenty", 20),
+        ("thirty", 30),
+        ("forty", 40),
+        ("fifty", 50),
+        ("sixty", 60),
+        ("seventy", 70),
+        ("eighty", 80),
+        ("ninety", 90),
+    ];
+
+    let word = word.to_ascii_lowercase();
+    if word.is_empty() {
+        return None;
+    }
+    let mut total = 0usize;
+    for part in word.split('-') {
+        let value = match part.parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => WORDS.iter().find(|(w, _)| *w == part).map(|(_, n)| *n)?,
+        };
+        total = total.checked_add(value)?;
+    }
+    Some(total)
+}
+
+/// A word with the Markdown and punctuation around it removed.
+fn bare(word: &str) -> &str {
+    word.trim_matches(|c: char| !c.is_alphanumeric() && c != '-')
+}
+
+/// The prose of a document, whatever the document is made of.
+///
+/// Markdown passes through. Rust keeps its `//!` and `///` lines with the marker
+/// stripped, and blanks everything else, so a paragraph never runs across a
+/// function body. A manifest keeps its `#` comments the same way. Line numbering
+/// is preserved in every case, because the whole value of a failure here is that
+/// it names the line to open.
+///
+/// The rest of a Rust file is deliberately invisible: a doc comment is prose an
+/// author writes for a reader, and code is not. `PROJECTION_MUST_REJECT` has
+/// thirteen entries and no sentence claiming it.
+fn prose_of(path: &str, body: &str) -> String {
+    let keep_prefixed = |markers: &[&str]| {
+        body.lines()
+            .map(|line| {
+                let t = line.trim_start();
+                markers
+                    .iter()
+                    .find_map(|m| t.strip_prefix(m))
+                    .unwrap_or("")
+                    .trim()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    // The extension through `Path` rather than `str::ends_with`, which
+    // `clippy::case_sensitive_file_extension_comparisons` denies: a `README.MD`
+    // would take the Markdown arm on one filesystem and the fallthrough on
+    // another, and this list is spelled by hand anyway.
+    match Path::new(path).extension().and_then(|e| e.to_str()) {
+        Some(e) if e.eq_ignore_ascii_case("rs") => keep_prefixed(&["//!", "///"]),
+        Some(e) if e.eq_ignore_ascii_case("toml") => keep_prefixed(&["#"]),
+        _ => body.to_owned(),
+    }
+}
+
+/// Every `<cardinal> rule(s)` claim in a document that is about the suite, as
+/// `(line, phrase, count)`.
+///
+/// Paragraphs rather than lines, because prose here wraps at 80 columns and the
+/// sentence this check was written for put `ProjectionStore` on one line and
+/// `two rules of seventeen` on the next. Each word keeps the line it was written
+/// on, so a failure names the sentence rather than the top of a fifteen-line doc
+/// block. Fenced code is skipped: a code sample is not a claim, and the README's
+/// samples are the one place a bare number sits next to a rule name for reasons
+/// that have nothing to do with counting.
+fn rule_count_claims(md: &str) -> Vec<(usize, String, usize)> {
+    let mut claims = Vec::new();
+    let mut fenced = false;
+    // One paragraph is a run of non-blank lines, as `(word, line)` pairs. A
+    // blockquote's `>` is stripped so the status banner reads as prose, which is
+    // what it is.
+    let mut paragraphs: Vec<Vec<(String, usize)>> = vec![Vec::new()];
+    for (n, raw) in md.lines().enumerate() {
+        let line = raw.trim().trim_start_matches('>').trim();
+        if raw.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced || line.is_empty() {
+            paragraphs.push(Vec::new());
+            continue;
+        }
+        if let Some(current) = paragraphs.last_mut() {
+            current.extend(line.split_whitespace().map(|w| (w.to_owned(), n + 1)));
+        }
+    }
+
+    for words in paragraphs {
+        let about_the_suite = words.iter().any(|(w, _)| {
+            let lowered = w.to_ascii_lowercase();
+            SUITE_WORDS.iter().any(|s| lowered.contains(s))
+        });
+        if !about_the_suite {
+            continue;
+        }
+        for (i, (word, line)) in words.iter().enumerate() {
+            let noun = bare(word).to_ascii_lowercase();
+            if noun != "rule" && noun != "rules" {
+                continue;
+            }
+            // `one test per rule` is a rate rather than a count, and the README
+            // states two of them. Excluded at the word `per` rather than by
+            // demanding adjacency, because `sixteen projection rules` — the
+            // spelling three of these documents went stale in — is a count with
+            // an adjective in the way, and a check that could not read it would
+            // teach the next author which spelling is unguarded.
+            if i > 0 && bare(&words[i - 1].0).eq_ignore_ascii_case("per") {
+                continue;
+            }
+            for back in 1..=2usize {
+                let Some(candidate) = i.checked_sub(back).map(|j| bare(&words[j].0)) else {
+                    break;
+                };
+                if let Some(count) = cardinal(candidate) {
+                    claims.push((*line, format!("{candidate} {noun}"), count));
+                    break;
+                }
+            }
+        }
+    }
+    claims
+}
+
+/// The counts a claim about this workspace's rules may legitimately state.
+///
+/// One per rule file plus the union, each labelled, so the failure message can
+/// print what the document *could* have meant instead of only what it may not
+/// say. Derived from [`collect_rules`], the same parse CF-29 and `spec-trace`
+/// run on, so landing a rule moves this bar without anyone editing this file —
+/// which is the whole difference between a check and a second place to be stale.
+fn true_rule_counts(root: &Path) -> Result<Vec<(usize, String)>> {
+    let mut counts = Vec::new();
+    for file in RULE_FILES {
+        let body =
+            fs::read_to_string(root.join(file)).with_context(|| format!("reading {file}"))?;
+        let rules = collect_rules(&body);
+        if rules.is_empty() {
+            bail!("parsed no rules from {file} — this check would accept any count instead");
+        }
+        let name = file.rsplit('/').next().unwrap_or(file);
+        counts.push((rules.len(), name.to_owned()));
+    }
+    counts.push((all_rules(root)?.len(), "all four rule files".to_owned()));
+    counts.sort_unstable();
+    Ok(counts)
+}
+
+/// Every document that tells a consumer how many rules there are.
+///
+/// The README is the one crates.io renders and the one that went stale; the
+/// other three carry the same claim in the three other places a consumer meets
+/// it — the crate page, the feature list they read before enabling anything, and
+/// the manifest comment beside the feature itself. All four were wrong about the
+/// projection suite at the same time, in three different file formats, which is
+/// why this list is not just the README.
+///
+/// **`CHANGELOG.md` is deliberately absent.** Its entries are dated records of
+/// what was true at a release, and a released entry saying *"sixteen rules"*
+/// was true then. Holding it to today's count would demand rewriting history to
+/// keep a check green, which is the opposite of what a changelog is for.
+const COUNT_BEARING_DOCS: [&str; 4] = [
+    TESTKIT_README,
+    "crates/happenstance-testkit/src/lib.rs",
+    "crates/happenstance-core/src/lib.rs",
+    "crates/happenstance-core/Cargo.toml",
+];
+
+/// The rule counts a consumer is told are counts this workspace actually has.
+///
+/// # The defect, and why it needed a step rather than a reviewer
+///
+/// D11's `package-check` asserts `README.md` is inside the packaged artifact.
+/// Presence is not truth, and the gap is not hypothetical: the README shipped
+/// two sentences saying the projection suite was *"two rules of seventeen"*
+/// through the fifteen commits that made it seventeen, and three consecutive
+/// audits raised it as a finding rather than a red build. A finding raised three
+/// times is a missing check, and the failure is worse than an ordinary stale
+/// document — it tells an adapter author that a port they can build against does
+/// not exist yet.
+///
+/// The sweep that landed this check found three more instances of the same
+/// sentence in [`COUNT_BEARING_DOCS`], in Markdown, in rustdoc and in a manifest
+/// comment. That is why the check reads all four rather than the one the audit
+/// named: correcting an instance is not the same as retiring a class.
+///
+/// # What it does not verify
+///
+/// Only a **cardinal qualifying `rule` or `rules`** within two words, only in a
+/// paragraph naming one of [`SUITE_WORDS`], and only in the four documents
+/// above. It says nothing about counts of anything else — mutants, registry
+/// rows, fixtures, adapters — nothing about a count above ninety-nine spelled in
+/// words, and nothing at all about whether the surrounding sentence is
+/// *otherwise* true. A README claiming the suite runs on Postgres sails through.
+///
+/// The narrowness is deliberate rather than provisional. Every number in these
+/// files was a candidate; a check over all of them would have to be told which
+/// numbers name what, and a check nobody can predict the verdict of gets
+/// switched off the first time it is wrong. The counts of *rules* are the ones
+/// that went stale, and they are the ones a machine can resolve to a single
+/// authority.
+///
+/// # Errors
+///
+/// Returns an error if a document or a rule file cannot be read, if a rule file
+/// parses to nothing, if a document states a rule count this workspace does not
+/// have, or if **no** document states one at all — a check whose subject can
+/// vanish is one that retires without anybody deciding to.
+pub(crate) fn stated_rule_counts() -> Result<()> {
+    let root = workspace_root()?;
+    let counts = true_rule_counts(&root)?;
+    let legend = counts
+        .iter()
+        .map(|(n, name)| format!("{n} ({name})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let mut checked = 0usize;
+    let mut problems = Vec::new();
+    for doc in COUNT_BEARING_DOCS {
+        let body = fs::read_to_string(root.join(doc)).with_context(|| format!("reading {doc}"))?;
+        for (line, phrase, count) in rule_count_claims(&prose_of(doc, &body)) {
+            checked += 1;
+            if !counts.iter().any(|(n, _)| *n == count) {
+                problems.push(format!(
+                    "{doc}:{line} — `{phrase}` names a count of conformance rules this workspace \
+                     does not have. The counts it has are {legend}."
+                ));
+            }
+        }
+    }
+
+    if checked == 0 {
+        bail!(
+            "none of {} states a rule count at all, so this check has nothing to hold. Say how \
+             many rules the suites carry, or delete this step deliberately rather than by \
+             omission.",
+            COUNT_BEARING_DOCS.join(", ")
+        );
+    }
+
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "{} stale rule count(s) in the documents a consumer reads. `cargo package --list` \
+             asserts the README is in the artifact; only this step asserts it is true.",
+            problems.len()
+        );
+    }
+
+    println!("{checked} stated rule count(s) checked against {legend}");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// The counts this workspace had when these tests were written are not the
+    /// point — the shapes are — so the fixtures state their own.
+    const COUNTS: [usize; 2] = [17, 89];
+
+    fn stale(md: &str) -> Vec<String> {
+        rule_count_claims(md)
+            .into_iter()
+            .filter(|(_, _, n)| !COUNTS.contains(n))
+            .map(|(_, phrase, _)| phrase)
+            .collect()
+    }
+
+    /// The sentence this check exists for, verbatim from
+    /// `crates/happenstance-testkit/README.md` as `79df6b7` wrote it and as the
+    /// crate shipped it for fifteen commits afterwards.
+    ///
+    /// It is the wrong implementation the check is required to reject, and it is
+    /// quoted rather than paraphrased because the wrap is the hard part: the
+    /// subject that scopes the paragraph is on one line and the false count is
+    /// on the next.
+    #[test]
+    fn the_shipped_sentence_this_check_was_written_for_is_rejected() {
+        let md = "\
+> What is still early is everything around that. **No adapter has run this
+> suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
+> suite exists but is two rules of seventeen, and neither has been shown to
+> reject a wrong store yet.
+";
+        assert_eq!(stale(md), vec!["two rules"]);
+    }
+
+    /// The second one, which is bold, mid-sentence and on one line.
+    #[test]
+    fn a_bolded_count_is_read_through_its_markdown() {
+        let md = "**Two rules of the seventeen the specification names, today.** The port is\n\
+                  `[PROVISIONAL]` and this suite is what will freeze it.\n";
+        assert_eq!(stale(md), vec!["Two rules"]);
+    }
+
+    /// The corrected spelling, and the one at the top of the same file.
+    #[test]
+    fn a_count_the_enumeration_supports_passes() {
+        let md = "The conformance suite for happenstance event store adapters. Eighty-nine\n\
+                  rules, each tracing to a MUST.\n\n\
+                  The `ProjectionStore` suite is all seventeen rules the specification names.\n";
+        assert!(stale(md).is_empty(), "{:?}", stale(md));
+        assert_eq!(rule_count_claims(md).len(), 2);
+    }
+
+    /// The near miss that set the scope, and the reason it is a paragraph test
+    /// rather than a file-wide one: the same README says this, truthfully, about
+    /// its own contribution rules.
+    #[test]
+    fn a_paragraph_that_is_not_about_the_suite_is_not_a_claim() {
+        let md = "Two rules govern what goes in it, both learned expensively:\n";
+        assert!(rule_count_claims(md).is_empty());
+    }
+
+    /// The spelling with an adjective in the way, which is the one the CHANGELOG
+    /// went stale in — *"passing all sixteen projection rules"* — and the rate
+    /// beside it, which is not a count at all and appears twice in the README.
+    #[test]
+    fn an_adjective_does_not_hide_a_count_and_a_rate_is_not_one() {
+        let stale_count = "A projection example passing all sixteen projection rules.\n";
+        assert_eq!(stale(stale_count), vec!["sixteen rules"]);
+
+        let rate = "The projection suite expands to one test per rule, so a failure names it.\n";
+        assert!(rule_count_claims(rate).is_empty(), "{:?}", stale(rate));
+    }
+
+    /// A code sample is not a claim. `event_store_conformance!` puts the word
+    /// `conformance` in the paragraph, so without the fence test the sample
+    /// would be scanned as prose.
+    #[test]
+    fn fenced_code_is_not_prose() {
+        let md = "```rust,ignore\n\
+                  // 2 rules, in the conformance suite\n\
+                  happenstance_testkit::event_store_conformance!(MyFixture::new());\n\
+                  ```\n";
+        assert!(rule_count_claims(md).is_empty());
+    }
+
+    /// The other two formats a stale count was found in. A `//!` block is prose
+    /// and is read; the code under it is not prose and is not, which is what
+    /// stops `PROJECTION_MUST_REJECT`'s thirteen entries from reading as a claim
+    /// about thirteen rules.
+    #[test]
+    fn rustdoc_and_manifest_comments_are_prose_and_code_is_not() {
+        let rust = "\
+//! * **`unstable-projection`** — the port. The reason is not that nothing
+//!   tests it: sixteen conformance rules do.
+const PROJECTION_RULES: [&str; 2] = [\"one\", \"two\"];
+";
+        let claims = rule_count_claims(&prose_of("crates/happenstance-core/src/lib.rs", rust));
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].2, 16);
+        assert_eq!(claims[0].0, 2, "the failure must name the line to open");
+
+        let manifest = "\
+# The `ProjectionStore` port. The suite exists and sixteen rules drive it.
+unstable-projection = []
+";
+        let claims = rule_count_claims(&prose_of("crates/happenstance-core/Cargo.toml", manifest));
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].2, 16);
+    }
+
+    /// Digits and words are the same claim, and a hyphenated compound is one
+    /// number rather than two.
+    #[test]
+    fn cardinals_are_read_in_both_spellings() {
+        assert_eq!(cardinal("17"), Some(17));
+        assert_eq!(cardinal("seventeen"), Some(17));
+        assert_eq!(cardinal("Eighty-nine"), Some(89));
+        assert_eq!(cardinal("the"), None);
+        assert_eq!(cardinal(""), None);
+    }
 }

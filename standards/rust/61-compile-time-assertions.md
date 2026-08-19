@@ -161,9 +161,9 @@ was the instrument for it: it would have reported "still owned" the day the
 binding became `Transaction<'a, Postgres>`, and the finding would have been the
 compile error in some downstream runner months later.
 
-**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:146 (proves nothing)` ·
-`crates/happenstance-postgres/src/projection_store.rs:154 (universally-quantified lifetime parameter)` ·
-`crates/happenstance-postgres/src/projection_store.rs:170 (fn the_batch_does_not_borrow_the_store)` ·
+**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:159 (proved nothing)` ·
+`crates/happenstance-postgres/src/projection_store.rs:164 (universally-quantified lifetime)` ·
+`crates/happenstance-postgres/src/projection_store.rs:180 (fn the_batch_does_not_borrow_the_store)` ·
 [SPECIFICATION PS-5](../../spec/SPECIFICATION.md)
 
 ---
@@ -325,7 +325,7 @@ skeleton's `todo!()` bodies mean no call site exists anywhere else, and a
 signature that holds for the owned batch and not the borrowing one ships as a
 green test named `both_batch_shapes_satisfy_the_same_generic_code`.
 
-**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:75 (const _: () = {)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:72 (Instantiating a generic function)` ·
+**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:112 (const _: () = {)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:109 (Instantiating a generic function)` ·
 `crates/happenstance-core/src/validate.rs:179 (const VERDICT: bool)` ·
 `crates/happenstance-core/src/validate.rs:174 (clippy::assertions_on_constants)`

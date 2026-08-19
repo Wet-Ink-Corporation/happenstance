@@ -3,7 +3,16 @@ resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
 
 [workspace.package]
-version = "0.2.0"
+# A **pre-release**, and it is the number `happenstance` and `happenstance-core`
+# both inherit. `0.2.0` and not `0.1.0` because phase 4 was a breaking change to
+# a version that had not moved; `-alpha.1` because the API is expected to keep
+# moving until the stable `0.2.0`, and a stable number would make "we can't
+# change that now" available as an argument against the rest of the runbook.
+#
+# A pre-release only resolves for a requirement that asks for one, so
+# `cargo add happenstance` does not pick this up by accident. That is the
+# intended behaviour, not a limitation.
+version = "0.2.0-alpha.1"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -21,9 +30,15 @@ categories = ["database", "data-structures"]
 # actually needs. Cargo forbids a member from *removing* a workspace default,
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
-happenstance-core = { version = "0.2.0", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.2.0", path = "crates/happenstance", default-features = false }
-happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit" }
+#
+# The three requirement strings move with the version above, and this is the
+# highest-cost line in the file to get wrong: `version = "0.2.0"` never matches a
+# `0.2.0-alpha.1` release, so leaving one behind resolves fine from the path
+# while the workspace is intact and fails only on the *second* `cargo publish` —
+# after `happenstance-core` is live and unremovable.
+happenstance-core = { version = "0.2.0-alpha.1", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.2.0-alpha.1", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { version = "0.2.0-alpha.1", path = "crates/happenstance-testkit" }
 
 # --- external ---
 # WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`
@@ -38,6 +53,16 @@ happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit"
 # `base64/alloc` in its own `serde` feature (ADR-0016 §10).
 base64 = { version = "0.22", default-features = false }
 bytes = { version = "1.10", default-features = false }
+# `happenstance`'s CBOR codec, behind its `cbor` feature. Added on a licence
+# verdict taken before the dependency landed rather than after: `cargo deny
+# check licenses` passes (`ciborium`, `ciborium-io` and `ciborium-ll` are
+# Apache-2.0; `half`, `cfg-if` and `zerocopy` are `MIT OR Apache-2.0`), and the
+# seven new nodes introduce no duplicate major — the `syn 2` its derive reaches
+# is already in this graph through `sqlx` → `url` → `idna` → `icu` → `yoke`.
+# `std` is named rather than inherited, for the reason `base64/alloc` is: it is
+# a default today, and a crate that drops a default in a patch release breaks a
+# dependant that changed nothing.
+ciborium = { version = "0.2", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 # `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
@@ -45,6 +70,19 @@ futures-util = { version = "0.3", default-features = false }
 # `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
 # default and which no native adapter wants.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# No longer dev-only, and the move is the point: `happenstance` ships a postcard
+# codec behind its `postcard` feature, so a published crate links this. It was
+# already here as the non-self-describing half of WF-7's two-format matrix, and
+# the reason that matrix is two formats: a `skip_serializing_if` attribute
+# round-trips cleanly in `serde_json` and desynchronises the stream here.
+#
+# `default-features = false` is load-bearing and was measured, not guessed. The
+# default turns on `heapless-cas`, which reaches `heapless 0.7` and then
+# `atomic-polyfill 1.0.3` — unmaintained, RUSTSEC-2023-0089, "no safe upgrade is
+# available", and `cargo deny check advisories` fails the gate on it. Nothing
+# here wants a fixed-capacity `Vec`; `use-std` is the flavour that serialises
+# into `std`'s, and it is what both the wire tests and the codec use.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 # The `/sql` endpoint speaks JSON, so `happenstance-neon` decodes JSON. `std`
 # rather than `alloc` because the endpoint's `bigint`-as-string rendering needs
@@ -79,19 +117,25 @@ trait-variant = "0.1.3"
 
 # --- dev / tooling only ---
 anyhow = "1"
-# The non-self-describing half of WF-7's two-format matrix, and the reason the
-# matrix is two formats: a `skip_serializing_if` attribute round-trips cleanly in
-# `serde_json` and desynchronises the stream here. `use-std` because it is only
-# ever a dev-dependency — nothing published links it.
-#
-# `default-features = false` is load-bearing and was measured, not guessed. The
-# default turns on `heapless-cas`, which reaches `heapless 0.7` and then
-# `atomic-polyfill 1.0.3` — unmaintained, RUSTSEC-2023-0089, "no safe upgrade is
-# available", and `cargo deny check advisories` fails the gate on it. Nothing
-# here wants a fixed-capacity `Vec`; the flavour that serialises into `std`'s is
-# the whole of what the wire tests use.
-postcard = { version = "1", default-features = false, features = ["use-std"] }
 proptest = "1"
+# The compile-fail harness. It is the only instrument that can pin a *diagnostic*
+# rather than the fact that something failed to compile: rustdoc collects
+# doctests from the lib target only, and on 1.97.1 it silently ignores an
+# unmatched error-code annotation, so `compile_fail,E0004` asserts no more than
+# bare `compile_fail` — and a negative control that cannot discriminate is not a
+# negative control (`spec/SPECIFICATION.md:8772`;
+# `crates/happenstance-core/src/event.rs:95-106`).
+#
+# Adopted on a measurement, not on taste — the `postcard` note above is the
+# precedent. It adds ten nodes to `Cargo.lock`: `trybuild` itself, `glob`,
+# `target-triple`, `termcolor`, `serde_spanned`, `winnow` and the four `toml*`
+# crates. `cargo deny check licenses` and `cargo deny check advisories` both pass
+# against the **unmodified** allowlist at `deny.toml:8-19`, and
+# `multiple-versions` reports nothing new. It is consumed only as a
+# `[dev-dependencies]` of `course-subscriptions`, which is `publish = false`, so
+# no published crate's graph, feature set or MSRV floor moves; `cargo hack
+# --no-dev-deps --rust-version` cannot see it at all.
+trybuild = "1.0"
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published
 # graph depends on it.

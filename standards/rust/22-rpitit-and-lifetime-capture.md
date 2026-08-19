@@ -1,9 +1,8 @@
 # 22 — RPITIT, GATs and lifetime capture
 
 > **Load when:** declaring a method on a port · an `async_fn_in_trait` warning
-> fails the gate · `error[E0195]` on a projection-store impl ·
-> `error[E0597]`/`E0716`/`E0515` returning a read stream · the `Send` flavour
-> hands back a stream that is not `Send`
+> fails the gate · `error[E0597]`/`E0716`/`E0515` returning a read stream · the
+> `Send` flavour hands back a stream that is not `Send`
 > **See also:** 20 (flavours) · 21 (`Send` obligations) · 23 (streams) ·
 > 92 (toolchain limits)
 
@@ -54,7 +53,7 @@ failure in CI, and the fix that first suggests itself is
 `#[allow(async_fn_in_trait)]`, which silences the one line where a reader could
 have seen that the future has no `Send` bound and never will have one.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:86 (Why the methods are spelled)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:97 (Why the methods are spelled)` ·
 `crates/happenstance-neon/src/transport.rs:40 (async_fn_in_trait)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) *(why `Fixture` is
 hand-written and un-derived, and so is subject to the lint)* ·
@@ -191,124 +190,21 @@ takes `&Query`, and what by-value costs)* ·
 
 ---
 
-## RS-22-4. [PROVISIONAL — settles at SPECIFICATION PS-5, which retires the GAT and with it this trap] Write the literal `Self::Batch<'_>` in every impl, even when the batch is owned.
+## Retired
 
-**Why.** The trait declares `async fn commit(&self, batch: Self::Batch<'_>, ..)`,
-whose elided parameter lifetime desugars into a generic the returned future
-captures. An impl naming the concrete type declares a different set of lifetime
-generics than the trait, which is what `error[E0195]` compares — not what the
-batch contains. Binding an owned type to `Batch<'a>` therefore buys none of the
-relief it appears to. The trait's own `where Self: 'a` may be omitted on the
-impl when the bound type is owned; rustc accepts it either way.
+**RS-22-4 — "Write the literal `Self::Batch<'_>` in every impl, even when the
+batch is owned."** Retired 2026-08-13, at the trigger the rule itself stated: it
+carried `[PROVISIONAL — settles at SPECIFICATION PS-5, which retires the GAT and
+with it this trap]`, and PS-5 landed with ADR-0017. `ProjectionStore::Batch` is
+now `type Batch;` with no lifetime, so `commit` declares no lifetime generics
+for an impl to mismatch and `error[E0195]` is unreachable through this port. The
+rule stopped rejecting any implementation an author could write, which is the
+decorative shape RS-01-1 exists to forbid, and its `Do` example — binding
+`type Batch<'a>` and spelling `Self::Batch<'_>` in four signatures — no longer
+compiles. The id is spent and is never reused.
 
-**Do**
-
-```rust
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
-
-struct OwnedBatchStore;
-
-impl SendProjectionStore for OwnedBatchStore {
-    type Error = StoreError;
-
-    /// Owned. The lifetime is satisfiable and unused — the shape
-    /// `sqlx::Transaction<'static, Postgres>` also takes.
-    type Batch<'a> = Vec<String>;
-
-    async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
-        Ok(Vec::new())
-    }
-
-    // `Self::Batch<'_>` literally, though everything behind it is owned.
-    async fn commit(
-        &self,
-        batch: Self::Batch<'_>,
-        _id: &ProjectionId,
-        _position: SequencePosition,
-    ) -> Result<(), Self::Error> {
-        drop(batch);
-        Ok(())
-    }
-#
-#     async fn checkpoint(&self, _id: &ProjectionId) -> Result<Option<SequencePosition>, Self::Error> {
-#         Ok(None)
-#     }
-#
-#     async fn rollback(&self, batch: Self::Batch<'_>) -> Result<(), Self::Error> {
-#         drop(batch);
-#         Ok(())
-#     }
-}
-# #[derive(Debug)]
-# struct StoreError;
-# impl core::fmt::Display for StoreError {
-#     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-#         f.write_str("store error")
-#     }
-# }
-# impl core::error::Error for StoreError {}
-# fn main() {}
-```
-
-**Not** — the concrete type in the signature, which is the natural thing to write
-once the batch is owned and the lifetime means nothing: `error[E0195]`.
-
-```rust,compile_fail,E0195
-# use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
-# struct OwnedBatchStore;
-impl SendProjectionStore for OwnedBatchStore {
-    type Error = StoreError;
-    type Batch<'a> = Vec<String>;
-
-    // error[E0195]: lifetime parameters or bounds on method `commit` do not
-    // match the trait declaration
-    async fn commit(
-        &self,
-        batch: Vec<String>,
-        _id: &ProjectionId,
-        _position: SequencePosition,
-    ) -> Result<(), Self::Error> {
-        drop(batch);
-        Ok(())
-    }
-#
-#     async fn checkpoint(&self, _id: &ProjectionId) -> Result<Option<SequencePosition>, Self::Error> {
-#         Ok(None)
-#     }
-#
-#     async fn begin(&self) -> Result<Self::Batch<'_>, Self::Error> {
-#         Ok(Vec::new())
-#     }
-#
-#     async fn rollback(&self, batch: Self::Batch<'_>) -> Result<(), Self::Error> {
-#         drop(batch);
-#         Ok(())
-#     }
-}
-# #[derive(Debug)]
-# struct StoreError;
-# impl core::fmt::Display for StoreError {
-#     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-#         f.write_str("store error")
-#     }
-# }
-# impl core::error::Error for StoreError {}
-# fn main() {}
-```
-
-**Rejects.** An adapter author who binds an owned batch expecting the promised
-`E0195` relief, meets the error on `commit`, and reads it as "the GAT is broken"
-— then either lands a lifetime on the store type, which is one of the five
-ingredients of the foreign-trait GAT **internal compiler error** this workspace
-minimised, or opens the port to remove the GAT while three adapters are mid-flight
-against it. `happenstance-sqlite` and `happenstance-ladybug` both hit this from
-opposite directions, with an owned batch and a borrowed one.
-
-**Evidence.** `crates/happenstance-sqlite/src/projection_store.rs:221 (error[E0195]: lifetime parameters or bounds)` ·
-`crates/happenstance-sqlite/src/projection_store.rs:225 (type Batch<'a> = SqliteBatch)` ·
-`crates/happenstance-ladybug/src/live_handle.rs:73 (error[E0195])` ·
-`crates/happenstance-postgres/src/projection_store.rs:101 (Transaction<'static, Postgres>)` ·
-[SPECIFICATION PS-5](../../spec/SPECIFICATION.md) *(provisional: an owned
-`type Batch;` removes `E0195` entirely, and what would falsify that)* ·
-[ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
-[adapter-shapes §2.2](../../references/adapter-shapes.md)
+The transcript is kept where it happened rather than restated here:
+`crates/happenstance-sqlite/src/projection_store.rs:534 (transcript this line used to carry)`
+holds the error verbatim beside the impl that paid it, and
+`experiments/live-handle-projection-batch/live_handle.rs:68 (exactly where PS-5 says it is)`
+holds the same finding from the borrowed end.

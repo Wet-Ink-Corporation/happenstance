@@ -50,6 +50,51 @@ serde = ["dep:serde", "dep:base64", "base64/alloc", "bytes/serde", "serde/alloc"
 # The in-memory reference event store. Costs no extra dependencies and backs
 # every doctest in this crate, so the docs cannot drift from the API.
 memory = ["std"]
+# The `ProjectionStore` port, its value types, `ProjectionProbe` and
+# `MemoryProjectionStore`. Off by default, and the reason is PS-2 rather than a
+# missing suite: the suite exists and seventeen rules drive it, but PS-2's bar is
+# *two adapters at opposite ends of the batch-shape axis* and the two shapes that
+# clear the suite today are both testkit-side instruments. See
+# `src/projection.rs`'s header for the full statement.
+#
+# What retires it: a projection adapter over storage this workspace does not
+# control — Ladybug, Neon or a Durable Object — passing the same suite. Whether
+# 0.1 ships with the gate still on is `publication-and-positioning`'s decision at
+# phase 12, not this feature's to presume.
+#
+# Costs nothing to carry: no `dep:` entry, and it implies neither `std` nor
+# `memory`, so `--no-default-features --features unstable-projection` is a
+# `no_std` build of the port and the powersets compile it.
+unstable-projection = []
+# `ProjectionProbe`, the write seam the projection conformance suite runs
+# through. No `dep:` entry, no `std`, no `memory`.
+#
+# The cheapness is the whole economic argument for the trait living beside the
+# port rather than in `happenstance-testkit`. An adapter's own `tests/` directory
+# is a separate crate, where neither a testkit trait nor the adapter's type is
+# local, so the orphan rule rejects `impl ProjectionProbe for MyStore` there and
+# the only way out would be a **non-dev** dependency on the testkit. Here it
+# costs one flag on a dependency the adapter already has and no new edge in its
+# graph. If this line ever acquires a `dep:`, that argument is void and the
+# placement is owed a new ADR.
+#
+# This list was `[]` until the gate landed, and the tripwire above used to read
+# "a `dep:` or an implied feature". `unstable-projection` is the exception the
+# sentence did not anticipate and is stated rather than quietly permitted: the
+# probe is *defined inside* the gated module, so `conformance` alone can only
+# mean one of two things. Either it implies the gate — one capability, one
+# switch, and `examples/outside-projection-adapter`'s manifest stays the one-flag
+# manifest it exists to model — or the probe is gated on both and `conformance`
+# alone becomes a feature that turns on no item at all. The first is chosen. It
+# adds no `dep:` and no graph edge, because the feature it implies is itself `[]`,
+# so the economic argument is unchanged rather than waived.
+#
+# What it still implies nothing *else* on purpose: `conformance` without
+# `memory`, and `conformance` under `--no-default-features` (which is `no_std`),
+# are both combinations the feature powersets compile. A `conformance` surface
+# that only works alongside `memory` is green on default features and on
+# `--all-features` and is caught nowhere else.
+conformance = ["unstable-projection"]
 
 [package.metadata.docs.rs]
 all-features = true

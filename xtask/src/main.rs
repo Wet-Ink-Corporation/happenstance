@@ -8,22 +8,26 @@
 //! # What the gate proves
 //!
 //! Mandatory, in order: formatting; clippy over every target and feature with
-//! `-D warnings`; the test suite; a `wasm32-unknown-unknown` build of
-//! `happenstance-core`, which is the only thing keeping [ADR-0001]'s `!Send`
-//! port flavour honest; the documentation, both with every feature and with
+//! `-D warnings`; the test suite; five `wasm32-unknown-unknown` builds, of which
+//! `happenstance-core`'s is what keeps [ADR-0001]'s `!Send` port flavour honest
+//! and the typed layer's is what compiles the crate a Workers application
+//! actually installs — and none of which says anything about *which* flavour the
+//! code bound, because `Send` is available on that target and only a `Send`
+//! store is not (`crates/happenstance/tests/flavours.rs` is that instrument);
+//! the documentation, both with every feature and with
 //! none, because a broken intra-doc link is a hard rustdoc error and the
 //! `no_std` configuration had three of them; `cargo xtask proof-artefact`, which
 //! holds the conformance suite to its own proof that it discriminates and the
 //! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
-//! own cross-references and regenerates its traceability table; five
-//! file-reading lints described below; a sixth manifest lint for D12, kept out
-//! of that group of five because it names no clause (ADR-0016 §14); and
+//! own cross-references and regenerates its traceability table; six
+//! file-reading lints described below; a seventh manifest lint for D12, kept out
+//! of that group because it names no clause (ADR-0016 §14); and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
 //!
-//! # The five lints, and why a grep is in a Rust gate
+//! # The six lints, and why a grep is in a Rust gate
 //!
 //! Four clauses of `SPECIFICATION.md` name a `cargo xtask ci` step, and each
 //! names one because the thing it checks cannot be expressed as a type: CF-33
@@ -34,7 +38,15 @@
 //! satisfied forever by a `Retires:` line, so a rule the specification says is
 //! gone can sit in `suite.rs` failing registered mutants with nothing to notice.
 //!
-//! Each of the five states, in its own documentation, what it does *not* verify.
+//! The sixth is not a clause's either, and it runs in the opposite direction to
+//! every other step here: `lints::stated_rule_counts` holds four *documents* to
+//! the code. `package-check` proves the testkit's README is inside the published
+//! artifact; nothing proved it was true, and it told crates.io the projection
+//! suite was two rules of seventeen through the fifteen commits that made it
+//! seventeen — as did the crate page, the feature list and the manifest comment
+//! beside the feature, in three other file formats.
+//!
+//! Each of the six states, in its own documentation, what it does *not* verify.
 //! That is not modesty. A check whose limits are undocumented is read as a
 //! guarantee, and the one that would be read hardest is CF-6's: the real
 //! enforcement is `GappedPositionStore` in the mutant registry, and the grep is
@@ -285,6 +297,45 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // What it buys: `happenstance` is the crate a Workers application
+        // `cargo add`s — ADR-0006 gave it the bare name — and until this step
+        // existed the gate compiled the contract, the harnesses and two adapters
+        // for this target and never the crate a consumer actually installs. The
+        // four steps above were satisfiable with the typed layer never built for
+        // the edge at all, which is the silence this closes.
+        //
+        // What it does NOT buy, and the distinction is the whole reason this
+        // comment is longer than the argument list: `Send` is a perfectly
+        // available auto trait on `wasm32-unknown-unknown`. What is unavailable
+        // there is a `Send` *store*. So a green check here proves dependency,
+        // `std` and feature hygiene, and proves nothing at all about whether
+        // this crate's generic code bound `EventStore` or `SendEventStore` — a
+        // generic body type-checks against its declared bounds whether or not
+        // anything instantiates it. The instrument for that half is
+        // `crates/happenstance/tests/flavours.rs`, which instantiates every
+        // entry point against a store that is genuinely `!Send`.
+        //
+        // `std,json` and not more: that is the combination the design fixed, and
+        // the rest of the feature space is compiled on this target by the
+        // `wasm32 feature powerset` step in OPTIONAL. Widening this one to chase
+        // `unstable-projection` would put a combination where a point belongs.
+        name: "wasm32 build of the typed layer",
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--no-default-features",
+            "--features",
+            "std,json",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // `RUSTDOCFLAGS` rather than the ambient `RUSTFLAGS: -D warnings` that
         // `ci.yml` sets, because rustdoc does not read `RUSTFLAGS` — so until
         // this line existed the gate denied every rustc lint and no rustdoc one.
@@ -416,6 +467,28 @@ const REQUIRED: &[Step] = &[
             "xtask",
             "--",
             "lint-changelog",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // The only step that reads a document for content rather than reading
+        // code against one. `package-check` proves `README.md` is inside the
+        // published artifact (D11); nothing proved it was true, and the README
+        // told crates.io the projection suite was "two rules of seventeen"
+        // through the fifteen commits that made it seventeen. Three audits
+        // raised it as a finding. A finding raised three times is a missing
+        // check, so this is the check.
+        name: "every stated rule count matches the suite",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-rule-counts",
         ],
         env: &[],
         probe: None,
@@ -600,6 +673,35 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The configuration the two steps above cannot see, and the one every
+        // consumer who types `cargo add happenstance-core` builds: `memory` on,
+        // `conformance` off. `--all-features` resolves a link into a
+        // `cfg`-gated item because the gate is open; `--no-default-features`
+        // never renders the page that carries the link. So a link from
+        // `MemoryProjectionStore`'s page to `ProjectionProbe` — a `conformance`
+        // item — was a hard error on the default feature set and green on both
+        // sides of it. That is the same D13 defect one axis over, and the fix
+        // for the defect is not a gate step; this is.
+        //
+        // `--document-private-items` for parity with the workspace step above:
+        // `rustdoc::redundant_explicit_links` fires only when both ends of a
+        // link are documented destinations, which private items are what makes
+        // true — so without the flag this step would render the right feature
+        // set through a narrower lint surface than the gate already runs.
+        name: "documentation (default features)",
+        program: "cargo",
+        args: &[
+            "doc",
+            "--locked",
+            "-p",
+            "happenstance-core",
+            "--no-deps",
+            "--document-private-items",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // D11. Manifest metadata promising two licences is not the same thing as
         // an artifact containing them, and only the second is what a consumer
         // unpacks. See `package`'s module docs.
@@ -671,6 +773,15 @@ const OPTIONAL: &[Step] = &[
             // if it were dropped.
             "-p",
             "happenstance-testkit",
+            // The typed layer, and it is where the *most* of this step's value
+            // now sits: the mandatory step above compiles one point of its
+            // feature space, `std,json`, so it compiles neither the projection
+            // runner (off by default) nor `postcard` nor `cbor` for this target.
+            // A feature is not target-scoped, so those combinations are checked
+            // here or nowhere. This is a widening **above** the mandatory guard
+            // and never a replacement for it — the probe below is why.
+            "-p",
+            "happenstance",
             "--target",
             "wasm32-unknown-unknown",
             "--feature-powerset",
@@ -777,6 +888,7 @@ fn main() -> ExitCode {
         Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
         Some("lint-position-literals") => lints::no_position_literals(),
+        Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
@@ -828,26 +940,29 @@ fn print_help() {
     println!("         the mandatory steps only, dropping that last group; it is the bar a");
     println!("         non-terminal project's integration gate runs, never the release bar.");
     println!("  affected [--base <ref>]");
-    println!("         The story-grain gate: the five file-reading lints and spec-trace,");
+    println!("         The story-grain gate: the six file-reading lints and spec-trace,");
     println!("         then fmt, clippy and tests for the packages this diff could have");
     println!("         broken and everything depending on them. Base defaults to `main`.");
     println!("         Errs toward more packages — see the module docs for the two ways it");
     println!("         can be wrong and why only one of them is allowed to happen.");
-    println!("  wasm   Check that happenstance-core, the conformance harnesses and the");
-    println!("         two wasm32 adapters (cloudflare, neon) build for");
-    println!("         wasm32-unknown-unknown.");
+    println!("  wasm   Check that happenstance-core, the conformance harnesses, the two");
+    println!("         wasm32 adapters (cloudflare, neon) and the typed layer");
+    println!("         (happenstance, the crate a Workers application installs) build");
+    println!("         for wasm32-unknown-unknown. Five checks; none of them says which");
+    println!("         port flavour the code bound — Send exists on that target.");
     println!("  spec-trace [--write]");
     println!("         Check the specification's clauses against the suite and the e2e");
     println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
     println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
     println!("         what the checker computes, and fails when they differ. --write");
     println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the five file-reading checks four clauses name as gate");
-    println!("         steps: CF-33 (no clock in the suite), CF-6 (no literal position");
-    println!("         values), CF-29 (a changelog entry per rule), CF-32 (the testkit's");
-    println!("         own version key), and §7.4's disposed-rule check. Each is also");
-    println!("         available on its own as lint-clock, lint-position-literals,");
-    println!("         lint-changelog, lint-testkit-version and lint-retired-rules.");
+    println!("  lints  Run just the six file-reading checks: CF-33 (no clock in the suite),");
+    println!("         CF-6 (no literal position values), CF-29 (a changelog entry per");
+    println!("         rule), CF-32 (the testkit's own version key), §7.4's disposed-rule");
+    println!("         check, and every stated rule count against the enumeration.");
+    println!("         Each is also available on its own as lint-clock,");
+    println!("         lint-position-literals, lint-changelog, lint-testkit-version,");
+    println!("         lint-retired-rules and lint-rule-counts.");
     println!("  package-check");
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
@@ -897,6 +1012,12 @@ fn print_help() {
 /// wasm32 and then cannot run there, which is a failure no `cargo check` of
 /// `happenstance-core` can see.
 ///
+/// Five since phase 7, and the fifth is appended rather than interleaved: the
+/// four above are the standing guard on [ADR-0001] and a reader who knows this
+/// transcript should still recognise it. The typed layer is last because it is
+/// the crate furthest from the port — and because it is the one a Workers
+/// application installs, which is the gap the other four left open.
+///
 /// [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 fn wasm_steps() -> Vec<&'static Step> {
     steps_named(&[
@@ -904,6 +1025,7 @@ fn wasm_steps() -> Vec<&'static Step> {
         "wasm32 check of the conformance harnesses",
         "wasm32 build of the Cloudflare adapter",
         "wasm32 build of the Neon adapter",
+        "wasm32 build of the typed layer",
     ])
 }
 
@@ -919,6 +1041,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "no conformance rule reads a clock",
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
+        "every stated rule count matches the suite",
         "the testkit carries its own version",
         "the Rust constitution is internally consistent",
         lint_narrative::STEP,
@@ -1034,4 +1157,350 @@ fn is_available(probe: &[&str]) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use std::fs;
+
+    use crate::spec_trace::workspace_root;
+    use crate::{OPTIONAL, REQUIRED, Step, wasm_steps};
+
+    /// The feature gating the projection module and its re-exports.
+    const GATE: &str = "unstable-projection";
+
+    /// The fifth `wasm32` step's name, spelled once.
+    ///
+    /// A grammatical peer of the four it joins, so the `=== name ===` transcript
+    /// still scans as one family rather than one stranger.
+    const TYPED_LAYER_WASM: &str = "wasm32 build of the typed layer";
+
+    /// The four `wasm32` steps that existed before the typed layer's, in order.
+    ///
+    /// They are the standing guard on ADR-0001 and are not something a scope —
+    /// or a refactor — is allowed to narrow or reorder.
+    const ORIGINAL_WASM_STEPS: &[&str] = &[
+        "wasm32 build of the contract crate",
+        "wasm32 check of the conformance harnesses",
+        "wasm32 build of the Cloudflare adapter",
+        "wasm32 build of the Neon adapter",
+    ];
+
+    /// The named step, out of a compile-time step table.
+    fn step<'a>(table: &'a [Step], name: &str) -> &'a Step {
+        table
+            .iter()
+            .find(|step| step.name == name)
+            .unwrap_or_else(|| panic!("no step named `{name}`"))
+    }
+
+    /// Every crate that names a projection item in its own `src/`, and must
+    /// therefore ask for [`GATE`] in its own manifest rather than inherit it from
+    /// whatever else the workspace build happened to turn on.
+    ///
+    /// Feature unification is per *build*. `cargo doc -p <crate>` and every
+    /// `cargo hack` combination build one crate at a time, so a manifest that
+    /// relies on a sibling's feature selection compiles in the workspace build
+    /// and nowhere else.
+    const DEPENDENTS: &[&str] = &[
+        "happenstance-sqlite",
+        "happenstance-ladybug",
+        "happenstance-postgres",
+        "happenstance-neon",
+        "happenstance-sync",
+        "happenstance-testkit",
+    ];
+
+    /// Read a workspace file with its line endings normalised.
+    ///
+    /// The tree is mixed: `core.autocrlf` is on for the Windows this repository
+    /// is developed on, so a file git has checked out carries `\r\n` and one an
+    /// editor wrote carries `\n`. rustfmt's `newline_style = "Auto"` is happy
+    /// with either, and an assertion matching `\n` on a `\r\n` file would fail
+    /// for a reason that has nothing to do with what it is asserting.
+    fn read(rel: &str) -> String {
+        let root = workspace_root().unwrap();
+        fs::read_to_string(root.join(rel))
+            .unwrap_or_else(|e| panic!("reading {rel}: {e}"))
+            .replace("\r\n", "\n")
+    }
+
+    /// The `default` line of a `[features]` table, as written.
+    fn default_features(manifest: &str) -> &str {
+        manifest
+            .lines()
+            .find(|l| l.starts_with("default = "))
+            .unwrap_or("")
+    }
+
+    /// The maturity signal an adapter author meets first is the feature table,
+    /// because that is what `cargo add` shows them — not a doc comment three
+    /// screens inside a module they have to already be reading.
+    #[test]
+    fn the_projection_port_is_behind_an_off_by_default_feature() {
+        let manifest = read("crates/happenstance-core/Cargo.toml");
+
+        assert!(
+            manifest.contains(&format!("\n{GATE} = ")),
+            "`{GATE}` is not declared in happenstance-core's `[features]`"
+        );
+        assert!(
+            !default_features(&manifest).contains(GATE),
+            "`{GATE}` is on by default, which hands the port to every caller who \
+             never asked for it: {}",
+            default_features(&manifest)
+        );
+    }
+
+    /// A feature that gates nothing is a feature table telling a story the
+    /// compiler does not: the module and the re-exports are the two places the
+    /// item is either reachable or invisible.
+    #[test]
+    fn the_gate_is_mounted_on_the_module_and_its_re_exports() {
+        let lib = read("crates/happenstance-core/src/lib.rs");
+        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
+        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
+
+        assert!(
+            lib.contains(&format!("{cfg}\n{doc_cfg}\npub mod projection;")),
+            "`pub mod projection;` is not gated the way `memory`'s module is"
+        );
+        assert!(
+            lib.contains(&format!("{cfg}\n{doc_cfg}\npub use projection::{{")),
+            "the projection re-exports are not gated, so the module is invisible \
+             and its items are not"
+        );
+    }
+
+    /// The powerset proves the combinations compile; this proves the *manifests*
+    /// are the reason, which is the half a workspace build cannot distinguish
+    /// because it unifies features across every member at once.
+    #[test]
+    fn every_crate_that_names_a_projection_item_opts_in() {
+        for package in DEPENDENTS {
+            let manifest = read(&format!("crates/{package}/Cargo.toml"));
+            assert!(
+                manifest.contains(GATE),
+                "{package} names a projection item and never asks for `{GATE}`"
+            );
+        }
+    }
+
+    /// A semver promise rather than an oversight: the typed layer's feature
+    /// table and its public surface say the same thing.
+    ///
+    /// This assertion used to read the other way — `happenstance` re-exported
+    /// no projection item, so a public feature there would have promised a
+    /// surface the crate did not expose. The typed projection runner made the
+    /// premise false rather than the rule wrong, so the rule is stated in the
+    /// direction that still has content: a passthrough **and** a surface, or
+    /// neither. What it still forbids is the pair coming apart — a feature
+    /// table advertising a runner nobody can name, or four `pub use`s a
+    /// consumer cannot turn on.
+    #[test]
+    fn the_typed_layer_makes_no_promise_it_does_not_keep() {
+        let manifest = read("crates/happenstance/Cargo.toml");
+        let lib = read("crates/happenstance/src/lib.rs");
+
+        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
+        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
+
+        let passthrough = manifest.contains(&format!("\n{GATE} = "));
+        // The badge is part of the surface, not an extra: an item that only
+        // exists behind a feature and renders no gate is anti-pattern 15.
+        let surface = lib.contains(&format!("{cfg}\n{doc_cfg}\npub use runner::{{"));
+
+        assert_eq!(
+            passthrough, surface,
+            "`happenstance`'s `{GATE}` passthrough and its projection surface \
+             disagree: the manifest declares it = {passthrough}, the crate root \
+             re-exports behind it = {surface}"
+        );
+
+        if passthrough {
+            assert!(
+                !default_features(&manifest).contains(GATE),
+                "`{GATE}` joined the typed layer's defaults, which hands an \
+                 unfrozen port to every caller who never asked for it: {}",
+                default_features(&manifest)
+            );
+            assert!(
+                manifest.contains(&format!("\"happenstance-core/{GATE}\"")),
+                "the typed layer gates a runner on `{GATE}` without forwarding \
+                 it to the contract crate, whose port the runner is built on"
+            );
+            assert!(
+                lib.contains(&format!("{cfg}\nmod runner;")),
+                "the runner's own module is not gated, so the feature table and \
+                 the compiler disagree about what `{GATE}` turns on"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // HS-S0031 AC-001, AC-002, AC-006 — the typed layer's wasm32 claim
+    // -----------------------------------------------------------------------
+
+    /// The `//` comment block immediately above a `name:` line in this file.
+    ///
+    /// The gate's steps carry their reasoning as ordinary line comments inside
+    /// the `Step` literal, so it is unreachable at runtime and has to be read
+    /// off the source. That is the point: a step whose comment only restates its
+    /// argument vector is the decorative shape this file's own documentation
+    /// warns about, and nothing but a source read can observe the difference.
+    fn step_comment(name: &str) -> String {
+        let source = read("xtask/src/main.rs");
+        let lines: Vec<&str> = source.lines().collect();
+        let at = lines
+            .iter()
+            .position(|line| line.trim() == format!("name: \"{name}\","))
+            .unwrap_or_else(|| panic!("no `name: \"{name}\",` line in xtask/src/main.rs"));
+
+        let mut comment: Vec<&str> = Vec::new();
+        for line in lines[..at].iter().rev() {
+            let trimmed = line.trim();
+            let Some(rest) = trimmed.strip_prefix("//") else {
+                break;
+            };
+            comment.push(rest.trim());
+        }
+        comment.reverse();
+        comment.join(" ")
+    }
+
+    /// AC-001. The crate a Workers application installs is compiled for the
+    /// target it claims, by a step nothing can skip.
+    #[test]
+    fn typed_layer_wasm_step_carries_the_designed_arguments() {
+        let step = step(REQUIRED, TYPED_LAYER_WASM);
+
+        assert_eq!(step.program, "cargo");
+        assert_eq!(
+            step.args,
+            [
+                "check",
+                "--locked",
+                "-p",
+                "happenstance",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--no-default-features",
+                "--features",
+                "std,json",
+            ],
+            "the argument list is `_design.md`'s, not the implementer's"
+        );
+        assert!(step.env.is_empty(), "the step needs no environment");
+
+        // Persistent chrome, never opened on demand. A probe means *skip when
+        // the tool is absent*, and this guard may never be skippable (RS-80-2).
+        assert!(
+            step.probe.is_none(),
+            "a probed guard is unguarded on every machine that lacks the tool"
+        );
+
+        // Hierarchy: a grammatical peer of the four it joins.
+        assert!(
+            step.name.starts_with("wasm32 build of the"),
+            "`{}` does not scan as one of the wasm32 family",
+            step.name
+        );
+
+        // Presentation exists at all: the comment states both halves.
+        let comment = step_comment(TYPED_LAYER_WASM).to_lowercase();
+        assert!(
+            !comment.is_empty(),
+            "the step carries no reasoning at all, only arguments"
+        );
+        assert!(
+            comment.contains("workers"),
+            "the comment does not say what the step buys: {comment}"
+        );
+        assert!(
+            comment.contains("send") && comment.contains("flavour"),
+            "the comment does not say what the step does NOT prove — `Send` \
+             exists on wasm32, so this proves nothing about which flavour is \
+             bound: {comment}"
+        );
+        assert!(
+            comment.contains("flavours.rs"),
+            "the comment does not point at the instrument that covers the half \
+             it cannot: {comment}"
+        );
+    }
+
+    /// AC-002. Removing the step is loud, and the four originals keep their
+    /// position so a reader who knows the transcript still recognises it.
+    #[test]
+    fn wasm_steps_resolve_and_number_five() {
+        // `wasm_steps` resolves by name through `steps_named`, which panics on a
+        // name that resolves to nothing. Calling it *is* the assertion.
+        let steps = wasm_steps();
+
+        assert_eq!(
+            steps.len(),
+            5,
+            "the typed layer is not in `cargo xtask wasm`"
+        );
+        for (at, expected) in ORIGINAL_WASM_STEPS.iter().enumerate() {
+            assert_eq!(
+                steps[at].name, *expected,
+                "the four original wasm32 steps moved; the fifth is appended, \
+                 never interleaved"
+            );
+        }
+        assert_eq!(
+            steps[4].name, TYPED_LAYER_WASM,
+            "the typed layer's step is not the appended fifth"
+        );
+
+        // And the four originals keep their argument lists byte-for-byte
+        // (NF-004): they are the standing guard on ADR-0001.
+        for name in ORIGINAL_WASM_STEPS {
+            let original = step(REQUIRED, name);
+            assert!(
+                original.args.contains(&"--target") && original.args.contains(&"--locked"),
+                "`{name}` lost an argument it had before the typed layer joined"
+            );
+            assert!(original.probe.is_none(), "`{name}` acquired a probe");
+        }
+    }
+
+    /// AC-006. The powerset widens the claim above the mandatory point, and
+    /// keeps its probe: a mandatory powerset breaks every machine without
+    /// `cargo hack`.
+    #[test]
+    fn the_wasm32_powerset_covers_the_typed_layer() {
+        let step = step(OPTIONAL, "wasm32 feature powerset");
+
+        let named: Vec<&&str> = step
+            .args
+            .iter()
+            .zip(step.args.iter().skip(1))
+            .filter_map(|(flag, package)| (*flag == "-p").then_some(package))
+            .collect();
+        assert!(
+            named.contains(&&"happenstance"),
+            "the typed layer's own feature combinations are never compiled for \
+             wasm32: {named:?}"
+        );
+
+        assert!(
+            step.args.contains(&"--feature-powerset")
+                && step.args.contains(&"wasm32-unknown-unknown"),
+            "the step stopped being a wasm32 powerset"
+        );
+
+        // Retained, deliberately. This is a widening *above* the mandatory
+        // guard and never a replacement for it.
+        let probe = step
+            .probe
+            .expect("a mandatory powerset breaks every machine without cargo hack");
+        assert!(
+            probe.contains(&"hack"),
+            "the powerset's probe no longer names the tool it needs: {probe:?}"
+        );
+    }
 }

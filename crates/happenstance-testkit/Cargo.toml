@@ -11,7 +11,14 @@ description = "DCB conformance suite for happenstance event store adapters."
 # change added thirty-four rules, and thirty-four new ways for a previously
 # passing adapter to go red is the event this crate's independent number exists
 # to signal.
-version = "0.2.0"
+#
+# And moved *down* to a pre-release for the alpha, which reads as a mistake
+# unless the reason is here. CF-32 gives this crate an independent **number**,
+# not an independent **maturity**: the rule set it publishes measures a port that
+# is still moving, and a stable `0.2.0` would promise adapter authors — who are
+# told to pin this crate exactly — a bar that is going to change under them. The
+# suite goes stable when the contract it measures does.
+version = "0.2.0-alpha.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -25,20 +32,64 @@ readme = "README.md"
 # testkit's own `MemoryFixture` is a *published* item in `fixtures`, not a test
 # helper, because it is the reference implementation of `Fixture` an adapter
 # author reads before writing their own.
+#
+# `conformance` arrived with the projection family and is on unconditionally
+# rather than behind a feature of this crate's own. It gates `ProjectionProbe`,
+# which `ProjectionFixture::Store` is bound on — so a testkit that made it
+# optional would have a fixture trait that exists on some feature
+# configurations and not others, and every projection item would need a `cfg`
+# and a doc gate. It adds no dependency: the feature costs nothing in
+# `happenstance-core`.
+#
+# `unstable-projection` is stated rather than inherited through `conformance`,
+# which implies it. Restating it is the D12 lesson one crate over — a feature this
+# crate needs is named here even when today's graph happens to supply it — and it
+# is what a reader of this manifest needs to see, because `fixtures` names
+# `MemoryProjectionStore` and the projection suite names the port directly.
 [dependencies]
-happenstance-core = { workspace = true, features = ["std", "memory"] }
+happenstance-core = { workspace = true, features = [
+  "std",
+  "memory",
+  "conformance",
+  "unstable-projection",
+] }
 # Needed to spell `MemoryHandle`'s delegating `read` — the return type is
 # `impl Stream<…> + Send`, and the trait it satisfies is defined in terms of
 # `futures_core::Stream`.
 futures-core.workspace = true
 
 [features]
-default = []
+# `memory` is in `default` deliberately. `GappyMemoryStore` is gated on it, and a
+# gate whose feature is never declared is an item that silently does not exist;
+# a gate declared but left out of `default` is an item a `cargo add
+# happenstance-testkit` user never meets. It forwards to a `happenstance-core`
+# feature this crate already enables unconditionally above, so it adds no
+# dependency and changes no resolution — what it buys is a switch
+# `--no-default-features` can turn off, which is what keeps the feature powerset
+# honest about a `#[cfg]` over a `pub` item (RS-51-1).
+default = ["memory"]
+memory = ["happenstance-core/memory"]
 # The property-test generators in `fixtures::strategies` (CF-21). Off by
 # default so the mandatory `wasm32` build stays untouched — `proptest` does not
 # build for that target — and on under `--all-features`, which is what the
 # gate's clippy, test and doc steps all run.
 proptest = ["dep:proptest"]
+# The benchmark family (`bench`, `event_store_benchmarks!`). CF-34: performance
+# is measured by a *separate* harness which is not part of the conformance bar,
+# so this feature buys a fourth macro family and **no** conformance rule.
+#
+# It adds no dependency — the empty list is the point, and NF-001 pins it. What
+# a benchmark needs and this crate must not have is a clock: CF-33 forbids one
+# anywhere under `src/`, and `xtask`'s `lint-clock` step enforces it by scanning
+# for the construct. So the harness produces counts and the caller's emitter
+# produces durations, with the measurement crate — `criterion`, `divan`, a CSV
+# writer — living in the *caller's* `dev-dependencies`.
+#
+# Off by default, and the module is target-gated on top of that. A Cargo feature
+# is not target-scoped, so `--all-features` reaches `wasm32-unknown-unknown`
+# too; see `src/lib.rs`'s declaration and `fixtures.rs`'s note, which is the
+# same trap `proptest` above paid for once already.
+bench = []
 
 # Split by target so the wasm harness can be *compiled* for wasm32 without
 # dragging tokio's multi-threaded runtime — which cannot exist there — into the

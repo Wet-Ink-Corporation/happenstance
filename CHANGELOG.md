@@ -17,14 +17,426 @@ not the same as what a user needed to be told.
   passing adapter's CI red, so treat a minor bump there as breaking and pin it
   exactly.
 - **`ProjectionStore` ships behind an off-by-default `unstable-projection`
-  feature** and is exempt from semver until two adapters at opposite ends of the
-  batch-shape axis have passed its conformance suite. See
-  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+  feature** — declared on `happenstance-core`, and forwarded by `happenstance`
+  for the typed runner built over it — and is exempt from semver until two
+  adapters at opposite ends of the batch-shape axis have passed its conformance
+  suite. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
 
 ### Added
 
+- **`recorded_time_survives_a_reopen` finally has a negative control that reaches
+  its own sentence.** The rule asserts three things in order — the event survived
+  the reopen, it is at the same position, and *`recorded_at` is unchanged* — and
+  only the third is its reason for existing. Until now the one registered store
+  that failed it, `LosingFixture`, failed at the **first** assertion: its events
+  are gone, so the stamp comparison never executed and the rule's headline
+  sentence had never been shown to bite. `RestampingFixture` is the control that
+  does. The defect it encodes is a real first schema: a migration that stores
+  payload, type and tags and **no `recorded_at` column**, so opening the store
+  reconstructs the log by replaying rows and stamping them at open time. Every
+  event still returns, at its own position, under its own identity — the single
+  thing lost is the one clock reading whose provenance the log itself attested,
+  and an adapter that ships it hands every auditor the time of the last restart
+  with no error and no symptom. It fails exactly that one rule and passes
+  `acknowledged_writes_survive_a_reopen` and
+  `reopened_store_does_not_reissue_an_event_id` beside it, which is what makes it
+  a scalpel rather than a second `LosingFixture`; its registry row pins the
+  headline message, so a failure at the survival anchor is reported as the wrong
+  failure instead of counted as a pass. The re-stamped value is derived from a
+  per-fixture reopen generation rather than from a clock: the binary's correct
+  stamp is a **constant**, so a naive re-stamp lands on the value it replaced and
+  is invisible — that run happened, and the harness reported the store as
+  *declared to fail and passed* — while a wall clock would both violate the
+  no-clock rule and make the comparison a race at millisecond resolution.
+- **`happenstance-testkit` ships a benchmark harness, behind an off-by-default
+  `bench` feature — and it is deliberately not part of the bar.**
+  `event_store_benchmarks!(MyFixture::new())` is inherited exactly as
+  conformance is, one line against the fixture you already wrote, and it adds
+  **no** conformance rule: the rule-name list this crate publishes is
+  byte-for-byte what it was, `suite.rs` gained no rule, and the family carries
+  its own enumeration (`for_each_event_store_benchmark!`) beside the scenarios
+  it names. The specification requires performance to be measured by a separate
+  harness which is not part of the conformance bar, and this is that harness —
+  so **no result it produces can fail a merge**: there is no threshold in it, at
+  any budget, and no watchdog. Three scenarios, fixed by their two consumers
+  rather than chosen: append throughput over a batch of *n*; conditional append
+  under *k* contenders, reporting the committed and rejected counts *separately*
+  and distinguishing a condition violation from a store failure, because a run
+  in which nobody collided is a measurement of the wrong thing however fast it
+  was; and replay of *N* events, once unfiltered and once behind a tag filter.
+  *n*, *k* and *N* are the caller's, supplied at the call site. **The clock is
+  the caller's too.** Nothing in this crate's `src/` may read one, so the
+  harness reports counts and the per-scenario wrapper is the `emit` parameter —
+  which puts `criterion`, `divan` or a CSV writer in *your* `dev-dependencies`
+  and leaves this crate's exactly two. Four public items behind the feature, in
+  the new `bench` module: `BenchmarkParams`, `BenchmarkRecord`, `BenchmarkPass`
+  and `scenarios`, plus the macro and two emitters. The feature is additive and
+  off by default, so nothing an existing consumer sees moves; it is also
+  target-gated, because a Cargo feature is not target-scoped and
+  `--all-features` would otherwise reach `wasm32-unknown-unknown`.
+  `tests/memory_benchmarks.rs` runs the whole family against `MemoryFixture` on
+  every `cargo test --features bench`, so it ships having been executed rather
+  than merely compiled.
+
+## [0.2.0-alpha.1] — 2026-08-16
+
+**The first published release, and it is a pre-release on purpose.** The API is
+expected to move until the stable `0.2.0`; only one alpha resolves at a time,
+and each is yanked when the next lands. `happenstance-testkit` publishes on its
+own number, `0.2.0-alpha.1`, which moves *down* from its in-tree `0.2.0`: CF-32
+gives it an independent number, not an independent maturity, and a stable suite
+over a moving port is the promise this release refuses to make.
+
+Everything under `### Added`, `### Changed` and `### Fixed` below was written as
+it landed, phase by phase, rather than reconstructed from `git log` at release
+time.
+
+### Added
+
+- **`happenstance-testkit` ships two stores that misbehave on purpose, because
+  every store a consumer could reach behaves perfectly.** `FaultyStore<S>` and
+  its `Send` sibling `SendFaultyStore<S>` wrap any event store and can be armed
+  — `violate_next(n)`, `fail_next_read(n)` — to refuse an append with
+  `ConditionViolated` naming **no** conflicting event, or to fail a read at its
+  first polled item. The defect that detects: a retry loop that branches on
+  `ConditionViolated::conflicting_position` being `Some`. It works against every
+  in-process store and never retries against one reached over one-shot HTTP,
+  which reports `None` conformantly — so until now the input that separates a
+  correct caller from an incorrect one did not exist in-process at all.
+  `GappyMemoryStore::with_stride(NonZeroU64)` is the second: a fully conformant
+  store whose positions advance by a caller-chosen stride. The defect that
+  detects: a read-model handler that computes its next position by adding one.
+  Both stores run the full conformance suite themselves — the wrapper *unarmed*,
+  so a disarmed fixture is proved not to be lying about ordering, positions or
+  identity, and the gapped store with its stride, so its gaps are proved to be
+  the freedom VT-11 grants rather than a defect. No conformance rule is added,
+  so no adapter's CI can turn red because of this. Four items, all at the crate
+  root: `FaultyStore`, `SendFaultyStore`, `FaultyStoreError<E>` — the projected
+  error the port's associated type forces, because `MemoryStoreError` is
+  uninhabited and there is no `S::Error` to fabricate — and `GappyMemoryStore`.
+- **`happenstance-testkit` declares a `memory` feature, and it is on by
+  default.** It gates `GappyMemoryStore` and forwards to a `happenstance-core`
+  feature this crate already enabled unconditionally, so it adds no dependency
+  and changes no resolution. What it buys is a switch `--no-default-features`
+  can turn off, which is what keeps the feature powerset honest about a `#[cfg]`
+  over a `pub` item.
+- **`projection_store_conformance!` — a fourth rule family, and the first line
+  an adapter author can write against `ProjectionStore`.** One line in your own
+  `tests/` expands to one test per projection rule, named after the rule, on any
+  of three runtimes: `__emit_projection_tokio` (the default),
+  `__emit_projection_blocking` (no async runtime at all) and
+  `__emit_projection_wasm`, which routes a skipped rule's stated reason to
+  `console_log!` because `println!` writes nowhere on
+  `wasm32-unknown-unknown`. The set is written in
+  `for_each_projection_store_rule!` and nowhere else, and
+  `no_orphan_projection_rules` fails by name if a rule is declared without being
+  registered. It takes a `ProjectionFixture` — a new trait beside `Fixture`,
+  whose `Store` is bound on `ProjectionProbe` rather than on `ProjectionStore`,
+  so an adapter that cannot be observed cannot invoke the suite.
+  `fixtures::MemoryProjectionFixture` and `fixtures::MemoryProjectionHandle` are
+  the reference implementation to read first. `happenstance-testkit` now enables
+  `happenstance-core`'s `conformance` feature unconditionally; that adds no
+  dependency and no feature of its own.
+- **A declined projection capability is a reported skip, never a silent
+  absence.** `ProjectionFixture` gains three `Capability` constants —
+  `SECOND_HANDLE`, which is a **MUST**; `RESET_REFUSAL`, which a store with
+  no protection policy declines honestly; and `COMMIT_FAULT`, which says
+  whether the store can be made to fail a `commit` — in the vocabulary the event-store
+  family already uses, with no projection-local skip type and no second line
+  shape. The defect this machinery detects is the one CF-18 names by hand: a
+  capability-gated rule `#[cfg]`-ed out of the expansion, so that an adapter
+  author who declares a capability unsupported to turn a red build green gets a
+  green build and **no record of the trade** — a rule absent from the binary
+  being indistinguishable, in CI output, from a rule that passed. The check is
+  `mutation_coverage::projection_capability_skips_are_reported`, which drives
+  the whole projection enumeration against a fixture that declines everything
+  and asserts on `RuleOutcome` values rather than on stdout, because libtest
+  exposes nothing programmatically. Declining `SECOND_HANDLE` **fails** rather
+  than skips, carrying the fixture's own stated reason: a projection store whose
+  commit is visible only to the connection that made it cannot be observed to
+  keep PS-1 at all, so treating that as a recordable trade would certify an
+  adapter nothing ever looked at twice.
+- **`commit_advances_the_checkpoint`** — the first of the projection family's
+  rules, and the baseline the rest of §4.11 is differential against. It detects
+  a `commit` that returns `Ok` and makes **neither** the read-model row nor the
+  checkpoint durable — an adapter that reports success and advances nothing, so
+  a runner re-reads the same events forever and the read model never moves.
+  That defect is not a straw man: PS-1's MUST is a *coupling* rather than a
+  progress obligation, so "neither durable" satisfies the clause through its "or
+  not at all" arm and passes the atomicity rule below. This is the rule that
+  fails it. The checkpoint is read back through a **fresh handle**, which also
+  catches a store whose commit is visible only to the connection that made it,
+  and it is compared against the position the commit was given rather than
+  against any literal, because the specification permits gaps.
+- **`commit_is_atomic_with_the_read_model`** — PS-1 itself, and the invariant
+  the projection port exists for. It writes a probe row into a batch, commits at
+  a position, then reads the row **and** the checkpoint back through fresh
+  handles and requires both present or both absent, never one. The defect it
+  detects is a store that advances the checkpoint and silently drops the
+  read-model write — the natural shape for any adapter whose read model lives
+  somewhere other than its checkpoint table, and one whose consequence is a
+  projection that skips every event the discarded batch would have applied, with
+  no error anywhere and nothing in the log to find afterwards. It asserts the
+  coupling and deliberately nothing else, so a failure here means one half
+  landed without the other rather than something the baseline rule already owns.
+  Its wrong implementation, `CheckpointOnlyStore`, is registered in the
+  projection mutant registry and fails this rule by name, so the rejection is
+  demonstrated rather than documented.
+- **`failed_commit_leaves_both_unchanged`** — PS-1's *second* conjunct, the arm
+  about a commit that reported failure, and the first projection rule gated on a
+  capability. The defect it detects is a partial apply: an adapter that writes
+  its read-model rows one statement at a time and writes the checkpoint last,
+  with no transaction around the pair, so a failure on the checkpoint write
+  leaves the rows durable while `commit` reports the error honestly. The caller
+  is told the batch was refused; part of it has silently been applied, and the
+  checkpoint that would have recorded it is not there. Every other rule in the
+  family only ever sees a commit *succeed*, so a store can keep the first
+  conjunct perfectly and still leak half of every failed batch. Reaching the
+  failure needs the store's co-operation — nothing a caller holds can make a
+  conformant `commit` fail — so the rule is gated on the new
+  `ProjectionFixture::COMMIT_FAULT` and reports a skip carrying the fixture's own
+  reason where the store has no fault to arm. `MemoryProjectionFixture` is such a
+  store and declines, so the reference run prints a `SKIP` line for this rule;
+  `PartialCommitStore` is the registered wrong implementation that fails the rule
+  by name. (It is not the only one — `refused_reset_changes_nothing` below is
+  declined too. `assert_reference_projection_declensions` pins the whole set by
+  equality rather than any count written in prose.)
+- **A projection mutant registry, and nine wrong stores in it.** The projection
+  suite can now be shown to *fail* something, which is a different claim from
+  passing against the oracle and is the only one worth anything to an adapter
+  author. `tests/projection_mutation_coverage.rs` carries a hand-written
+  `REGISTRY` of stores and the exact rules each fails, four meta-tests over it —
+  every rule has a mutant, the registry and the store enumeration agree, each
+  mutant fails **exactly** what it declares, and every row states the adapter
+  shape that makes it plausible — and a `Defect` seam in which each hostile store
+  overrides one step of a correct core. No pass rate is quoted anywhere over the
+  set: the denominator is an author's choice, so a fraction reports how
+  representative the author was while reading as though it reported how good the
+  suite is. CF-5's conformant variant is named as an open hole rather than
+  asserted over an empty set.
+- **`rollback_leaves_both_unchanged`** — PS-8, and the reason `rollback` stays on
+  the port even though a buffered batch could just be dropped: Rust has no
+  `async Drop`, so an adapter holding a real transaction has no way to issue
+  `ROLLBACK` and await it from a destructor. The defect it detects is an adapter
+  whose `rollback` clears its own statement buffer, drops the guard and hands the
+  connection back **without ever sending `ROLLBACK`** — every driver with
+  implicit transaction handling makes that available, `Ok` comes back, and the
+  rows the batch carried are still there afterwards. A test asserting only that
+  `rollback` returned `Ok` certifies it. The rule reads both halves back through
+  a *fresh* handle and compares the checkpoint against what it was before the
+  rollback rather than against a position, so it asserts preservation and makes
+  no claim about progress.
+- **`dropped_batch_leaves_store_usable`** — PS-7, and the half of it that is
+  actually the rule. "A dropped batch rolls back" alone certifies a store that
+  has permanently lost its only writer, so this rule drops a batch **bare** — no
+  `commit`, no `rollback` — and then opens and commits a *second* batch on the
+  same handle and requires that second row to read back. The defect is an adapter
+  whose `begin` checks a connection out of a pool and whose `Drop` returns it to
+  nothing: `commit` and `rollback` both give it back, so only the path nobody
+  writes a test for leaks, and the store answers `Busy` for ever after. A
+  reviewer's probe found exactly that store, which is why the clause has a second
+  half at all.
+- **`commit_rejects_a_foreign_batch`** — PS-15. A batch begun on one store
+  instance and committed on another must be refused as
+  `CommitError::ForeignBatch`, and **neither store may move**. The defect is an
+  adapter that stamps the batch per *type* rather than per instance — a `const`,
+  a `Default`, a hash of the connection string — which is indistinguishable from
+  correct in any test holding one store and lets a runner with two stores commit
+  one projection's rows into the other's database. The check is at run time
+  because the type-level fix was compiled and refuted: a lifetime names a region
+  rather than an instance. This is the one rule in the family that does **not**
+  want a second handle onto one store; it wants two isolated stores, which two
+  `open()` calls already produce.
+- **`commit_accepts_a_position_the_batch_did_not_write`** — PS-21, and the clause
+  that makes a checkpoint a high-water mark of *consideration* rather than of
+  application. The defect is an adapter that validates `position` against what
+  the batch wrote, and registering it matters precisely because the misreading is
+  **reasonable**: "advances `id`'s checkpoint to `position`" reads like a claim
+  about applied work, and without this rule a validating store would be exactly
+  as conformant as one that accepts. Two backends could disagree and both pass,
+  which is a silent interoperability difference rather than a capability gap.
+  What it costs in the field is a narrow projection — forty matches in
+  thirty-seven thousand events — re-scanning the same range for ever on every
+  restart.
+- **`commit_rejects_a_regressing_position`** — PS-22. A commit naming a position
+  strictly below the current checkpoint is refused as
+  `CheckpointRegression { current, attempted }`, carrying both values so a caller
+  can log the gap rather than re-derive it, and neither half moves. The defect is
+  `UPDATE checkpoint SET position = ?` issued unconditionally, which is what
+  everyone writes and which is correct until two runners share an id: under a
+  redeploy where an old pod has not yet exited, the stale runner drags the
+  checkpoint backwards and every event between the two positions is applied
+  twice. The rule deliberately asserts nothing about an **equal** position,
+  because the clause permits accepting one.
+- **`distinct_projections_advance_independently`** — PS-23. Two projections in
+  one store advance at their own rates, and neither one's commit may disturb the
+  other's checkpoint or its rows. The defect is a checkpoint table with one row,
+  one position column and no key — what a store that has only ever run one
+  projection will write. The fastest projection drags every other one's
+  checkpoint forward, and the slower ones skip every event between the two
+  positions permanently, with nothing reported. It passes every other rule in the
+  family, which is why this one has to exist separately.
+- **`reset_clears_rows_and_checkpoint_together`** — PS-16, and the rule that
+  makes `reset` one unit of work rather than two statements that usually both
+  run. The defect it detects is the runbook procedure: clear the read model on
+  one connection, update the checkpoint on another. That is what Norvant's night
+  desk executed at 02:46:31, and the pod died at 02:46:33 before the second
+  statement — so the runner restarted, read the *old* checkpoint, resumed past
+  it, applied sixty-one events into an empty table and reported healthy. Both
+  halves are read back through a **fresh handle** and asserted together, because
+  the pairing is the claim and neither half alone is one. The rule also carries
+  PS-16's failure-injecting arm without needing a fixture that can arm a fault:
+  a batch begun on a different store instance is refused as
+  `ResetError::ForeignBatch`, and a `reset` that errored must leave both halves
+  exactly as they were.
+- **`reset_is_scoped_to_one_projection`** — PS-17. The defect it detects is a
+  `reset` that truncates the checkpoint table — one statement, no `WHERE`,
+  obviously correct until a second projection shares the file. Kestrel Cold
+  Chain's does: `van_stock` is rebuilt several times a day across 138 devices,
+  and `fgas_ledger` is a hash chain a regulator already holds and must never be
+  rebuilt at all. The rule commits rows and a checkpoint under **two** ids in one
+  store and asserts the sibling's rows and checkpoint are untouched, which is
+  what makes it non-decorative: without the sibling the same code passes and the
+  ledger is destroyed in the field. It hands `reset` an **empty** batch on
+  purpose, so that every row that disappears is the store's own doing rather than
+  the caller's `probe_delete_all`.
+- **`refused_reset_changes_nothing`** — PS-18, and the family's second
+  capability-gated rule. An adapter must be able to refuse a reset for a
+  projection its domain protects, and the operative half is that a refusal
+  **changes nothing**: the defects it detects are a policy enforced anywhere
+  except inside `reset`, so the call returns `Ok` and does the work, and a policy
+  checked *after* the deletes have gone out, so the refusal is reported perfectly
+  honestly over a read model that is already gone. A rule stopping at
+  `matches!(err, ResetError::Refused)` certifies the second. Reaching a refusal
+  needs the store's own policy, so the rule is gated on
+  `ProjectionFixture::RESET_REFUSAL` and names the projection to protect through
+  the new `ProjectionFixture::protect_from_reset`; `MemoryProjectionStore` holds
+  no protection policy and declines, so the reference run prints a second `SKIP`
+  line carrying that store's own words.
+- **`fresh_projection_has_no_checkpoint`** — PS-38's second sentence, and the
+  defect it detects is a checkpoint that answers for a projection nobody has ever
+  built. A `checkpoint` resolving a missing row with
+  `.unwrap_or(Checkpoint::Live { through: FIRST })` — what an author writes when
+  the position column is `NOT NULL DEFAULT 1` — tells a runner that a read model
+  that does not exist is authoritative and already considered through the first
+  position. The runner then resumes *past* the events it has never applied, and
+  every event at that position is skipped on the first run of every projection the
+  store has never seen. The rule asks for one id no commit has named and requires
+  the `Checkpoint::NeverRun` **variant**; it compares against no position, because
+  the position it would compare against is the exact value the defective store
+  writes.
+
+  **It arrived a day late, and the delay is the interesting part.** §4.11 filed
+  the rule under PS-19, whose `MUST` is scoped *after a successful `reset`* and
+  therefore says nothing about an id never seen — so the first version of this
+  rule convicted adapters of an obligation no sentence in the specification
+  stated, and `PresumedLiveCheckpointStore`, the store registered to fail it, was
+  **conformant**. The rule and its store were withdrawn rather than argued around.
+  What brought them back is a clause and not a re-reading: ADR-0030 minted PS-38,
+  whose second sentence is *"a `ProjectionId` no successful `commit` has named
+  MUST read as `Checkpoint::NeverRun`"*, and the rule now cites that. No
+  `[FROZEN]` clause was edited to make this pass; PS-19 is byte-identical across
+  the whole episode. If you are writing an adapter, the practical consequence is
+  that this obligation is `[PROVISIONAL]` — PS-38 falls to a store that answers
+  `checkpoint` from a replica that may lag its own `commit`, and the clause names
+  that falsifier itself.
+- **`reset_is_not_commit_at_first`** — PS-19 and PS-20, and the rule that turns
+  RUNBOOK's observation into an enforced rejection. The defect it detects is
+  `commit(empty_batch, id, SequencePosition::FIRST, Live)` used as a substitute
+  for a reset — **six deployment scenarios out of six reached for it and all six
+  got it wrong**. It compiles, it returns `Ok` and the checkpoint moves, so
+  everything anybody checks afterwards looks right; what it costs is event 1,
+  permanently and silently, because a runner resumes strictly after the position
+  it reads. The rule performs both operations on two ids in one store, asserts
+  the checkpoints differ **by variant**, and then derives a resume point from
+  each under the port's own rule — strictly after a recorded position, inclusive
+  from the store's first position when the checkpoint is `NeverRun` — asserting
+  the event at the first position is applied in the reset case and not in the
+  substitute's. No runner is built: the derivation is four lines the rule owns.
+- **`batch_reads_reflect_pending_writes`** — PS-12, and the first projection rule
+  whose gate is not on the fixture. The defect it detects is a batch `get`
+  implemented as one round trip on the connection the batch is already holding,
+  so it answers from **committed** state: a projection doing `get` then `set`
+  inside one batch reads the value from before the batch began, and every
+  increment after the first is lost with no error anywhere — least visibly when
+  the chunk is largest. The rule asserts the *value* it wrote, not merely that
+  something came back, so a store answering `Some(0)` for everything fails it.
+  An adapter whose batch offers no read path at all declares
+  `ProjectionProbe::READS_THROUGH_BATCH = false`, which PS-12 permits outright,
+  and gets a reported skip naming that constant — the switch is on the probe
+  beside the store, because whether a batch can be read through is a property of
+  the batch type rather than of the fixture's environment.
+- **`rebuild_is_chunk_size_invariant`** — PS-13 and PS-14, both `[FROZEN]`. A
+  rebuild runs at whatever chunk size fits the operator's memory budget, and this
+  rule is what stops that becoming a correctness variable nobody logs. It replays
+  one fixed sequence — `a, a, b, a, b, a` — at chunk sizes 1, 3 and whole-log
+  against three isolated stores, each step a read-modify-write **through the open
+  batch**, and requires the three runs' read models to be identical per key. The
+  defects it detects are a batch that reads from committed state (which loses
+  every repeat inside a chunk) and a batch that stages writes with
+  `entry().or_insert(…)`, keeping the **first** value for a key — the natural
+  spelling when a batch is thought of as a dedup buffer, whose reads are honest
+  and which therefore fails only here. The increment is load-bearing: a plain
+  `set` is chunk-insensitive by construction and would certify both clauses on
+  nothing.
+- **`rebuilding_is_distinguishable_from_live`** — PS-24. A reader deciding
+  whether the rows in front of it are authoritative gets its answer from the
+  checkpoint's variant, and the defect this detects is a rebuild in place behind
+  a single position field: `Authority` arrives at `commit` and is dropped, so the
+  checkpoint says `Live` over a half-built read model and every reader that asked
+  is told yes. The rule commits two chunks claiming `Authority::Rebuilding` and
+  one claiming `Authority::Live`, asserting the **variant** after each and never
+  the position it carries. It builds no runner: everything it needs is on the
+  port's own signature. It asserts nothing immediately after the reset that opens
+  it, because a rebuild that has committed nothing correctly reads `NeverRun`.
+- **A conformant projection variant, so both arms of a gate have a fixture.**
+  `NoBatchReadStore` declares `READS_THROUGH_BATCH = false` and leaves
+  `probe_read_through` `unimplemented!()` — the buffering and write-behind shape,
+  whose batch has nothing to read from until it is sent — and is registered as
+  `Kind::ConformantVariant` with an empty `fails` list. It is the projection
+  registry's first conformant variant, so
+  `projection_conformant_variants_pass_everything` lands with it: the only
+  assertion in that binary that can point at a **rule** rather than at a store,
+  because a rule over-specified beyond its clause fails a store that is
+  deliberately, legally different. `NO_BATCH_READ_PATH` and
+  `NO_BATCH_READ_PATH_REASON` are exported beside `NO_STORE_LIMITS` and
+  `NO_CEILING_REASON` and are the second and last instance of the
+  testkit-written-reason exception.
+- **Five more wrong projection stores, and three declarations grown.**
+  `TwoStatementResetStore` (the 02:46:31 truncate whose second statement never
+  ran), `TruncatingResetStore` (`DELETE FROM projection_checkpoints`, no
+  `WHERE`), `CommitAtFirstResetStore` (the substitute six scenarios reached for),
+  and `RefusalAsSuccessStore` and `RefusalAfterTheFactStore` (the two halves of a
+  protection policy that is not in the write path) are registered in the
+  projection mutant registry, each failing exactly what it declares at a pinned
+  assertion. Three existing rows grew rather than the new rules being weakened to
+  preserve them, which is the exactness meta-test working: a store that makes
+  nothing durable, one that stamps its batches per type, and one that validates a
+  commit's position are each visible to a reset rule as well. Still no pass rate
+  anywhere over the set. A sixth store — `PresumedLiveCheckpointStore`, a missing
+  checkpoint row read as `Live` — is **held** with the rule it fails, for the
+  reason stated above: it is conformant with PS-19 as the clause is written
+  today.
+- **`MemoryProjectionStore`, behind the existing `memory` feature** — the
+  projection port's answer to `MemoryEventStore`, and the first implementation of
+  that port anywhere that actually runs. It is the oracle a failing adapter is
+  measured against, the target of a runnable `begin` → write → `commit` →
+  read-back walkthrough on its own page, and the fix for the port's cold start:
+  an adapter author now has something to copy. Costs no new dependency, and
+  `MemoryProjectionBatch` and `MemoryProjectionStoreError` are exported beside it.
+  With `conformance` also on, it implements `ProjectionProbe` and declares
+  `READS_THROUGH_BATCH = true` — the apply-on-write end of the batch-shape axis
+  the projection suite has to span.
+- **`ProjectionProbe`, behind a new off-by-default `conformance` feature** on
+  `happenstance-core` — the write seam the projection conformance suite drives an
+  adapter's read model through. It lives beside the port rather than in
+  `happenstance-testkit` because an adapter's own `tests/` directory is a third
+  crate, where the orphan rule rejects the impl; here it costs an adapter author
+  one feature flag on a dependency they already have and **no new edge in their
+  dependency graph**. The feature is `[]`: no dependency, and it implies neither
+  `std` nor `memory`.
 - **Six adapter skeletons, as instruments rather than as adapters.**
   `happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon` are
   new; `happenstance-sqlite`, `happenstance-ladybug` and `happenstance-sync` grew
@@ -947,7 +1359,102 @@ not the same as what a user needed to be told.
   `contains_event_id` deliberately did **not** become a step: no rule calls it,
   so a defect there would be a claim nothing evaluates.
 
+- **`happenstance-testkit`'s crate page now tells an outside author how to
+  conform, in six steps.** *Writing a projection adapter from outside this
+  workspace* names the two dependencies and which section each belongs in, says
+  where the `ProjectionProbe` impl must live and what the orphan rule answers if
+  you put it in `tests/`, and says why the expansion reaches the fixture trait
+  through a hidden `__private` module you never name. **No item became `pub` and
+  no rule changed**, so this is not a MINOR event on the bar this crate's version
+  is a promise about — the surface was already complete, and what was missing was
+  the page that says so.
+
+- **`examples/outside-projection-adapter/` — the page's falsifier, kept in the
+  tree.** A `publish = false` workspace member implementing `ProjectionStore` and
+  `ProjectionProbe` from the rendered documentation alone, passing every rule in
+  `for_each_projection_store_rule!` — one of them as a declared skip carrying its
+  own stated reason — with a checkpoint-only sibling beside it that
+  `commit_is_atomic_with_the_read_model` rejects by name. It is the only crate in
+  the workspace where the orphan rule and the non-dev dependency graph behave as
+  they do for a stranger, which is what makes it able to fail the wrong version
+  of that placement decision: `cargo tree --edges normal` over it reaches
+  `happenstance-core` and nothing else.
+
+- **A gate step that reads the documents a consumer reads, and fails when they
+  state a rule count this workspace does not have.** `cargo xtask
+  lint-rule-counts`, mandatory in `cargo xtask ci` and in the story-grain
+  `affected` gate. Every other step in the gate holds code to a document; this
+  one runs the other way, because the failure it catches had already happened
+  four times in three file formats at once — the crates.io README, the crate
+  page's feature list, the manifest comment beside the feature, and the
+  changelog entry for the outside-author example all said the projection suite
+  was two rules of seventeen, or sixteen, through the commits that made it
+  seventeen. `cargo package --list` proves the README is *inside* the artifact
+  (D11); nothing proved it was *true*, and three consecutive audits raised it as
+  a finding rather than a red build.
+
+  It reads a cardinal — digits or words, `eighty-nine` included — qualifying
+  `rule` or `rules` inside a paragraph about the suite, and compares it against
+  the rule files themselves. `one test per rule` is a rate and is skipped;
+  `CHANGELOG.md` is excluded, because a released entry that was true when it was
+  written must not be rewritten to keep a check green. The counts come from the
+  same parse CF-29 and `spec-trace` use, so landing a rule moves the bar with no
+  edit here.
+
 ### Changed
+
+- **The gate now holds the projection family's proof-artefact names, and harness
+  parity is enforced by a test rather than by review.** `cargo xtask ci`'s *each
+  phase's proof artefacts* step asserts the projection mutant registry's
+  meta-tests and the new harness-parity target out of `cargo test -- --list`
+  **before** running them, so renaming, `#[ignore]`-ing or emptying one of them
+  fails the gate by name instead of exiting 0 with nothing to say. Each
+  `happenstance-testkit` row now prints **its own** registry's row count; it used
+  to select the count by package, so a second row in that package would have
+  printed the event-store registry's number beside the projection target.
+
+  The parity guard is `crates/happenstance-testkit/tests/projection_harness_parity.rs`.
+  It takes the rule names from `for_each_projection_store_rule!` and asserts that
+  no harness source contains one as an identifier and that each of the three
+  carries exactly one `projection_store_conformance!` invocation. A harness that
+  listed rules by hand type-checks exactly as well as a generated one, so the
+  mandatory `wasm32` check could not have seen it and a reviewed `rg` could not
+  have failed twice.
+
+- **`unstable-projection` exists, and the promise at the top of this file is now
+  true.** `ProjectionStore`, `ProjectionId`, `Checkpoint`, `Authority`,
+  `CommitError`, `ResetError`, `SendProjectionStore`, `ProjectionProbe` and
+  `MemoryProjectionStore` are behind an off-by-default feature on
+  `happenstance-core`; `cargo add happenstance-core` no longer hands you the
+  projection port, and a build that names one of those items without the flag
+  fails to compile instead. `conformance` implies it, so an adapter author running
+  the projection suite still writes one flag. `memory` does **not** — the memory
+  projection store needs both, because it implements the port the gate is on.
+  Nothing else in the crate changed shape, and opting back out is deleting the
+  flag.
+
+  **The reason is not that nothing tests it.** All seventeen conformance rules
+  §4.11 assigns to an adapter's own suite are written and drive the port, a store
+  that writes a checkpoint without its read model fails one by name, and two
+  structurally unlike batch shapes pass all of them. The reason is the bar §4's PS-2 sets for *freezing* it
+  — two adapters at opposite ends of the batch-shape axis — and both shapes that
+  clear the suite today are instruments this workspace wrote. What retires the
+  exemption is that same suite green against a projection adapter over storage
+  this workspace does not control. The module header states it where the compiler
+  error sends you.
+
+- **Every `PS` clause's rule citation is now checked, and §4's clause count moved
+  by one.** `cargo xtask spec-trace` used to abstain on the whole `PS` family
+  because the projection suite did not exist; it does, so the exclusion went, and
+  ten citations that had never been resolved by anything were dispositioned —
+  three were parser artefacts naming a doctest annotation, a probe method and a
+  projection callback rather than rules, and seven are rules that genuinely are
+  not written yet and now say so. **PS-38** is new
+  ([ADR-0030](references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md)):
+  a successful `commit` MUST advance the checkpoint, and an id no commit has named
+  MUST read as `NeverRun`. Four rules already enforced that and no clause stated
+  it. No `[FROZEN]` sentence was edited — PS-1, PS-19, PS-21 and PS-22 are
+  byte-identical, and each gained a recorded finding instead.
 
 - **`EventStore::append`'s documentation no longer offers the returned position
   as a follow-up `AppendCondition::after`.** It never was one: positions may be
@@ -1027,6 +1534,29 @@ not the same as what a user needed to be told.
   was just sent.
 
 ### Fixed
+
+- **`MemoryProjectionStore::default()` handed every instance the same identity,
+  which disabled the foreign-batch check.** The struct derived `Default`, and the
+  derive fills the per-instance `stamp` with `0` while the counter starts at `1`
+  — so two stores built with `default()` compared equal, `b.commit(a.begin(), ..)`
+  and `b.reset(a.begin(), ..)` were both *accepted*, and rows and checkpoint were
+  mutated by a batch the receiving store never opened. `CommitError::ForeignBatch`
+  and `ResetError::ForeignBatch` were unreachable through that constructor while
+  the tests, which all used `new()`, stayed green. `Default` is now hand-written
+  as `Self::new()`, mirroring `MemoryEventStore`, and
+  `commit_rejects_a_foreign_batch_from_default_stores` plus its `reset` twin fail
+  on the derive. This matters more than an ordinary bug: this store is the oracle
+  a failing adapter is presumed wrong against.
+
+- **`cargo doc -p happenstance-core` failed on the crate's *default* feature set
+  while both existing doc steps passed.** `MemoryProjectionStore`'s page linked
+  `ProjectionProbe::READS_THROUGH_BATCH`, an item gated on `conformance`, and
+  `rustdoc::broken_intra_doc_links` is `deny` — so the configuration a consumer
+  gets from `cargo add` was a hard error, invisible to `--all-features` (the gate
+  is open, the link resolves) and to `--no-default-features` (the page is never
+  rendered). The link is now spelled plainly, and a third gate step,
+  `documentation (default features)`, builds that configuration so the blind spot
+  cannot reopen. Same defect class as D13, one feature axis over.
 
 - **`happenstance` and `happenstance-core`'s READMEs promised "MSRV 1.85,
   checked in CI".** Phase 2 raised the floor to 1.97.1
@@ -1163,4 +1693,4 @@ not the same as what a user needed to be told.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main
+[0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

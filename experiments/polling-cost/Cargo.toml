@@ -1,0 +1,47 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root and adopting this crate as a member —
+# the same trick `experiments/wire-format/Cargo.toml` documents. No entry in the
+# root `members` list changes, no `crates/**` manifest gains a dependency, and
+# this never runs under `cargo xtask ci`.
+#
+# That is CF-34 expressed in a file rather than in a promise: performance is
+# measured by a separate harness, and the harness MUST NOT be part of the
+# conformance bar. `cargo xtask affected --base main` over a diff touching only
+# `experiments/` selects no package, which `is_inert`'s `experiments/` prefix
+# already guarantees and this crate must not disturb.
+#
+# The lockfile that resolves beside this manifest is this crate's own. The
+# workspace `Cargo.lock` is untouched.
+[workspace]
+
+[package]
+name = "polling-cost"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The **real** runner, by path, with the feature that gates it. A harness that
+# re-implemented the poll loop would measure the harness; this is also the first
+# time `run_projection` is held from outside the workspace, which makes it an
+# unplanned usability check on a signature nobody had consumed yet.
+happenstance = { path = "../../crates/happenstance", features = [
+    "unstable-projection",
+    "memory",
+    "json",
+] }
+# Naming `Stream` is unavoidable in a hand-written `impl EventStore`, and the
+# counting instrument is one. It is already in `happenstance-core`'s graph, so
+# this adds no node to anything.
+futures-core = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# `GappyMemoryStore`, for the staleness observer's gap test. Dev-only: the
+# measured path never sees it, and a store that leaves holes is the instrument
+# that separates a comparison from a subtraction.
+happenstance-testkit = { path = "../../crates/happenstance-testkit" }
+
+[profile.release]
+debug = true
