@@ -18,6 +18,8 @@
 // way the `[command-loop]` reference below is already written.
 //! DCB-compliant event sourcing, with batteries.
 //!
+//! > **Answers:** `tutorial` — How do I decide, write, and hold an invariant?
+//!
 //! One enum of events, one struct that folds them, and one call that reads,
 //! decides, appends and retries:
 //!
@@ -61,13 +63,16 @@
 //! # Ok::<(), Box<dyn Error>>(()) }
 //! ```
 //!
+//! To watch that boundary *refuse* a write instead, in three runnable steps: [the opening encounter](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/first-encounter.md).
+//!
 //! # What arrives here, and what stays below
 //!
-//! The discriminator is **encoding**. [`happenstance_core`] deals in opaque
-//! bytes on purpose — that is what keeps adapters free of domain knowledge and
-//! lets replication forward events without deserialising them. Anything that
-//! knows how a payload is *shaped* belongs here, so that the contract crate
-//! never grows a `serde` dependency in its default feature set.
+//! The discriminator is **encoding**. [`happenstance_core`](happenstance_core)
+//! deals in opaque bytes on purpose — that is what keeps adapters free of
+//! domain knowledge and lets replication forward events without deserialising
+//! them. Anything that knows how a payload is *shaped* belongs here, so that
+//! the contract crate never grows a `serde` dependency in its default feature
+//! set.
 //!
 //! [ADR-0006](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0006-bare-name-to-the-typed-layer.md)
 //! is why the bare name is here rather than on the contract: an application
@@ -137,9 +142,9 @@
 //! dev-dependency. A test double belongs in a second crate rather than in an
 //! application's own dependency graph.
 //!
-//! Adapter authors should depend on [`happenstance_core`] directly rather than
-//! on this crate: it is the smaller semver surface, and it is the one the
-//! conformance suite is written against.
+//! Adapter authors should depend on [`happenstance_core`](happenstance_core)
+//! directly rather than on this crate: it is the smaller semver surface, and
+//! it is the one the conformance suite is written against.
 //!
 
 // The vocabulary's command-loop reference resolves to whichever door this build

@@ -124,6 +124,14 @@ mod append_conditions {
     #![doc = include_str!("../../docs/append-conditions.md")]
 }
 
+// The opening encounter. Three fences, each a whole program, and the third one
+// asserts the refusal the page is about — so removing the boundary from it
+// turns this module red rather than turning a sentence stale.
+#[cfg(doctest)]
+mod first_encounter {
+    #![doc = include_str!("../../docs/first-encounter.md")]
+}
+
 // Registered like any other page, and it carries no `rust` fence at all. That
 // is the point: it is the retained fixture behind the `text`-fence limit stated
 // in `xtask/src/lint_narrative.rs`, walked by the checker on every run and
