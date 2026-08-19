@@ -21,13 +21,13 @@ archetype: capability
 slice: binding-beyond-this-project
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T01:00:28.528Z
+updated: 2026-08-19T01:00:33.060Z
 links:
   pr: null
   commits:
     - dc58e80
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
