@@ -127,3 +127,35 @@ That line is printed from inside the matched arm, so it cannot appear unless the
 store really refused — which it is required to do, and required to report under
 exactly that name
 ([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)).
+
+### Try it wrong, then put it back
+
+The program above is compiled and run by this repository's own gate, so you can
+break it and watch something fail. Two minutes, and one expression.
+
+**The edit.** In the fence above, drop the guard from the append — change
+`Some(&condition)` to `None`, and leave everything else alone. It still
+compiles, and it still runs. Then:
+
+```text
+cargo test -p xtask --doc -- first_encounter
+```
+
+**What you should see.** The run goes red, and this is the line to look for. It
+is the program telling you what it got instead of a refusal:
+
+```text
+the boundary did not hold: Ok(SequencePosition(2))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+```
+
+The failing test is named `narrative::first_encounter (line 96)`, after this
+page. The path in the panic above it is not this page: doctests report against a
+temporary file, and the test's name is the part that identifies where you are.
+
+**Putting it back.** Change `None` back to `Some(&condition)`. Re-run the same
+command and it passes again, with nothing else in your tree to repair.
+
+An append that is accepted where it should have been refused is a lost update
+with no error anywhere. You have just watched the single expression that is the
+difference.

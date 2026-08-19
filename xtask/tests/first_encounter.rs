@@ -538,12 +538,26 @@ fn every_fence_imports_from_the_facade_and_binds_the_weaker_trait() {
 // AC-008 — normative weight is a citation, never a restatement
 // ---------------------------------------------------------------------------
 
+/// The clause citation is the last element of every step's **own** material.
+///
+/// "Own material" is the six budgeted elements, which stop at the first `###`:
+/// the design composes the falsification drill as step 3's one declared
+/// additional element, sitting *after* the citation
+/// (`_design.md` `## Composition`, "Step 3 additionally carries, after item 6…").
+/// Reading to the end of the step instead would make this assertion demand the
+/// citation come after the drill, which is the opposite of what is signed off —
+/// and `xtask/tests/falsification_drill.rs::the_drill_is_a_subsection_at_the_bottom_of_step_three`
+/// is what holds the drill below the citation from the other side.
 #[test]
 fn every_step_closes_on_a_clause_citation() {
     let page = read(PAGE);
     for (heading, _) in STEPS {
         let body = step(&page, heading);
-        let last = body
+        let own: Vec<&String> = body
+            .iter()
+            .take_while(|line| !line.starts_with("### "))
+            .collect();
+        let last = own
             .iter()
             .rev()
             .find(|line| !line.trim().is_empty())
