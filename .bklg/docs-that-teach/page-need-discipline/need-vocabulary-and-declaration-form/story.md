@@ -20,13 +20,13 @@ archetype: foundation
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:29:36.383Z
+updated: 2026-08-19T00:30:09.306Z
 links:
   pr: null
   commits:
     - 55b987b
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
