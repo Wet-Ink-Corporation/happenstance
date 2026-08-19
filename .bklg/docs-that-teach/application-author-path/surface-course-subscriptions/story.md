@@ -21,10 +21,11 @@ archetype: capability
 slice: conceptual-bridge
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:03:07.260Z
+updated: 2026-08-19T19:50:39.841Z
 links:
   pr: null
-  commits: []
+  commits:
+    - "5805623"
   kb: []
 gate_open: false
 schema: 1

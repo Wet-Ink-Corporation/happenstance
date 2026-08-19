@@ -28,7 +28,7 @@ process_rev: "92524823"
 
 ## Summary
 
-Three measured density overages on `crates/happenstance/src/lib.rs` — the page a
+Four defects on `crates/happenstance/src/lib.rs`, three of them measured density overages — the page a
 `cargo add happenstance` reader lands on. They are properties of HS-P0016's `commit`
 landing program and its headings, not of any page `docs-that-teach` authored.
 
@@ -52,6 +52,36 @@ The three findings, verbatim from `_conditions.md:207-209`:
 | F-1 | the crate-root fence is **35 rendered lines** | 32, the crate-root exemption in `_design.md` § Density budget | count the non-hidden lines of the fence in the module doc of `crates/happenstance/src/lib.rs:26-64` |
 | F-2 | **70 columns** on two lines | 68; 72 is where `overflow-x` engages on the 696px fence at 1024×768 | widest rendered fence line in `target/doc/happenstance/index.html` |
 | F-3 | two of four `##` headings exceed **22 characters**, at 39 and 26 | 22; the 200px sidebar TOC clips with an ellipsis and never wraps | `git grep -n "^//! # " -- crates/happenstance/src/lib.rs`, then count each title |
+
+### F-4 — the landing fence zeroes the consistency boundary the page now points at
+
+Added 2026-08-19, after `HS-P0022`'s project review. Same file, same root cause — landing
+copy this initiative may not touch — so it is recorded here rather than as a second item
+on one page.
+
+`crates/happenstance/src/lib.rs:40` and `:57` both call `Tags::empty()`. The initiative
+charter describes that call, at `.bklg/docs-that-teach/initiative.md:51-53`, as **zeroing
+out the consistency boundary**. `HS-P0022` then added a sentence one line beneath that
+fence, at `:66`: *"To watch that boundary refuse a write instead"* — a pointer to
+`docs/first-encounter.md`, where a boundary genuinely does refuse.
+
+So the crate's landing page now demonstrates the boundary being zeroed and, immediately
+below, promises the reader a boundary that holds. Both statements are true in isolation;
+read top to bottom they teach against each other.
+
+**Why it is not a `docs-that-teach` defect.** AC-006 binds pages that initiative
+*authored*, and the fence is HS-P0016's. The one thing that is fair to say about the
+review process is recorded rather than glossed: `boundary-refusal-encounter`'s O2 check
+(`_conditions.md:126`) cleared AC-006 by reading only the lead-in **above** the fence and
+never considered the sentence added **below** it. The criterion is not unmet; the check
+was narrower than the page.
+
+**How to re-see it:** `git grep -n "Tags::empty" -- crates/happenstance/src/lib.rs`, then
+read `:26-66` in one pass.
+
+**Origin:** `HS-P0022` `_review.md` finding F-B, and
+`.bklg/docs-that-teach/application-author-path/_integration.md:167-168`, which is where the
+reviewer noted it had no Redkiln item of its own.
 
 ## Impact
 
