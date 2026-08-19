@@ -32,7 +32,7 @@ Seventeen assertions, all red before the page existed, all green after:
 
 | SHA | Subject |
 | --- | ------- |
-| `077e3ff` | feat(application-author-path): Boundary refusal encounter |
+| `9493276` (amended from `077e3ff` only to carry this SHA) | feat(application-author-path): Boundary refusal encounter |
 
 ## Changes
 
