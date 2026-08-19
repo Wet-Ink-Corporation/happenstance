@@ -200,6 +200,7 @@ diff is its own backlog folder; everything else arrives through the merge commit
 ## PR boundary
 
 ```
+xtask/src/main.rs
 xtask/src/spec_trace.rs
 standards/rust/51-features-and-no-std.md
 standards/rust/52-wasm32-and-target-cfg.md
@@ -219,8 +220,25 @@ crates/happenstance/tests/doc_budget.rs
 > the point of naming first is that nobody gets to decide a file was in scope by
 > having already edited it.
 >
+> **Amended again during implementation, 2026-08-18, and this is the second half
+> of the same honesty.** The list above said six; `git diff-tree --cc --name-only
+> a5c0f30` — the command that asks git which files differ from **both** parents,
+> which is the mechanical definition of a resolution — reports **seven**. The
+> seventh is **`xtask/src/main.rs`**, and the paragraph below already described
+> its conflict ("Both branches inserted a `REQUIRED` step into
+> `xtask/src/main.rs`") while the fence block omitted the path itself. It is a
+> genuine union resolution: our side added the `lint-pages` dispatch arm and two
+> `lint_steps()` entries, theirs added `lint-rule-counts` and one, and the merge
+> kept all of them. Adding the path is not a scope decision — the file was
+> resolved either way, one commit before either list was written — and a fence
+> known to be incomplete is worse than one that records its own bad ordering.
+> The measurement, and this correction, are `_baseline.md` § Dispositions row 8.
+>
 > What each is, so the scrutiny the paragraph demands can actually be applied:
 >
+> - **`xtask/src/main.rs`** — both branches added a subcommand dispatch arm and
+>   `lint_steps()` entries. Resolved as a **union**; taking either side would
+>   have dropped a lint step the other branch's gate depends on.
 > - **`xtask/src/spec_trace.rs`** — both branches added tests to the same
 >   `mod tests`. Resolved as a **union**, 230 lines of ours plus 54 of theirs;
 >   taking either side would have deleted passing tests.
