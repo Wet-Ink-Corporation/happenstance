@@ -14,7 +14,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | # | project | id | dependsOn | terminal | state | verdict | review |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
-| 2 | page-need-discipline | HS-P0021 | 1 | no | in-progress | — | — |
+| 2 | page-need-discipline | HS-P0021 | 1 | no | done | approved | `page-need-discipline/_review.md` |
 | 3 | application-author-path | HS-P0022 | 1, 2 | no | pending | — | — |
 | 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
@@ -218,3 +218,84 @@ rejected is the self-certification this loop exists to prevent. Preflight reads 
 axes from git, so the relaunch re-enters `discipline-on-disk` at Review with the findings
 above as hypotheses, runs the fix -> re-review -> re-seal tail, and then opens slices 2 and 3.
 `baseRef` is unchanged at `b23b238d`.
+
+### Run 3 — HS-P0021, workflow `wf_39c79725-e82` — COMPLETE
+
+Re-launched fresh, not resumed. Preflight read both axes from git, saw `discipline-on-disk`
+committed but sealed `changes-requested`, and re-entered it **at Review** — no implementer was
+dispatched for the four stories already committed. The fix → re-review → re-seal tail ran, then
+slices 2 and 3 opened in order. `baseRef` unchanged at `b23b238d`.
+
+- 8/8 stories; all three slices sealed **`approved`**; `degradedSummary: none`; no blockers; no
+  baseline repairs. 21 agents, 0 errors.
+- Project review **`approved`**, overall **3**, 0 uncovered ACs, 0 missing artifacts
+  (`page-need-discipline/_review.md`). Integration bar green — `dodGreen: true`,
+  `reachabilityOk: true`, 0 fixme'd, 0 unmounted, the 15 whole-initiative DoD scenarios deferred
+  to HS-P0025 by design (`_integration.md`).
+- Rubric: ac-coverage 3, integration-reachability 3, test-integrity 3, gate-greenness 3,
+  brief-fidelity 2, intent-fidelity 2, presentation-fidelity 0 (exempt, per the standing
+  adjudication under run 1 — not re-raised).
+- One caveat on the evidence: the safety classifier timed out reviewing `gate:page-need-gate-step`.
+  That slice's substance was verified independently at the orchestrator — the fence fix read in
+  source, `cargo xtask ci --fast` green, `doctor` and `validate --kb` clean.
+
+#### The run-1 blocker, verified fixed
+
+The parity count is gone. `xtask/src/lint_pages.rs` now walks fence open/close state
+(`fence_tag_problems`) and `the_fence_check_rejects_the_three_wrong_fences` holds three wrong
+fences as `&str` specimens — bare, `rust`-tagged, and unterminated — each asserted to report on
+the **opener's** own `file:line`. The third case was named by neither the reviewer nor this
+orchestrator: an unterminated opener re-phases every fence after it. Checked in source before the
+halt was accepted as resolved, not taken from the report. The inverse bug in
+`router_is_inside_its_budgets` went with it.
+
+#### Two defects the gates found that the adversarial reviewers did not
+
+Both surfaced only when `redkiln advance` ran the deterministic story gate, after the project
+review had already scored the work. Neither changes a score; both are places where a reviewer's
+*verified* was not the same as *checked*.
+
+**1. Five of eight stories escaped their declared PR boundary.** Amended at `a41a1a5`, with the
+reason inline and the original declaration left standing above it as the audit trail.
+
+| story | outside its fence | what it is |
+| --- | --- | --- |
+| HS-S0147 / HS-S0148 / HS-S0149 | `xtask/src/lint_pages.rs`, 412 / 253 / 277 lines | every hunk inside `mod tests` — tests pinning each story's own rule atom |
+| HS-S0150 | `standards/rust/{51,52,70,80}-*.md` | forced citation renumber, identical to `c52b031`'s case |
+| HS-S0150 | `xtask/src/lint_narrative.rs` | the fence declared `xtask/src/narrative.rs`, which names no file in this repository |
+| HS-S0150 | `docs/append-conditions.md`, `docs/text-fences.md` | pin repairs; the fence said `docs/README.md` |
+| HS-S0151 | the slice-mate's `implementation-report.md` | corrected eight lines the checker story wrote about its own behaviour |
+
+Two Merge DoD lines asserted `git diff main -- xtask` is empty. They were false and are corrected
+rather than left to read as met.
+
+**The cause of the first three is structural and will recur.** Stories are implemented **one whole
+slice per context, integration-first**, and a slice's stories share one Rust module — so a
+per-story fence that partitions `lint_pages.rs` between slice-mates cannot be satisfied by a story
+that writes any test at all. The alternative was leaving each rule atom unpinned until the checker
+story, which is the half-mount `_storymap.md` explicitly rules out. **Carried to HS-P0022–HS-P0025:
+stop fencing per story inside a module a whole slice shares.** A fence naming a nonexistent path is
+worth noting separately — it is invisible to the check and can only ever under-constrain.
+
+**2. Two `_ledger.md` files were unparseable, from their own checkpoints.** Fixed at `cf7b1ff`.
+`ledgerBlock` scans from the `# … ledger` heading for the first fence and abandons the search the
+moment it meets another heading (redkiln 0.19.0 `dist/index.js:14761-14779`).
+`governed-page-cites-the-discipline` and `playbook-atom-staged-for-ingest` both put narrative
+sections in between, so each read as having **no acceptance block at all** rather than a malformed
+one — the same shape of failure as #136: strictest on the most thorough artifact.
+
+They were shaped that way at `263dc7b` and `dc58e80`, their own checkpoints; the review fix pass
+added to the sections but did not create the problem. So the adversarial slice reviewer and the
+project reviewer both cited these ledgers as evidence while, to the tooling, they were absent —
+nothing in the workflow runs `redkiln verify --grain story`, and the story gate was the first thing
+to look. The fenced block was moved and nothing inside it edited; a pointer sits at the old
+position saying so.
+
+#### Verdicts executed, 2026-08-18
+
+- All 8 stories: provenance recorded first (`record-links`, checkpoint SHA each), then `plan` →
+  `report`, `--verdict approved --stay`. All now `report`/`in-review`, holding for closeout.
+- HS-P0021: `implementation` → `integration` → `review`, then `--verdict approved --stay`
+  (`aadf0589`). Now `review`/`in-review`. The integration gate ran `cargo xtask ci --fast` green.
+
+Project 2 state: **done**.
