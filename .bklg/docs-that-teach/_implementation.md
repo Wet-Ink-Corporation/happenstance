@@ -15,7 +15,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
 | 2 | page-need-discipline | HS-P0021 | 1 | no | done | approved | `page-need-discipline/_review.md` |
-| 3 | application-author-path | HS-P0022 | 1, 2 | no | pending | — | — |
+| 3 | application-author-path | HS-P0022 | 1, 2 | no | in-progress | — | — |
 | 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
 | 6 | durable-audience-closeout | HS-P0025 | 5 | **yes** | pending | — | — |
@@ -299,3 +299,84 @@ position saying so.
   (`aadf0589`). Now `review`/`in-review`. The integration gate ran `cargo xtask ci --fast` green.
 
 Project 2 state: **done**.
+
+### Run 4 — HS-P0022 application-author-path
+
+- Entry preflight: tree clean; `entry_baseline` green so the full-suite gate was skipped;
+  affected baseline `cargo xtask ci --fast` green.
+- **The merge, done in preflight under human supervision rather than inside the workflow.**
+  HS-S0183's job is to merge `initiative/from-contract-to-published-library` forward — 294
+  commits, a sibling initiative still in flight. It conflicted in five files, and the human
+  decision was to resolve it here rather than hand it to an unattended subagent.
+
+  | file | resolution |
+  | --- | --- |
+  | `xtask/src/spec_trace.rs` | **union**, 230 lines ours + 54 theirs. Both branches added tests to the same `mod tests`; taking either side would have deleted passing tests |
+  | `standards/rust/{51,52,70,80}-*.md` | Evidence line numbers only. Both branches had inserted a `REQUIRED` step into `main.rs` and repointed these at their own numbers, so **neither side was correct** against the merged file. Took theirs as the base, recomputed all ten, re-verified — 27 atoms, all consistent |
+
+  One test was red afterwards and is fixed in the merge commit: `doc_budget.rs`'s `read()` now
+  normalises CRLF. The test matches source text against literal `\n`; the repo runs
+  `core.autocrlf = true` with no `.gitattributes`, so a freshly **checked out** file is CRLF. The
+  sibling worktree passes only because its agents **wrote** those files as LF — a fresh clone on
+  Windows fails identically, so this is a **latent defect on that branch** the merge exposed
+  rather than caused.
+
+  Merge `a5c0f30`, green on `cargo xtask ci --fast` and
+  `cargo test --workspace --all-features --no-fail-fast`. HS-S0183's fence was then amended
+  (`6d44316`) to name all six conflict-resolution files — and records that they were named
+  **after** resolution, not before as its own spec requires, because the point of naming first is
+  that nobody decides a file was in scope by having already edited it.
+- baseRef: `7c62e4d1`, captured after the `design` -> `implementation` advance. Held stable
+  across re-launches.
+
+### Run 4 result — HS-P0022, workflow `wf_d0c0929a-11d` — HALTED (blocked dependency)
+
+- 4/8 stories committed. `preflight-and-anchor` sealed **`approved`** (`7016d65`);
+  `opening-encounter` committed (`9493276`, `cc9c4a4`) but **unsealed**; slices 3 and 4 never
+  opened. No baseline repairs. 9 agents, 0 errors, 0 retries.
+- **`degradedSummary: 2 fatal`**, and the label is wider than the fact. Both entries are
+  `strayPaths` — seven helper files agents wrote outside the worktree, all under this session's
+  scratchpad (`check_baseline.py`, `measure2.py`, `check_resolutions.py`, and a `dt-probe`
+  scratch crate used to certify DT-6). They are verification instruments, not deliverables; no
+  repo file outside the worktree was touched and no declared artifact is missing. A real
+  isolation-rule violation, benign in effect — recorded rather than filed away.
+
+#### BC-002 — the blocker, and why halting was right
+
+`boundary-refusal-encounter` stopped at its `implement` step rather than delivering three ACs
+partially. `_design.md` § Composition composes a `## A boundary refuses` section as a **second**
+fence on `crates/happenstance/src/lib.rs`. The merge deleted the premise that was written
+against, and the merged page carries its own signed-off assertions:
+`crates/happenstance/tests/doc_budget.rs:157` requires **exactly one** fence — *"a second one
+would demote the first, which is the page's primary hierarchy signal"* — and
+`MODULE_DOC_LINES = 130` caps the module doc, which this story's own additions take to exactly
+130. Both verified at the orchestrator against the merged tree before the halt was accepted.
+
+The only route to the section was deleting HS-P0016's signed-off `commit` landing program —
+outside this project's seam per `project.md`'s risk table, named by two vocabulary bullets, and
+the crate's one demonstration of the typed layer ADR-0006 gave the bare name to.
+
+**Nothing was stubbed, no test weakened, no criterion re-worded, and `_design.md` was not
+edited.** The reader-facing surface is complete: `docs/first-encounter.md` is authored, mounted,
+executed and reachable, and the crate root took the answered-need line and a pointer to it. This
+is the halt-loudly-on-a-missing-dependency path working exactly as intended.
+
+#### Resolved 2026-08-19 — amend the design (`faa8834`)
+
+Human decision: **amend the design; do not amend the merged tree.** The crate root does not carry
+the refusal; it is authored once, on `docs/first-encounter.md`.
+
+- `_design.md` § Composition region 4 and the `## Hierarchy` primary-element bullet are struck by
+  amendment notes that leave the original text standing as the audit trail.
+- `spec.md` gains `## Amendment — BC-002` immediately above the acceptance table, naming exactly
+  which clause of AC-002, AC-007 and AC-008 falls and what stands in its place.
+- `_conditions.md` records the two rejected routes: raising the crate-root budgets (overrides
+  another project's signed-off assertion from inside a documentation story — editing the check
+  that says no is not answering it) and replacing the landing program (outside the seam, and it
+  would meet a reader with an untyped `Bytes` program on the crate whose identity is the typed
+  layer).
+
+**The cost is recorded, not absorbed.** The composition decision the spec was built on — *a
+reader who lands on docs.rs meets the refusal before they meet the plan* — is not delivered.
+That reader meets a `commit` program and reaches the refusal one hop later. The three inherited
+AC-007 overages on the crate root are **recorded as owed by HS-P0016**, not waived.
