@@ -7,9 +7,9 @@ title: The Application Author's Path
 parent: HS-I0007
 initiative: docs-that-teach
 project: application-author-path
-status: in-review
+status: implementing
 process: project
-stage: design
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T13:00:33.115Z
+updated: 2026-08-19T03:00:34.233Z
 links:
   pr: null
   commits: []
