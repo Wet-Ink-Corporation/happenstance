@@ -21,7 +21,7 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| preflight-and-anchor | approved | merge-forward-preflight 63fa959, tension-resolutions 661ebfa | (this commit) |
 
 ## Surviving findings
 
