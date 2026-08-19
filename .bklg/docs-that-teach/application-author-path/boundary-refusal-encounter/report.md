@@ -9,21 +9,30 @@ updated: "2026-08-18T00:00:00.000Z"
 
 ## Findings Ledger
 
-The story's outcome as the review gate reads it. **Five of eight criteria are satisfied; three
-carry a crate-root clause that the merged tree makes unauthorable and are routed rather than
-flipped.** The reader-facing surface this story exists to land — `docs/first-encounter.md` —
-is complete, mounted, executed by the gate, and reachable from the crate root.
+The story's outcome as the review gate reads it, **reconciled 2026-08-19 against `spec.md`
+§ Amendment — BC-002**, which the sign-off owner authored at `faa8834` *after* the rows below
+were first written. **Seven of eight criteria are satisfied; one — AC-007 — is carried forward
+as an open shortfall with a named destination and is not flipped.** The reader-facing surface
+this story exists to land — `docs/first-encounter.md` — is complete, mounted, executed by the
+gate, and reachable from the crate root.
+
+The reconciliation is the point of this revision. Before it, three rows said *partial — routed*
+while the amendment that supersedes them said two of the three stand as met; a story cannot be
+presented for review with its ledger and its governing amendment disagreeing about what is
+done. AC-002 and AC-008 are flipped against the amendment's *what stands in its place* column.
+AC-007 is not, because the clause it strikes is *owed* to an item that does not yet exist —
+see the row and `_conditions.md` § *The three crate-root overages, and where they go*.
 
 | AC | Result | What proves it | Mount |
 | --- | --- | --- | --- |
 | AC-001 | **satisfied** | The step-3 doctest, executed: `cargo test -p xtask --doc -- first_encounter` → 3 passed. The print sits inside the matched `Err(AppendError::ConditionViolated(_))` arm (`docs/first-encounter.md:112-117`), so `refused: ConditionViolated` cannot appear unless the store refused; the output block at `:122-124` is byte-equal to that stdout. `xtask/tests/first_encounter.rs::step_three_prints_the_refusal_from_inside_the_matched_arm` | `xtask/src/narrative.rs:128-136` |
-| AC-002 | **partial — routed** | Met: the fence executes rather than type-checking (`crates/happenstance/src/lib.rs:26-64`), no roadmap sits above it, the adapter redirect is last, ADR-0006's reasoning survives verbatim (`:76-81`), and literal `[happenstance_core]` bracket pairs are **zero under both** doc invocations where the baseline measured 2. Not met: `## A boundary refuses` and its refusal fence — see BC-002 | `crates/happenstance/src/lib.rs` |
+| AC-002 | **satisfied as amended** | `spec.md` § Amendment — BC-002 strikes the `## A boundary refuses` heading, fence and printed refusal; everything standing in their place is met. The fence executes rather than type-checking (`crates/happenstance/src/lib.rs:26-64`), no roadmap sits above it, the adapter redirect is last (`:145-147`), ADR-0006's reasoning survives verbatim (`:77-82`), literal `[happenstance_core]` bracket pairs are **zero under both** doc invocations where the baseline measured 2, the answered-need line stands above everything (`:21`), and the pointer beneath the fence (`:66`) reaches the refusal in one hop | `crates/happenstance/src/lib.rs` |
 | AC-003 | **satisfied** | `::every_later_step_opens_on_its_two_line_header_block` (two rendered lines, one-hop link to step one, first element under both later headings), `::step_one_carries_the_answered_need_in_line_ones_place`, `::every_step_fence_is_a_complete_program` — and tier 3, which compiles and runs all three fences as independent units | `xtask/src/narrative.rs:128-136` |
 | AC-004 | **satisfied** | Red then green on the real doctest: untagged racing append → `the boundary did not hold: Ok(SequencePosition(2))`; `.with_tags(held)` → refused. `::the_racing_append_and_the_after_are_both_load_bearing` additionally rejects `Query::all()` and `Tags::empty()` | `xtask/src/narrative.rs:128-136` |
 | AC-005 | **satisfied** | Zero `#`-prefixed lines on the authored page (`::no_hidden_line_carries_any_part_of_the_boundary`); on the crate root, two hidden lines, neither a boundary construct, with the `#[tokio::main]` wrapper decided **permitted** and recorded as observation O1 | `crates/happenstance/src/lib.rs` |
 | AC-006 | **satisfied** | `cargo run -p xtask -- lints` → `3 pages, all consistent`, which is the checker that reports *unregistered* and *dangling registration* in both directions; `docs/README.md:20`; `IGNORE_ALLOWANCES` still `&[]`; no `ignore`/`no_run`/`compile_fail` anywhere on the page | `xtask/src/narrative.rs:128-136` |
-| AC-007 | **partial — routed** | Met in full on the page: 68 columns, 24 lines, 435-character paragraphs, one answered-need per surface above the first fence, zero affordances, no prior-model vocabulary, facade-only imports, seven elements per step. Not met: three **inherited** crate-root numbers (35 lines vs 32, 70 columns vs 68, two `##` headings over 22) — see BC-002 | `crates/happenstance/src/lib.rs` |
-| AC-008 | **partial — routed** | Met: all three steps close on an inline clause link (ES-8, ES-26, ES-25); `spec-trace` → `no problems found`; no `MUST` on either surface. Not met: the crate-root section that would carry the citation does not exist — see BC-002 | `xtask/src/narrative.rs:128-136` |
+| AC-007 | **carried — open, with a destination** | Met in full on the page: 68 columns, 24 lines, 435-character paragraphs, one answered-need per surface above the first fence, zero affordances, no prior-model vocabulary, facade-only imports, seven elements per step. Open: three **inherited** crate-root numbers (35 rendered lines vs 32, 70 columns vs 68 on two lines, two `##` headings over 22 at 39 and 26). The amendment strikes them and records them *owed by HS-P0016*, which is on the unmerged sibling branch and cannot receive a route from here; they are restated with their measurement in `_conditions.md` § *The three crate-root overages, and where they go* and need one `redkiln new` in the `support` initiative before this row may be flipped | `crates/happenstance/src/lib.rs` |
+| AC-008 | **satisfied as amended** | `spec.md` § Amendment — BC-002 confines the criterion to `docs/first-encounter.md`, there being no crate-root section to carry a last sentence. All three steps close on an inline clause link in last position (ES-8, ES-26, ES-25); `spec-trace` → `no problems found`; no `MUST` on either surface; the crate-root pointer (`:66`) reaches the ES-25 sentence in one hop. Hardened on the fix pass by `::step_two_reaches_the_boundary_its_citation_claims`, which checks the ES-26 citation against what step 2's program *does* rather than against a resolvable anchor | `xtask/src/narrative.rs:128-136` |
 
 **The one deferral, stated once.** `_design.md` composes a `## A boundary refuses` section on
 the crate root carrying the refusal fence, and `merge-forward-preflight/_baseline.md` routed the
@@ -58,17 +67,41 @@ unless the store refused, and reports the actual value when it does not. The fen
 at exactly 24 rendered lines and 68 columns — DT-4's zero-headroom measurement — paid for by
 folding the `use` block from four lines to three.
 
-**Scope.** One path outside `spec.md`'s PR-boundary fence: `xtask/tests/first_encounter.rs`,
-the seventeen source-reading assertions. Recorded as observation O4 rather than answered by
-widening the fence, on `_baseline.md` § Carried forward P2's reasoning — a fence widened to
-quiet a report stops being a statement about scope.
+**Scope, and how it was answered.** One path landed outside `spec.md`'s five-entry PR-boundary
+fence at checkpoint `9493276`: `xtask/tests/first_encounter.rs`, now eighteen source-reading
+assertions. It was recorded as observation O4 rather than answered, on the reasoning that a
+fence widened to quiet a report stops being a statement about scope. That reasoning was right
+about *widening in silence* and wrong about what EC-010 permits: EC-010 names exactly two
+responses — revert it, or route it as its own story — and recording is neither. The fence is
+now amended to admit `xtask/tests/**`, with the reason inline and on its own commit (`4232b34`),
+in the form `a41a1a5` used. The widening admits tests only; `xtask/src/**` stays outside, so no
+production path, gate step or `REQUIRED` entry is admitted by it, and EC-010's actual concern —
+a second page under `docs/` — is untouched.
+
+**Step 2 said more than its program showed, and now does not.** The sentence beneath step 2's
+fence cited ES-26 — *`after` is exclusive, an event at exactly `after` never rejects* — over a
+program that read an **empty** store, so `after_opt(None)` meant "no matching event at all" and
+the exclusivity boundary was never reached. That is this initiative's headline defect shape in
+miniature, on the page written to close it, and no check in the repository could see it:
+`::every_step_closes_on_a_clause_citation` requires only a link and `spec-trace` only that the
+id resolves. The program is corrected rather than the sentence — step 2 now lands one matching
+event, reads it back so `upto` is `Some(SequencePosition(1))`, and guards on exactly that
+position, which is also a closer on-ramp to step 3. Its output block, byte-equal to the run,
+shows both numbers: `1 seen, up to Some(SequencePosition(1)), at SequencePosition(2)`. The new
+assertion `::step_two_reaches_the_boundary_its_citation_claims` fails against the old program
+(verified red: *step two never lands an event of its own*), so the citation is checked against
+what the fence does rather than against a resolvable anchor. Line numbering is unchanged — the
+three fences still open at 16, 55 and 96 — so the drill's quoted `narrative::first_encounter
+(line 96)` and `_drill-observation.md` remain byte-accurate.
 
 ## Acceptance
 
-Five of eight criteria satisfied with cited evidence in `_ledger.md`; three partial, each
-carrying its met half as evidence and its blocked half routed to BC-002. `redkiln verify
---grain story` will therefore report `ledger` red until the sign-off owner answers BC-002, and
-that is the intended reading: a partial criterion is not a satisfied one.
+Seven of eight criteria satisfied with cited evidence in `_ledger.md`. **AC-007 is carried
+open**: its page half is met and cited, its three inherited crate-root numbers are struck by
+the amendment but owed to an item that does not exist yet, so `redkiln verify --grain story`
+will report `ledger` red until that item is opened and the row flipped against its id. That is
+the intended reading — a criterion whose strike has no owner is not a satisfied one, and this
+is the shortfall the project-level review must carry to closeout rather than absorb.
 
 Traced project ACs: **AC-004** (`project.md:242-246`, initiative DoD-3 — "following the opening
 encounter end to end from its first step, a reader reaches a running program in which an append

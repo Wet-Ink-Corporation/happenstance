@@ -569,6 +569,72 @@ fn every_step_closes_on_a_clause_citation() {
     }
 }
 
+/// Step 2 cites ES-26, so step 2's program must reach what ES-26 is about.
+///
+/// `every_step_closes_on_a_clause_citation` above only requires a *link*, and
+/// `cargo xtask spec-trace` only requires the *id to resolve*. Neither can see
+/// the defect this initiative was seeded by — a sentence claiming semantics
+/// over a program that only demonstrates syntax — and this page is the one
+/// written to close it. ES-26 is the **exclusivity** of `after`: an event at
+/// exactly `after` does not reject. A program that guards an *empty* store
+/// never reaches it, because `after_opt(None)` means "no matching event at
+/// all" (ES-25's other half) and no position is ever compared. That is the
+/// wrong implementation this rule rejects, and it is the one the page shipped
+/// with until this check existed.
+#[test]
+fn step_two_reaches_the_boundary_its_citation_claims() {
+    let page = read(PAGE);
+    let text = step(&page, STEPS[1].0).join("\n");
+    assert!(
+        text.contains("#es-26--"),
+        "step two no longer cites ES-26; this assertion is what ties that \
+         citation to the program, so it must move with the citation rather \
+         than be left asserting a clause the step stopped claiming"
+    );
+
+    let owned = fences(&text);
+    let program = owned
+        .iter()
+        .find(|fence| fence.info == "rust")
+        .map(|fence| fence.body.join("\n"))
+        .expect("step two carries a fence");
+
+    // The store is seeded before it is read, so the read observes a matching
+    // event and `upto` is `Some(...)`.
+    let seeded = program
+        .find(", None).await")
+        .expect("step two never lands an event of its own");
+    let read_back = program
+        .find("read_decision_model(")
+        .expect("step two never reads");
+    assert!(
+        seeded < read_back,
+        "step two reads an empty store, so `after` is None and the \
+         event-at-exactly-`after` boundary ES-26 states is never reached"
+    );
+
+    // The guard is built from that observed position, and the guarded append
+    // is admitted rather than refused — both halves of what the prose claims.
+    assert!(
+        program.contains("after_opt(upto)") && program.contains("Some(&condition)"),
+        "step two does not guard on the position its own read observed"
+    );
+
+    // And the reader can see it: the output block names that position, so the
+    // boundary is on screen rather than only in the sentence beneath it.
+    let output = owned
+        .iter()
+        .find(|fence| fence.info == "text")
+        .map(|fence| fence.body.join("\n"))
+        .expect("step two carries an output block");
+    assert!(
+        output.contains("Some(SequencePosition("),
+        "step two's output never shows the position it guarded on, so a reader \
+         cannot tell an admitted append at a real boundary from one that had \
+         no boundary to clear: {output}"
+    );
+}
+
 #[test]
 fn no_sentence_states_a_rule_in_the_pages_own_words() {
     let page = read(PAGE);

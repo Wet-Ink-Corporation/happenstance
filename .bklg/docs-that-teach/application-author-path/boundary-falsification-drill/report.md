@@ -38,9 +38,21 @@ either way.
 `crates/happenstance/tests/doc_budget.rs` allows exactly one fence there, and the module-doc
 budget is already at its ceiling. The twin is therefore
 `crates/happenstance/tests/boundary_refusal.rs` — the placement this story's own PR boundary
-pre-authorises and its EC-002 pre-scopes — and it carries the half no doc fence can: the same
+pre-authorises — and it carries the half no doc fence can: the same
 append run *without* the condition, asserted accepted. It also reports against a file a reader
 can open.
+
+**The trigger was BC-002, and this sentence is here so a later reader does not read it as
+EC-002.** This story's EC-002 is the contingency for *the executed path failing to execute* —
+HS-P0020's step type-checking without running — and its response routes a substrate finding to
+HS-P0020. It did not fire. The executed path executed: `cargo test -p xtask --doc --
+first_encounter` → `3 passed`, and `_drill-observation.md` § Direction one shows the page mount
+going red under the edit, which a compile-only step could not do. The spec pre-scoped
+`crates/happenstance/tests/**` under EC-002 alone, so the file is in-fence for a reason the spec
+happened to write down rather than for the reason it actually landed — and reading the row the
+other way would misroute a substrate finding to HS-P0020 that nobody made. What the substitution
+gives up is that the twin is not a reader-facing surface: the page proves the claim to the
+reader, the twin proves it to the repository.
 
 **One substrate finding routed.** EC-004 fired on the page mount: the doctest's panic reports
 against a rustdoc temporary bundle under the OS temp directory, not against
@@ -56,10 +68,16 @@ of `_design.md` `## Composition`. It now reads to the first `###`, and the drill
 the drill below the citation from the other side, so both halves of the ordering are asserted
 where before one was asserted backwards.
 
-**Scope.** One path outside this story's PR-boundary fence: `xtask/tests/falsification_drill.rs`,
-the nine source-reading assertions, for the same reason and with the same disposition as the
-slice-mate's observation O4 — `xtask` is the crate that owns the narrative tree, and the
-alternative is no mechanical check at all for AC-001, AC-006 and AC-007.
+**Scope, and how it was answered.** One path landed outside this story's PR-boundary fence at
+checkpoint `cc9c4a4`: `xtask/tests/falsification_drill.rs`, the nine source-reading assertions.
+Recording it — the disposition it first took, matching the slice-mate's observation O4 — is not
+one of the two responses EC-010 sanctions. The fence is now amended to admit `xtask/tests/**`,
+with the reason inline and on its own commit (`4232b34`). It was already admitting
+`crates/happenstance/tests/**`, so what was missing was `xtask`'s test directory, not a decision
+to exclude it; `xtask` is the crate that owns the narrative tree and is `publish = false`, the
+widening is tests-only, and the alternative was no mechanical check at all for AC-001, AC-006
+and AC-007 — including the byte comparison between the failure the page quotes and the failure
+the transcript recorded, which is the check this story's own risk table ranks first.
 
 ## Acceptance
 

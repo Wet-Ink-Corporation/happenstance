@@ -28,6 +28,18 @@ rather than forecast.
 Seventeen assertions, all red before the page existed, all green after:
 `cargo test -p xtask --test first_encounter` → `17 passed; 0 failed`.
 
+> **Fix pass, 2026-08-19 — an eighteenth assertion, red first.**
+> `::step_two_reaches_the_boundary_its_citation_claims` was written against the *shipped* step 2
+> and failed on it — `step two never lands an event of its own` — because that program cited
+> ES-26's exclusivity over an empty store, where `after_opt(None)` means "no matching event at
+> all" and the boundary is never reached. Green after the program was corrected to seed, read
+> back and guard on the observed position:
+> `cargo test -p xtask --test first_encounter` → `18 passed; 0 failed`, and
+> `cargo test -p xtask --doc -- first_encounter` → `3 passed`. The rows above are the
+> implementation run's record and are left as written; the ledger's AC-002 and AC-008 are
+> flipped on the fix pass against `spec.md` § Amendment — BC-002, and AC-007 is carried open —
+> `_conditions.md` § *Acceptance reconciliation*.
+
 ## Commits
 
 | SHA | Subject |
@@ -106,7 +118,22 @@ invocations, which is the statement `_baseline.md` disposition row 9 asked this 
    fence. It is the repository's own idiom for a composition check no compiler can make, and
    `xtask` is the crate that owns the narrative tree. Recorded as observation O4 rather than
    answered by widening the fence.
+
+   > **Corrected 2026-08-19.** Recording is not one of the two responses EC-010 sanctions.
+   > The fence is amended to admit `xtask/tests/**`, tests only, with the reason inline and on
+   > its own commit (`4232b34`). The reasoning above is why the amendment went that way rather
+   > than a revert; it was never a licence to leave the violation standing.
 3. Steps 1 and 2 close on ES-8 and ES-26 rather than on ES-25. `_design.md`'s per-step
    composition requires a clause citation as every step's last element and names ES-25 only for
    step 3; ordering and the exclusivity of `after` are what steps 1 and 2 actually demonstrate.
    Both ids resolve under `spec-trace` and both lines come from `_baseline.md` § Anchors.
+
+   > **Corrected 2026-08-19.** Step 2 *cited* the exclusivity of `after` over a program that
+   > did not reach it: the store was empty when it read, so `after_opt(None)` meant "no matching
+   > event at all" (ES-25's other half) and ES-26's boundary was never compared against
+   > anything. The program is corrected rather than the sentence — step 2 now lands one matching
+   > event, reads it back so `upto` is `Some(SequencePosition(1))`, and guards on exactly that
+   > position; its output block shows both numbers. `::step_two_reaches_the_boundary_its_citation_claims`
+   > is the new assertion that ties the citation to what the fence does, verified red against
+   > the old program. The three fences still open at lines 16, 55 and 96, so the drill's quoted
+   > test name and `_drill-observation.md` stay byte-accurate.

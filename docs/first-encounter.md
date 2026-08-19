@@ -49,8 +49,8 @@ every other reader of the store sees
 >
 > Arrived here cold? [Start at step one](#append-and-read-back).
 
-The write now carries a guard: append only if nothing matching that query has
-landed above the position the read observed.
+This time the store is not empty. The write carries a guard: append only if
+nothing matching that query landed above the position the read observed.
 
 ```rust
 use happenstance::{AppendCondition, Event, EventStore};
@@ -63,25 +63,25 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let held = Tags::from_pairs([("course", "c1")])?;
     let item = QueryItem::new(["SeatHeld"], held.clone())?;
     let seats = Query::from_items([item])?;
-
-    let (taken, upto) = read_decision_model(&store, &seats).await?;
     let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
+    store.append(&[seat.clone()], None).await?;
 
+    let (seen, upto) = read_decision_model(&store, &seats).await?;
     let condition = AppendCondition::new(seats).after_opt(upto);
     let at = store.append(&[seat], Some(&condition)).await?;
 
-    println!("{} seats seen, appended at {at:?}", taken.len());
+    println!("{} seen, up to {upto:?}, at {at:?}", seen.len());
     Ok(())
 }
 ```
 
 ```text
-0 seats seen, appended at SequencePosition(1)
+1 seen, up to Some(SequencePosition(1)), at SequencePosition(2)
 ```
 
-Nothing had landed, so the append is admitted — `after` names the last position
-you did see, and an event at exactly that position never rejects
-([ES-26](../spec/SPECIFICATION.md#es-26--the-ac3-boundary-after-is-exclusive-from-is-inclusive)).
+A matching event already sits at exactly the position you read to, and the
+append is still admitted: `after` is exclusive, and an event at exactly that
+position never rejects ([ES-26](../spec/SPECIFICATION.md#es-26--the-ac3-boundary-after-is-exclusive-from-is-inclusive)).
 
 ## A condition that refuses
 
