@@ -7,9 +7,9 @@ title: The playbook atom staged under .kb/_intake/, never hand-authored into .kb
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: binding-beyond-this-project
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:26:57.198Z
+updated: 2026-08-19T01:00:28.528Z
 links:
   pr: null
   commits:
     - dc58e80
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
