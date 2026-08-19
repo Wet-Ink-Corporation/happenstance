@@ -9,7 +9,7 @@ initiative: docs-that-teach
 project: page-need-discipline
 status: implementing
 process: project
-stage: implementation
+stage: integration
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-18T16:05:42.265Z
+updated: 2026-08-19T01:03:19.607Z
 links:
   pr: null
   commits: []
