@@ -249,3 +249,16 @@ The § Anchors table is machine-checkable as it stands: each row's last column i
 whose printed line number must equal the line in its second column. A row that has rotted says
 so the first time anyone runs it, which is the only property that makes this table worth more
 than the corpus of line citations it supersedes.
+
+## § Carried forward to HS-P0025
+
+Two process observations from this story that are **not** rework here and must not be
+rediscovered at closeout. HS-P0025 (`durable-audience-closeout`) owns the whole-initiative
+merge-forward re-observation in `merge-forward-baseline/`, which is the story that meets both
+of these next; project DoD item 9's routing rule (`project.md:300-302`) is why they are written
+down rather than remembered.
+
+| # | the observation | why it is HS-P0025's | what would close it |
+| --- | --- | --- | --- |
+| P1 | This story's PR-boundary fence was completed **after** its conflict resolutions rather than before, twice (`spec.md:213-264`), against its own EC-001. The disclosure is in the fence itself and the slice review verified all seven resolved files independently — union preserved, no test dropped, all ten recomputed constitution citations resolving, the `doc_budget.rs` CRLF normalisation strengthening the test — so nothing is hidden by it, and the ordering is the whole finding | The next merge-bearing story is HS-P0025's, and it merges a wider tree than this one did. The point of naming a resolution path *first* is that nobody gets to decide a file was in scope by having already edited it — a property that survives only if the rule is met before the merge, not audited after it | The closeout's merge story names every path it expects to resolve **before** running the merge, and records the delta between that list and `git diff-tree --cc --name-only <merge>` as a finding either way |
+| P2 | `redkiln verify --grain story` cannot express "arrived by parentage". Both this story's and `tension-resolutions`' `boundary` checks failed on ~230 paths the merge commit's **second parent** brings, none of them authored — `git diff HEAD^1 HEAD` is empty of anything either story wrote. Neither was answered by widening the fence, and both recorded the raw output instead (EC-007, `_ledger.md`; `tension-resolutions/_resolutions.md § Conditions and dispositions`) | A glob cannot describe a merge, so every merge-bearing story on this initiative pays the same false failure and answers it in prose. Whether the fix is a `verify` flag, a first-parent diff, or a documented exemption is a tooling decision, not a story decision — and the closeout is where tooling observations for this initiative are collected | A recorded disposition at closeout: either an issue on the `support` initiative (`.redkiln/config.yaml:5`) naming the desired semantics, or an explicit statement that recording the raw output is the accepted answer and merge stories will keep doing it |

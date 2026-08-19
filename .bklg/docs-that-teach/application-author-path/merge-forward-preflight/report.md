@@ -71,3 +71,13 @@ than by a preference:
    which reports exactly the files that differ from **both** parents — the mechanical
    definition of a conflict resolution, and the check that caught this story's own fence naming
    six of seven.
+
+**Two of those are now carried, not just harvested.** The slice review raised this story's
+EC-001 ordering — the PR-boundary fence completed *after* the conflict resolutions, twice —
+as a non-blocking process finding, having verified all seven resolved files independently and
+found nothing hidden by the disclosure. It and candidate 3 above are written into
+`_baseline.md § Carried forward to HS-P0025` as **P1** and **P2**, each with what would close
+it, and `durable-audience-closeout/merge-forward-baseline/spec.md`'s `## Anchors` table now
+points at that section — so the next merge-bearing story meets them before it merges rather
+than rediscovering them after. A harvest candidate that only exists in a report nobody opens at
+the moment it applies is the same defect as an unreachable record.

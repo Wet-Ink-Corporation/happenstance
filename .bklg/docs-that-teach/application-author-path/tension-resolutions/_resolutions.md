@@ -23,12 +23,12 @@ would otherwise be hit mid-authoring, one story at a time:
 recorded with a status and routed. `_design.md` is byte-identical to its signed-off state.
 
 **The probes ran outside the repository**, in a scratch crate that depends on
-`crates/happenstance` by path (EC-008, NF-006). Nothing landed in the tree: the three fences
-are compiled *and executed* as doctests, the geometry is read off rustdoc's own render of
-them, and only the transcripts are committed. To rebuild it: a `[workspace]`-isolated crate
-outside the repository with `happenstance = { path = "…/crates/happenstance", features =
-["std", "memory", "json"] }` and a `tokio` dev-dependency, then `cargo test --doc` and
-`cargo doc --no-deps`.
+`crates/happenstance` by path (EC-008, NF-006). Nothing landed in the tree: every fence
+transcribed below is compiled *and executed* as a doctest, the geometry is read off
+rustdoc's own render of it, and only the transcripts are committed. To rebuild it: a
+`[workspace]`-isolated crate outside the repository with `happenstance = { path =
+"…/crates/happenstance", features = ["std", "memory", "json"] }` and a `tokio`
+dev-dependency, then `cargo test --doc` and `cargo doc --no-deps`.
 
 This record consumes `merge-forward-preflight/_baseline.md` rather than re-running its
 archaeology: `§ Anchors` supplies every clause line cited below, `§ Dispositions` supplies the
@@ -209,7 +209,11 @@ it would simply fail. The hazard worth teaching is the quiet one, and it is the 
 **Probe, and it is the load-bearing one.** The wrong-side fence was written against the merged
 API, compiled, and **run**. It imports from `happenstance` (ADR-0006), binds `EventStore` and
 never `SendEventStore` (CLAUDE.md constraint 4, `_design.md:776-780`), hides nothing, and is
-marked wrong at both ends:
+marked wrong at both ends. **Re-transcribed and re-measured on 2026-08-18** after review found
+the first transcript carried a *second* delta against the correct fence — an untagged
+`Event::new("SeatHeld", &b"{}"[..])?` appended under the condition — which is a delta on the
+very axis this lesson teaches and which would have shipped an untagged domain event as the
+bridge page's rendered shape. The fence below carries **one** delta, and it is the tag:
 
 ```
      1  19  use happenstance::{
@@ -226,33 +230,47 @@ marked wrong at both ends:
     12  53      let item = QueryItem::new(["SeatHeld"], narrow)?;
     13  43      let seats = Query::from_items([item])?;
     14  68      let (_taken, upto) = read_decision_model(&store, &seats).await?;
-    15  68      let other = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
-    16  40      store.append(&[other], None).await?;
+    15  67      let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
+    16  47      store.append(&[seat.clone()], None).await?;
     17  64      let condition = AppendCondition::new(seats).after_opt(upto);
-    18  51      let seat = Event::new("SeatHeld", &b"{}"[..])?;
-    19  65      let accepted = store.append(&[seat], Some(&condition)).await;
-    20  29      println!("{accepted:?}");
-    21  65      assert!(accepted.is_ok(), "the narrow guard did not refuse");
-    22  53      // END WRONG. The correct fence is the one above.
-    23  10      Ok(())
-    24   1  }
+    18  65      let accepted = store.append(&[seat], Some(&condition)).await;
+    19  29      println!("{accepted:?}");
+    20  65      assert!(accepted.is_ok(), "the narrow guard did not refuse");
+    21  53      // END WRONG. The correct fence is the one above.
+    22  10      Ok(())
+    23   1  }
 
-rendered lines: 24    widest line: 68 columns    hidden lines: 0
+rendered lines: 23    widest line: 68 columns    hidden lines: 0
+
+$ rustc --version
+rustc 1.97.1 (8bab26f4f 2026-07-14)
 
 $ cargo test --doc
-running 3 tests
-test src\lib.rs - (line 8) ... ok
-test src\lib.rs - minimal_wrong_side (line 83) ... ok
-test src\lib.rs - (line 42) ... ok
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+running 2 tests
+test src\lib.rs - (line 9) ... ok
+test src\lib.rs - minimal_wrong_side (line 43) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 $ cargo run --quiet --example narrow_min
 Ok(SequencePosition(2))
 ```
 
+**The delta, stated exactly, because "one expression" is a claim a reviewer can check.**
+Against § DT-4's step-3 program the guard's `QueryItem` is the only thing that moves:
+`QueryItem::new(["SeatHeld"], held.clone())` becomes `QueryItem::new(["SeatHeld"], narrow)`.
+The event constructed, the unconditional append, the condition and the guarded append are the
+**same text on both sides** — `let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);`,
+`store.append(&[seat.clone()], None)`, `AppendCondition::new(seats).after_opt(upto)`,
+`store.append(&[seat], Some(&condition))`. What is left over is not program behaviour: the
+`let narrow = …` binding that names the wrong tag, the two `WRONG` markers the design requires
+(`_design.md:373-384`), the `AppendError` import the wrong side no longer needs, and the
+assertion stating the opposite outcome. Nothing that decides what is appended, or under what
+condition, differs. That is what makes the contrast isolate the guard rather than confound it.
+
 The contrast is only a contrast against its neighbour, so both halves are stated together. The
-correct fence — § DT-4's step-3 program, one expression different: its guard query is tagged
-`course=c1`, the invariant it must hold — **refuses** the same append on the same store:
+correct fence — § DT-4's step-3 program, whose guard query is tagged `course=c1`, the invariant
+it must hold — **refuses** the same append on the same store:
 
 ```
 $ cargo run --quiet --example refuse        # the correct guard
@@ -262,15 +280,17 @@ $ cargo run --quiet --example narrow_min    # the same program, guard tagged too
 Ok(SequencePosition(2))
 ```
 
-One expression apart, and `ConditionViolated` becomes `Ok`. That is the whole resolution, and
-it is a result rather than a prediction.
+One expression apart — the tag on the guard's `QueryItem` — and `ConditionViolated` becomes
+`Ok`. That is the whole resolution, and it is a result rather than a prediction.
 
-**`assert!(accepted.is_ok())` PASSES.** The conflicting `SeatHeld` — tagged `course=c1`, the
-seat someone else took — never enters a guard query tagged `student=s1`, so the store accepts
-the append at position 2, capacity is exceeded, and nothing in the type system, the API or the
-store objects. That is the failure a reader can actually ship, and it is exactly what the
-correct fence's tag join exists to prevent. **EC-001 did not fire**; finding F-6's correction
-is confirmed rather than re-broken.
+**`assert!(accepted.is_ok())` PASSES.** Both appends carry the same `SeatHeld` tagged
+`course=c1`: the first is the seat someone else took, the second is the one this command
+guards. Neither enters a guard query tagged `student=s1`, so `read_decision_model` returns
+nothing, `after_opt(None)` guards against nothing, the store accepts the second append at
+position 2, capacity is exceeded, and nothing in the type system, the API or the store objects.
+That is the failure a reader can actually ship, and it is exactly what the correct fence's tag
+join exists to prevent. **EC-001 did not fire**; finding F-6's correction is confirmed rather
+than re-broken.
 
 **One reconciliation, and it is worth stating precisely.** The design's sketch of this fence
 (`_design.md:373-384`) is five lines with an elision — `// ... same append, same condition
@@ -280,7 +300,11 @@ forbids hiding (`_design.md:524`). Written out honestly the fence is a whole pro
 first honest draft measured **31 rendered lines and 75 columns** against the bridge page's
 24 and 68. Reduced by the design's own yield order — comments cut to one marker line at each
 end, the interior blank lines removed, the tag construction bound rather than inlined, and the
-assertion message shortened — it lands at exactly **24 lines and 68 columns**, above.
+assertion message shortened — it reached 24 lines and 68 columns; holding the appended event
+identical on both sides then removed the second `Event::new` line, and it lands at **23
+rendered lines and 68 columns**, above. The reduction that mattered was the last one, and it
+was not a density move: making the two fences differ by one expression *also* made the fence
+shorter, because a second event construction was only ever there to carry the second delta.
 Nothing was hidden, no marker was dropped, no budget was relaxed, and it still compiles, runs
 and passes. `_design.md` is untouched; the reconciliation is recorded here.
 
@@ -293,7 +317,10 @@ one forgotten.
 
 **Verdict: `reconciled`, with the reconciliation stated.** DT-5 and DT-6 both hold as
 decisions; DT-6's fence needed to be written as a complete program rather than as the design's
-elided sketch, and at its minimum it fits both budgets exactly.
+elided sketch, and at its minimum it sits exactly on the 68-column ceiling with one line of
+headroom under the 24-line one. The certification is against the **one-delta** fence above:
+the "single expression" clause AC-003 states is met by the guard's tag and by nothing else,
+which is the property that makes the contrast teach tags rather than confound them.
 
 ## § Anchor table
 
@@ -335,7 +362,7 @@ anchor survives intact.** Retitling it would have moved the one string every oth
 | `conceptual-bridge` §4 (`##`) | `Tag, query, fold, guard` | 23 | no (markdown) | `#tag-query-fold-guard` | read off a rustdoc render |
 | `conceptual-bridge` §5 (`##`) | `The guard you would write` | 25 | no (markdown) | `#the-guard-you-would-write` | read off a rustdoc render |
 | `conceptual-bridge` §6 (`##`) | `What a type-only guard misses` | 29 | no (markdown) | `#what-a-type-only-guard-misses` | read off a rustdoc render. **Contradicted by the design's own DT-6 correction**: F-6 re-decided the wrong side to a *too-narrowly-tagged* guard, and a type-only guard is the opposite failure. `## Composition` was not updated. Superseded by the row below |
-| `conceptual-bridge` §6 (`##`) | `What a narrow guard misses` | 26 | no (markdown) | `#what-a-narrow-guard-misses` | read off a rustdoc render. **The supplied final title**, matching what DT-6 actually resolved to |
+| `conceptual-bridge` §6 (`##`) | `What a narrow guard misses` | 26 | no (markdown) | `#what-a-narrow-guard-misses` | read off a rustdoc render. **The supplied final title**, matching what DT-6 actually resolved to. Authoritative pending the sign-off owner's call, which is recorded as **BC-001** in `invariant-to-appendcondition-bridge/_conditions.md` — that file, not this row, is what HS-S0187's implementer reads |
 | `conceptual-bridge` §7 (`##`) | `Back to the working version` | 27 | no (markdown) | `#back-to-the-working-version` | read off a rustdoc render |
 
 **`worked-example-handoff` has no `##` heading**, and that is stated rather than left as an
@@ -361,6 +388,16 @@ heading added later that does contain one must be re-checked against that rule.
 What each remaining story in this project loads from this record and from `_design.md`, so
 that "each page cites the one place" (AC-009) is a check a reviewer runs against a table rather
 than against a memory.
+
+**The map is wired in both directions, and that is what makes it a mechanism rather than a
+hope.** A consumption map nothing points *at* is a table only its author reads: the page
+stories' specs were written before this record existed and re-derived the DT-1 slug from
+`_design.md:108-114` themselves, which is precisely the "re-derives it once more" failure this
+story exists to end. So each of the six rows below now has a matching row in that story's own
+`## Anchors (progressive disclosure)` table naming this file and the sections it loads —
+`git grep -l "_resolutions.md" -- .bklg` returns all six spec files, not only this folder. The
+check is symmetric: a row here without an anchor row there, or an anchor row there without a
+row here, is the defect.
 
 | story | `_design.md` sections binding it | anchor rows it renders or links | the one DT-1 citation string |
 | --- | --- | --- | --- |
@@ -390,16 +427,20 @@ returns empty).
 | D2 | the vocabulary-seam sentence exists because the example imports `happenstance_core` (`_design.md:497-502`) | the example imports `happenstance` at `main.rs:34` | reconciled for this record's purposes — no probe or anchor row depends on the premise; the sentence's fate is `surface-course-subscriptions`', per `_baseline.md § Dispositions` row 2 |
 | D3 | AC-010 surfaces the example's module doc `:1-19` (`_design.md:728-741`) | the module doc runs `:1-28` | holds — no resolution depends on the span; § Consumption map points `surface-course-subscriptions` at the merged one |
 | D4 | the worked example carries no test target (`project.md:75-77`) | `tests/runs.rs`, `tests/ui.rs` and a `trybuild` dev-dependency exist | holds — it strengthens DT-6's zero-allowance position rather than weakening it: the example's own fences are now swept by the `"tests"` REQUIRED step (`xtask/src/main.rs:158`) |
-| F1 | `## Composition` §6 names the bridge's wrong-side section `## What a type-only guard misses` (`_design.md:487-488`) | `## Pattern decision` DT-6 was re-decided at the design gate (finding F-6) to a **too-narrowly-tagged** guard, and a type-only guard is the *opposite*, over-refusing failure. `## Composition` was never updated, so two binding sections of the same signed-off file disagree | reconciled — this record supplies `What a narrow guard misses` (26 chars, `#what-a-narrow-guard-misses`) as §6's final title, which is the design's own *intent* under F-6. `_design.md` is not edited (EC-007); the disagreement is raised to the sign-off owner as a note on `invariant-to-appendcondition-bridge` |
-| F2 | the wrong-side fence is sketched as five lines with an elision, `// ... same append, same condition shape ...` (`_design.md:373-384`), and must compile and run with zero allowance-list entries (`:206-208`) | written honestly it is a whole program; the elided lines are the append call and the condition, both forbidden to hide (`:524`). First honest draft: 31 lines, 75 columns. Reduced by the design's own yield order: **24 lines, 68 columns**, nothing hidden, both markers intact, compiles, runs, `is_ok()` passes | reconciled — the fence is written as a complete program at its minimum. No budget relaxed, no exemption written, no reopen needed |
+| F1 | `## Composition` §6 names the bridge's wrong-side section `## What a type-only guard misses` (`_design.md:487-488`) | `## Pattern decision` DT-6 was re-decided at the design gate (finding F-6) to a **too-narrowly-tagged** guard, and a type-only guard is the *opposite*, over-refusing failure. `## Composition` was never updated, so two binding sections of the same signed-off file disagree | reconciled — this record supplies `What a narrow guard misses` (26 chars, `#what-a-narrow-guard-misses`) as §6's final title, which is the design's own *intent* under F-6. Because the 22-character budget does **not** bind `conceptual-bridge` (§ Anchor table), this is a *semantic* rename and not a budget-mandated retitle: the string is wrong about what the section teaches, not too long. `_design.md` is not edited (EC-007), and the disagreement is no longer a note in prose — it is **BC-001**, a named blocking condition in `invariant-to-appendcondition-bridge/_conditions.md`, which states the authoritative title pending the sign-off owner's call and is where that call is recorded. HS-S0187's implementer meets one string and one decision without opening this record |
+| F2 | the wrong-side fence is sketched as five lines with an elision, `// ... same append, same condition shape ...` (`_design.md:373-384`), and must compile and run with zero allowance-list entries (`:206-208`) | written honestly it is a whole program; the elided lines are the append call and the condition, both forbidden to hide (`:524`). First honest draft: 31 lines, 75 columns. Reduced by the design's own yield order, then narrowed to a single delta against the correct fence: **23 lines, 68 columns**, nothing hidden, both markers intact, compiles, runs, `is_ok()` passes | reconciled — the fence is written as a complete program at its minimum. No budget relaxed, no exemption written, no reopen needed |
 | F3 | anti-pattern 6 forbids "aggregate" on the crate root and every step (`_design.md:852-854`); DT-1 names the prior model exactly once | zero on `crates/happenstance/src/lib.rs`, zero across `docs/`, **three** in `examples/course-subscriptions/src/main.rs:3,11,12` — inside the module doc AC-010 requires surfaced verbatim on `worked-example-handoff`, a surface anti-pattern 6 does not govern | reconciled — the anti-pattern is not violated, and the interaction is real: the word will appear three times on the handoff page, outside DT-1's anchor. Routed to `surface-course-subscriptions`, which cannot paraphrase (AC-010) or edit the example's prose (UX brief) and must therefore decide how the seam is framed |
 | F4 | the payoff line is 92 characters of `Debug` and buries `ConditionViolated` (finding F-3, `_design.md:997`) | measured on the merged API: **93** characters — `Err(ConditionViolated(ConditionViolated { conflicting_position: Some(SequencePosition(1)) }))` | holds — one character worse, and the mitigation is unchanged: the output block, not the `Debug` string, carries the word (`## Composition` item 5) |
 | F5 | step 3's program is "roughly 20 lines" and remains the binding case for the 24-line budget (`_design.md:568`) | measured: **24** rendered lines, **68** columns, zero hidden — exactly at both ceilings | holds, with zero headroom. Recorded as a constraint on `boundary-refusal-encounter` rather than as slack: one added line breaks one of the two budgets |
+| F6 | AC-003 requires the wrong side to differ from the correct fence **by a single expression** (`project.md:239-241`; `spec.md` AC-003), and this record certified that it did | review found the first transcript differed in **two** places: the guard's tag *and* the event appended under the condition, which was untagged — `Event::new("SeatHeld", &b"{}"[..])?` against the correct fence's `…?.with_tags(held)`. The second delta is on tags, the very axis the lesson teaches, so the contrast no longer isolated the guard, and the shape `invariant-to-appendcondition-bridge` would have rendered shipped an untagged domain event | reconciled — the probe was rewritten to differ only in the guard's `QueryItem` tag, re-run on the pinned 1.97.1 toolchain (`is_ok()` passes; `Ok(SequencePosition(2))`), re-measured off a render (**23 rendered lines, 68 columns**) and the certification re-stated against it. Found by review rather than by the probe, and recorded here rather than corrected in silence |
 
 **Nothing is `raised as reopen condition`.** Every probe that could have failed passed, and the
-two contradictions found (F1 and F2) are executions of the design's own stated intent rather
-than departures from it. Had the wrong-side fence refused, or had it been unwritable, EC-001
-and EC-002 would have made this a reopen and nothing downstream could have started on it.
+two design contradictions found (F1 and F2) are executions of the design's own stated intent
+rather than departures from it. Had the wrong-side fence refused, or had it been unwritable,
+EC-001 and EC-002 would have made this a reopen and nothing downstream could have started on
+it. F6 is a defect in this record's own first transcript rather than in the design, and it is
+statused the same way for the same reason: a certification corrected quietly is a certification
+nobody can audit.
 
 **The story gate's own output, recorded rather than smoothed.**
 `redkiln verify --grain story --item HS-S0184` at this story's checkpoint:
@@ -426,8 +467,10 @@ content here, and it is green.
 ```
 $ git grep -n -i -E "aggregate|one stream per entity|which stream" -- crates/happenstance/src/lib.rs docs/ examples/course-subscriptions/src/main.rs
 $ cd <a scratch crate outside the repository, depending on crates/happenstance by path>
-$ cargo test --doc                 # all three fences compile AND run
+$ cargo test --doc                 # every transcribed fence compiles AND runs
 $ cargo doc --no-deps              # then read line counts, widths and id="…" off the DOM
+                                   # (<pre class="rust rust-example-rendered">, tags stripped,
+                                   #  entities unescaped, trailing blank lines dropped)
 $ cargo run --quiet --example refuse
 $ cargo run --quiet --example narrow_min
 $ cargo xtask lints && cargo xtask spec-trace

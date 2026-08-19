@@ -33,7 +33,7 @@ Final run: **88/88 checks passed, GREEN**.
 | -- | ---- | ----------- |
 | AC-001 | `check_resolutions.py` AC-001 block (9 assertions): the record names `conceptual-bridge` and `Where your streams went` as the one home, states `#where-your-streams-went`, cites the frequency evidence; and the anti-pattern-6 `git grep` is re-run against all three paths with the counts compared to the record | **Red**: record missing. **Green**: 9/9. The probe found 0 / 0 / **3** — the third being the worked example's module doc, which is a finding rather than a violation and is routed |
 | AC-002 | `check_resolutions.py` AC-002 block: rebuilds the probe, re-renders it, re-measures step 3's fence off the DOM, and asserts the record's numbers match AND that height ≤ 24, width ≤ 68, hidden lines = 0; plus the three mitigations and the seven-element composition being present | **Red**: record missing. **Green**: 10/10 — step 3 measured **24 lines / 68 columns / 0 hidden**, exactly at both ceilings |
-| AC-003 | `check_resolutions.py` AC-003 block (14 assertions), the load-bearing one: it **runs** `cargo test --doc` on the probe (3 fences, all execute), asserts the wrong-side fence hides nothing, is marked at both ends, binds `EventStore` not `SendEventStore`, imports from `happenstance` not `happenstance_core`, and that both verbatim transcripts are in the record | **Red twice.** (1) record missing. (2) `the record transcribes the refusal verbatim` failed — the accepted result was pasted but its one-expression-different counterpart was in a different section, so the contrast was not readable where the resolution is certified. **Green**: 14/14 after both transcripts were placed side by side |
+| AC-003 | `check_resolutions.py` AC-003 block (14 assertions), the load-bearing one: it **runs** `cargo test --doc` on the probe (every transcribed fence executes), asserts the wrong-side fence hides nothing, is marked at both ends, binds `EventStore` not `SendEventStore`, imports from `happenstance` not `happenstance_core`, and that both verbatim transcripts are in the record | **Red twice.** (1) record missing. (2) `the record transcribes the refusal verbatim` failed — the accepted result was pasted but its one-expression-different counterpart was in a different section, so the contrast was not readable where the resolution is certified. **Green**: 14/14 after both transcripts were placed side by side. **Red a third time, at review** — see § Post-review correction: the checker never asserted that the two fences differ in *one* place, so a second delta rode through 14/14 |
 | AC-004 | `check_resolutions.py` AC-004 block (39 assertions): for all 15 anchor rows it re-derives the character count and looks the heading text up in the **rendered** slug map, failing on any predicted id; plus one map row per remaining story, the budget scoping, and `cargo xtask lints && cargo xtask spec-trace` | **Red**: record missing. **Green**: 39/39. Every id matched the render exactly, including `#where-your-streams-went` |
 | AC-005 | `check_resolutions.py` AC-005 block: ≥6 statused rows, `_design.md` byte-identity, authored diff confined to the story folder, no rust-tagged fence, the probe having left nothing in the tree, and `cargo xtask affected --base main` | **Red once, and it was a real signal**: `cargo xtask affected --base main` exit 1 — `happenstance-sqlite`'s `append_returns_the_callers_own_last_position` failed with `SQLite failed: database is locked` under 64 contenders while a second cargo build was running. **Green**: exit 0 on a clean re-run, twice. Recorded as a load-sensitive flake, not fixed here |
 
@@ -69,7 +69,7 @@ transcripts are committed (EC-008, NF-006), verified by
 | Command | Result |
 | --- | --- |
 | `python check_resolutions.py` (the story's own tests, outside the tree) | **88/88 GREEN** |
-| `cargo test --doc` in the probe crate | **3 passed, 0 failed** — all three fences compile *and* execute |
+| `cargo test --doc` in the probe crate | **2 passed, 0 failed** on the re-run — every transcribed fence compiles *and* executes |
 | `cargo run --quiet --example refuse` | `Err(ConditionViolated(ConditionViolated { conflicting_position: Some(SequencePosition(1)) }))` |
 | `cargo run --quiet --example narrow_min` | `Ok(SequencePosition(2))` — DT-6's assertion holds |
 | `cargo doc --no-deps` in the probe crate | **exit 0**; the render every id and every geometry number is read off |
@@ -97,17 +97,19 @@ correction is confirmed rather than re-broken, and EC-001 did not fire.
    at the design gate (F-6) to a *too-narrowly-tagged* guard — the opposite failure. Two
    binding sections of the same signed-off file contradict each other. EC-007 applied: the
    final title `What a narrow guard misses` (26, `#what-a-narrow-guard-misses`) is supplied in
-   the anchor table, the disagreement is raised to the sign-off owner as a note on
-   `invariant-to-appendcondition-bridge`, and `_design.md` was **not** edited.
+   the anchor table, the disagreement is carried as **BC-001** in
+   `invariant-to-appendcondition-bridge/_conditions.md` — a named blocking condition stating
+   the authoritative title pending the sign-off owner's call, and where that call is recorded —
+   and `_design.md` was **not** edited.
 2. **The design's sketch of the wrong-side fence cannot compile.** `_design.md:373-384` is five
    lines with `// ... same append, same condition shape ...`, and the elided lines are the
    append call and the condition — both forbidden to hide by the transience policy (`:524`).
    Written honestly it first measured **31 rendered lines and 75 columns** against the bridge
    page's 24 and 68. Reduced by the design's *own* yield order — comments to one marker line at
    each end, interior blanks removed, the tag construction bound rather than inlined, the
-   assertion message shortened — it lands at exactly **24 lines and 68 columns**, still
-   complete, still runnable, still marked at both ends, nothing hidden. `reconciled`, not
-   relaxed and not reopened.
+   assertion message shortened — it reached 24 lines and 68 columns, and after the correction
+   below it lands at **23 lines and 68 columns**, still complete, still runnable, still marked
+   at both ends, nothing hidden. `reconciled`, not relaxed and not reopened.
 
 **The budget reconciliation went the way that saves the design's own anchor.** Sign-off
 condition 2 says the three step surfaces are markdown; the merge made that concrete (`docs/`,
@@ -133,3 +135,49 @@ heading in the table, so no row is provisional.
 pinned 1.97.1 toolchain and read the same way, and it leaves nothing in the tree — which is
 what EC-008 requires. The slice-mate's `_baseline.md § Composition baseline` carries the real
 crate root's own numbers, taken with the spec's exact command.
+
+## Post-review correction, 2026-08-18
+
+Four findings came back from the slice review. Three were rework and are done; the fourth is a
+closeout carry. What re-ran is stated exactly, because a correction whose evidence is "I read
+it again" is the defect the whole record is written against.
+
+1. **AC-003's single-expression clause was unmet, and the record certified the opposite.** The
+   first DT-6 transcript differed from § DT-4's step-3 program in **two** places: the guard's
+   tag *and* the event appended under the condition, which was an untagged
+   `Event::new("SeatHeld", &b"{}"[..])?`. The second delta is on tags — the axis the lesson
+   exists to teach — so the contrast did not isolate the guard, and the shape
+   `invariant-to-appendcondition-bridge` would have rendered shipped an untagged domain event.
+   **Rebuilt and re-run**, not re-read: the out-of-tree probe crate was reconstructed against
+   `crates/happenstance` by path, the wrong-side fence rewritten so the only delta is
+   `QueryItem::new(["SeatHeld"], held.clone())` → `QueryItem::new(["SeatHeld"], narrow)`, and
+   `cargo test --doc` (**2 passed, 0 failed**), `cargo run --quiet --example refuse`
+   (`Err(ConditionViolated(…))`), `cargo run --quiet --example narrow_min`
+   (`Ok(SequencePosition(2))`) and `cargo doc --no-deps` all executed on rustc 1.97.1. The
+   geometry was read off the DOM the same way as before — the `<pre class="rust
+   rust-example-rendered">` block, tags stripped and entities unescaped — and measures **23
+   rendered lines / 68 columns / 0 hidden**, inside the bridge page's 24 and 68. The
+   certification in `§ DT-5+DT-6` is re-stated against that fence, and the finding is row
+   **F6** in `§ Conditions and dispositions` rather than a silent edit. The checker that gave
+   14/14 never asserted the *count* of deltas, which is why it passed: a rule that cannot fail
+   the wrong implementation is decorative, and this is the concrete instance.
+2. **The record was reachable from nothing outside its own folder.** AC-004 exists to make
+   "decide once, cite one place" a mechanism, and the six consuming stories' specs still
+   re-derived the DT-1 slug from `_design.md:108-114` because nothing pointed them here. Each
+   of the six now carries a `_resolutions.md` row in its own `## Anchors (progressive
+   disclosure)` table naming the sections it loads and when to open them, and `§ Consumption
+   map` states the reciprocity as a checkable rule. `git grep -l "_resolutions.md" -- .bklg`
+   now returns all six spec files rather than this folder alone.
+3. **The §6 retitle was a second live string, not one string.** `_resolutions.md` fixed
+   `What a narrow guard misses` while `invariant-to-appendcondition-bridge/spec.md:429` still
+   states its own AC-004 against `## What a type-only guard misses`, and the "note to the
+   sign-off owner" existed nowhere in that story's folder. It is now **BC-001** in
+   `invariant-to-appendcondition-bridge/_conditions.md`: a named condition that blocks that
+   story's completion, names `What a narrow guard misses` as authoritative pending the sign-off
+   owner's call, and records that this is a *semantic* rename — `conceptual-bridge` is not
+   budget-bound, so the old title is wrong about what the section teaches rather than too long.
+4. **Non-blocking, carried rather than reworked.** The slice-mate's PR-boundary fence was
+   completed *after* its conflict resolutions twice, against its own EC-001; the review
+   verified all seven resolved files independently and found nothing hidden by it. Carried to
+   HS-P0025 in `merge-forward-preflight/_baseline.md § Carried forward to HS-P0025`, with the
+   `redkiln verify --grain story` "arrived by parentage" question (EC-007) recorded beside it.
