@@ -7,9 +7,9 @@ title: A wasm32 conformance run inside cargo xtask ci, not beside it
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -19,14 +19,14 @@ archetype: foundation
 slice: wasm-execution-seam
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-19T17:24:37.626Z
+updated: 2026-08-19T22:43:29.739Z
 links:
   pr: null
   commits:
     - 8ea7bb7c8b8d282af73cb08f860d948367a85a8e
     - d1bae6d0ab21f900f6d17bea2a9e58a75743afc4
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
