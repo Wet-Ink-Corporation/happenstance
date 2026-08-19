@@ -200,8 +200,50 @@ diff is its own backlog folder; everything else arrives through the merge commit
 ## PR boundary
 
 ```
+xtask/src/spec_trace.rs
+standards/rust/51-features-and-no-std.md
+standards/rust/52-wasm32-and-target-cfg.md
+standards/rust/70-rustdoc-obligations.md
+standards/rust/80-the-gate.md
+crates/happenstance/tests/doc_budget.rs
 .bklg/docs-that-teach/application-author-path/merge-forward-preflight/**
 ```
+
+> **Amended 2026-08-18. The merge stopped being clean, and this fence is the
+> paragraph below being honoured — one commit late.** The paragraph requires each
+> conflict-resolution file to be named here *before* it is resolved. The merge was
+> performed in `/redkiln:implement` preflight under human supervision rather than
+> inside the workflow, and the six files were named **after** resolution, in the
+> same session and before any of this project's authored work began. That ordering
+> is worse than the paragraph asks for and is recorded rather than smoothed over:
+> the point of naming first is that nobody gets to decide a file was in scope by
+> having already edited it.
+>
+> What each is, so the scrutiny the paragraph demands can actually be applied:
+>
+> - **`xtask/src/spec_trace.rs`** — both branches added tests to the same
+>   `mod tests`. Resolved as a **union**, 230 lines of ours plus 54 of theirs;
+>   taking either side would have deleted passing tests.
+> - **`standards/rust/{51,52,70,80}-*.md`** — Evidence line-number citations only.
+>   Both branches inserted a `REQUIRED` step into `xtask/src/main.rs` and each
+>   repointed these citations at its own numbers, so **neither side was correct**
+>   against the merged file. Took theirs as the base and recomputed all ten stale
+>   citations; `cargo xtask lint-constitution` reports 27 atoms, all consistent.
+>   No claim, rule or example changed.
+> - **`crates/happenstance/tests/doc_budget.rs`** — the only red test after the
+>   merge. `read()` now normalises CRLF to LF. The test matches source text against
+>   literal `\n`, and this repository runs `core.autocrlf = true` with no
+>   `.gitattributes`, so a freshly *checked out* file is CRLF and the pattern never
+>   matches. The sibling worktree passes only because its agents *wrote* those files
+>   as LF — a fresh clone on Windows fails identically, so this is a latent defect on
+>   `initiative/from-contract-to-published-library` that the merge exposed rather than
+>   caused.
+>
+> The merge is `a5c0f30`. `cargo xtask ci --fast` and
+> `cargo test --workspace --all-features --no-fail-fast` are both green on it. This
+> story still owes everything else the list below names — the baseline record, the
+> re-resolved anchor table, the four dispositioned design contradictions and the
+> recorded gate result.
 
 **Read the fence together with this paragraph, because a merge commit does not fit a glob.**
 `redkiln verify --grain story` fails on any file changed outside the first fenced block above,
