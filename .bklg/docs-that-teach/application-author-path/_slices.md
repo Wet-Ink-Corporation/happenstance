@@ -23,6 +23,7 @@ human-readable record, the trailer is what resume greps.
 | ----- | ------- | ----------------- | --------- |
 | preflight-and-anchor | approved | merge-forward-preflight 63fa959, tension-resolutions 661ebfa | (this commit) |
 | opening-encounter | approved | boundary-refusal-encounter 9493276, boundary-falsification-drill cc9c4a4 | (this commit) |
+| conceptual-bridge | approved | invariant-to-appendcondition-bridge b24d2cd, surface-course-subscriptions 5805623 | (this commit) |
 
 ## Surviving findings
 
