@@ -7,9 +7,9 @@ title: The cite-never-restate rule, the non-author verdict walk, and the paraphr
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,13 +20,13 @@ archetype: capability
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T00:26:39.605Z
+updated: 2026-08-19T00:49:37.036Z
 links:
   pr: null
   commits:
     - a349e04
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
