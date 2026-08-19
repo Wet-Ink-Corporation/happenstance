@@ -19,10 +19,12 @@ archetype: foundation
 slice: wasm-execution-seam
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:51.587Z
+updated: 2026-08-19T17:24:37.626Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 8ea7bb7c8b8d282af73cb08f860d948367a85a8e
+    - d1bae6d0ab21f900f6d17bea2a9e58a75743afc4
   kb: []
 gate_open: false
 schema: 1
