@@ -7,9 +7,9 @@ title: The closed need set and the declaration form, landed once
 parent: HS-P0021
 initiative: docs-that-teach
 project: page-need-discipline
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by: []
@@ -20,12 +20,13 @@ archetype: foundation
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:19.992Z
+updated: 2026-08-19T00:29:36.383Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 55b987b
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
