@@ -132,6 +132,15 @@ mod first_encounter {
     #![doc = include_str!("../../docs/first-encounter.md")]
 }
 
+// The conceptual bridge. Two whole programs one expression apart: the guard
+// tagged to the invariant refuses, and the guard tagged to the row the command
+// writes accepts. The second one's `is_ok()` is the assertion — narrowing that
+// tag back turns this module red rather than turning a paragraph stale.
+#[cfg(doctest)]
+mod carry_your_invariant {
+    #![doc = include_str!("../../docs/carry-your-invariant.md")]
+}
+
 // Registered like any other page, and it carries no `rust` fence at all. That
 // is the point: it is the retained fixture behind the `text`-fence limit stated
 // in `xtask/src/lint_narrative.rs`, walked by the checker on every run and
