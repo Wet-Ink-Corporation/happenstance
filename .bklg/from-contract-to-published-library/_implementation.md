@@ -24,7 +24,7 @@ attributable to the initiative rather than inherited.
 |---|---------|----|------------|-------|-------------------|
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
-| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **in-progress** | run 2 halted at slice 2 review · 7/14 committed · baseRef `90cbca5` |
+| 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **done** | approved 2026-08-19 · `_review.md` · 14/14 · 6 runs · `overall: 3` · `happenstance-sqlite 0.0.0` reserved |
 | 4 | `cloudflare-durable-object-store` | HS-P0013 | — | pending | |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
@@ -1414,3 +1414,84 @@ implementer dispatched, seals it, then runs Integration and the project review f
 this project. AC-001 is now satisfiable, so the halt that stopped run 4 is gone. Expect the
 `unconsumed-foundation` pair (HS-S0034, HS-S0035) to persist — that is **#122**, still the release
 blocker, and still owed before `publication-and-positioning`.
+
+### HS-P0012 `sqlite-durable-store` — run 6 and CLOSE, 2026-08-18/19 (`wf_9d06ccb3-cdd`)
+
+**14/14 stories, all five slices `approved`, `degradedSummary: none`, `missingArtifacts: []`,
+`uncoveredAcs: []`, no baseline repairs. Project verdict `approved` by the human at `e220c45d`; the
+item is held at `review`/`in-review` with `--stay`, awaiting `/redkiln:closeout`. All fourteen
+stories are at `report`/`in-review` approved.**
+
+Rubric: integration-reachability / test-integrity / gate-greenness / brief-fidelity / intent-fidelity
+**3**; ac-coverage **2**; presentation-fidelity **0 — does not apply**. `overall: 3`.
+
+The DoD bar ran for real: 90 conformance rules green against a real SQLite file, the concurrency
+family at **64 contenders**, the projection store passing the borrowed suite (24), a genuine
+`AFTER INSERT … RAISE(ABORT)` trigger through a second connection for mid-batch atomicity, and
+`spec-trace` at 401 checked / 80 anchored against a 389/76 baseline. The fifteen whole-initiative
+journeys deferred to their owning projects, correctly for a feature project. Design review
+`not-applicable` — no surface, and `design.capture` undeclared, so a declared skip rather than a
+silent pass.
+
+**ac-coverage's docked point is honest and pre-planned.** AC-012 is met in substance and partly in
+letter: the benchmark harness exists, is feature- and target-gated, and executes 18 tests inside the
+gate, but the real-SQLite arm lives in `experiments/`, which is not a workspace member, so it sits
+outside the gate by the repository's own convention (`_storymap.md:49-50`).
+
+### The integration proof carried a false PASS, and it was caught by re-running the command
+
+`_integration.md` row 14 claimed `redkiln doctor` exited 0 *"carrying exactly the six expected
+`template-drift` advisories … and no seventh"*. It exited **1**. Found by the orchestrator running
+both halves before advancing anything — not by reading the report, and not by any check in the loop.
+
+That is the defect class this project's own premise names — something that looks like evidence and is
+not — landing in the project's own integration proof. It was corrected **twice**, each time with the
+superseded sentence quoted rather than deleted: once on 2026-08-18 against redkiln 0.19.0, and again
+on 2026-08-19 after the 0.20.0 upgrade changed the answer.
+
+`dod_green` was deliberately **retained rather than flipped**. The declared project bar is
+`verify.integration_scoped` — `cargo xtask ci --fast` — which is row 13, and the orchestrator re-ran
+it independently: exit 0, `all required checks passed`. `redkiln doctor` is not one of the four
+declared `verify:` commands, so row 14 is an extra check this run chose to make; its failure is
+recorded as a failure without retroactively reddening the bar the project is held to. Flipping the
+flag would have been a machine overriding the declared configuration; leaving the row unqualified
+would have been the lie.
+
+**Two agents hit transient API errors** (`Server error mid-response`, `529 Overloaded`) and their
+retries succeeded, so `degraded` is empty. Separately the **safety classifier timed out** while
+reviewing one verify agent, which is why the bar was re-run first-hand rather than relayed, and why
+the registry was audited independently: exactly four `happenstance` crates exist, the three from
+2026-08-16 and `happenstance-sqlite 0.0.0` at 13:16:06 on 2026-08-18. Nothing extra was published.
+
+### redkiln 0.20.0 landed mid-gate and changed two recorded facts
+
+The upgrade remediates **#122, #129, #130, #131, #135 and #137** — the last two filed from this
+initiative. Both of the facts row 14 rested on moved, so the artifact was re-verified before the
+advance rather than after:
+
+- **#122.** `doctor`'s `unconsumed-foundation` count drops **nine → two** on the same tree: the seven
+  transitive-reachability false positives clear exactly as the issue predicted. **Neither survivor is
+  this project's** — `HS-S0100` and `HS-S0108` are both in `replication-identity-and-ingest`
+  (HS-P0017), unstarted. HS-S0034 and HS-S0035 are clean, so the earlier claim that this project
+  generated errors it had to clear was an artifact of the predicate, not of the backlog. CI's
+  `backlog` job still asserts the list is empty, so the debt is real and is **now HS-P0017's**.
+- **#135.** Two fences that were never machine-checked now are. `HS-S0039` returns
+  `{"boundary": ran:true, pass:true}` — enforced and clean, confirming by machine what the slice
+  reviewer had verified by hand against `11596b4`. **`HS-S0043` returns `ran: true` with *"a boundary
+  heading is present but declares nothing parseable"*** — still unenforced, but disclosed instead of
+  failing open, which is precisely what #135 asked for.
+
+### Open, carried out of this project
+
+1. **`HS-S0043`'s spec declares no parseable PR boundary.** It is approved, and it is the one story in
+   this project whose scope was never machine-checked. A gap in the spec, not the code; the human
+   declined to fix it at the gate, so it is carried rather than closed.
+2. **redkiln #122's residue is HS-P0017's** — two genuine story-map wiring problems, owed before
+   `publication-and-positioning`.
+3. **AC-012's letter-vs-substance gap** — the benchmark harness's real-SQLite arm is outside the gate
+   by convention. Recorded, not hidden, and it cost the rubric a point.
+
+Six runs, and the shape of the last four is worth keeping: runs 3 and 5 each spent about an hour to
+surface a fence line and two stale digits, because the loop re-runs a full adversarial review to find
+artifact defects a fix pass clears in minutes. **Every blocking finding after run 2 was an artifact
+defect, never broken code** — the adapter passed 89 then 90 conformance rules throughout.
