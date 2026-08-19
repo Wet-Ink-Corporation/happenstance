@@ -280,8 +280,29 @@ and **Wires into** to mount this slice; that is not scope drift.
 crates/happenstance-cloudflare/src/**
 crates/happenstance-cloudflare/tests/**
 crates/happenstance-cloudflare/Cargo.toml
+xtask/src/main.rs
+xtask/src/proof.rs
+deny.toml
+CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/caller-visible-error-verdict/**
 ```
+
+**Fence amendment — 2026-08-19, `/redkiln:implement` run `wf_e8cbc0ee-b9a`.** The four
+rows below `Cargo.toml` were added after implementation, for the reason set out in full in
+`../worker-binding-layer/spec.md` under the same heading. This story's own checkpoint
+`5955cb3` strayed outside the original fence in exactly one category: three
+`standards/rust/` atoms — `50-dependency-hygiene.md`, `52-wasm32-and-target-cfg.md` and
+`61-compile-time-assertions.md` — whose `file:line` evidence rows point into
+`src/send_shape.rs` and `src/test_object.rs`, both of which this story touches. `cargo
+xtask lint-constitution` is a gate step, so a stale citation is red and repairing it was
+out of bounds. `xtask/src/main.rs`, `xtask/src/proof.rs`, `deny.toml` and `CHANGELOG.md`
+enter through the slice-wide repair commit `2ea99fd`, recorded against all four stories of
+`real-worker-bindings`; none of them is touched by this story's own checkpoint `5955cb3`.
+
+Nothing above licenses editing normative clause text; this story changed no
+`spec/SPECIFICATION.md` clause, and `spec/SPECIFICATION.md` is deliberately **not** in
+this fence.
 
 `Cargo.toml` is inside the boundary for one reason only: the tier question below may
 require `wasm-bindgen-test` in this crate's wasm32 dev-dependencies. If the host tier

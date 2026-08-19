@@ -231,11 +231,39 @@ The narrowest honest path set — `redkiln verify --grain story` reads the first
 ```
 crates/happenstance-cloudflare/src/event_store.rs
 crates/happenstance-cloudflare/src/lib.rs
+crates/happenstance-cloudflare/src/query_sql.rs
 crates/happenstance-cloudflare/src/sql_storage.rs
+crates/happenstance-cloudflare/src/test_object.rs
 crates/happenstance-cloudflare/Cargo.toml
 crates/happenstance-cloudflare/tests/**
+xtask/src/main.rs
+xtask/src/proof.rs
+deny.toml
+CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/durable-object-write-path/**
 ```
+
+**Fence amendment — 2026-08-19, `/redkiln:implement` run `wf_e8cbc0ee-b9a`.** The four
+rows below `tests/**` were added after implementation, for the reason set out in full in
+`../worker-binding-layer/spec.md` under the same heading: `standards/rust/**` carries
+`file:line` citations into the files this slice rewrites, and `cargo xtask
+lint-constitution` is a gate step, so repairing a citation the diff itself invalidated had
+no in-bounds spelling. `xtask/src/proof.rs`, `deny.toml` and `CHANGELOG.md` enter through
+the slice-wide repair commit `2ea99fd`, recorded against all four stories of
+`real-worker-bindings`.
+
+`query_sql.rs` is a separate and smaller correction: it is a new module this story
+created, and the fence simply failed to name a file that did not yet exist when the fence
+was written. `test_object.rs` and `xtask/src/main.rs` are the same shape as the four rows
+above — they reach this story only through `2ea99fd`, and both sit inside the slice's own
+territory (the Durable Object host stand-in, and the gate step `wasm-execution-seam`
+added). This story's fence names individual `src/` files rather than `src/**`, which is
+why they had to be named here and not in the two slice-mates below.
+
+This story's own checkpoint `3eb91cf` changed **nothing** outside the fence as originally
+written. It is listed here only because the shared repair commit is attributed to it.
+Nothing above licenses editing normative clause text.
 
 `sql_storage.rs` and `Cargo.toml` are in the set only for what this story genuinely needs from the
 binding layer — a read-only accessor the classifier calls, or a dev-dependency its targeted tests need.

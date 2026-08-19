@@ -211,10 +211,40 @@ still answers the `!Send` question in their inner loop, and a `cargo xtask ci` t
 ```
 crates/happenstance-cloudflare/**
 xtask/src/main.rs
+xtask/src/proof.rs
 Cargo.toml
 Cargo.lock
+deny.toml
+CHANGELOG.md
+spec/SPECIFICATION.md
+standards/rust/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/worker-binding-layer/**
 ```
+
+**Fence amendment — 2026-08-19, `/redkiln:implement` run `wf_e8cbc0ee-b9a`.** The last
+five path rows were added *after* the story was implemented, and the reason is recorded
+here rather than left to be inferred from a widened glob. The fence as first written was
+not satisfiable by a correct implementation of this story.
+
+`standards/rust/**` and `spec/SPECIFICATION.md` carry `file:line` citations pointing
+*into* the very files this story rewrites — `src/js.rs` most of all. `cargo xtask
+lint-constitution` and `cargo xtask spec-trace` are both gate steps. So a diff that moves
+a cited line and leaves the citation stale is red, and a diff that repairs the citation
+was, until this amendment, out of bounds. There was no third option, and the eleven
+constitution and specification edits in `310a4c8` are all of that kind: `js.rs:31` →
+`js.rs:33`, `js.rs:46` → `js.rs:77`, and nine more like them. `deny.toml` is the same
+shape one level out — adding `worker` fires `cargo deny`'s `async-trait` ban, and
+answering it is part of adding the dependency, not a separate concern this story could
+defer. `xtask/src/proof.rs` and `CHANGELOG.md` enter through the slice-wide repair commit
+`2ea99fd`, which is recorded against all four stories of `real-worker-bindings`.
+
+**What this amendment does not license.** Normative text. A `[FROZEN]` clause still
+requires a new ADR rather than an edit (`CLAUDE.md`, *Open questions, deliberately
+unresolved*), and the sole `spec/SPECIFICATION.md` change this story made is to ES-6's
+**non-normative** explanatory paragraph, which described the `Rc<str>` stand-in this story
+replaced with real bindings. Widening a fence to admit a *citation repair* is not widening
+it to admit a *decision*. A future story that edits a clause's normative half under cover
+of this row has taken the amendment further than it goes.
 
 **In this PR.** The `worker` dependency and its feature set, declared once in
 `[workspace.dependencies]`; the real bindings in `src/js.rs` and `src/sql_storage.rs`; the

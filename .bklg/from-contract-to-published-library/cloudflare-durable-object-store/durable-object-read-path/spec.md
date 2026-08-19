@@ -99,9 +99,38 @@ The delta is bounded to the read path: `render_read` gains the ceiling and rende
 ```
 crates/happenstance-cloudflare/src/**
 crates/happenstance-cloudflare/tests/**
+crates/happenstance-cloudflare/Cargo.toml
 CHANGELOG.md
+xtask/src/main.rs
+xtask/src/proof.rs
+deny.toml
+standards/rust/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/durable-object-read-path/**
 ```
+
+**Fence amendment — 2026-08-19, `/redkiln:implement` run `wf_e8cbc0ee-b9a`.** The three
+rows below `CHANGELOG.md` were added after implementation, for the reason set out in full
+in `../worker-binding-layer/spec.md` under the same heading. This story's own checkpoint
+`9891320` strayed outside the original fence in exactly one category: three
+`standards/rust/` atoms — `50-dependency-hygiene.md`, `52-wasm32-and-target-cfg.md` and
+`61-compile-time-assertions.md` — whose `file:line` evidence rows point into
+`src/event_store.rs` and `src/send_shape.rs`, both of which this story reshapes. `cargo
+xtask lint-constitution` is a gate step, so leaving those citations stale is red and
+repairing them was out of bounds; there was no third option. `xtask/src/proof.rs` and
+`deny.toml` enter through the slice-wide repair commit `2ea99fd`, recorded against all
+four stories of `real-worker-bindings`.
+
+`crates/happenstance-cloudflare/Cargo.toml` and `xtask/src/main.rs` arrive the same way,
+and the first of the two deserves a note because **Explicitly not in this PR** above still
+names the manifest as a slice-mate's. That exclusion holds and is not being walked back:
+this story's own checkpoint `9891320` does not touch `Cargo.toml`. It is in the fence only
+because `2ea99fd` is attributed to all four stories of the slice, and a shared repair
+commit cannot be attributed to one of them without losing the provenance of the other
+three.
+
+Nothing above licenses editing normative clause text; this story changed no
+`spec/SPECIFICATION.md` clause, and `spec/SPECIFICATION.md` is deliberately **not** in
+this fence.
 
 ## Behavior and interfaces
 

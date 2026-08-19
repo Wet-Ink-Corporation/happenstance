@@ -21,10 +21,12 @@ archetype: foundation
 slice: real-worker-bindings
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:09:52.600Z
+updated: 2026-08-19T21:58:17.391Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 310a4c8bbaa10032677f8137f701a0a45e14e0a0
+    - 2ea99fd10bc1af495c7e47b8bbd7116a04e1d28f
   kb: []
 gate_open: false
 schema: 1
