@@ -9,7 +9,7 @@ initiative: from-contract-to-published-library
 project: sqlite-durable-store
 status: implementing
 process: project
-stage: implementation
+stage: integration
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-17T00:53:30.326Z
+updated: 2026-08-19T13:28:14.001Z
 links:
   pr: null
   commits: []
