@@ -380,3 +380,93 @@ the refusal; it is authored once, on `docs/first-encounter.md`.
 reader who lands on docs.rs meets the refusal before they meet the plan* — is not delivered.
 That reader meets a `commit` program and reaches the refusal one hop later. The three inherited
 AC-007 overages on the crate root are **recorded as owed by HS-P0016**, not waived.
+
+### Run 5 result — HS-P0022, workflow `wf_e181c7e6-6ac` — HALTED at slice 2 review
+
+Re-launched fresh after the BC-002 amendment. Preflight saw `preflight-and-anchor` sealed
+`approved` and skipped it; `opening-encounter` re-entered at Review as designed.
+
+- 4/8 stories. `opening-encounter` sealed **`changes-requested`** (`df38576`).
+  `degradedSummary: none` — an API 521 killed the seal agent, the retry succeeded, and the
+  verdict reached git. Worth noting only because the *first* symptom of a lost seal and a
+  retried one look identical from the failures list; git is what settles it.
+- The reviewer declined to fire the escape-hatch detector on the BC-002 descope and said why:
+  the blocker is external and mechanically verifiable, the route was written into `spec.md` as
+  EC-006/EC-008 *before* implementation, the amendment is a separate human-authored commit that
+  leaves every original word standing, and the implementer **refused to flip AC-007** — the
+  opposite of gaming. That is the right call and is recorded so closeout does not rediscover it.
+
+#### Blocker 1 — provenance, and the boundary red it was faking
+
+`redkiln verify --item HS-S0185 --grain story` failed `provenance` ("14 file(s) changed inside
+this story's declared boundary and links.commits is empty") **and** `boundary`, the latter naming
+~200 files from the `a5c0f30` merge. The second was an artifact of the first: 0.19.0 scopes
+`boundary` to `ownScope = ownChangedFiles(root, commitLinks(...))` and falls back to the
+branch-wide diff when `links.commits` is empty.
+
+Fixed by recording the two checkpoint SHAs (`record-links HS-S0185 9493276`,
+`HS-S0186 cc9c4a4`). The slice fix pass `5af116b` was **deliberately not recorded against
+either story**: it spans both stories' directories, so attaching it to HS-S0185 would drag its
+slice-mate's ledger and report inside HS-S0185's fence and turn `boundary` red for real. Same
+disposition as HS-P0021's fix commits.
+
+#### Blocker 2 — AC-007 had a strike with no owner
+
+Correctly red. `spec.md` § Amendment — BC-002 struck three inherited crate-root numbers and
+`_conditions.md` recorded them as owed by **HS-P0016**, which lives on the unmerged sibling
+branch and is therefore not a destination reachable from here. `_conditions.md:229-232` had
+already refused the shortcut in advance: *"Flipping it against a destination that carries no rows
+would reproduce, one directory over, exactly the defect this section was written to close."*
+
+Resolved 2026-08-19 at the human's direction by opening a real owner:
+
+- **HS-B0001** `crate-root-density-overages` (severity medium), carrying F-1/F-2/F-3 verbatim
+  with budgets, re-measurement commands and reader impact — fence 35 rendered lines against 32,
+  70 columns against 68 on two lines, two of four `##` headings at 39 and 26 against 22.
+- **HS-P0026** `inherited-documentation-defects` created in the same act, and only because
+  `redkiln new` refuses to place a story or a bug directly under an initiative and `support`
+  (HS-I0005) is an untouched template carrying no projects. Flagged to the human before it was
+  created, because inventing a project inside an un-decomposed initiative is more structure than
+  one blocked row justifies on its own.
+
+AC-007 now flips against an item id that exists on this branch and carries the findings.
+`redkiln verify --item HS-S0185 --grain story` passes all four checks. The overages are recorded
+**owed, not waived**.
+
+#### FINDING — `declaredBoundary` fails open, and hardest on the most on-topic spec
+
+`redkiln verify --item HS-S0186 --grain story` reports **pass** with two of four checks
+**skipped**: `boundary — no boundary declared` and `provenance — no boundary declared`. The
+fence is plainly there, seven entries at
+`boundary-falsification-drill/spec.md:198-207`.
+
+Cause, read in the parser rather than inferred (`dist/index.js:14696-14718`):
+
+```js
+const headingIdx = lines.findIndex((l) => /^#{1,6}\s+.*boundary/i.test(l));
+// ...then, scanning forward for the fence:
+if (/^#{1,6}\s/.test(lines[j] ?? "")) return void 0;   // bail on any heading first
+```
+
+It takes the **first** heading anywhere in the file whose text contains "boundary". This story's
+**title** is `# Spec — Removing the boundary makes the repository fail` (`:10`); `## Scope lock`
+follows at `:12`, before any fence; the function returns `undefined`, and both checks silently
+become no-ops. A story *about* boundaries gets **no boundary check**, and the item reports `pass`
+rather than a warning.
+
+This is the **third** member of one family this session, and the family is worth naming:
+
+| # | check | how it fails open |
+| --- | --- | --- |
+| redkiln#136 / #94 | `boundary` | measured every story against `main`, so a precise fence blocked and no fence passed — fixed in 0.19.0 |
+| `ledgerBlock` | `ledger` | a heading between the `# … ledger` heading and the fence makes the whole acceptance block *invisible*, so two HS-P0021 ledgers read as having no rows at all |
+| `declaredBoundary` | `boundary`, `provenance` | the word "boundary" in a title captures the search; the declared fence is never found |
+
+All three are strictest, or blindest, on the artifact that took the subject most seriously. Not
+filed as an issue and **not worked around**: renaming HS-S0186 to dodge the regex would hide the
+bug rather than report it, and the story's title is accurate. Recorded here at the human's
+direction. The reviewer had already hand-checked every slice commit against both amended fences
+and found no real escape, so nothing is known to be hiding behind the skipped check.
+
+Two PR boundaries were also amended inside the run (`4232b34`) to admit `xtask/tests/**`, each
+with its reason inline — the same disposition as `a41a1a5` one project back.
