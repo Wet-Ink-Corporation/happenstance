@@ -69,7 +69,7 @@ match a string.
 | Commit | What it carries |
 | --- | --- |
 | `b24d2cd` | The slice-mate's checkpoint, `feat(application-author-path): Invariant to AppendCondition bridge` — the page this story links from and the anchor it cites |
-| *(this story's checkpoint — recorded at `## Notes` below once made)* | `feat(application-author-path): Surface course-subscriptions` — the extraction, the page, the mount, the bridge link, `reach.rs`, this report, `report.md`, and the seven flipped ledger rows |
+| `5805623` | This story's checkpoint, `feat(application-author-path): Surface course-subscriptions` — the extraction, the page, the mount, the bridge link, `reach.rs`, this report, `report.md`, and the seven flipped ledger rows |
 
 ## Changes
 
