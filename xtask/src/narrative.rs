@@ -141,6 +141,15 @@ mod carry_your_invariant {
     #![doc = include_str!("../../docs/carry-your-invariant.md")]
 }
 
+// The handoff. It carries no fence either, and for a different reason from the
+// page below: its teaching is somebody else's file, reached in one hop. What
+// registration buys here is that the page cannot rot into an orphan under the
+// tree while the two links on it still look fine in a diff.
+#[cfg(doctest)]
+mod read_the_worked_example {
+    #![doc = include_str!("../../docs/read-the-worked-example.md")]
+}
+
 // Registered like any other page, and it carries no `rust` fence at all. That
 // is the point: it is the retained fixture behind the `text`-fence limit stated
 // in `xtask/src/lint_narrative.rs`, walked by the checker on every run and

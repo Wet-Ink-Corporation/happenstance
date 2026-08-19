@@ -153,3 +153,6 @@ one expression: the query item is tagged `held`, the course whose seats the
 rule is about, and not `whose`.
 [The guard you would write](#the-guard-you-would-write) is the version to
 copy.
+
+To see the same cycle inside a running program rather than a fence,
+[read the worked example](read-the-worked-example.md).
