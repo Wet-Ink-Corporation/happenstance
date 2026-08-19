@@ -22,13 +22,13 @@ archetype: foundation
 slice: preflight-and-anchor
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T19:59:01.224Z
+updated: 2026-08-19T19:59:03.756Z
 links:
   pr: null
   commits:
     - 661ebfa
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
