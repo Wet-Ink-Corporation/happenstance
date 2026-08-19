@@ -63,6 +63,31 @@ thiserror.workspace = true
 # falsified by the runtime.
 worker.workspace = true
 
+# The conformance suite this adapter is measured by, and it is deliberately
+# **not** target-scoped while `wasm-bindgen-test` below is.
+#
+# `wasm-bindgen-test` has to be target-scoped because the attribute it carries
+# resolves in the caller's crate: a host `cargo test` must not have to resolve
+# it at all. `happenstance-testkit` is the opposite case. `Fixture`'s five
+# associated constants — `SECOND_HANDLE`, `REOPEN`, `MID_BATCH_FAULT` and the
+# three `Option<usize>` ceilings — are *facts about this adapter* that need no
+# JavaScript heap to read, and the tests that hold them honest are the ones an
+# ordinary contributor runs in their inner loop with no wasm toolchain
+# installed. Target-scoping this row would have put every one of those
+# assertions behind a runner, which is exactly the "compiled by the gate,
+# executed by nothing" shape the previous milestone spent its budget ending.
+#
+# Nothing lands in `[dependencies]`: a dev-dependency does not travel to a
+# consumer, so the runtime graph `cargo deny` and `cargo hack` see is unchanged
+# by both rows.
+[dev-dependencies]
+happenstance-testkit.workspace = true
+# Named here as well as in `[dependencies]` because an integration target is a
+# second compilation unit: it links this crate and this crate's *dev*-graph, and
+# a regular dependency of the library is not in its extern prelude.
+happenstance-core = { workspace = true, features = ["std"] }
+futures-core.workspace = true
+
 # `wasm-bindgen-test` is target-scoped for the reason
 # `crates/happenstance-testkit/Cargo.toml`'s block gives: the runtime attribute
 # resolves in the caller's crate, never in the testkit, and a host `cargo test`

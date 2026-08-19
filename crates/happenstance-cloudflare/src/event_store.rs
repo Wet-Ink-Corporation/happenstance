@@ -1342,8 +1342,8 @@ mod write_path_tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::{Ceilings, CloudflareEventStore, CloudflareEventStoreError};
+    use crate::host::{arm_throw, arm_throws, durable_object};
     use crate::sql_storage::{SqlStorage, SqlValue};
-    use crate::test_object::{arm_throw, arm_throws, durable_object};
 
     /// One fresh Durable Object, migrated, reached through the one constructor.
     fn open() -> (SqlStorage, CloudflareEventStore) {
@@ -2162,9 +2162,9 @@ mod read_path_tests {
     use worker::wasm_bindgen::JsValue;
 
     use super::{CloudflareEventStore, CloudflareEventStoreError, PAGE_SIZE};
+    use crate::host::{durable_object, statements};
     use crate::js::JsHandle;
     use crate::sql_storage::{SqlCursor, SqlRow, SqlStorage, SqlValue};
-    use crate::test_object::{durable_object, statements};
 
     /// One fresh Durable Object, migrated, reached through the one constructor —
     /// the same shape the write path's tests use, because a read reachable only

@@ -363,6 +363,24 @@ pub(crate) struct WasmUnitTarget {
     /// Read by the runner-free guard, which is what makes an emptied row fail on
     /// a machine with no runner rather than pass quietly.
     pub(crate) source_dir: &'static str,
+    /// The `cfg` spelling that tree's `wasm32`-only tests are written behind.
+    ///
+    /// A per-row field rather than one constant, because the two rows this
+    /// registry carries are gated in genuinely different places and a single
+    /// spelling could only serve one of them. A `#[cfg(test)]` module inside a
+    /// `src/` tree is written `cfg(all(test, target_arch = "wasm32"))`; an
+    /// **integration** target is already `#[cfg(test)]` by virtue of being one,
+    /// so its `wasm32`-only half is written `cfg(target_arch = "wasm32")` and a
+    /// scan looking for the first spelling would find nothing and bail — telling
+    /// a reader the row is aimed somewhere the tests are not, when it is aimed
+    /// exactly at them.
+    ///
+    /// Widening [`WASM32_TEST_GATE`] to accept both spellings was the other
+    /// option and it is worse: `cfg(target_arch = "wasm32")` appears in `src/`
+    /// trees for reasons that have nothing to do with tests, so the *package*
+    /// scan below — whose whole job is to notice a package with `wasm32` tests
+    /// and no row — would start matching packages that have none.
+    pub(crate) gate: &'static [&'static str],
     /// What this target needs from the host beyond the runner itself.
     ///
     /// Printed with the failure rather than left for the reader to infer: a
@@ -582,15 +600,75 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
 /// `cargo test -p happenstance-cloudflare` runs four probes and nothing about
 /// whether the adapter works. That is the same *compiled, never executed* shape
 /// the previous milestone built this machinery to end, one directory over.
-pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[WasmUnitTarget {
-    package: "happenstance-cloudflare",
-    selector: &["--lib"],
-    source_dir: "crates/happenstance-cloudflare/src",
-    host: "Node 22.5 or newer: `crates/happenstance-cloudflare/src/test_object.rs` \
-           reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's \
-           default host is Node",
-    tests: CLOUDFLARE_UNIT_TESTS,
-}];
+pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
+    WasmUnitTarget {
+        package: "happenstance-cloudflare",
+        selector: &["--lib"],
+        source_dir: "crates/happenstance-cloudflare/src",
+        gate: WASM32_TEST_GATE,
+        host: CLOUDFLARE_HOST,
+        tests: CLOUDFLARE_UNIT_TESTS,
+    },
+    WasmUnitTarget {
+        // The fixture's own contract, and the second row this registry has ever
+        // carried — which is the field `selector`'s documentation was written
+        // for: `["--test", name]` was always the other spelling, and this is the
+        // first row to need it.
+        //
+        // It is *not* a `WASM_TARGETS` row, and the distinction is the one that
+        // registry's own documentation draws: every row there is held to a
+        // `RuleFamily`'s exhaustive enumeration, and this target runs no
+        // conformance rule. What it runs is the seven assertions about the
+        // fixture that the suite cannot make about itself — isolation between
+        // two instances alive at once, two handles onto one object, the schema
+        // seam running per instance, the store id surviving a second handle, and
+        // the `REOPEN` override actually discarding handle state rather than
+        // events. Every one of them needs a real Durable Object, so every one of
+        // them is `#[wasm_bindgen_test]`, so without this row the gate would
+        // compile them and run none — the exact shape the rest of this file
+        // exists to end.
+        //
+        // The same target's *other* five cases are plain `#[test]`s about what
+        // the fixture declares, and they need no runner at all: an ordinary
+        // `cargo test -p happenstance-cloudflare` runs them. They are absent
+        // from `tests` below because `--list` on this runner reports only what
+        // the `wasm-bindgen-test` harness collects.
+        package: "happenstance-cloudflare",
+        selector: &["--test", "fixture_contract"],
+        source_dir: "crates/happenstance-cloudflare/tests",
+        gate: WASM32_TARGET_GATE,
+        host: CLOUDFLARE_HOST,
+        tests: CLOUDFLARE_FIXTURE_CONTRACT_TESTS,
+    },
+];
+
+/// What both `happenstance-cloudflare` rows need from the machine.
+///
+/// Named once because both rows execute the same shim against the same engine,
+/// and a host requirement stated twice is a host requirement that will disagree
+/// with itself the first time Node's floor moves.
+const CLOUDFLARE_HOST: &str = "Node 22.5 or newer: `crates/happenstance-cloudflare/src/host.rs` \
+     reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's \
+     default host is Node";
+
+/// The fixture-contract cases that need a real object under them.
+///
+/// Transcribed for [`MEMORY_WASM_RULES`]' reason — a rename needs something to
+/// disagree with — and every one is a fact no other check in this repository can
+/// reach. The isolation case in particular is the one genuinely new failure mode
+/// this adapter can have: a `CloudflareFixture` that quietly pointed every fresh
+/// instance at the same Durable Object storage would pass every conformance rule
+/// that does not construct two fixture instances, and it constructs both here
+/// **before** either appends, which is what tells isolation apart from clearing.
+const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
+    "on_the_object::the_host_is_reachable_from_an_integration_test",
+    "on_the_object::two_instances_alive_at_once_observe_none_of_each_others_appends",
+    "on_the_object::two_handles_from_one_instance_observe_each_others_appends",
+    "on_the_object::migrate_runs_once_per_instance_not_per_connect",
+    "on_the_object::a_second_handle_does_not_re_mint_the_store_id",
+    "on_the_object::a_supported_capability_has_its_method_overridden",
+    "on_the_object::the_hosts_arming_hook_fires_once_and_disarms",
+];
 
 /// The `happenstance-cloudflare` cases worth naming, by the name `--list` prints.
 ///
@@ -788,6 +866,15 @@ const WASM32_TEST_GATE: &[&str] = &[
     r#"cfg(all(target_arch="wasm32",test))"#,
 ];
 
+/// Where an **integration** target says "this half only exists on `wasm32`".
+///
+/// The same job as [`WASM32_TEST_GATE`] one directory over, and it is a separate
+/// constant rather than a third entry there for the reason
+/// [`WasmUnitTarget::gate`] gives: this spelling is common in `src/` trees for
+/// reasons unrelated to tests, so folding it into the package scan would make
+/// that scan match packages with no `wasm32` tests at all.
+const WASM32_TARGET_GATE: &[&str] = &[r#"cfg(target_arch="wasm32")"#];
+
 /// Packages whose sources declare `wasm32`-only test modules and that have no
 /// row in [`WASM_UNIT_TARGETS`].
 ///
@@ -826,7 +913,7 @@ fn unregistered_wasm_unit_packages() -> Result<Vec<String>> {
         if !manifest.is_file() {
             continue;
         }
-        if !tree_has_wasm32_test_gate(&crate_dir.join("src"))? {
+        if !tree_has_wasm32_test_gate(&crate_dir.join("src"), WASM32_TEST_GATE)? {
             continue;
         }
         let manifest = fs::read_to_string(&manifest)
@@ -839,14 +926,14 @@ fn unregistered_wasm_unit_packages() -> Result<Vec<String>> {
     // module is a row that would keep passing while the tests it names moved
     // away — the same failure the scan above exists to catch, one level in.
     for unit in WASM_UNIT_TARGETS {
-        if !tree_has_wasm32_test_gate(&root.join(unit.source_dir))? {
+        if !tree_has_wasm32_test_gate(&root.join(unit.source_dir), unit.gate)? {
             bail!(
                 "{}'s row points at {}, which carries no `{}` module. The row is \
                  aimed somewhere the wasm32 tests are not, so its silence would \
                  mean nothing.",
                 unit.package,
                 unit.source_dir,
-                WASM32_TEST_GATE[0]
+                unit.gate[0]
             );
         }
     }
@@ -861,8 +948,8 @@ fn unregistered_wasm_unit_packages() -> Result<Vec<String>> {
         .collect())
 }
 
-/// Whether any `.rs` file under `dir` carries a `wasm32`-only test-module gate.
-fn tree_has_wasm32_test_gate(dir: &Path) -> Result<bool> {
+/// Whether any `.rs` file under `dir` carries one of `gate`'s spellings.
+fn tree_has_wasm32_test_gate(dir: &Path, gate: &[&str]) -> Result<bool> {
     if !dir.is_dir() {
         return Ok(false);
     }
@@ -871,7 +958,7 @@ fn tree_has_wasm32_test_gate(dir: &Path) -> Result<bool> {
             .with_context(|| format!("reading an entry of {}", dir.display()))?
             .path();
         if path.is_dir() {
-            if tree_has_wasm32_test_gate(&path)? {
+            if tree_has_wasm32_test_gate(&path, gate)? {
                 return Ok(true);
             }
             continue;
@@ -885,7 +972,7 @@ fn tree_has_wasm32_test_gate(dir: &Path) -> Result<bool> {
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect();
-        if WASM32_TEST_GATE.iter().any(|gate| code.contains(gate)) {
+        if gate.iter().any(|spelling| code.contains(spelling)) {
             return Ok(true);
         }
     }
@@ -2111,14 +2198,56 @@ mod tests {
     fn the_wasm32_unit_scan_can_see_the_package_it_exempts() {
         let root = workspace_root().unwrap();
         assert!(
-            tree_has_wasm32_test_gate(&root.join("crates/happenstance-cloudflare/src")).unwrap(),
+            tree_has_wasm32_test_gate(
+                &root.join("crates/happenstance-cloudflare/src"),
+                WASM32_TEST_GATE
+            )
+            .unwrap(),
             "the scan cannot see the one tree it is registered against, so its \
              silence about every other tree would mean nothing"
         );
         assert!(
-            !tree_has_wasm32_test_gate(&root.join("crates/happenstance-core/src")).unwrap(),
+            !tree_has_wasm32_test_gate(
+                &root.join("crates/happenstance-core/src"),
+                WASM32_TEST_GATE
+            )
+            .unwrap(),
             "and it does not fire on a crate that has no wasm32-only test module, \
              which would make every row a false positive"
+        );
+    }
+
+    /// The two gate spellings are genuinely different, and each row's is the one
+    /// its own tree uses.
+    ///
+    /// Without this, `WASM32_TARGET_GATE` could be a copy of `WASM32_TEST_GATE`
+    /// — or either could drift to a spelling neither tree writes — and every
+    /// `source_dir` guard would keep passing on the strength of the *other*
+    /// row's tree. The negative half is what makes it a detector: the module
+    /// spelling must **not** be what an integration target is written behind,
+    /// because that is the whole reason the field exists.
+    #[test]
+    fn each_unit_row_is_gated_by_the_spelling_its_own_tree_uses() {
+        let root = workspace_root().unwrap();
+        for unit in WASM_UNIT_TARGETS {
+            assert!(
+                tree_has_wasm32_test_gate(&root.join(unit.source_dir), unit.gate).unwrap(),
+                "{}'s row names `{}`, which {} does not use",
+                unit.package,
+                unit.gate[0],
+                unit.source_dir
+            );
+        }
+        assert!(
+            !tree_has_wasm32_test_gate(
+                &root.join("crates/happenstance-cloudflare/tests"),
+                WASM32_TEST_GATE
+            )
+            .unwrap(),
+            "an integration target is already `#[cfg(test)]` by being one, so it \
+             cannot be written behind the module spelling. If this ever passes, \
+             `WasmUnitTarget::gate` has stopped distinguishing anything and one \
+             constant would do."
         );
     }
 

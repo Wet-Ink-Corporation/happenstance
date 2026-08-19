@@ -309,8 +309,8 @@ mod tests {
     use worker::wasm_bindgen::JsValue;
 
     use super::{JsHandle, JsThrow, StringifiedThrow};
+    use crate::host::durable_object;
     use crate::sql_storage::{SqlError, SqlValue};
-    use crate::test_object::durable_object;
 
     /// The exact text a Durable Object's SQLite puts in the thrown `Error`'s
     /// `message` when an append condition implemented as a unique index loses.

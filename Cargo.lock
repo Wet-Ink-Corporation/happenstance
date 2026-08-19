@@ -518,6 +518,7 @@ version = "0.2.0-alpha.1"
 dependencies = [
  "futures-core",
  "happenstance-core",
+ "happenstance-testkit",
  "thiserror",
  "wasm-bindgen-test",
  "worker",

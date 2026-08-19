@@ -478,7 +478,6 @@ fn safe_integer(number: f64) -> i64 {
 /// `pub(crate)` rather than `pub` because the *supported* entry point is
 /// [`SqlStorage::from_state`]: a caller who has a `State` should hand over the
 /// `State`, not a `JsValue` that might be anything.
-#[cfg(all(test, target_arch = "wasm32"))]
 pub(crate) fn storage_from_durable_object_state(state: JsValue) -> SqlStorage {
     let state: worker::State = state
         .unchecked_into::<worker::worker_sys::DurableObjectState>()
@@ -491,7 +490,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::{SqlError, SqlValue};
-    use crate::test_object::durable_object;
+    use crate::host::durable_object;
 
     /// Property 4, as an assertion. A Durable Object is single-threaded but
     /// re-entrant: the state a statement bumps is reached through a `RefCell`

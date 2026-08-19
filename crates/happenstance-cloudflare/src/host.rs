@@ -1,4 +1,5 @@
-//! A Durable Object's SQL storage, stood up for this crate's own tests.
+//! The Durable Object host: one object's `state`, stood up so that a store can
+//! be hung off it.
 //!
 //! # What this is, exactly
 //!
@@ -11,21 +12,38 @@
 //!
 //! So what is doubled here is the *runtime*, never the adapter. Every statement
 //! this crate's tests observe is rendered by the adapter, marshalled by
-//! `worker`, and executed by SQLite. Nothing in `src/` is compiled differently
-//! because these tests exist — the module is `#[cfg(all(test, target_arch =
-//! "wasm32"))]` and the types it produces are the ones production uses.
+//! `worker`, and executed by SQLite; the types it produces are the ones
+//! production uses.
+//!
+//! # A test-and-example surface, and not a second public API
+//!
+//! It is `pub`, and that is a visibility decision taken deliberately in the
+//! crate root rather than an accident of refactoring. A conformance run needs
+//! something to hang the store off, and the run lives in `tests/` — a **second
+//! compilation unit**, from which a `#[cfg(test)]` module in `src/lib.rs`
+//! cannot be named at all. That constraint is what moved this module out of
+//! `#[cfg(test)]`. It is not a promise about the shape of a Durable Object
+//! host, and the adapter itself stays a library type that any real
+//! `#[durable_object]` class can hold — [`crate::CloudflareEventStore::new`] is
+//! the one construction seam, and this module reaches it by exactly the call a
+//! production class would make.
+//!
+//! It is *unconditional* rather than `#[cfg(target_arch = "wasm32")]` for the
+//! reason the crate documentation gives about the host build generally: every
+//! `worker` binding links off-target and resolves to a `wasm-bindgen` stub that
+//! panics when called. So this module compiles everywhere and
+//! [`DurableObjectHost::new`] can only *run* where a JavaScript heap exists,
+//! which is the honest shape — a fixture that cannot connect is a broken test
+//! environment, and it says so by panicking rather than by not existing.
 //!
 //! # What it is *not*, and who owns the difference
 //!
-//! It is not a Durable Object runtime. There is no eviction, no hibernation, no
-//! event loop re-entering the object mid-`await`, and no real storage ceiling —
-//! so it cannot answer "what is `MAX_EVENT_DATA_LEN` here" or "does an
-//! acknowledged write survive a reopen". Those are
-//! `durable-object-host-and-fixture` and `measured-store-limits`, which mount
-//! the conformance suite on a real `workerd`. This module exists so that the
-//! write and read paths are written against a real SQL engine in the slice that
-//! writes them, instead of being written blind and first executed two
-//! milestones later.
+//! It is not the whole Durable Object runtime. There is no eviction, no
+//! hibernation, no event loop re-entering the object mid-`await`, and no
+//! platform storage ceiling of its own. What it **does** model, because the
+//! conformance suite needs both and both are properties of the *object* rather
+//! than of the isolate, is a **reopen** — see [`DurableObjectHost::storage`] —
+//! and a **fault armed for one statement** — see [`arm_throw_after`].
 //!
 //! # Why `js_sys::eval` rather than a `#[wasm_bindgen]` snippet
 //!
@@ -40,6 +58,7 @@
 use worker::js_sys;
 use worker::wasm_bindgen::{JsCast, JsValue};
 
+use crate::js::JsHandle;
 use crate::sql_storage::{SqlStorage, storage_from_durable_object_state};
 
 /// One Durable Object's `state`, as JavaScript.
@@ -121,8 +140,19 @@ const DURABLE_OBJECT_STATE: &str = r"
     // storage ceiling that fails an `INSERT` fails the compensating `DELETE`
     // beside it, and that pair is what `CloudflareEventStoreError::PartialBatch`
     // reports. A single-shot arming can never construct it.
-    armThrow(match, message, times) {
-      armed = { match, message, left: times === undefined ? 1 : Number(times) };
+    //
+    // `skip` is the fourth parameter and the one CF-39 needs: a mid-batch fault
+    // is a fault on the *k*-th write of a batch, not on the first, and a batch
+    // whose very first row never lands is not a partial write anybody has to
+    // undo. Skipping `skip` matching statements and then throwing is what puts
+    // rows on the ground before the fault arrives.
+    armThrow(match, message, times, skip) {
+      armed = {
+        match,
+        message,
+        left: times === undefined ? 1 : Number(times),
+        skip: skip === undefined ? 0 : Number(skip),
+      };
     },
     // Every statement the adapter issued, in order. Read by
     // `statements()` below, which is how a test counts *how many times* the
@@ -132,10 +162,14 @@ const DURABLE_OBJECT_STATE: &str = r"
     exec(query, ...bindings) {
       issued.push(query);
       if (armed !== null && query.includes(armed.match)) {
-        const message = armed.message;
-        armed.left -= 1;
-        if (armed.left <= 0) { armed = null; }
-        throw new Error(message);
+        if (armed.skip > 0) {
+          armed.skip -= 1;
+        } else {
+          const message = armed.message;
+          armed.left -= 1;
+          if (armed.left <= 0) { armed = null; }
+          throw new Error(message);
+        }
       }
       let statement;
       try {
@@ -161,22 +195,97 @@ const DURABLE_OBJECT_STATE: &str = r"
 })()
 ";
 
+/// One Durable Object, held so that its storage can be bound more than once.
+///
+/// The type exists for the one thing a bare [`SqlStorage`] cannot express: the
+/// difference between *the object* and *a handle onto it*. Cloning a
+/// `SqlStorage` aliases the same binding — same shared invalidation state, same
+/// cursor generation — which is exactly right for a second handle and exactly
+/// wrong for a **reopen**, where the whole point is that process-level state is
+/// thrown away and the durable rows are not.
+///
+/// Holding the object's `state` value and re-deriving a binding from it on
+/// demand is what makes both operations available from one place, and it is the
+/// mechanism a fixture answers `REOPEN` `SUPPORTED` on: a Durable Object's
+/// storage outlives its isolate, so discarding handle state and reading the
+/// store again is something this runtime genuinely does, while restarting the
+/// isolate from inside a test is not.
+///
+/// `Clone` aliases the object rather than standing up a second one, for the same
+/// reason `SqlStorage`'s does. Two *fixture instances* must share nothing, so a
+/// fixture builds a fresh host with [`DurableObjectHost::new`]; two handles onto
+/// one object are what a clone and [`storage`](Self::storage) are for.
+#[derive(Debug, Clone)]
+pub struct DurableObjectHost {
+    /// The object's `state`, kept live behind an `Rc`.
+    ///
+    /// [`JsHandle`] and not a bare `JsValue`: a real `JsValue` is `Send + Sync`
+    /// on `wasm32` builds without `atomics`, so holding one directly is how this
+    /// crate's central `!Send` property gets restored by accident and without a
+    /// diagnostic.
+    state: JsHandle,
+}
+
+impl DurableObjectHost {
+    /// Stands up a fresh, isolated Durable Object.
+    ///
+    /// One call is one object: a new in-memory database nothing else can see,
+    /// which is the isolation the conformance suite's own fixture contract asks
+    /// for.
+    ///
+    /// # Panics
+    ///
+    /// If the shim fails to evaluate — because there is no JavaScript heap here
+    /// at all (an ordinary host build, where every `worker` binding is a
+    /// panicking stub), because the host is not Node, or because it is too old
+    /// for `node:sqlite`. There is nothing to recover to, and a test that
+    /// silently ran against no storage would be worse than a failure.
+    #[must_use]
+    pub fn new() -> Self {
+        let state: JsValue = js_sys::eval(DURABLE_OBJECT_STATE)
+            .expect("the Durable Object shim evaluates on a Node host with `node:sqlite`");
+        Self {
+            state: JsHandle::new(state),
+        }
+    }
+
+    /// Binds this object's SQL storage, through the production path.
+    ///
+    /// `worker::State::from(DurableObjectState)` → `state.storage().sql()`, the
+    /// same two calls a `#[durable_object]` class makes. Each call returns a
+    /// **fresh** binding onto the **same** durable storage, which is what makes
+    /// this the reopen seam: the returned handle carries none of the previous
+    /// one's process-level state, and the rows are untouched.
+    ///
+    /// # Panics
+    ///
+    /// If the retained value is not a Durable Object `state`, which can only
+    /// happen if this type was constructed some other way.
+    #[must_use]
+    pub fn storage(&self) -> SqlStorage {
+        storage_from_durable_object_state(self.state.as_js().clone())
+    }
+}
+
+impl Default for DurableObjectHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A fresh, isolated Durable Object's SQL storage.
 ///
-/// One call is one object: a new in-memory database nothing else can see, which
-/// is the isolation the conformance suite's own fixture contract asks for.
-/// Cloning the returned [`SqlStorage`] aliases it, which is the second half of
-/// the same contract — one instance, many handles.
+/// [`DurableObjectHost::new`] followed by [`DurableObjectHost::storage`], for
+/// callers that want one handle and never a second binding. Cloning the returned
+/// [`SqlStorage`] aliases it, which is the other half of the fixture contract —
+/// one instance, many handles.
 ///
 /// # Panics
 ///
-/// If the shim fails to evaluate, which means the test host is not Node or is
-/// too old for `node:sqlite`. There is nothing to recover to, and a test that
-/// silently ran against no storage would be worse than a failure.
-pub(crate) fn durable_object() -> SqlStorage {
-    let state: JsValue = js_sys::eval(DURABLE_OBJECT_STATE)
-        .expect("the Durable Object shim evaluates on a Node host with `node:sqlite`");
-    storage_from_durable_object_state(state)
+/// [`DurableObjectHost::new`]'s, unchanged.
+#[must_use]
+pub fn durable_object() -> SqlStorage {
+    DurableObjectHost::new().storage()
 }
 
 /// Arms one throw, on the next statement whose text contains `matching`.
@@ -196,8 +305,8 @@ pub(crate) fn durable_object() -> SqlStorage {
 ///
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
-pub(crate) fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
-    arm_throws(sql, matching, message, 1);
+pub fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
+    arm(sql, matching, message, 1, 0);
 }
 
 /// Arms `times` consecutive throws on statements whose text contains `matching`.
@@ -212,24 +321,57 @@ pub(crate) fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
 ///
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
-pub(crate) fn arm_throws(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
-    let arm = sql
+pub fn arm_throws(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
+    arm(sql, matching, message, times, 0);
+}
+
+/// Arms one throw on the statement **after** `skip` matching ones have run.
+///
+/// The generalisation CF-39 needs, and it is not a nicety. A fixture's
+/// `arm_mid_batch_fault` asks for the *k*-th write of a batch to fail, and a
+/// fault that fires on the first write leaves no rows on the ground for the
+/// store to have to undo — so the rule it feeds would be asking about an append
+/// that never started rather than about atomicity. Arming after two of the
+/// adapter's own `INSERT INTO event (` statements is what makes
+/// `append_is_atomic_under_a_mid_batch_fault` a real question.
+///
+/// The thrown value is a real `new Error(message)` marshalled back through
+/// `worker`'s own bindings, so the store classifies it exactly as it classifies
+/// a Durable Object's SQLite refusing a statement: nothing is mocked between the
+/// throw and the caller.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims, which means the caller built
+/// the storage some other way.
+pub fn arm_throw_after(sql: &SqlStorage, matching: &str, message: &str, skip: u32) {
+    arm(sql, matching, message, 1, skip);
+}
+
+/// The one call every arming above goes through.
+///
+/// `Function::apply` over a four-element array rather than `call3`, because the
+/// shim's hook takes four arguments and `js_sys`'s positional helpers stop at
+/// three.
+fn arm(sql: &SqlStorage, matching: &str, message: &str, times: u32, skip: u32) {
+    let hook = sql
         .handle()
         .property("armThrow")
         .expect("reading the arming hook does not throw")
         .expect("this module's shim always carries the hook");
-    let arm: js_sys::Function = arm
+    let hook: js_sys::Function = hook
         .as_js()
         .clone()
         .dyn_into()
         .expect("the arming hook is a function");
-    arm.call3(
-        sql.handle().as_js(),
+    let arguments = js_sys::Array::of4(
         &JsValue::from_str(matching),
         &JsValue::from_str(message),
         &JsValue::from_f64(f64::from(times)),
-    )
-    .expect("arming a throw does not itself throw");
+        &JsValue::from_f64(f64::from(skip)),
+    );
+    hook.apply(sql.handle().as_js(), &arguments)
+        .expect("arming a throw does not itself throw");
 }
 
 /// Every statement this object has been asked to run, oldest first.
@@ -243,7 +385,7 @@ pub(crate) fn arm_throws(sql: &SqlStorage, matching: &str, message: &str, times:
 ///
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
-pub(crate) fn statements(sql: &SqlStorage) -> Vec<String> {
+pub fn statements(sql: &SqlStorage) -> Vec<String> {
     let log = sql
         .handle()
         .property("issuedStatements")

@@ -16,10 +16,24 @@
 //! what it was written to do; the lint is denied workspace-wide, so the gate
 //! now fails on the first one that comes back.
 //!
+//! There is now something to hang a store off, too. [`host`] stands up one
+//! Durable Object's `state` — real SQLite through Node's `node:sqlite`, reached
+//! by the same `State::storage().sql()` a `#[durable_object]` class calls — and
+//! it is `pub` so that a conformance target, which is a second compilation
+//! unit, can name it. It is a **test-and-example surface** and not a second
+//! public API: the adapter stays a library type any real Durable Object class
+//! can hold, and [`host`]'s own documentation says what that visibility does and
+//! does not promise.
+//!
 //! What has *not* happened yet is the conformance suite: this adapter has not
-//! run `happenstance_testkit::event_store_conformance!` on `workerd`, and
-//! until it has, it is an implementation rather than a conformant adapter. The
-//! fixture, the host and the gate step are the next three stories'.
+//! run `happenstance_testkit::event_store_conformance!` against a
+//! `CloudflareFixture`, and until it has, it is an implementation rather than a
+//! conformant adapter. The fixture itself exists —
+//! `crates/happenstance-cloudflare/tests/support/mod.rs`, in `tests/` because
+//! `happenstance-testkit` is a dev-dependency and an `impl Fixture` in `src/`
+//! would put the suite in a published crate's runtime graph — and its own
+//! contract is held honest by `tests/fixture_contract.rs`. Pointing the shipped
+//! macro at it is the next story's.
 //!
 //! # What this crate is for
 //!
@@ -231,7 +245,7 @@
 //!   exactly** — the runner refuses a mismatched schema part way through a test
 //!   binary. `cargo install wasm-bindgen-cli --version <locked> --locked`.
 //! * **Node 22.5 or newer.** The runner's host is Node, and
-//!   `test_object.rs`'s Durable Object shim reaches Node's own `node:sqlite`
+//!   `host.rs`'s Durable Object shim reaches Node's own `node:sqlite`
 //!   through `process.getBuiltinModule` — real SQLite, the same engine a Durable
 //!   Object runs. On an older Node every case fails at once inside the shim,
 //!   which reads as "the adapter is broken" and is not.
@@ -246,19 +260,29 @@
 #![doc(html_no_source)]
 
 pub mod event_store;
+// The Durable Object host. `pub`, and the visibility is the decision rather
+// than the placement.
+//
+// It used to be `#[cfg(all(test, target_arch = "wasm32"))] mod test_object`,
+// which was right while its only callers were this crate's own `#[cfg(test)]`
+// modules and wrong the moment a conformance target needed it. An integration
+// test is a **second compilation unit**: it links this crate's public surface
+// and nothing else, so a `#[cfg(test)]` module in `src/` is not merely
+// inconvenient from `tests/` — it does not exist there. That is the one closed
+// question about the host's placement, and it is why this line is `pub`.
+//
+// What the visibility does *not* buy is a second public API. The adapter stays
+// a library type any `#[durable_object]` class can hold, this module reaches it
+// through the same `CloudflareEventStore::new(sql)` a production class calls,
+// and the crate documentation above says so. `publish = false` still stands;
+// whether the host travels to a consumer at all is `publish-ready-crate`'s to
+// decide, and it is a smaller decision for the module being one item rather
+// than a `cfg` maze.
+pub mod host;
 pub mod js;
 mod query_sql;
 pub mod send_shape;
 pub mod sql_storage;
-
-// The same condition on the definition and on every caller. Gate only the
-// caller and the module survives where nothing calls it.
-// Left un-gated it is dead code on wasm, and `dead_code` is an error under the
-// gate's `-D warnings` — a failure that lands on the mandatory `wasm32 build of
-// the Cloudflare adapter` step, with a message about an unused function that
-// says nothing about targets.
-#[cfg(all(test, target_arch = "wasm32"))]
-mod test_object;
 
 pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStream};
 pub use js::{JsHandle, JsThrow, StringifiedThrow};
@@ -506,8 +530,8 @@ mod es6_reconstruction {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::event_store::{CloudflareEventStore, CloudflareEventStoreError};
+    use crate::host::{arm_throw, durable_object};
     use crate::sql_storage::SqlError;
-    use crate::test_object::{arm_throw, durable_object};
 
     /// The exact text a Durable Object's SQLite surfaces through the thrown
     /// `Error`'s `message` when the uniqueness an append condition rests on is

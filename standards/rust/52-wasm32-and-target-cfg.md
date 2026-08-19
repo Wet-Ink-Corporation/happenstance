@@ -155,9 +155,9 @@ step — goes red on a lint, in a crate whose bodies are all `todo!()`, with a
 message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:256 (Left un-gated it is dead code on wasm)` ·
-`crates/happenstance-cloudflare/src/lib.rs:288 (mod not_send_probe)` ·
-`xtask/src/main.rs:289 (wasm32 build of the Cloudflare adapter)`
+**Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:106 (is denied under)` ·
+`crates/happenstance-cloudflare/src/lib.rs:298 (mod not_send_probe)` ·
+`xtask/src/main.rs:294 (wasm32 build of the Cloudflare adapter)`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
 
