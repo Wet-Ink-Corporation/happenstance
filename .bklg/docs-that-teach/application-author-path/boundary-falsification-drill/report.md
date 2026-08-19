@@ -16,13 +16,13 @@ directions is recorded rather than asserted.
 
 | AC | Result | What proves it | Mount |
 | --- | --- | --- | --- |
-| AC-001 | **satisfied** | `docs/first-encounter.md:131-161` — `### Try it wrong, then put it back`, under `## A condition that refuses`, after the ES-25 citation, step 3's only `###`. Three labelled parts in order: **The edit.**, **What you should see.**, **Putting it back.** `xtask/tests/falsification_drill.rs::the_drill_is_a_subsection_at_the_bottom_of_step_three` and `::the_drill_states_the_edit_then_the_failure_then_the_revert`, the second scanning the labels **in order** so a transposition fails | `xtask/src/narrative.rs:128-136` (page) |
-| AC-002 | **satisfied** | Both mounts executed on a clean tree: `cargo test -p xtask --doc -- first_encounter` → 3 passed; `cargo test -p happenstance --test boundary_refusal` → 2 passed. Both inside the existing `"tests"` REQUIRED step. No `ignore`/`no_run`/`compile_fail` at either mount; `IGNORE_ALLOWANCES` still `&[]` | page + `crates/happenstance/tests/boundary_refusal.rs` |
-| AC-003 | **satisfied** | The edit applied for real: page → `the boundary did not hold: Ok(SequencePosition(2))` at `narrative::first_encounter (line 96)`; twin → the same message at `crates\happenstance\tests\boundary_refusal.rs:67:15`. Both are the refusal assertion, reached by a program that compiled and ran. `REQUIRED` unchanged | page + twin |
-| AC-004 | **satisfied** | One inverse change at each mount and nothing else: 3 passed and 2 passed again, `git status --porcelain` empty at the checkpoint. EC-005 did not fire | page + twin |
-| AC-005 | **satisfied** | `_drill-observation.md`, dated 2026-08-18: starting tree and HEAD sha, both directions verbatim at both mounts, a reproducibility re-run, the closing clean-tree check, the cost note, three routed findings. `::the_transcript_records_both_directions` fails if a half goes missing | both |
+| AC-001 | **satisfied** | `docs/first-encounter.md:132-163` — `### Try it wrong, then put it back`, under `## A condition that refuses`, after the ES-25 citation, step 3's only `###`. Three labelled parts in order: **The edit.**, **What you should see.**, **Putting it back.** `xtask/tests/falsification_drill.rs::the_drill_is_a_subsection_at_the_bottom_of_step_three` and `::the_drill_states_the_edit_then_the_failure_then_the_revert`, the second scanning the labels **in order** so a transposition fails | `xtask/src/narrative.rs:128-136` (page) |
+| AC-002 | **satisfied** | Both mounts executed on a clean tree: `cargo test -p xtask --doc -- first_encounter` → 3 passed; `cargo test -p happenstance --test boundary_refusal` → 3 passed. Both inside the existing `"tests"` REQUIRED step. No `ignore`/`no_run`/`compile_fail` at either mount; `IGNORE_ALLOWANCES` still `&[]` | page + `crates/happenstance/tests/boundary_refusal.rs` |
+| AC-003 | **satisfied** | The edit applied for real, and applied again after the scenario changed: page → `the boundary did not hold: Ok(SequencePosition(3))` at `narrative::first_encounter (line 96)`; twin → the same message at `crates\happenstance\tests\boundary_refusal.rs:87:15`. Both are the refusal assertion, reached by a program that compiled and ran. `REQUIRED` unchanged | page + twin |
+| AC-004 | **satisfied** | One inverse change at each mount and nothing else: 3 passed and 3 passed again, `git status --porcelain` empty at the checkpoint and both mounts byte-identical by `git hash-object` across the 2026-08-19 re-run. EC-005 did not fire | page + twin |
+| AC-005 | **satisfied** | `_drill-observation.md`, dated 2026-08-18: starting tree and HEAD sha, both directions verbatim at both mounts, a reproducibility re-run, the closing clean-tree check, the cost note, three routed findings — plus § *Re-run 2026-08-19*, the whole drill performed again end to end after BC-004 changed step 3's program. `::the_transcript_records_both_directions` fails if a half goes missing | both |
 | AC-006 | **satisfied** | `::the_pages_quoted_failure_is_byte_equal_to_the_recorded_one` walks every quoted line and requires it in the transcript — the check that catches a drill written from imagination. Plus `::the_quoted_failure_is_copy_faithful` (no elision) and `::the_drill_neither_uses_nor_suggests_emptying_the_query` | page |
-| AC-007 | **satisfied** | `::the_drill_is_persistent_and_introduces_nothing` — no fold, no affordance, no prior-model word, no `MUST`, no second answered-need, no `happenstance_core`; one `###` in the step; `cargo run -p xtask -- lints` green (no `HIDDEN_MARKERS`); all 17 page assertions still pass; `spec-trace` resolves ES-25 | page |
+| AC-007 | **satisfied** | `::the_drill_is_persistent_and_introduces_nothing` — no fold, no affordance, no prior-model word, no `MUST`, no second answered-need, no `happenstance_core`; one `###` in the step; `cargo run -p xtask -- lints` green (no `HIDDEN_MARKERS`); all 19 page assertions still pass; `spec-trace` resolves ES-25 | page |
 
 **The finding that mattered, and it could have gone the other way.** Under the edit the refusal
 assertion failed at both mounts *while* `without_the_condition_the_same_append_is_accepted`
@@ -78,6 +78,19 @@ to exclude it; `xtask` is the crate that owns the narrative tree and is `publish
 widening is tests-only, and the alternative was no mechanical check at all for AC-001, AC-006
 and AC-007 — including the byte comparison between the failure the page quotes and the failure
 the transcript recorded, which is the check this story's own risk table ranks first.
+
+**The drill was performed a second time, because the scenario under it changed.** The slice's
+fix pass corrected step 3 so the guard carries a position the program's own read observed
+(`boundary-refusal-encounter/_conditions.md` § **BC-004**), which puts one more event in the
+store and moves the position the unconditional append lands at from `2` to `3`. A transcript
+that was not re-run would have left the page quoting a failure that no longer happens — the
+exact defect `::the_pages_quoted_failure_is_byte_equal_to_the_recorded_one` exists to catch, and
+it would have caught it. So both directions were run again at both mounts and recorded in
+`_drill-observation.md` § *Re-run 2026-08-19*, with the 2026-08-18 transcripts left standing as
+the audit trail. The twin gained the same seeded scenario and a third test,
+`::the_after_is_load_bearing_in_its_value_not_in_its_presence`, which passed under the drill's
+edit throughout — it builds its own conditions — and is what says the *guard*, not the scenario
+around it, is what the edit removes.
 
 ## Acceptance
 

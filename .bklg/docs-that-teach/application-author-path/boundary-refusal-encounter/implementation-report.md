@@ -40,6 +40,25 @@ Seventeen assertions, all red before the page existed, all green after:
 > flipped on the fix pass against `spec.md` § Amendment — BC-002, and AC-007 is carried open —
 > `_conditions.md` § *Acceptance reconciliation*.
 
+> **Second fix pass, 2026-08-19 — AC-004's row above records a check that could not fail.**
+> `::the_racing_append_and_the_after_are_both_load_bearing` proved the tag join (the red in the
+> row stands, only its position moves to `Ok(SequencePosition(3))` under the corrected
+> scenario) and asserted the rest with a source substring, `program.contains("after_opt(upto)")`,
+> over a step 3 that read an **empty** store: `upto` was `None`, `AppendCondition::new` already
+> carries `after: None`, and the call was inert — delete it and the doctest stayed green.
+> Replaced by two assertions with the substring gone:
+> `::the_racing_append_carries_the_tag_the_guards_query_joins_on` and
+> `::step_three_guards_on_a_position_its_own_read_observed`, the second **verified red against
+> the shipped program** (*"step three reads an empty store, so `upto` is None and
+> `after_opt(upto)` is inert"*) and green after step 3 was corrected to seed, read
+> `Some(SequencePosition(1))`, race above it and guard on it.
+> `cargo test -p xtask --test first_encounter` → `19 passed; 0 failed`;
+> `cargo test -p happenstance --test boundary_refusal` → `3 passed`, the third being
+> `::the_after_is_load_bearing_in_its_value_not_in_its_presence`, which executes BC-004's
+> finding: whole-log still refuses, a guard built from a read taken after the race is accepted.
+> AC-007 is no longer carried open — `8161418` opened HS-B0001 and the row is flipped against
+> its id. The rows above are the implementation run's record and are left as written.
+
 ## Commits
 
 | SHA | Subject |

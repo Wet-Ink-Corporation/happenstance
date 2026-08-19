@@ -13,6 +13,13 @@ file is the only record it will ever have, and project DoD item 3 reads it. Ever
 is pasted from a run in this session on the pinned toolchain; nothing is composed, and the
 page's quoted block is taken **from here** rather than the other way round.
 
+**Superseded numbers, and where the current ones are.** The 2026-08-18 sections below were run
+against a step-3 program that read an *empty* store, where the unconditional append landed at
+position `2`. The slice's fix pass changed that program (BC-004), so the drill was performed
+again and the page now quotes § *Re-run 2026-08-19*. The older transcripts are kept verbatim as
+the audit trail; every `Ok(SequencePosition(2))` in them is a real line from a real run of a
+program this repository no longer carries.
+
 Two mounts are exercised throughout, and both are inside the one `"tests"` REQUIRED step
 (`xtask/src/main.rs`, `cargo test --locked --workspace --all-features -- --show-output`), so no
 gate step was added:
@@ -249,6 +256,123 @@ of the first run: the `#[allow(clippy::cloned_ref_to_slice_refs, …)]` block an
 added between the two runs, moving the assertion down eleven lines. The message and the test
 name — the two things a reader is asked to recognise — are byte-identical across both runs, and
 that is NF-005 measured a second time on a different axis than the process id.
+
+## Re-run 2026-08-19 — the scenario changed, so the drill was performed again
+
+**Read this before the 2026-08-18 transcripts above.** The slice's fix pass changed step 3's
+program: it now lands one matching seat *before* the decision reads, so `upto` is
+`Some(SequencePosition(1))` rather than `None` and the guard carries a boundary the program
+actually observed (`boundary-refusal-encounter/_conditions.md` § **BC-004**). One more event in
+the store moves the position the *unconditional* append lands at from `2` to `3`, so the failure
+the drill produces is a different line than it was, and a transcript that was not re-run would
+have made the page quote a run that no longer happens. Everything above is left standing as the
+audit trail; **the lines the page quotes are taken from this section**.
+
+The tracked tree carried the fix pass's own three modified files throughout, so the closing check
+here is stronger than `git status --porcelain` rather than weaker: both mounts are hashed before
+the edit and after the revert, and the two pairs are equal, which is byte-identity of the exact
+files the drill touched. The empty-porcelain record for the procedure itself stands at checkpoint
+`b64448a` in the section above, and nothing about the edit or the revert changed.
+
+```console
+$ git status --porcelain
+ M crates/happenstance/tests/boundary_refusal.rs
+ M docs/first-encounter.md
+ M xtask/tests/first_encounter.rs
+
+$ git hash-object docs/first-encounter.md crates/happenstance/tests/boundary_refusal.rs
+b8f3c20de8cd7976ff8e9a75bcba0c9894207adb
+b86ab2e4f552911d8468a116314a47c344fbf585
+```
+
+**Direction one — the boundary removed.** The same one-expression edit as before, at
+`docs/first-encounter.md:113` and `crates/happenstance/tests/boundary_refusal.rs:86`:
+
+```text
+-    match store.append(&[seat], Some(&condition)).await {
++    match store.append(&[seat], None).await {
+```
+
+```console
+$ cargo test -p xtask --doc -- first_encounter
+running 3 tests
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 16) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 55) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 96) ... FAILED
+
+failures:
+
+---- xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 96) stdout ----
+Test executable failed (exit status: 101).
+
+stderr:
+
+thread 'main' (62136) panicked at C:\Users\ryanm\AppData\Local\Temp\rustdoctestOagqcm\doctest_bundle_2024.rs:84:15:
+the boundary did not hold: Ok(SequencePosition(3))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+failures:
+    xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 96)
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 168 filtered out; finished in 0.40s
+error: doctest failed, to rerun pass `-p xtask --doc`
+
+$ cargo test -p happenstance --test boundary_refusal
+warning: unused variable: `condition`
+  --> crates\happenstance\tests\boundary_refusal.rs:83:23
+running 3 tests
+test the_after_is_load_bearing_in_its_value_not_in_its_presence ... ok
+test without_the_condition_the_same_append_is_accepted ... ok
+test the_guarded_append_is_refused ... FAILED
+
+failures:
+
+---- the_guarded_append_is_refused stdout ----
+
+thread 'the_guarded_append_is_refused' (60800) panicked at crates\happenstance\tests\boundary_refusal.rs:87:15:
+the boundary did not hold: Ok(SequencePosition(3))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+failures:
+    the_guarded_append_is_refused
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+**Read the three twin results together.** `the_guarded_append_is_refused` failed;
+`without_the_condition_the_same_append_is_accepted` passed, so the append, the store and the tags
+are all fine; and `the_after_is_load_bearing_in_its_value_not_in_its_presence` — the test BC-004
+added, which builds its own conditions and so does not take the drill's edit — passed, which is
+what says the *guard*, not the scenario around it, is the thing the edit removed.
+
+**Direction two — the boundary restored.** The same one-operation inverse, at both mounts:
+
+```console
+$ cargo test -p xtask --doc -- first_encounter
+running 3 tests
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 16) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 55) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 96) ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 168 filtered out; finished in 0.35s
+
+$ cargo test -p happenstance --test boundary_refusal
+running 3 tests
+test the_after_is_load_bearing_in_its_value_not_in_its_presence ... ok
+test without_the_condition_the_same_append_is_accepted ... ok
+test the_guarded_append_is_refused ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+$ git hash-object docs/first-encounter.md crates/happenstance/tests/boundary_refusal.rs
+b8f3c20de8cd7976ff8e9a75bcba0c9894207adb
+b86ab2e4f552911d8468a116314a47c344fbf585
+```
+
+**Both hashes are the ones recorded before the edit.** One stated revert, nothing else touched,
+and the two files the drill operates on are byte-identical to where they started — no
+`Cargo.lock` touch, no generated file, no second instruction. NF-005 holds across the scenario
+change too: the two lines a reader is asked to recognise are the test name
+`narrative::first_encounter (line 96)` and `the boundary did not hold: Ok(SequencePosition(3))`,
+and the fence still opens at line 96 because the fix pass added its line *inside* the fence.
 
 ## Cost, and what was not added
 

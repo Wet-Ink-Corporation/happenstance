@@ -43,6 +43,14 @@ use happenstance::{MemoryEventStore, Query, QueryItem, Tags, read_decision_model
 /// condition built from the query and the position the read observed — so the
 /// two tests below differ in **one argument** and nothing else.
 ///
+/// One seat is landed *before* the read, so `upto` is `Some(SequencePosition(1))`
+/// rather than `None` and the guard carries a boundary this program actually
+/// observed. That is not decoration: with an empty store the read yields `None`,
+/// `AppendCondition::new` already carries `after: None`, and `.after_opt(upto)`
+/// is inert — the scenario would refuse for the whole-log reason rather than for
+/// the reason the page claims. See `boundary-refusal-encounter/_conditions.md`
+/// § BC-004.
+///
 /// The `clone` clippy asks to replace with `std::slice::from_ref` is kept
 /// deliberately: this body is the page's fence written a second time, and the
 /// only defence against the two drifting apart is that they read the same. A
@@ -59,10 +67,11 @@ async fn raced() -> Result<(MemoryEventStore, Event, AppendCondition), Box<dyn c
     let held = Tags::from_pairs([("course", "c1")])?;
     let item = QueryItem::new(["SeatHeld"], held.clone())?;
     let seats = Query::from_items([item])?;
+    let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
+    store.append(&[seat.clone()], None).await?; // already held
 
     let (_taken, upto) = read_decision_model(&store, &seats).await?;
-    let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
-    store.append(&[seat.clone()], None).await?;
+    store.append(&[seat.clone()], None).await?; // another writer
 
     let condition = AppendCondition::new(seats).after_opt(upto);
     Ok((store, seat, condition))
@@ -77,6 +86,62 @@ async fn the_guarded_append_is_refused() -> Result<(), Box<dyn core::error::Erro
         Err(AppendError::ConditionViolated(_)) => Ok(()),
         ok => panic!("the boundary did not hold: {ok:?}"),
     }
+}
+
+/// What "the `after` is load-bearing" can mean, and what it cannot, executed.
+///
+/// The page's criterion asks for a second falsification alongside the tag join:
+/// remove `after_opt(upto)` and the scenario stops refusing. That one cannot be
+/// had, and this is where it is *checked* rather than asserted in prose.
+/// `AppendCondition::new` carries `after: None`, and `None` checks the **whole
+/// log** — strictly stronger than any position — so deleting the call tightens
+/// the guard and the same append is refused anyway. The first half below is
+/// that fact as a test.
+///
+/// What is falsifiable, and what a reader must actually get right, is the
+/// position's *value*: build the guard from a read taken after the race and the
+/// store admits the append. That acceptance is the lost update the whole
+/// encounter exists to make visible, and the second half below is it.
+///
+/// Recorded and routed as **BC-004** in
+/// `.bklg/docs-that-teach/application-author-path/boundary-refusal-encounter/_conditions.md`.
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the same scenario as `raced`, spelled the same way on purpose"
+)]
+#[tokio::test]
+async fn the_after_is_load_bearing_in_its_value_not_in_its_presence()
+-> Result<(), Box<dyn core::error::Error>> {
+    let store = MemoryEventStore::new();
+    let held = Tags::from_pairs([("course", "c1")])?;
+    let item = QueryItem::new(["SeatHeld"], held.clone())?;
+    let seats = Query::from_items([item])?;
+    let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
+    store.append(&[seat.clone()], None).await?; // already held
+
+    let (_taken, _upto) = read_decision_model(&store, &seats).await?;
+    store.append(&[seat.clone()], None).await?; // another writer
+
+    // Presence: the guard a reader is left with if they delete `after_opt`.
+    let whole_log = AppendCondition::new(seats.clone());
+    let refused = store.append(&[seat.clone()], Some(&whole_log)).await;
+    assert!(
+        matches!(refused, Err(AppendError::ConditionViolated(_))),
+        "the whole-log guard admitted the append, so `after: None` is not the \
+         stronger condition this test and BC-004 both rest on: {refused:?}"
+    );
+
+    // Value: a guard built from a read taken *after* the race, which is the
+    // mistake the page's `upto` exists to prevent.
+    let (_again, fresh) = read_decision_model(&store, &seats).await?;
+    let stale = AppendCondition::new(seats).after_opt(fresh);
+    let accepted = store.append(&[seat], Some(&stale)).await;
+    assert!(
+        accepted.is_ok(),
+        "a guard built from a read taken after the race refused, so this test \
+         no longer demonstrates the lost update it exists for: {accepted:?}"
+    );
+    Ok(())
 }
 
 /// The half that makes the claim falsifiable: remove the condition — the

@@ -36,6 +36,22 @@ citation is asserted independently from the other side by
 narrower in scope and no weaker: both halves of the ordering are now pinned, where before one
 was pinned backwards.
 
+> **Fix pass, 2026-08-19 — the drill was run again, because the scenario under it changed.**
+> The slice-mate's step 3 was reading an empty store, so its `after_opt(upto)` was inert
+> (`boundary-refusal-encounter/_conditions.md` § **BC-004**). Corrected, it lands one matching
+> seat before the read, which puts one more event in the store and moves the failure the drill
+> produces from `Ok(SequencePosition(2))` to `Ok(SequencePosition(3))`. The rows above are the
+> implementation run's record and are left as written; what changed since:
+> the drill was performed end to end again at both mounts and recorded in `_drill-observation.md`
+> § *Re-run 2026-08-19* (page: `narrative::first_encounter (line 96)` FAILED with the new line;
+> twin: `boundary_refusal.rs:87:15` with the same line; both green again after the one inverse
+> change; `git hash-object` on both mounts equal before the edit and after the revert). The page's
+> quoted block was re-taken from that transcript, so
+> `::the_pages_quoted_failure_is_byte_equal_to_the_recorded_one` still passes on a line the run
+> actually produced. The twin gained the same seed and a third test,
+> `::the_after_is_load_bearing_in_its_value_not_in_its_presence` — `3 passed`, not 2 — and the
+> drill's own nine assertions and the slice-mate's nineteen are green.
+
 ## Commits
 
 | SHA | Subject |

@@ -334,7 +334,7 @@ fn step_three_prints_the_refusal_from_inside_the_matched_arm() {
 }
 
 #[test]
-fn the_racing_append_and_the_after_are_both_load_bearing() {
+fn the_racing_append_carries_the_tag_the_guards_query_joins_on() {
     let page = read(PAGE);
     let body = step(&page, STEPS[2].0).join("\n");
     let owned = fences(&body);
@@ -352,12 +352,89 @@ fn the_racing_append_and_the_after_are_both_load_bearing() {
         "the racing append carries no tags, so the guard's query cannot match it"
     );
     assert!(
-        program.contains("after_opt(upto)"),
-        "the condition is not built from the position the read actually observed"
-    );
-    assert!(
         !program.contains("Query::all()") && !program.contains("Tags::empty()"),
         "the guard is broadened, so the scenario would refuse for the wrong reason"
+    );
+}
+
+/// Step 3's guard stands on a position step 3's own read observed.
+///
+/// **This assertion exists because the one it replaces could not fail.** It
+/// asserted the source substring `after_opt(upto)`, over a program that read an
+/// **empty** store: `upto` was `None`, and `AppendCondition::new(q)` already
+/// carries `after: None` (`crates/happenstance-core/src/append.rs`, `Guard`),
+/// so the call was inert — delete it and the step-3 doctest still passed.
+///
+/// And it cannot be fixed by asserting the criterion's own falsification
+/// recipe, because that recipe is unsatisfiable by construction: `after: None`
+/// checks the **whole log**, which is strictly *stronger* than any `after`, so
+/// removing the call can only ever tighten the guard — never turn a refusal
+/// into an acceptance. Recorded and routed as **BC-004** in
+/// `boundary-refusal-encounter/_conditions.md`.
+///
+/// What is left is the property a reader must actually get right, and it is
+/// falsifiable in both directions: the `after` is the position **this
+/// program's own read observed**, taken before the race and carried into the
+/// guard. Guard on a position read *after* the race and the store admits the
+/// append — the lost update, verified red. Read an empty store and there is no
+/// position to be wrong about, which is the program that shipped and which this
+/// assertion fails.
+#[test]
+fn step_three_guards_on_a_position_its_own_read_observed() {
+    let page = read(PAGE);
+    let body = step(&page, STEPS[2].0).join("\n");
+    let owned = fences(&body);
+    let program = owned
+        .iter()
+        .find(|fence| fence.info == "rust")
+        .map(|fence| fence.body.join("\n"))
+        .expect("step three carries a fence");
+
+    // The store holds a matching event before the decision reads it, so the
+    // read observes a real position rather than `None`.
+    let seeded = program
+        .find(", None).await")
+        .expect("step three never lands an event of its own");
+    let read_back = program
+        .find("read_decision_model(")
+        .expect("step three never reads");
+    assert!(
+        seeded < read_back,
+        "step three reads an empty store, so `upto` is None and `after_opt(upto)` \
+         is inert — the guard it builds is indistinguishable from the whole-log \
+         guard `AppendCondition::new` already carries"
+    );
+
+    // The racing writer lands between the read and the guarded append, so the
+    // event that violates the guard is strictly above the observed position.
+    let racing = program[read_back..]
+        .find(", None).await")
+        .map(|at| read_back + at)
+        .expect("nothing lands between the read and the guarded append");
+    let guarded = program
+        .find("Some(&condition)")
+        .expect("step three never makes the guarded append");
+    assert!(
+        read_back < racing && racing < guarded,
+        "the racing append does not sit between the read and the guarded append, \
+         so nothing is above the position the guard was built from"
+    );
+    assert!(
+        program.contains("after_opt(upto)"),
+        "the condition is not built from the position the read observed"
+    );
+
+    // And the reader can see that position: it is in the program's own output,
+    // so an append refused above a real boundary is distinguishable on screen
+    // from one refused because the guard was whole-log all along.
+    let output = owned
+        .iter()
+        .find(|fence| fence.info == "text")
+        .map(|fence| fence.body.join("\n"))
+        .expect("step three carries an output block");
+    assert!(
+        output.contains("Some(SequencePosition("),
+        "step three's output never shows the position it guarded on: {output}"
     );
 }
 

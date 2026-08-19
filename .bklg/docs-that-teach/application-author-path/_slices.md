@@ -80,6 +80,24 @@ or a human — starts from. They are hypotheses for the next reviewer to verify,
   **Fix:** No change requested on this point. Carry the note forward to the project-level review so
   that closeout weighs the descope on its merits rather than rediscovering it.
 
+- **PROVENANCE, recorded on the fix pass 2026-08-19, so an absence is not read as an omission.**
+  Two commits on this slice are **cross-story slice fixes and are deliberately attributed to
+  neither story's `links.commits`**: `5af116b` (the ledger/amendment reconciliation and step 2's
+  corrected citation) and the fix-pass commit that follows this note (the BC-004 correction of
+  step 3, the drill re-run, and the four review findings). Each touches `docs/first-encounter.md`,
+  `xtask/tests/first_encounter.rs` **and both** story directories, and the two stories declare
+  different PR-boundary fences: `boundary-falsification-drill/**` sits outside HS-S0185's fence
+  and `boundary-refusal-encounter/**` outside HS-S0186's. Recording either commit against a
+  single story turns `redkiln verify --grain story`'s `boundary` check red on files that were
+  correctly changed — the caution the finding above states in its own words — and recording it
+  against *both* would claim each story owns the other's directory. The slice, not the story, is
+  the unit that owns them; the per-story commits recorded by `redkiln record-links` are the
+  implementation checkpoints `9493276` and `cc9c4a4`, and every cross-story commit is enumerated
+  here with its subject so the audit trail is complete without a fence being widened to hold it.
+  `4232b34` (the two PR-boundary amendments) is a third, and is already named in both stories'
+  reports. **Fix:** none requested by this note — it exists because the reviewer asked for the
+  reasoning to be stated rather than inferred.
+
 - **OBSERVATION**, no change requested. `redkiln verify --item HS-S0186 --grain story` reports
   `boundary: no boundary declared` and `provenance: no boundary declared`, even though
   boundary-falsification-drill/spec.md:199-207 does declare a seven-entry fence. Its pass is

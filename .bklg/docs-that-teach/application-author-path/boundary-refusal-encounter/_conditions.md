@@ -16,6 +16,9 @@ turned up.
 `_design.md` is untouched. So is `_design.md`'s sign-off row. Nothing below re-decides DT-1,
 DT-4, DT-5 or DT-6.
 
+**Added on the 2026-08-19 fix pass:** § **BC-004**, at the bottom — a clause of AC-004 that no
+implementation can satisfy, found by a slice review, measured, and routed the way BC-002 was.
+
 ## BC-002 — the crate root's one fence is already spoken for
 
 **What the design says.** `## Composition` composes `crate-root-encounter` as: summary,
@@ -80,7 +83,8 @@ halves are met and are cited on the rows. Nothing is flipped on a partial.
   story may not touch; all three were measured by `merge-forward-preflight` before this story
   started and routed here on the assumption the rewrite would replace the program.
 - **AC-008** — the crate root has no section whose last sentence can carry the ES-25 citation,
-  because the section does not exist. Step 3 carries it (`docs/first-encounter.md:129`).
+  because the section does not exist. Step 3 carries it (`docs/first-encounter.md:130`, `:129`
+  before the BC-004 fix pass added a line inside step 3's fence).
 
 ## BC-003 — the literal bracket pairs were invocation-dependent, and are now zero
 
@@ -175,7 +179,7 @@ amendment disagree about what is done has no reviewable state; that is what this
 | row | now | on what authority |
 | --- | --- | --- |
 | **AC-002** | `satisfied: true` | `spec.md` § Amendment — BC-002 strikes the heading, the fence and the printed refusal. Every clause standing in their place is met and cited on the row: the fence executes (`crates/happenstance/src/lib.rs:26-64`), no roadmap survives above it, the adapter-author redirect is last (`:145-147`), ADR-0006's reasoning survives verbatim (`:77-82`), the literal `[happenstance_core]` bracket count is zero under **both** doc invocations, the answered-need line is above everything (`:21`), and the pointer at `:66` reaches the refusal in one hop |
-| **AC-008** | `satisfied: true` | The same amendment confines the criterion to `docs/first-encounter.md`: with no crate-root section there is no crate-root last sentence. ES-25 is carried in last position at `docs/first-encounter.md:129`, ES-8 and ES-26 at `:43` and `:84`, `spec-trace` is green, and neither surface contains `MUST` |
+| **AC-008** | `satisfied: true` | The same amendment confines the criterion to `docs/first-encounter.md`: with no crate-root section there is no crate-root last sentence. ES-25 is carried in last position at `docs/first-encounter.md:130`, ES-8 and ES-26 at `:43` and `:84`, `spec-trace` is green, and neither surface contains `MUST` |
 | **AC-007** | `satisfied: false`, deliberately | See the next section. The amendment strikes three numbers and records them *owed*; the item that owes them does not exist on this branch |
 
 **The descope is a decision, not a ledger edit, and one half of recording it is still owed.**
@@ -234,3 +238,97 @@ fence-inventory-and-clause-audit` is the item that will meet these three numbers
 construction — it is `blocked_by` this story, its AC-001 inventories `crate-root-encounter`, and
 its AC-006 enumerates the same 68 / 24 / 32 / 22 budget — but it inventories and routes rather
 than fixes, so it is not a substitute for the `support` item above.
+
+## BC-004 — one half of AC-004's falsification cannot be had, and the seam it hid
+
+**Found by the slice review, 2026-08-19**, and this section is the measurement rather than the
+rebuttal. AC-004 asks for two falsifications of step 3's guard: *remove **either** the tag join
+from the guard's `Query` **or** the `after_opt(upto)` from the `AppendCondition`, THEN the
+scenario stops refusing — both are load-bearing*. The first is real and is demonstrated below.
+**The second is unsatisfiable by construction, for every program anyone could write.**
+
+**Why, from the type.** `AppendCondition::new(query)` already constructs its one `Guard` with
+`after: None` (`crates/happenstance-core/src/append.rs`, `impl AppendCondition`), and `None` is
+not "unguarded" — `Guard::after`'s own documentation says it: *"`None` checks the entire log."*
+So `after` is a **relaxation** of a whole-log guard, and deleting `.after_opt(upto)` moves the
+guard from "no matching event above the position I read" to "no matching event anywhere", which
+is strictly *stronger*. It can turn an acceptance into a refusal. It can never turn a refusal
+into an acceptance, which is what the criterion asks a reader to observe.
+
+**Measured, on the corrected page, both directions:**
+
+```console
+$ # `.after_opt(upto)` deleted from docs/first-encounter.md step 3
+$ cargo test -p xtask --doc -- first_encounter
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 168 filtered out
+
+$ # `.with_tags(held)` dropped from the event instead
+$ cargo test -p xtask --doc -- first_encounter
+thread 'main' panicked at …doctest_bundle_2024.rs:84:15:
+the boundary did not hold: Ok(SequencePosition(3))
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 168 filtered out
+```
+
+**What this concealed, which is the part that matters.** Because the criterion's recipe cannot
+be run, the implementation satisfied it with a *source substring* —
+`xtask/tests/first_encounter.rs::the_racing_append_and_the_after_are_both_load_bearing` asserted
+`program.contains("after_opt(upto)")` — over a step 3 that read an **empty** store. `upto` was
+`None`, `AppendCondition::new` already carries `after: None`, and the call was therefore inert:
+the reviewer deleted it and the step-3 doctest stayed green. A rule no wrong implementation can
+fail is decorative (`CLAUDE.md`, *A rule that no adapter can fail is decorative*), and this one
+named the property in its own function name while checking a substring. It is the same defect
+shape `5af116b` found in step 2, one step further on.
+
+**What replaced it — real behaviour, in three places.**
+
+| # | what now stands where the inert call stood | where |
+| --- | --- | --- |
+| 1 | Step 3 lands one matching seat **before** the decision reads, so `upto` is `Some(SequencePosition(1))`: the guard carries a position this program observed, the racing writer lands strictly above it, and the reader sees the position in the program's own output (`guarded above Some(SequencePosition(1)): ConditionViolated`) | `docs/first-encounter.md:96-125` |
+| 2 | `::step_three_guards_on_a_position_its_own_read_observed` — the seed precedes the read, the race sits between the read and the guarded append, and the output block shows the position. **Verified red against the program that shipped**: *"step three reads an empty store, so `upto` is None and `after_opt(upto)` is inert"* | `xtask/tests/first_encounter.rs` |
+| 3 | `::the_after_is_load_bearing_in_its_value_not_in_its_presence` — an executed `#[tokio::test]` carrying both halves of this finding: the whole-log guard a reader is left with after deleting `after_opt` still **refuses**, and a guard built from a read taken *after* the race is **accepted**, which is the lost update | `crates/happenstance/tests/boundary_refusal.rs` |
+
+Row 3 is the one that makes this record falsifiable rather than an argument: if some later change
+made `after: None` weaker than an `after`, that test goes red and this section is wrong in a way
+the gate reports.
+
+**Acceptance consequence, and why it differs from AC-007's.** `_ledger.md` AC-004 stays
+`satisfied: true`, and the row's evidence is corrected to say exactly this rather than to repeat
+the sentence *"both halves of the guard are therefore load-bearing"*, which was false as written.
+The reasoning, stated so a reviewer can reject it rather than guess at it:
+
+- The criterion's **obligation** — no empty consistency boundary where prose claims a real one,
+  the guard tagged to the invariant, the racing append carrying the same tags, and the `after`
+  built from the position the read observed — is met on the page and pinned by tests that fail
+  the wrong implementation in *both* directions.
+- What is unsatisfiable is one **falsification recipe** for it, and the reason it is
+  unsatisfiable is that the library is *safer* than the recipe assumed. There is no reader-facing
+  shortfall to owe: nothing a reader meets is weaker than the criterion intended.
+- AC-007 is the opposite case and is why the two are treated differently: three measured overages
+  a reader actually meets on a page this project may not touch. That is a debt, it was carried
+  `satisfied: false` until **HS-B0001** existed to own it, and it was flipped against that item's
+  id and not against prose. Nothing here asks for the same treatment, because nothing here is
+  owed to a reader.
+
+**Routed to:** the sign-off owner of `spec.md`'s acceptance table, as an amendment to AC-004's
+wording, on the same route BC-002 took (`spec.md` EC-006: *"record it as a design gap and route
+it to the sign-off owner"*). The clause to amend is *"remove **either** the tag join … **or** the
+`after_opt(upto)` … THEN the scenario stops refusing"*; the wording that is true of the code, and
+that the tests above already check, is:
+
+> remove the tag join from the guard's `Query`, **or** build the `after` from a read taken after
+> the race rather than the one the decision was made on, and the scenario stops refusing. The
+> `after` is load-bearing in its **value**: deleting it does not weaken the guard, it widens it
+> to the whole log.
+
+`spec.md:155` and the Behavior table at `:410` carry the same sentence and fall with it. Nothing
+is edited here: the criterion stands unedited in `_ledger.md` and in `spec.md`, this section is
+what supersedes the one clause, and `xtask/tests/first_encounter.rs` no longer carries a test
+whose *name* claims the property that does not hold.
+
+**Re-deriving this record:**
+
+```console
+$ cargo test -p xtask --test first_encounter -- step_three_guards_on_a_position_its_own_read_observed
+$ cargo test -p happenstance --test boundary_refusal
+$ cargo test -p xtask --doc -- first_encounter
+```

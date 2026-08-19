@@ -90,8 +90,8 @@ position never rejects ([ES-26](../spec/SPECIFICATION.md#es-26--the-ac3-boundary
 >
 > Arrived here cold? [Start at step one](#append-and-read-back).
 
-This time another writer gets there first, carrying the same tag. The guard is
-unchanged, and it is now standing over an event your decision never saw.
+One seat is already held; your decision reads it, and the guard carries the
+position that read observed. Another writer lands a second seat before yours.
 
 ```rust
 use happenstance::{AppendCondition, AppendError, Event, EventStore};
@@ -104,14 +104,15 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let held = Tags::from_pairs([("course", "c1")])?;
     let item = QueryItem::new(["SeatHeld"], held.clone())?;
     let seats = Query::from_items([item])?;
+    let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
+    store.append(&[seat.clone()], None).await?; // already held
 
     let (_taken, upto) = read_decision_model(&store, &seats).await?;
-    let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
-    store.append(&[seat.clone()], None).await?;
+    store.append(&[seat.clone()], None).await?; // another writer
     let condition = AppendCondition::new(seats).after_opt(upto);
     match store.append(&[seat], Some(&condition)).await {
         Err(AppendError::ConditionViolated(_)) => {
-            println!("refused: ConditionViolated");
+            println!("guarded above {upto:?}: ConditionViolated");
         }
         ok => panic!("the boundary did not hold: {ok:?}"),
     }
@@ -120,7 +121,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
 ```
 
 ```text
-refused: ConditionViolated
+guarded above Some(SequencePosition(1)): ConditionViolated
 ```
 
 That line is printed from inside the matched arm, so it cannot appear unless the
@@ -145,7 +146,7 @@ cargo test -p xtask --doc -- first_encounter
 is the program telling you what it got instead of a refusal:
 
 ```text
-the boundary did not hold: Ok(SequencePosition(2))
+the boundary did not hold: Ok(SequencePosition(3))
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ```
 
