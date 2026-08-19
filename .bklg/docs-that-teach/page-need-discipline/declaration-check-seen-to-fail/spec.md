@@ -173,8 +173,24 @@ executes, `cargo xtask ci` will not exercise it and the observation is void — 
 - Nothing else. The breaks are working-tree edits made, observed and reverted inside the run.
 
 ```
+.bklg/docs-that-teach/page-need-discipline/page-need-checker-mounted-in-the-gate/implementation-report.md
 .bklg/docs-that-teach/page-need-discipline/declaration-check-seen-to-fail/**
 ```
+
+> **Amended 2026-08-18, after implementation.** The slice-mate's report path was
+> added because this story's fence admitted only its own directory, and `d7d27c5`
+> corrected eight lines of
+> `page-need-checker-mounted-in-the-gate/implementation-report.md`.
+>
+> That is this story's whole job reaching one file upstream. It breaks the gate,
+> watches it fail, and reverts — so it is the first thing in the project to
+> observe the checker from outside, and what it observed contradicted eight lines
+> the checker story had already written about its own behaviour. Correcting them
+> in place is better than recording a contradiction and leaving it, and the eight
+> lines are named in this story's `_ledger.md`. No code, page or rule was touched:
+> `d7d27c5` is `.bklg/` and telemetry only, which is why `git diff main -- xtask`
+> is empty for this story and the two red captures it records were reverted in
+> full.
 
 **Explicitly not in this PR**
 

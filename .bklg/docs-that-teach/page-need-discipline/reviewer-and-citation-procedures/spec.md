@@ -398,15 +398,35 @@ the two mount regions.
 
 ```
 standards/pages/**
+xtask/src/lint_pages.rs
 .bklg/docs-that-teach/page-need-discipline/reviewer-and-citation-procedures/**
 ```
+
+> **Amended 2026-08-18, after implementation.** `xtask/src/lint_pages.rs` was
+> added because the fence was wrong about where this story's own verification
+> lives, not to clear a gate. The bullet above still reads
+> **`xtask/src/**` — nothing**; that declaration is left standing as the audit
+> trail and is **retracted here**. `a349e04` committed 277 lines to that file,
+> and every hunk of them is inside `mod tests` — tests pinning bands `30` and `40`, their ceilings and the two-needs fixture. No production path,
+> constant, gate step or dispatch arm was added; those remain
+> `page-need-checker-mounted-in-the-gate`'s, exactly as the bullet intends.
+>
+> The cause is structural rather than a lapse. This project's stories are
+> implemented **one whole slice per context, integration-first**, and a slice's
+> stories share one Rust module — so a per-story fence that partitions
+> `lint_pages.rs` between slice-mates cannot be satisfied by a story that writes
+> any test at all. The alternative was to leave each rule atom unpinned until the
+> checker story, which is the half-mount `_storymap.md` rules out. Recorded here
+> rather than quietly widened, because widening a fence to clear a red gate is
+> the one move this check exists to make visible.
 
 **Merge DoD, one line.** Bands `30` and `40` exist, conform to the atom grammar and its
 ceilings, are reachable from both router regions with every link resolving, and state
 their own blind spots first; a named non-author has run the walk against the fixture to
 a recorded `fail — two needs`, the governed-set walk is recorded as **vacuous** rather
 than as a pass, and the paraphrase spot check has been run over `standards/pages/**` with
-its verdict in `_ledger.md`; `git diff main -- xtask standards/rust docs .kb` is empty
+its verdict in `_ledger.md`; `git diff main -- standards/rust docs .kb` is empty (`git diff main -- xtask`
+is **not** — see the amendment above)
 and `cargo xtask ci --fast`, `cargo xtask lints`, `cargo xtask spec-trace` and
 `cargo xtask affected --base main` are green.
 

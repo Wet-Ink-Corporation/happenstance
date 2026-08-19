@@ -20,10 +20,11 @@ archetype: capability
 slice: page-need-gate-step
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:29.724Z
+updated: 2026-08-19T00:26:52.892Z
 links:
   pr: null
-  commits: []
+  commits:
+    - d7d27c5
   kb: []
 gate_open: false
 schema: 1

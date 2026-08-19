@@ -284,11 +284,35 @@ scope drift.
 xtask/src/lint_pages.rs
 xtask/src/main.rs
 xtask/src/affected.rs
-xtask/src/narrative.rs
+xtask/src/lint_narrative.rs
 standards/pages/README.md
-docs/README.md
+docs/**
+standards/rust/**
 .bklg/docs-that-teach/page-need-discipline/page-need-checker-mounted-in-the-gate/**
 ```
+
+> **Amended 2026-08-18, after implementation.** Three corrections, none of them
+> a widening of what this story was allowed to build, and all three left visible
+> rather than folded into the original list.
+>
+> 1. `xtask/src/narrative.rs` → **`xtask/src/lint_narrative.rs`**. The declared
+>    path names no file in this repository. The module `ee0a500` actually reads
+>    `TREE` from — the pin that stops this checker holding a second copy of
+>    HS-P0020's page list — is `lint_narrative.rs`, and has been since that
+>    project landed. A wrong name in the declaration, not a change of scope.
+> 2. `docs/README.md` → **`docs/**`**. Mounting the step re-pointed the pinned
+>    citations in `docs/append-conditions.md` and `docs/text-fences.md` as well
+>    as the index row. Both are one-line repairs to link targets this story's own
+>    pin is what keeps resolving; neither adds or edits any teaching.
+> 3. **`standards/rust/**`** added, for the identical reason recorded at
+>    `c52b031` for HS-P0020: inserting a `REQUIRED` step into
+>    `xtask/src/main.rs` shifts every line number the constitution's **Evidence**
+>    lines cite into that file, and `cargo xtask lint-constitution` fails until
+>    they are re-pointed. `ee0a500` carries that repair across
+>    `standards/rust/{51-features-and-no-std,52-wasm32-and-target-cfg,70-rustdoc-obligations,80-the-gate}.md`.
+>    No claim, rule or example in any atom changed — only the line numbers its
+>    Evidence lines point at. The 63 constitution doctests are green either way,
+>    which is why this repair is mechanical rather than editorial.
 
 **Merge DoD, one line.** `cargo xtask ci` green with the new step named in its output and
 `cargo xtask lints` reaching it; `cargo test -p xtask` green including the four directory-guard

@@ -21,10 +21,11 @@ archetype: capability
 slice: discipline-on-disk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:21.281Z
+updated: 2026-08-19T00:26:36.088Z
 links:
   pr: null
-  commits: []
+  commits:
+    - dec82c7
   kb: []
 gate_open: false
 schema: 1

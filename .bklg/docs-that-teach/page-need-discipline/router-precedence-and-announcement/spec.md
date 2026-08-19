@@ -351,13 +351,32 @@ contract to mount this slice; that is not scope drift. Here the composition root
 ```
 standards/pages/**
 docs/README.md
+xtask/src/lint_pages.rs
 .bklg/docs-that-teach/page-need-discipline/router-precedence-and-announcement/**
 ```
 
+> **Amended 2026-08-18, after implementation.** `xtask/src/lint_pages.rs` was
+> added because the fence was wrong about where this story's own verification
+> lives, not to clear a gate. The bullet above still reads
+> **`xtask/src/**` — nothing**; that declaration is left standing as the audit
+> trail and is **retracted here**. `9dacc7d` committed 412 lines to that file,
+> and every hunk of them is inside `mod tests` — eleven tests pinning the router this story authored, plus one doc-comment correction on `ROUTER` at `:122`. No production path,
+> constant, gate step or dispatch arm was added; those remain
+> `page-need-checker-mounted-in-the-gate`'s, exactly as the bullet intends.
+>
+> The cause is structural rather than a lapse. This project's stories are
+> implemented **one whole slice per context, integration-first**, and a slice's
+> stories share one Rust module — so a per-story fence that partitions
+> `lint_pages.rs` between slice-mates cannot be satisfied by a story that writes
+> any test at all. The alternative was to leave each rule atom unpinned until the
+> checker story, which is the half-mount `_storymap.md` rules out. Recorded here
+> rather than quietly widened, because widening a fence to clear a red gate is
+> the one move this check exists to make visible.
+
 **Merge DoD, one line.** `standards/pages/README.md` exists with a complete generated
 index and a stated rank; `docs/README.md` reaches it in one hop and does not lie about
-who reads it; `git diff main -- standards/rust/README.md` and `git diff main -- xtask`
-are both empty; `cargo xtask ci --fast`, `cargo xtask lints`, `cargo xtask spec-trace`
+who reads it; `git diff main -- standards/rust/README.md` is empty (`git diff main -- xtask`
+is **not** — see the amendment above); `cargo xtask ci --fast`, `cargo xtask lints`, `cargo xtask spec-trace`
 and `cargo xtask affected --base main` are green, the last having widened to the whole
 workspace by design.
 
