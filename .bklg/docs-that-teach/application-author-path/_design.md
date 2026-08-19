@@ -444,6 +444,36 @@ The single structural change to this surface is **the fence moves up and the roa
 down**. That is the composition decision: a reader who lands on docs.rs meets the refusal
 before they meet the plan.
 
+> **Amended 2026-08-19 — BC-002. Region 4 above is struck, and the region list is left
+> standing as the audit trail.** The crate root does **not** carry a
+> `## Watch a boundary refuse` / `## A boundary refuses` section. The refusal is authored
+> once, on `docs/first-encounter.md`, and the crate root carries the answered-need line
+> (region 2, unchanged) plus **one sentence directly beneath the existing fence pointing at
+> step one**. Regions 1, 2, 3, 5 and 6 are unchanged.
+>
+> **Why the design was right when it was signed off and is wrong now.** It was written against
+> a `crates/happenstance/src/lib.rs` whose first code was a never-awaited
+> `# async fn example()` wrapper under `## Using it today`. Merging
+> `initiative/from-contract-to-published-library` forward (`a5c0f30`) replaced that page
+> wholesale, and the merged page brings its own signed-off assertions with it:
+> `crates/happenstance/tests/doc_budget.rs:157` requires the crate root to carry **exactly one**
+> fence — *"a second one would demote the first, which is the page's primary hierarchy
+> signal"* — and `MODULE_DOC_LINES = 130` caps the module doc, which the answered-need line and
+> pointer take to exactly 130. The section could therefore exist only by deleting HS-P0016's
+> `commit` landing program, which `project.md`'s risk table places outside this project's seam
+> (*"does not touch landing copy"*), which two vocabulary bullets name, and which is the crate's
+> one demonstration of the typed layer ADR-0006 gave the bare name to.
+>
+> **What is lost, stated rather than glossed.** The composition decision above — *a reader who
+> lands on docs.rs meets the refusal before they meet the plan* — is now met only in the weaker
+> sense that the roadmap does not survive at all and the fence is already first. That reader
+> meets a `commit` program, not a refusal, and reaches the refusal one hop later. The stronger
+> reading is not delivered and is not deemed delivered.
+>
+> Routed as BC-002 by `boundary-refusal-encounter`, which recorded the contradiction under
+> EC-008 and stopped rather than folding it in or editing this file. Decided by the `_design.md`
+> sign-off owner on 2026-08-19 and recorded here rather than in a commit message.
+
 ### `opening-encounter`
 
 One page, three steps, no index page in front of them. An index would be a fourth page whose
@@ -634,6 +664,12 @@ because this project authors no colour).
 - **Primary — the refusal.** Carried by position: `## Watch a boundary refuse` is the first
   `##` after the status section and the fence is the first code on the page. Reinforced by
   form: it is the only fence, and the printed output sits directly beneath it.
+
+  > **Amended 2026-08-19 — BC-002.** Struck. On the merged page the primary element is
+  > HS-P0016's `commit` program, which is the first code and the only fence; the refusal is
+  > not on this surface at all. What this project adds here is recessive by comparison: the
+  > answered-need line above everything, and a pointer beneath the fence. The refusal's
+  > hierarchy claim now belongs to `opening-encounter`, which is where the refusal is.
 - **Secondary — the answered-need line and ADR-0006's reasoning.** Carried by position
   (above everything, and immediately after, respectively) and by heading level (`##`).
 - **Recessive — the planned-surface roadmap and the adapter-author redirect.** Carried by

@@ -136,3 +136,29 @@ $ cargo test -p xtask --test first_encounter
 $ cargo run -p xtask -- lints && cargo run -p xtask -- spec-trace
 $ cargo run -p xtask -- affected --base main
 ```
+
+## BC-002 — RESOLVED 2026-08-19 by the `_design.md` sign-off owner
+
+**Decision: amend the design; do not amend the merged tree.** The crate root does not carry the
+refusal. `_design.md` § Composition region 4 is struck by an amendment note under
+`crate-root-encounter`, its `## Hierarchy` primary-element bullet is struck by a second note, and
+`spec.md` gains an `## Amendment — BC-002` section immediately above the acceptance table naming
+exactly which clause of AC-002, AC-007 and AC-008 falls and what stands in its place. All original
+text is left standing; nothing is edited away.
+
+The two rejected routes, and why:
+
+- **Raise the crate-root budgets** (allow a second fence, lift `MODULE_DOC_LINES`). Rejected: it
+  overrides another project's signed-off assertion and the stated reason behind it — *"a second
+  one would demote the first, which is the page's primary hierarchy signal"* — from inside a
+  documentation story. Editing the check that says no is not the same as answering it.
+- **Replace HS-P0016's landing program.** Rejected on this record's own argument: outside the
+  stated seam, and it would meet a reader with an untyped `Event`/`Bytes` program on the crate
+  whose identity is the typed layer.
+
+The three inherited AC-007 numbers are **recorded as owed by HS-P0016**, not waived — they are
+real overages on a real page, and this project is simply not the one that may fix them.
+
+The cost is recorded rather than absorbed: the reader who lands on docs.rs meets a `commit`
+program and reaches the refusal one hop later. That is a weaker outcome than the signed-off design
+intended, and it is accepted as such.

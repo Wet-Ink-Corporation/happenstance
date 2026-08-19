@@ -418,6 +418,32 @@ verbatim; what is replaced is a fence that asserts an empty log and demonstrates
 citations elsewhere in the planning corpus that point into the old section are repaired at
 closeout's reference reconciliation, not here (`_design.md:736-741`).
 
+## Amendment — BC-002, 2026-08-19
+
+**Read this before the table below.** Three criteria each carry one clause about a crate-root
+section that the merged tree makes unauthorable. Those clauses are **struck by the `_design.md`
+sign-off owner**; the rows are left standing unedited as the audit trail, and this section is
+what supersedes them.
+
+The cause is `a5c0f30`, the merge of `initiative/from-contract-to-published-library`, which
+replaced `crates/happenstance/src/lib.rs` after this spec was written.
+`crates/happenstance/tests/doc_budget.rs:157` requires the crate root to carry **exactly one**
+fence and `MODULE_DOC_LINES = 130` caps its module doc — a budget this story's own additions take
+to exactly 130. The full reasoning, with the re-derivation of every assumption the design made, is
+`boundary-refusal-encounter/_conditions.md` § BC-002; the design-side record is `_design.md`
+§ Composition, the amendment note under `crate-root-encounter`.
+
+| criterion | the clause struck | what stands in its place |
+| --- | --- | --- |
+| **AC-002** | the `## Watch a boundary refuse` / `## A boundary refuses` heading, its fence and its printed refusal on the crate root | the crate root carries the answered-need line above everything and **one sentence beneath the existing fence pointing at step one**. Every other clause of AC-002 stands and is already met: the fence executes (`#[tokio::main]`, not the never-awaited wrapper), the roadmap is below it because no roadmap survives, the adapter-author redirect is last, ADR-0006's reasoning survives verbatim, and the literal bracket count is **zero** under both doc invocations where the baseline measured two |
+| **AC-007** | the three **inherited** crate-root numbers — fence 35 rendered lines against 32, 70 columns against 68 on two lines, and two of four `##` headings over 22 characters | these are properties of HS-P0016's program and headings, which this project may not touch. They are struck here and **recorded as owed by HS-P0016**, not waived. Every page-side number in AC-007 stands and is met: 68 columns, 24 rendered lines, 435-character paragraphs, one answered-need per surface above the first fence, zero affordances, no prior-model words, facade-only imports, seven elements per step |
+| **AC-008** | the requirement that the **crate-root section's** last sentence carry the ES-25 citation | there is no such section, so there is no such sentence. The clause applies to `docs/first-encounter.md` alone, where it is met: all three steps close on an inline clause link, `spec-trace` is green, and neither surface contains `MUST` or `MUST NOT` |
+
+**What this costs, said plainly.** The composition decision this spec was built on — *a reader
+who lands on docs.rs meets the refusal before they meet the plan* — is not delivered. That reader
+meets a `commit` program and reaches the refusal one hop later, through the pointer. The weaker
+outcome is accepted deliberately rather than recorded as a pass.
+
 ## Acceptance criteria
 
 Eight criteria, each stated from the reader's intent rather than as a capability. The persona
