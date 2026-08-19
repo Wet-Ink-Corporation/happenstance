@@ -111,12 +111,19 @@ const DURABLE_OBJECT_STATE: &str = r"
 
   const sql = {
     get databaseSize() { return scalar('PRAGMA page_count') * scalar('PRAGMA page_size'); },
-    // Arms exactly one throw, on the next statement whose text contains
-    // `match`. It is how a test constructs the thrown value a Durable Object's
-    // SQLite would produce and then delivers it down the *production* path —
-    // through `worker`'s real bindings and this crate's real classifier —
-    // without needing a `workerd` runner or a race to lose.
-    armThrow(match, message) { armed = { match, message }; },
+    // Arms throws on the next `times` statements whose text contains `match`,
+    // defaulting to exactly one. It is how a test constructs the thrown value a
+    // Durable Object's SQLite would produce and then delivers it down the
+    // *production* path — through `worker`'s real bindings and this crate's
+    // real classifier — without needing a `workerd` runner or a race to lose.
+    //
+    // The count exists because one failure is not the only reachable shape: a
+    // storage ceiling that fails an `INSERT` fails the compensating `DELETE`
+    // beside it, and that pair is what `CloudflareEventStoreError::PartialBatch`
+    // reports. A single-shot arming can never construct it.
+    armThrow(match, message, times) {
+      armed = { match, message, left: times === undefined ? 1 : Number(times) };
+    },
     // Every statement the adapter issued, in order. Read by
     // `statements()` below, which is how a test counts *how many times* the
     // adapter asked a question rather than only what it got back — the
@@ -125,9 +132,10 @@ const DURABLE_OBJECT_STATE: &str = r"
     exec(query, ...bindings) {
       issued.push(query);
       if (armed !== null && query.includes(armed.match)) {
-        const thrown = armed;
-        armed = null;
-        throw new Error(thrown.message);
+        const message = armed.message;
+        armed.left -= 1;
+        if (armed.left <= 0) { armed = null; }
+        throw new Error(message);
       }
       let statement;
       try {
@@ -189,6 +197,22 @@ pub(crate) fn durable_object() -> SqlStorage {
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
 pub(crate) fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
+    arm_throws(sql, matching, message, 1);
+}
+
+/// Arms `times` consecutive throws on statements whose text contains `matching`.
+///
+/// The generalisation of [`arm_throw`], and it exists for one reachable state
+/// that a single throw cannot construct: a batch whose write fails **and** whose
+/// compensating discard fails too, which is what
+/// [`CloudflareEventStoreError::PartialBatch`](crate::CloudflareEventStoreError)
+/// reports. Both statements name the same table, so one substring arms both.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims, which means the caller built
+/// the storage some other way.
+pub(crate) fn arm_throws(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
     let arm = sql
         .handle()
         .property("armThrow")
@@ -199,10 +223,11 @@ pub(crate) fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
         .clone()
         .dyn_into()
         .expect("the arming hook is a function");
-    arm.call2(
+    arm.call3(
         sql.handle().as_js(),
         &JsValue::from_str(matching),
         &JsValue::from_str(message),
+        &JsValue::from_f64(f64::from(times)),
     )
     .expect("arming a throw does not itself throw");
 }

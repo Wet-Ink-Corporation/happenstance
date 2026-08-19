@@ -160,3 +160,36 @@ ingested one — right up until replication exists, at which point it is silentl
 every `.kb/` write and every `spec/SPECIFICATION.md` edit — ES-11 and ES-12 keep their
 `[PROVISIONAL]` markers, and lifting one is ADR-0023's through `/redkiln:kb-ingest`;
 `crates/happenstance-core/` in its entirety, including the two `memory.rs` read-shape tests.
+
+## Slice-review repair (`real-worker-bindings`)
+
+**AC-003, AC-005 and AC-006 each name a committed negative control; what shipped was a
+transient mutation sweep.** The sweeps were real evidence on the afternoon they ran and
+nothing re-runs them — the difference `caller-visible-error-verdict`'s AC-004 already got
+right in this same crate, where the wrong shape is compiled into the test tree. All three
+controls are now committed, and each is rejected by the *same* predicate the real read
+passes rather than by a predicate that merely resembles it:
+
+* **`WrongPagingStream` + `WrongCeiling::RecapturedPerPage`** — the ceiling-less paging
+  read. It and the shipped read are both driven through
+  `drain_across_an_interleaved_append`, so one assertion body faces both.
+* **`CursorHoldingStream`** — the predecessor design `SqlRowStream`'s own documentation
+  describes and rejects: one cursor opened at the first poll and advanced across poll
+  boundaries. Driven through `replay_across_an_append_on_one_handle`. This one required
+  **strengthening** `a_live_read_stream_does_not_block_an_append_on_one_handle`, which
+  counted items: a held cursor lets the append through — it holds an `Rc`, not a `Ref` —
+  and then breaks on its next advance with `SqlError::CursorInvalidated`, which an item
+  count cannot see. It now asserts outcomes and completeness, so the control can fail it.
+* **`WrongCeiling::ArithmeticOnHead`** — the `NullHeadPagingStore` shape ES-9 registers,
+  held to the same five option sets as `reading_an_empty_store_yields_nothing` through a
+  shared `empty_store_option_sets`, so a control cannot drift onto easier inputs.
+
+Each wrong shape reuses the shipped `render_read`, `drain_page` and `decode_row` verbatim,
+so what a control rejects is one decision rather than two implementations.
+
+**And the tests are now executed by the gate.** The whole read path was compiled by the
+`wasm32 build of the Cloudflare adapter` step and run by nothing in the gate: `WASM_TARGETS`
+held three testkit rows and `unregistered_wasm_harnesses` scanned only the testkit's
+`tests/` directory, so no check could notice. `xtask` gained a sibling registry,
+`WASM_UNIT_TARGETS`, and a completeness scan over every crate's `src` tree; the
+`wasm32 run of the conformance rules` step executes all 81 cases.

@@ -127,13 +127,32 @@ Two notes specific to this story, because they change what counts as evidence:
     compared against the positions the store *actually assigned* (read back through raw SQL) and against
     slice order by event type; no literal position value appears anywhere.
     `::a_failed_batch_leaves_no_partial_rows` — a four-event batch whose **third** event crosses the
-    ceiling leaves zero rows, which rejects a store that validates as it writes. Atomicity is structural
-    rather than transactional here and the reason is written at `crates/happenstance-
-    cloudflare/src/event_store.rs:68-83`: `append`'s body contains no `.await` at all, so the object
-    cannot yield between the probe and the insert. `write_batch` (`:397`) issues one `INSERT … RETURNING
-    position` per event because SQLite leaves the row order of a multi-row `RETURNING` undefined.
+    ceiling leaves zero rows, which rejects a store that validates as it writes. `write_batch` (`:454`)
+    issues one `INSERT … RETURNING position` per event because SQLite leaves the row order of a
+    multi-row `RETURNING` undefined.
+    CORRECTED AT SLICE REVIEW, and the correction is the substance of this row. The all-or-none half was
+    argued in prose and guarded by nothing: `a_failed_batch_leaves_no_partial_rows` refuses on the
+    pre-flight ceiling check, where **zero** statements have run, so it observes a batch that never
+    started rather than one that started and stopped. The claim at the old `event_store.rs:68-83` — that
+    "the runtime's implicit transaction covers the batch" — was **false**, and the adapter was the shape
+    it named: N `INSERT`s, then tag rows, then the identity `UPDATE`, with every throw converted to
+    `Err(…)` and returned normally, which is exactly when a Durable Object commits the turn's writes.
+    Three committed guards now observe it, and all three failed against the previous implementation
+    (RED recorded: 3 failed / 74 passed): `::a_batch_that_throws_after_its_first_row_leaves_nothing_behind`
+    (`:1851`) arms a throw on `INSERT INTO event_tag` and asserts both `event` and `event_tag` are empty;
+    `::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind` (`:1885`) does the same at the
+    `UPDATE … SET origin_store`; `::a_discarded_batch_does_not_wedge_or_rewind_the_store` (`:1921`)
+    shows the next append lands and does **not** reuse the discarded position. The fix is explicit
+    compensation rather than a weakened claim — `write_batch` (`:454`) discards the range the batch was
+    assigned through `discard_from` (`:578`), exact because nothing is awaited mid-batch — and the
+    remaining failure is reported rather than hidden: `CloudflareEventStoreError::PartialBatch` (`:705`)
+    carries both the original cause and the reason the discard could not run, reached by
+    `::a_batch_whose_discard_also_fails_reports_both_failures` (`:1960`). `SAVEPOINT` was not an
+    alternative: a Durable Object rejects transaction control through `sql.exec()`. The module
+    documentation now says isolation is not atomicity instead of claiming the runtime provides it
+    (`crates/happenstance-cloudflare/src/event_store.rs:68-95`). All 81 cases execute in the gate.
   mount_point: "crates/happenstance-cloudflare/src/event_store.rs — `EventStore::append` (:171-177) over the synchronous `SqlStorage::exec` seam (src/sql_storage.rs:1-12)"
-  verifying_test: "crates/happenstance-cloudflare/src/event_store.rs::write_path_tests::append_returns_the_last_written_position; ::write_path_tests::a_failed_batch_leaves_no_partial_rows"
+  verifying_test: "crates/happenstance-cloudflare/src/event_store.rs::write_path_tests::append_returns_the_last_written_position; ::write_path_tests::a_failed_batch_leaves_no_partial_rows; ::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind; ::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind; ::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures; ::write_path_tests::a_discarded_batch_does_not_wedge_or_rewind_the_store"
 
 - id: AC-008
   criterion: "GIVEN an application author resuming a projection after the object was evicted, WHEN they call `head()` on an empty store and again after appending, THEN they get `None` and then the highest visible position, decoded through the one shared position decoder, with no `await` taken while the storage handle is held."

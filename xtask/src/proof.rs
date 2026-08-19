@@ -77,6 +77,7 @@
 //! [ADR-0016]: ../../.kb/decisions/0016-the-wire-format.md
 
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -346,6 +347,33 @@ pub(crate) struct WasmTarget {
     pub(crate) rules: &'static [&'static str],
 }
 
+/// One `wasm32` test target that is executed and runs no conformance rules.
+///
+/// See [`WASM_UNIT_TARGETS`] for why this is a second shape rather than three
+/// more optional fields on [`WasmTarget`].
+pub(crate) struct WasmUnitTarget {
+    /// The package holding it.
+    pub(crate) package: &'static str,
+    /// How `cargo test` selects the target — `["--lib"]` today, and
+    /// `["--test", "name"]` is the other spelling this field exists to allow
+    /// without a second registry.
+    pub(crate) selector: &'static [&'static str],
+    /// The tree whose `wasm32`-gated test modules this row executes.
+    ///
+    /// Read by the runner-free guard, which is what makes an emptied row fail on
+    /// a machine with no runner rather than pass quietly.
+    pub(crate) source_dir: &'static str,
+    /// What this target needs from the host beyond the runner itself.
+    ///
+    /// Printed with the failure rather than left for the reader to infer: a
+    /// target that needs a newer Node than the machine has fails inside a test
+    /// body, and "the adapter is broken" is the wrong conclusion to hand
+    /// someone.
+    pub(crate) host: &'static str,
+    /// The tests that must still be present, by the name `--list` prints.
+    pub(crate) tests: &'static [&'static str],
+}
+
 /// One conformance suite: its rule enumeration, the macro that invokes it, and
 /// the `wasm32` emitter it must go through.
 ///
@@ -531,6 +559,77 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
     },
 ];
 
+/// Every `wasm32` test target the gate executes that is **not** a conformance
+/// harness.
+///
+/// A sibling registry rather than more [`WASM_TARGETS`] rows, and the split is
+/// the same one [`WasmTarget`] makes against [`Artefact`]: every row of
+/// `WASM_TARGETS` is held to a [`RuleFamily`]'s exhaustive enumeration, and a
+/// target that runs no conformance rules has no enumeration to be held to. One
+/// registry would have to make `family` optional, and an optional field on a
+/// row is a conditional inside the check the other rows depend on.
+///
+/// **Why it exists at all.** `happenstance-cloudflare`'s adapter tests —
+/// the write path, the read path, the four modelled `SqlStorage` properties, the
+/// `!Send` probes' `wasm32` twins and the ES-6 reconstruction — are
+/// `#[wasm_bindgen_test]` cases under `#[cfg(all(test, target_arch =
+/// "wasm32"))]`, because that is the only target the auto-trait leak they exist
+/// to catch can appear on. The gate *compiled* them from the day they merged
+/// (`main.rs`'s `wasm32 build of the Cloudflare adapter` step carries `--tests`
+/// for exactly that) and executed none of them: `WASM_TARGETS` holds three
+/// testkit rows, and [`unregistered_wasm_harnesses`] scans only the testkit's
+/// `tests/` directory, so nothing in this file could notice. A host
+/// `cargo test -p happenstance-cloudflare` runs four probes and nothing about
+/// whether the adapter works. That is the same *compiled, never executed* shape
+/// the previous milestone built this machinery to end, one directory over.
+pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[WasmUnitTarget {
+    package: "happenstance-cloudflare",
+    selector: &["--lib"],
+    source_dir: "crates/happenstance-cloudflare/src",
+    host: "Node 22.5 or newer: `crates/happenstance-cloudflare/src/test_object.rs` \
+           reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's \
+           default host is Node",
+    tests: CLOUDFLARE_UNIT_TESTS,
+}];
+
+/// The `happenstance-cloudflare` cases worth naming, by the name `--list` prints.
+///
+/// Transcribed rather than derived, for the reason [`MEMORY_WASM_RULES`] gives:
+/// a rename needs something to disagree with. Chosen so that each is a fact no
+/// other check in this repository can reach — a deleted or `#[cfg]`-ed-out
+/// module takes its own detector with it, and only a list written down
+/// elsewhere notices.
+///
+/// The four groups, and what each is the last guard on:
+///
+/// * the `!Send` twins, including the positive control, which are the only
+///   assertions that run on a target where `wasm-bindgen`'s
+///   `cfg(not(target_feature = "atomics"))` `unsafe impl` is live;
+/// * the three write-path all-or-none guards, which reject the shape the adapter
+///   itself had — N inserts, a throw converted to `Err(…)`, and a turn that
+///   commits the rows written before it;
+/// * the read path's ceiling detectors and their three committed negative
+///   controls, which are the whole of ADR-0011 as this adapter implements it;
+/// * the ES-6 reconstruction, which is project AC-005's artefact.
+const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
+    "wasm_tests::the_probe_is_not_vacuous",
+    "wasm_tests::the_js_boundary_types_are_not_send",
+    "wasm_tests::the_error_type_is_not_send",
+    "wasm_tests::the_send_flavour_does_not_imply_a_send_error",
+    "event_store::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind",
+    "event_store::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind",
+    "event_store::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures",
+    "event_store::read_path_tests::read_is_stable_under_an_interleaved_append",
+    "event_store::read_path_tests::a_ceilingless_paging_read_is_rejected",
+    "event_store::read_path_tests::a_cursor_held_across_a_poll_is_rejected",
+    "event_store::read_path_tests::a_null_head_ceiling_is_rejected_on_the_empty_store",
+    "event_store::read_path_tests::all_items_of_one_query_share_one_ceiling",
+    "es6_reconstruction::constraint_violation_reaches_the_caller_as_condition_violated",
+    "es6_reconstruction::transport_fault_reaches_the_caller_distinguishably",
+    "es6_reconstruction::an_evidence_discarding_classifier_is_rejected",
+    "es6_reconstruction::the_distinction_is_reachable_from_outside_the_crate",
+];
+
 /// The runner that executes a `wasm-bindgen-test` harness.
 ///
 /// Spelled once and shared with the gate step's probe in `main.rs`: a step that
@@ -675,6 +774,141 @@ fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
         .into_iter()
         .filter(|target| !WASM_TARGETS.iter().any(|wasm| wasm.target == *target))
         .collect())
+}
+
+/// Where a crate says "these tests exist only on `wasm32`".
+///
+/// The module gate, normalised for whitespace and accepted in both orderings.
+/// It is the spelling `happenstance-cloudflare` uses in six files, and the one
+/// that makes a test module invisible to every host `cargo test` — which is
+/// exactly the condition under which "compiled by the gate, executed by nothing"
+/// can happen without anybody noticing.
+const WASM32_TEST_GATE: &[&str] = &[
+    r#"cfg(all(test,target_arch="wasm32"))"#,
+    r#"cfg(all(target_arch="wasm32",test))"#,
+];
+
+/// Packages whose sources declare `wasm32`-only test modules and that have no
+/// row in [`WASM_UNIT_TARGETS`].
+///
+/// The sibling of [`unregistered_wasm_harnesses`], and it exists for the miss
+/// that one could not see: it scans a single directory —
+/// `crates/happenstance-testkit/tests` — so a `wasm32` test module *anywhere
+/// else in the workspace* executed nowhere and nothing said so. That is not
+/// hypothetical; it is what happened to `happenstance-cloudflare`'s seventy-four
+/// adapter tests, which the gate compiled and never ran.
+///
+/// **What it looks for, and what that costs.** A `.rs` file under any
+/// `crates/*/src` tree whose *code* carries a [`WASM32_TEST_GATE`] spelling.
+/// Comments are stripped first, so a file discussing the gate in prose does not
+/// count — the same reason [`code_only`] exists.
+///
+/// **Its limits, stated so they are not read as guarantees.** It sees `src`
+/// trees, so a `wasm32`-only integration test outside the testkit's `tests/`
+/// directory is caught by neither scan; it matches a spelling rather than
+/// parsing `cfg`, so a gate written some third way evades it; and it says
+/// nothing about whether a registered row's tests pass, which needs the runner.
+/// What it does guarantee is that the two spellings this workspace actually uses
+/// cannot appear in a package the execution registry has never heard of.
+///
+/// # Errors
+///
+/// Returns an error if a crate directory or source cannot be read, or if a
+/// registered row's `source_dir` holds no gated module at all — which means the
+/// row is aimed somewhere the tests are not.
+fn unregistered_wasm_unit_packages() -> Result<Vec<String>> {
+    let root = workspace_root()?;
+    let mut gated: Vec<String> = Vec::new();
+
+    for entry in fs::read_dir(root.join("crates")).context("reading crates/")? {
+        let crate_dir = entry.context("reading an entry of crates/")?.path();
+        let manifest = crate_dir.join("Cargo.toml");
+        if !manifest.is_file() {
+            continue;
+        }
+        if !tree_has_wasm32_test_gate(&crate_dir.join("src"))? {
+            continue;
+        }
+        let manifest = fs::read_to_string(&manifest)
+            .with_context(|| format!("reading {}", manifest.display()))?;
+        gated.push(package_name(&manifest)?);
+    }
+    gated.sort();
+
+    // The registry must be aimed at something. A row whose tree carries no gated
+    // module is a row that would keep passing while the tests it names moved
+    // away — the same failure the scan above exists to catch, one level in.
+    for unit in WASM_UNIT_TARGETS {
+        if !tree_has_wasm32_test_gate(&root.join(unit.source_dir))? {
+            bail!(
+                "{}'s row points at {}, which carries no `{}` module. The row is \
+                 aimed somewhere the wasm32 tests are not, so its silence would \
+                 mean nothing.",
+                unit.package,
+                unit.source_dir,
+                WASM32_TEST_GATE[0]
+            );
+        }
+    }
+
+    Ok(gated
+        .into_iter()
+        .filter(|package| {
+            !WASM_UNIT_TARGETS
+                .iter()
+                .any(|unit| unit.package == *package)
+        })
+        .collect())
+}
+
+/// Whether any `.rs` file under `dir` carries a `wasm32`-only test-module gate.
+fn tree_has_wasm32_test_gate(dir: &Path) -> Result<bool> {
+    if !dir.is_dir() {
+        return Ok(false);
+    }
+    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry
+            .with_context(|| format!("reading an entry of {}", dir.display()))?
+            .path();
+        if path.is_dir() {
+            if tree_has_wasm32_test_gate(&path)? {
+                return Ok(true);
+            }
+            continue;
+        }
+        if path.extension().is_none_or(|ext| ext != "rs") {
+            continue;
+        }
+        let source =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let code: String = code_only(&source)
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        if WASM32_TEST_GATE.iter().any(|gate| code.contains(gate)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The `name` of a package, read out of its manifest.
+///
+/// A four-line parse rather than `cargo metadata`, for the reason
+/// [`locked_wasm_bindgen_version`] reads `Cargo.lock` directly: this check costs
+/// no dependency resolution, and it runs on every machine.
+///
+/// # Errors
+///
+/// Returns an error if the manifest declares no `name`, which would mean it is
+/// not a package manifest at all.
+fn package_name(manifest: &str) -> Result<String> {
+    manifest
+        .lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_prefix("name = "))
+        .map(|name| name.trim_matches('"').to_owned())
+        .context("a crate manifest declares no `name`")
 }
 
 /// Every rule a [`RuleFamily`]'s enumeration declares.
@@ -1068,7 +1302,95 @@ pub(crate) fn wasm_run() -> Result<()> {
         }
     }
 
+    wasm_unit_run(&env)
+}
+
+/// Executes every registered non-conformance `wasm32` target.
+///
+/// The same two assertions the loop above makes, minus the one that cannot
+/// apply: there is no [`RuleFamily`] enumeration to be exhaustive against, so
+/// what is checked is that every test the row *names* is still in the target's
+/// own `--list`. That is what a rename or a deleted module has to disagree with.
+///
+/// The host requirement is printed before the run rather than after the failure.
+/// These targets talk to a real SQLite through `node:sqlite`, so on a machine
+/// whose Node is too old they fail inside a test body with a JS exception, and
+/// the reader's first conclusion would be that the adapter is broken.
+///
+/// # Errors
+///
+/// Returns an error if a target cannot be built or enumerated, if a named test
+/// is absent from its listing, or if the tests themselves fail.
+fn wasm_unit_run(env: &[(&str, &str); 1]) -> Result<()> {
+    for unit in WASM_UNIT_TARGETS {
+        let label = format!(
+            "`{}`'s {} on {WASM_TRIPLE}",
+            unit.package,
+            unit.selector.join(" ")
+        );
+        let args = wasm_unit_cargo_args(unit);
+        let listed = list(&args, env, &label)?;
+
+        let absent: Vec<&str> = unit
+            .tests
+            .iter()
+            .copied()
+            .filter(|test| !listed.iter().any(|line| line == test))
+            .collect();
+
+        if !absent.is_empty() {
+            bail!(
+                "{label} is missing {} of the tests the gate names: {absent:?}\n\n\
+                 The target builds, so `cargo test` would have exited 0 with \
+                 nothing to say about them. These are named in \
+                 `xtask/src/proof.rs` rather than derived, so that a rename — or \
+                 a `#[cfg]` that quietly stops compiling a module — has something \
+                 to disagree with. Listed: {} test(s).",
+                absent.len(),
+                listed.len()
+            );
+        }
+
+        println!(
+            "{}/{}: {} tests listed, {} named, executing on {WASM_TRIPLE}\n  host: {}",
+            unit.package,
+            unit.selector.join(" "),
+            listed.len(),
+            unit.tests.len(),
+            unit.host
+        );
+
+        let status = Command::new("cargo")
+            .args(&args)
+            .args(["--", "--nocapture"])
+            .envs(env.iter().copied())
+            .status()
+            .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
+
+        if !status.success() {
+            bail!(
+                "{label} failed with {status}\n\n\
+                 If every case failed at once, check the host before the code: {}",
+                unit.host
+            );
+        }
+    }
+
     Ok(())
+}
+
+/// The arguments one non-conformance `wasm32` target's two cargo invocations
+/// share.
+///
+/// A `Vec` rather than [`wasm_cargo_args`]'s fixed array because the selector is
+/// one token for `--lib` and two for `--test <name>`, and a row that could only
+/// ever be a `--lib` would need this function rewritten the first time an
+/// integration test needed executing.
+fn wasm_unit_cargo_args(unit: &WasmUnitTarget) -> Vec<&'static str> {
+    let mut args = vec!["test", "--locked", "-p", unit.package];
+    args.extend_from_slice(unit.selector);
+    args.extend_from_slice(&["--target", WASM_TRIPLE]);
+    args
 }
 
 /// Asserts the executed targets exist and are wired to their own rule set — with
@@ -1108,6 +1430,31 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
     // whether a registered target is honest; this asks whether the registration
     // is complete, which is the question a per-row loop cannot reach and the one
     // that was got wrong. See `unregistered_wasm_harnesses`.
+    // The same question for the targets that run no conformance rules. Asked
+    // separately because the scan above reads one directory and this one reads
+    // every crate's `src` tree — and the gap between those two sentences is
+    // where seventy-four executed-by-nothing adapter tests lived.
+    let unregistered = unregistered_wasm_unit_packages()?;
+    if !unregistered.is_empty() {
+        bail!(
+            "{} package(s) declare wasm32-only test modules with no row in \
+             WASM_UNIT_TARGETS: {unregistered:?}\n\n\
+             Each compiles for that target and executes nowhere. A `#[cfg(all(test, \
+             target_arch = \"wasm32\"))]` module is invisible to every host \
+             `cargo test`, so the only thing that can run one is a row here.",
+            unregistered.len()
+        );
+    }
+    for unit in WASM_UNIT_TARGETS {
+        if unit.tests.is_empty() {
+            bail!(
+                "{}'s row names no tests, so a rename would have nothing to \
+                 disagree with",
+                unit.package
+            );
+        }
+    }
+
     let unregistered = unregistered_wasm_harnesses()?;
     if !unregistered.is_empty() {
         bail!(
@@ -1729,6 +2076,49 @@ mod tests {
             unregistered.is_empty(),
             "{unregistered:?} drive a conformance suite through a wasm32 emitter \
              and have no row in WASM_TARGETS, so nothing executes them"
+        );
+    }
+
+    /// The same question one directory wider, and the miss the test above could
+    /// not see.
+    ///
+    /// [`unregistered_wasm_harnesses`] reads exactly one directory —
+    /// `crates/happenstance-testkit/tests` — so a `wasm32`-only test module
+    /// anywhere else in the workspace executed nowhere and no check said so.
+    /// That is not hypothetical: it is what happened to
+    /// `happenstance-cloudflare`'s adapter tests, which the gate compiled from
+    /// the day they merged and ran on no machine, while the previous
+    /// milestone's stated purpose was to end precisely that shape.
+    #[test]
+    fn every_package_with_wasm32_only_tests_has_a_row() {
+        let unregistered = unregistered_wasm_unit_packages().unwrap();
+        assert!(
+            unregistered.is_empty(),
+            "{unregistered:?} carry `#[cfg(all(test, target_arch = \"wasm32\"))]` \
+             modules and have no row in WASM_UNIT_TARGETS, so nothing executes them"
+        );
+    }
+
+    /// The scan is a detector rather than a decoration: it finds the package it
+    /// currently exempts.
+    ///
+    /// Without this, `unregistered_wasm_unit_packages` returning an empty list
+    /// would be indistinguishable from it reading nowhere — which is the exact
+    /// failure `unregistered_wasm_harnesses` guards against with its own
+    /// `capable.len() < WASM_TARGETS.len()` bail, and the reason that bail
+    /// exists at all.
+    #[test]
+    fn the_wasm32_unit_scan_can_see_the_package_it_exempts() {
+        let root = workspace_root().unwrap();
+        assert!(
+            tree_has_wasm32_test_gate(&root.join("crates/happenstance-cloudflare/src")).unwrap(),
+            "the scan cannot see the one tree it is registered against, so its \
+             silence about every other tree would mean nothing"
+        );
+        assert!(
+            !tree_has_wasm32_test_gate(&root.join("crates/happenstance-core/src")).unwrap(),
+            "and it does not fire on a crate that has no wasm32-only test module, \
+             which would make every row a false positive"
         );
     }
 

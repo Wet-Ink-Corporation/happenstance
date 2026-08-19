@@ -155,3 +155,26 @@ distinction is already covered by `ViolationAsStoreErrorStore` in the testkit's 
 coverage. What was left is unportable by construction — a property of *this* error type's
 contents — and that asymmetry is itself why the workspace's only `!Send` adapter is the only
 instrument for the clause.
+
+## Slice-review repair (`real-worker-bindings`)
+
+**One thing fixed here, one owed upstream.**
+
+*Fixed.* The single command that reaches both halves of ES-6 is now written in the crate's
+own documentation instead of only in a ledger — the exact invocation, why a plain
+`cargo test -p happenstance-cloudflare` reaches only the four probes, and both host
+preconditions: a `wasm-bindgen-test-runner` matching `Cargo.lock`'s `wasm-bindgen`, and Node
+22.5 or newer, because `test_object.rs`'s Durable Object shim reaches `node:sqlite` through
+`process.getBuiltinModule`. It is also no longer only a contributor's to remember: `xtask`
+gained a `WASM_UNIT_TARGETS` registry with a `--lib` row for this package, and the `wasm32
+run of the conformance rules` gate step executes it — so the `es6_reconstruction` tests, the
+`!Send` twins and the whole adapter suite are **run** by the gate rather than merely
+compiled by it.
+
+*Owed.* AC-006's branch condition is not the one that fired. The AC selects host-native "if
+`cargo test -p happenstance-cloudflare` still links once `worker` is real" — and it does
+link; the four probes run there. The condition that actually decides the tier is that a
+store cannot be *driven* off-target, because `worker`'s externs are panicking stubs on the
+host. That is a valid reason and a different one, and amending the criterion to name it is a
+human decision through `redkiln advance` rather than a ledger reword. The ledger row now
+states what happened instead of reinterpreting the stated branch.

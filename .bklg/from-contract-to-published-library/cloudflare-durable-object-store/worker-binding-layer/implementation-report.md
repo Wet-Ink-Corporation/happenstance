@@ -186,3 +186,30 @@ reason is left in the file where the impl was.
 `#![allow(clippy::todo)]` at `lib.rs:149`, per the spec's PR boundary; and the four
 `send_shape.rs` probe bodies, which the spec records as *not* adapter paths and whose
 disposition travels with the scoped allow.
+
+## Slice-review repair (`real-worker-bindings`)
+
+**`deny.toml` is reverted; the `cargo deny check bans` finding stands red.** The first cut
+of this story widened the `async-trait` ban's `wrappers` list with `worker` and
+`worker-macros` so the check would pass, and recorded that as a boundary deviation. Slice
+review rejected it, and rightly: AC-008's own final conjunct is *neither `deny.toml` nor
+`rust-toolchain.toml` is edited to make either of them pass*, and spec Clarification 8 says
+the exclusion exists precisely because such an edit "would turn AC-008's two measurements
+into green checkmarks while deleting the finding they exist to produce". `deny.toml` is now
+byte-identical to the slice base. The finding is recorded on the AC-008 ledger row and
+escalated to ADR-0023 (`adr-0023-and-atom-resolutions`), which is where the wrapper entries
+land if that record ratifies them.
+
+What that costs, stated rather than left to be discovered: `cargo deny` is an OPTIONAL,
+probed gate step, so `cargo xtask ci --fast` — this story's stated Merge DoD — is green,
+and the full `cargo xtask ci` is red at the `cargo deny` step until the ADR lands. That is
+EC-002's decided response to a supply-chain guard firing — record it, escalate it, do not
+widen — rather than an accident.
+
+**The ES-6 citation repair in `spec/SPECIFICATION.md` is left in place and its ratification
+is carried forward.** Reverting it would make `cargo xtask spec-trace` — a gate step — red
+for citations that are merely stale, and the clause's normative sentence and `[FROZEN]`
+marker were never touched. But `CLAUDE.md` says a `[FROZEN]` clause changes by ADR rather
+than by edit, so as it stands the repair is self-authorised. ADR-0023's record must carry
+it, and `redkiln validate --kb` must still agree afterwards. That obligation is written on
+the AC-009 ledger row rather than left in a report nobody re-reads.

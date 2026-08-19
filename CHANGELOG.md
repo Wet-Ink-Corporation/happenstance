@@ -135,6 +135,28 @@ not the same as what a user needed to be told.
   risk from, and it does not bite. No conformance rule was added or changed, so
   nothing an adapter author is held to moved. With it the crate's last
   `todo!()` is gone and the scoped `#![allow(clippy::todo)]` left with it.
+- **The Durable Object adapter's `append` is all-or-none, and now by doing
+  rather than by believing.** It had documented the guarantee as the runtime's:
+  nothing is awaited mid-batch, so the turn's implicit transaction was taken to
+  cover it. That conflated isolation with atomicity. A Durable Object commits
+  the turn's writes when the handler returns *normally*, and this adapter
+  converts a thrown statement into `Err(…)` and returns normally — so the rows
+  written before the throw would have committed. `append` now compensates
+  explicitly, discarding the position range a failed batch was assigned, which
+  is exact rather than best-effort precisely because nothing is awaited in
+  between. A discarded batch leaves a **gap**, never a reused position, because
+  an `EventId` is `(store, position)`. When the discard itself fails — an object
+  out of room fails the `DELETE` as readily as the `INSERT` — the caller is told
+  through the new `CloudflareEventStoreError::PartialBatch`, which carries both
+  failures and is the one outcome of `append` after which a retry is unsafe.
+- **The gate executes the Cloudflare adapter's `wasm32` tests instead of only
+  compiling them.** `xtask` gained `WASM_UNIT_TARGETS`, a registry beside
+  `WASM_TARGETS` for `wasm32` test targets that run no conformance rules, and a
+  completeness scan over every crate's `src` tree so a
+  `#[cfg(all(test, target_arch = "wasm32"))]` module cannot execute nowhere
+  unnoticed — the miss the previous milestone's harness scan could not see,
+  because it read one directory. `cargo xtask ci` now runs the adapter's
+  eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
 
 ## [0.2.0-alpha.1] — 2026-08-16
 

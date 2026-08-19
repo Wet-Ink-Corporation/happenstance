@@ -279,9 +279,14 @@ const REQUIRED: &[Step] = &[
         // `--all-targets` reaches benchmark and example targets that have no
         // wasm story.
         //
-        // Compiling is not executing. The run is the `wasm32 run of the
-        // conformance rules` step below, which reaches this crate's harness once
-        // `every-rule-under-workerd` registers a `WASM_TARGETS` row for it.
+        // Compiling is not executing, and for a while that gap was the whole
+        // story here: this step built the adapter's eighty-one wasm32 cases and
+        // nothing in the gate ran one. It does now — `proof::WASM_UNIT_TARGETS`
+        // carries a `--lib` row for this package and the `wasm32 run of the
+        // conformance rules` step below executes it. What is still only
+        // *compiled* is the conformance suite against a `CloudflareFixture`,
+        // which arrives when `every-rule-under-workerd` registers a
+        // `WASM_TARGETS` row for it.
         //
         // The **name** is unchanged, deliberately: `wasm_steps()` selects by
         // name, and an index-selected step once pointed `cargo xtask wasm` at
@@ -402,6 +407,14 @@ const REQUIRED: &[Step] = &[
         // row landed, the only place a rule actually ran on wasm32 was a
         // GitHub Actions job on one of the three runners the gate matrices
         // over, which is a claim about CI rather than about the gate.
+        //
+        // It runs two registries, and the name under-claims rather than over-
+        // claims: `proof::WASM_TARGETS` is the conformance harnesses, and
+        // `proof::WASM_UNIT_TARGETS` is every other wasm32 test target — today
+        // the Cloudflare adapter's own `--lib` cases, which the step above had
+        // been compiling and nothing had been running. The name is left alone
+        // because `wasm_steps()` selects it by string, and an index-selected
+        // step once pointed `cargo xtask wasm` at clippy while printing green.
         //
         // `--nocapture` reaches the runner through `proof.rs`, and it is load-
         // bearing rather than verbose: `println!` is a silent discard on

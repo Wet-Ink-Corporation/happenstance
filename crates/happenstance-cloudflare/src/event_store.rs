@@ -72,15 +72,28 @@
 //! [`SqlStorage::exec`] is synchronous. `append` therefore evaluates its
 //! condition and inserts its rows with **nothing awaited in between** — the body
 //! contains no `.await` at all — so the object cannot yield to its event loop
-//! part way through and the runtime's implicit transaction covers the batch.
-//! That is a *stronger* guarantee than any other adapter in the workspace gets,
-//! and it is why this adapter is a poor instrument for the position-allocation
-//! axis and a good one for the flavour axis.
+//! part way through. That is a *stronger* isolation guarantee than any other
+//! adapter in the workspace gets, and it is why this adapter is a poor
+//! instrument for the position-allocation axis and a good one for the flavour
+//! axis.
 //!
-//! It is also why there is no `BEGIN`/`COMMIT` here: a Durable Object rejects
-//! transaction-control statements through `sql.exec()` and offers a callback
-//! form instead, which would put a second seam in the constructor for a
-//! guarantee the single-threaded turn already gives.
+//! **Isolation is not atomicity, and this crate once conflated them.** The turn's
+//! implicit transaction commits when the handler returns *normally*, and an
+//! adapter that catches a thrown statement and reports it as `Err(…)` returns
+//! normally — so the rows written before the throw would commit with the rest of
+//! the turn. Nothing rolls them back, because from the runtime's point of view
+//! nothing went wrong. All-or-none is therefore something
+//! [`CloudflareEventStore`]'s write path does explicitly, by discarding the
+//! positions the failed batch was assigned, and
+//! `a_batch_that_throws_after_its_first_row_leaves_nothing_behind` is what fails
+//! if that is removed or believed rather than done.
+//!
+//! There is still no `BEGIN`/`COMMIT` here, and none is available: a Durable
+//! Object rejects transaction-control statements — `SAVEPOINT` among them —
+//! through `sql.exec()`, and offers a callback form instead, which would put a
+//! second seam in the constructor. The compensating discard is exact rather than
+//! a best effort for the reason above: with nothing awaited mid-batch, no row
+//! outside the batch can be in the range it deletes.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -408,7 +421,30 @@ impl CloudflareEventStore {
         Ok(None)
     }
 
-    /// Writes every row of the batch and returns the position of its last event.
+    /// Writes every row of the batch, or none of them, and returns the position
+    /// of its last event.
+    ///
+    /// # The all-or-none half is this function, not the runtime
+    ///
+    /// A batch is several statements — one `INSERT` per event, one per tag row,
+    /// and the identity `UPDATE` at the end — and a throw at any of them leaves
+    /// the ones before it written. The runtime does not undo them: a Durable
+    /// Object commits the turn's writes when the handler **returns normally**,
+    /// and this adapter converts every throw into `Err(…)` and returns normally,
+    /// which is exactly what a caller branching on `AppendError` needs it to do.
+    /// So the implicit transaction that covers the turn is not a rollback
+    /// mechanism for a failure the adapter caught and reported, and reading it
+    /// as one was this crate's own error — see
+    /// `a_batch_that_throws_after_its_first_row_leaves_nothing_behind`, which
+    /// fails against the version that believed it.
+    ///
+    /// `SAVEPOINT` is not the fix either: a Durable Object rejects transaction
+    /// control through `sql.exec()` outright, which is the same reason there is
+    /// no `BEGIN`/`COMMIT` here. What is left is **explicit compensation** —
+    /// discard the rows this batch assigned — and it is exact rather than
+    /// approximate because nothing is awaited between the first `INSERT` and the
+    /// last statement, so no other writer can have interleaved a row into the
+    /// range being discarded.
     ///
     /// The `event` rows go in one at a time, each with `RETURNING position`,
     /// because `AUTOINCREMENT` permits gaps and nothing may assume `+ 1`; SQLite
@@ -421,7 +457,45 @@ impl CloudflareEventStore {
         events: &[Event],
         recorded_at: RecordedAt,
     ) -> Result<SequencePosition, CloudflareEventStoreError> {
+        // Owned out here rather than inside `write_rows`, because the discard
+        // needs the positions of a batch that did **not** finish — which is the
+        // one case a return value cannot carry.
         let mut positions = Vec::with_capacity(events.len());
+        let outcome = self.write_rows(store_id, events, recorded_at, &mut positions);
+
+        let Err(cause) = outcome else {
+            return outcome;
+        };
+        let Some(from) = positions.first().copied() else {
+            // The very first `INSERT` threw, so nothing was assigned and there
+            // is nothing to discard. Distinguished rather than folded in: a
+            // `DELETE` over an empty range is a statement issued for no reason,
+            // and on a metered runtime that is billed rows read.
+            return Err(cause);
+        };
+
+        match self.discard_from(from) {
+            Ok(()) => Err(cause),
+            Err(while_discarding) => Err(CloudflareEventStoreError::PartialBatch {
+                from,
+                cause: Box::new(cause),
+                while_discarding: Box::new(while_discarding),
+            }),
+        }
+    }
+
+    /// Writes every row of the batch, leaving whatever it managed in place.
+    ///
+    /// Split out of `write_batch` so that the positions of a *failed* batch
+    /// survive the failure: they are what the compensating discard is aimed at,
+    /// and a function that returned them only on success could not report them.
+    fn write_rows(
+        &self,
+        store_id: StoreId,
+        events: &[Event],
+        recorded_at: RecordedAt,
+        positions: &mut Vec<SequencePosition>,
+    ) -> Result<SequencePosition, CloudflareEventStoreError> {
         for event in events {
             let metadata = event
                 .metadata()
@@ -453,7 +527,7 @@ impl CloudflareEventStore {
             positions.push(position);
         }
 
-        self.write_tag_rows(events, &positions)?;
+        self.write_tag_rows(events, positions)?;
 
         // One statement at the end of the batch rather than a value bound per
         // row: a locally appended event's identity is *this object's incarnation
@@ -482,6 +556,36 @@ impl CloudflareEventStore {
             .last()
             .copied()
             .ok_or_else(|| SqlError::internal("an append of no events reached write_batch").into())
+    }
+
+    /// Discards every row at or above `from`, undoing a batch that failed part
+    /// way through.
+    ///
+    /// **The range is exact, not a guess.** `from` is the position the batch's
+    /// first `INSERT … RETURNING` was given, every later row of the batch was
+    /// given a higher one, and nothing is awaited between them — so on a
+    /// single-threaded object no row outside this batch can sit in the range.
+    ///
+    /// Tag rows first, because `event_tag.position` references `event.position`
+    /// and the reverse order asks SQLite to orphan them.
+    ///
+    /// What this deliberately does not do is reset the position counter. The
+    /// schema's `AUTOINCREMENT` keeps its high-water mark across the delete, so
+    /// a discarded batch leaves a **gap** rather than positions to be handed out
+    /// twice — and it has to, because an `EventId` is `(store, position)` and a
+    /// reused position is two different events wearing one identity. Gaps are
+    /// permitted by the specification; reuse is not.
+    fn discard_from(&self, from: SequencePosition) -> Result<(), CloudflareEventStoreError> {
+        let from = position_as_i64(from);
+        self.sql.exec(
+            "DELETE FROM event_tag WHERE position >= ?",
+            &[SqlValue::Integer(from)],
+        )?;
+        self.sql.exec(
+            "DELETE FROM event WHERE position >= ?",
+            &[SqlValue::Integer(from)],
+        )?;
+        Ok(())
     }
 
     /// Inserts every `(tag, position, event_type)` row.
@@ -578,6 +682,34 @@ pub enum CloudflareEventStoreError {
     StoredPosition {
         /// The rejected value.
         raw: i64,
+    },
+
+    /// An append failed part way through **and** the rows it had already written
+    /// could not be discarded, so this object still holds part of a batch that
+    /// never succeeded.
+    ///
+    /// Both failures travel because either alone misleads. `cause` says why the
+    /// append stopped; `while_discarding` says why the compensation could not
+    /// clean up after it — and it is the second that changes what the caller
+    /// must do. Every other failure of `append` leaves the log as it found it,
+    /// so a DCB command loop may re-read and retry. This one does not: the log
+    /// now contains events the caller's own failed append put there, and a
+    /// retry would decide against them.
+    ///
+    /// It is reachable, not defensive — a storage ceiling reached mid-batch
+    /// fails the `INSERT` and then fails the `DELETE` that would undo it. See
+    /// `a_batch_whose_discard_also_fails_reports_both_failures`.
+    #[error(
+        "an append failed and its rows from position {from} could not be discarded: {cause} (while discarding: {while_discarding})"
+    )]
+    PartialBatch {
+        /// The first position this batch was given; every row at or above it was
+        /// this batch's, and is what the discard was aimed at.
+        from: SequencePosition,
+        /// Why the append stopped.
+        cause: Box<CloudflareEventStoreError>,
+        /// Why the rows it had written could not be discarded.
+        while_discarding: Box<CloudflareEventStoreError>,
     },
 }
 
@@ -1211,7 +1343,7 @@ mod write_path_tests {
 
     use super::{Ceilings, CloudflareEventStore, CloudflareEventStoreError};
     use crate::sql_storage::{SqlStorage, SqlValue};
-    use crate::test_object::durable_object;
+    use crate::test_object::{arm_throw, arm_throws, durable_object};
 
     /// One fresh Durable Object, migrated, reached through the one constructor.
     fn open() -> (SqlStorage, CloudflareEventStore) {
@@ -1255,6 +1387,32 @@ mod write_path_tests {
             match row.values() {
                 [SqlValue::Integer(position)] => out.push(*position),
                 other => panic!("unexpected position row: {other:?}"),
+            }
+        }
+        out
+    }
+
+    /// Every `(tag, position)` row the store holds, in order.
+    ///
+    /// Read separately from [`stored_positions`] because a batch discarded
+    /// half-way can leave either table populated without the other, and a
+    /// compensation that cleaned up one of them would pass an assertion written
+    /// only over the other.
+    fn stored_tag_rows(sql: &SqlStorage) -> Vec<(String, i64)> {
+        let mut cursor = sql
+            .exec(
+                "SELECT tag, position FROM event_tag ORDER BY position, tag",
+                &[],
+            )
+            .expect("the select runs");
+        let mut out = Vec::new();
+        while let Some(row) = cursor.next_row() {
+            let row = row.expect("the row decodes");
+            match row.values() {
+                [SqlValue::Text(tag), SqlValue::Integer(position)] => {
+                    out.push((tag.clone(), *position));
+                }
+                other => panic!("unexpected tag row: {other:?}"),
             }
         }
         out
@@ -1522,6 +1680,7 @@ mod write_path_tests {
                 CloudflareEventStoreError::CorruptTags => "corrupt tags",
                 CloudflareEventStoreError::UnstampedEvent { .. } => "unstamped event",
                 CloudflareEventStoreError::StoredPosition { .. } => "stored position",
+                CloudflareEventStoreError::PartialBatch { .. } => "partial batch",
             }
         }
 
@@ -1670,6 +1829,166 @@ mod write_path_tests {
         assert!(
             stored_positions(&sql).is_empty(),
             "and none of the first two may have landed"
+        );
+    }
+
+    /// AC-007, the half `a_failed_batch_leaves_no_partial_rows` cannot reach.
+    ///
+    /// That test refuses on the pre-flight ceiling check, where **zero**
+    /// statements have run — so it observes a batch that never started, not a
+    /// batch that started and stopped. This one arms a throw on the *tag* insert,
+    /// which is issued after every `event` row already exists, and is therefore
+    /// the only test in this module that can observe all-or-none at all.
+    ///
+    /// The named wrong implementation it rejects is the one this adapter was:
+    /// issue N inserts, convert the throw into `Err(…)`, return normally. A
+    /// Durable Object commits its turn's writes when the handler returns
+    /// normally, so the rows written before the throw survive — an append that
+    /// failed and half-landed, which is the one outcome a DCB command loop
+    /// cannot recover from, because its retry re-reads a log containing events
+    /// its own failed append put there.
+    #[wasm_bindgen_test]
+    async fn a_batch_that_throws_after_its_first_row_leaves_nothing_behind() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event_tag", "no space left on device");
+
+        let failure = store
+            .append(
+                &[tagged("First", &["a:1"]), tagged("Second", &["b:2"])],
+                None,
+            )
+            .await
+            .expect_err("the armed throw refuses the write");
+
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+        assert!(
+            stored_positions(&sql).is_empty(),
+            "and the `event` rows written before the throw must not survive it"
+        );
+        assert!(
+            stored_tag_rows(&sql).is_empty(),
+            "nor may the tag rows of the events that did insert"
+        );
+    }
+
+    /// AC-007. The same property at the last statement of the batch — the
+    /// `UPDATE … SET origin_store` that stamps identity, which runs after every
+    /// `event` **and** every `event_tag` row exists.
+    ///
+    /// Separate from the test above rather than a second `arm_throw` inside it,
+    /// because the two failure points compensate through different amounts of
+    /// written state and a single test would only ever prove the first.
+    #[wasm_bindgen_test]
+    async fn a_batch_that_throws_while_stamping_identity_leaves_nothing_behind() {
+        let (sql, store) = open();
+        arm_throw(
+            &sql,
+            "UPDATE event SET origin_store",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"]), event("Second")], None)
+            .await
+            .expect_err("the armed throw refuses the write");
+
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+        assert!(
+            stored_positions(&sql).is_empty(),
+            "every row of an unstamped batch is discarded"
+        );
+        assert!(
+            stored_tag_rows(&sql).is_empty(),
+            "tag rows included, or the object keeps rows pointing at nothing"
+        );
+    }
+
+    /// AC-007. The store a discarded batch leaves behind is still a usable
+    /// store: the next append lands, and it lands *above* the discarded
+    /// positions rather than reusing them.
+    ///
+    /// The second half is why `AUTOINCREMENT` is in the schema. A position this
+    /// object once handed out — even to a batch that was then discarded — must
+    /// never be handed out again, because `EventId` is `(store, position)` and a
+    /// reused position is two different events with one identity.
+    #[wasm_bindgen_test]
+    async fn a_discarded_batch_does_not_wedge_or_rewind_the_store() {
+        let (sql, store) = open();
+        arm_throw(&sql, "INSERT INTO event_tag", "no space left on device");
+
+        let discarded = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed throw refuses the first write");
+        assert!(matches!(discarded, AppendError::Store(_)), "{discarded:?}");
+
+        let landed = store
+            .append(&[event("Second")], None)
+            .await
+            .expect("the arming disarmed as it fired, so the next batch lands");
+
+        assert_eq!(
+            stored_positions(&sql),
+            vec![i64::try_from(landed.get()).expect("a position fits an i64")],
+            "the surviving log is exactly the batch that succeeded"
+        );
+        assert!(
+            landed.get() > 1,
+            "and the discarded batch's position was not reused: {landed:?}"
+        );
+    }
+
+    /// AC-007. When the compensation *itself* fails, the caller is told — with
+    /// both failures and the position the surviving rows start at.
+    ///
+    /// The reachable shape, not a defensive one: the failure that stops a batch
+    /// is most often the object running out of room, and an object with no room
+    /// fails the `DELETE` that would undo the `INSERT` just as readily. Arming
+    /// two throws on `event_tag` fires the first on the batch's tag insert and
+    /// the second on the discard that answers it.
+    ///
+    /// Without this test [`CloudflareEventStoreError::PartialBatch`] would be a
+    /// variant no execution reaches — a claim about a state, rather than the
+    /// report of one.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_discard_also_fails_reports_both_failures() {
+        let (sql, store) = open();
+        arm_throws(&sql, "event_tag", "no space left on device", 2);
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed throw refuses the write");
+
+        let AppendError::Store(CloudflareEventStoreError::PartialBatch {
+            from,
+            cause,
+            while_discarding,
+        }) = &failure
+        else {
+            panic!("a batch whose discard failed reports PartialBatch: {failure:?}");
+        };
+
+        assert_eq!(
+            stored_positions(&sql),
+            vec![i64::try_from(from.get()).expect("a position fits an i64")],
+            "`from` names where the rows the object still holds begin"
+        );
+        assert!(
+            cause.to_string().contains("no space left on device"),
+            "the original failure is not discarded: {cause}"
+        );
+        assert!(
+            while_discarding
+                .to_string()
+                .contains("no space left on device"),
+            "and neither is the reason the cleanup could not run: {while_discarding}"
         );
     }
 
@@ -1831,6 +2150,8 @@ mod write_path_tests {
 mod read_path_tests {
     use core::future::poll_fn;
     use core::pin::{Pin, pin};
+    use core::task::{Context, Poll};
+    use std::collections::VecDeque;
 
     use futures_core::Stream;
     use happenstance_core::{
@@ -1842,7 +2163,7 @@ mod read_path_tests {
 
     use super::{CloudflareEventStore, CloudflareEventStoreError, PAGE_SIZE};
     use crate::js::JsHandle;
-    use crate::sql_storage::{SqlRow, SqlStorage, SqlValue};
+    use crate::sql_storage::{SqlCursor, SqlRow, SqlStorage, SqlValue};
     use crate::test_object::{durable_object, statements};
 
     /// One fresh Durable Object, migrated, reached through the one constructor —
@@ -1979,9 +2300,234 @@ mod read_path_tests {
             .collect()
     }
 
+    /// The positions of the items that decoded, ignoring any error item.
+    ///
+    /// [`positions_of`] panics on an error, which is exactly right for the tests
+    /// that must not produce one — and useless for the negative controls, whose
+    /// whole purpose is to produce one.
+    fn ok_positions_of(items: &[Item]) -> Vec<SequencePosition> {
+        items
+            .iter()
+            .filter_map(|item| item.as_ref().ok().map(|event| event.position))
+            .collect()
+    }
+
     /// A row built by hand, for the decoder's own boundary cases.
     fn row(values: Vec<SqlValue>) -> SqlRow {
         SqlRow::new(JsHandle::new(JsValue::NULL), values)
+    }
+
+    /// What both the real read and every wrong shape below yield.
+    type Item = Result<SequencedEvent, CloudflareEventStoreError>;
+
+    /// Which decision the wrong paging shape gets wrong.
+    ///
+    /// One type with two policies rather than two types, because everything else
+    /// about them — the statement, the decode, the page loop — must stay
+    /// *identical to the shipped read*, or the control proves that two
+    /// implementations differ rather than that one decision matters.
+    #[derive(Debug, Clone, Copy)]
+    enum WrongCeiling {
+        /// AC-003's named wrong implementation: no stable sample. The ceiling is
+        /// re-captured before every page, which is what "pages without a
+        /// ceiling" amounts to against a store whose maximum only grows — and it
+        /// is the shape a careful implementer reaches honestly, by treating the
+        /// bound as a detail of rendering one page rather than as the sample
+        /// point of the whole read.
+        RecapturedPerPage,
+        /// AC-006's `NullHeadPagingStore`: the ceiling is arithmetic over
+        /// `head()`, and an empty store's head is `None`. Spelled as an error
+        /// item rather than a panic because that is the milder of the two
+        /// outcomes ES-9 records, and the milder one still has to be rejected.
+        ArithmeticOnHead,
+    }
+
+    /// A paging read that gets its ceiling wrong, and nothing else.
+    ///
+    /// **A committed negative control, not a fixture.** It reuses the shipped
+    /// [`render_read`](super::render_read), [`drain_page`](super::drain_page)
+    /// and [`decode_row`](super::decode_row) verbatim, so the only difference
+    /// between it and [`SqlRowStream`](super::SqlRowStream) is the one line each
+    /// [`WrongCeiling`] names. That is what makes a test that rejects it a test
+    /// about the ceiling.
+    ///
+    /// It is deliberately reachable only from this module: it is evidence that
+    /// the read-path assertions can fail, never an alternative read.
+    struct WrongPagingStream {
+        sql: SqlStorage,
+        query: Query,
+        options: ReadOptions,
+        page_size: usize,
+        ceiling: WrongCeiling,
+        cursor: Option<SequencePosition>,
+        page: VecDeque<SqlRow>,
+        page_was_full: bool,
+        done: bool,
+    }
+
+    impl WrongPagingStream {
+        fn new(
+            sql: &SqlStorage,
+            query: Query,
+            options: ReadOptions,
+            page_size: usize,
+            ceiling: WrongCeiling,
+        ) -> Self {
+            Self {
+                sql: sql.clone(),
+                query,
+                options,
+                page_size,
+                ceiling,
+                cursor: None,
+                page: VecDeque::new(),
+                page_was_full: true,
+                done: false,
+            }
+        }
+    }
+
+    impl Stream for WrongPagingStream {
+        type Item = Item;
+
+        fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let this = self.get_mut();
+            loop {
+                if let Some(row) = this.page.pop_front() {
+                    return match super::decode_row(&row) {
+                        Ok(decoded) => {
+                            this.cursor = Some(decoded.position);
+                            Poll::Ready(Some(Ok(decoded)))
+                        }
+                        Err(err) => {
+                            this.done = true;
+                            Poll::Ready(Some(Err(err)))
+                        }
+                    };
+                }
+                if this.done || !this.page_was_full {
+                    return Poll::Ready(None);
+                }
+
+                let ceiling = match super::max_position(&this.sql) {
+                    Err(err) => {
+                        this.done = true;
+                        return Poll::Ready(Some(Err(err)));
+                    }
+                    Ok(Some(ceiling)) => ceiling,
+                    Ok(None) => match this.ceiling {
+                        WrongCeiling::RecapturedPerPage => return Poll::Ready(None),
+                        WrongCeiling::ArithmeticOnHead => {
+                            // The registered failure mode, and the whole of it:
+                            // arithmetic on an absent head. The shipped read
+                            // returns an empty stream here.
+                            this.done = true;
+                            return Poll::Ready(Some(Err(
+                                CloudflareEventStoreError::StoredPosition { raw: 0 },
+                            )));
+                        }
+                    },
+                };
+
+                let (statement, bindings) = super::render_read(
+                    &this.query,
+                    this.options,
+                    ceiling,
+                    this.cursor,
+                    this.page_size,
+                );
+                match super::drain_page(&this.sql, &statement, &bindings) {
+                    Err(err) => {
+                        this.done = true;
+                        return Poll::Ready(Some(Err(err)));
+                    }
+                    Ok(rows) => {
+                        if rows.is_empty() {
+                            return Poll::Ready(None);
+                        }
+                        this.page_was_full = rows.len() >= this.page_size;
+                        this.page = rows;
+                    }
+                }
+            }
+        }
+    }
+
+    /// A read that opens one cursor at the first poll and advances it one row
+    /// per poll — the predecessor design [`SqlRowStream`](super::SqlRowStream)'s
+    /// own documentation describes and rejects.
+    ///
+    /// **A committed negative control.** The statement it runs is the shipped
+    /// one, rendered by [`render_read`](super::render_read) under a real ceiling
+    /// captured up front, so the single difference from the shipped read is that
+    /// the cursor is *held across the caller's suspension point* rather than
+    /// drained before the poll returns. Cloudflare documents that a cursor held
+    /// across an `await` is not a stable snapshot; this is what that costs.
+    struct CursorHoldingStream {
+        sql: SqlStorage,
+        statement: Option<(String, Vec<SqlValue>)>,
+        cursor: Option<SqlCursor>,
+        done: bool,
+    }
+
+    impl CursorHoldingStream {
+        fn new(sql: &SqlStorage, query: &Query, options: ReadOptions) -> Self {
+            let ceiling = super::max_position(sql)
+                .expect("the ceiling capture runs")
+                .expect("this control is only ever pointed at a non-empty store");
+            Self {
+                sql: sql.clone(),
+                statement: Some(super::render_read(
+                    query,
+                    options,
+                    ceiling,
+                    None,
+                    usize::MAX,
+                )),
+                cursor: None,
+                done: false,
+            }
+        }
+    }
+
+    impl Stream for CursorHoldingStream {
+        type Item = Item;
+
+        fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let this = self.get_mut();
+            if this.done {
+                return Poll::Ready(None);
+            }
+            if this.cursor.is_none() {
+                let Some((statement, bindings)) = this.statement.take() else {
+                    this.done = true;
+                    return Poll::Ready(None);
+                };
+                match this.sql.exec(&statement, &bindings) {
+                    Err(err) => {
+                        this.done = true;
+                        return Poll::Ready(Some(Err(err.into())));
+                    }
+                    Ok(cursor) => this.cursor = Some(cursor),
+                }
+            }
+
+            let cursor = this
+                .cursor
+                .as_mut()
+                .expect("the cursor was just opened or already held");
+            match cursor.next_row() {
+                None => {
+                    this.done = true;
+                    Poll::Ready(None)
+                }
+                Some(Err(err)) => {
+                    this.done = true;
+                    Poll::Ready(Some(Err(err.into())))
+                }
+                Some(Ok(row)) => Poll::Ready(Some(super::decode_row(&row))),
+            }
+        }
     }
 
     /// A well-formed stored row, which each decode test breaks in exactly one
@@ -2095,20 +2641,20 @@ mod read_path_tests {
         );
     }
 
-    /// AC-003. The ceiling as a caller observes it: drain part of a paged read,
-    /// append, drain the rest — and the late event is absent. A paging read that
-    /// re-`exec`s *without* a ceiling picks it up on the next page, which is the
-    /// wrong implementation this rejects.
-    #[wasm_bindgen_test]
-    async fn read_is_stable_under_an_interleaved_append() {
-        let (_sql, store) = open_paged(2);
-        append_each(&store, &["One", "Two", "Three", "Four"]).await;
-
-        // Bound to a local rather than written inline: `read` returns
-        // `impl Stream` capturing the query's lifetime, so a temporary would be
-        // dropped while the stream still holds it.
-        let all = Query::all();
-        let stream = store.read(&all, ReadOptions::new());
+    /// AC-003's assertion body, written **once** so that the real read and the
+    /// named wrong shape face the same predicate rather than two predicates that
+    /// happen to be spelled alike.
+    ///
+    /// Drains two items, appends mid-drain on the same handle, drains the rest,
+    /// and hands back everything it saw plus the position the late append
+    /// landed at. The caller decides what that means.
+    async fn drain_across_an_interleaved_append<S>(
+        stream: S,
+        store: &CloudflareEventStore,
+    ) -> (Vec<Item>, SequencePosition)
+    where
+        S: Stream<Item = Item>,
+    {
         let mut stream = pin!(stream);
         let mut seen = vec![
             step(&mut stream).await.expect("a first event"),
@@ -2123,6 +2669,26 @@ mod read_path_tests {
         while let Some(item) = step(&mut stream).await {
             seen.push(item);
         }
+        (seen, late)
+    }
+
+    /// AC-003. The ceiling as a caller observes it: drain part of a paged read,
+    /// append, drain the rest — and the late event is absent. A paging read that
+    /// re-`exec`s *without* a ceiling picks it up on the next page, which is the
+    /// wrong implementation this rejects — committed as
+    /// [`WrongCeiling::RecapturedPerPage`] and driven through the same helper by
+    /// `a_ceilingless_paging_read_is_rejected` below.
+    #[wasm_bindgen_test]
+    async fn read_is_stable_under_an_interleaved_append() {
+        let (_sql, store) = open_paged(2);
+        append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        // Bound to a local rather than written inline: `read` returns
+        // `impl Stream` capturing the query's lifetime, so a temporary would be
+        // dropped while the stream still holds it.
+        let all = Query::all();
+        let (seen, late) =
+            drain_across_an_interleaved_append(store.read(&all, ReadOptions::new()), &store).await;
 
         assert_eq!(
             event_types(&seen),
@@ -2132,6 +2698,39 @@ mod read_path_tests {
         assert!(
             !positions_of(&seen).contains(&late),
             "and the late event is absent by position too"
+        );
+    }
+
+    /// AC-003's **negative control**, committed rather than swept.
+    ///
+    /// The named wrong implementation, driven through
+    /// [`drain_across_an_interleaved_append`] — the same helper, the same
+    /// assertions — and shown to fail both of them. Without this the test above
+    /// is a rule no adapter can fail, which is the decorative shape `CLAUDE.md`
+    /// names; a mutation sweep proves the same thing on the afternoon it is run
+    /// and nothing re-runs it afterwards.
+    #[wasm_bindgen_test]
+    async fn a_ceilingless_paging_read_is_rejected() {
+        let (sql, store) = open_paged(2);
+        append_each(&store, &["One", "Two", "Three", "Four"]).await;
+
+        let wrong = WrongPagingStream::new(
+            &sql,
+            Query::all(),
+            ReadOptions::new(),
+            2,
+            WrongCeiling::RecapturedPerPage,
+        );
+        let (seen, late) = drain_across_an_interleaved_append(wrong, &store).await;
+
+        assert!(
+            event_types(&seen) != ["One", "Two", "Three", "Four"],
+            "the ceiling-less shape must fail the assertion the real read passes: {:?}",
+            event_types(&seen)
+        );
+        assert!(
+            positions_of(&seen).contains(&late),
+            "and it fails it by picking the mid-drain append up on the next page"
         );
     }
 
@@ -2291,27 +2890,87 @@ mod read_path_tests {
         );
     }
 
-    /// AC-005. A suspended read holds no borrow of the object and no live
-    /// cursor, so an `append` on the same handle completes mid-drain.
-    #[wasm_bindgen_test]
-    async fn a_live_read_stream_does_not_block_an_append_on_one_handle() {
-        let (_sql, store) = open_paged(1);
-        append_each(&store, &["One", "Two"]).await;
-
-        let all = Query::all();
-        let stream = store.read(&all, ReadOptions::new());
+    /// AC-005's assertion body, written **once** so the real read and the named
+    /// cursor-holding shape face the same predicate.
+    ///
+    /// Steps one item, appends on the same handle while the read is suspended,
+    /// then drains what is left and hands all of it back.
+    async fn replay_across_an_append_on_one_handle<S>(
+        stream: S,
+        store: &CloudflareEventStore,
+    ) -> Vec<Item>
+    where
+        S: Stream<Item = Item>,
+    {
         let mut stream = pin!(stream);
-        step(&mut stream)
-            .await
-            .expect("a first event")
-            .expect("which decodes");
+        let mut seen = vec![step(&mut stream).await.expect("a first event")];
 
         store
             .append(&[event("WhileTheReadIsLive")], None)
             .await
             .expect("an append must not be blocked by a suspended read");
 
-        while step(&mut stream).await.is_some() {}
+        while let Some(item) = step(&mut stream).await {
+            seen.push(item);
+        }
+        seen
+    }
+
+    /// AC-005. A suspended read holds no borrow of the object and no live
+    /// cursor, so an `append` on the same handle completes mid-drain **and the
+    /// replay survives it**.
+    ///
+    /// Both halves are asserted, and the second is the one with teeth. A stream
+    /// that held its cursor across the poll would let the append through — the
+    /// cursor holds an `Rc`, not a `Ref` — and then break on its next advance
+    /// with [`SqlError::CursorInvalidated`]. An assertion that only counted
+    /// items would pass against it, so it counts *outcomes*. See
+    /// `a_cursor_held_across_a_poll_is_rejected`.
+    #[wasm_bindgen_test]
+    async fn a_live_read_stream_does_not_block_an_append_on_one_handle() {
+        let (_sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two"]).await;
+
+        let all = Query::all();
+        let seen =
+            replay_across_an_append_on_one_handle(store.read(&all, ReadOptions::new()), &store)
+                .await;
+
+        assert!(
+            seen.iter().all(Result::is_ok),
+            "the replay survives an append on the same handle: {seen:?}"
+        );
+        assert_eq!(
+            positions_of(&seen),
+            assigned,
+            "and it completes, rather than stopping where the append interrupted it"
+        );
+    }
+
+    /// AC-005's **negative control**, committed rather than swept.
+    ///
+    /// [`CursorHoldingStream`] is the predecessor design `SqlRowStream`'s own
+    /// documentation describes and rejects: one cursor opened at the first poll
+    /// and advanced one row per poll. It differs from the shipped read in
+    /// exactly one decision — the cursor is held across the caller's suspension
+    /// point instead of being drained before the poll returns — and it is
+    /// driven through the same helper and rejected by the same predicate.
+    #[wasm_bindgen_test]
+    async fn a_cursor_held_across_a_poll_is_rejected() {
+        let (sql, store) = open_paged(1);
+        let assigned = append_each(&store, &["One", "Two"]).await;
+
+        let wrong = CursorHoldingStream::new(&sql, &Query::all(), ReadOptions::new());
+        let seen = replay_across_an_append_on_one_handle(wrong, &store).await;
+
+        assert!(
+            seen.iter().any(Result::is_err),
+            "a held cursor cannot survive another statement, so this must fail: {seen:?}"
+        );
+        assert!(
+            ok_positions_of(&seen) != assigned,
+            "and the replay it hands back is short of the log it was reading"
+        );
     }
 
     /// AC-005. The other direction, and the obligation no clause states: a read
@@ -2372,6 +3031,20 @@ mod read_path_tests {
         }
     }
 
+    /// The option sets AC-006's empty-store case is exercised under.
+    ///
+    /// A function rather than a literal repeated in two tests, because the
+    /// negative control is only a control while it faces the *same* inputs.
+    fn empty_store_option_sets() -> [ReadOptions; 5] {
+        [
+            ReadOptions::new(),
+            ReadOptions::new().backwards(),
+            ReadOptions::new().limit(3),
+            ReadOptions::new().from(SequencePosition::new(1).expect("one is a position")),
+            ReadOptions::new().to(SequencePosition::new(9).expect("nine is a position")),
+        ]
+    }
+
     /// AC-006. An empty store reads as empty, with no error — the state every
     /// adapter is in on its first run, and the registered failure mode of
     /// ceiling arithmetic on `head() == None`. The options are exercised against
@@ -2380,17 +3053,43 @@ mod read_path_tests {
     async fn reading_an_empty_store_yields_nothing() {
         let (_sql, store) = open();
 
-        for options in [
-            ReadOptions::new(),
-            ReadOptions::new().backwards(),
-            ReadOptions::new().limit(3),
-            ReadOptions::new().from(SequencePosition::new(1).expect("one is a position")),
-            ReadOptions::new().to(SequencePosition::new(9).expect("nine is a position")),
-        ] {
+        for options in empty_store_option_sets() {
             let items = drain(store.read(&Query::all(), options)).await;
             assert!(
                 items.is_empty(),
                 "an empty store yields nothing and no error under {options:?}: {items:?}"
+            );
+        }
+    }
+
+    /// AC-006's **negative control**, committed rather than swept.
+    ///
+    /// `NullHeadPagingStore` is the registered failing adapter ES-9 already
+    /// names (`references/adr/0011-read-laziness-and-isolation.md:374-384`): its
+    /// ceiling is arithmetic over `head()`, so the one store state every adapter
+    /// starts in — `head() == None` — becomes an error rather than an empty
+    /// replay. [`WrongCeiling::ArithmeticOnHead`] is that shape, held to the
+    /// same option sets and the same predicate as the test above.
+    #[wasm_bindgen_test]
+    async fn a_null_head_ceiling_is_rejected_on_the_empty_store() {
+        let (sql, _store) = open();
+
+        for options in empty_store_option_sets() {
+            let items = drain(WrongPagingStream::new(
+                &sql,
+                Query::all(),
+                options,
+                2,
+                WrongCeiling::ArithmeticOnHead,
+            ))
+            .await;
+            assert!(
+                !items.is_empty(),
+                "the null-head shape must fail the empty-store case under {options:?}"
+            );
+            assert!(
+                items.iter().any(Result::is_err),
+                "and it fails it by erroring on a store whose only fault is being new: {items:?}"
             );
         }
     }

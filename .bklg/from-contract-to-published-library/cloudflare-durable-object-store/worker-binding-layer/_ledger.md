@@ -144,13 +144,26 @@ under `spec.md`'s EC-001 / EC-002 rather than being absorbed by an allowlist or 
     advisories ok (EC-003 did not fire), and no new `wasm-bindgen` duplicate (EC-007 did not fire). The
     graph widened by 40 crates. WHAT DID FIRE, and it is not in the spec's EC list: `deny.toml`'s
     `[bans].deny` bans `async-trait`, and `worker` 0.8.5 and `worker-macros` both depend on it, so
-    `cargo deny check bans` failed with `error[banned]: crate 'async-trait = 0.1.91' is explicitly
-    banned` plus two `unmatched-wrapper` warnings naming both parents. `deny.toml` is outside this
-    spec's PR boundary; the file's own comment says the check 'fails until someone decides it should'
-    carry a new wrapper. The decision taken is the two `wrappers` entries at `deny.toml:85-89`, with the
-    reasoning at `:56-83` stating exactly what they permit (worker's own trait, never a happenstance
-    port) and that a third route still fails. Recorded as a boundary deviation in `implementation-
-    report.md` Notes and escalated to ADR-0023 (`adr-0023-and-atom-resolutions`).
+    `cargo deny check bans` fails with `error[banned]: crate 'async-trait = 0.1.91' is explicitly
+    banned` plus two `unmatched-wrapper` warnings naming both parents.
+    THE FINDING STANDS RED, and that is this row's evidence rather than a caveat on it. The first cut of
+    this story widened the ban's `wrappers` list to make the check pass; slice review rejected it and it
+    is REVERTED — `git diff --stat` against the slice base shows `deny.toml` and `rust-toolchain.toml`
+    untouched, byte-identical to `HEAD~4`, which is this criterion's own final conjunct. Spec
+    Clarification 8 is the reason: both files are one-line edits that "would turn AC-008's two
+    measurements into green checkmarks while deleting the finding they exist to produce", and EC-002's
+    decided response to a supply-chain guard firing is *record it, escalate it, do not widen*. So the
+    verdict recorded here is: licences ok, advisories ok, no `wasm-bindgen` duplicate, **bans RED on
+    `async-trait` via `worker` and `worker-macros`**, escalated to ADR-0023
+    (`adr-0023-and-atom-resolutions`), which is where the two `wrappers` entries land if that record
+    ratifies them. What it costs until then is stated rather than absorbed: `cargo deny` is an OPTIONAL,
+    probed step, so `cargo xtask ci --fast` — this story's stated Merge DoD — is green, and the full
+    `cargo xtask ci` is red at that step until the ADR lands. What the red does **not** mean is recorded
+    beside the dependency itself (`crates/happenstance-cloudflare/Cargo.toml:36-53`): `worker` uses
+    `#[async_trait]` for its own `DurableObject` trait, no happenstance port gains a bound from it,
+    ADR-0001's derivation is untouched, and the substantive guards —
+    `crates/happenstance/tests/flavours.rs` and this crate's `!Send` probes, now executed on `wasm32`
+    as well as the host — are unmoved.
   mount_point: "Cargo.toml [workspace.dependencies] — the single declaration of `worker`; deny.toml and rust-toolchain.toml deliberately outside the PR boundary"
   verifying_test: "cargo hack check -p happenstance-cloudflare --no-dev-deps --rust-version; cargo +1.97.1 test -p happenstance-cloudflare; cargo deny check licenses advisories bans; git diff --stat showing deny.toml and rust-toolchain.toml untouched"
 
@@ -167,7 +180,17 @@ under `spec.md`'s EC-001 / EC-002 rather than being absorbed by an allowlist or 
     checked, 80 anchored, 'traceability: no problems found'. ES-6's two citations into `js.rs` were
     repointed onto the live `Rc`-shaped payload (`spec/SPECIFICATION.md:2692-2694` and `:2699-2701`), a
     boundary deviation recorded in `implementation-report.md` Notes; the clause's normative sentence and
-    its `[FROZEN]` marker are untouched. `cargo xtask lint-constitution`: '27 atoms, all consistent'
+    its `[FROZEN]` marker are untouched.
+    OBLIGATION CARRIED FORWARD, raised at slice review and not dischargeable inside this story. The
+    citation repair is *repair* — `spec-trace` is a gate step and the `js.rs` line ranges moved — but
+    `spec/SPECIFICATION.md` is outside this spec's PR boundary and `CLAUDE.md` says a `[FROZEN]` clause
+    changes by ADR rather than by edit, so as it stands the edit is self-authorised. It is not reverted,
+    because reverting it makes `cargo xtask spec-trace` red for a citation that is simply stale. The
+    ratifying artefact is owed from `adr-0023-and-atom-resolutions`: ADR-0023's record must carry the
+    ES-6 citation repair (the two `js.rs` ranges, the two rewritten sentences around them, and the fact
+    that the normative sentence and the marker are unchanged), and `redkiln validate --kb` must still
+    agree afterwards. Nothing under `.kb/` is written by this slice — the spec forbids it and
+    `/redkiln:kb-ingest` is the only author. `cargo xtask lint-constitution`: '27 atoms, all consistent'
     after repointing the 27 citations this diff moved, one of which (RS-50-5) also gained a paragraph
     recording that this workspace later reversed the trade the rule states. `cargo doc --workspace
     --all-features` green under the workspace's denied `missing_docs`.

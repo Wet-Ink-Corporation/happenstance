@@ -31,9 +31,29 @@ thiserror.workspace = true
 # `web-sys`, `url` and their leaves); `wasm-bindgen`, `js-sys` and
 # `wasm-bindgen-futures` were already there as `wasm-bindgen-test`'s transitive
 # dependencies, so those three are new *edges* to existing *nodes*.
-# `cargo deny check licenses advisories bans` is green against `deny.toml`'s
+# `cargo deny check licenses advisories` is green against `deny.toml`'s
 # unmodified eight-licence allowlist, and `worker`'s declared
 # `rust-version = "1.75"` sits well under ADR-0029's 1.97.1 floor.
+#
+# *And one price that is not paid yet, stated because a silent one is how a
+# guard dies.* `cargo deny check bans` is **red**: `deny.toml` bans
+# `async-trait` (ADR-0001 — it injects `+ Send`, which forecloses wasm32), and
+# `worker` 0.8.5 depends on it unconditionally, as does `worker-macros`. The
+# ban's own comment says such a route "fails until someone decides it should"
+# be a wrapper, and that decision is not this manifest's to take: widening the
+# `wrappers` list here would turn the measurement into a green checkmark and
+# delete the finding. So the finding stands, recorded against AC-008 in
+# `worker-binding-layer/_ledger.md` and escalated to ADR-0023
+# (`adr-0023-and-atom-resolutions`), which is where the wrapper entries land if
+# they are ratified.
+#
+# What it does *not* mean, since a red ban invites the wrong inference:
+# `worker` uses `#[async_trait]` for its own `DurableObject` trait, and no
+# happenstance port gains a bound from it. `happenstance-core` still declares
+# each port once without a `Send` bound and lets `trait_variant` derive the
+# second flavour, and the substantive guards are unmoved —
+# `crates/happenstance/tests/flavours.rs` and this crate's `!Send` probes, which
+# now run on `wasm32` as well as on the host.
 #
 # *What it buys.* The argument that this dependency has no type-checking
 # benefit was true of a crate whose every body was `todo!()` and false of one

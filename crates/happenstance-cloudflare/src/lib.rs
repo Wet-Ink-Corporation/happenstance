@@ -170,6 +170,21 @@
 //!   most at risk from; the ceiling is affordable here, so it does not bite,
 //!   and what it costs is one extra statement per page and the rows those pages
 //!   re-read.
+//! * **A caught throw does not roll back the turn.** A Durable Object's
+//!   implicit transaction commits when the handler returns *normally*, and this
+//!   adapter converts every throw into an `Err(…)` and returns normally —
+//!   which is what a caller branching on `AppendError` needs it to do, and
+//!   which means the rows a failed batch had already written would commit with
+//!   the rest of the turn. Isolation is not atomicity, and reading the first as
+//!   the second was this crate's own error for one milestone. `SAVEPOINT` is
+//!   not available either: a Durable Object rejects transaction control through
+//!   `sql.exec()`. So all-or-none is *done*, explicitly, by
+//!   [`event_store::CloudflareEventStore`]'s write path discarding the
+//!   positions a failed batch was assigned — exact rather than best-effort,
+//!   because nothing is awaited mid-batch. When the discard itself fails, the
+//!   caller is told through
+//!   [`event_store::CloudflareEventStoreError::PartialBatch`], which is the one
+//!   failure of `append` after which a retry is not safe.
 //! * **Positions are bounded by 2^53, not 2^64.** Workers SQL widens integers
 //!   through a JS number on the way out, so a `SequencePosition` above
 //!   `Number.MAX_SAFE_INTEGER` is not round-trippable even though
@@ -191,6 +206,42 @@
 //! their inner loop: the `!Send` probes below run there, under an ordinary
 //! `cargo test`, with no wasm toolchain at all. They run on `wasm32` too — see
 //! the twin below for why one target is not enough.
+//!
+//! # Running this crate's tests
+//!
+//! **One command reaches everything, and it is not `cargo test`:**
+//!
+//! ```console
+//! $ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
+//!     cargo test -p happenstance-cloudflare --lib --target wasm32-unknown-unknown
+//! ```
+//!
+//! A plain `cargo test -p happenstance-cloudflare` runs four tests — the `!Send`
+//! probes — and nothing about whether the adapter works. **That is a property of
+//! the store, not a choice about where to put the tests.** Every `worker`
+//! binding links on the host and resolves to a `wasm-bindgen` stub that panics
+//! when called, so a `SqlStorage` cannot be *driven* off-target at all: the
+//! tests that append and read have to be where a JavaScript heap is. What moved
+//! with them is only what had to; the probes stayed host-reachable and gained a
+//! target-side twin rather than being relocated.
+//!
+//! Two things the command needs, and both fail confusingly if they are missing:
+//!
+//! * **`wasm-bindgen-test-runner`, matching `Cargo.lock`'s `wasm-bindgen`
+//!   exactly** — the runner refuses a mismatched schema part way through a test
+//!   binary. `cargo install wasm-bindgen-cli --version <locked> --locked`.
+//! * **Node 22.5 or newer.** The runner's host is Node, and
+//!   `test_object.rs`'s Durable Object shim reaches Node's own `node:sqlite`
+//!   through `process.getBuiltinModule` — real SQLite, the same engine a Durable
+//!   Object runs. On an older Node every case fails at once inside the shim,
+//!   which reads as "the adapter is broken" and is not.
+//!
+//! Neither is a precondition for touching the crate: `cargo test`,
+//! `cargo clippy` and `cargo check` all run on a stock stable toolchain with no
+//! wasm target installed. The gate runs the command above for you —
+//! `xtask`'s `WASM_UNIT_TARGETS` carries the row and the `wasm32 run of the
+//! conformance rules` step executes it — so a regression here fails the gate
+//! rather than waiting for someone to think of running it.
 
 #![doc(html_no_source)]
 

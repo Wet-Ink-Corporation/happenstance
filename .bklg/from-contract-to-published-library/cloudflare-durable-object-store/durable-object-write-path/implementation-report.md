@@ -152,3 +152,39 @@ prefix, and the type name already says they are ceilings.
 caller-visible reconstruction test; every `.kb/` write. The scoped
 `#![allow(clippy::todo)]` stays, because this story is not the one that lands the crate's
 last `todo!()`.
+
+## Slice-review repair (`real-worker-bindings`)
+
+**AC-007's all-or-none half was argued in prose and guarded by nothing — and the prose was
+wrong.** `a_failed_batch_leaves_no_partial_rows` refuses on the pre-flight ceiling check,
+where zero statements have run, so it observes a batch that never *started* rather than one
+that started and stopped: it could not see the property at all. And the mechanism the crate
+documented — "the runtime's implicit transaction covers the batch" — does not hold for this
+adapter's own shape. `write_batch` issues N `INSERT`s, then the tag rows, then the identity
+`UPDATE`, and converts every throw into `Err(…)` and returns **normally**, which is exactly
+when a Durable Object commits its turn's writes. Isolation is not atomicity, and reading the
+first as the second is what happened here.
+
+Three committed guards now observe it, and all three failed against the shipped
+implementation before it changed (RED recorded: 3 failed / 74 passed) — a throw armed on
+`INSERT INTO event_tag`, a throw armed on `UPDATE event SET origin_store`, and the store's
+usability afterwards.
+
+**The fix is real, not a weakened claim.** `write_batch` compensates explicitly, discarding
+the position range the failed batch was assigned through `discard_from`. It is exact rather
+than best-effort because nothing is awaited mid-batch, so no row outside the batch can sit
+in the range; and it does not reset the counter, so a discarded batch leaves a *gap* —
+positions are never reused, because an `EventId` is `(store, position)` and a reused
+position is two events wearing one identity. `SAVEPOINT` was not an alternative: a Durable
+Object rejects transaction control through `sql.exec()`, which is the same reason there is
+no `BEGIN`/`COMMIT` here.
+
+**The one remaining failure is reported rather than hidden.**
+`CloudflareEventStoreError::PartialBatch` carries both the original cause and the reason the
+discard could not run, and it is the only failure of `append` after which a retry is unsafe.
+It is reachable rather than defensive — an object out of room fails the `DELETE` as readily
+as the `INSERT` — and `a_batch_whose_discard_also_fails_reports_both_failures` reaches it.
+That needed one small extension to the test shim: `armThrow` takes an optional count, so a
+single arming can fire on both statements.
+
+The module documentation at `event_store.rs:68-95` now says what is true.
