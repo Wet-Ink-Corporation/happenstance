@@ -7,9 +7,9 @@ title: Removing the boundary makes the repository fail
 parent: HS-P0022
 initiative: docs-that-teach
 project: application-author-path
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,13 +21,13 @@ archetype: capability
 slice: opening-encounter
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-19T13:56:44.660Z
+updated: 2026-08-19T20:01:30.590Z
 links:
   pr: null
   commits:
     - cc9c4a4
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
