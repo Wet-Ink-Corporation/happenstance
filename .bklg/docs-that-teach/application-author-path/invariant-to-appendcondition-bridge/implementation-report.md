@@ -78,7 +78,7 @@ test result: ok. 2 passed; 0 failed
 
 | Commit | What it carries |
 | --- | --- |
-| `a5f9b03` | `feat(application-author-path): Invariant to AppendCondition bridge` — the page, its registration, this report, `report.md`, and the eight flipped ledger rows |
+| `b24d2cd` | `feat(application-author-path): Invariant to AppendCondition bridge` — the story checkpoint: the page, its registration, this report, `report.md`, and the eight flipped ledger rows |
 
 ## Changes
 
