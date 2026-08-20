@@ -129,7 +129,18 @@ impl CloudflareFixture {
     /// `wasm32`-only, and the gate is not tidiness: its one caller needs a real
     /// object under it, so on the host this would be an item nothing can reach
     /// — and `dead_code` is denied under `-D warnings`.
+    ///
+    /// The `allow` is the price of a `tests/support` module, and it is worth
+    /// stating rather than reaching for. A support module is compiled **once per
+    /// declaring target**, so `durable_object_conformance` gets its own copy in
+    /// which this method has no caller — dead code there and live code in
+    /// `fixture_contract`, from one source. `expect` is wrong for exactly that
+    /// reason: it would fire in the target where the method *is* used. The
+    /// alternative shapes are worse — a second support module duplicating the
+    /// fixture, or moving the method into the test that calls it and losing the
+    /// encapsulation of `sql`.
     #[cfg(target_arch = "wasm32")]
+    #[allow(dead_code)]
     #[must_use]
     pub(crate) fn issued_statements(&self) -> Vec<String> {
         happenstance_cloudflare::host::statements(&self.sql.borrow())
@@ -176,41 +187,87 @@ impl Fixture for CloudflareFixture {
     /// path cannot absorb. Inheriting the default would therefore put a sentence
     /// in this run's CI log that is not true of this adapter.
     ///
-    /// Declined **for now** with the honest reason: the mechanism exists but
-    /// arming it is a verdict owed to the real runner, and CF-39 requires a
-    /// fixture claiming the capability to state the mechanism it uses. Settling
-    /// that against the executed suite is `measured-store-limits`', and it is a
-    /// one-line change to this constant plus one override by construction.
-    const MID_BATCH_FAULT: Capability = Capability::declined(
-        "this Durable Object host can throw on a chosen statement, so the \
-         mechanism exists; what has not been settled against an executed \
-         conformance run is which statement of this adapter's write path is the \
-         k-th row's, and CF-39 requires a fixture claiming the capability to \
-         name the mechanism rather than to hope",
-    );
-
-    /// `None`, stated rather than inherited — and the value is not this story's.
+    /// **Supported**, with the mechanism stated — which CF-39 requires and which
+    /// is the whole difference between this and the registered wrong
+    /// implementation.
     ///
-    /// A ceiling is a **fact**, not a trade: stating `Some(N)` promises that
-    /// exactly `N` bytes are accepted and `N + 1` is refused as
-    /// `AppendError::ExceedsStoreLimit`, in both directions, on every gate run.
-    /// A guessed number therefore fails `append_reports_exceeded_store_limits`
-    /// one way or the other, which is the rule doing its job.
+    /// **The mechanism:** the Durable Object host is asked to throw a real
+    /// `Error` on the *k*-th statement whose text contains `INSERT INTO event (`
+    /// — the adapter's own per-event insert, and not `INSERT INTO event_tag`,
+    /// which the substring deliberately excludes. The throw is marshalled back
+    /// through `worker`'s real bindings and classified by this crate's own
+    /// classifier; nothing is mocked between the fault and the caller.
     ///
-    /// Locating the number is a **measurement** against the real runner and
-    /// belongs to `measured-store-limits`. What is owed here is that the
-    /// constant is *written out*, so that a deliberate `None` is distinguishable
-    /// from a ceiling inherited by omission — the two read identically in a CI
-    /// log and only this source can tell them apart.
-    const MAX_EVENT_DATA_LEN: Option<usize> = None;
+    /// **Why the store cannot absorb it.** A Durable Object rejects transaction
+    /// control through `sql.exec()`, so there is no `SAVEPOINT` to roll back to,
+    /// and the turn's implicit transaction commits when the handler returns
+    /// *normally* — which converting a throw into `Err(…)` does. The adapter
+    /// therefore undoes a failed batch itself, by deleting the positions it had
+    /// assigned. It cannot retry the row (the throw is not transient) and it
+    /// cannot ignore it (the row is genuinely not there), so the append fails
+    /// and the log is left byte-identical. That is exactly the pair
+    /// `append_is_atomic_under_a_mid_batch_fault` exists to observe, and this is
+    /// the first fixture in the workspace to let it observe anything.
+    ///
+    /// **The negative control was run before the claim.** With the arming
+    /// removed, `arming_a_mid_batch_fault_makes_the_append_fail` goes red with
+    /// the message that names `NoopFaultFixture` — the shape where the override
+    /// is present, empty, and reports a green atomicity result for a store
+    /// nothing ever faulted. A seam nobody has watched fail is indistinguishable
+    /// from that shape from the outside.
+    const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
-    /// `None`, stated. See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN);
-    /// the value is `measured-store-limits`'.
-    const MAX_TAGS_PER_EVENT: Option<usize> = None;
+    /// 1 MiB, and it is a *stated* ceiling rather than the physical maximum.
+    ///
+    /// The distinction is the honest part. CF-40 asks that the declared value be
+    /// accepted and one more refused as `ExceedsStoreLimit`; it does not ask for
+    /// the largest value the store could ever take, and an unstable exact
+    /// maximum is how a green run becomes a flaky one. What is declared here is
+    /// the adapter's own refusal policy, kept by
+    /// `CloudflareEventStore`'s `check_ceilings` **before any SQL is issued** —
+    /// which is what lets the refusal name *which* ceiling was crossed, where a
+    /// refusal classified from a thrown storage error could not.
+    ///
+    /// **The derivation**, in full at `experiments/durable-object-limits/README.md`:
+    /// a Durable Object's SQL storage documents a 2 MiB maximum row size, and
+    /// this adapter's `event` row carries an `event_type` of up to 255 bytes, a
+    /// `metadata` blob the contract does not bound at all, the canonical `tags`
+    /// encoding — up to 256 KiB at the tag ceiling below — and ADR-0014's
+    /// identity columns. Half the row cap leaves a megabyte for all of it.
+    ///
+    /// **What was measured**, and what was not: probe M2 drove this adapter's own
+    /// `append` and `read` on the executing runtime and found a 1 MiB payload
+    /// accepted and read back byte-for-byte, with no refusal observable at all up
+    /// to 8 MiB; probe M5 found the same answer against an object already holding
+    /// a megabyte, so the boundary is not a function of what is stored. The
+    /// physical wall was therefore never located on this host — recorded as a
+    /// finding in the evidence package rather than papered over — which is
+    /// precisely why the declared number is a conservative position well inside
+    /// it rather than a search result.
+    const MAX_EVENT_DATA_LEN: Option<usize> = Some(1024 * 1024);
 
-    /// `None`, stated. See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN);
-    /// the value is `measured-store-limits`'.
-    const MAX_EVENTS_PER_BATCH: Option<usize> = None;
+    /// 1,024 tags, sixteen times the `MIN_SUPPORTED_TAGS_PER_EVENT` floor.
+    ///
+    /// Measured against *this adapter's* tag storage rather than against
+    /// SQLite's text limit, which is what the derivation has to be about: probe
+    /// M3 found 1,024 tags producing exactly 1,024 `event_tag` rows at a cost of
+    /// 135,168 bytes, and found 8,192 accepted and read back with no refusal.
+    /// The declaration sits at 1,024 because at `MAX_TAG_LEN` the canonical
+    /// `tags` blob is then 256 KiB — an eighth of the documented row cap, which
+    /// is what keeps the payload ceiling above safe.
+    const MAX_TAGS_PER_EVENT: Option<usize> = Some(1024);
+
+    /// 1,024 events, eight times the `MIN_SUPPORTED_EVENTS_PER_BATCH` floor.
+    ///
+    /// The bound is not SQL. This adapter renders one `INSERT` per event and one
+    /// per tag, each its own statement, so no bound-parameter cap is in play —
+    /// which is the mistake the derivation had to avoid. What *is* in play is
+    /// that the whole batch runs inside one turn with nothing awaited between
+    /// rows, which is what makes the compensating discard exact; so the ceiling
+    /// is a statement count the object must get through before it yields. Probe
+    /// M4 measured a 1,024-event batch with one tag each issuing 2,055
+    /// statements and completing, and found 4,096 accepted with no refusal.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(1024);
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // `ready` rather than `async move`: acquiring this handle is a refcount
@@ -235,6 +292,26 @@ impl Fixture for CloudflareFixture {
         // same value, and the incarnation lives in a `store_meta` row that this
         // call does not touch.
         *self.sql.borrow_mut() = self.host.storage();
+        core::future::ready(())
+    }
+
+    fn arm_mid_batch_fault(&self, after: usize) -> impl Future<Output = ()> {
+        // `after` matching statements run, and the next one throws — which is
+        // what makes this a *mid*-batch fault. A fault on the first row leaves
+        // nothing on the ground for the store to have to undo, so the rule it
+        // feeds would be asking about an append that never started.
+        //
+        // The match string ends at `(` on purpose. `INSERT INTO event` alone is
+        // a prefix of `INSERT INTO event_tag`, so it would arm on whichever of
+        // the two came first and the fault would land in the tag pass rather
+        // than between two event rows. The trailing paren is the whole of the
+        // difference, and it is the kind of thing that is silently almost-right.
+        happenstance_cloudflare::host::arm_throw_after(
+            &self.sql.borrow(),
+            "INSERT INTO event (",
+            "SQLITE_FULL: database or disk is full",
+            u32::try_from(after).unwrap_or(u32::MAX),
+        );
         core::future::ready(())
     }
 }

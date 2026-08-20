@@ -160,12 +160,31 @@ const UNIT: u8 = 0x1f;
 
 /// The capacity ceilings this store refuses a batch against.
 ///
-/// A seam rather than three literals, because the *numbers* are
-/// `measured-store-limits`' and the *channel* is this story's: a ceiling that
-/// is `usize::MAX` refuses nothing, and one that is small refuses through the
-/// same code path a measured one will. Nothing public states a numeric limit
-/// yet, and a fixture that declared one before it was measured would promise
-/// that exactly that many bytes are accepted and one more refused.
+/// A seam rather than three literals, because the *channel* and the *numbers*
+/// were settled one milestone apart: a ceiling of `usize::MAX` refuses nothing
+/// and a measured one refuses through the same code path, which is what let the
+/// refusal be proven in both directions before the values existed.
+///
+/// # The values are declarations this store keeps, not walls the runtime imposes
+///
+/// Stating a number is a promise checked at **both** ends: exactly that many
+/// bytes accepted, one more refused as `AppendError::ExceedsStoreLimit` naming
+/// the matching `StoreLimit`, with nothing of the refused value left in the log.
+/// [`check_ceilings`](CloudflareEventStore::check_ceilings) is what keeps that
+/// promise, and it runs **before any SQL** deliberately — a refusal classified
+/// from a thrown storage error cannot say *which* ceiling was crossed, and a
+/// refusal that arrives after some rows have landed is a partial batch.
+///
+/// So these are the adapter's own policy rather than a report of where the
+/// platform happens to throw, and that is the honest reading of them.
+/// `experiments/durable-object-limits/` records what was measured: on the
+/// executing runtime no per-value refusal is observable at 8 MiB of payload,
+/// 8,192 tags or a 4,096-event batch, and the boundary does not move when the
+/// object is pre-loaded — so the *physical* wall was never located and the
+/// declared numbers are deliberately conservative positions well inside it.
+/// CF-40 requires only that the declared value is accepted and one more refused;
+/// it does not require the declaration to be the physical maximum, and an
+/// unstable exact maximum is how a green run becomes a flaky one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Ceilings {
     /// The largest `data` payload one event may carry.
@@ -177,7 +196,49 @@ pub(crate) struct Ceilings {
 }
 
 impl Ceilings {
-    /// What this store declares before anything has been measured: nothing.
+    /// What this store refuses a batch against, in production.
+    ///
+    /// Each number is a documented platform cap minus this adapter's own
+    /// measured overhead, confirmed accepted on the executing runtime. The
+    /// derivations are in `experiments/durable-object-limits/README.md`; the
+    /// short forms are:
+    ///
+    /// * **`event_data_len` — 1 MiB.** A Durable Object's SQL storage documents
+    ///   a 2 MiB maximum row size, and this adapter's `event` row carries more
+    ///   than `data`: an `event_type` of up to 255 bytes, a nullable `metadata`
+    ///   blob the contract does not bound at all, the canonical `tags` encoding
+    ///   — up to 256 KiB at `tags_per_event` below — and ADR-0014's
+    ///   `origin_store`, `origin_position` and `recorded_at`. Half the row cap
+    ///   leaves a full megabyte for all of that. Measured: a 1 MiB payload is
+    ///   accepted and reads back byte-for-byte, sixteen times the
+    ///   `MIN_SUPPORTED_EVENT_DATA_LEN` floor.
+    /// * **`tags_per_event` — 1,024.** One `event_tag` row per tag, measured:
+    ///   1,024 tags produce exactly 1,024 rows and cost 135,168 bytes of
+    ///   storage. At `MAX_TAG_LEN` the canonical `tags` blob is then 256 KiB,
+    ///   an eighth of the row cap, which is what makes the payload figure above
+    ///   safe. Sixteen times the `MIN_SUPPORTED_TAGS_PER_EVENT` floor.
+    /// * **`events_per_batch` — 1,024.** The bound here is not SQL: one
+    ///   `INSERT` per event and one per tag, each its own statement, so no
+    ///   parameter cap is in play. What is in play is that the whole batch runs
+    ///   inside one turn with **nothing awaited between rows** — which is what
+    ///   makes the compensating discard exact — so the ceiling is a statement
+    ///   count the object has to get through before it yields. Measured: a
+    ///   1,024-event batch with one tag each issues 2,055 statements and
+    ///   completes. Eight times the `MIN_SUPPORTED_EVENTS_PER_BATCH` floor.
+    pub(crate) const MEASURED: Self = Self {
+        event_data_len: 1024 * 1024,
+        tags_per_event: 1024,
+        events_per_batch: 1024,
+    };
+
+    /// A store that refuses nothing, for the tests that supply their own.
+    ///
+    /// Kept after [`MEASURED`](Self::MEASURED) landed rather than deleted,
+    /// because it is the base every `with_ceilings` test builds from: those
+    /// tests state one small ceiling and inherit "no ceiling" for the other two,
+    /// and inheriting the *production* numbers there would make each of them
+    /// quietly depend on a value it is not about.
+    #[cfg(all(test, target_arch = "wasm32"))]
     pub(crate) const UNMEASURED: Self = Self {
         event_data_len: usize::MAX,
         tags_per_event: usize::MAX,
@@ -228,7 +289,7 @@ impl CloudflareEventStore {
         Self {
             sql,
             identity: RefCell::new(None),
-            ceilings: Ceilings::UNMEASURED,
+            ceilings: Ceilings::MEASURED,
             page_size: PAGE_SIZE,
         }
     }

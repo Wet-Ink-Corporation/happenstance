@@ -26,6 +26,36 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **The Cloudflare Durable Object adapter declares its capacity limits and arms a
+  mid-batch fault, so three rules that skipped everywhere now run somewhere.**
+  `CloudflareFixture` states `MAX_EVENT_DATA_LEN = 1 MiB`,
+  `MAX_TAGS_PER_EVENT = 1024` and `MAX_EVENTS_PER_BATCH = 1024`, and
+  `CloudflareEventStore` refuses above each of them before issuing any SQL — which
+  is what lets the refusal name *which* ceiling was crossed.
+
+  `append_reports_exceeded_store_limits` detects a store that accepts a payload
+  one byte over its stated ceiling, that refuses it through `AppendError::Store`
+  where a caller cannot tell a capacity refusal from a transient failure, that
+  truncates instead of refusing, or that clamps a batch to what one statement can
+  carry and answers `Ok` for the part it wrote. Until now it had never run against
+  a real adapter: every fixture in the tree left all three constants at `None`, so
+  it reported a skip everywhere and certified nothing.
+
+  `MID_BATCH_FAULT` is claimed for the first time in the workspace, with the
+  mechanism stated as CF-39 requires: the Durable Object host throws a real
+  `Error` on the *k*-th `INSERT INTO event (` statement, which the adapter cannot
+  absorb — a Durable Object rejects transaction control through `sql.exec()`, so
+  there is no `SAVEPOINT` to roll back to and the adapter undoes the batch itself.
+  `arming_a_mid_batch_fault_makes_the_append_fail` detects a fixture that claims
+  the capability with an empty arm, and `append_is_atomic_under_a_mid_batch_fault`
+  detects a store that leaves the rows it managed to write behind. The negative
+  control was run: with the arm removed, the first goes red naming the
+  `NoopFaultFixture` shape.
+
+  The three numbers are measurements rather than guesses, reproducible from
+  `experiments/durable-object-limits/` and deliberately not in the gate. What the
+  gate checks on every run is the promise, in both directions.
+
 - **The Cloudflare Durable Object adapter now runs the event-store conformance
   suite, on `wasm32-unknown-unknown`, inside `cargo xtask ci`.** Every rule
   `for_each_event_store_rule!` declares is executed against a

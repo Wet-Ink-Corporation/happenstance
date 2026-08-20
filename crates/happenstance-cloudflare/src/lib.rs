@@ -66,6 +66,34 @@
 //! `a_live_read_stream_does_not_block_an_append`, which are the single-threaded
 //! shapes of the same question.
 //!
+//! ## The capacity limits this store declares
+//!
+//! VT-21 asks a store to document its actual limit, and these are it. They are
+//! enforced by [`event_store::CloudflareEventStore`]'s own ceiling check
+//! **before any SQL is issued**, which is what lets a refusal name *which*
+//! ceiling was crossed — a refusal classified after the fact from a thrown
+//! storage error could not, and a refusal arriving after some rows had landed
+//! would be a partial batch.
+//!
+//! | Limit | Value | Refused as |
+//! | --- | --- | --- |
+//! | payload (`data`) | 1,048,576 bytes (1 MiB) | `AppendError::ExceedsStoreLimit { limit: StoreLimit::EventDataLen, .. }` |
+//! | tags per event | 1,024 | `… limit: StoreLimit::TagsPerEvent` |
+//! | events per append | 1,024 | `… limit: StoreLimit::EventsPerBatch` |
+//!
+//! Each clears its guaranteed minimum by a wide margin — sixteen, sixteen and
+//! eight times respectively — and each is a **stated** ceiling rather than the
+//! physical maximum. That distinction is the honest part: on the executing
+//! runtime no per-value wall is observable at 8 MiB of payload, 16,384 tags or
+//! 8,192 consecutive inserts, so these numbers are this adapter's own refusal
+//! policy, derived as the platform's documented 2 MiB row cap minus this
+//! adapter's own measured overhead. CF-40 asks that a declared value be accepted
+//! and one more refused; it does not ask for the largest value the store could
+//! ever take, and an unstable exact maximum is how a green run becomes a flaky
+//! one. The derivations, the two consecutive identical runs behind them, and the
+//! finding that the wall was never located are in
+//! `experiments/durable-object-limits/README.md`.
+//!
 //! ## The model family is not in the graph on this target
 //!
 //! It sits behind the testkit's off-by-default `proptest` feature, and both

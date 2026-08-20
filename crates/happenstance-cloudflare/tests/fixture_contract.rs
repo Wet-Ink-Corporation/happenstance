@@ -182,6 +182,92 @@ fn the_three_store_limits_are_stated_here() {
     }
 }
 
+/// The `None` default is a statement, and for this store it is a false one.
+///
+/// Nothing in the conformance suite can catch this, and the reason is worth
+/// stating rather than implying: the defect is in the **fixture's declaration**,
+/// not in a store's behaviour, so no store can fail a rule written about it, and
+/// `CLAUDE.md` forbids adding a conformance rule nothing can fail. Leaving all
+/// three at `None` makes `append_reports_exceeded_store_limits` report
+/// `Skipped { capability: NO_STORE_LIMITS }`, print an honest-looking line and
+/// certify nothing — a green run in which the workspace's one capacity-capped
+/// runtime contributes nothing at all to the clause it was brought in to
+/// discharge, which is the outcome CF-40 names in terms.
+///
+/// So the guard is adapter-local: this test lives in this crate, ships in no
+/// suite and gates no other adapter. If it is ever deleted as redundant, the
+/// quiet failure mode is fully restored.
+#[test]
+fn the_three_store_limits_are_measured_not_defaulted() {
+    for (name, declared) in [
+        (
+            "MAX_EVENT_DATA_LEN",
+            <CloudflareFixture as Fixture>::MAX_EVENT_DATA_LEN,
+        ),
+        (
+            "MAX_TAGS_PER_EVENT",
+            <CloudflareFixture as Fixture>::MAX_TAGS_PER_EVENT,
+        ),
+        (
+            "MAX_EVENTS_PER_BATCH",
+            <CloudflareFixture as Fixture>::MAX_EVENTS_PER_BATCH,
+        ),
+    ] {
+        assert!(
+            declared.is_some(),
+            "{name} is `None`, which says this store has no ceiling on that \
+             value. It is not true of a store whose backing API carries \
+             `SqlError::StorageLimitExceeded` and whose adapter refuses a batch \
+             before issuing any SQL, and it makes \
+             `append_reports_exceeded_store_limits` skip rather than run."
+        );
+    }
+}
+
+/// A ceiling below a floor is a conformance failure, never a declaration.
+///
+/// The trait explicitly permits a fixture to state a ceiling below one of the
+/// guaranteed minima, and to then fail the corresponding rule — correctly,
+/// because VT-21, VT-22 and VT-24 make those floors obligations every store
+/// clears. So a measurement that comes in under a floor is not a smaller number
+/// to declare; it is a schema or batching change in the adapter, or a blocking
+/// finding. This test is what stops the first of those two readings.
+#[test]
+fn no_declared_ceiling_is_below_its_floor() {
+    use happenstance_core::{
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT,
+    };
+
+    for (name, declared, floor) in [
+        (
+            "MAX_EVENT_DATA_LEN",
+            <CloudflareFixture as Fixture>::MAX_EVENT_DATA_LEN,
+            MIN_SUPPORTED_EVENT_DATA_LEN,
+        ),
+        (
+            "MAX_TAGS_PER_EVENT",
+            <CloudflareFixture as Fixture>::MAX_TAGS_PER_EVENT,
+            MIN_SUPPORTED_TAGS_PER_EVENT,
+        ),
+        (
+            "MAX_EVENTS_PER_BATCH",
+            <CloudflareFixture as Fixture>::MAX_EVENTS_PER_BATCH,
+            MIN_SUPPORTED_EVENTS_PER_BATCH,
+        ),
+    ] {
+        let Some(ceiling) = declared else {
+            continue;
+        };
+        assert!(
+            ceiling >= floor,
+            "{name} is {ceiling}, below the guaranteed minimum of {floor}. \
+             Declaring the smaller number is not the fix: the store must clear \
+             the floor, so the answer is a wider column, a chunked insert, or a \
+             blocking finding."
+        );
+    }
+}
+
 /// AC-007 — the expression the slice-mate hands the shipped macro type-checks.
 ///
 /// The macro's general arm hoists the fixture expression behind

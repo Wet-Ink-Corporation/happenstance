@@ -1,0 +1,34 @@
+# Deliberately outside the workspace, exactly as `experiments/wire-format` is.
+# The empty `[workspace]` table below stops cargo walking up to the repository
+# root and adopting this crate as a member, so no entry in the root `members`
+# list changes, the root `Cargo.lock` is never touched, and nothing here ever
+# runs under `cargo xtask ci`. CLAUDE.md's repository map is what this is
+# honouring: `experiments/` is "measurements. reproducible, and not in the gate."
+#
+# What the gate checks on every invocation is the *promise* — the three
+# `Option<usize>` constants `CloudflareFixture` declares, held in both directions
+# by `append_reports_exceeded_store_limits`. Re-deriving a boundary on every CI
+# run would make the gate's outcome depend on a search rather than on a
+# declaration, which is the difference between a stable red and a flaky one.
+[workspace]
+
+[package]
+name = "durable-object-limit-probes"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Path dependencies rather than a workspace membership. The probe drives the
+# *real* adapter — `CloudflareEventStore::new(sql)` over a real Durable Object's
+# storage — because a number measured against anything else would be a number
+# about that other thing.
+[dependencies]
+happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare" }
+happenstance-core = { path = "../../crates/happenstance-core", features = ["std"] }
+futures-core = "0.3"
+
+# The probe only runs where a JavaScript heap does, so its harness is the same
+# one the adapter's own `wasm32` tests use, and target-scoped for the same
+# reason: the attribute resolves in this crate's scope.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
