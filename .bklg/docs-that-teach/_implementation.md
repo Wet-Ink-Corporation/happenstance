@@ -16,7 +16,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
 | 2 | page-need-discipline | HS-P0021 | 1 | no | done | approved | `page-need-discipline/_review.md` |
 | 3 | application-author-path | HS-P0022 | 1, 2 | no | done | approved | `application-author-path/_review.md` |
-| 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | pending | — | — |
+| 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | in-progress | — | — |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
 | 6 | durable-audience-closeout | HS-P0025 | 5 | **yes** | pending | — | — |
 
@@ -543,3 +543,135 @@ Project 3 state: **done**.
    amendments. Stories are implemented one whole slice per context, so a fence that partitions one
    Rust module between slice-mates cannot be satisfied by a story that writes any test. Worth
    fixing at plan grain rather than amending per project a fourth time.
+
+---
+
+# HANDOFF — session ended 2026-08-19, mid-HS-P0023
+
+**Read this section first.** The session was ended deliberately, not by a failure. Everything
+below is what a fresh `/redkiln:implement docs-that-teach` needs in order to pick up without
+re-deriving anything.
+
+## Resume in one line
+
+Preflight, then **launch the workflow fresh** for HS-P0023 (a new `Workflow` call — never
+`resumeFromRunId`, never a cache-buster). Git carries both resume axes and preflight reads them.
+
+```
+scriptPath: <redkiln workflow-root>/forge-implement.js
+args: { slug: 'docs-that-teach', initiativeId: 'HS-I0007', projectId: 'HS-P0023',
+        terminal: false, branch: 'initiative/docs-that-teach',
+        baseRef: 'ffd0eeb7',                       <- HOLD THIS. Do not re-capture.
+        backlogDir: '.bklg/docs-that-teach',
+        worktree: '.claude/worktrees/docs-that-teach',
+        project: { id: 'HS-P0023', slug: 'reach-and-adapter-path',
+                   title: 'Reach and Adapter Path',
+                   briefs: ['architecture','ux','testing','design','grounding'] },
+        stories: [ ...the 8 below, in this order, grouped by slice... } ]
+```
+
+`baseRef` is `ffd0eeb7` — captured after HS-P0023's `design -> implementation` advance. **Keep it
+stable across re-launches of this project**; re-capturing it at the current tip would hide the
+story commits already made from the cumulative review diff.
+
+## Exact state of HS-P0023
+
+| slice | story | id | state |
+| --- | --- | --- | --- |
+| `pointer-policy` | `pointer-policy-and-inventory` | HS-S0154 | **committed `ef2eb6b`**, slice sealed **approved** `4457d62` |
+| `adapter-error-site` | `adapter-reasoning-account` | HS-S0155 | **committed `af9a241`**, slice NOT sealed |
+| `adapter-error-site` | `store-error-site-rewrite` | HS-S0156 | **PARTIAL, in `10e99b2` as WIP** — see below |
+| `adapter-error-walk` | `error-site-walk-record` | HS-S0157 | not started |
+| `front-door-reach` | `front-door-pointer` | HS-S0158 | not started — **see the known collision below** |
+| `front-door-reach` | `evaluator-onward-links` | HS-S0159 | not started |
+| `reach-walks` | `front-door-walk-record` | HS-S0160 | not started |
+| `reach-walks` | `second-question-walk-records` | HS-S0161 | not started |
+
+`depends_on` and `traces_to` for all eight are in
+`.bklg/docs-that-teach/reach-and-adapter-path/_storymap.md` § Slices — read it rather than
+guessing.
+
+Preflight will skip `pointer-policy` (committed **and** sealed approved) and re-enter
+`adapter-error-site`, which has one story committed and one partial.
+
+### `10e99b2` — the WIP commit, and why it is shaped that way
+
+The run was stopped mid-`store-error-site-rewrite`. Its uncommitted work was committed rather
+than discarded, **deliberately without a `Story:` trailer**, so the resume window does not count
+HS-S0156 as done and the story re-runs. The re-entering implementer will find the work already in
+the tree: it is a **starting point no review has seen**, not finished work.
+
+- `crates/happenstance-core/src/store.rs` (+51) — the module-doc rewrite the story exists for.
+- `xtask/src/pointers.rs` (+113) — pointer-checker work continuing from HS-S0154.
+- `store-error-site-rewrite/spec.md` (+23) — written by the implementer during the run; read it
+  before trusting the fence.
+- `spec/SPECIFICATION.md`, `spec/E2E-CASES.md`, nine `standards/rust/*.md` — **mechanical citation
+  renumbering only**, forced by `store.rs` growing ~47 lines. Diff read line by line before
+  committing: no clause, rule, claim or example changed, only the line numbers Evidence and
+  `Rejects:` point at. Third occurrence of this pattern in the initiative.
+
+**`cargo xtask ci --fast` was green at `10e99b2`** — run, not assumed — so preflight starts from a
+green baseline and the partial work is self-consistent.
+
+### Known collision waiting in HS-S0158 `front-door-pointer`
+
+Measured at preflight, before the run started, and passed to the implementer as a forewarning
+rather than a decision. The story must install a pointer on `crates/happenstance/src/lib.rs`
+"above the fold, displacing nothing", but that page has **zero headroom**: the module doc is at
+**exactly 130/130** against `MODULE_DOC_LINES = 130` (`crates/happenstance/tests/doc_budget.rs`),
+because HS-P0022's own pointer at `:66` took it there. "Add a pointer" and "displacing nothing"
+are contradictory on a full budget.
+
+Two routes are **already closed**, both rejected when BC-002 was settled on 2026-08-19
+(`application-author-path/boundary-refusal-encounter/_conditions.md` § "BC-002 — RESOLVED"):
+raising `MODULE_DOC_LINES`, and touching HS-P0016's `commit` landing program.
+`crates/happenstance/README.md` — the story's other surface — carries no such budget, and
+**HS-B0001 already owns four findings on that same file**. If the crate-root half is genuinely
+unbuildable, the right move is a recorded condition routed to the `_design.md` sign-off owner,
+exactly as BC-002 was.
+
+## The rest of the initiative
+
+Projects 1–3 are **done**: HS-P0020, HS-P0021 and HS-P0022 are each approved and parked at
+`review`/`in-review`, with all their stories approved at `report`/`in-review`, holding for
+`/redkiln:closeout`. **Nothing may be advanced to `closeout`/`done`** — that is the human's call
+at closeout. Projects 5 and 6 (HS-P0024, HS-P0025) are pending; **HS-P0025 is terminal** and owns
+the whole-initiative DoD, so it is the only one launched with `terminal: true`.
+
+### Carried forward, and now deferred more than once
+
+1. **F-A** — `docs/carry-your-invariant.md` and `docs/read-the-worked-example.md` have no
+   entrance; nothing links to them but each other. Initiative DoD-7/DoD-9, **owned by HS-P0023**,
+   so it is due in the run being resumed.
+2. **HS-P0021's two residuals, deferred twice now** — the `README.md` exclusion at
+   `xtask/src/lint_pages.rs:496` that leaves the `orientation` token with no live subject, and the
+   rotted Evidence citations at `standards/pages/10-the-need-set.md:72` and `:169`. Assigned to
+   HS-P0022, which did not touch them.
+3. **Per-story fences inside a shared module.** Three projects, three rounds of boundary
+   amendments. Stories are implemented one whole slice per context, so a fence partitioning one
+   Rust module between slice-mates cannot be satisfied by a story that writes any test. Worth
+   fixing at plan grain rather than amending a fourth time.
+
+### Open items with owners
+
+- **HS-B0001** `crate-root-density-overages` (under **HS-P0026**, both created this session) —
+  four findings on `crates/happenstance/src/lib.rs`: F-1/F-2/F-3 the density overages, F-4 the
+  `Tags::empty()` fence that zeroes the boundary the new pointer promises.
+- **Three redkiln parser findings**, recorded above and none worked around: redkiln#136/#94
+  (fixed in 0.19.0), `ledgerBlock` (a heading before the fence hides the whole acceptance block),
+  and `declaredBoundary` (the word "boundary" in a title captures the search, so HS-S0186 reports
+  `pass` with two of four checks skipped). All three fail open, and hardest on the artifact that
+  took the subject most seriously.
+
+## Standing rules for whoever resumes
+
+- **`redkiln` is the only writer of item frontmatter.** Every transition is `redkiln advance`
+  with `--commit`, never `--apply`.
+- **Two calls per story verdict**: `advance <id> --to report --commit`, then
+  `--verdict approved --stay --commit` (or `--verdict changes-requested --commit`, no `--stay`).
+  Approval requires a human answer; never pass a hardcoded verdict.
+- **`record-links` before the advance**, using each story's own checkpoint SHA. Do not attach a
+  cross-story fix-pass commit to one story — it drags the slice-mate's files inside that story's
+  fence and turns `boundary` red for real.
+- **`record-run` first, before anything else, including before any halt.**
+- Never `git stash` in this worktree; never `redkiln adopt --templates`; never `--no-verify`.
