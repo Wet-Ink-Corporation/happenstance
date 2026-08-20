@@ -182,7 +182,7 @@ the only step in the gate that sees it.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:115 (extern crate alloc)` ·
 `crates/happenstance-core/src/error.rs:184 (impl core::error::Error for ConditionViolated)` ·
-`crates/happenstance-core/src/store.rs:148 (core::error::Error + 'static)` ·
+`crates/happenstance-core/src/store.rs:149 (core::error::Error + 'static)` ·
 [core::error::Error](https://doc.rust-lang.org/core/error/trait.Error.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-51-5. Keep `doc_cfg` behind `cfg_attr(docsrs, …)`, and declare the docs.rs configuration in the manifest.

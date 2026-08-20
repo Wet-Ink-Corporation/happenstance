@@ -85,7 +85,7 @@ remove it.
 **Evidence.** `Cargo.toml:100 (Members opt in with)` · `Cargo.toml:103 (missing_docs)` ·
 `Cargo.toml:116 (missing_errors_doc)` ·
 `crates/happenstance-core/Cargo.toml:104 (workspace = true)` ·
-`crates/happenstance-core/src/store.rs:250 (AppendError::NoEvents)` ·
+`crates/happenstance-core/src/store.rs:251 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
 ---
@@ -155,7 +155,7 @@ consumer — is a hard error. `MemoryProjectionStore`'s page linking
 configuration so that the rule is checked where the consumer stands.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
-`crates/happenstance-core/src/store.rs:98 (It is not linked because)` ·
+`crates/happenstance-core/src/store.rs:99 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
 `xtask/src/main.rs:662 (no default features)` ·
 `xtask/src/main.rs:691 (documentation (default features))` ·
@@ -321,7 +321,7 @@ trait would have met ES-30. Without it the trade is re-argued by whoever
 remembers it, and in the meantime a blanket body no adapter can override has
 displaced SQLite's `SELECT max(position)` fast path.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:269 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:280 (where Self: Sync)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:270 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:281 (where Self: Sync)` ·
 [SPECIFICATION ES-30](../../spec/SPECIFICATION.md) ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)

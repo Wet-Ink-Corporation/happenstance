@@ -252,13 +252,17 @@ pub const POINTER_REGISTER: &[Pointer] = &[Pointer {
     surface: "crates/happenstance-core/src/store.rs",
     destination: "the adapter reading order, docs/adapter-reading-order.md",
     form: PointerForm::PinnedTreeMarkdown,
-    guard: "the narrative tree's bidirectional registration check — `cargo xtask narrative`, \
-            a mandatory step — fails the build when the destination stops being registered \
-            in `xtask/src/narrative.rs`, whether it was deleted or renamed. Rung actually \
-            taken: the named-but-unlinked cross-reference, rung 3, because no link form \
-            from a rustdoc page resolves into the narrative tree in all three of the gate's \
-            rustdoc builds. Not guarded, and stated rather than implied: that the path \
-            spelled in the prose is still the path the page is registered under",
+    guard: "two mechanisms, and between them they cover both ends. The narrative tree's \
+            bidirectional registration check — `cargo xtask narrative`, a mandatory step — \
+            fails the build when the destination stops being registered in \
+            `xtask/src/narrative.rs`, whether it was deleted or renamed. And \
+            `row_p3s_pointer_is_installed_on_the_surface_it_claims`, in this file, fails \
+            when the prose on the surface stops carrying this row's destination path or its \
+            link text, or when that path stops being the one the tree registers — the gap \
+            this row previously recorded as unguarded, closed by the story that filed it. \
+            Rung actually taken: the named-but-unlinked cross-reference, rung 3, because no \
+            link form from a rustdoc page resolves into the narrative tree in all three of \
+            the gate's rustdoc builds",
     link_text: "the adapter reading order",
     answer_on_first_screen: true,
     targets_fragment: false,
@@ -662,6 +666,90 @@ mod tests {
             p3.answer_on_first_screen,
             "the reading order is the destination's first screen, which is why the \
              row needs no fragment"
+        );
+    }
+
+    /// Row **P3** describes a pointer that is really installed, on the surface it
+    /// names, pointing where it says.
+    ///
+    /// [`validate`] reads the register and not the diff, and this module's own
+    /// documentation says plainly that nothing here can catch a story installing a
+    /// pointer and filing no row. **The inverse direction is catchable, and this is
+    /// it**: a row is a claim about two files, so the claim is read back out of
+    /// them. Three ways for the register to start lying are closed —
+    ///
+    /// * the row is filed and the pointer was never installed, or was later
+    ///   deleted from the surface;
+    /// * the link text drifted on the surface, so an extracted link list and the
+    ///   register disagree about what the reader is offered;
+    /// * the path spelled in the prose stopped being the path the narrative tree
+    ///   registers, which is the gap P3's guard used to record as unguarded.
+    ///
+    /// The two files it reads are read with `include_str!`, so a *surface* or a
+    /// *registration table* that is deleted or moved fails to compile rather than
+    /// to assert. Reaching across the workspace is safe here and would not be from
+    /// a published crate: `xtask` is `publish = false`, so none of the packaging
+    /// hazard applies.
+    ///
+    /// **What this does not catch, said plainly rather than left to be assumed:**
+    /// the destination page going missing. Nothing here opens
+    /// `docs/adapter-reading-order.md` — it checks that the surface and the
+    /// registration table agree on its *path*. The page's own existence is the
+    /// other half of P3's guard and belongs to the narrative tree:
+    /// `xtask/src/narrative.rs` registers it under `#[cfg(doctest)]`, so
+    /// `cargo test --doc` fails to compile without it, and `cargo xtask narrative`
+    /// reports that `mod adapter_reading_order` names no page in `docs`. Both were
+    /// run against a working tree with the page renamed away, and both fired.
+    #[test]
+    fn row_p3s_pointer_is_installed_on_the_surface_it_claims() {
+        const SURFACE: &str = include_str!("../../crates/happenstance-core/src/store.rs");
+        const REGISTRATIONS: &str = include_str!("narrative.rs");
+        const DESTINATION: &str = "docs/adapter-reading-order.md";
+
+        let p3 = POINTER_REGISTER
+            .iter()
+            .find(|row| row.id == "P3")
+            .expect("P3 is store.rs's pointer to the adapter reading order");
+
+        // The module `//!` comment and nothing below it. The surface is the page a
+        // reader sees, so the file's own test module — which quotes both strings
+        // while asserting the same thing from the other side — must not be able to
+        // satisfy this from inside.
+        let page: Vec<&str> = SURFACE
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .collect();
+
+        assert!(
+            p3.destination.contains(DESTINATION),
+            "this test reads the surface for {DESTINATION}, so the row has to be \
+             about that page: {}",
+            p3.destination
+        );
+        let installed = page
+            .iter()
+            .filter(|line| line.contains(DESTINATION))
+            .count();
+        assert_eq!(
+            installed, 1,
+            "the surface {} carries the destination path {installed} times in its \
+             documentation. A row filed against a surface that does not carry the \
+             pointer is the register claiming a reach nobody installed; two of them \
+             is the recessive single hop turning into a navigation surface",
+            p3.surface
+        );
+        assert!(
+            page.iter().any(|line| line.contains(p3.link_text)),
+            "the link text {:?} is not on the surface. The register and the page have \
+             drifted, and the register is what a maintainer reads instead of every \
+             file",
+            p3.link_text
+        );
+        assert!(
+            REGISTRATIONS.contains(DESTINATION),
+            "the path spelled on the surface is no longer the path \
+             `xtask/src/narrative.rs` registers, so `cargo xtask narrative` is \
+             guarding a different page from the one the reader is sent to"
         );
     }
 
