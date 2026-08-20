@@ -35,14 +35,35 @@
 //!
 //! ```text
 //! error[E0034]: multiple applicable items in scope
+//!  --> src/lib.rs:7:19
 //!   |
-//!   |     store.read(&query, options)
-//!   |           ^^^^ multiple `read` found
+//! 7 |     let _ = store.read(&query, options);
+//!   |                   ^^^^ multiple `read` found
+//!   |
+//!   = note: candidate #1 is defined in an impl of the trait `SendEventStore` for the type `MemoryEventStore`
+//!   = note: candidate #2 is defined in an impl of the trait `EventStore` for the type `TraitVariantBlanketType`
+//! help: disambiguate the method for candidate #2
+//!   |
+//! 7 -     let _ = store.read(&query, options);
+//! 7 +     let _ = EventStore::read(&store, &query, options);
 //! ```
+//!
+//! In words, because a caret does not survive a search hit or a screen reader:
+//! `store.read(…)` is ambiguous because both [`EventStore`] and
+//! [`SendEventStore`] are in scope and each of them supplies a `read`.
 //!
 //! Import only the one you are binding on — [`EventStore`] in almost every
 //! case. If you genuinely need both in one module, disambiguate with
 //! fully-qualified syntax: `SendEventStore::read(&store, &query, options)`.
+//!
+//! The block above is a `text` fence and nothing compiles it. The error *code*
+//! is asserted by the compiled `rust,compile_fail,E0034` examples in
+//! `standards/rust/20-two-flavour-ports.md` and `standards/rust/00-prime-directives.md`;
+//! the notes' wording and `TraitVariantBlanketType` are rustc 1.97.1's, asserted by nothing.
+//!
+//! For why there are two flavours at all, and what an adapter looks like once
+//! you accept them, the adapter reading order at `docs/adapter-reading-order.md`
+//! sequences what is already written. Named, not linked: it is a page, not an item.
 //!
 //! ## Naming
 //!
@@ -90,6 +111,32 @@ use crate::query::{Query, ReadOptions};
 ///     Ok(events.len())
 /// }
 /// ```
+// The workspace's first `#[doc(alias)]`, so the rule it is added under is
+// written here rather than left to be inferred. An alias is a *search key* and
+// not a pointer: it moves a reader who is already searching and does nothing
+// for the reader who is reading, so it never substitutes for the cross-reference
+// at the stall in this module's documentation. It is permitted only where the
+// string a reader types is one that rustc, the specification, or a recorded
+// reader question actually emits, and is not the item's own name or a substring
+// of it. Both strings below are rustc's, from the diagnostic reproduced above.
+// Rejected: synonym farming (`eventstore`, `es`, `event-store`), and aliases for
+// concepts rather than for strings. No pointer-register row is filed: an
+// attribute cannot rot independently of the item it sits on, because deleting
+// the item deletes the alias.
+//
+// Two attributes, not the three the design projected, and the reason is
+// mechanical rather than editorial. `SendEventStore` is *derived* — the
+// `trait_variant` expansion builds it with `..tr.clone()`
+// (`trait-variant-0.1.3/src/variant.rs:115-123`), which copies the trait's
+// attributes verbatim — so there is no item on which to write a variant-only
+// alias, and every alias written here lands on both flavours. Two written is
+// four in the search index, which is the coverage the criterion asked for.
+//
+// Residual risk, named: `TraitVariantBlanketType` is an *internal* name of that
+// expansion. If it is renamed upstream the string here goes stale and nothing
+// in this repository catches it.
+#[doc(alias = "E0034")]
+#[doc(alias = "TraitVariantBlanketType")]
 #[trait_variant::make(SendEventStore: Send)]
 pub trait EventStore {
     /// How this adapter fails for its own reasons.

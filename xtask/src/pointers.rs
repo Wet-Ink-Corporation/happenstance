@@ -230,12 +230,43 @@ pub const MAX_ROWS_EVER: usize = 20;
 
 /// Every pointer installed under the policy above.
 ///
-/// It lands **empty**, and that is the design rather than an omission: each story
-/// that installs a pointer files its own row in the same change that installs it,
-/// so a pre-filled register would be a set of claims nobody had earned. The rules
-/// in [`validate`] are therefore exercised against deliberately-wrong registers
-/// rather than against this one — a rule no register can fail is decorative.
-pub const POINTER_REGISTER: &[Pointer] = &[];
+/// It landed **empty**, and that was the design rather than an omission: each
+/// story that installs a pointer files its own row in the same change that
+/// installs it, so a pre-filled register would be a set of claims nobody had
+/// earned. The rules in [`validate`] are therefore exercised against
+/// deliberately-wrong registers rather than against this one — a rule no register
+/// can fail is decorative.
+///
+/// **P3 is the first row, and it is the one place the four forms could not name
+/// the rung.** The href ladder's third rung — a named-but-unlinked
+/// cross-reference — is not a [`PointerForm`] variant, because the enum
+/// enumerates the architecture brief's four *mechanism-table* rows and the ladder
+/// is a different list. A fifth variant would re-open the signed-off mechanism
+/// table for a rung the design's own P3 row already groups with
+/// [`PointerForm::PinnedTreeMarkdown`] ("in-tree markdown link, **or** the
+/// named-unlinked form live at `store.rs:77`"), and both share one guard. So the
+/// row is filed under that variant and the rung it actually took is stated in its
+/// `guard`, where a reviewer reads it.
+pub const POINTER_REGISTER: &[Pointer] = &[Pointer {
+    id: "P3",
+    surface: "crates/happenstance-core/src/store.rs",
+    destination: "the adapter reading order, docs/adapter-reading-order.md",
+    form: PointerForm::PinnedTreeMarkdown,
+    guard: "the narrative tree's bidirectional registration check — `cargo xtask narrative`, \
+            a mandatory step — fails the build when the destination stops being registered \
+            in `xtask/src/narrative.rs`, whether it was deleted or renamed. Rung actually \
+            taken: the named-but-unlinked cross-reference, rung 3, because no link form \
+            from a rustdoc page resolves into the narrative tree in all three of the gate's \
+            rustdoc builds. Not guarded, and stated rather than implied: that the path \
+            spelled in the prose is still the path the page is registered under",
+    link_text: "the adapter reading order",
+    answer_on_first_screen: true,
+    targets_fragment: false,
+    gates: "(i) BR-15, a recorded reader failure at this item; (ii) the reader arrives from a \
+            diagnostic or a search box and `pub mod store` renders its own page; (iii) one \
+            sentence, last in the section, no heading of its own; (iv) rung 3 of the ladder, \
+            guarded by the registration check",
+}];
 
 /// The fewest words a self-describing link text can be built from.
 const LINK_TEXT_MINIMUM_WORDS: usize = 3;
@@ -562,15 +593,75 @@ mod tests {
 
     // ---- AC-003 ------------------------------------------------------------
 
+    /// What `the_register_lands_empty_and_valid` became once a story filed a row.
+    ///
+    /// `pointer-policy-and-inventory` landed [`POINTER_REGISTER`] empty and
+    /// asserted that emptiness as a forward pin. `store-error-site-rewrite`
+    /// installed the first pointer, so the assertion is **inverted here rather
+    /// than deleted quietly** — the shape [`crate::lint_pages`]'s `ROUTER` doc
+    /// records one tree over, where a story asserted a file's absence and named
+    /// the story that would invert it. What survives the inversion is the half
+    /// that never expires: the validator is wired to the *live* register, and the
+    /// register holds only rows a story actually installed.
     #[test]
-    fn the_register_lands_empty_and_valid() {
-        assert!(
-            POINTER_REGISTER.is_empty(),
-            "the register lands empty; each installing story files its own row"
-        );
+    fn the_register_carries_only_rows_a_story_installed() {
         assert!(
             validate(POINTER_REGISTER).is_ok(),
             "the validator must be wired to the real register, not only to synthetic ones"
+        );
+        let filed: Vec<&str> = POINTER_REGISTER.iter().map(|row| row.id).collect();
+        assert_eq!(
+            filed,
+            ["P3"],
+            "the register grows one row per installed pointer: a row here that no \
+             story installed is a claim nobody earned, and a missing row is a \
+             pointer whose only guard is memory"
+        );
+    }
+
+    /// Row **P3** — the `store.rs` module doc's cross-reference to the adapter
+    /// reading order — is filed with a guard that names a mechanism which exists.
+    ///
+    /// The rung assertion is the load-bearing one. [`PointerForm`] enumerates the
+    /// architecture brief's four *mechanism-table* rows and has no variant for the
+    /// href ladder's third rung, so a row taking that rung is filed under
+    /// [`PointerForm::PinnedTreeMarkdown`] — the row whose guard it shares — and
+    /// has to say so in words. A guard cell that quietly dropped the rung would
+    /// leave the register claiming a link that is not there.
+    #[test]
+    fn row_p3_records_the_store_module_pointer_and_the_rung_it_took() {
+        let p3 = POINTER_REGISTER
+            .iter()
+            .find(|row| row.id == "P3")
+            .expect("P3 is store.rs's pointer to the adapter reading order");
+
+        assert_eq!(p3.surface, "crates/happenstance-core/src/store.rs");
+        assert!(
+            p3.destination.contains("docs/adapter-reading-order.md"),
+            "the destination must name the page the pointer resolves to: {}",
+            p3.destination
+        );
+        assert_eq!(p3.form, PointerForm::PinnedTreeMarkdown);
+        assert!(
+            p3.guard.contains("cargo xtask narrative") && p3.guard.contains("registration check"),
+            "the guard must name the mechanism that fails the build: {}",
+            p3.guard
+        );
+        assert!(
+            p3.guard.contains("named-but-unlinked"),
+            "the guard must record the rung actually taken, which is not the one \
+             the form's name suggests: {}",
+            p3.guard
+        );
+        assert!(
+            p3.gates.contains("(i)") && p3.gates.contains("(iv)"),
+            "rule 2 admits a pointer at an item only through its four gates: {}",
+            p3.gates
+        );
+        assert!(
+            p3.answer_on_first_screen,
+            "the reading order is the destination's first screen, which is why the \
+             row needs no fragment"
         );
     }
 

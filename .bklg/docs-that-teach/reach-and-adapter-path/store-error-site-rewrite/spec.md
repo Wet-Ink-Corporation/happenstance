@@ -401,8 +401,31 @@ boundary is widened **here, deliberately, before the edit** — never at gate ti
 ```
 crates/happenstance-core/src/store.rs
 spec/SPECIFICATION.md
+spec/E2E-CASES.md
+standards/rust/*.md
+xtask/src/pointers.rs
 .bklg/docs-that-teach/reach-and-adapter-path/**
 ```
+
+**Three globs were added at implementation, and each is a consequence of the insertion
+rather than new scope.**
+
+1. `xtask/src/pointers.rs` — the register's home, which `pointer-policy-and-inventory`
+   bound after this spec was written. The paragraph above provided for exactly this:
+   the register landed outside the original globs, so the boundary is widened here
+   rather than at gate time. Row **P3** is filed there and nothing else in that file's
+   policy is re-decided.
+2. `spec/E2E-CASES.md` and `standards/rust/*.md` — Decision 8 forecast the citation
+   drift and named only `spec/SPECIFICATION.md`. It is **`cargo xtask spec-trace` *and*
+   `cargo xtask lint-constitution`** that read line-anchored `store.rs:NNN` citations,
+   and the second reads `standards/rust/`, which `spec-trace` never opens. Both trees
+   are gated, both are displaced by the same insertion, and repairing only one leaves
+   the other red. The edits there are line numbers and nothing else — no rule, no
+   clause, no `**Evidence.**` subject changes.
+
+`references/**` also carries `store.rs:NNN` citations and is **deliberately not
+repaired**: it is evidence kept for citation, binding nothing, read by no checker, and
+its line numbers were already historical. Stated so the omission is a decision.
 
 ## Behavior and interfaces
 

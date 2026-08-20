@@ -282,7 +282,7 @@ which fails with four `error[E0277]` on `Rc<str>` — a change that looks free i
 every other crate, is semver-visible the moment it is published, and is found by
 whoever next tries to build for Workers.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:101 (type Error: core::error::Error + 'static)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:148 (type Error: core::error::Error + 'static)` ·
 `crates/happenstance-cloudflare/src/send_shape.rs:88 (SendEventStore)` ·
 [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(`[FROZEN]`: bounds are
 identical on both flavours by construction)* ·
