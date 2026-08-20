@@ -100,7 +100,26 @@ The implementer **may** also touch the composition-root and wiring files named i
 - **WF-11's memory-ceiling measurement** → `wf-11-memory-ceiling-falsifier` (HS-S0056). It shares this story's measure-don't-guess discipline (`../_decomposition.md:643-647`) and is a different ceiling.
 - **`publish = false`, licences and the README** → `publish-ready-crate` (HS-S0060).
 
-**Merge DoD one-liner.** `cargo xtask affected --base main` is green, and in the gate's own output for this crate's `wasm32` conformance run `append_reports_exceeded_store_limits` reports **Ran** rather than a `NO_STORE_LIMITS` skip, with the three guaranteed-minimum rules still green beside it.
+**Merge DoD one-liner.** `cargo xtask affected --base main` is green, and in the gate's own output for this crate's `workerd` conformance run `append_reports_exceeded_store_limits` reports **Ran** rather than a `NO_STORE_LIMITS` skip, with the three guaranteed-minimum rules still green beside it.
+
+> **This sentence was reverted on 2026-08-19, at the human gate on slice
+> `durable-object-conformance-run`.** The slice repair pass `84d5ab9` had reworded it
+> `workerd` → `wasm32`, which moved the acceptance bar onto the artefact that shipped. That
+> commit's own amendment rationale covers **path rows only** and does not mention this
+> edit, so it rode along in a fence commit rather than being decided.
+>
+> The distinction is the point, and it is not a technicality. `8fa4d06` established that a
+> **path fence** may be widened when the fence as written was not satisfiable by a correct
+> implementation — a citation the gate itself compels you to repair. An **acceptance
+> sentence** is not that. It is the thing the work is measured against, and a pass that
+> edits its own bar has not met it, however defensible the substitution turns out to be.
+>
+> Whether `wasm32`-under-a-shim is an acceptable reading of this story's ACs is a real
+> question with a real answer owed to it. It is escalated to
+> `adr-0023-and-atom-resolutions` (HS-S0058) together with AC-001's runtime substitution,
+> and if ADR-0023 ratifies it, this sentence and AC-001/AC-002/AC-003 are amended together
+> through the spec path, as a named decision with its rationale — not as a line in a repair
+> diff.
 
 **The path fence**, written out here rather than left implicit — `redkiln verify --grain story` reads the first fenced block of this section:
 
