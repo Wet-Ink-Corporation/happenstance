@@ -558,8 +558,8 @@ because a table that quietly loses a row cannot be checked against anything.
 | SY-28 | scope preservation across a round trip | 13 |
 | SY-32 | retention gaps reported rather than silent | 14 |
 | ~~CF-13~~ | ~~a fixture that can *fail* the visibility rule~~ | **settled at 3**: `PreCommitPositionStore` fails `nothing_below_an_observed_position_appears_later` deterministically on one thread, the `Send + Sync` sub-trait the marker held in reserve was not needed, and the clause is `[FROZEN]`. The **adapter** far end stays open and is §6.5's position-allocation row, owned by phase 10 |
-| CF-14 | durability across a reopen | 8 — and the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). **Phase 9's reading: the deferral still holds, and one more of the three named implementations has answered with one shape.** `CloudflareFixture` expressed `REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and `SqliteFixture` use — a fresh binding off the Durable Object's retained `state`, nothing added to the trait — and `acknowledged_writes_survive_a_reopen`, `reopened_store_does_not_reissue_an_event_id` and `recorded_time_survives_a_reopen` all **ran and passed** in the wasm32 conformance run with **zero** `SKIP` lines on that row, so "durable" needed no grading; the limit is that this executed under `wasm-bindgen-test-runner` over a `node:sqlite`-backed shim and **not** `workerd`, so what was exercised is the capability's own weaker operation and an isolate restart still cannot be performed from inside a test. **The far end is untouched**: this project supplied no store that can lose an acknowledged write to a *fault* rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s (HS-P0012), and `happenstance-neon` (HS-P0014) is the one named implementation still unanswered |
-| CF-27 | the suffix-store instrument | 14 — **phase 9's reading: more real, not less, and this runtime is why.** A Durable Object's storage outlives its isolate — `CloudflareFixture::reopen` re-derives a binding off the retained `state` and every row is still there — so *eviction* is not how one of these loses history and the intuitive hazard is the wrong one; what is real is that this adapter reaches storage as `state.storage().sql()` and the same `Storage` object carries `delete_all()` (`worker-0.8.5/src/durable.rs:449`), so a wholesale purge happens with no `EventStore` method involved at all and the store passes every rule unchanged afterwards — the silence CF-27's *Rejects* paragraph describes, now with a named verb behind it. The specification's **No, and nothing is planned** completeness row therefore understates the exposure by one adapter. The instrument that would settle it — a testkit-adjacent store holding only a suffix and reporting that it does — is **deliberately not built here**: it stays `retention-and-incomplete-logs`' (HS-P0018) and phase 14's, and this row is a re-read handed on rather than an answer |
+| CF-14 | durability across a reopen | 8 — the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). **Phase 9's reading: the deferral still holds, and one more of the three named implementations has answered with one shape** — `CloudflareFixture` expressed `REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and `SqliteFixture` use, and `acknowledged_writes_survive_a_reopen` with its two neighbours ran and passed with **zero** `SKIP` in the wasm32 conformance run, so "durable" needed no grading. **The far end is untouched** — this project supplied no store that can lose an acknowledged write to a *fault* rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s (HS-P0012), and what the run could *not* exercise is in phase 9's session log, *The CF-14 re-read* |
+| CF-27 | the suffix-store instrument | 14 — **phase 9's reading: more real, not less, and this runtime is why.** *Eviction* is the wrong hazard — a Durable Object's storage outlives its isolate — but the same `Storage` object this adapter reaches through carries `delete_all()` (`worker-0.8.5/src/durable.rs:449`), so a wholesale purge happens with no `EventStore` method involved and the store passes every rule unchanged afterwards, which is how the specification's **No, and nothing is planned** completeness row comes to understate the exposure by one adapter. The instrument that would settle it — a testkit-adjacent store holding only a suffix and reporting that it does — is **deliberately not built here**: it stays `retention-and-incomplete-logs`' (HS-P0018) and phase 14's, and the argument is in phase 9's session log, *The CF-27 re-read* |
 
 Checked against `SPECIFICATION.md` §7.2's maturity column, and at phase 9 **the two
 sets are no longer equal**. `cargo xtask spec-trace` counts **twelve** `[DEFERRED]`
@@ -4477,6 +4477,41 @@ is what would sharpen this paragraph from *cheap in shape* to *cheap in cost*; i
 needs a `workerd`-class runner and it belongs post-0.1, outside this initiative.
 Recorded, not acted on: no port method, no sub-trait, no feature flag and no alarm
 plumbing lands with this verdict.
+
+**2026-08-20 — the CF-14 re-read, in full.** *The verdict is the CF-14 row of* The 10
+`[DEFERRED]` clauses *above; this is the detail behind it, held here so that cell keeps
+the one-to-three-sentence budget its neighbours keep.* `CloudflareFixture` expressed
+`REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and
+`SqliteFixture` use — a fresh binding derived off the Durable Object's retained `state`,
+with nothing added to the `Fixture` trait to accommodate it — and
+`acknowledged_writes_survive_a_reopen`, `reopened_store_does_not_reissue_an_event_id` and
+`recorded_time_survives_a_reopen` all ran and passed with **zero** `SKIP` lines on that
+row, so "durable" needed no grading and no second grade of the capability was invented.
+**The limit is the runner, and it is named here rather than left to be discovered:** this
+executed on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` over a
+`node:sqlite`-backed shim and **not** `workerd`, so what was exercised is the capability's
+own weaker operation — a re-derived binding, not an isolate restart, which still cannot be
+performed from inside a test (`kb-open-question-workerd-runner-absent-001`). The far end is
+untouched: this project supplied no store that can lose an acknowledged write to a *fault*
+rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s
+(HS-P0012), and `happenstance-neon` (HS-P0014) is the one named implementation still
+unanswered. Nothing here moves CF-14's `[DEFERRED]` marker.
+
+**2026-08-20 — the CF-27 re-read, in full.** *The verdict is the CF-27 row of the same
+table; this is the argument behind it.* The intuitive hazard is the wrong one: a Durable
+Object's storage **outlives** its isolate — `CloudflareFixture::reopen` re-derives a binding
+off the retained `state` and every row is still there — so eviction is not how one of these
+loses history. What is real is the verb: this adapter reaches storage as
+`state.storage().sql()`, and the same `Storage` object carries `delete_all()`
+(`worker-0.8.5/src/durable.rs:449`), so a wholesale purge happens with **no `EventStore`
+method involved at all** and the store passes every conformance rule unchanged afterwards —
+exactly the silence CF-27's *Rejects* paragraph describes, now with a named verb behind it.
+The specification's **No, and nothing is planned** completeness row therefore understates the
+exposure by one adapter, and this re-read is handed on rather than answered: the instrument
+that would settle it — a testkit-adjacent store holding only a suffix of its own log and
+reporting that it does — is deliberately **not** built here and stays
+`retention-and-incomplete-logs`' (HS-P0018) and phase 14's. Nothing here moves CF-27's
+`[DEFERRED]` marker.
 
 ---
 

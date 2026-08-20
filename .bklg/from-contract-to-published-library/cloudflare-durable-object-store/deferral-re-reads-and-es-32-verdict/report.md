@@ -27,7 +27,7 @@ marker moved. The diff is `RUNBOOK.md` and this story's own directory.** No
 | AC-007 — every verdict names an artefact that did not exist before | **satisfied** | the negative control was performed and recorded in `implementation-report.md`, *The negative control*: each sentence was attempted from the clause alone and each attempt failed at a named point | — |
 | AC-008 — no marker moves, the census is untouched | **satisfied, with a finding** | `git diff -- spec/SPECIFICATION.md` empty; `spec-trace` green; thirteen rows, three struck, ten live, none displaced. **The equality statement was stale on arrival** and now states what is true — see below | `RUNBOOK.md:564-577` |
 | AC-009 — a fired falsifier is escalated, and silence is not left blank | **satisfied** | no falsifier fired, and both readings say so in terms; two things *are* handed on by name — the deferred-table drift, and the unmeasured alarm cost | ledger evidence + the RUNBOOK rows |
-| AC-010 — the verdict is where the reader already is | **satisfied** | two existing table cells and one paragraph in an existing session log; no new section, no new table, no bare pointer; the long form exists once and four sites point at it | — |
+| AC-010 — the verdict is where the reader already is | **satisfied, after a post-review correction** | two existing table cells and three paragraphs in an existing session log; no new section, no new table, no bare pointer, and the long form exists once with the cells pointing at it. The **sentence budget was the one part initially missed** — see *The density budget* below | `RUNBOOK.md:561`, `:562`, `:4492-4525` |
 
 ### The finding a reviewer must read
 
@@ -46,6 +46,31 @@ maturity table is a clause question and a prose re-read has no licence for it. T
 reconciliation is handed to `adr-0023-and-atom-resolutions` and to whichever pass
 owns the projection deferrals, in the RUNBOOK text itself so it cannot be lost with
 this report.
+
+### The density budget, and the correction it took
+
+**Recorded because a review caught it rather than because the story did.** AC-010
+fixes a numeric invariant — *each row cell stays within the one-to-three-sentence
+budget its ten neighbours keep* — and the CF-14 and CF-27 cells as first written ran
+to **four** sentences and roughly 900 to 1,100 characters each, against neighbouring
+cells of about fifty. The conclusion-first, in-place, greppable half of the AC was
+served, and the struck CF-13 cell is an in-table precedent for a long one, so this
+was a soft miss rather than a betrayal — but it was a miss, and a numeric invariant
+the spec chose to state is not satisfied by being *nearly* met.
+
+**The fix moves detail, it does not delete it.** Each cell is now its verdict plus
+the one narrow finding that verdict rests on, three sentences each: CF-14 keeps the
+fixture, the contract shape, `acknowledged_writes_survive_a_reopen` and the zero-`SKIP`
+run, plus the far-end handoff AC-002 requires; CF-27 keeps the `delete_all()` verb, the
+completeness-row consequence and the HS-P0018 handoff AC-004 requires. Everything
+trimmed — the three rule names in full, the `wasm-bindgen-test-runner`-not-`workerd`
+limit, `happenstance-neon` as the one named implementation still unanswered, and
+CF-27's *Rejects*-paragraph argument — moved into phase 9's Session log as
+*The CF-14 re-read, in full* and *The CF-27 re-read, in full*, beside the ES-32
+paragraph. That is the shape AC-010 itself blesses: **long form once, pointers
+elsewhere**, and it is the same shape the ES-32 verdict already uses from five sites.
+No claim was weakened and no citation dropped; `rg -n "CF-14|CF-27|ES-32" RUNBOOK.md`
+still finds one authoritative statement per clause.
 
 ### Deferred, and to whom
 
