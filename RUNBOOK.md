@@ -301,7 +301,7 @@ scheduling defect.
 | **0021** | 7 | How does a payload's shape evolve — codec tag, versioned event types, upcasting, and does the read path need a hook it does not have? |
 | ~~**0022**~~ | 8 | ~~SQLite: driver, schema, tag storage, and the append-condition strategy.~~ **Written**, as [ADR-0022](references/adr/0022-append-condition-strategy.md), and staged for ingest at `.kb/_intake/0033-adr-0022-append-condition-strategy.md`. The **driver** half was stale on arrival — `rusqlite` without a pool was already settled at `crates/happenstance-sqlite/src/lib.rs:47-53` — so it is ratified rather than decided, in the shape row 0008 already uses. The rest is one question with seven consequences: the append condition is a `max(position)` guard inside `BEGIN IMMEDIATE`, which **reverses the architecture brief's recommendation on a measurement** (23 µs against the `EXISTS` probe's 32 and the conditional insert's 45 on the rejection path over a 5,000-event log; 213 against 311 and 306 over 50,000); tags go in `event_tag(tag, position)` with `event_type` covering (a selective read 3.16x and 4.63x faster than a canonical blob and JSON1); three pragma values; the runtime seam; `index_arms()` rejected. Measured in `experiments/append-condition/`, out of the workspace and out of the gate, because `append` is still `todo!()` and AC-013 puts the record first. Two non-verdicts are fenced with owners — **ES-17 is not lifted**, and the gap is escalated on the row below |
 | **—** | 8 → ? | *(escalated by ADR-0022 §13, and owned by nobody yet)* ADR-0012 names phase 8 as the measurement that could lift `append`'s `&[Event]` marker, and its falsifier item 1 requires *"two builds of the **same** SQLite adapter differing only in `append`'s ownership, measured on the same harness."* Three candidate stores in an experiment crate are not that, and no story in phase 8's map produces it — the four implementation stories build **one** adapter. Items 2 to 5 are also unproduced, and item 5 is a *design* obligation (*"a cheap way to keep a copy for retry"*) no measurement alone supplies. This needs a number and an owner, or an explicit deferral with a new phase; what it must not have is a silence |
-| **0023** | 9 | Cloudflare: the `SqlStorage` mapping and the off-tokio conformance harness. |
+| ~~**0023**~~ | 9 | ~~Cloudflare: the `SqlStorage` mapping and the off-tokio conformance harness.~~ **Written**, as [ADR-0023](.kb/decisions/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md), and accepted. It is one question with two halves and **one body of evidence settles both** — the conformance suite executing against the real `worker` bindings, off tokio, inside one `cargo xtask ci` — so the mapping holds every binding `!Send` behind an `Rc` and retains the thrown value rather than stringifying it (which is what makes ADR-0009's ES-6 prediction hold rather than break), and the harness's shape is recorded as `every-rule-under-workerd`'s **finding** rather than chosen here: `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, one row in the executed-target registry, and **not** the `vitest-pool-workers` CI job this row used to queue, which loses to *the same run as the rest of the gate* (`references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md:157`). Amendment **ADR-0023-A** then moved nine acceptance sentences at three grains onto what actually executes, and ADR-0001's `provisional` marker is cited and **not** retired, because phase 1 already lifted it |
 | **0024** | 10 | Postgres: how does the adapter buy the position-visibility invariant when `nextval()` allocates outside the transaction — measured, not preferred? |
 | **0025** | 11 | Ladybug: checkpoint placement, how a projection expresses graph mutations, and the blocking API. |
 | **0026** | 13 | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18) |
@@ -4398,8 +4398,19 @@ this crate keeps the Durable Object and the newcomer is named for its primitive.
 
 **Work**
 
-- [ ] ADR-0023: the `SqlStorage` mapping and the `workerd` harness
-      (`vitest-pool-workers` as its own CI job).
+- [x] ADR-0023: the `SqlStorage` mapping and the off-tokio harness. **Written and
+      accepted** as
+      [ADR-0023](.kb/decisions/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md),
+      by the `2026-08-20-intake-phase-9` wave. What landed is **not**
+      `vitest-pool-workers` as its own CI job: the conformance suite executes on
+      `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a
+      `node:sqlite`-backed `DurableObjectState` shim, driven by **one row** in
+      `xtask/src/proof.rs`'s executed-target registry, **inside one `cargo xtask ci`**.
+      The separate-job shape lost to *the same run as the rest of the gate* — a
+      separate CI job is a claim about CI, and nobody's local gate checks it
+      (`references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md:157`).
+      A `workerd`-class runner is not rejected on merit and stays open at
+      `kb-open-question-workerd-runner-absent-001`.
 - [ ] Finish the skeleton; run the registry's `__emit_wasm` flavour.
 - [ ] Record whether the `!Send` `Error` asymmetry ADR-0009 predicted actually
       bites — this is the adapter that decides it, and whether stringifying a
