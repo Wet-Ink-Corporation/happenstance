@@ -62,6 +62,13 @@ Five consecutive lines agreeing is conclusive; one is not, because `    ///` occ
 everywhere. That check is what EC-004 asks for in the direction it can be had, and
 it is why no line number was hand-edited to silence anything — nothing was failing.
 
+**Left standing because it is what was run, and corrected below: "conclusive" is the
+word that was wrong.** A five-line window answers *did this citation move with the
+file*, which is a displacement check. It cannot answer *is the citation pointing at
+the thing the sentence names*, and it passed over four citations for which the two
+answers differ. The re-run that found them, and the instrument each tree actually
+has, are in the section after next.
+
 **The check caught a real false positive, and that is why it was run in report mode
 first.** A naive `store\.rs:` pattern also matches the tail of
 `projection_store.rs:270-292` and `event_store.rs:62-67` — citations into
@@ -72,31 +79,91 @@ mis-pointed four other crates' citations while every gate stayed green.
 
 ## Every changed line, and what changed in it
 
-48 lines across 11 files. Proved mechanically rather than asserted:
+**51 lines across 10 files, carrying 52 citation tokens.** Masked comparison, and the
+scope is the correction — it is run over the whole slice, `af9a241..HEAD`, not over one
+commit:
 
 ```console
-$ # mask every store.rs line number in the diff and compare each pair
-$ lines differing in anything but a store.rs line number: 0
+$ # mask every store.rs line number AND every bare `:NNN` continuation in
+$ # `git diff af9a241 -- spec/ standards/`, then compare each changed line
+$ # against its predecessor
+$ lines differing in anything but a line number: 0
 ```
 
-No clause text, no rule, no `Rejects:` case, no `**Evidence.**` subject and no
-example changed. `references/**` also carries `store.rs:NNN` citations and is
-**deliberately not repaired**: it is evidence kept for citation, binding nothing,
-read by no checker, and its line numbers were already historical. Stated so the
-omission is a decision rather than an oversight.
+No clause text, no rule, no `Rejects:` case, no `**Evidence.**` subject and no example
+changed. `references/**` also carries `store.rs:NNN` citations and is **deliberately not
+repaired**: it is evidence kept for citation, binding nothing, read by no checker, and
+its line numbers were already historical. Stated so the omission is a decision rather
+than an oversight.
 
-| File | Citations bumped |
-| --- | --- |
-| `spec/SPECIFICATION.md` | 20 |
-| `spec/E2E-CASES.md` | 14 |
-| `standards/rust/40-public-surface-and-evolution.md` | 4 |
-| `standards/rust/70-rustdoc-obligations.md` | 4 |
-| `standards/rust/20-two-flavour-ports.md` | 2 |
-| `standards/rust/21-send-is-not-inherited.md`, `22-rpitit-and-lifetime-capture.md`, `30-error-taxonomy.md`, `51-features-and-no-std.md`, `92-toolchain-limits-and-dead-ends.md` | 1 each |
+## What the per-commit check could not see
 
-Spot-checked by hand at the subjects that matter most, each now landing on its own
-first line rather than the line above it: `store.rs:141`
-(`#[trait_variant::make(SendEventStore: Send)]`), `:149`
+**The first version of this section was run per-commit, and that is why it reported
+green over four broken citations.** The story landed in two commits — `10e99b2` bumped
+by `+21`/`+47`, `f2c7dbe` re-bumped by `+1` — and a masked comparison of *one commit's*
+changed lines cannot see a citation that the first commit bumped wrongly and the second
+bumped again from the wrong base. Two independent blind spots, both structural:
+
+* **Per-commit scope.** Only `af9a241..HEAD` compares a citation against the file it was
+  written for.
+* **The masking pattern.** It matched `store.rs:NNN` and not the bare `` `:NNN` ``
+  continuation form, which is how these documents write a second citation into the same
+  sentence. Three of the four defects are that form.
+
+Re-run over the whole slice, with the check tightened from *the five lines beginning at
+the old target now begin at the new target* to **the cited line IS the first line of the
+subject the sentence names**:
+
+| Site | Was | Now | Why the old check passed it |
+| --- | --- | --- | --- |
+| `E2E-CASES.md:1409` | `store.rs:114` | `store.rs:141` — `#[trait_variant::make(SendEventStore: Send)]` | bumped `+22` where the displacement was `+48`. Old `:92` and new `:114` are both `/// ``` `, and the four lines under each are doc-comment filler, so the five-line window matched and the citation still landed 27 lines from its subject |
+| `E2E-CASES.md:1411` | `` `:99` `` | `` `:149` `` | bare continuation — never matched, so never bumped. The same document already cited the same subject at `:1389`, so the file contradicted itself |
+| `E2E-CASES.md:351` | `` `:213` `` | `` `:377` `` — `events.last()` | the same blind spot; its sibling `store.rs:260` on `:350` was bumped and this was not |
+| `SPECIFICATION.md:5909` | `` `:368` `` | `` `:369` `` — `pub async fn read_decision_model<S>(` | bare continuation, bumped `+47` instead of `+48`. Inside `ANCHOR_SLACK`, so `spec-trace` stayed green; one line off the subject all the same |
+
+A five-consecutive-lines window is a *displacement* check. It is the right instrument for
+"did this citation move with the file" and the wrong one for "is it pointing at what the
+sentence names", and the two answers differ exactly where a citation was already wrong.
+
+## Which tree was verified by which instrument
+
+The evidence this story files must say this, because the three trees are not equally
+guarded and the first draft of the boundary paragraph claimed they were:
+
+| Tree | Instrument | What it actually checks |
+| --- | --- | --- |
+| `standards/rust/**` — 8 files, 15 citations | `cargo xtask lint-constitution`, a gate step | the citation's **written** `(anchor)` within `ANCHOR_SLACK = 10` lines (`xtask/src/lint_constitution.rs:674`, the constant at `:111`) |
+| `spec/SPECIFICATION.md` — 20 changed lines, 21 tokens | `cargo xtask spec-trace`, a gate step | a subject **derived** from the sentence, within `ANCHOR_SLACK = 12` lines (`xtask/src/spec_trace.rs:301`, the constant at `:395`) |
+| `spec/E2E-CASES.md` — 16 changed lines | **nothing** | `spec_trace.rs` opens this file at `:617` and `:723` only to resolve the E2E case ids `SPECIFICATION.md` refers to. Its own `store.rs:NNN` citations are read by no checker in this repository |
+
+So every core `store.rs` citation in `E2E-CASES.md` was re-anchored **by hand against its
+subject**, and verified by reading the cited line back out of `store.rs` — the only
+instrument that exists for it. All 16 now open on the first line of the subject their
+sentence names.
+
+## The inherited approximations, repaired rather than preserved
+
+That hand verification found nine more: citations mis-anchored *before* `af9a241`, which
+both bump rounds then carried forward faithfully. They are repaired here, for two reasons.
+`spec.md` now says these citations must be re-anchored by hand against their subjects, and
+that sentence would have been false on the day it was written. And most of them made
+`E2E-CASES.md` contradict `SPECIFICATION.md` about the **same** subject:
+
+| Sites in `E2E-CASES.md` | Subject the sentence names | Was, post-bump | Now | `SPECIFICATION.md` |
+| --- | --- | --- | --- | --- |
+| `:273`, `:925`, `:1269` | `EventStore::append` | `store.rs:196-200` — the `# Cancellation` paragraph | `261-265` | `261-265` |
+| `:399` | `append`'s `Option<AppendCondition>` parameter | `store.rs:199` | `264` | — |
+| `:116`, `:1497` | `read_decision_model` | `store.rs:246-256` — inside `append`'s doc | `369-379` | `369-379` |
+| `:217`, `:1042` | `append`'s `# Atomicity` paragraph | `store.rs:178-181` | `189-192` | `189-192` |
+| `:1389` | `type Error: core::error::Error + 'static` | `store.rs:147` | `149` | `149` |
+| `:92` | the `read` doc's laziness, ordering and inclusivity | `store.rs:149-169` — opening on `type Error` | `151-171` | — |
+| `:149` | `read` applying one `ReadOptions` to the whole `Query` | `store.rs:166-170` | `167-171` | `167-171` |
+| `:1384` | the stream at the top level of the return type | `store.rs:152-156` | `153-158` | `153-158` |
+
+Each is a line number and nothing else, so the masked comparison above covers them too.
+
+Spot-check retained and restated as what it is — a hand read of seven subjects, not a
+proof of the set: `store.rs:141` (`#[trait_variant::make(SendEventStore: Send)]`), `:149`
 (`type Error: core::error::Error + 'static;`), `:167` (`fn read(`), `:261`
 (`async fn append(`), `:296` (`async fn head(`), `:333`
 (`pub async fn collect<S, T, E>(`), `:369` (`pub async fn read_decision_model<S>(`).

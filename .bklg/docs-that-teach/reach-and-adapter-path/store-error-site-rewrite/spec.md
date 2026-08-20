@@ -416,12 +416,25 @@ rather than new scope.**
    rather than at gate time. Row **P3** is filed there and nothing else in that file's
    policy is re-decided.
 2. `spec/E2E-CASES.md` and `standards/rust/*.md` — Decision 8 forecast the citation
-   drift and named only `spec/SPECIFICATION.md`. It is **`cargo xtask spec-trace` *and*
-   `cargo xtask lint-constitution`** that read line-anchored `store.rs:NNN` citations,
-   and the second reads `standards/rust/`, which `spec-trace` never opens. Both trees
-   are gated, both are displaced by the same insertion, and repairing only one leaves
-   the other red. The edits there are line numbers and nothing else — no rule, no
-   clause, no `**Evidence.**` subject changes.
+   drift and named only `spec/SPECIFICATION.md`. Both trees carry line-anchored
+   `store.rs:NNN` citations and both are displaced by the same insertion — but they
+   are **not** displaced under the same instrument, and this paragraph said they were.
+
+   **Corrected, because the wrong version of it is what let three E2E-CASES defects
+   land green.** `cargo xtask lint-constitution` reads `standards/rust/**` and checks
+   each citation's *written* `(anchor)` within ten lines
+   (`xtask/src/lint_constitution.rs:674`, `ANCHOR_SLACK` at `:111`), so that tree is
+   gated and repairing only `SPECIFICATION.md` would indeed leave it red.
+   `cargo xtask spec-trace` is **not** the second half of that claim: `check_citations`
+   takes one document and is called with `spec/SPECIFICATION.md`
+   (`xtask/src/spec_trace.rs:301`). It opens `spec/E2E-CASES.md` at `spec_trace.rs:617`
+   and `:723` only to resolve the case ids `SPECIFICATION.md` refers to, and it reads
+   **none** of that file's own `store.rs:NNN` citations. So `spec/E2E-CASES.md` is
+   inside this boundary because the insertion displaces it, not because anything would
+   go red: **its citations are checked by nothing, and must be re-anchored by hand
+   against their subjects, then verified by hand.** The method that does that, and the
+   defects it caught, are in `_spec-trace.md`. The edits there are line numbers and
+   nothing else — no rule, no clause, no `**Evidence.**` subject changes.
 
 `references/**` also carries `store.rs:NNN` citations and is **deliberately not
 repaired**: it is evidence kept for citation, binding nothing, read by no checker, and

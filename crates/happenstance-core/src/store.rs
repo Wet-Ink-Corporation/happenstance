@@ -1003,6 +1003,31 @@ help: disambiguate the method for candidate #2
         }
     }
 
+    /// The workspace lockfile, so a positional claim can be tied to a version.
+    const LOCKFILE: &str = include_str!("../../../Cargo.lock");
+
+    /// The `trait-variant` release whose expansion was actually read.
+    ///
+    /// Bumping this constant is not a chore. It is the signal to re-open
+    /// `variant.rs` and confirm the copying below still happens, because nothing
+    /// else in this repository can see it.
+    const TRAIT_VARIANT_VERIFIED: &str = "0.1.3";
+
+    /// The version `Cargo.lock` resolves `trait-variant` to.
+    ///
+    /// Parsed rather than pinned in the manifest: `trait-variant = "0.1.3"` is a
+    /// caret requirement, so `0.1.4` would resolve without the manifest changing.
+    /// The lockfile is what the gate builds against (`--locked`), so it is the
+    /// only place the *resolved* version can be read.
+    fn resolved_trait_variant() -> &'static str {
+        LOCKFILE
+            .split("name = \"trait-variant\"")
+            .nth(1)
+            .and_then(|rest| rest.split("version = \"").nth(1))
+            .and_then(|rest| rest.split('"').next())
+            .expect("the workspace lockfile resolves the derivation's crate")
+    }
+
     /// The attributes sit where `trait_variant` copies them onto the derived flavour.
     ///
     /// Two attributes, not the three the design projected, and the reason is
@@ -1012,6 +1037,19 @@ help: disambiguate the method for candidate #2
     /// two written here are four entries in the search index — a superset of the
     /// three the design asked for. Position is the whole mechanism, so position is
     /// what is asserted.
+    ///
+    /// **Position is a proxy, and the second assertion is what stops it being a
+    /// silent one.** That the attributes sit above the derivation is necessary and
+    /// not sufficient: the copying itself is upstream behaviour, and a
+    /// `trait-variant` release that stopped doing it would leave this test green
+    /// and `SendEventStore` carrying no search key at all. Nothing in this
+    /// repository can observe the expansion, so the version is asserted instead —
+    /// the gate builds `--locked`, so the resolved version cannot move without
+    /// someone changing it deliberately, and changing it is the moment to re-read
+    /// `variant.rs`. (The other half of the mechanism has a standing guard already:
+    /// `SendEventStore` has no doc comment of its own, so if attributes stopped
+    /// being copied, `missing_docs` — `warn` in the workspace lints and `-D
+    /// warnings` in the gate — would fail the build.)
     #[test]
     fn the_search_keys_sit_where_trait_variant_copies_them_to_both_flavours() {
         let lines: Vec<&str> = production_source().lines().collect();
@@ -1029,6 +1067,17 @@ help: disambiguate the method for candidate #2
             "pub trait EventStore {",
             "the attributes must sit on the trait the derivation copies from, or the \
              `Send` flavour carries no search key at all"
+        );
+        assert_eq!(
+            resolved_trait_variant(),
+            TRAIT_VARIANT_VERIFIED,
+            "the two attributes above reach `SendEventStore` only because \
+             trait-variant {TRAIT_VARIANT_VERIFIED} rebuilds the derived trait with \
+             `..tr.clone()` (`trait-variant-{TRAIT_VARIANT_VERIFIED}/src/variant.rs:115-123`), \
+             copying the base trait's attributes onto it. The position asserted above \
+             cannot see that, so the version stands in for it: read the new \
+             `variant.rs`, confirm the attributes are still copied, then move this \
+             constant"
         );
     }
 }

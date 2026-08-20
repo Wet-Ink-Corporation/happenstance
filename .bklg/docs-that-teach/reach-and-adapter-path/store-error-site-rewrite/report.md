@@ -30,9 +30,9 @@ because `xtask/src/lib.rs` declares the module.
 | **AC-004** — the narrow limit, not the broad one | **satisfied** | `store.rs:60-63` names the uncompiled fence *and* the compiled `rust,compile_fail,E0034` negatives at `standards/rust/20-two-flavour-ports.md:179` and `standards/rust/00-prime-directives.md:242` that really do assert the error code. Those two fences are compiled by `cargo test --locked -p xtask --doc`, green inside the affected gate. `module_doc::the_page_never_claims_that_nothing_checks_this` forbids the broad falsehood by name. |
 | **AC-005** — one recessive, correctly-formed pointer | **satisfied** | `store.rs:65-67`: last sentence, no heading, link text `the adapter reading order`, named-but-unlinked (rung 3 of the ladder). `module_doc::one_recessive_pointer_closes_the_section` asserts exactly one mention, no `http(s)://`, and no `[` anywhere in the paragraph — so an intra-doc link cannot creep in. The affected gate's rustdoc builds run under `rustdoc::broken_intra_doc_links = "deny"` and are green. EC-002 did not fire: the destination exists and is registered at `xtask/src/narrative.rs:160-161`. |
 | **AC-006** — register row P3 with a named guard | **satisfied** | `xtask/src/pointers.rs:250-273`. The guard names two mechanisms and **both were run against the condition they claim**: with the destination renamed away, `cargo xtask narrative` exited 1 with the reason in the message. The story also added `row_p3s_pointer_is_installed_on_the_surface_it_claims` (`:694`), which reads the row's claim back out of the surface and the registration table — closing the "path in the prose is not the path the tree registers" gap the row previously recorded as unguarded. Red first: `carries the destination path 0 times in its documentation`. |
-| **AC-007** — clause pin read first, three artefacts, `spec-trace` green | **satisfied** | `_clause-pin.md`, `_reproduction.md`, `_spec-trace.md`. The pin exists and is enumerated (`xtask/src/lint_narrative.rs:1354`, 21 clauses), so EC-001 did not fire; the three entries pinned to this file (ES-19, ES-23, ES-24) are anchored by verbatim phrases at `store.rs:179`, `:194`, `:217`, all outside the edited region. `cargo xtask spec-trace` exits 0 in check mode. The subject review is mechanised, not eyeballed: **all 48 changed citation lines are identical to their predecessors once the line number is masked — 0 differ in anything else.** Repair-vs-gap verdict: **repair**; EC-009 did not fire. |
+| **AC-007** — clause pin read first, three artefacts, `spec-trace` green | **satisfied** | `_clause-pin.md`, `_reproduction.md`, `_spec-trace.md`. The pin exists and is enumerated (`xtask/src/lint_narrative.rs:1354`, 21 clauses), so EC-001 did not fire; the three entries pinned to this file (ES-19, ES-23, ES-24) are anchored by verbatim phrases at `store.rs:179`, `:194`, `:217`, all outside the edited region. `cargo xtask spec-trace` exits 0 in check mode. **Subject review, corrected after review and re-run over the whole slice (`af9a241..HEAD`) rather than per-commit:** 51 changed lines across 10 files carrying 52 citation tokens, all identical to their predecessors once *both* the `store.rs:NNN` form **and** the bare `` `:NNN` `` continuation form are masked — 0 differ in anything else. The instruments are not equal and the evidence now says which is which: `standards/rust/**` (8 files, 15 citations) is machine-checked by `cargo xtask lint-constitution` against a written anchor; `spec/SPECIFICATION.md` (20 lines) by `cargo xtask spec-trace` against a derived subject; `spec/E2E-CASES.md` (16 lines) by **nothing** — `spec_trace.rs` opens it only to resolve case ids — so all 16 were re-anchored and verified by hand against their subjects. The per-commit run had reported green over four wrong citations and nine inherited approximations; all thirteen are repaired and tabulated in `_spec-trace.md`. Repair-vs-gap verdict: **repair**; EC-009 did not fire. |
 | **AC-008** — the surface obeys the signed-off design | **satisfied** | Section measures **35** source lines against a cap of **36**; heading ladder unchanged at four entries rendering h2/h3/h3/h3 with no level skipped; no `<details>`, `<div>`, `style=` or "See also" block. Built and read: the module doc sits inside `<details class="toggle top-doc" open>`, so it is **not** collapsed. The fence's longest line measures **109** characters and takes a horizontal scrollbar at both viewports — `_design.md`'s F4 measurement reproduced, expected rather than a defect. |
-| **AC-009** — the search keys, by a stated rule | **satisfied, with the verification column's count corrected** | `store.rs:115-140`: the rule, its rejected alternatives, the no-register-row reason, and **two** attributes. The column says three. Three is not writable: `SendEventStore` is derived and `trait-variant-0.1.3/src/variant.rs:115-123` rebuilds it with `..tr.clone()`, copying the trait's attributes, so there is no second item to attach one to. Observed rather than argued — `trait.SendEventStore.html` renders `EventStore`'s doc comment verbatim, and a doc comment *is* a `#[doc]` attribute. Two attributes therefore yield **four** (key, item) pairs in the search index, a strict superset of the design's three. The criterion's THEN — a reader searching `E0034` or `TraitVariantBlanketType` reaches the two traits — is met and over-met. |
+| **AC-009** — the search keys, by a stated rule | **satisfied, with the verification column's count corrected** | `store.rs:115-140`: the rule, its rejected alternatives, the no-register-row reason, and **two** attributes. The column says three. Three is not writable: `SendEventStore` is derived and `trait-variant-0.1.3/src/variant.rs:115-123` rebuilds it with `..tr.clone()`, copying the trait's attributes, so there is no second item to attach one to. Observed rather than argued — `trait.SendEventStore.html` renders `EventStore`'s doc comment verbatim, and a doc comment *is* a `#[doc]` attribute. Two attributes therefore yield **four** (key, item) pairs in the search index, a strict superset of the design's three. The criterion's THEN — a reader searching `E0034` or `TraitVariantBlanketType` reaches the two traits — is met and over-met. **Corrected after review: the copying was asserted only positionally, and position is necessary and not sufficient.** `..tr.clone()` is upstream behaviour; a `trait-variant` release that stopped copying attributes would leave the position test green and `SendEventStore` carrying no search key at all. The same test now also asserts the version `Cargo.lock` resolves `trait-variant` to, against `TRAIT_VARIANT_VERIFIED` — the release whose `variant.rs` was actually read. The gate builds `--locked`, so the version cannot move without someone moving it, and moving it is the moment to re-read `variant.rs`. Falsified before it was kept: setting the constant to `0.1.4` reds the test with a message naming what to re-verify. |
 
 ### What a reviewer should look at hardest
 
@@ -43,11 +43,15 @@ breaks the very rule the story was asked to establish. The judgement is recorded
 in the source at `store.rs:128-134`, and here — three places, so it cannot be found only by someone
 who already suspected it.
 
-**The citation diff.** 48 lines across 11 files is the largest part of this change by line count and
+**The citation diff.** 51 lines across 10 files is the largest part of this change by line count and
 carries the least thought per line. It is line numbers only, and that claim is checkable in one
-command rather than by reading: mask every `store.rs:NNN` and the two sides of the diff are equal.
-The method, and the 21 false positives it rejected — `projection_store.rs` and `event_store.rs` match
-a naive pattern on their tail — are in `_spec-trace.md`.
+command rather than by reading: mask every `store.rs:NNN` **and** every bare `` `:NNN` ``
+continuation, and the two sides of the diff are equal. Read the method before the count. It was
+first run per-commit and with only the `store.rs:NNN` form masked, and both of those omissions hid
+real defects; the corrected run is over `af9a241..HEAD` with both forms masked, and it says which of
+the three trees is machine-checked and which is not. The method, the four wrong citations and nine
+inherited approximations it caught, and the 21 false positives it rejected — `projection_store.rs`
+and `event_store.rs` match a naive pattern on their tail — are in `_spec-trace.md`.
 
 **The tests, for whether they could fail.** Two were built specifically so a weaker form could not
 pass: the transcript is compared with `assert_eq!` rather than `contains` (it caught the interrupted
@@ -79,3 +83,22 @@ no checker reads it, and its numbers were already historical.
   requires every key to still appear verbatim in the transcript it came from. What is still missing,
   and is still HS-P0020's, is the check that rustc has not renamed `TraitVariantBlanketType` upstream —
   named as residual risk at `store.rs:136-138` and counted as a guard by nobody.
+- **The second risk on that mechanism is now named and guarded, where it was neither.** The alias
+  *string* going stale had a residual-risk note; the alias *propagation* had only a positional test, and
+  a `trait-variant` release that stopped copying the base trait's attributes would have passed it while
+  `SendEventStore` lost every search key. `module_doc::the_search_keys_sit_where_trait_variant_copies_them_to_both_flavours`
+  now also pins the resolved dependency version, so the change arrives as a red test naming what to
+  re-read rather than as a silent regression. **`Cargo.toml` was deliberately left unannotated**: a
+  comment there would displace `Cargo.toml:122` and `:134`, both cited from `standards/rust/**` where
+  `lint-constitution` reads them, and the test's own failure message is the surface a `cargo update`
+  actually hits.
+- **Register row P3's `form` field remains an approximation, accepted for this slice.** The row is a
+  named-but-unlinked cross-reference inside a Rust doc comment, filed under
+  `PointerForm::PinnedTreeMarkdown` — documented at `xtask/src/pointers.rs:147-153` as a markdown link
+  on a page inside the pinned tree. Only the guard cell carries the truth, so a maintainer filtering the
+  register by `form` is misled. The reasoning is written at `xtask/src/pointers.rs:239-249` and traces to
+  `_design.md`'s own P3 wording, which groups the two forms under one guard. **The escalation trigger,
+  recorded so it is not re-decided by repetition: if a second rung-3 pointer is ever filed, raise the
+  missing variant with `pointer-policy-and-inventory` rather than approximating again.** Nothing was
+  changed in `pointers.rs` for this note, because adding lines there would displace the dozens of
+  `pointers.rs:NNN` citations that story's own approved records carry.

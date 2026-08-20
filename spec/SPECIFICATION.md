@@ -5906,7 +5906,7 @@ checkpoint invariant living one crate above the port that states it.
 pump collapses upward.** The count was taken over the tree rather than
 remembered. `happenstance-core` publishes exactly two free functions — `collect`
 (`crates/happenstance-core/src/store.rs:333`) and `read_decision_model`
-(`:368`) — and **neither is a checkpoint pump; there is no pump function in the
+(`:369`) — and **neither is a checkpoint pump; there is no pump function in the
 contract crate at all.** So the caller count is not zero over a function that
 exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,

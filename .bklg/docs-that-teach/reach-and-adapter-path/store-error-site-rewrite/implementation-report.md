@@ -101,7 +101,7 @@ work as unreviewed starting material, and everything above was written on top of
 | --- | --- |
 | `crates/happenstance-core/src/store.rs` | The section `## Import one flavour, not both` (`:31-67`) runs (a) the surviving cause sentence, (b) rustc 1.97.1's own transcript, (c) the ambiguity named in words, (d) the untouched in-place fix, (e) the narrow limit, (f) one recessive pointer — the design's binding order, 35 source lines. The fence was re-pasted from this session's reproduction: line number and the closing `\|` of the suggestion hunk, which the earlier draft had cut mid-box. Two `#[doc(alias)]` attributes at `:139-140` under a stated rule at `:115-138`. A new `#[cfg(test)] mod module_doc` at `:436` with seventeen tests. |
 | `xtask/src/pointers.rs` | Row **P3** filed in `POINTER_REGISTER` (`:250-273`). Its guard was rewritten to name two mechanisms instead of one and to drop the sentence recording an unguarded gap, because the gap is now closed. New test `row_p3s_pointer_is_installed_on_the_surface_it_claims` (`:694`) reads the row's claim back out of the surface and out of `narrative.rs`'s registration table. No policy in that file was re-decided. |
-| `spec/SPECIFICATION.md` (20), `spec/E2E-CASES.md` (14), nine `standards/rust/*.md` (15) | **Line numbers and nothing else.** 48 changed lines, every one identical to its predecessor once the `store.rs:NNN` number is masked. Detail, method and the false positives the method rejected are in `_spec-trace.md`. |
+| `spec/SPECIFICATION.md` (20 lines, 21 tokens), `spec/E2E-CASES.md` (16), eight `standards/rust/*.md` (15) | **Line numbers and nothing else.** 51 changed lines across 10 files, every one identical to its predecessor once *both* the `store.rs:NNN` form and the bare `` `:NNN` `` continuation form are masked. Counts corrected after review, from the whole-slice re-run. Detail, method, the instrument each tree actually has, and the false positives the method rejected are in `_spec-trace.md`. |
 | `.bklg/…/store-error-site-rewrite/_clause-pin.md`, `_reproduction.md`, `_spec-trace.md` | AC-007's three artefacts. |
 | `.bklg/…/store-error-site-rewrite/_ledger.md` | Nine rows flipped with cited evidence. |
 
@@ -177,3 +177,33 @@ a later story or a project residual.
 **The observed walk is not here, and must not be.** DoD-10 closes on `error-site-walk-record`, which
 must be a different pair of hands. Nothing in this report claims a walk; the falsifications above are
 file-level and are labelled as such.
+
+## Corrections applied after the slice review
+
+Six findings, all on the *evidence* and the *citations* rather than on the delivered text. The
+section above is left as written, because a report that quietly re-writes its own history is the
+thing the correction is about.
+
+| Finding | What was wrong | What was done |
+| --- | --- | --- |
+| Regression, `E2E-CASES.md:1409` | `store.rs:114`, bumped `+22` where the displacement was `+48`; `:114` is the closing fence of the `count_all` doctest | re-anchored to `store.rs:141`, `#[trait_variant::make(SendEventStore: Send)]` |
+| Regression, `E2E-CASES.md:1411` | `` `:99` `` — a bare continuation the masking pattern never matched, so it was never bumped, while `:1389` cited the same subject as `:147` | both re-anchored to `:149`, the subject's own line |
+| Unrepaired displacement, `E2E-CASES.md:350-351` | `store.rs:260` and the bare `` `:213` `` | re-anchored to `:376` and `:377`, the two lines of `read_decision_model`'s body the sentence names |
+| False premise, `spec.md:418-424` | claimed `spec-trace` reads `E2E-CASES.md`'s `store.rs:NNN` citations and that "both trees are gated" | corrected against `xtask/src/spec_trace.rs:301`, `:617`, `:723`; the paragraph now states that this file's citations are checked by **nothing** and must be re-anchored and verified by hand |
+| Overstated evidence, `_spec-trace.md` and the AC-007 row | "48 lines across 11 files … 0 differ" was true of the final commit's own changed lines and not of the slice | the masked comparison was re-run over `af9a241..HEAD` with the bare-continuation form added to the pattern — **51 lines, 10 files, 52 tokens, 0 differ** — and both records now state which tree was verified by which instrument |
+| Positional-only assertion, AC-009 | the `..tr.clone()` copying is upstream behaviour and had only a positional proxy | the test now also pins the version `Cargo.lock` resolves `trait-variant` to; falsified at `0.1.4` before being kept |
+
+**The re-run found more than the review named, which is the point of running it rather than
+patching the four sites.** `spec/SPECIFICATION.md:5909` carried a bare `` `:368` `` bumped `+47`
+instead of `+48` — inside `ANCHOR_SLACK`, so the gate never saw it — and nine `E2E-CASES.md`
+citations were mis-anchored *before* `af9a241` and had been carried forward faithfully by both bump
+rounds, seven of them naming a subject `SPECIFICATION.md` cites correctly elsewhere. All are
+repaired and tabulated in `_spec-trace.md`; every edit is a line number and nothing else, and the
+masked comparison covers them.
+
+**One finding was accepted rather than fixed, with its escalation trigger written down.** Register
+row P3's `form` field says `PointerForm::PinnedTreeMarkdown` for what is a named-but-unlinked
+cross-reference. The reasoning is at `xtask/src/pointers.rs:239-249`; the trigger is in `report.md`
+under *Handed on*. `pointers.rs` was not edited for it, because inserting lines there displaces the
+`pointers.rs:NNN` citations carried by `pointer-policy-and-inventory`'s own approved records — the
+same defect class this correction exists to close.
