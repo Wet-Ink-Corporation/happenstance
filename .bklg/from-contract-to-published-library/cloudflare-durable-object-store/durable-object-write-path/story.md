@@ -21,14 +21,14 @@ archetype: capability
 slice: real-worker-bindings
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T04:34:43.227Z
+updated: 2026-08-20T04:34:49.300Z
 links:
   pr: null
   commits:
     - 3eb91cfcac8cfd85b4fc1e7b8e4d612d66866ff2
     - 2ea99fd10bc1af495c7e47b8bbd7116a04e1d28f
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
