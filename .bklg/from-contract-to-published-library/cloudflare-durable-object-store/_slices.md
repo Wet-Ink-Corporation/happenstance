@@ -33,15 +33,7 @@ or a human — starts from. They are hypotheses for the next reviewer to verify,
 
 ### durable-object-conformance-run
 
-- **double-satisfies-real-ac** — `crates/happenstance-cloudflare/src/host.rs:106-221` — a `node:sqlite`-backed
-  `DurableObjectState` shim stands in for the runtime that HS-S0054 AC-001
-  (`.bklg/.../every-rule-under-workerd/spec.md:159`), project AC-002/AC-004 and initiative DoD 4 name.
-  `host.rs:39-48` states plainly "It is not a Durable Object runtime"; the implementation report
-  withdraws the claim at `implementation-report.md:13-17`. The doubling is disclosed and escalated
-  rather than concealed, but the AC still describes real runtime behaviour that a double is standing
-  in for.
-- **fixmed-dod** — `.bklg/from-contract-to-published-library/cloudflare-durable-object-store/measured-store-limits/spec.md:103`
-  — the Merge DoD one-liner was reworded in the repair commit `84d5ab9` from "this crate's `workerd`
-  conformance run" to "this crate's `wasm32` conformance run", i.e. the acceptance sentence was moved
-  onto the artefact that shipped. The commit's fence-amendment rationale covers path rows only and
-  does not mention this edit.
+- **issue**: crates/happenstance-cloudflare/tests/durable_object_conformance.rs:1 still reads '//! Every event-store conformance rule, executed against a real Durable Object.' The file is untouched since 440bbac ('Every rule, executed under workerd') — it survived both the 2026-08-19 repair pass and the 2026-08-20 ADR-0023-A pass, even though commit 84d5ab9 quotes this exact claim as the slice's central blocking finding. It contradicts kb-decision-0023's exclusion list, src/host.rs:41-42's binding 'It is not a Durable Object runtime, and nothing in this crate may be read as saying it is', and the amendment's own stated principle that a reader who never opens the evidence package must not be told the opposite of what it says. It sits at the reader's landing point the spec designates (every-rule-under-workerd/spec.md:281).
+  **fix**: Rewrite the module doc headline of tests/durable_object_conformance.rs to the amended sentence already used elsewhere in the crate — e.g. '//! Every event-store conformance rule, executed on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a real `SqlStorage` mapping — not under `workerd`.' — and add a one-line pointer to `crate::host`'s 'What it is not' section so the exclusion list is one hop away from the executed artefact.
+- **issue**: xtask/src/proof.rs:559-563 is stale in a way the executed run disproves: 'this fixture *declines* `MID_BATCH_FAULT` today, so they are its visible `SKIP <rule>: <reason>` lines under `--nocapture`, and they are what `measured-store-limits` will flip.' measured-store-limits is in this same slice and did flip it — MID_BATCH_FAULT is SUPPORTED (tests/support/mod.rs:244), both fault rules Ran, and the Cloudflare row now prints no SKIP line at all. The gate registry's own documentation misdescribes the behaviour of the row it guards, and points a reader at output that does not exist.
+  **fix**: Update the CLOUDFLARE_WASM_RULES doc comment at xtask/src/proof.rs:559-568 to past tense: the two atomicity-under-fault rules and `append_reports_exceeded_store_limits` now Ran rather than skipped, MID_BATCH_FAULT rests on a real SQLite trigger, and the reason they stay named is that a regression flipping the constant back to a decline would leave them green as skips.
