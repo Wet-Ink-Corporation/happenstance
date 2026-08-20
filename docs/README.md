@@ -18,6 +18,7 @@ that shapes a page whose job is orientation.
 | --- | --- |
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 | Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
+| What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
 | Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
 
 | Looking for | It is at |

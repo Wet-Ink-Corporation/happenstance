@@ -213,15 +213,23 @@ HTML, inline style, folded or tabbed content, no skipped heading levels; self-de
 `redkiln verify --grain story` reads the first fenced block below and fails on any file changed outside it.
 
 ```
-<HS-P0020-PINNED-TREE-ROOT>/**
+docs/**
+xtask/src/narrative.rs
 .bklg/docs-that-teach/reach-and-adapter-path/adapter-reasoning-account/**
 ```
 
-**The first glob is a bound-at-implementation placeholder and must be replaced with HS-P0020's concrete
-pinned-tree root before the first commit.** It is written as a placeholder rather than guessed because the
-tree does not exist on this branch and inventing its path is the invented-primitive failure `_design.md`
-refuses (finding F5). Binding it is a mechanical substitution, not a widening; if the tree has not landed,
-this story blocks (Context pack §9).
+**The first glob was a bound-at-implementation placeholder and is now bound.** HS-P0020 landed on this
+branch: the pinned narrative tree is `docs/` (`xtask/src/lint_narrative.rs:239`, `TREE`), its index is
+`docs/README.md` (`:250`), and its no-orphan mechanism is the bidirectional registration check
+`check_registration` (`:536`) reading the harness at `xtask/src/narrative.rs` (`:257`, `HARNESS`) under the
+mandatory `every narrative page is checked` step. `route` is therefore bound to
+`docs/adapter-reading-order.md` and design finding **F5** is closed for this surface.
+
+**The second line is the mount and not a widening.** Registration in this tree *is* an
+`include_str!` + `mod` pair in `xtask/src/narrative.rs`, so the page cannot be mounted without touching
+that one file — which is the "index/nav/manifest entry inside the tree that HS-P0020's no-orphan mechanism
+reads" this boundary's "In this PR" list already permits. Nothing else under `xtask/src/**` is touched: no
+pinned-tree constant, no `REQUIRED` step, no checker (N-1, N-4; NF-005).
 
 **In this PR**
 

@@ -150,6 +150,17 @@ mod read_the_worked_example {
     #![doc = include_str!("../../docs/read-the-worked-example.md")]
 }
 
+// The adapter author's reading order. It carries no fence either, and for the
+// page above's reason: everything it teaches is somebody else's file, reached
+// by name. Registration is the whole of what guards that — a page deleted
+// leaves a `mod` naming nothing, and a page renamed stops resolving in
+// `include_str!`, so the six citations on it and every cross-reference into it
+// fail the build rather than rotting into prose that still reads fine.
+#[cfg(doctest)]
+mod adapter_reading_order {
+    #![doc = include_str!("../../docs/adapter-reading-order.md")]
+}
+
 // Registered like any other page, and it carries no `rust` fence at all. That
 // is the point: it is the retained fixture behind the `text`-fence limit stated
 // in `xtask/src/lint_narrative.rs`, walked by the checker on every run and
