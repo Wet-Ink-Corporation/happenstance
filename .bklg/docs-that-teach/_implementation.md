@@ -16,7 +16,7 @@ Terminal / DoD-owner project: `durable-audience-closeout` (HS-P0025) — confirm
 | 1 | checked-documentation-surface | HS-P0020 | — | no | done | approved | `checked-documentation-surface/_review.md` |
 | 2 | page-need-discipline | HS-P0021 | 1 | no | done | approved | `page-need-discipline/_review.md` |
 | 3 | application-author-path | HS-P0022 | 1, 2 | no | done | approved | `application-author-path/_review.md` |
-| 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | in-progress | — | — |
+| 4 | reach-and-adapter-path | HS-P0023 | 1, 2, 3 | no | in-progress | — | blocked: redkiln #94/#130 circular gate; 4/8 stories, see run 5 |
 | 5 | comprehension-evidence | HS-P0024 | 3, 4 | no | pending | — | — |
 | 6 | durable-audience-closeout | HS-P0025 | 5 | **yes** | pending | — | — |
 
