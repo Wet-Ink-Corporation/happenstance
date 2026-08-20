@@ -1,4 +1,13 @@
-//! Every event-store conformance rule, executed against a real Durable Object.
+//! Every event-store conformance rule, executed on `wasm32-unknown-unknown`
+//! under `wasm-bindgen-test-runner` against a real `SqlStorage` mapping — **not
+//! under `workerd`**.
+//!
+//! What stands in for the runtime is a Node process holding real SQLite behind
+//! the `DurableObjectState` shape. See [`happenstance_cloudflare::host`]'s
+//! *What it is not* section for the exclusion list — no isolate, no eviction,
+//! no hibernation, no I/O gate, none of the platform's storage ceilings — and
+//! `kb-decision-0023` for why that substitution is a recorded finding rather
+//! than a choice.
 //!
 //! This is CF-23's **third harness** — `wasm-bindgen-test` — applied for the
 //! first time to a real adapter rather than to the testkit's own fixture. The

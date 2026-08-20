@@ -556,16 +556,20 @@ const PROJECTION_WASM_RULES: &[&str] = &[
 /// constant back to a decline would leave them green as skips, and only a list
 /// written down elsewhere notices.
 ///
-/// The two **atomicity-under-fault** rules are named for the opposite reason:
-/// this fixture *declines* `MID_BATCH_FAULT` today, so they are its visible
-/// `SKIP <rule>: <reason>` lines under `--nocapture`, and they are what
-/// `measured-store-limits` will flip. A rename between now and then would
-/// silently drop the thing that story is about.
+/// The two **atomicity-under-fault** rules were named when this fixture still
+/// *declined* `MID_BATCH_FAULT` and they were its visible
+/// `SKIP <rule>: <reason>` lines under `--nocapture`. `measured-store-limits`
+/// flipped it: the constant is `Capability::SUPPORTED`, the fault rests on a
+/// real SQLite trigger, and both rules now **Ran**. They stay named for the
+/// reason the flip created rather than removed — a regression turning the
+/// constant back to a decline would leave them green as skips, and only a list
+/// written down here notices.
 ///
 /// `append_reports_exceeded_store_limits` is here for the same reason one
-/// position over: it is the rule whose outcome `measured-store-limits` turns
+/// position over: it is the rule whose outcome `measured-store-limits` turned
 /// from a `NO_STORE_LIMITS` skip into a `Ran`, and it is the workspace's one
-/// capacity-capped runtime reporting on CF-40.
+/// capacity-capped runtime reporting on CF-40. The Cloudflare row prints no
+/// `SKIP` line today.
 ///
 /// The two **read-isolation and interleaving** rules are the ones whose pass
 /// depends on this adapter's borrow discipline rather than on a lock — a Durable
