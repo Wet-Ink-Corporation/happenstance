@@ -23,7 +23,13 @@ summary: >-
   domain; ADR-0031 partly supersedes ADR-0007 and ADR-0032 fully supersedes ADR-0021, both
   reflected here by annotation rather than by moving either superseded row. A new open question,
   ES-17, was added to the ports domain, and D-1, CF-36 and "no PS rule name is resolved" were added
-  to the typed-layer and specification-governance domains respectively.
+  to the typed-layer and specification-governance domains respectively. The 2026-08-20 wave
+  (`2026-08-20-intake-phase-9`) added ADR-0023 and ADR-0034 (phase 9) to the ports domain, along
+  with a new reference atom on WF-11's memory-ceiling verdict and a new open question on the
+  absent workerd-class runner; and a new reference atom, the phase-8 specification reconciliation
+  census, to "Specification governance & conformance." A second new open question from this wave,
+  on the worker crate's `deny.toml` ban collision, is indexed on `open-questions-index.md` only —
+  it names no canonical concept or domain path of its own, so this map is not the atom it touches.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -36,7 +42,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
   - .kb/_governance/integration-waves/2026-08-15-intake
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
-last_reviewed: 2026-08-17
+  - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
+last_reviewed: 2026-08-20
 ---
 
 # Domain map
@@ -72,6 +79,13 @@ back against the tree phases 4 and 5 had already changed.
   citation check runs only against clause families `has_suite` admits; `PS`
   sat outside that switch for two slices after its conformance suite was
   written, with every gate green throughout. Added 2026-08-15.
+- [`phase-8-specification-reconciliation-census.md`](../reference/phase-8-specification-reconciliation-census.md)
+  (`kb-reference-phase-8-spec-reconciliation-001`) — the second census of the
+  standing post-phase reconciliation criterion, hand-run for phase 8: of 401
+  `spec-trace` citations checked only 80 are anchored to their subject, the
+  criterion's arithmetic bullet had no clause range to close against, and 14
+  of 20 repairs were false sentences no gate step could reach. Extends, does
+  not replace, the phase-4/5 census above. Added 2026-08-20.
 
 **Playbooks** — transferable practice this pass extracted
 
@@ -126,8 +140,13 @@ advance its `ProjectionId`'s checkpoint, and an id no successful `commit` has na
 `Checkpoint::NeverRun` — the progress obligation section 4 never stated. The 2026-08-17 wave added
 a fifth, `.kb/decisions/0022`, phase 8's first real measurement against SQLite: the append-condition
 SQL strategy and tag storage `happenstance-sqlite` ships, settling what ADR-0012 declined to decide
-at phase 4. The full decision list, including status and supersession, is
-[`decision-map.md`](decision-map.md) rather than repeated here.
+at phase 4. The 2026-08-20 wave added a sixth and seventh, `.kb/decisions/0023` and
+`.kb/decisions/0034`, both phase 9: ADR-0023 settles the Cloudflare `SqlStorage` mapping and the
+off-tokio harness that proves it, merging in the ES-6 verdict as one body of evidence; ADR-0034
+settles that the fixture contract has no single owning document, answering
+`kb-open-question-cf-40-ownership-001` from outside the three accepted decisions (ADR-0015,
+ADR-0012, ADR-0022) it cites without editing any of them. The full decision list, including
+status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated here.
 
 **Reference**
 
@@ -150,6 +169,12 @@ at phase 4. The full decision list, including status and supersession, is
   (`kb-reference-projection-fan-out-cost-001`) — `ProjectionStore::apply`'s `&mut P` fixes N
   projections at N reads, derivable from the signature alone; a shape, not a verdict, on the
   `[PROVISIONAL]` projection family. Added 2026-08-17.
+- [`wf-11-memory-ceiling-verdict-2026-08.md`](../reference/wf-11-memory-ceiling-verdict-2026-08.md)
+  (`kb-reference-wf-11-memory-ceiling-verdict-001`) — WF-11's falsifier fired at directly on
+  `happenstance-cloudflare`'s wasm32 harness: the memory-ceiling condition is not constructible
+  on this runtime (a Node isolate has no per-isolate cap), and the category finding — no streaming
+  entry point for a human-readable payload — reproduces the published cost table exactly. Added
+  2026-08-20.
 
 **Concepts**
 
@@ -197,7 +222,12 @@ own partial supersession of ADR-0007),
 `kb-open-question-es-17-two-adapter-measurement-001` (added 2026-08-17 — ADR-0012's falsifier item
 1 asks for two builds of one SQLite adapter differing only in `append`'s batch ownership; the
 phase-8 append-condition experiment measured three strategies against the same `&[Event]` signature
-instead, and nothing currently scheduled produces the two-build evidence).
+instead, and nothing currently scheduled produces the two-build evidence),
+`kb-open-question-workerd-runner-absent-001` (added 2026-08-20 — the whole Cloudflare conformance
+suite runs on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a `node:sqlite`
+shim, never under `workerd`; ADR-0023 records the exclusion as an escalated, not a rejected,
+finding, and WF-11's memory-ceiling non-fire is a second independent consequence of the same
+absent runner).
 
 ## The typed layer: decision models, codecs, and payload evolution
 

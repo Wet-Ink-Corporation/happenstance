@@ -27,6 +27,7 @@ related:
   - kb-decision-0017
   - kb-decision-0018
   - kb-decision-0019
+  - kb-reference-phase-8-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
   - .kb/_intake/0004-edition-and-msrv.md
