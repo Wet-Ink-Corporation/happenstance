@@ -1,7 +1,7 @@
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: bound, and implemented
+//! # Status: bound, implemented, and conformant on its own target
 //!
 //! This crate depends on [`worker`] and talks to a real Durable Object's
 //! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
@@ -25,15 +25,55 @@
 //! can hold, and [`host`]'s own documentation says what that visibility does and
 //! does not promise.
 //!
-//! What has *not* happened yet is the conformance suite: this adapter has not
-//! run `happenstance_testkit::event_store_conformance!` against a
-//! `CloudflareFixture`, and until it has, it is an implementation rather than a
-//! conformant adapter. The fixture itself exists —
-//! `crates/happenstance-cloudflare/tests/support/mod.rs`, in `tests/` because
-//! `happenstance-testkit` is a dev-dependency and an `impl Fixture` in `src/`
-//! would put the suite in a published crate's runtime graph — and its own
-//! contract is held honest by `tests/fixture_contract.rs`. Pointing the shipped
-//! macro at it is the next story's.
+//! # Conformance: what has run, and what is deliberately not asked to
+//!
+//! **The event-store family runs in full, on this target, inside the gate.**
+//! `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is three
+//! lines — `happenstance_testkit::event_store_conformance!` with
+//! `emit = happenstance_testkit::__emit_wasm` and a `CloudflareFixture` — and
+//! `cargo xtask ci` executes it on `wasm32-unknown-unknown` under
+//! `wasm-bindgen-test-runner`, against a real Durable Object's SQL storage. The
+//! rule set is not a claim this file makes: the macro expands
+//! `for_each_event_store_rule!`, which is the one place the list is written, and
+//! `xtask`'s registry asserts every name that enumeration declares out of the
+//! target's own `--list` **before** the run starts. A wasm32-only subset is not
+//! a thing anybody here has to be trusted about.
+//!
+//! The fixture lives in `tests/support/mod.rs` rather than in `src/`, because
+//! `happenstance-testkit` is a dev-dependency and an `impl Fixture` here would
+//! put the suite that measures this adapter into the runtime graph of every
+//! consumer of it. Its own contract — one instance is one object, two instances
+//! share nothing, `connect()` is a second handle onto *that* object — is held
+//! honest by `tests/fixture_contract.rs`.
+//!
+//! ## The concurrency family is not invoked, and that is a reason rather than a
+//! ## silence
+//!
+//! `event_store_concurrency_conformance!` binds `F::Store: EventStore + Send`
+//! and its module is `#[cfg(not(target_arch = "wasm32"))]`, because the family
+//! needs threads to spawn. This adapter's store is `!Send` by construction — it
+//! is the *reason* the bare flavour exists — and `wasm32-unknown-unknown` has no
+//! threads, so a `!Send` adapter **cannot** invoke that family and is not
+//! expected to.
+//!
+//! Read that as a narrowing of the word *conformant* and nothing more. It costs
+//! this adapter nothing it could otherwise have had: a Durable Object is a
+//! single-threaded actor with exclusive ownership of its storage, so there is no
+//! second writer for a race to elect a winner between, and the interleaving the
+//! family exists to stress is not reachable here at all. What the event-store
+//! family *does* run against this store includes
+//! `interleaved_appends_on_one_handle_elect_one_winner` and
+//! `a_live_read_stream_does_not_block_an_append`, which are the single-threaded
+//! shapes of the same question.
+//!
+//! ## The model family is not in the graph on this target
+//!
+//! It sits behind the testkit's off-by-default `proptest` feature, and both
+//! `fixtures::strategies` and `model` carry a target condition on top of that
+//! feature — because a Cargo feature is **not** target-scoped, so
+//! `--all-features` would otherwise switch it on for `wasm32`, where `proptest`
+//! is not a dependency at all. So it is absent here by construction rather than
+//! by choice, and there is nothing for this adapter to opt into.
 //!
 //! # What this crate is for
 //!

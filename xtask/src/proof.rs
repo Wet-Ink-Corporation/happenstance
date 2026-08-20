@@ -536,6 +536,56 @@ const PROJECTION_WASM_RULES: &[&str] = &[
     "rebuilding_is_distinguishable_from_live",
 ];
 
+/// The rules a Durable Object is the only thing in the workspace that can lose.
+///
+/// The same argument [`MEMORY_WASM_RULES`] makes, aimed at an adapter rather
+/// than at a fixture the testkit ships, and the reasons are four.
+///
+/// The two **fixture-contract** rules are the seam this row was registered to
+/// run. `two_fixture_instances_observe_none_of_each_others_appends` is the one
+/// genuinely new failure mode this project can introduce and that nothing
+/// upstream can catch — a `CloudflareFixture` quietly pointing every fresh
+/// instance at the same Durable Object storage passes every other rule in the
+/// suite — and `two_handles_observe_each_others_appends` is CF-16's `must!`,
+/// which fails rather than skips on a declined capability.
+///
+/// The three **`REOPEN`** rules are named because this fixture is the first in
+/// the workspace to answer that capability `SUPPORTED`. Everything else declines
+/// it, so until this row existed the three were skips everywhere and the reopen
+/// path had never been executed by anything. A regression that turned the
+/// constant back to a decline would leave them green as skips, and only a list
+/// written down elsewhere notices.
+///
+/// The two **atomicity-under-fault** rules are named for the opposite reason:
+/// this fixture *declines* `MID_BATCH_FAULT` today, so they are its visible
+/// `SKIP <rule>: <reason>` lines under `--nocapture`, and they are what
+/// `measured-store-limits` will flip. A rename between now and then would
+/// silently drop the thing that story is about.
+///
+/// `append_reports_exceeded_store_limits` is here for the same reason one
+/// position over: it is the rule whose outcome `measured-store-limits` turns
+/// from a `NO_STORE_LIMITS` skip into a `Ran`, and it is the workspace's one
+/// capacity-capped runtime reporting on CF-40.
+///
+/// The two **read-isolation and interleaving** rules are the ones whose pass
+/// depends on this adapter's borrow discipline rather than on a lock — a Durable
+/// Object is single-threaded and re-entrant, `SqlStorage` reaches its shared
+/// state through a `RefCell` that is *tried*, and ADR-0011's ceiling-and-page is
+/// what keeps a cursor off a suspension point. They are the rules that look
+/// hardest here and the first any narrowing would reach for.
+const CLOUDFLARE_WASM_RULES: &[&str] = &[
+    "two_fixture_instances_observe_none_of_each_others_appends",
+    "two_handles_observe_each_others_appends",
+    "acknowledged_writes_survive_a_reopen",
+    "reopened_store_does_not_reissue_an_event_id",
+    "recorded_time_survives_a_reopen",
+    "append_is_atomic_under_a_mid_batch_fault",
+    "arming_a_mid_batch_fault_makes_the_append_fail",
+    "append_reports_exceeded_store_limits",
+    "read_result_is_stable_under_concurrent_append",
+    "a_live_read_stream_does_not_block_an_append",
+];
+
 /// Every conformance target the gate executes on `wasm32-unknown-unknown`.
 ///
 /// Three rows, and the shape is the deliverable. `every-rule-under-workerd`
@@ -574,6 +624,23 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
         source: "crates/happenstance-testkit/tests/projection_conformance_wasm.rs",
         family: &PROJECTION_FAMILY,
         rules: PROJECTION_WASM_RULES,
+    },
+    WasmTarget {
+        // The fourth row, and the first that is not the testkit measuring
+        // itself. Everything above drives a store the testkit ships; this drives
+        // an **adapter**, on the target the two-flavour port design was paid
+        // for, through a `Fixture` the adapter's own author wrote.
+        //
+        // It is the whole of this story's `xtask` delta, which is the contract
+        // `wasm-execution-gate-step` took in its AC-006: a package, a target, the
+        // module its emitter wraps, its family and the rules worth naming. No
+        // second `Step`, no second runner wiring, no second `--target` plumbing.
+        package: "happenstance-cloudflare",
+        target: "durable_object_conformance",
+        module: "dcb_conformance_wasm",
+        source: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs",
+        family: &EVENT_STORE_FAMILY,
+        rules: CLOUDFLARE_WASM_RULES,
     },
 ];
 
@@ -838,13 +905,26 @@ fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
     }
     capable.sort();
 
-    if capable.len() < WASM_TARGETS.len() {
+    // Compared against the rows that live in *this* directory, not against every
+    // row in the registry. The distinction did not exist while every row was the
+    // testkit's own and it became load-bearing the moment an adapter registered
+    // one: this scan reads a single directory by design (`HARNESS_DIR`), so a
+    // Cloudflare row counted here would make the guard fire on a registry that
+    // is exactly right, with a message accusing the scan of reading nowhere.
+    //
+    // The property being guarded is unchanged and is still the important one:
+    // every harness the scan *can* see must be registered, and the scan must be
+    // able to see at least as many as claim to be there.
+    let rows_here = WASM_TARGETS
+        .iter()
+        .filter(|wasm| wasm.source.starts_with(HARNESS_DIR))
+        .count();
+    if capable.len() < rows_here {
         bail!(
             "{HARNESS_DIR} holds {} wasm32-capable harness(es) — {capable:?} — and \
-             {} row(s) are registered. This scan is reading somewhere the rows are \
-             not, so its silence would mean nothing.",
-            capable.len(),
-            WASM_TARGETS.len()
+             {rows_here} row(s) claim to live there. This scan is reading somewhere \
+             the rows are not, so its silence would mean nothing.",
+            capable.len()
         );
     }
 
@@ -2038,6 +2118,68 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The Cloudflare conformance target is mounted by a **row**, and nothing
+    /// else.
+    ///
+    /// `wasm-execution-gate-step` committed in its AC-006 that the next executed
+    /// target arrives by registering a row rather than by writing a second
+    /// execution step, and this is that contract cashed. It is not a restatement
+    /// of the row's own fields for their own sake: what would satisfy every
+    /// *other* check in this file, and fail the contract, is a second `Step` in
+    /// `main.rs`'s `REQUIRED` with `-p happenstance-cloudflare --test
+    /// durable_object_conformance` hard-coded into its `args` — a shape under
+    /// which the registry stays three rows long, `wasm_conformance` keeps
+    /// passing, and the seam has quietly grown a parallel path with its own
+    /// runner wiring to drift.
+    ///
+    /// So the row's identity is asserted here *and* the step count is asserted
+    /// beside it. The `module` in particular is load-bearing: libtest prints
+    /// `<mod_name>::<rule>`, so a row whose `module` disagrees with the target's
+    /// `mod_name` fails every one of the eighty-nine derived expectations at
+    /// once, with a message about missing rules rather than about a typo.
+    #[test]
+    fn the_cloudflare_conformance_target_is_a_row_and_not_a_second_step() {
+        let row = WASM_TARGETS
+            .iter()
+            .find(|wasm| wasm.package == "happenstance-cloudflare")
+            .expect(
+                "the Cloudflare conformance target has no row in WASM_TARGETS, so \
+                 `cargo xtask ci` compiles it and executes nothing — which is the \
+                 exact position this project started in",
+            );
+
+        assert_eq!(
+            row.target, "durable_object_conformance",
+            "the row must name the target `cargo test --test` selects"
+        );
+        assert_eq!(
+            row.module, "dcb_conformance_wasm",
+            "the row's module is the prefix libtest prints in front of every \
+             rule, so it must equal the target's `mod_name`"
+        );
+        assert_eq!(
+            row.family.enumeration, EVENT_STORE_FAMILY.enumeration,
+            "an adapter's store conformance target is held to the event-store \
+             enumeration, exhaustively"
+        );
+        assert_eq!(
+            row.source, "crates/happenstance-cloudflare/tests/durable_object_conformance.rs",
+            "the runner-free guard reads this path; a row pointing anywhere else \
+             would pass on a machine with no runner while proving nothing"
+        );
+
+        let execution_steps = crate::REQUIRED
+            .iter()
+            .filter(|step| step.name.contains("wasm32 run of"))
+            .count();
+        assert_eq!(
+            execution_steps, 1,
+            "registering a target is adding a row, never adding a step. Two \
+             execution steps means two runner wirings, two `--target` plumbings \
+             and two places for the next target to be forgotten."
+        );
     }
 
     /// AC-005. The executed target delegates wholly to its family's enumeration.

@@ -26,9 +26,8 @@ quiet ledger edit.
     having **executed** against `CloudflareFixture` inside a real Durable Object runtime — a per-rule
     pass or a named failure, never a compile line — in the same terminal scroll as the rest of the
     gate.
-  satisfied: false
-  evidence: ""
-  mount_point: "xtask/src/proof.rs — the declared executed-target registry row for happenstance-cloudflare/durable_object_conformance, driven by the named wasm32 execution Step in xtask/src/main.rs's const REQUIRED (:105) inside run_ci (:828) and run_fast (:853)"
+  satisfied: true
+  evidence: "**All 89 event-store rules executed and passed** against a real Durable Object's SQL storage on wasm32-unknown-unknown, in the gate's own step: `cargo run -p xtask -- wasm-conformance` prints `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` and then `test result: ok. 89 passed; 0 failed; 0 ignored`. Per-rule pass lines, not compile lines, in the same terminal scroll as the rest of the gate. The target is crates/happenstance-cloudflare/tests/durable_object_conformance.rs; the row is xtask/src/proof.rs WASM_TARGETS[3]; the driving step is `wasm32 run of the conformance rules` in xtask/src/main.rs's REQUIRED, unchanged."
   verifying_test: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs executed by `cargo xtask ci` (and `cargo xtask ci --fast`, `cargo xtask wasm`)"
 - id: AC-002
   criterion: >-
@@ -40,9 +39,8 @@ quiet ledger edit.
     three lines, `crates/happenstance-cloudflare/` defines no `macro_rules!` taking a rule list, no
     `#[cfg]` sits over any individual rule, and `for_each_event_store_rule!` is still the only
     enumeration in the tree.
-  satisfied: false
-  evidence: ""
-  mount_point: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs — the three-line shipped-macro invocation, registered as a row in xtask/src/proof.rs's executed-target registry"
+  satisfied: true
+  evidence: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs:60-64 is the three-line invocation, `event_store_conformance!(mod_name = dcb_conformance_wasm, emit = happenstance_testkit::__emit_wasm, fixture = CloudflareFixture::new())` — `memory_conformance_wasm.rs` with one expression changed. `rg -n \"macro_rules!\" crates/happenstance-cloudflare/` returns nothing; no `#[cfg]` sits over any individual rule; `for_each_event_store_rule!` is still the only enumeration and `registry::no_orphan_rules` is green. This is mechanical rather than a review promise: `xtask`'s guard derives all 89 names from the enumeration and asserts them out of the target's own `--list` before the run, and `xtask/src/proof.rs::tests::the_executed_wasm_targets_name_no_rule_of_their_own` refuses a target that writes a rule list in its code."
   verifying_test: "crates/happenstance-testkit/src/registry.rs `no_orphan_rules` under `cargo test --workspace --all-features`, plus `rg -n \"macro_rules!\" crates/happenstance-cloudflare/` returning nothing and diff review against crates/happenstance-testkit/tests/memory_conformance_wasm.rs:19-27"
 - id: AC-003
   criterion: >-
@@ -52,9 +50,8 @@ quiet ledger edit.
     executed-target registry in `xtask/src/proof.rs` naming `happenstance-cloudflare` and
     `durable_object_conformance` — no second `Step` in `const REQUIRED`, no second runner-env wiring,
     no second `--target` plumbing — and `cargo xtask wasm` picks it up by name with no further edit.
-  satisfied: false
-  evidence: ""
-  mount_point: "xtask/src/proof.rs — the declared executed-target registry (the ARTEFACTS-shaped list at :133-149), selected by name through wasm_steps() (xtask/src/main.rs:784-791) and steps_named (:816-826)"
+  satisfied: true
+  evidence: "The whole `xtask` conformance delta is one `WasmTarget` row (xtask/src/proof.rs, WASM_TARGETS[3]) naming `happenstance-cloudflare`, `durable_object_conformance`, `dcb_conformance_wasm` and `EVENT_STORE_FAMILY`. `xtask/src/proof.rs::tests::the_cloudflare_conformance_target_is_a_row_and_not_a_second_step` asserts each of those AND counts the steps in `REQUIRED` whose name contains `wasm32 run of`, requiring exactly 1 — so a second `Step` fails the test rather than passing every other check in the file. RED beat: the same test failed with `the Cloudflare conformance target has no row in WASM_TARGETS` before the row existed. `xtask/src/main.rs` is unchanged; `cargo xtask wasm-conformance` picks the row up by name with no further edit. One repair to the seam WAS needed and is reported as a finding — see the implementation report, `unregistered_wasm_harnesses`'s row count."
   verifying_test: "new #[cfg(test)] unit tests in xtask (xtask/src/proof.rs and xtask/src/main.rs) run by `cargo test -p xtask`, plus `cargo xtask wasm` executing the target"
 - id: AC-004
   criterion: >-
@@ -64,9 +61,8 @@ quiet ledger edit.
     hand-written emitter that silently drops three rules, THEN the gate fails before the run, with a
     message naming exactly which expected rules are missing — never exiting 0 on `running 0 tests`
     and never printing green over a suite three rules short.
-  satisfied: false
-  evidence: ""
-  mount_point: "xtask/src/proof.rs — the new registry row's expectation list, derived from happenstance_testkit::__emit_rule_names! (crates/happenstance-testkit/src/registry.rs:290-295) and mod_name-prefixed, asserted out of `cargo test -- --list` before the run (proof.rs:183-240, :292-325)"
+  satisfied: true
+  evidence: "**Both negative controls were performed and both failed before the run.** (A) Target emptied to its attributes: `cargo xtask wasm-conformance-enumeration` → `crates/happenstance-cloudflare/tests/durable_object_conformance.rs no longer invokes the conformance suite; an emptied target exits 0 on `running 0 tests` (looked for `event_store_conformance!`)`, and `cargo xtask wasm-conformance` → `is missing 89 of the 89 rules `for_each_event_store_rule!` declares … Listed: 0 name(s).` (B) Target wrapped in `#![cfg(not(target_arch = \"wasm32\"))]`: same 89-of-89 failure, naming the missing rules. Both were reverted and the guard is green again (`89 rules enumerated, 10 named`). The expectation is DERIVED, not hand-copied: `enumerated_rules(wasm.family)` parses `for_each_event_store_rule!` itself and prefixes with the row's `module`. The transcribed `CLOUDFLARE_WASM_RULES` list is the second, rename-catching half, and `xtask/src/proof.rs::tests::every_named_wasm_rule_is_one_the_enumeration_declares` asserts it is non-empty and wholly contained in the enumeration."
   verifying_test: "`cargo xtask proof-artefact` covering the new row; a #[cfg(test)] unit test in xtask/src/proof.rs asserting the expectation list is non-empty and matches the enumeration (`cargo test -p xtask`); the two negative controls performed by hand and their failure output recorded in the implementation report"
 - id: AC-005
   criterion: >-
@@ -76,9 +72,8 @@ quiet ledger edit.
     "SKIP <rule>: fixture declines `<CAPABILITY>` — <reason>" line is visible in the gate's captured
     output — not swallowed by libtest capture, and not silently discarded by a `println!` on a target
     that has no stdout.
-  satisfied: false
-  evidence: ""
-  mount_point: "the wasm32 execution step's captured output in `cargo xtask ci`, produced by the registry row in xtask/src/proof.rs and routed through RuleOutcome::skip_line (crates/happenstance-testkit/src/contract.rs:500-503) into __emit_wasm's console_log! (crates/happenstance-testkit/src/registry.rs:276-288)"
+  satisfied: true
+  evidence: "The fixture declines two things and the run prints exactly three SKIP lines for them, verbatim from `cargo run -p xtask -- wasm-conformance`: `SKIP arming_a_mid_batch_fault_makes_the_append_fail: fixture declines `MID_BATCH_FAULT` — this Durable Object host can throw on a chosen statement, so the mechanism exists; what has not been settled against an executed conformance run is which statement of this adapter's write path is the k-th row's, and CF-39 requires a fixture claiming the capability to name the mechanism rather than to hope`; the same for `append_is_atomic_under_a_mid_batch_fault`; and `SKIP append_reports_exceeded_store_limits: fixture declines `MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH` — this fixture states no ceiling for any store limit …`. Every one of those rules RAN and reported; none was `#[cfg]`-ed out. The three `REOPEN` rules print no skip at all, because this fixture is the workspace's first to answer that capability SUPPORTED — a fact only visible because the skip channel works. The path is `RuleOutcome::skip_line` → `__emit_wasm`'s `console_log!`, surfaced by the step's `--nocapture`."
   verifying_test: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs run under `cargo xtask ci` with the runner's --nocapture equivalent; the emitted SKIP lines pasted verbatim into the implementation report (or, if the fixture declines nothing, a recorded-and-reverted scratch decline demonstrating the path)"
 - id: AC-006
   criterion: >-
@@ -91,9 +86,8 @@ quiet ledger edit.
     default and `fixtures::strategies`/`model` carry the same target condition because a feature is
     not target-scoped, so it is not in the graph on `wasm32` at all: a documented, reasoned
     non-invocation rather than an unexplained absence.
-  satisfied: false
-  evidence: ""
-  mount_point: "crates/happenstance-cloudflare/src/lib.rs — the crate-level documentation a consumer lands on, rendered by the docs step of `cargo xtask ci`"
+  satisfied: true
+  evidence: "crates/happenstance-cloudflare/src/lib.rs:28-73 — a section headed *Conformance: what has run, and what is deliberately not asked to*, landing where a consumer of the rendered docs lands. It states the concurrency family's non-invocation WITH its reason (`event_store_concurrency_conformance!` binds `F::Store: EventStore + Send`, its module is `#[cfg(not(target_arch = \"wasm32\"))]`, and a `!Send` adapter on a threadless target cannot invoke it and is not expected to) and says what that does and does not cost — a Durable Object is a single-threaded actor with exclusive storage ownership, so there is no second writer for a race, and the event-store family still runs the single-threaded shapes of the same question. The model family's status is in the same section: it is behind the off-by-default `proptest` feature, whose module carries a target condition on top BECAUSE a Cargo feature is not target-scoped, so `proptest` is not in the graph on wasm32 at all. `cargo doc -p happenstance-cloudflare --no-deps` is clean; the same prose is restated at the fixture, crates/happenstance-cloudflare/tests/support/mod.rs:36-59."
   verifying_test: "`cargo xtask ci` docs step and the --no-default-features doc build; review of the paragraph against crates/happenstance-testkit/src/lib.rs:101-110, :168-173, :176-183 and standards/rust/70-rustdoc-obligations.md"
 - id: AC-007
   criterion: >-
@@ -103,9 +97,8 @@ quiet ledger edit.
     `[target.'cfg(target_arch = "wasm32")'.dev-dependencies]` of this crate (because the attribute
     resolves in the caller's scope), `[dependencies]` is untouched, no Cargo feature was invented to
     carry a test harness, and the runtime graph `cargo deny` and `cargo hack` see is unchanged.
-  satisfied: false
-  evidence: ""
-  mount_point: "crates/happenstance-cloudflare/Cargo.toml — the new [target.'cfg(target_arch = \"wasm32\")'.dev-dependencies] block, mirroring crates/happenstance-testkit/Cargo.toml's own"
+  satisfied: true
+  evidence: "`cargo tree -p happenstance-cloudflare -e normal --depth 1` after this slice: `futures-core`, `happenstance-core`, `thiserror`, `worker` — identical to before. `[dependencies]` was not touched, no Cargo feature was invented to carry a harness, and there is no `build.rs`. `wasm-bindgen-test` remains in `[target.'cfg(target_arch = \"wasm32\")'.dev-dependencies]`, mirroring crates/happenstance-testkit/Cargo.toml, because the runtime attribute resolves in the caller's scope. DEVIATION, deliberate and reported: `happenstance-testkit`, `happenstance-core` and `futures-core` are HOST dev-dependencies rather than target-scoped ones (crates/happenstance-cloudflare/Cargo.toml `[dev-dependencies]`), because an integration target is a second compilation unit that does not inherit the library's `[dependencies]`, and because the fixture's declaration-level criteria must be reachable by an ordinary `cargo test` — see the implementation report. All three are existing workspace members or existing workspace dependencies, so `cargo deny`'s licence/advisory surface gains nothing; MSRV is unaffected, since a dev-dependency is invisible to CI's `--no-dev-deps` job and covered by its full `cargo test` at the 1.97.1 floor."
   verifying_test: "the `cargo hack` feature-powerset, `cargo deny` and `package-check` steps of `cargo xtask ci`, plus `cargo tree -p happenstance-cloudflare -e normal` identical before and after"
 - id: AC-008
   criterion: >-
@@ -115,8 +108,7 @@ quiet ledger edit.
     CF-40's discharge; any rule that failed only on `wasm32` is recorded as a named finding with its
     divergence rather than `#[cfg]`-ed away; every standing detector is still green; and nothing
     `[FROZEN]` was amended and nothing was written under `.kb/`.
-  satisfied: false
-  evidence: ""
-  mount_point: ".bklg/from-contract-to-published-library/cloudflare-durable-object-store/every-rule-under-workerd/ — the implementation report and captured gate output HS-S0055 and HS-S0058 consume, produced by the registry row's run in xtask/src/proof.rs"
+  satisfied: true
+  evidence: "The implementation report beside this ledger scopes the run honestly: it names the three ceilings as HS-S0053's DECLARATIONS (all `None`) and states in terms that the green run is **not** CF-40's discharge, with `measured-store-limits` named as where those numbers become facts. **No rule failed on wasm32**, so there is no divergence finding to record — 89 of 89 passed on the first run. Standing detectors green: `cargo test -p happenstance-cloudflare` runs the four `!Send` probes including `the_probe_is_not_vacuous` and `send_shape::send_flavour::SendStoreWithLocalError` still compiles; `cargo test -p happenstance-core` keeps both `read`-shape tests; `cargo run -p xtask -- spec-trace` reports `traceability: no problems found` over 201 clauses and 401 citations; `cargo run -p xtask -- lint-constitution` reports 27 atoms consistent. `git status` shows no `.kb/**` path and no `spec/SPECIFICATION.md` path in this slice. Two `standards/rust/` atoms carry repaired `file:line` citations, reported as a finding rather than absorbed."
   verifying_test: "`cargo xtask spec-trace`; `cargo test -p happenstance-cloudflare` (the four !Send probes incl. the_probe_is_not_vacuous, and send_shape::send_flavour::SendStoreWithLocalError still compiling); `cargo test -p happenstance-core` (both read-shape tests in crates/happenstance-core/src/memory.rs); `git diff --stat` showing no .kb/** and no spec/SPECIFICATION.md path"
 ```

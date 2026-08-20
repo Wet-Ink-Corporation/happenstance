@@ -26,6 +26,37 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **The Cloudflare Durable Object adapter now runs the event-store conformance
+  suite, on `wasm32-unknown-unknown`, inside `cargo xtask ci`.** Every rule
+  `for_each_event_store_rule!` declares is executed against a
+  `CloudflareFixture` over a real Durable Object's SQL storage — not compiled,
+  not asserted in prose, executed, in the same command and the same terminal
+  scroll as the rest of the gate. It is CF-23's third harness
+  (`wasm-bindgen-test`) applied for the first time to an adapter rather than to
+  the testkit's own fixture, and it is the first time any rule has run against
+  the workspace's only `!Send` store on the target the two-flavour port design
+  (ADR-0001) was paid for.
+
+  The harness is three lines of the shipped `event_store_conformance!` macro. It
+  defines no emitter, names no rule and carries no `#[cfg]` over any individual
+  rule, because the one wrong implementation nothing in this tree could grep for
+  is a bespoke emitter that quietly drops the rules a runtime cannot pass:
+  `no_orphan_rules` reads `suite.rs`'s source and never looks at a harness, and
+  `capability_skips_are_reported` runs inside the testkit's own binary. The
+  detector is therefore outside the process — `xtask`'s executed-target registry
+  asserts every enumerated rule out of the target's own `cargo test -- --list`
+  before the run starts, so an emptied, `cfg`-ed-away, renamed or under-emitting
+  target fails with a message naming what is missing rather than exiting 0 on
+  `running 0 tests`.
+
+  The adapter joined by **adding a row** to that registry: no second gate step,
+  no second runner wiring, no second `--target` plumbing. What this run does not
+  claim is stated where a reader lands, in the crate's own documentation: the
+  concurrency family is not invoked, because it binds `Store: Send` and needs
+  threads to spawn, and a `!Send` adapter on a single-threaded target cannot
+  invoke it and is not expected to; the model family is not in the dependency
+  graph on this target at all.
+
 - **`cargo xtask ci` now *executes* the conformance rules on
   `wasm32-unknown-unknown`, rather than compiling harnesses that run
   elsewhere.** Two rows join the gate. `wasm32 run of the conformance rules`
