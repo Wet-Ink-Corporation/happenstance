@@ -685,15 +685,25 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
         // It is *not* a `WASM_TARGETS` row, and the distinction is the one that
         // registry's own documentation draws: every row there is held to a
         // `RuleFamily`'s exhaustive enumeration, and this target runs no
-        // conformance rule. What it runs is the seven assertions about the
-        // fixture that the suite cannot make about itself — isolation between
-        // two instances alive at once, two handles onto one object, the schema
-        // seam running per instance, the store id surviving a second handle, and
-        // the `REOPEN` override actually discarding handle state rather than
-        // events. Every one of them needs a real Durable Object, so every one of
-        // them is `#[wasm_bindgen_test]`, so without this row the gate would
-        // compile them and run none — the exact shape the rest of this file
-        // exists to end.
+        // conformance rule *of the suite's enumeration*. What it runs is the
+        // nine assertions about the fixture that the suite cannot make about
+        // itself — isolation between two instances alive at once, two handles
+        // onto one object, the schema seam running per instance, the store id
+        // surviving a second handle, the `REOPEN` override actually discarding
+        // handle state rather than events, the armed fault being SQLite's rather
+        // than the host shim's, and the one `SKIP` line the gate emits at all.
+        // Every one of them needs a real Durable Object, so every one of them is
+        // `#[wasm_bindgen_test]`, so without this row the gate would compile
+        // them and run none — the exact shape the rest of this file exists to
+        // end.
+        //
+        // The last two do name two shipped rules in their code, and that is not
+        // the subset-list shape `the_executed_wasm_targets_name_no_rule_of_their_own`
+        // rejects: they hand a *declining* fixture to two `require!`-gated rules
+        // to observe the skip line, which is an assertion about reporting rather
+        // than a hand-picked enumeration. The check that forbids naming rules
+        // reads `WASM_TARGETS`, where the conformance target lives, and this row
+        // is deliberately not there.
         //
         // The same target's *other* five cases are plain `#[test]`s about what
         // the fixture declares, and they need no runner at all: an ordinary
@@ -735,6 +745,16 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
     "on_the_object::a_second_handle_does_not_re_mint_the_store_id",
     "on_the_object::a_supported_capability_has_its_method_overridden",
     "on_the_object::the_hosts_arming_hook_fires_once_and_disarms",
+    // The two that carry the claims this crate would otherwise be making on
+    // trust. The first reads the trigger's own `RAISE(ABORT, …)` text back out
+    // of a caller-visible error, which is the only assertion that can tell
+    // CF-39's fault apart from one armed on the JavaScript host — a fault the
+    // double owns rather than the store. The second is the *only* place in the
+    // gate where a `SKIP <rule>: fixture declines …` line is actually produced
+    // and read, because `CloudflareFixture` declines nothing: without it,
+    // project AC-003's "emits" half has no live instance anywhere.
+    "on_the_object::the_armed_fault_is_a_real_trigger_inside_the_store",
+    "on_the_object::a_declined_capability_reaches_the_gate_as_a_skip_line",
 ];
 
 /// The `happenstance-cloudflare` cases worth naming, by the name `--list` prints.

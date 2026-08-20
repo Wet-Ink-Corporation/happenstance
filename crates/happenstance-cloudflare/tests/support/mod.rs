@@ -69,8 +69,19 @@ use core::cell::RefCell;
 use core::future::Future;
 
 use happenstance_cloudflare::host::DurableObjectHost;
-use happenstance_cloudflare::{CloudflareEventStore, SqlStorage};
+use happenstance_cloudflare::{CloudflareEventStore, SqlStorage, SqlValue};
 use happenstance_testkit::{Capability, Fixture};
+
+/// The text the armed trigger raises with.
+///
+/// Spelled once and read back by `fixture_contract`'s control, which is what
+/// makes it evidence rather than decoration: the string exists **only** inside a
+/// SQL trigger body, so a caller-visible error carrying it cannot have come from
+/// anywhere but SQLite, through the adapter's own classifier. A JavaScript shim
+/// that faked the fault could not put this string there without being the thing
+/// that raised it.
+pub(crate) const MID_BATCH_FAULT_TEXT: &str =
+    "happenstance conformance fault: the event row is refused inside the write path";
 
 /// One Durable Object's storage, as the conformance suite's [`Fixture`].
 pub(crate) struct CloudflareFixture {
@@ -182,21 +193,28 @@ impl Fixture for CloudflareFixture {
     /// Restated here rather than inherited, and the restatement is the point.
     ///
     /// The trait's default is written for a store with **no fault to inject**,
-    /// and a Durable Object is not that store: its SQL storage can be made to
-    /// throw on a chosen statement, which is a mechanism the adapter's write
-    /// path cannot absorb. Inheriting the default would therefore put a sentence
-    /// in this run's CI log that is not true of this adapter.
+    /// and a Durable Object is not that store: its SQL storage takes triggers,
+    /// so a row can be made to fail inside the adapter's own `INSERT`, which is
+    /// a mechanism the write path cannot absorb. Inheriting the default would
+    /// therefore put a sentence in this run's CI log that is not true of this
+    /// adapter.
     ///
     /// **Supported**, with the mechanism stated — which CF-39 requires and which
     /// is the whole difference between this and the registered wrong
     /// implementation.
     ///
-    /// **The mechanism:** the Durable Object host is asked to throw a real
-    /// `Error` on the *k*-th statement whose text contains `INSERT INTO event (`
-    /// — the adapter's own per-event insert, and not `INSERT INTO event_tag`,
-    /// which the substring deliberately excludes. The throw is marshalled back
-    /// through `worker`'s real bindings and classified by this crate's own
-    /// classifier; nothing is mocked between the fault and the caller.
+    /// **The mechanism:** a real SQLite trigger on the `event` table —
+    /// `BEFORE INSERT … RAISE(ABORT, …)` behind a countdown the trigger body
+    /// decrements — armed by [`Fixture::arm_mid_batch_fault`] below. It is
+    /// SQLite that refuses the row, inside the statement the adapter itself
+    /// issued, and the refusal travels back through `worker`'s real bindings
+    /// into this crate's own classifier. Nothing is mocked between the fault and
+    /// the caller, and — the part that matters for a claim the conformance suite
+    /// certifies — **nothing about it belongs to the JavaScript host this crate
+    /// ships for its own tests.** Swap that host for `workerd` and the trigger
+    /// is still a trigger; a fault armed on the shim would have evaporated,
+    /// taking this capability's meaning with it. CF-39 names a trigger armed for
+    /// one write as its exemplar for exactly that reason.
     ///
     /// **Why the store cannot absorb it.** A Durable Object rejects transaction
     /// control through `sql.exec()`, so there is no `SAVEPOINT` to roll back to,
@@ -215,6 +233,14 @@ impl Fixture for CloudflareFixture {
     /// is present, empty, and reports a green atomicity result for a store
     /// nothing ever faulted. A seam nobody has watched fail is indistinguishable
     /// from that shape from the outside.
+    ///
+    /// **The standing control is in the tree**, which is the stronger form of
+    /// the same thing: `fixture_contract`'s
+    /// `the_armed_fault_is_a_real_trigger_inside_the_store` reads
+    /// [`MID_BATCH_FAULT_TEXT`] back out of the caller-visible error. That
+    /// string exists only in a SQL trigger body, so an error carrying it came
+    /// from SQLite and from nowhere else — which is the assertion a shim-armed
+    /// fault could never satisfy.
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
     /// 1 MiB, and it is a *stated* ceiling rather than the physical maximum.
@@ -296,22 +322,58 @@ impl Fixture for CloudflareFixture {
     }
 
     fn arm_mid_batch_fault(&self, after: usize) -> impl Future<Output = ()> {
-        // `after` matching statements run, and the next one throws — which is
-        // what makes this a *mid*-batch fault. A fault on the first row leaves
-        // nothing on the ground for the store to have to undo, so the rule it
-        // feeds would be asking about an append that never started.
+        // A real SQLite trigger on the `event` table, and the choice of
+        // mechanism is the whole of this capability's honesty.
         //
-        // The match string ends at `(` on purpose. `INSERT INTO event` alone is
-        // a prefix of `INSERT INTO event_tag`, so it would arm on whichever of
-        // the two came first and the fault would land in the tag pass rather
-        // than between two event rows. The trailing paren is the whole of the
-        // difference, and it is the kind of thing that is silently almost-right.
-        happenstance_cloudflare::host::arm_throw_after(
-            &self.sql.borrow(),
-            "INSERT INTO event (",
-            "SQLITE_FULL: database or disk is full",
-            u32::try_from(after).unwrap_or(u32::MAX),
-        );
+        // The rejected alternative was a hook on the JavaScript host: ask the
+        // shim to throw on the *k*-th statement whose text contains
+        // `INSERT INTO event (`. It works, it is still the shape the crate's own
+        // transport-fault tests use — and it makes the claim a property of the
+        // **double** rather than of the store. Swap this crate's `node:sqlite`
+        // host for `workerd` and that fault evaporates, taking `MID_BATCH_FAULT`
+        // with it and leaving two conformance rules certifying a mechanism that
+        // no longer exists. CF-39's own wording asks for a fault *inside the
+        // store's own write path*, and names a trigger armed for one write as
+        // the exemplar; so that is what this is.
+        //
+        // The countdown, and why the trigger holds it rather than a threshold
+        // computed here: `remaining` is decremented by the trigger body on every
+        // insert, and the `RAISE` fires once it has gone negative — so the fault
+        // lands on the (`after` + 1)-th row of the table, wherever the object's
+        // position counter happens to be, and re-arming is one `DELETE`. A fault
+        // on the *first* row would leave nothing on the ground for the store to
+        // have to undo, and the rule it feeds would be asking about an append
+        // that never started rather than about atomicity.
+        //
+        // `RAISE(ABORT)` and not `FAIL` or `ROLLBACK`: ABORT backs out the
+        // current statement and nothing else, which is exactly the mid-batch
+        // shape — the rows already written stay written, and the store has to
+        // undo them itself or fail the rule.
+        let sql = self.sql.borrow();
+        sql.exec(
+            "CREATE TABLE IF NOT EXISTS mid_batch_fault (remaining INTEGER NOT NULL)",
+            &[],
+        )
+        .expect("the fault counter applies");
+        sql.exec("DELETE FROM mid_batch_fault", &[])
+            .expect("a re-arming clears the previous countdown");
+        sql.exec(
+            "INSERT INTO mid_batch_fault (remaining) VALUES (?)",
+            &[SqlValue::Integer(i64::try_from(after).unwrap_or(i64::MAX))],
+        )
+        .expect("the countdown is set");
+        sql.exec(
+            &format!(
+                "CREATE TRIGGER IF NOT EXISTS mid_batch_fault_fires \
+                 BEFORE INSERT ON event BEGIN \
+                 UPDATE mid_batch_fault SET remaining = remaining - 1; \
+                 SELECT RAISE(ABORT, '{MID_BATCH_FAULT_TEXT}') \
+                 FROM mid_batch_fault WHERE remaining < 0; \
+                 END"
+            ),
+            &[],
+        )
+        .expect("the fault trigger applies");
         core::future::ready(())
     }
 }

@@ -25,6 +25,7 @@
 
 mod support;
 
+use happenstance_cloudflare::CloudflareEventStore;
 use happenstance_testkit::{Capability, Fixture};
 use support::CloudflareFixture;
 
@@ -44,6 +45,122 @@ const INHERITED_MID_BATCH_FAULT_REASON: &str = "this fixture cannot make its sto
 /// A decline is only worth printing if it says why **this** runtime cannot, and
 /// "not supported" satisfies every other check in this repository.
 const RUNTIME_VOCABULARY: &[&str] = &["durable object", "isolate", "storage", "object's", "handle"];
+
+/// A fixture for this adapter that declines every capability it may decline.
+///
+/// It exists because **the guard it feeds had no subject**. `CloudflareFixture`
+/// answers all three capabilities `SUPPORTED`, so `Capability::reason()` returns
+/// `None` for each and a walk over them skips its own body three times and
+/// asserts nothing — a reason-quality check that passes on a fixture with no
+/// reasons, and would go on passing if `Capability::reason` were broken, if the
+/// vocabulary list were emptied, or if the assertion were deleted. Every green
+/// run of it was reporting the *absence* of declines, in the shape of a check
+/// about their content.
+///
+/// So the subject is defined here, in the same target, where it cannot
+/// disappear as the adapter's capabilities improve. It is also what makes
+/// project AC-003's *emits* half a live instance rather than a scratch build:
+/// `a_declined_capability_reaches_the_gate_as_a_skip_line` hands this fixture to
+/// two of the shipped capability-gated rules and reads the `SKIP` line the
+/// runner actually prints.
+///
+/// **Why it may decline `SECOND_HANDLE` safely.** That capability's rule uses
+/// `must!` and *fails* rather than skips on a declined value, so a fixture
+/// declining it must never be handed to the whole suite. This one never is —
+/// it is handed to two named rules, both `require!`-gated — and stating all
+/// three keeps the vocabulary check reading three real reasons rather than two.
+struct DecliningFixture;
+
+impl Fixture for DecliningFixture {
+    /// The same store the real fixture declares, so the trait bounds this type
+    /// has to satisfy are the ones that actually apply to this adapter.
+    type Store = CloudflareEventStore;
+
+    /// Declined in this runtime's words — the bar `every_declined_capability_names_this_runtime` sets.
+    const SECOND_HANDLE: Capability = Capability::declined(
+        "this fixture hands out one binding per Durable Object and never clones \
+         the object's storage, so a second handle onto the same object is not \
+         something it can produce",
+    );
+
+    /// Ditto, and about the isolate rather than about the fixture.
+    const REOPEN: Capability = Capability::declined(
+        "this fixture holds no Durable Object `state` to re-derive a binding \
+         from, so it cannot discard handle state without discarding the object's \
+         storage with it",
+    );
+
+    /// Ditto, and about the write path rather than about the fixture.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "this fixture arms no trigger on the object's `event` table, so there is \
+         nothing to make the k-th row of a batch fail inside the store's own \
+         write path",
+    );
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        // Never reached, and the shape says so rather than returning something
+        // plausible. Every rule this fixture is handed is `require!`-gated on a
+        // capability it declines, and `require!` returns `Skipped` *before* it
+        // calls `open()` — which is the property that lets a declining fixture
+        // exist at all without a store behind it. If this ever runs, the rule it
+        // was handed to is not the gated rule this type was written for.
+        core::future::ready(no_store_to_connect_to())
+    }
+}
+
+/// The body of [`DecliningFixture::connect`], as a diverging call.
+///
+/// Written out here rather than inlined so that `unreachable!` is *called*
+/// rather than *contained*: `core::future::ready(unreachable!(…))` is a warning
+/// (`unreachable_code`, and this workspace gates on `-D warnings`), because the
+/// compiler can see the argument never returns and the call never happens. A
+/// function whose body diverges says the same thing without the constructor
+/// being unreachable at the call site.
+fn no_store_to_connect_to() -> CloudflareEventStore {
+    unreachable!(
+        "`DecliningFixture` is handed only to capability-gated rules, which \
+         return `Skipped` before calling `open()`"
+    )
+}
+
+/// Every capability declared by every fixture in this target, with its owner.
+///
+/// One list, walked by the reason-quality guard, so that adding a fixture or a
+/// capability adds a subject rather than needing a second loop.
+fn declared_capabilities() -> Vec<(&'static str, &'static str, Capability)> {
+    vec![
+        (
+            "CloudflareFixture",
+            "SECOND_HANDLE",
+            <CloudflareFixture as Fixture>::SECOND_HANDLE,
+        ),
+        (
+            "CloudflareFixture",
+            "REOPEN",
+            <CloudflareFixture as Fixture>::REOPEN,
+        ),
+        (
+            "CloudflareFixture",
+            "MID_BATCH_FAULT",
+            <CloudflareFixture as Fixture>::MID_BATCH_FAULT,
+        ),
+        (
+            "DecliningFixture",
+            "SECOND_HANDLE",
+            <DecliningFixture as Fixture>::SECOND_HANDLE,
+        ),
+        (
+            "DecliningFixture",
+            "REOPEN",
+            <DecliningFixture as Fixture>::REOPEN,
+        ),
+        (
+            "DecliningFixture",
+            "MID_BATCH_FAULT",
+            <DecliningFixture as Fixture>::MID_BATCH_FAULT,
+        ),
+    ]
+}
 
 /// Compiled proof that a type is **not** `Send`, with its own positive control.
 ///
@@ -102,24 +219,28 @@ fn the_fixture_store_is_not_send() {
 }
 
 /// AC-005 — every declined capability names why *this runtime* cannot.
+///
+/// # The anti-vacuity control, and why it is not optional
+///
+/// This walk once read `CloudflareFixture` alone. All three of its capabilities
+/// are `SUPPORTED`, `Capability::reason()` answers `None` for a supported one,
+/// and so the loop body never ran: zero assertions, green, on every commit since
+/// the fixture claimed its third capability. A guard whose subject can vanish as
+/// the code improves is a guard that reports the improvement as compliance.
+///
+/// [`DecliningFixture`] is the fix, and the `checked` counter is what stops the
+/// same thing happening again — three subjects are structurally present, so a
+/// count below three means the list, not the fixtures, has been emptied.
 #[test]
 fn every_declined_capability_names_this_runtime() {
-    let declared: [(&str, Capability); 3] = [
-        (
-            "SECOND_HANDLE",
-            <CloudflareFixture as Fixture>::SECOND_HANDLE,
-        ),
-        ("REOPEN", <CloudflareFixture as Fixture>::REOPEN),
-        (
-            "MID_BATCH_FAULT",
-            <CloudflareFixture as Fixture>::MID_BATCH_FAULT,
-        ),
-    ];
+    let mut checked = 0_usize;
 
-    for (name, capability) in declared {
+    for (owner, name, capability) in declared_capabilities() {
+        let name = format!("{owner}::{name}");
         let Some(reason) = capability.reason() else {
             continue;
         };
+        checked += 1;
         assert!(
             !reason.trim().is_empty(),
             "{name} is declined with an empty reason. `Capability::declined` \
@@ -137,6 +258,16 @@ fn every_declined_capability_names_this_runtime() {
              Expected one of {RUNTIME_VOCABULARY:?} to appear in it."
         );
     }
+
+    assert!(
+        checked >= 3,
+        "this guard examined {checked} declined capabilities, and it is written \
+         to have at least three: `DecliningFixture` declares all three of its \
+         capabilities declined precisely so that the reason-quality check has a \
+         subject that cannot disappear when the adapter's own capabilities \
+         improve. Fewer than three means the list this walks was emptied, and a \
+         walk over nothing passes."
+    );
 }
 
 /// AC-006 — `MID_BATCH_FAULT` is answered in this impl, not inherited.
@@ -144,8 +275,31 @@ fn every_declined_capability_names_this_runtime() {
 /// The trait defaults it, and the default was written for a store with no fault
 /// to inject. A Durable Object is not that store, so inheriting the default
 /// would put a sentence in this run's CI log that is not about this adapter.
+///
+/// # Two failures, and only one of them is visible in the constant
+///
+/// A fixture can fail this two ways, and the reason-comparison alone catches
+/// exactly one of them. *Copying* the default's text is visible in the value.
+/// **Inheriting** it is not — inheritance is an omission, so the constant simply
+/// reads `Capability::declined("…the trait's words…")` with nothing in this
+/// impl to point at, and against a `SUPPORTED` declaration the comparison
+/// degenerates to `None != Some(_)` and is true for free. So the source is read
+/// as well, in the same shape `the_three_store_limits_are_stated_here` uses: the
+/// constant has to be *written* in the impl.
 #[test]
 fn mid_batch_fault_is_restated_not_inherited() {
+    const SOURCE: &str = include_str!("support/mod.rs");
+
+    assert!(
+        SOURCE.contains("const MID_BATCH_FAULT"),
+        "`MID_BATCH_FAULT` is not written in `tests/support/mod.rs`, so this \
+         fixture inherited the trait's default — a sentence written for an \
+         in-memory store with no fault to inject, speaking for a Durable \
+         Object in this run's CI log. An inherited constant and a deliberate \
+         one are indistinguishable in the value; only the source tells them \
+         apart."
+    );
+
     let declared = <CloudflareFixture as Fixture>::MID_BATCH_FAULT;
     assert_ne!(
         declared.reason(),
@@ -155,6 +309,26 @@ fn mid_batch_fault_is_restated_not_inherited() {
          store speak for a Durable Object. Restate it in the impl: supported \
          with a real armed seam, or declined in this runtime's own words."
     );
+
+    if declared.is_supported() {
+        assert!(
+            SOURCE.contains("fn arm_mid_batch_fault"),
+            "`MID_BATCH_FAULT` is declared supported and `arm_mid_batch_fault` \
+             is not overridden in this impl, so the trait's provided body — \
+             which panics — is what the suite will reach. The declaration and \
+             the seam have to arrive together."
+        );
+        assert!(
+            SOURCE.contains("RAISE(ABORT"),
+            "`MID_BATCH_FAULT` is declared supported, but the override arms no \
+             fault inside the store's own write path. CF-39 asks for a \
+             mechanism the *store* cannot absorb — a trigger or a constraint on \
+             the `event` table — and a fault armed on the JavaScript host this \
+             crate ships for its own tests is a property of that host rather \
+             than of the store: swap it for `workerd` and the capability's \
+             meaning goes with it."
+        );
+    }
 }
 
 /// AC-007 — the three CF-40 ceilings are written out in this impl.
@@ -302,10 +476,11 @@ mod on_the_object {
     use futures_core::Stream;
     use happenstance_cloudflare::host::{self, DurableObjectHost};
     use happenstance_core::{Event, EventStore, Query, ReadOptions};
-    use happenstance_testkit::Fixture;
-    use wasm_bindgen_test::wasm_bindgen_test;
+    use happenstance_testkit::{Fixture, rules};
+    use wasm_bindgen_test::{console_log, wasm_bindgen_test};
 
-    use super::CloudflareFixture;
+    use super::support::MID_BATCH_FAULT_TEXT;
+    use super::{CloudflareFixture, DecliningFixture};
 
     fn event(event_type: &str) -> Event {
         Event::new(event_type.to_owned(), &b"payload"[..]).expect("a valid event type")
@@ -537,10 +712,13 @@ mod on_the_object {
 
     /// The host's arming hook is a real seam, not a decoration.
     ///
-    /// Not an acceptance criterion of its own — it is the control that makes
-    /// `a_supported_capability_has_its_method_overridden`'s
-    /// `MID_BATCH_FAULT` branch mean something, by showing the same host under
-    /// the same statement failing exactly once and then working.
+    /// It arms a **transport** fault — a throw out of the binding for a
+    /// statement that was itself valid — which is the one class of failure no
+    /// SQL mechanism can express, and which this crate's own classifier tests in
+    /// `src/` depend on. It is *not* how `MID_BATCH_FAULT` is armed; see
+    /// `the_armed_fault_is_a_real_trigger_inside_the_store` below for that, and
+    /// `tests/support/mod.rs` for why the two are deliberately different
+    /// mechanisms.
     #[wasm_bindgen_test]
     fn the_hosts_arming_hook_fires_once_and_disarms() {
         let host = DurableObjectHost::new();
@@ -548,19 +726,121 @@ mod on_the_object {
         sql.exec("CREATE TABLE IF NOT EXISTS probe (v INTEGER)", &[])
             .expect("the schema applies");
 
-        host::arm_throw_after(&sql, "INSERT INTO probe", "armed", 1);
+        host::arm_throw(&sql, "INSERT INTO probe", "armed");
 
         assert!(
-            sql.exec("INSERT INTO probe (v) VALUES (1)", &[]).is_ok(),
-            "the skip count is honoured: the first matching statement runs"
+            sql.exec("INSERT INTO probe (v) VALUES (1)", &[]).is_err(),
+            "the armed statement throws"
         );
         assert!(
-            sql.exec("INSERT INTO probe (v) VALUES (2)", &[]).is_err(),
-            "and the next one throws"
-        );
-        assert!(
-            sql.exec("INSERT INTO probe (v) VALUES (3)", &[]).is_ok(),
+            sql.exec("INSERT INTO probe (v) VALUES (2)", &[]).is_ok(),
             "and the arming disarms as it fires, so one arming is one throw"
         );
+    }
+
+    /// CF-39's fault is SQLite's, and this is the evidence rather than the
+    /// claim.
+    ///
+    /// The whole difficulty with a fixture-armed fault is that a *fixture* can
+    /// arm one two ways, and only one of them is a fact about the store. A hook
+    /// on the JavaScript host this crate ships would produce an identical `Err`
+    /// here while being a property of the double — swap the host for `workerd`
+    /// and the capability's meaning goes with it, and two conformance rules go
+    /// on printing green about a mechanism that no longer exists.
+    ///
+    /// So the assertion is on the *text*.
+    /// [`MID_BATCH_FAULT_TEXT`](super::support::MID_BATCH_FAULT_TEXT) is spelled
+    /// in exactly one place — inside a SQL `RAISE(ABORT, …)` body — so a
+    /// caller-visible error carrying it was raised by SQLite, inside the
+    /// statement the adapter itself issued, and marshalled back through
+    /// `worker`'s real bindings and this crate's classifier. Nothing else in the
+    /// tree can put that string there.
+    ///
+    /// The two accepted rows before it are the other half: they show the
+    /// countdown is a countdown, so the fault lands *mid* batch rather than on
+    /// the first row, which is what makes atomicity a question at all.
+    #[wasm_bindgen_test]
+    async fn the_armed_fault_is_a_real_trigger_inside_the_store() {
+        let fixture = CloudflareFixture::new();
+        let store = fixture.connect().await;
+
+        fixture.arm_mid_batch_fault(2).await;
+
+        store
+            .append(&[event("One")], None)
+            .await
+            .expect("the countdown has not reached the armed row yet");
+        store
+            .append(&[event("Two")], None)
+            .await
+            .expect("nor at the second row");
+
+        let failure = store
+            .append(&[event("Three")], None)
+            .await
+            .expect_err("the third row is refused by the armed trigger");
+        let rendered = format!("{failure:?}");
+        assert!(
+            rendered.contains(MID_BATCH_FAULT_TEXT),
+            "the caller-visible error does not carry the trigger's own \
+             `RAISE(ABORT, …)` text, so whatever refused this row was not the \
+             trigger. That string is spelled once, inside SQL, precisely so \
+             that this assertion cannot be satisfied by a fault armed on the \
+             JavaScript host — which would be a property of the double rather \
+             than of the store. Got: {rendered}"
+        );
+    }
+
+    /// Project AC-003's *emits* half, with a live instance behind it.
+    ///
+    /// The obligation is that a declined capability's stated reason reaches the
+    /// gate reader in the gate's own output — `RuleOutcome::skip_line` through
+    /// `console_log!`, because `println!` writes nowhere on
+    /// `wasm32-unknown-unknown`. Until this test existed the Cloudflare run
+    /// printed **zero** `SKIP` lines, because `CloudflareFixture` declines
+    /// nothing; the path was therefore demonstrable only by declining something
+    /// in a scratch build and reverting, which leaves nothing behind that a
+    /// later change could break.
+    ///
+    /// [`DecliningFixture`](super::DecliningFixture) is what makes it standing
+    /// instead. These are the shipped rules, reached by their real names through
+    /// `happenstance_testkit::rules`, and the line asserted here is the same
+    /// `String` `__emit_wasm` would print — so if the format, the reason
+    /// plumbing or the emitter breaks, this fails rather than a future adapter's
+    /// gate output quietly going blank.
+    #[wasm_bindgen_test]
+    async fn a_declined_capability_reaches_the_gate_as_a_skip_line() {
+        for (rule, outcome) in [
+            (
+                "append_is_atomic_under_a_mid_batch_fault",
+                rules::append_is_atomic_under_a_mid_batch_fault(|| async { DecliningFixture })
+                    .await,
+            ),
+            (
+                "acknowledged_writes_survive_a_reopen",
+                rules::acknowledged_writes_survive_a_reopen(|| async { DecliningFixture }).await,
+            ),
+        ] {
+            let line = outcome.skip_line(rule).expect(
+                "a rule gated on a capability the fixture declines reports a skip, \
+                 and a skip has a line",
+            );
+
+            // The emission itself, through the sink `__emit_wasm` uses. This is
+            // the half a human reads in the gate's own scroll.
+            console_log!("{line}");
+
+            assert!(
+                line.starts_with(&format!("SKIP {rule}: fixture declines `")),
+                "the skip line does not name the rule and the declined \
+                 capability in the shape the gate reader is promised. Got: {line}"
+            );
+            assert!(
+                line.contains("Durable Object") || line.contains("object's"),
+                "the skip line carries a reason that does not name this \
+                 runtime, so the only record of the trade says nothing. Got: \
+                 {line}"
+            );
+        }
     }
 }

@@ -332,6 +332,40 @@ through `CloudflareEventStore::new(sql)`; `SECOND_HANDLE` is `SUPPORTED` and
 every declined capability names this runtime's reason; the four `!Send` probes
 and `send_flavour::SendStoreWithLocalError` still compile and pass.
 
+**The path fence**, written out here rather than left implicit — `redkiln verify
+--grain story` reads the first fenced block of this section:
+
+```
+crates/happenstance-cloudflare/src/host.rs
+crates/happenstance-cloudflare/src/lib.rs
+crates/happenstance-cloudflare/src/js.rs
+crates/happenstance-cloudflare/src/event_store.rs
+crates/happenstance-cloudflare/src/sql_storage.rs
+crates/happenstance-cloudflare/tests/**
+crates/happenstance-cloudflare/Cargo.toml
+Cargo.lock
+xtask/src/proof.rs
+standards/rust/**
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/durable-object-host-and-fixture/**
+```
+
+**Fence amendment — 2026-08-19, slice `durable-object-conformance-run` repair
+pass.** This block did not exist when the story was implemented, and
+`standards/rust/**` is the row that needed saying out loud. `8fa4d06` recorded
+the identical amendment for `HS-S0049..HS-S0052`: those atoms carry `file:line`
+citations pointing *into* `crates/happenstance-cloudflare/src/lib.rs` and now
+also into `crates/happenstance-cloudflare/tests/support/mod.rs`, both of which
+this story creates or rewrites, and `cargo xtask lint-constitution` is a gate
+step. A diff that moves a cited line and leaves the citation stale is red; a diff
+that repairs it was out of bounds. Eight such repairs were made across this
+slice, every one a line-number change with the anchor string untouched.
+
+**What this amendment does not license.** Normative text, and nothing about what
+an atom of the constitution *says* — a citation repair moves `path:LINE` and
+leaves the anchor and the prose byte-identical. It also does not reopen the
+exclusions above: `spec/SPECIFICATION.md`, `.kb/**`, `publish = false` and the
+measured ceilings all remain outside this fence.
+
 ## Behavior and interfaces
 
 | Behavior or contract | Details | Evidence path |

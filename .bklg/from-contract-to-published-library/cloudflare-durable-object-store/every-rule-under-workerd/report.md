@@ -9,19 +9,31 @@ updated: "2026-08-19"
 
 ## Findings Ledger
 
-**Outcome: eight of eight ACs satisfied. Eighty-nine of eighty-nine event-store rules
-executed and passed against a real Durable Object on `wasm32-unknown-unknown`, inside
-`cargo xtask ci`. Nothing blocked, nothing deferred, no rule `#[cfg]`-ed out, no clause
-amended, no `.kb/` write.** One finding against the upstream seam was repaired here rather
-than escalated and is flagged for ratification.
+**Outcome (amended 2026-08-19, slice repair pass): seven of eight ACs satisfied as
+written, and one BLOCKING finding escalated. Eighty-nine of eighty-nine event-store rules
+executed and passed on `wasm32-unknown-unknown` inside `cargo xtask ci`, against a
+`node:sqlite`-backed `DurableObjectState` shim shipped in this crate — real SQLite through
+`worker`'s real bindings, and *not* `workerd`. No rule `#[cfg]`-ed out, no clause amended,
+no `.kb/` write.**
+
+The original outcome line read *eight of eight … against a real Durable Object … nothing
+blocked*, and all three halves of that were wrong in the same way. AC-001's words are
+*inside a real Durable Object runtime*; the runtime under the run is a Node process. The
+escalation this story's own **EC-006** and `project.md:301-308` pre-committed to was not
+raised, and the degradation was absorbed instead. **Project AC-002, project AC-004 and
+initiative DoD 4 are therefore reported OPEN**, pending ADR-0023 either ratifying the
+substitution as an explicit trade or re-planning the slice; the measured cost is in the
+implementation report under *Blocking finding*, which is the input ADR-0023 needs. Two
+findings against upstream seams were repaired here rather than escalated and are flagged
+for ratification below.
 
 | AC | Result | Proved by | Mounted into |
 | --- | --- | --- | --- |
-| AC-001 | satisfied | `cargo run -p xtask -- wasm-conformance` → `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` … `test result: ok. 89 passed; 0 failed` | `xtask/src/proof.rs` `WASM_TARGETS[3]`; driven by the existing `wasm32 run of the conformance rules` step |
+| AC-001 | **satisfied except its words *inside a real Durable Object runtime*** — see the blocking finding | `cargo run -p xtask -- wasm-conformance` → `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` … `test result: ok. 89 passed; 0 failed` | `xtask/src/proof.rs` `WASM_TARGETS[3]`; driven by the existing `wasm32 run of the conformance rules` step |
 | AC-002 | satisfied | `rg -n "macro_rules!" crates/happenstance-cloudflare/` empty; `registry::no_orphan_rules` green; `proof::tests::the_executed_wasm_targets_name_no_rule_of_their_own` | `crates/happenstance-cloudflare/tests/durable_object_conformance.rs:60-64` (three lines) |
 | AC-003 | satisfied | `proof::tests::the_cloudflare_conformance_target_is_a_row_and_not_a_second_step` — row identity **and** `REQUIRED` execution-step count == 1. Red beat: `has no row in WASM_TARGETS` | one row; `xtask/src/main.rs` untouched |
 | AC-004 | satisfied | both negative controls performed and both failed *before* the run (emptied target, `cfg`-ed-away target), output pasted in the implementation report; expectation derived from the enumeration, not hand-copied | `xtask/src/proof.rs` `wasm_enumeration` + `wasm_run` |
-| AC-005 | satisfied | three `SKIP` lines captured verbatim under `--nocapture`, two carrying the fixture's own words about this runtime; the three `REOPEN` rules print **no** skip because they ran | `RuleOutcome::skip_line` → `__emit_wasm`'s `console_log!` |
+| AC-005 | satisfied, **and re-established at slice HEAD** | three `SKIP` lines captured verbatim under `--nocapture` at this story's own HEAD; `measured-store-limits` then made every capability `SUPPORTED`, so the conformance run prints **zero** skips and this AC's fallback (decline one in a scratch build and revert) was left as the only demonstration. The repair pass replaced it with a standing one: a `DecliningFixture` in `tests/fixture_contract.rs` handed to two shipped capability-gated rules, its lines emitted through the same sink and asserted on | `RuleOutcome::skip_line` → `console_log!`, in the `fixture_contract` row the gate already runs |
 | AC-006 | satisfied | `crates/happenstance-cloudflare/src/lib.rs:28-73`; `cargo doc -p happenstance-cloudflare --no-deps` clean | the crate documentation a consumer lands on |
 | AC-007 | satisfied | `cargo tree -p happenstance-cloudflare -e normal --depth 1` identical before and after; `[dependencies]` untouched; no feature invented | `crates/happenstance-cloudflare/Cargo.toml` |
 | AC-008 | satisfied | `spec-trace` `no problems found`; `lint-constitution` 27 atoms consistent; the four `!Send` probes green on both targets; no `.kb/**` or `spec/SPECIFICATION.md` path in the diff | the implementation report's scope paragraph |
@@ -53,6 +65,17 @@ falsifier they were most at risk from. Both passed.
    the guarded property is unchanged. EC-003 says escalate rather than absorb, and the
    judgement call taken here was that leaving the gate red on a *correct* registry serves
    nobody. It is recorded as a defect in HS-S0048's claim, not in this diff.
+
+   **Restated as an open finding (2026-08-19, slice repair pass), because "flagged for
+   ratification" is not the same as "raised".** *Finding against `wasm-execution-gate-step`
+   (HS-S0048): its `unregistered_wasm_harnesses` guard compared a single-directory scan
+   against the whole registry's length, so the first row registered outside
+   `crates/happenstance-testkit/tests/` made the guard fail on a registry that was exactly
+   right. AC-006's "the next target arrives as a row" therefore did not hold as stated.* The
+   local repair stands rather than being reverted — reverting it re-reds the gate for every
+   subsequent story on a correct registry — and it is narrower than EC-003 contemplated,
+   which is why it is written out here as a finding the owning story has to accept or
+   dispute rather than left as a line in a diff.
 2. **Eight `standards/rust/` citations were repointed.** The AC-006 documentation section
    moves every line below it in `src/lib.rs`, and four atoms cite that file by `file:line`.
    `lint-constitution` is a gate step. Only line numbers changed; no normative text, and

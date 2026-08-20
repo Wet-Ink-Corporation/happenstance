@@ -42,30 +42,62 @@ not the same as what a user needed to be told.
   it reported a skip everywhere and certified nothing.
 
   `MID_BATCH_FAULT` is claimed for the first time in the workspace, with the
-  mechanism stated as CF-39 requires: the Durable Object host throws a real
-  `Error` on the *k*-th `INSERT INTO event (` statement, which the adapter cannot
-  absorb — a Durable Object rejects transaction control through `sql.exec()`, so
-  there is no `SAVEPOINT` to roll back to and the adapter undoes the batch itself.
+  mechanism stated as CF-39 requires: a real SQLite trigger on the `event` table
+  — `BEFORE INSERT … RAISE(ABORT, …)` behind a countdown — armed by the fixture,
+  so it is SQLite that refuses the *k*-th row, inside the statement the adapter
+  itself issued. The store cannot absorb it: a Durable Object rejects transaction
+  control through `sql.exec()`, so there is no `SAVEPOINT` to roll back to and
+  the adapter undoes the batch itself.
   `arming_a_mid_batch_fault_makes_the_append_fail` detects a fixture that claims
   the capability with an empty arm, and `append_is_atomic_under_a_mid_batch_fault`
   detects a store that leaves the rows it managed to write behind. The negative
   control was run: with the arm removed, the first goes red naming the
   `NoopFaultFixture` shape.
 
-  The three numbers are measurements rather than guesses, reproducible from
-  `experiments/durable-object-limits/` and deliberately not in the gate. What the
-  gate checks on every run is the promise, in both directions.
+  A trigger rather than a hook on the JavaScript host this crate ships for its
+  own tests, and the difference is the claim's whole content: a host-armed fault
+  is a property of the **double**, and swapping the runtime underneath the
+  adapter would take the capability with it while two rules went on printing
+  green. The standing control is
+  `fixture_contract::the_armed_fault_is_a_real_trigger_inside_the_store`, which
+  reads the trigger's own `RAISE` text back out of the caller-visible error —
+  a string that exists nowhere but in SQL.
+
+  **The three numbers are this adapter's declared refusal policy, not
+  measurements of a physical wall.** No per-value wall was observable on the
+  executing host at 8 MiB of payload, 16,384 tags or 8,192 consecutive inserts,
+  and that host is a Node process rather than `workerd`, so it enforces none of
+  the Durable Object platform's documented caps. Each number is instead seeded
+  from Cloudflare's documented 2 MiB row cap and reduced by this adapter's
+  measured per-row overhead; the failure to locate the wall is recorded as the
+  central finding of `experiments/durable-object-limits/`, which is reproducible
+  and deliberately not in the gate. What the gate checks on every run is the
+  promise CF-40 actually makes — the declared value accepted, one more refused,
+  naming the ceiling it crossed — in both directions.
 
 - **The Cloudflare Durable Object adapter now runs the event-store conformance
   suite, on `wasm32-unknown-unknown`, inside `cargo xtask ci`.** Every rule
   `for_each_event_store_rule!` declares is executed against a
-  `CloudflareFixture` over a real Durable Object's SQL storage — not compiled,
-  not asserted in prose, executed, in the same command and the same terminal
-  scroll as the rest of the gate. It is CF-23's third harness
-  (`wasm-bindgen-test`) applied for the first time to an adapter rather than to
-  the testkit's own fixture, and it is the first time any rule has run against
-  the workspace's only `!Send` store on the target the two-flavour port design
-  (ADR-0001) was paid for.
+  `CloudflareFixture` under `wasm-bindgen-test-runner` — not compiled, not
+  asserted in prose, executed, in the same command and the same terminal scroll
+  as the rest of the gate. It is CF-23's third harness (`wasm-bindgen-test`)
+  applied for the first time to an adapter rather than to the testkit's own
+  fixture, and it is the first time any rule has run against the workspace's only
+  `!Send` store on the target the two-flavour port design (ADR-0001) was paid
+  for.
+
+  **What it runs against, precisely: not `workerd`.** The storage under the
+  adapter is a `DurableObjectState`-shaped shim shipped in this crate, backed by
+  Node's own `node:sqlite` — real SQLite reached through `worker`'s real
+  `wasm-bindgen` externs by the same `state.storage().sql()` a
+  `#[durable_object]` class calls, so what is doubled is the runtime and never
+  the adapter. There is no isolate, no eviction, no hibernation and none of the
+  platform's own storage ceilings. Getting a `workerd`-class runner
+  (`wrangler` / `miniflare` / `vitest-pool-workers`) inside `cargo xtask ci` is
+  an escalated **blocking finding** rather than a degradation this project
+  absorbed, and it is ADR-0023's to settle; until it is, the two provisional
+  answers are the capacity limits above and what a real isolate restart would do
+  to an acknowledged write.
 
   The harness is three lines of the shipped `event_store_conformance!` macro. It
   defines no emitter, names no rule and carries no `#[cfg]` over any individual
@@ -80,8 +112,19 @@ not the same as what a user needed to be told.
   `running 0 tests`.
 
   The adapter joined by **adding a row** to that registry: no second gate step,
-  no second runner wiring, no second `--target` plumbing. What this run does not
-  claim is stated where a reader lands, in the crate's own documentation: the
+  no second runner wiring, no second `--target` plumbing.
+
+  `CloudflareFixture` declines nothing, so this run prints **no** `SKIP` line of
+  its own — which would have left CF-18's reporting path with no live instance
+  anywhere in the gate. `fixture_contract` supplies one: a declining fixture
+  defined beside the real one, handed to two of the shipped capability-gated
+  rules, whose `SKIP <rule>: fixture declines <CAPABILITY> — <reason>` lines are
+  emitted through the same `console_log!` sink `__emit_wasm` uses and asserted
+  on. The same fixture is what makes the reason-quality guard non-vacuous: it
+  had been walking three `SUPPORTED` capabilities and asserting nothing.
+
+  What this run does not claim is stated where a reader lands, in the crate's
+  own documentation: the
   concurrency family is not invoked, because it binds `Store: Send` and needs
   threads to spawn, and a `!Send` adapter on a single-threaded target cannot
   invoke it and is not expected to; the model family is not in the dependency

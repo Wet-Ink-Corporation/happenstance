@@ -1,7 +1,7 @@
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: bound, implemented, and conformant on its own target
+//! # Status: bound, implemented, and running the suite on `wasm32` — not yet under `workerd`
 //!
 //! This crate depends on [`worker`] and talks to a real Durable Object's
 //! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
@@ -21,23 +21,47 @@
 //! by the same `State::storage().sql()` a `#[durable_object]` class calls — and
 //! it is `pub` so that a conformance target, which is a second compilation
 //! unit, can name it. It is a **test-and-example surface** and not a second
-//! public API: the adapter stays a library type any real Durable Object class
-//! can hold, and [`host`]'s own documentation says what that visibility does and
-//! does not promise.
+//! public API: it carries `#[doc(hidden)]`, the adapter stays a library type any
+//! real Durable Object class can hold, and [`host`]'s own documentation says
+//! what that visibility does and does not promise. Every item in it panics on a
+//! real Workers isolate — `process.getBuiltinModule('node:sqlite')` does not
+//! exist there — so whether it travels to a consumer at all is
+//! `publish-ready-crate`'s decision, and hiding it now keeps that a decision
+//! about removing an undocumented item rather than about breaking a published
+//! one.
 //!
-//! # Conformance: what has run, and what is deliberately not asked to
+//! # Conformance: what has run, where, and what is deliberately not asked to
 //!
 //! **The event-store family runs in full, on this target, inside the gate.**
 //! `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is three
 //! lines — `happenstance_testkit::event_store_conformance!` with
 //! `emit = happenstance_testkit::__emit_wasm` and a `CloudflareFixture` — and
 //! `cargo xtask ci` executes it on `wasm32-unknown-unknown` under
-//! `wasm-bindgen-test-runner`, against a real Durable Object's SQL storage. The
-//! rule set is not a claim this file makes: the macro expands
-//! `for_each_event_store_rule!`, which is the one place the list is written, and
-//! `xtask`'s registry asserts every name that enumeration declares out of the
-//! target's own `--list` **before** the run starts. A wasm32-only subset is not
-//! a thing anybody here has to be trusted about.
+//! `wasm-bindgen-test-runner`. The rule set is not a claim this file makes: the
+//! macro expands `for_each_event_store_rule!`, which is the one place the list
+//! is written, and `xtask`'s registry asserts every name that enumeration
+//! declares out of the target's own `--list` **before** the run starts. A
+//! wasm32-only subset is not a thing anybody here has to be trusted about.
+//!
+//! ## What it runs *against*, stated precisely
+//!
+//! A `DurableObjectState`-shaped shim shipped in this crate, backed by Node's
+//! own `node:sqlite` — [`host`], and its documentation is the long form. The
+//! adapter above it is unmodified: `worker::State::from(…)` →
+//! `state.storage().sql()` → `worker::SqlStorage::exec`, with `worker`'s real
+//! `wasm-bindgen` externs in the middle and real SQLite underneath. What is
+//! doubled is the *runtime*, never the adapter.
+//!
+//! **It is not `workerd`.** No `wrangler`, no `miniflare`, no
+//! `vitest-pool-workers`, no isolate, no eviction, no hibernation and none of
+//! the platform's own storage ceilings. Getting a `workerd`-class runner inside
+//! `cargo xtask ci` is an escalated blocking finding this project raised rather
+//! than absorbed, and it is ADR-0023's to settle. Two things therefore remain
+//! provisional and are marked as such where they are stated: the three capacity
+//! limits below, and what a real isolate restart would do to an acknowledged
+//! write. Everything else — every rule of the enumeration, against a `!Send`
+//! store, on `wasm32-unknown-unknown`, in the same terminal scroll as the rest
+//! of the gate — genuinely executed.
 //!
 //! The fixture lives in `tests/support/mod.rs` rather than in `src/`, because
 //! `happenstance-testkit` is a dev-dependency and an `impl Fixture` here would
@@ -68,7 +92,10 @@
 //!
 //! ## The capacity limits this store declares
 //!
-//! VT-21 asks a store to document its actual limit, and these are it. They are
+//! VT-21 asks a store to document its actual limit. What follows is **this
+//! adapter's declared refusal policy, not a measured physical wall** — the
+//! paragraph under the table says exactly what was and was not observed, and
+//! it is the first thing to read here rather than the last. The numbers are
 //! enforced by [`event_store::CloudflareEventStore`]'s own ceiling check
 //! **before any SQL is issued**, which is what lets a refusal name *which*
 //! ceiling was crossed — a refusal classified after the fact from a thrown
@@ -83,15 +110,24 @@
 //!
 //! Each clears its guaranteed minimum by a wide margin — sixteen, sixteen and
 //! eight times respectively — and each is a **stated** ceiling rather than the
-//! physical maximum. That distinction is the honest part: on the executing
-//! runtime no per-value wall is observable at 8 MiB of payload, 16,384 tags or
-//! 8,192 consecutive inserts, so these numbers are this adapter's own refusal
-//! policy, derived as the platform's documented 2 MiB row cap minus this
-//! adapter's own measured overhead. CF-40 asks that a declared value be accepted
-//! and one more refused; it does not ask for the largest value the store could
-//! ever take, and an unstable exact maximum is how a green run becomes a flaky
-//! one. The derivations, the two consecutive identical runs behind them, and the
-//! finding that the wall was never located are in
+//! physical maximum. Read that literally, because the difference is the whole of
+//! what is honest here: **no physical wall was observable on the executing
+//! host** at 8 MiB of payload, 16,384 tags or 8,192 consecutive inserts, and the
+//! host is a Node process rather than `workerd`, so it does not enforce the
+//! Durable Object platform's documented caps at all. The three numbers are
+//! therefore this adapter's **own refusal policy**, seeded from Cloudflare's
+//! documented 2 MiB row cap and reduced by this adapter's measured per-row
+//! overhead. They are not search results, and the experiment's own README
+//! records the failure to locate the wall as its central finding.
+//!
+//! What *was* measured, on this host and reproducibly: the declared value is
+//! accepted and read back byte-for-byte, and one more is refused as
+//! `ExceedsStoreLimit` naming the ceiling it crossed. That is exactly what CF-40
+//! asks a store to guarantee — it does not ask for the largest value the store
+//! could ever take, and an unstable exact maximum is how a green run becomes a
+//! flaky one. Locating the real wall needs a `workerd`-class runner, which is
+//! the escalated blocking finding ADR-0023 owns. The derivations and the two
+//! consecutive identical runs behind them are in
 //! `experiments/durable-object-limits/README.md`.
 //!
 //! ## The model family is not in the graph on this target
@@ -346,6 +382,19 @@ pub mod event_store;
 // whether the host travels to a consumer at all is `publish-ready-crate`'s to
 // decide, and it is a smaller decision for the module being one item rather
 // than a `cfg` maze.
+//
+// `#[doc(hidden)]`, and the attribute is doing real work rather than tidying the
+// docs. `pub` is a **semver promise** as well as a reachability decision, and
+// every item behind this one — the host, `durable_object`, both arming helpers,
+// `statements` — panics on a real Workers isolate, because
+// `process.getBuiltinModule('node:sqlite')` does not exist there. Shipping them
+// as documented public API would promise a consumer something that cannot work
+// where they will run it, and would make `publish-ready-crate`'s question
+// "should this travel at all?" a *breaking change* rather than the removal of an
+// undocumented item. The alternative was a `test-host` Cargo feature; it buys
+// the same thing and costs a `cargo hack` powerset dimension on every run, so it
+// stays available and unspent.
+#[doc(hidden)]
 pub mod host;
 pub mod js;
 mod query_sql;

@@ -5,9 +5,28 @@ created: "2026-08-19"
 updated: "2026-08-19"
 ---
 
-# Implementation Report — The fixture's numeric limits are measurements, not guesses
+# Implementation Report — The fixture's numeric limits are this adapter's declared refusal policy
 
-**All eleven ACs are satisfied, and the observable this story is judged by is an
+> **Amended 2026-08-19, slice repair pass.** Two claims were withdrawn on review
+> and are corrected here rather than footnoted. **The title said
+> *measurements, not guesses*, and the three ceilings are neither**: they are
+> this adapter's own declared refusal policy, seeded from Cloudflare's documented
+> 2 MiB row cap, because no physical wall was observable on the executing host —
+> which the report already said in *The one thing a reviewer must read before the
+> numbers* and the changelog then contradicted. And **CF-39's `MID_BATCH_FAULT`
+> was claimed on a mechanism belonging to the JavaScript host this crate ships
+> for its own tests**, not to the store; the repair pass replaced it with a real
+> SQLite trigger on the `event` table, which is what CF-39 names as its exemplar
+> and what survives a swap of the runtime. **Ten of eleven ACs are satisfied as
+> written; AC-001's *never read off a platform page* is not — 1 MiB is the
+> documented 2 MiB row cap halved and then confirmed accepted, because there is
+> no wall on this host to locate — and AC-002's and AC-003's positioning carries
+> the same seed.** The blocking finding in
+> `../every-rule-under-workerd/implementation-report.md` is the shared cause: no
+> `workerd`-class runner exists inside `cargo xtask ci`, so the platform's real
+> caps are unobservable from here.
+
+**The observable this story is judged by is an
 absence:** the Cloudflare conformance row now prints **no `SKIP` line at all**.
 Before this story it read 89 passed with three skips — `NO_STORE_LIMITS` on
 `append_reports_exceeded_store_limits`, and `MID_BATCH_FAULT` on both
@@ -21,6 +40,12 @@ test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.3
 Three rules that skipped in every fixture in the workspace now run somewhere, and
 this adapter is where. `MID_BATCH_FAULT` is claimed for the **first time
 anywhere** — new coverage for the conformance *suite*, not only for this adapter.
+
+That absence has a cost the repair pass paid: with nothing declined, the gate
+emitted **zero** `SKIP` lines, so CF-18's reporting path — project AC-003's
+*emits* half — had no live instance left anywhere. It is standing again, in
+`tests/fixture_contract.rs`, over a `DecliningFixture` handed to two shipped
+capability-gated rules; see the sibling report's *The skip lines, verbatim*.
 
 ## The one thing a reviewer must read before the numbers
 
@@ -91,7 +116,7 @@ go stale.
 | `crates/happenstance-cloudflare/src/event_store.rs` | `Ceilings::MEASURED` replaces `Ceilings::UNMEASURED` as what `new()` carries, with the derivation of each number on the constant. `UNMEASURED` stays, now `#[cfg(all(test, target_arch = "wasm32"))]`, because it is the base every `with_ceilings` test builds from and inheriting production numbers there would make each of those tests depend on a value it is not about |
 | `crates/happenstance-cloudflare/tests/support/mod.rs` | The three `Option<usize>` constants become `Some(…)`, each with its derivation and the *stated ceiling* caveat; `MID_BATCH_FAULT` flips to `SUPPORTED` with the mechanism stated and an `arm_mid_batch_fault` override |
 | `crates/happenstance-cloudflare/tests/fixture_contract.rs` | Two new host-native cases: `the_three_store_limits_are_measured_not_defaulted` and `no_declared_ceiling_is_below_its_floor` |
-| `crates/happenstance-cloudflare/src/host.rs` | Nothing new — `arm_throw_after` and the shim's `skip` parameter landed in `durable-object-host-and-fixture`, precisely so this story would inherit a working seam and a control test for it |
+| `crates/happenstance-cloudflare/src/host.rs` | Nothing new at the time — `arm_throw_after` and the shim's `skip` parameter landed in `durable-object-host-and-fixture`, precisely so this story would inherit a working seam and a control test for it. **The 2026-08-19 slice repair pass removed both** and rewrote the module docs: CF-39's fault is now a real SQLite trigger armed by the fixture, and the docs state what is still owed to `workerd` and who owns it |
 | `crates/happenstance-cloudflare/src/lib.rs` | VT-21's obligation: a table of the three declared limits, what each is refused as, and the *stated ceiling* finding |
 | `experiments/durable-object-limits/**` | **New.** `Cargo.toml` (outside the workspace, bare `[workspace]`), `tests/boundaries.rs` (M1–M5, two phases), `README.md`, `results/run-1.txt`, `results/run-2.txt` |
 | `CHANGELOG.md` | A CF-29-shaped entry naming the defect each newly-reachable rule detects |

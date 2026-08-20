@@ -12,6 +12,28 @@ updated: "2026-08-19"
 unchanged. Three decisions shaped the diff and each was forced by something the compiler
 or the gate said rather than argued for.
 
+> **Amended 2026-08-19, slice repair pass — two corrections to what this report claimed.**
+>
+> **AC-005's verification went vacuous one story later, and it was this report's shape that
+> let it.** `every_declined_capability_names_this_runtime` walks the fixture's three
+> capabilities and asserts only on the ones that are *declined*; when
+> `measured-store-limits` turned the last decline into a `SUPPORTED`, the loop began
+> skipping its own body three times and the test asserted nothing at all — green, forever,
+> and green as well if `Capability::reason` broke or the vocabulary list emptied. A guard
+> whose subject is the code's current weakness reports the fix as compliance. It now walks
+> a `DecliningFixture` defined in the same target, with a floor assertion on how many
+> subjects it examined, so it cannot go vacuous again.
+>
+> **The host is not a Durable Object runtime, and this report's own words about it were
+> deleted from the code rather than answered.** `src/test_object.rs` carried a paragraph
+> saying it "is not a Durable Object runtime … so it cannot answer *what is
+> MAX_EVENT_DATA_LEN here* or *does an acknowledged write survive a reopen*", deferring
+> both to this story and to `measured-store-limits`. Promoting the module to `pub mod host`
+> dropped that paragraph, and the two questions were then answered *with the same
+> artefact*. The paragraph is restored, expanded and unmissable in `src/host.rs`'s module
+> documentation, and the blocking finding it points at is in
+> `../every-rule-under-workerd/implementation-report.md`.
+
 **The host is a promotion, not a new file.** `src/test_object.rs` already stood up a real
 Durable Object `state` backed by Node's `node:sqlite`, reached through
 `worker::State::from(DurableObjectState)` → `state.storage().sql()` — the production path
@@ -55,7 +77,7 @@ ceilings inherited.
 | AC-002 | `tests/fixture_contract.rs::the_fixture_store_is_not_send` | — passed from the first run, and that is the correct outcome for a standing detector: this criterion is *non-regression*, and its own positive control (`SequencePosition` is `Send`) is what makes the negative half mean anything | unchanged and green, alongside the four `src/lib.rs` probes on both targets |
 | AC-003 | `::on_the_object::two_instances_alive_at_once_observe_none_of_each_others_appends` | `assertion left == right failed` — both instances read both appends, because every instance was handed one shared `DurableObjectHost` | `CloudflareFixture::new` stands up its own object (`tests/support/mod.rs:109`) |
 | AC-004 | `::on_the_object::two_handles_from_one_instance_observe_each_others_appends`, `::migrate_runs_once_per_instance_not_per_connect`, `::a_second_handle_does_not_re_mint_the_store_id` | the migration count came back `3` against a required `1`; the two-handle case failed on events leaking in from the shared object; `SECOND_HANDLE` declined additionally failed `the_fixture_expression_satisfies_the_macro_arm` | `migrate()` moved into `new()`, `SECOND_HANDLE = SUPPORTED`, `connect()` a `SqlStorage` clone |
-| AC-005 | `::every_declined_capability_names_this_runtime` | `SECOND_HANDLE is declined with 'not decided yet', which says *that* this fixture cannot rather than *why this runtime* cannot` | one declined capability, `MID_BATCH_FAULT`, with a reason about this host's throwing statement and CF-39's obligation |
+| AC-005 | `::every_declined_capability_names_this_runtime` | `SECOND_HANDLE is declined with 'not decided yet', which says *that* this fixture cannot rather than *why this runtime* cannot` | one declined capability, `MID_BATCH_FAULT`, with a reason about this host's throwing statement and CF-39's obligation — **and see the amendment above: that subject disappeared one story later, so the guard now walks a `DecliningFixture` in the same target and asserts a floor on how many subjects it saw** |
 | AC-006 | `::mid_batch_fault_is_restated_not_inherited`, `::on_the_object::a_supported_capability_has_its_method_overridden` | `assertion left != right failed`, both sides printing the trait's default sentence verbatim | `MID_BATCH_FAULT` restated; `REOPEN = SUPPORTED` with a `reopen()` override the supported-capability case then exercises |
 | AC-007 | `::the_fixture_expression_satisfies_the_macro_arm`, `::the_three_store_limits_are_stated_here` | ``MAX_EVENT_DATA_LEN is not written in tests/support/mod.rs, so this fixture inherited it from the trait`` | three `const … : Option<usize> = None` written out, each naming `measured-store-limits` as the owner of the value |
 
@@ -96,7 +118,7 @@ settled. The slice digest returned by this run carries the settled SHA as well.
 
 | Path | Shape of the change |
 | --- | --- |
-| `crates/happenstance-cloudflare/src/host.rs` | Renamed from `src/test_object.rs`. New `DurableObjectHost` — the object held so its storage can be bound *again*, which is the reopen seam — plus `arm_throw_after`, and `pub` on `durable_object`, `arm_throw`, `arm_throws`, `statements`. The JS shim's `armThrow` gains a fourth `skip` parameter so a fault can fire on the k-th matching statement rather than the first. Module docs rewritten to state what the visibility does and does not promise |
+| `crates/happenstance-cloudflare/src/host.rs` | Renamed from `src/test_object.rs`. New `DurableObjectHost` — the object held so its storage can be bound *again*, which is the reopen seam — plus `arm_throw_after`, and `pub` on `durable_object`, `arm_throw`, `arm_throws`, `statements`. The JS shim's `armThrow` gains a fourth `skip` parameter so a fault can fire on the k-th matching statement rather than the first. **Both were removed again in the 2026-08-19 slice repair pass**: CF-39's fault is a real SQLite trigger armed by the fixture, so a host-armed *mid-batch* fault had no remaining caller and a capability resting on one would have been a property of the double. Module docs rewritten to state what the visibility does and does not promise |
 | `crates/happenstance-cloudflare/src/lib.rs` | `pub mod host;` replaces `#[cfg(all(test, target_arch = "wasm32"))] mod test_object;`, with the reasoning inline; four `use crate::test_object::…` updated; the crate-level status paragraph corrected to say the host exists and the suite has still not run |
 | `crates/happenstance-cloudflare/src/sql_storage.rs` | `storage_from_durable_object_state` loses its `#[cfg(all(test, …))]`, because a non-test module now calls it |
 | `crates/happenstance-cloudflare/tests/support/mod.rs` | **New.** `CloudflareFixture` and `impl Fixture` — the five constants, `connect()`, the `reopen()` override, and the documented non-invocation of the concurrency and model families |

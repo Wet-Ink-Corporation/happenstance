@@ -97,11 +97,34 @@ The delta is deliberately thin in code and thick in what cannot happen afterward
 crates/happenstance-cloudflare/tests/**
 crates/happenstance-cloudflare/Cargo.toml
 crates/happenstance-cloudflare/src/lib.rs
+crates/happenstance-cloudflare/src/host.rs
 xtask/src/proof.rs
 xtask/src/main.rs
 CHANGELOG.md
+standards/rust/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/every-rule-under-workerd/**
 ```
+
+**Fence amendment — 2026-08-19, slice `durable-object-conformance-run` repair pass.** The
+last two rows were added after implementation, and the reason is the same one `8fa4d06`
+recorded for `HS-S0049..HS-S0052` rather than a new one: `standards/rust/**` carries
+`file:line` citations pointing *into* `crates/happenstance-cloudflare/src/lib.rs`, whose
+heavily documented header this story edits, and `cargo xtask lint-constitution` is a gate
+step. A diff that moves a cited line and leaves the citation stale is red; a diff that
+repairs it was out of bounds. There was no third option, so the fence as first written was
+not satisfiable by a correct implementation. Eight citations moved across the slice
+(`25-what-removes-send-and-sync.md`, `50-dependency-hygiene.md`,
+`52-wasm32-and-target-cfg.md` and `61-compile-time-assertions.md`), and every one is a
+line-number repair with its anchor string unchanged. `src/host.rs` enters through the
+slice-wide repair commit, which is recorded against all three stories of this slice: the
+module's documentation is where *what is still owed to `workerd`, and who owns it* is
+now stated.
+
+**What this amendment does not license.** Normative text, and nothing about the
+constitution's *rules*. A citation repair moves `path:LINE` and leaves the anchor string
+and the surrounding prose byte-identical; changing what an atom **says** is a change to
+the house style, which needs its own pass and its own reviewer. The same holds one level
+out for `spec/SPECIFICATION.md`, which this story still may not touch at all.
 
 ## Behavior and interfaces
 

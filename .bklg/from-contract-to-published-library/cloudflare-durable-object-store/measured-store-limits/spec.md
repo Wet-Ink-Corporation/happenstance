@@ -100,7 +100,39 @@ The implementer **may** also touch the composition-root and wiring files named i
 - **WF-11's memory-ceiling measurement** → `wf-11-memory-ceiling-falsifier` (HS-S0056). It shares this story's measure-don't-guess discipline (`../_decomposition.md:643-647`) and is a different ceiling.
 - **`publish = false`, licences and the README** → `publish-ready-crate` (HS-S0060).
 
-**Merge DoD one-liner.** `cargo xtask affected --base main` is green, and in the gate's own output for this crate's `workerd` conformance run `append_reports_exceeded_store_limits` reports **Ran** rather than a `NO_STORE_LIMITS` skip, with the three guaranteed-minimum rules still green beside it.
+**Merge DoD one-liner.** `cargo xtask affected --base main` is green, and in the gate's own output for this crate's `wasm32` conformance run `append_reports_exceeded_store_limits` reports **Ran** rather than a `NO_STORE_LIMITS` skip, with the three guaranteed-minimum rules still green beside it.
+
+**The path fence**, written out here rather than left implicit — `redkiln verify --grain story` reads the first fenced block of this section:
+
+```
+crates/happenstance-cloudflare/src/event_store.rs
+crates/happenstance-cloudflare/src/lib.rs
+crates/happenstance-cloudflare/src/host.rs
+crates/happenstance-cloudflare/tests/**
+experiments/durable-object-limits/**
+xtask/src/proof.rs
+CHANGELOG.md
+standards/rust/**
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/measured-store-limits/**
+```
+
+**Fence amendment — 2026-08-19, slice `durable-object-conformance-run` repair pass.** This
+block did not exist when the story was implemented, and the last four rows are the reason
+it is being written now rather than a widening of something that was there. `8fa4d06`
+recorded the identical amendment for `HS-S0049..HS-S0052`: `standards/rust/**` carries
+`file:line` citations pointing *into* `crates/happenstance-cloudflare/src/lib.rs`, whose
+header this story edits, and `cargo xtask lint-constitution` is a gate step — so a diff
+that moves a cited line is red unless it also repairs the citation, and repairing it was
+out of bounds. Eight such repairs were made across this slice, every one a line-number
+change with the anchor string untouched. `src/host.rs`, `xtask/src/proof.rs` and
+`CHANGELOG.md` enter through the slice-wide repair commit, which is recorded against all
+three stories of this slice.
+
+**What this amendment does not license.** Normative text, and nothing about what an atom
+of the constitution *says*. A citation repair moves `path:LINE` and leaves the anchor and
+the prose byte-identical. `spec/SPECIFICATION.md` remains **outside** this fence entirely,
+CF-40's and CF-39's `[PROVISIONAL]` markers included — the residual is handed to
+`adr-0023-and-atom-resolutions` exactly as the exclusion list above says.
 
 ## Behavior and interfaces
 

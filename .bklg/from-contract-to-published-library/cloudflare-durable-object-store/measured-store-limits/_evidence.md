@@ -43,9 +43,16 @@ require the declaration to be the physical maximum, and an unstable exact maximu
 is how a green run becomes a flaky one — which is exactly the case
 `measured-store-limits`' own spec anticipated in its clarification 5.
 
-**This is the one thing a `workerd`-class runner would change**, and it is worth
-recording as the standing residual: phase A would then produce real numbers, and
-the declarations would either be confirmed as conservative or moved.
+**This is the one thing a `workerd`-class runner would change**, and it is now an
+**escalated blocking finding** rather than a standing residual — raised with its
+measured cost in `../every-rule-under-workerd/implementation-report.md`, *Blocking
+finding*, on the path `project.md:301-308` and this project's `_decomposition.md`
+option (iii) pre-committed to. Phase A under such a runner would produce real
+numbers, and the declarations would either be confirmed as conservative or moved.
+Until ADR-0023 either ratifies the substitution or re-plans it, the three
+constants are stated everywhere as declared policy and nowhere as measurements —
+`CHANGELOG.md`, `src/lib.rs`, the fixture's own doc comments and this package
+were all corrected to agree on that in the slice repair pass.
 
 ## 3. CF-40's `[PROVISIONAL]` falsifier did **not** fire
 
@@ -64,19 +71,43 @@ This is the **first fixture in the workspace** to claim `MID_BATCH_FAULT`, so
 `append_is_atomic_under_a_mid_batch_fault` have now run for real somewhere — new
 coverage for the *conformance suite*, not only for this adapter.
 
-**The mechanism**, in the terms CF-39 requires a claimant to state: the Durable
-Object host is armed to throw a real `Error` on the *k*-th statement whose text
-contains `INSERT INTO event (` — the adapter's own per-event insert. The trailing
-paren is load-bearing: `INSERT INTO event` alone is a prefix of
-`INSERT INTO event_tag`, so without it the fault lands in the tag pass rather than
-between two event rows.
+**The mechanism**, in the terms CF-39 requires a claimant to state: a real SQLite
+**trigger** on the `event` table, armed by the fixture —
+
+```sql
+CREATE TRIGGER IF NOT EXISTS mid_batch_fault_fires BEFORE INSERT ON event BEGIN
+  UPDATE mid_batch_fault SET remaining = remaining - 1;
+  SELECT RAISE(ABORT, '…') FROM mid_batch_fault WHERE remaining < 0;
+END
+```
+
+— so the *k*-th row of a batch is refused by SQLite, inside the `INSERT` the
+adapter itself issued. `RAISE(ABORT)` and not `FAIL` or `ROLLBACK`: ABORT backs
+out the current statement and nothing else, which is exactly the mid-batch shape
+— the rows already written stay written and the store has to undo them itself.
+
+**Amended 2026-08-19, and the amendment is the finding ADR-0023 should read.**
+The mechanism first claimed here was **not** this. It was a hook on the JavaScript
+host in `src/host.rs`: arm the shim to throw on the *k*-th statement whose text
+contains `INSERT INTO event (`. That produces an identical `Err` and an identical
+green pair of rules — and it is a property of the **double**, not of the store.
+Swap the `node:sqlite` host for `workerd` and the fault evaporates while both
+rules go on printing green about a mechanism that no longer exists, which is the
+`NoopFaultFixture` failure mode arriving by a different door. CF-39's own text
+asks for a fault *inside the store's own write path* and names a trigger armed
+for one write as the exemplar; a trigger is also the only form of it that
+survives the runtime substitution this project has not yet been able to make.
+**The standing control** is
+`fixture_contract::the_armed_fault_is_a_real_trigger_inside_the_store`, which
+reads the trigger's own `RAISE` text back out of the caller-visible error — a
+string spelled nowhere but in SQL, so no host-armed fault can satisfy it.
 
 **Why the store cannot absorb it.** A Durable Object rejects transaction control
 through `sql.exec()`, so there is no `SAVEPOINT`; the turn's implicit transaction
 commits when the handler returns normally, which converting a throw into `Err(…)`
 does. The adapter therefore undoes a failed batch itself by deleting the positions
-it had assigned — and the compensating `DELETE FROM event …` is deliberately not
-matched by the arming substring, so the discard runs.
+it had assigned — and the trigger is `BEFORE INSERT` only, so the compensating
+`DELETE FROM event …` runs unimpeded.
 
 **The negative control was performed.** With the arm removed and the override left
 in place — the registered `NoopFaultFixture` shape —
@@ -158,3 +189,44 @@ defect is in a *fixture's declaration*, which no store can fail, so `CLAUDE.md`'
 rule forbids a suite rule for it and the guard is the adapter-local
 `the_three_store_limits_are_measured_not_defaulted` plus the CF-29-shaped changelog
 entry.
+
+## 9. The blocking finding ADR-0023 must resolve **before** any claim rests on it
+
+Added 2026-08-19, slice repair pass. It is numbered last because it is the newest,
+and it should be read first.
+
+**The finding.** No `workerd`-class runner exists inside `cargo xtask ci`, and one
+cannot be made to at acceptable cost. The measured cost table is in
+`../every-rule-under-workerd/implementation-report.md`, *Blocking finding*; the
+short form is that the in-gate seam is `wasm-bindgen-test-runner` on
+`wasm32-unknown-unknown` with no Node package graph, and a `workerd` runner needs
+a `wrangler.toml`, a Durable Object binding, and a JS harness driving `fetch` into
+the object — which would re-express the rules across an HTTP boundary and
+constitute a **second enumeration**, failing project AC-002 by construction — plus
+a probe-gated step on a binary with no Windows-native story, which project AC-004
+forbids.
+
+**Why it is ADR-0023's and not a residual.** `project.md:301-308` already names
+reconciling `RUNBOOK.md:4267-4268`'s separate-CI-job shape with the initiative's
+same-run requirement as **ADR-0023's first job**, and `_decomposition.md`'s option
+(iii) is *a documented blocking finding* rather than a degradation to absorb. The
+slice absorbed it once and reported the DoD green; that was reversed, and the
+artefacts that carried the overclaim — the crate documentation, the changelog and
+the three stage reports — now say what ran and against what.
+
+**What ADR-0023 owes, in two decisions rather than one.**
+
+1. **Ratify or reject the substitution.** *Is executing every rule against real
+   SQLite through the real `worker` bindings on the real target, under a
+   `node:sqlite`-backed `DurableObjectState` shim, an acceptable stand-in for
+   "under `workerd`" for the purposes of initiative DoD 4?* If yes, say so
+   explicitly, with the cost table as the evidence, and amend the DoD's wording so
+   no future reader has to re-derive the trade. If no, the slice is re-planned
+   around a runner that meets the words.
+2. **Say what stays open either way.** Two answers in this crate are provisional
+   *because* of the substitution and do not become facts by ratifying it: the
+   three capacity ceilings (§1, §2 — declared policy, no wall observable here) and
+   whether an acknowledged write survives a real isolate restart (§5 — this host
+   models a rebind, not a teardown). Both are named in
+   `crates/happenstance-cloudflare/src/host.rs`'s module documentation, which is
+   where a reader of the code lands.

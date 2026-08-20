@@ -7,7 +7,16 @@ updated: "2026-08-19"
 
 # Implementation Report — Every event-store conformance rule executed on the target, in the same gate run
 
-**All eight ACs are satisfied, and the headline is one line of output:**
+> **Amended 2026-08-19, slice repair pass.** This report originally opened *"All eight ACs
+> are satisfied"* and claimed initiative DoD 4 closed. Both sentences were withdrawn on
+> review, and the correction is below rather than in a footnote, because the claim is the
+> thing the story exists to make. **Seven of eight ACs are satisfied as written. AC-001 is
+> satisfied except for its words *inside a real Durable Object runtime*, and project
+> AC-002, project AC-004 and initiative DoD 4 are therefore reported OPEN, not closed** —
+> see *Blocking finding* below. Nothing about the execution changed; what changed is the
+> sentence describing what it executed against.
+
+**The headline is one line of output:**
 
 ```text
 happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown
@@ -15,11 +24,13 @@ happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 name
 test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.18s
 ```
 
-Eighty-nine of eighty-nine, first run, no failure to triage. That is the sentence
-initiative DoD 4 was written for — *the constrained-runtime store passes the suite on its
-own target, executed in the gate rather than asserted in prose* — and it is the first time
-any conformance rule in this workspace has run against a real adapter's `!Send` store on
-`wasm32-unknown-unknown`.
+Eighty-nine of eighty-nine, first run, no failure to triage. It is the first time any
+conformance rule in this workspace has run against a real adapter's `!Send` store on
+`wasm32-unknown-unknown`, executed inside the gate rather than asserted in prose. What it
+executed *against* is a `DurableObjectState`-shaped shim shipped in
+`crates/happenstance-cloudflare/src/host.rs`, backed by Node's own `node:sqlite` and
+reached through `worker`'s real `wasm-bindgen` externs — real SQLite, the production
+adapter path, and **not `workerd`**.
 
 The diff that produced it is deliberately thin: three lines of the shipped macro, one
 registry row, one documentation section, one changelog entry. Everything else is the
@@ -27,13 +38,55 @@ negative space — after this merges there is no bespoke emitter, no `#[cfg]` ov
 individual rule, no wasm-only rule list anywhere in the tree, and no configuration in which
 the Cloudflare target compiles to nothing while the gate prints green.
 
+## Blocking finding — no `workerd`-class runner exists inside `cargo xtask ci`, and one cannot be made to at acceptable cost
+
+Raised as **blocking**, on the escalation path this story's own EC-006 and `project.md`'s
+risk register pre-committed to (`project.md:301-308`, `_decomposition.md:410-422` option
+iii, this spec's EC-006). It is recorded here rather than absorbed, and it is the reason
+the ACs above are reported as they are.
+
+**What was attempted, and what it costs.** The gate's execution seam is
+`wasm-bindgen-test-runner` driving `wasm32-unknown-unknown` — one runner, one target, no
+Node packages, resolved from `Cargo.lock` and installed by `cargo install`. A
+`workerd`-class runner is a different artefact in every dimension that matters here:
+
+| | in-gate today | `workerd`-class |
+| --- | --- | --- |
+| Toolchain | `wasm-bindgen-cli`, pinned by `Cargo.lock` | Node + `npm`/`pnpm` lockfile + `wrangler`/`miniflare`/`vitest-pool-workers`, versioned by nothing this repository owns |
+| Target | `wasm32-unknown-unknown` | `wasm32-unknown-unknown` **plus** a `worker` entrypoint, a `wrangler.toml`, a Durable Object binding and a migration tag |
+| Harness | `#[wasm_bindgen_test]`, the rules unchanged | a JS test file driving a `fetch` into the object; the rules would have to be re-expressed across an HTTP boundary or an RPC shim, which is a **second enumeration** and fails project AC-002 by construction |
+| Gate shape | one mandatory step on three runner OSes | probe-gated at best — `workerd` is an external binary with no Windows-native story, and `xtask/src/main.rs:197-202` is explicit that a constraint whose only check is skippable is unguarded on every machine that lacks the tool |
+
+The runbook's own proposal (`RUNBOOK.md:4267-4268`) is `vitest-pool-workers` **in its own
+CI job**, which is precisely the artefact AC-07/DoD 4 rejects: not the same run, not the
+same scroll, not reachable by the command a contributor types.
+
+**What this story did instead, and why it is not the same thing.** It executed every rule
+against real SQLite through the real `worker` bindings on the real target. That is a
+strictly stronger result than the `cargo check` this project started from, and strictly
+weaker than the AC's words. The substitution is a **trade**, and a trade has to be ratified
+before it is claimed:
+
+- **Owner.** `adr-0023-and-atom-resolutions` (HS-S0058). `project.md:301-308` already
+  names reconciling the runbook's separate-job shape with the initiative's same-run
+  requirement as **ADR-0023's first job**; this finding is the input to that.
+- **Until then.** Project AC-002 (*every rule runs and passes*) is satisfied on
+  `wasm32-unknown-unknown` and **not** under `workerd`; project AC-004 (*inside the gate,
+  not beside it*) is satisfied for the step and **not** for the runtime; initiative DoD 4
+  is **open**. No artefact in the tree may say otherwise, and
+  `crates/happenstance-cloudflare/src/host.rs` and `src/lib.rs` now carry the sentence
+  naming what is owed and who owns it — restored after an earlier pass deleted it.
+- **What would close it.** Either ADR-0023 ratifies the substitution explicitly, with this
+  cost table as its evidence, or the slice is re-planned around a runner that meets the
+  AC's words.
+
 ## TDD Evidence
 
 | AC | Test | Red | Green |
 | --- | --- | --- | --- |
 | AC-003 | `xtask/src/proof.rs::tests::the_cloudflare_conformance_target_is_a_row_and_not_a_second_step` | `the Cloudflare conformance target has no row in WASM_TARGETS, so cargo xtask ci compiles it and executes nothing — which is the exact position this project started in` | the row added; the test also counts `REQUIRED` steps matching `wasm32 run of` and requires exactly 1, so the "second Step with hard-coded args" shape fails rather than passing |
 | AC-004 | the two negative controls, plus `::every_named_wasm_rule_is_one_the_enumeration_declares` | both controls performed against a *working* target and both failed before the run — output below | controls reverted; `89 rules enumerated, 10 named` |
-| AC-001, AC-005 | `dcb_conformance_wasm::*` under `cargo run -p xtask -- wasm-conformance` | with no registry row the target compiled and executed nowhere — the failure this whole seam exists to end, and the one that leaves no output at all | 89 passed, three SKIP lines visible |
+| AC-001, AC-005 | `dcb_conformance_wasm::*` under `cargo run -p xtask -- wasm-conformance` | with no registry row the target compiled and executed nowhere — the failure this whole seam exists to end, and the one that leaves no output at all | 89 passed, three SKIP lines visible **at this story's own HEAD**; zero at slice HEAD once `measured-store-limits` had declared all three ceilings and `MID_BATCH_FAULT` — see *The skip lines, verbatim* below for where the live instance moved to |
 | AC-002 | `rg -n "macro_rules!" crates/happenstance-cloudflare/` (empty); `registry::no_orphan_rules`; `::the_executed_wasm_targets_name_no_rule_of_their_own` | — structural, and the point is that it is *mechanical* rather than reviewed: the `--list` derivation is what makes a subset impossible, not a promise in this report | green |
 | AC-006 | `cargo doc -p happenstance-cloudflare --no-deps` + review | — | the section landed at `src/lib.rs:28-73` |
 | AC-007 | `cargo tree -p happenstance-cloudflare -e normal --depth 1` | — | identical before and after: `futures-core`, `happenstance-core`, `thiserror`, `worker` |
@@ -87,6 +140,33 @@ reporting a fact about itself rather than declining to co-operate
 
 The first two are the fixture's own words about *this* runtime. The third is the testkit's
 `NO_CEILING_REASON`, and it is exactly the line `measured-store-limits` exists to delete.
+
+**Amended 2026-08-19 — and `measured-store-limits` deleted all three.** At *slice* HEAD
+`CloudflareFixture` declines nothing, so the conformance run prints **zero** `SKIP` lines
+and the lines above are history rather than current gate output. That left project AC-003's
+*emits* half and project DoD 2 with no live instance anywhere: the reporting path was
+demonstrable only by declining something in a scratch build and reverting, which leaves
+nothing a later change can break. This spec's AC-005 named that fallback and it is not
+good enough on its own.
+
+The repair pass made it standing instead. `tests/fixture_contract.rs` now defines a
+`DecliningFixture` beside the real one and hands it to two of the **shipped**
+capability-gated rules, in the same wasm32 target the gate already executes; the lines it
+prints through the same `console_log!` sink `__emit_wasm` uses are asserted on, so the
+format, the reason plumbing and the emitter all have something that fails when they break:
+
+```text
+SKIP append_is_atomic_under_a_mid_batch_fault: fixture declines `MID_BATCH_FAULT` — this
+fixture arms no trigger on the object's `event` table, so there is nothing to make the k-th
+row of a batch fail inside the store's own write path
+SKIP acknowledged_writes_survive_a_reopen: fixture declines `REOPEN` — this fixture holds
+no Durable Object `state` to re-derive a binding from, so it cannot discard handle state
+without discarding the object's storage with it
+```
+
+Captured from `cargo test -p happenstance-cloudflare --target wasm32-unknown-unknown
+--test fixture_contract -- --nocapture`, which is the row `xtask`'s `WASM_UNIT_TARGETS`
+already drives inside the gate.
 
 ## Commits
 

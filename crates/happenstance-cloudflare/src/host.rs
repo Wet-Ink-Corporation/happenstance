@@ -36,14 +36,44 @@
 //! which is the honest shape — a fixture that cannot connect is a broken test
 //! environment, and it says so by panicking rather than by not existing.
 //!
-//! # What it is *not*, and who owns the difference
+//! # What it is *not*, what is still owed, and who owns the difference
 //!
-//! It is not the whole Durable Object runtime. There is no eviction, no
-//! hibernation, no event loop re-entering the object mid-`await`, and no
-//! platform storage ceiling of its own. What it **does** model, because the
-//! conformance suite needs both and both are properties of the *object* rather
-//! than of the isolate, is a **reopen** — see [`DurableObjectHost::storage`] —
-//! and a **fault armed for one statement** — see [`arm_throw_after`].
+//! **It is not a Durable Object runtime, and nothing in this crate may be read
+//! as saying it is.** It is a Node process holding real SQLite behind the
+//! `DurableObjectState` shape. `workerd` is nowhere in it: no isolate, no
+//! eviction, no hibernation, no I/O gate, no event loop re-entering the object
+//! mid-`await`, and none of the platform's own storage ceilings. What it
+//! **does** model, because the conformance suite needs it and it is a property
+//! of the *object* rather than of the isolate, is a **reopen** — see
+//! [`DurableObjectHost::storage`].
+//!
+//! Two questions therefore still have *provisional* answers here, and they are
+//! named rather than left for a reader to discover:
+//!
+//! * **What this store's limits physically are.** No per-value wall is
+//!   observable on this host at 8 MiB of payload, 16,384 tags or 8,192
+//!   consecutive inserts, so the three ceilings the conformance fixture declares
+//!   are this adapter's own **refusal policy**, seeded from Cloudflare's
+//!   documented 2 MiB row cap — not a search result. `crate`'s own
+//!   documentation says so where a consumer lands, and
+//!   `experiments/durable-object-limits/README.md` records the finding.
+//! * **Whether an acknowledged write survives a real isolate restart.**
+//!   [`DurableObjectHost::storage`] re-derives a binding off the same `state`,
+//!   which is exactly what `Fixture::REOPEN` names and no more: process-level
+//!   handle state is discarded and the durable rows are not. Tearing the isolate
+//!   down and standing it back up is the stronger operation, and this host
+//!   cannot perform it.
+//!
+//! **Who owns the difference.** A `workerd`-class runner — `wrangler`,
+//! `miniflare` or `vitest-pool-workers` — inside `cargo xtask ci` is an
+//! escalated **blocking finding**, recorded with its measured cost against
+//! `every-rule-under-workerd` and `measured-store-limits` in this repository's
+//! backlog, and it is ADR-0023's to settle (`project.md` names reconciling the
+//! runbook's separate-CI-job shape with the initiative's same-run requirement as
+//! that ADR's first job). Until it is settled, the honest sentence about this
+//! crate's conformance run is the one the crate root states: every rule executes
+//! on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a
+//! `node:sqlite`-backed shim shipped here, and **not** under `workerd`.
 //!
 //! # Why `js_sys::eval` rather than a `#[wasm_bindgen]` snippet
 //!
@@ -131,27 +161,26 @@ const DURABLE_OBJECT_STATE: &str = r"
   const sql = {
     get databaseSize() { return scalar('PRAGMA page_count') * scalar('PRAGMA page_size'); },
     // Arms throws on the next `times` statements whose text contains `match`,
-    // defaulting to exactly one. It is how a test constructs the thrown value a
-    // Durable Object's SQLite would produce and then delivers it down the
-    // *production* path — through `worker`'s real bindings and this crate's
-    // real classifier — without needing a `workerd` runner or a race to lose.
+    // defaulting to exactly one. It is how a *transport* fault is constructed —
+    // a throw the store never issued valid SQL for, which no SQL mechanism can
+    // express — and then delivered down the production path, through `worker`'s
+    // real bindings and this crate's real classifier.
     //
     // The count exists because one failure is not the only reachable shape: a
     // storage ceiling that fails an `INSERT` fails the compensating `DELETE`
     // beside it, and that pair is what `CloudflareEventStoreError::PartialBatch`
     // reports. A single-shot arming can never construct it.
     //
-    // `skip` is the fourth parameter and the one CF-39 needs: a mid-batch fault
-    // is a fault on the *k*-th write of a batch, not on the first, and a batch
-    // whose very first row never lands is not a partial write anybody has to
-    // undo. Skipping `skip` matching statements and then throwing is what puts
-    // rows on the ground before the fault arrives.
-    armThrow(match, message, times, skip) {
+    // What this hook is deliberately **not** used for is CF-39's mid-batch
+    // fault. That one is a real SQLite trigger on the `event` table, armed by
+    // the conformance fixture — see `tests/support/mod.rs` — because a fault
+    // that lives in this shim would evaporate the moment the runtime under the
+    // adapter is swapped for `workerd`, taking the capability claim with it.
+    armThrow(match, message, times) {
       armed = {
         match,
         message,
         left: times === undefined ? 1 : Number(times),
-        skip: skip === undefined ? 0 : Number(skip),
       };
     },
     // Every statement the adapter issued, in order. Read by
@@ -162,14 +191,10 @@ const DURABLE_OBJECT_STATE: &str = r"
     exec(query, ...bindings) {
       issued.push(query);
       if (armed !== null && query.includes(armed.match)) {
-        if (armed.skip > 0) {
-          armed.skip -= 1;
-        } else {
-          const message = armed.message;
-          armed.left -= 1;
-          if (armed.left <= 0) { armed = null; }
-          throw new Error(message);
-        }
+        const message = armed.message;
+        armed.left -= 1;
+        if (armed.left <= 0) { armed = null; }
+        throw new Error(message);
       }
       let statement;
       try {
@@ -290,12 +315,23 @@ pub fn durable_object() -> SqlStorage {
 
 /// Arms one throw, on the next statement whose text contains `matching`.
 ///
-/// This is how a test *constructs* a thrown value — `new Error(message)`, the
-/// shape a Durable Object's SQLite produces — and then delivers it down the
-/// production path: through `worker`'s real `wasm-bindgen` externs, into
+/// This is how a test *constructs* a **transport** fault — `new Error(message)`
+/// thrown out of the binding for a statement the store issued perfectly well —
+/// and then delivers it down the production path: through `worker`'s real
+/// `wasm-bindgen` externs, into
 /// [`SqlError::from_worker`](crate::sql_storage::SqlError), and out through this
 /// crate's own classification. Nothing is mocked between the throw and the
-/// caller, and no `workerd` runner is needed to observe it.
+/// caller.
+///
+/// **It is not how CF-39's mid-batch fault is armed**, and the difference is
+/// load-bearing rather than stylistic. A capability the conformance suite
+/// certifies must rest on a mechanism that belongs to the *store*, not to the
+/// host this crate ships for its own tests: the fixture arms that one with a
+/// real SQLite trigger on the `event` table, which survives a swap of the
+/// runtime underneath it. What is left here is the class of fault SQL cannot
+/// express at all — a binding that throws where the statement was valid — which
+/// is exactly what this crate's classifier tests need and nothing else can
+/// produce.
 ///
 /// One arming is one throw: it disarms as it fires, so the statement that
 /// follows behaves normally and a test can show the same store both failing and
@@ -306,7 +342,7 @@ pub fn durable_object() -> SqlStorage {
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
 pub fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
-    arm(sql, matching, message, 1, 0);
+    arm(sql, matching, message, 1);
 }
 
 /// Arms `times` consecutive throws on statements whose text contains `matching`.
@@ -322,38 +358,17 @@ pub fn arm_throw(sql: &SqlStorage, matching: &str, message: &str) {
 /// If the handle is not one of this module's shims, which means the caller built
 /// the storage some other way.
 pub fn arm_throws(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
-    arm(sql, matching, message, times, 0);
-}
-
-/// Arms one throw on the statement **after** `skip` matching ones have run.
-///
-/// The generalisation CF-39 needs, and it is not a nicety. A fixture's
-/// `arm_mid_batch_fault` asks for the *k*-th write of a batch to fail, and a
-/// fault that fires on the first write leaves no rows on the ground for the
-/// store to have to undo — so the rule it feeds would be asking about an append
-/// that never started rather than about atomicity. Arming after two of the
-/// adapter's own `INSERT INTO event (` statements is what makes
-/// `append_is_atomic_under_a_mid_batch_fault` a real question.
-///
-/// The thrown value is a real `new Error(message)` marshalled back through
-/// `worker`'s own bindings, so the store classifies it exactly as it classifies
-/// a Durable Object's SQLite refusing a statement: nothing is mocked between the
-/// throw and the caller.
-///
-/// # Panics
-///
-/// If the handle is not one of this module's shims, which means the caller built
-/// the storage some other way.
-pub fn arm_throw_after(sql: &SqlStorage, matching: &str, message: &str, skip: u32) {
-    arm(sql, matching, message, 1, skip);
+    arm(sql, matching, message, times);
 }
 
 /// The one call every arming above goes through.
 ///
-/// `Function::apply` over a four-element array rather than `call3`, because the
-/// shim's hook takes four arguments and `js_sys`'s positional helpers stop at
-/// three.
-fn arm(sql: &SqlStorage, matching: &str, message: &str, times: u32, skip: u32) {
+/// `call3` rather than `Function::apply` over an array: the shim's hook takes
+/// three arguments, which is exactly where `js_sys`'s positional helpers stop.
+/// The fourth parameter this once carried — *skip k matching statements, then
+/// throw* — went with the mechanism it existed for, when CF-39's mid-batch fault
+/// moved out of this shim and into a real SQLite trigger the fixture arms.
+fn arm(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
     let hook = sql
         .handle()
         .property("armThrow")
@@ -364,14 +379,13 @@ fn arm(sql: &SqlStorage, matching: &str, message: &str, times: u32, skip: u32) {
         .clone()
         .dyn_into()
         .expect("the arming hook is a function");
-    let arguments = js_sys::Array::of4(
+    hook.call3(
+        sql.handle().as_js(),
         &JsValue::from_str(matching),
         &JsValue::from_str(message),
         &JsValue::from_f64(f64::from(times)),
-        &JsValue::from_f64(f64::from(skip)),
-    );
-    hook.apply(sql.handle().as_js(), &arguments)
-        .expect("arming a throw does not itself throw");
+    )
+    .expect("arming a throw does not itself throw");
 }
 
 /// Every statement this object has been asked to run, oldest first.

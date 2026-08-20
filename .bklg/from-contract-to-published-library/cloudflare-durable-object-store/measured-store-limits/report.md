@@ -5,26 +5,42 @@ created: "2026-08-19"
 updated: "2026-08-19"
 ---
 
-# Report — The fixture's numeric limits are measurements, not guesses
+# Report — The fixture's numeric limits are this adapter's declared refusal policy
 
 ## Findings Ledger
 
-**Outcome: eleven of eleven ACs satisfied. The Cloudflare conformance row now
-prints zero `SKIP` lines — 89 of 89 rules Ran and passed. Nothing blocked,
-nothing deferred, no conformance rule or mutant added, no clause amended, no
-`.kb/` write.** One finding about the limits of the measurement itself is flagged
-for ratification, and it is the most important sentence in this report.
+**Outcome (amended 2026-08-19, slice repair pass): ten of eleven ACs satisfied as
+written. The Cloudflare conformance row runs 89 of 89 rules and passes. No
+conformance rule or mutant added, no clause amended, no `.kb/` write.**
+
+Two corrections, and both are about what a claim means rather than about what ran.
+**This report's title said *measurements, not guesses*; the three ceilings are
+neither.** They are this adapter's declared refusal policy, seeded from
+Cloudflare's documented 2 MiB row cap, because no physical wall was observable on
+the executing host — which *The finding that matters most* below already said, and
+which `CHANGELOG.md` then contradicted in the sentence a consumer actually reads.
+**AC-001's wording is therefore not satisfied as written** — it asks for an `N`
+*located by driving this adapter's own `append` against a real Durable Object,
+never read off a platform page*, and 1 MiB is the platform's documented 2 MiB row
+cap halved, then confirmed accepted. AC-002's and AC-003's positioning carries the
+same seed. The shared cause is the blocking finding escalated in
+`../every-rule-under-workerd/implementation-report.md`: no `workerd`-class runner
+exists inside `cargo xtask ci`, so the platform's caps are unobservable from here.
+**Second, CF-39's mechanism was replaced.** It was armed on the JavaScript host
+this crate ships for its own tests, which makes the capability a property of the
+double; it is now a real SQLite trigger on the `event` table, which is CF-39's own
+exemplar and survives a swap of the runtime.
 
 | AC | Result | Proved by | Mounted into |
 | --- | --- | --- | --- |
-| AC-001 | satisfied | `dcb_conformance_wasm::append_reports_exceeded_store_limits` (payload arm) executing in the gate; probe M2B: 1,048,576 accepted and read back, 1,048,577 refused as `ExceedsStoreLimit(EventDataLen)` | `tests/support/mod.rs:247`; enforced at `src/event_store.rs:228`/`:292`/`:418` |
+| AC-001 | **satisfied except *never read off a platform page*** — 1 MiB is the documented 2 MiB row cap halved and then confirmed accepted, because no wall exists on this host to locate; see the outcome above | `dcb_conformance_wasm::append_reports_exceeded_store_limits` (payload arm) executing in the gate; probe M2B: 1,048,576 accepted and read back, 1,048,577 refused as `ExceedsStoreLimit(EventDataLen)` | `tests/support/mod.rs:247`; enforced at `src/event_store.rs:228`/`:292`/`:418` |
 | AC-002 | satisfied | same rule, tag arm; probe M3B: 1,024 tags → 1,024 `event_tag` rows, 139,264 bytes; 1,025 refused as `ExceedsStoreLimit(TagsPerEvent)` | `tests/support/mod.rs:258` |
 | AC-003 | satisfied | same rule, batch arm; probe M4B: 2,055 statements for 1,024 events; 1,025 refused as `ExceedsStoreLimit(EventsPerBatch)` | `tests/support/mod.rs:270` |
-| AC-004 | satisfied | **the absence**: no `NO_STORE_LIMITS` line anywhere in the row's output; `tests/fixture_contract.rs::the_three_store_limits_are_measured_not_defaulted`. Red beat: it failed naming `MAX_EVENT_DATA_LEN` | the three constants |
+| AC-004 | **satisfied except its *measured* wording** — the three constants are declared policy, not search results; see the outcome above | **the absence**: no `NO_STORE_LIMITS` line anywhere in the row's output; `tests/fixture_contract.rs::the_three_store_limits_are_measured_not_defaulted`. Red beat: it failed naming `MAX_EVENT_DATA_LEN` | the three constants |
 | AC-005 | satisfied | `::no_declared_ceiling_is_below_its_floor` (16×, 16×, 8×); the three guaranteed-minimum rules green in the same run. No sub-floor measurement occurred | the three constants |
 | AC-006 | satisfied | `experiments/durable-object-limits/` — README, `tests/boundaries.rs`, `results/run-1.txt` and `run-2.txt` byte-identical; outside the workspace by a bare `[workspace]` table, so never in the gate | the experiment directory |
 | AC-007 | satisfied | probe M5: a 2 MiB row accepted on a fresh object **and** on one holding a megabyte, so the boundary is a constant. CF-40's falsifier tested and **not** fired | `_evidence.md` §3 |
-| AC-008 | satisfied | `MID_BATCH_FAULT = SUPPORTED` with the mechanism stated; both fault rules Ran and passed; **negative control performed** — arm removed, rule went red naming the `NoopFaultFixture` shape, then restored | `tests/support/mod.rs:218`, `:298` |
+| AC-008 | satisfied, **on a corrected mechanism** | `MID_BATCH_FAULT = SUPPORTED` with the mechanism stated; both fault rules Ran and passed; **negative control performed** — arm removed, rule went red naming the `NoopFaultFixture` shape, then restored. The mechanism is now a real `BEFORE INSERT … RAISE(ABORT, …)` trigger on the `event` table, not a hook on the JavaScript host; the standing control `fixture_contract::the_armed_fault_is_a_real_trigger_inside_the_store` reads the trigger's own text back out of the caller-visible error | `tests/support/mod.rs`, `impl Fixture` — `MID_BATCH_FAULT` and `arm_mid_batch_fault` |
 | AC-009 | satisfied | `REOPEN` confirmed, not overturned: all three reopen rules Ran and passed, the first time any has executed anywhere | `tests/support/mod.rs:180`, `:281` |
 | AC-010 | satisfied | CF-29-shaped `CHANGELOG.md` entry (`lint-changelog` green); the VT-21 limits table in `src/lib.rs`; `cargo doc` clean | `CHANGELOG.md`, `src/lib.rs` |
 | AC-011 | satisfied | `_evidence.md` §1–§8, including the CF-40 ownership finding and the coordination check; `git status` shows no `.kb/**` path | this story's folder |
@@ -45,9 +61,11 @@ is what lets a refusal name *which* ceiling was crossed. CF-40 requires a declar
 value to be accepted and one more refused; the spec's own clarification 5 blesses
 a conservative stated ceiling over an unstable exact one, and this is that case.
 
-That reading is written where it cannot be missed: the fixture's doc comments, the
-crate documentation's limits table, `experiments/durable-object-limits/README.md`,
-and `_evidence.md` §2. A `workerd`-class runner is the one thing that would change
+That reading is now written where it cannot be missed *and where a consumer lands*:
+the fixture's doc comments, the crate documentation's status heading and limits
+table, `CHANGELOG.md` — which had said the opposite, and is the correction this
+repair pass owed most — `experiments/durable-object-limits/README.md`, and
+`_evidence.md` §2. A `workerd`-class runner is the one thing that would change
 it, and both directions of change are loud rather than silent, because
 `append_reports_exceeded_store_limits` fails in one direction or the other.
 
