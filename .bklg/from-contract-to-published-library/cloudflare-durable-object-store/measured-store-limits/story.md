@@ -22,7 +22,7 @@ archetype: capability
 slice: durable-object-conformance-run
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T20:42:37.684Z
+updated: 2026-08-20T20:42:45.046Z
 links:
   pr: null
   commits:
@@ -31,7 +31,7 @@ links:
     - 22529d5
     - 1c23740
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
