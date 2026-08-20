@@ -840,6 +840,27 @@ HS-S0156 and HS-S0157 now all pass `verify --grain story` on all four checks.
 Human decision 2026-08-20: **stop HS-P0023 here and reassess**, and **file both findings
 upstream as separate issues**.
 
+**Filed 2026-08-20**, after searching the tracker for duplicates:
+
+- **Wet-Ink-Corporation/redkiln#146** — "forge-implement's story gate reads `links.commits`, which
+  nothing in the lane writes until after the workflow returns: #130 restores the pre-#94 boundary
+  failure at every slice". No open duplicate. #130 was closed 2026-08-19 in the 0.20.0
+  gate-honesty sweep (#138) and its body never mentions `provenance`, `record-links` or
+  `links.commits`, so the interaction with #94 was not considered. Carries the four-story table,
+  both gate transcripts, the one-command proof, and three ranked fixes.
+- **Wet-Ink-Corporation/redkiln#147** — "Residual of #135: `sectionPatterns` ends the boundary
+  section at any heading, so a correct fence under `### In this PR` is unreachable". **#135 is
+  closed and its fix shipped in 0.20.0** — the anchored heading match and the end of the silent
+  pass both work — so this was refiled as a *residual* rather than a new bug. The sharpening that
+  earns it its own issue: #135 characterised this bucket as specs "written as prose, with no
+  fenced block", and the synthetic case proves a **textbook-correct fence** under a subheading is
+  equally invisible. Suggests re-running #135's 135-spec replication with a depth-aware
+  terminator, since some of its eight cause-B specs may have had a fence all along.
+
+The two are cross-linked, because they interact: an unparseable boundary switches `provenance`
+off, which is the only reason HS-S0156 cleared the gate its slice-mates could not. Landing #147
+alone would turn that story red on #146's gate, so the fixes want sequencing together.
+
 Nothing advanced. HS-P0023 stays on `implementation`; all eight stories stay on `plan`; no
 verdict recorded anywhere. Two slices remain unopened (`front-door-reach`, `reach-walks`), and
 `front-door-reach` still carries the unresolved 130/130 crate-root budget collision described in
