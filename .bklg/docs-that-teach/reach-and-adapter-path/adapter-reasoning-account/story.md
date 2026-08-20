@@ -21,10 +21,11 @@ archetype: capability
 slice: adapter-error-site
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:32.239Z
+updated: 2026-08-20T07:07:58.922Z
 links:
   pr: null
-  commits: []
+  commits:
+    - af9a241
   kb: []
 gate_open: false
 schema: 1

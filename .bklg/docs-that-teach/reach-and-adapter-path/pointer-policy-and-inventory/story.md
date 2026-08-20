@@ -22,10 +22,11 @@ archetype: foundation
 slice: pointer-policy
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:31.699Z
+updated: 2026-08-20T07:07:56.236Z
 links:
   pr: null
-  commits: []
+  commits:
+    - ef2eb6b
   kb: []
 gate_open: false
 schema: 1
