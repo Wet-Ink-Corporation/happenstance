@@ -7,9 +7,9 @@ title: "The ES-6 artefact: constraint violation versus transport fault, recovere
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,14 +20,14 @@ archetype: capability
 slice: real-worker-bindings
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-19T21:58:33.247Z
+updated: 2026-08-20T04:37:35.584Z
 links:
   pr: null
   commits:
     - 5955cb3fb5c8687447a7beda3aa8890d842e8a97
     - 2ea99fd10bc1af495c7e47b8bbd7116a04e1d28f
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
