@@ -7,9 +7,9 @@ title: "A lazy read that is still one sample: ADR-0011's ceiling-and-page"
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -21,14 +21,14 @@ archetype: capability
 slice: real-worker-bindings
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-19T21:58:27.683Z
+updated: 2026-08-20T04:36:02.500Z
 links:
   pr: null
   commits:
     - 98913200d797f7cd52a1ae17764cca6bbb8f086d
     - 2ea99fd10bc1af495c7e47b8bbd7116a04e1d28f
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
