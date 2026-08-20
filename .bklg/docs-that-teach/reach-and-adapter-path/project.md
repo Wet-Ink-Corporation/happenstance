@@ -356,3 +356,8 @@ Code and existing surfaces:
   (`architecture`, `ux`; no `testing`, no `deployment`)
 - [`../initiative.md`](../initiative.md) — the initiative charter
 - [`../_plan.md`](../_plan.md) — the initiative planning rollup
+- [the observed error-site walk record](error-site-walk-record/walk-record.md) — the dated,
+  keyboard-only walk this project's AC-009 asks for, and Definition-of-done item 4's evidence for
+  it: the `error[E0034]` collision reproduced first-hand at the pinned toolchain, `store.rs`
+  observed to unblock the reader in place before any hop, and the adapter reasoning account reached
+  in one hop, with the walker named and the claim bounded to non-authors rather than non-insiders
