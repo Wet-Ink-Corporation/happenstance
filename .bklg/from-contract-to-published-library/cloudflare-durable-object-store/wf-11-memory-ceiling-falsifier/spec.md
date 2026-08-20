@@ -78,6 +78,7 @@ The output is a verdict, in one of exactly three admissible shapes — *it fires
 
 - One new test target under `crates/happenstance-cloudflare/tests/` — `#![cfg(target_arch = "wasm32")]`, `#[wasm_bindgen_test]`-wrapped: the ceiling staircase, the deterministic payload generator (re-derived, with the seed cited in a comment), the base64-in-JSON encode at each probed size, the postcard negative control on the same bytes, and `console_log!` reporting of every number — because `println!` writes nowhere on this target (`crates/happenstance-testkit/src/registry.rs:276-288`).
 - `crates/happenstance-cloudflare/Cargo.toml`: `serde_json` and `postcard`, and `happenstance-core = { workspace = true, features = ["serde"] }`, under `[target.'cfg(target_arch = "wasm32")'.dev-dependencies]` **only**. `[dependencies]` is untouched — no feature added to the normal `happenstance-core` edge, and no new Cargo feature invented to carry a test.
+- `Cargo.lock`: the two names those dev-dependencies add to this package's dependency list, and nothing else. The lockfile is committed here, so a manifest edge that is in this boundary writes a lockfile line that must be in it too — a boundary that authorises the `Cargo.toml` change and omits its mechanical consequence fails `redkiln verify --grain story` on a diff it already approved.
 - One row in `xtask/src/proof.rs`'s executed-target registry naming this package and this target, with its expected test names, so a deleted, emptied, renamed or `#[ignore]`d probe fails the gate before the run instead of exiting 0 on `running 0 tests`. `proof.rs`'s own doc comment count is corrected in the same change if this row makes it stale.
 - A `CHANGELOG.md` entry under `[Unreleased]` naming the measurement that now exists.
 - This story's own backlog folder: `_ledger.md`, the implementation report, the captured `workerd` output verbatim (ceiling in pages and bytes, every probed size, both peaks, the verdict), and the finding written in the exact shape HS-S0058 will cite when it moves the open-question atom.
@@ -100,6 +101,7 @@ The implementer **may** touch the composition-root files named in the Integratio
 ```
 crates/happenstance-cloudflare/tests/**
 crates/happenstance-cloudflare/Cargo.toml
+Cargo.lock
 xtask/src/proof.rs
 xtask/src/main.rs
 CHANGELOG.md
