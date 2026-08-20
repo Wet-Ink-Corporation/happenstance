@@ -787,3 +787,82 @@ as a hypothesis to verify, then continues to slices 3, 4 and 5.
 HS-S0156's unparseable boundary is **left as it is** for this run: recorded, not amended. Reshaping
 a fence so a gate sees something different is the one move the check exists to make visible, and it
 is owed an amendment record with its reason rather than a quiet edit made in passing.
+
+---
+
+### Run 5 — HS-P0023 `reach-and-adapter-path`, workflow `wf_8077d317-429` — HALTED
+
+- Relaunched fresh per run 4's disposition. Same baseRef `ffd0eeb7`, same eight stories.
+- `degradedSummary: none`. 8 agents, 0 retried, 0 failed. No baseline repairs.
+- **4/8 stories.** `adapter-error-site` re-entered at Review, re-reviewed and sealed
+  **`approved`** (`d14affd`) — the run-4 provenance repair cleared it, confirming that diagnosis.
+  `adapter-error-walk` then opened, implemented `error-site-walk-record` (`2ac7163`), reviewed
+  it, and hit **the identical gate failure**, sealing `changes-requested` (`cd85952`).
+- Integration, design review and project review did not run.
+
+#### ROOT CAUSE — two correct redkiln fixes that are incompatible in this lane
+
+Run 4 was read as a one-off gap left by an interrupted session. Run 5 proves it is structural.
+
+- **#94** made `boundary` derive its window from `links.commits` via `ownChangedFiles`, because
+  on a long-lived initiative branch `main...HEAD` is the whole initiative and a precise fence
+  *"CANNOT PASS, ever"* — `src/store/verify.ts:110-118`, in those words.
+- **#130**, new in **0.20.0**, moved all four checks of `verify --grain story` into the slice's
+  in-workflow Verify leg. Before 0.20.0 that leg ran `affected_gate` only.
+
+`workflows/forge-implement.js` contains **zero** occurrences of `record-links`; the command
+assigns it to the orchestrator, after the workflow returns. So `links.commits` is necessarily
+empty when #130's gate runs, `ownChangedFiles` returns `undefined`, and `boundaryCheck(dir,
+ownScope ?? changed)` falls back to precisely the window #94 exists to avoid. `provenance` fails
+on the same empty field. The slice cannot seal, so the loop cannot proceed unattended.
+
+The whole argument is visible in this one project:
+
+| story | under 0.20.0's four-check leg | why |
+| --- | --- | --- |
+| HS-S0154 | sealed `approved` | ran under **0.19.0**, whose leg had one check |
+| HS-S0155 | **halted** (run 4) | parseable boundary |
+| HS-S0156 | passed | boundary **unparseable** — the subheading bug switches provenance off |
+| HS-S0157 | **halted** (run 5) | parseable boundary |
+
+Not one story cleared that gate on merit. The two that passed did so because the check did not
+exist yet, or because a parser bug hid their fence.
+
+`require_commit_provenance: false` is **not** a workaround: `ownScope` is computed regardless of
+that flag, so `boundary` would still fall back. Verified by reading `verify.ts:135-152`, not
+assumed.
+
+**Repair applied:** `redkiln record-links HS-S0157 --sha 2ac7163` (`c3e4673`). HS-S0154, HS-S0155,
+HS-S0156 and HS-S0157 now all pass `verify --grain story` on all four checks.
+
+#### Disposition
+
+Human decision 2026-08-20: **stop HS-P0023 here and reassess**, and **file both findings
+upstream as separate issues**.
+
+Nothing advanced. HS-P0023 stays on `implementation`; all eight stories stay on `plan`; no
+verdict recorded anywhere. Two slices remain unopened (`front-door-reach`, `reach-walks`), and
+`front-door-reach` still carries the unresolved 130/130 crate-root budget collision described in
+the run-3 handoff.
+
+## HS-P0023 state at stop
+
+| slice | story | id | state |
+| --- | --- | --- | --- |
+| `pointer-policy` | `pointer-policy-and-inventory` | HS-S0154 | committed `ef2eb6b`, sealed **approved** |
+| `adapter-error-site` | `adapter-reasoning-account` | HS-S0155 | committed `af9a241`, sealed **approved** |
+| `adapter-error-site` | `store-error-site-rewrite` | HS-S0156 | committed `f2c7dbe` (+`10e99b2`,`76e9424`), sealed **approved** |
+| `adapter-error-walk` | `error-site-walk-record` | HS-S0157 | committed `2ac7163`, sealed **changes-requested** |
+| `front-door-reach` | `front-door-pointer` | HS-S0158 | not started — 130/130 collision waiting |
+| `front-door-reach` | `evaluator-onward-links` | HS-S0159 | not started |
+| `reach-walks` | `front-door-walk-record` | HS-S0160 | not started |
+| `reach-walks` | `second-question-walk-records` | HS-S0161 | not started |
+
+`baseRef` remains **`ffd0eeb7`** — hold it across any future relaunch of this project.
+
+HS-S0157's seal is `changes-requested` on the gate alone; its four checks are now green, so a
+relaunch re-enters `adapter-error-walk` at Review and should clear it without an implementer.
+
+Still owed by this project and deferred again: **F-A** (`docs/carry-your-invariant.md` and
+`docs/read-the-worked-example.md` have no entrance — initiative DoD-7/DoD-9), and HS-P0021's two
+residuals, now deferred three times.
