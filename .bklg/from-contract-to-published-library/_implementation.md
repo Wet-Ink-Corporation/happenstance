@@ -25,7 +25,7 @@ attributable to the initiative rather than inherited.
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **done** | approved 2026-08-19 · `_review.md` · 14/14 · 6 runs · `overall: 3` · `happenstance-sqlite 0.0.0` reserved |
-| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | 2 runs · 8/12 · slices 1–2 approved (5 stories approved at the gate) · slice 3 changes-requested on unmet AC-001 · escalated to ADR-0023 |
+| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | 3 runs · 11/12 · slices 1–2 approved (5 stories approved at the gate) · slice 3 changes-requested and **still owed a review** · slice 4 committed but never sealed · **blocked on the human `/redkiln:kb-ingest` wave for ADR-0023** |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
 | 7 | `publication-and-positioning` | HS-P0016 | 2, 3, 4, 5, 6 | pending | |
@@ -1646,3 +1646,112 @@ together through the spec path as one named decision.
    check bans` is red. Its AC-012 and project DoD 1 both say so; the ADR-0023 outcome gates it.
 4. **`pub mod host` is `#[doc(hidden)]`** — every item behind it panics on a real Workers
    isolate, so HS-S0059's question is "remove a hidden item", not "break a published one".
+
+## HS-P0013 `cloudflare-durable-object-store` — run 3, 2026-08-19/20 (`wf_d3a8c848-9b2`)
+
+baseRef `156cd27` (unchanged, third run). Launched with **`resumeSlice:
+'evidence-and-verdicts'`** — an escape hatch, taken deliberately at the human gate and
+recorded here because it has a cost. Halted at slice `evidence-and-verdicts`, story
+`adr-0023-and-atom-resolutions`, step **`implement`**, kind **`blocked-dependency`**.
+11 of 12 stories committed. `degradedSummary: none`; no baseline repairs; no agent errors;
+one implementer, one attempt.
+
+**Why the hatch.** Slice 3's two surviving findings — AC-001 unmet (a `node:sqlite`
+`DurableObjectState` shim standing in for `workerd`) and the three store limits read off a
+platform page — were deferred at run 2's gate to HS-S0058, which authors ADR-0023 in slice
+4. A default re-launch would have re-entered slice 3 at Review and re-verified findings
+whose resolution did not exist yet. **The cost is real and is not discharged:** slice 3's
+review was walked past, not answered. It is still sealed `changes-requested` in
+`_slices.md` and must be re-reviewed once ADR-0023 lands.
+
+| Story | Commits | Outcome |
+|-------|---------|---------|
+| `wf-11-memory-ceiling-falsifier` (HS-S0056) | `14dbb4b`, `4aa3820` | complete — verdict **(c)**, the condition is not constructible on this runtime |
+| `deferral-re-reads-and-es-32-verdict` (HS-S0057) | `a20a864`, `77e674b` | complete — three verdicts into `RUNBOOK.md`, no marker moved |
+| `adr-0023-and-atom-resolutions` (HS-S0058) | `d3030c6`, `63927cc` | **blocked** — staged for the wave, 11 of 12 ACs need its output |
+
+**Slice 4 was never sealed.** The halt landed at HS-S0058's implement step, *before* the
+slice review ran, so `_slices.md` gained no fourth row and no adversarial reviewer has seen
+HS-S0056 or HS-S0057. That is why both were held at the gate rather than approved: the
+work is not suspect, it is unexamined.
+
+### The block is a correct refusal, and it is the HS-P0010 shape again
+
+`/redkiln:kb-ingest` carries `disable-model-invocation: true`, runs its Stage A inline to
+create its **own** dedicated worktree, gates on a human before the workflow writes a byte,
+and is merged by a human afterwards. Running its workflow directly from this slice **was
+available and was declined** — it would have run in the wrong worktree on the initiative
+branch with no human at either gate, and would have made the intake set's two approval-gate
+refusals unilaterally. Nothing was hand-written into `.kb/decisions/`; `git diff --name-only
+main -- .kb/decisions/` for this story is empty, which is the failure `CLAUDE.md` records as
+reverted at `0269720`.
+
+### What is staged for the wave
+
+- `references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md` — the long-form
+  record. The only untracked addition under `references/adr/`, modifies no existing file
+  there, `spec-trace` green.
+- Four `.kb/_intake/` documents: ADR-0023 proper, the ES-6 verdict, CF-40's ownership
+  resolution, WF-11's resolution. A fifth (`0034-what-the-phase-8-reconciliation-cost.md`)
+  has been tracked since `4ad58d0` and will be swept up by the same run — expected, not a
+  surprise.
+- `coordination-note.md` — AC-001's artefact, written **before** any intake document, which
+  is the order AC-001 fixes.
+
+**CF-40 resolves to Branch B: no resolution exists, so this story stages one.** HS-P0012
+merged and deliberately did not mint it — ADR-0022 records CF-40 as a non-verdict with a
+named owner twice (`.kb/decisions/0022-append-condition-strategy.md:30,93`) and
+`.kb/maps/open-questions-index.md:171-173` still carries the bullet as Open. Phase 9
+supplies the third data point that turns the ownership argument into an observation:
+`CloudflareFixture` is the first fixture in the workspace to declare all three ceilings
+*and* claim `MID_BATCH_FAULT`, and it declines ownership too.
+
+**Proposed wave id: `2026-08-19-intake-phase-9`** — suffixed on purpose. An overwritten wave
+directory destroys an earlier wave's audit trail and is not recoverable from the atoms it
+produced.
+
+**Two refusals the wave's gate must be ready to make.** Never fold the ES-6 cluster into
+`.kb/decisions/0009-error-send-sync.md` or the CF-40 cluster into `0015-*` — for an accepted
+decision atom the only legal shapes are a new atom or a superseding one, whatever the
+adjudicator scores. And never read the ES-6 cluster as resolving
+`.kb/open-questions/es-6-names-an-unwritable-rule.md`; `store_error_crosses_a_join_handle` is
+still unwritten and unowned.
+
+### Recorded at the gate
+
+| Story | Outcome |
+|-------|---------|
+| HS-S0057 | **changes-requested** recorded; back on `implement`/`in-progress` |
+| HS-S0056 | **could not reach `report`** — its `implement` command gate is red on boundary (`Cargo.lock` is outside its fence). Left on `plan`, *further back* than a recorded rejection would have put it. This is carried-forward item 2 from run 2 coming true on the first story it touched. |
+| HS-S0058 | **could not reach `report`** — its gate is red on the ledger itself (AC-002 … AC-012, eleven unsatisfied). The gate is reporting the block accurately; there is nothing to fix but the wave. Left on `plan`. |
+
+HS-P0013 was **not** advanced past `implementation`: the run halted at a blocked dependency.
+
+### WF-11's verdict is downstream of slice 3's finding, and that is not incidental
+
+The falsifier was fired at, on the target, inside the gate, and did not bite. The staircase
+asked the host for 2,047 pages, was granted every one, took linear memory to **2,169 pages =
+142,147,584 bytes** — past Cloudflare's documented 128 MiB per-isolate limit — and was
+refused nothing. It stopped on the *probe's* page budget, so only a lower bound was measured.
+The cause is upstream and already recorded: no `workerd`-class runner exists inside
+`cargo xtask ci`, only `wasm-bindgen-test-runner` over Node, and a Node isolate has no
+per-isolate memory cap. **Whether (c) is an acceptable answer for AC-011, or a deferral until
+a real runner exists, is plausibly ADR-0023's call rather than the implementer's.** It was
+not settled here.
+
+### Carried forward
+
+1. **The next action is a human's:** run `/redkiln:kb-ingest` (its own worktree, its own two
+   gates), merge the wave, then re-launch implement for HS-P0013.
+2. **Slice 3's review is owed.** The hatch deferred it; ADR-0023 does not discharge it. A
+   re-launch after the wave should NOT carry `resumeSlice` — git truth re-enters slice 3 at
+   Review, which is now the right place because the resolution will exist.
+3. **HS-S0056's fence needs `Cargo.lock`** before its verdict is recordable — the same
+   unsatisfiable-fence shape as HS-S0053, on a second story. Run 2 predicted this would recur
+   and it did. The pattern, not the four amended specs, is what is unfixed.
+4. **HS-S0059's fence is still unchecked** against that pattern, and `publish-ready-crate`
+   still cannot claim a green gate while `cargo deny check bans` is red on
+   `worker 0.8.5` → `async-trait`.
+5. **RUNBOOK.md:302 and phase 9's ADR-0023 work box are deliberately untouched.** Striking
+   the queue row before the atom exists would point a reader at a path that is not there.
+   They belong after the wave.
