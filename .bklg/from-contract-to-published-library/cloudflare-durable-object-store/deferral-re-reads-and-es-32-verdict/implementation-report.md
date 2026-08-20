@@ -152,4 +152,4 @@ One checkpoint on `initiative/from-contract-to-published-library`.
 
 | SHA | subject |
 | --- | --- |
-| `PENDING` | `feat(cloudflare-durable-object-store): CF-14 and CF-27 re-read on this runtime, and the ES-32 verdict on disk` |
+| `a20a864` | `feat(cloudflare-durable-object-store): CF-14 and CF-27 re-read on this runtime, and the ES-32 verdict on disk` |
