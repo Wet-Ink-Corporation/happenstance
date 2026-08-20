@@ -485,7 +485,7 @@ ADR-0026 must be written against two unlike peers, not one.
 | Store limits: payload size, tag count, query items, batch size | 5 | **provisional — VT-21 – VT-25.** Guaranteed minima the store MUST accept, plus an error variant for what it refuses | 0015 |
 | Wire format: `Query::All`'s encoding, sparse shapes, versioning | 5 | **settled — WF-2 – WF-12** (D1 critical, D6). The format is **private to happenstance**; the `serde` feature moves events between happenstance instances and is not an interoperability surface. Two qualifications this row used to swallow: **WF-1 is settled in its scope half only** and its interoperability half stays `[DEFERRED]` on the row below; and **D12 is not phase 5's to close** — it was closed at phase 0 by `927d291` and phase 5 adds a manifest lint against its recurrence rather than a fix | 0016 |
 | DCB wire interoperability | 13 | **deferred — WF-1**, and the reason changed at phase 5. The named home is still ADR-0026's envelope section, but the deferral no longer waits on *"a bridge exercised against the DCB reference implementation's encoding"*: **there is no such encoding.** The DCB specification and its reference TypeScript library publish **no wire format at all** — `EventStore.ts` contains no serialisation code of any kind, and the specification's JSON snippets are labelled *"a **potential** JSON representation"* beside an explicit disclaimer that *"implementations are not required to use the same terms or function/field names"*. A bridge built today would be built against an illustration the specification disclaims, and the first real DCB peer would break it. **That makes the deferral stronger rather than weaker.** The surviving divergence is recorded rather than fixed: happenstance spells match-all as a value that cannot syntactically collide with a filtered query (`null` before phase 5, `"All"` after), while the reference spells it `{items: []}` — structurally identical to an illegal empty filtered query and distinguished only by which function built it | 0016, 0026 |
-| Durability across a process boundary | 8 | **deferred — CF-14; provisional — CF-17.** Nothing in the workspace could express the question, because the fixture took one handle. **Phase 3 changed the fixture and went one step further than CF-14's deferral allows, deliberately**: `REOPEN` and `acknowledged_writes_survive_a_reopen` landed against `DurableFixture`, with `LosingFixture` failing it, because without a gated rule `capability_skips_are_reported` had nothing to observe and CF-17's `[PROVISIONAL]` marker was untested. The far end is untouched — nothing in the tree loses a write to a *fault* rather than to an instruction — so CF-14 stays `[DEFERRED]` and phase 8 is still the first store that can lose one | 0010, 0022 |
+| Durability across a process boundary | 8 | **deferred — CF-14; provisional — CF-17.** Nothing in the workspace could express the question, because the fixture took one handle. **Phase 3 changed the fixture and went one step further than CF-14's deferral allows, deliberately**: `REOPEN` and `acknowledged_writes_survive_a_reopen` landed against `DurableFixture`, with `LosingFixture` failing it, because without a gated rule `capability_skips_are_reported` had nothing to observe and CF-17's `[PROVISIONAL]` marker was untested. The far end is untouched — nothing in the tree loses a write to a *fault* rather than to an instruction — so CF-14 stays `[DEFERRED]` and phase 8 is still the first store that can lose one. **Phase 9 has now re-read it against a real Durable Object fixture**; the reading is the CF-14 row of *The 10 `[DEFERRED]` clauses* below, and it does not move the marker | 0010, 0022 |
 
 ### Projections
 
@@ -497,7 +497,7 @@ ADR-0026 must be written against two unlike peers, not one.
 | Ship the projection port behind `unstable-projection` at 0.1, or freeze it | 6 | **provisional — PS-3.** The honest option if the two batch shapes disagree, and it decouples publication from this phase | 0017 |
 | May `commit` name a position no applied event occupies; may a checkpoint move backwards | 6 | **settled — PS-21; provisional — PS-22** | 0018 |
 | Ladybug checkpoint placement; how a projection expresses graph mutations; `lbug`'s blocking API | 11 | open | 0025 |
-| Do projections poll, or does `EventStore` grow a tail/subscription seam | 9 | **settled for 0.1 — ES-32: absent, and stated as absent.** Phase 7's runner polls and phase 7 records the cost of N views × N reads; phase 9 records whether a Durable Object's storage API makes a tail seam cheap enough to reopen post-0.1. The previous plan named an owner whose work list had no item for it; both phases now carry one | — (post-0.1) |
+| Do projections poll, or does `EventStore` grow a tail/subscription seam | 9 | **settled for 0.1 — ES-32: absent, and stated as absent.** Phase 7's runner polls and phase 7 records the cost of N views × N reads; **phase 9 has now recorded its half** — the one-paragraph verdict is in phase 9's session log, and it says the seam is cheap to reopen post-0.1 *only* in the additive shape this clause already names. The previous plan named an owner whose work list had no item for it; both phases now carry one | — (post-0.1) |
 
 ### Sync
 
@@ -558,12 +558,24 @@ because a table that quietly loses a row cannot be checked against anything.
 | SY-28 | scope preservation across a round trip | 13 |
 | SY-32 | retention gaps reported rather than silent | 14 |
 | ~~CF-13~~ | ~~a fixture that can *fail* the visibility rule~~ | **settled at 3**: `PreCommitPositionStore` fails `nothing_below_an_observed_position_appears_later` deterministically on one thread, the `Send + Sync` sub-trait the marker held in reserve was not needed, and the clause is `[FROZEN]`. The **adapter** far end stays open and is §6.5's position-allocation row, owned by phase 10 |
-| CF-14 | durability across a reopen | 8 — and the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). What stays deferred is the far end: a store that can lose an acknowledged write to a fault |
-| CF-27 | the suffix-store instrument | 14 |
+| CF-14 | durability across a reopen | 8 — and the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). **Phase 9's reading: the deferral still holds, and one more of the three named implementations has answered with one shape.** `CloudflareFixture` expressed `REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and `SqliteFixture` use — a fresh binding off the Durable Object's retained `state`, nothing added to the trait — and `acknowledged_writes_survive_a_reopen`, `reopened_store_does_not_reissue_an_event_id` and `recorded_time_survives_a_reopen` all **ran and passed** in the wasm32 conformance run with **zero** `SKIP` lines on that row, so "durable" needed no grading; the limit is that this executed under `wasm-bindgen-test-runner` over a `node:sqlite`-backed shim and **not** `workerd`, so what was exercised is the capability's own weaker operation and an isolate restart still cannot be performed from inside a test. **The far end is untouched**: this project supplied no store that can lose an acknowledged write to a *fault* rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s (HS-P0012), and `happenstance-neon` (HS-P0014) is the one named implementation still unanswered |
+| CF-27 | the suffix-store instrument | 14 — **phase 9's reading: more real, not less, and this runtime is why.** A Durable Object's storage outlives its isolate — `CloudflareFixture::reopen` re-derives a binding off the retained `state` and every row is still there — so *eviction* is not how one of these loses history and the intuitive hazard is the wrong one; what is real is that this adapter reaches storage as `state.storage().sql()` and the same `Storage` object carries `delete_all()` (`worker-0.8.5/src/durable.rs:449`), so a wholesale purge happens with no `EventStore` method involved at all and the store passes every rule unchanged afterwards — the silence CF-27's *Rejects* paragraph describes, now with a named verb behind it. The specification's **No, and nothing is planned** completeness row therefore understates the exposure by one adapter. The instrument that would settle it — a testkit-adjacent store holding only a suffix and reporting that it does — is **deliberately not built here**: it stays `retention-and-incomplete-logs`' (HS-P0018) and phase 14's, and this row is a re-read handed on rather than an answer |
 
-Checked against `SPECIFICATION.md` §7.2's maturity column: ten live rows, and the
-two sets are equal — `spec-trace` counts ten `[DEFERRED]` clauses and names the
-same ten. No deferred clause is unowned.
+Checked against `SPECIFICATION.md` §7.2's maturity column, and at phase 9 **the two
+sets are no longer equal**. `cargo xtask spec-trace` counts **twelve** `[DEFERRED]`
+clauses — WF-1, ES-39, **PS-18**, **PS-27**, **PS-30**, SY-14, SY-18, SY-27, SY-28,
+SY-32, CF-14, CF-27 — while this table lists ten live rows and names **PS-33**,
+which §7.2 now carries as `NON-NORMATIVE` and not as deferred at all. So three
+projection clauses are deferred in the specification and unlisted here, and one row
+here names a clause the specification has since demoted.
+
+The drift predates this reading and is **recorded rather than repaired in
+passing**: reconciling a maturity table is a clause question and this pass is a
+prose re-read of CF-14 and CF-27 with no licence to move a marker, a row or a
+census figure. It is handed to ADR-0023's queue row and to whichever pass owns the
+projection deferrals. **No deferred clause listed here is unowned** — which is the
+property this paragraph was written to protect, and it still holds; the three that
+are *not* listed are owed an owning phase by the pass that reconciles the table.
 
 **One of them sits on a surface phase 12 publishes**, and it is safe. WF-1 (DCB
 wire interoperability) is owned by phase 13, after publication, but the format is
@@ -596,7 +608,7 @@ seventeen.
 | Per-item boundaries on a condition | VT-30 | E2E-04 and E2E-05 still unwritable after phase 4 | 4 |
 | `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
 | The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
-| No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 |
+| No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 — **answered**; the one-paragraph verdict is in phase 9's session log. It answers *this* falsifier only: the clause's own benchmark-shaped one — E2E-32's fan-out runner holding N views within their staleness budget — is untouched and stays phase 7's |
 | The whole batch shape and write seam | PS-4 – PS-6, PS-9, PS-11, PS-12, PS-15 | **PS-2 alone** — `CheckpointOnlyStore` passing, or a third adapter disagreeing with the two that froze it | 6, re-tested 11 |
 | Reset, checkpoint regression, chunked rebuild, query drift | PS-16, PS-18, PS-22 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset | 6 |
 | Failure policy | PS-27, PS-30 | one poisoned projection stalling the others | 6, exercised 7 |
@@ -4392,9 +4404,12 @@ this crate keeps the Durable Object and the newcomer is named for its primitive.
 - [ ] Record whether the `!Send` `Error` asymmetry ADR-0009 predicted actually
       bites — this is the adapter that decides it, and whether stringifying a
       `JsValue` loses information the caller needs.
-- [ ] Record whether a Durable Object's storage API makes a tail or subscription
+- [x] Record whether a Durable Object's storage API makes a tail or subscription
       seam cheap enough to reopen ES-32 post-0.1. This is the tail-seam ledger
       row's work item; the previous plan named an owner and gave it nothing to do.
+      **Recorded** in this phase's session log, *The tail seam (ES-32) — the
+      verdict*, and recorded only: no port method, no sub-trait and no alarm
+      plumbing lands with it.
 
 **Proof artefact.** Two things, because the first does not decide ES-6 and the
 previous revision offered only the first.
@@ -4419,7 +4434,10 @@ discharged by assertion.
       rather than silent.
 - [ ] ES-6 is decided — the bound is added, or the deferral is renewed with the
       compiled reason from a real `!Send` error type.
-- [ ] A one-paragraph verdict on the tail seam, in this file's ledger.
+- [x] A one-paragraph verdict on the tail seam, in this file's ledger. **Ticked
+      because the paragraph is on disk**, in this phase's session log below, under
+      *The tail seam (ES-32) — the verdict*; the two ledger rows that promised it
+      point at it rather than repeat it.
 - [ ] `publish = false` removed; `cargo xtask ci` green including the wasm32 step.
 
 **Cases this makes writable.** The real-adapter half of E2E-30, E2E-52 and E2E-54.
@@ -4427,6 +4445,38 @@ discharged by assertion.
 **Estimate.** 8 days.
 
 **Session log**
+
+**2026-08-19 — the tail seam (ES-32) — the verdict.** *This answers the falsifier
+the provisional-clause table poses — "a Durable Object making one cheap enough to
+reopen" — and only that one; the clause's own benchmark-shaped falsifier, E2E-32's
+fan-out runner holding N views inside their staleness budget, is untouched and
+stays phase 7's.* **A Durable Object does make a tail seam cheap to reopen
+post-0.1, and it makes it cheap in exactly the additive shape ES-32 already
+names — which is a confirmation of the clause rather than a case against it.** The
+real bindings settled the decisive property rather than a preference: a Workers
+`SqlStorage` cursor **is not a snapshot and cannot be held across an `await`**
+(`crates/happenstance-cloudflare/src/sql_storage.rs:1-24`, property 2 — the reason
+ADR-0011's ceiling-and-page mechanism exists in this adapter's read path at all),
+so a tail on this runtime can never be a held stream; it has to be a wake-up plus a
+bounded re-read from a position the caller already holds, which is a poll with a
+push trigger in front of it. The object genuinely *can* push — an alarm is the DO
+half of the `LISTEN`/`NOTIFY` pair ES-32 names — so this adapter is squarely in the
+clause's "loses nothing" column: a separate `TailingEventStore` sub-trait composes
+over it without touching any existing adapter, while a required `subscribe` on
+`EventStore` would have forced *this* adapter to implement it by re-reading behind
+a name that says it does not, which is precisely the shape ES-32's *Rejects*
+paragraph forbids. So the asymmetry argument survives contact with the first real
+constrained runtime: adding the capability later is additive, removing it later is
+not, and nothing observed here makes the 0.1 absence look like a mistake. **The
+verdict is bounded, and the bound is named rather than hidden:** nobody has measured
+what a DO alarm's wake-up actually costs — latency, and per-object price at N
+objects — and it cannot be measured from this gate, whose runner is
+`wasm-bindgen-test-runner` over a `node:sqlite`-backed shim with no alarms and no
+isolate (`every-rule-under-workerd`'s escalated blocking finding). That measurement
+is what would sharpen this paragraph from *cheap in shape* to *cheap in cost*; it
+needs a `workerd`-class runner and it belongs post-0.1, outside this initiative.
+Recorded, not acted on: no port method, no sub-trait, no feature flag and no alarm
+plumbing lands with this verdict.
 
 ---
 
