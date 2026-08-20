@@ -7,9 +7,9 @@ title: CF-14 and CF-27 re-read on this runtime, and the ES-32 verdict on disk
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -19,12 +19,14 @@ archetype: capability
 slice: evidence-and-verdicts
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:10:06.076Z
+updated: 2026-08-20T13:27:26.847Z
 links:
   pr: null
-  commits: []
+  commits:
+    - a20a864
+    - 77e674b
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
