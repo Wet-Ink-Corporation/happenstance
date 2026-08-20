@@ -775,4 +775,15 @@ orchestrator's.
 
 #### Disposition
 
-**Pending** — awaiting the human decision recorded below.
+Human decision 2026-08-20: **relaunch fresh** (`wf_8077d317-429`, same baseRef `ffd0eeb7`), and
+**file the parser finding upstream** the way redkiln#136 was.
+
+No story advanced, no verdict recorded, and HS-P0023 stays on `implementation`. The seal on
+`adapter-error-site` was issued by that slice's own reviewer, and a re-review is what clears it —
+not the orchestrator's account of why the gate went red. Preflight reads both resume axes from
+git, so the relaunch re-enters `adapter-error-site` at Review with the prior finding handed over
+as a hypothesis to verify, then continues to slices 3, 4 and 5.
+
+HS-S0156's unparseable boundary is **left as it is** for this run: recorded, not amended. Reshaping
+a fence so a gate sees something different is the one move the check exists to make visible, and it
+is owed an amendment record with its reason rather than a quiet edit made in passing.
