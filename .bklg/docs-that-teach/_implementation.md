@@ -675,3 +675,104 @@ the whole-initiative DoD, so it is the only one launched with `terminal: true`.
   fence and turns `boundary` red for real.
 - **`record-run` first, before anything else, including before any halt.**
 - Never `git stash` in this worktree; never `redkiln adopt --templates`; never `--no-verify`.
+
+---
+
+### Run 4 — HS-P0023 `reach-and-adapter-path`, workflow `wf_119c8acb-7d4` — HALTED
+
+- Entry preflight: tree clean after `5dc4d4d` (one CLI-written telemetry `session_end` line
+  committed); branch and worktree confirmed; `entry_baseline` already green so the full-suite
+  gate was skipped; affected baseline `cargo xtask ci --fast` green, exit 0.
+- baseRef: **`ffd0eeb7`**, held stable from the previous session rather than re-captured, exactly
+  as the handoff instructed.
+- Scope: all 8 stories. Slices 3 and 4 were swapped from `_storymap.md`'s numbering so the
+  independent `adapter-error-walk` banks before the known `front-door-reach` budget collision;
+  the storymap explicitly permits it ("slices 4 and 3 are concurrent"). `terminal: false`.
+- `degradedSummary: none`. No baseline repairs. 6 agents, 0 retried, 0 failed.
+
+#### Result — 3/8 stories, halted at `adapter-error-site` verify
+
+`pointer-policy` was skipped as committed-and-sealed-approved. `adapter-error-site` re-entered,
+implemented `store-error-site-rewrite` (`f2c7dbe`), ran review, gate, an in-slice fix pass
+(`76e9424`, re-anchoring every `store.rs` citation to its subject), re-review and gate rerun,
+then sealed **`changes-requested`** (`64301e9`). Slices 3, 4 and 5 never opened. Integration,
+design review and project review did not run — the halt is upstream of them.
+
+#### The blocking finding was a provenance gap, not a code defect
+
+The one surviving finding was a deterministic story-gate failure on HS-S0155:
+
+```
+boundary:   changed outside declared boundary: CHANGELOG.md, CLAUDE.md, Cargo.lock,
+            Cargo.toml, RUNBOOK.md, [195 files total]
+provenance: 16 file(s) changed inside this story's declared boundary and
+            links.commits is empty.
+```
+
+All three of HS-P0023's committed stories carried `links.commits: []` — the previous session
+was interrupted before it reached `record-links`. With that field empty, redkiln 0.19.0's
+`boundaryCheck(located.dir, ownScope ?? changed)` has no `ownScope` to use and falls back to the
+broad `base...HEAD` set; `base` is `DEFAULT_BASE = "main"`, so HS-S0155 was measured against the
+entire initiative branch — including `CHANGELOG.md`, `Cargo.toml` and the whole sibling-merge
+HS-P0022 brought forward, none of which any story in this project touched.
+
+This is **not** a recurrence of redkiln#94/#136. That fix works; it is *conditioned* on
+`links.commits` being populated, and the interrupted session never populated it. The tell was in
+the boundary output itself: `declared but matched no changed file:
+.bklg/.../adapter-reasoning-account/**` — the story's own fence matched nothing because the
+window being measured was the wrong one.
+
+**Remedy applied, 2026-08-20** — the one the gate's own message prescribes:
+
+| story | sha(s) recorded |
+| --- | --- |
+| HS-S0154 `pointer-policy-and-inventory` | `ef2eb6b` |
+| HS-S0155 `adapter-reasoning-account` | `af9a241` |
+| HS-S0156 `store-error-site-rewrite` | `10e99b2`, `f2c7dbe`, `76e9424` |
+
+`10e99b2` (the prior session's trailer-less WIP) and `76e9424` (the in-slice fix pass) were both
+checked file-by-file before attribution: both touch only HS-S0156's subject — `store.rs`, that
+story's backlog folder, and the mechanical `spec/` + `standards/rust/` citation renumbering the
+`store.rs` insertion forces. Neither touches `adapter-reasoning-account/`, so neither drags a
+slice-mate's files inside the other story's fence. Committed as `0bf8316`.
+
+Re-verified after recording — **all three now pass**:
+
+```
+HS-S0154 (story): pass   [ok] affected-gate  [ok] boundary  [ok] ledger  [ok] provenance
+HS-S0155 (story): pass   [ok] affected-gate  [ok] boundary  [ok] ledger  [ok] provenance
+HS-S0156 (story): pass   [ok] affected-gate  [ok] boundary* [ok] ledger  [skip] provenance*
+```
+
+#### FINDING — the fourth fail-open parser case, and it hit the most careful spec
+
+`*` above is a real gap, not a pass. HS-S0156's gate reports:
+
+> `boundary` — a boundary heading is present but declares nothing parseable; declare the paths
+> in a fenced block, or in a `| Path | Change |` table whose first column carries backticked paths
+
+and consequently `provenance` — `[skip] no boundary declared`. So HS-S0156 has **two of four
+checks inert**, and its `## PR boundary` — five precise "In this PR" bullets and eight
+"Explicitly not in this PR" bullets, among the most carefully drawn in the initiative — binds
+nothing mechanically.
+
+The cause is the parser's shape requirement. HS-S0154's bullets parse because each opens with a
+backticked path (`` - `xtask/src/pointers.rs` — new. ``). HS-S0156's open with prose (`- The
+rewrite of `## Import one flavour, not both` in ...`), so the first backticked run is a heading,
+not a path, and `declaredBoundary` finds nothing.
+
+This is the **fourth** finding in this family on this initiative, after redkiln#136/#94, the
+`ledgerBlock` heading case and the `declaredBoundary` title-capture case (HS-S0186). All four
+fail **open**, and all four bite hardest on the artifact that took the subject most seriously —
+the same asymmetry redkiln's own fix rationale names: *"the gate was strictest on the most
+disciplined specs: declaring no fence passed, declaring a precise one blocked you."* Here the
+inversion is complete: writing the fence in prose makes it vanish.
+
+Not worked around. Rewriting HS-S0156's boundary into a parseable form would be a **boundary
+amendment**, which this ledger's own precedent (`c52b031`) requires be recorded as an amendment
+with its reason rather than made as a quiet edit — and it is a governance call, not the
+orchestrator's.
+
+#### Disposition
+
+**Pending** — awaiting the human decision recorded below.
