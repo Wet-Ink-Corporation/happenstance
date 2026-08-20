@@ -344,6 +344,7 @@ crates/happenstance-cloudflare/src/sql_storage.rs
 crates/happenstance-cloudflare/tests/**
 crates/happenstance-cloudflare/Cargo.toml
 Cargo.lock
+CHANGELOG.md
 xtask/src/proof.rs
 standards/rust/**
 .bklg/from-contract-to-published-library/initiative.md
