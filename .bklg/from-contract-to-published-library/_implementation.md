@@ -25,7 +25,7 @@ attributable to the initiative rather than inherited.
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **done** | approved 2026-08-19 · `_review.md` · 14/14 · 6 runs · `overall: 3` · `happenstance-sqlite 0.0.0` reserved |
-| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | run 1 halted at slice 2 boundary · 5/12 · slice 1 approved · fences amended, gate now green · re-launched |
+| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | 2 runs · 8/12 · slices 1–2 approved (5 stories approved at the gate) · slice 3 changes-requested on unmet AC-001 · escalated to ADR-0023 |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
 | 7 | `publication-and-positioning` | HS-P0016 | 2, 3, 4, 5, 6 | pending | |
@@ -1564,3 +1564,85 @@ HS-S0051 and HS-S0052.
 2. **This will recur.** Every remaining story in this project that touches cited code faces
    the same unsatisfiable-fence shape. The amendment fixed four specs, not the pattern; the
    seven outstanding stories' fences have not been checked against it.
+
+## HS-P0013 `cloudflare-durable-object-store` — run 2, 2026-08-19 (`wf_bece7796-930`)
+
+baseRef `156cd27` (unchanged). Halted at slice `durable-object-conformance-run`, step
+**`review`** — a substantive verdict this time, not a plumbing failure. 8 of 12 stories
+committed. `degradedSummary: none`; no baseline repairs; no agent errors.
+
+**Run 1's fix held.** `real-worker-bindings` re-entered at Review, passed, and sealed
+**approved**. The fence amendment was the whole difference; no implementer was dispatched
+for those four stories.
+
+| Slice | Verdict | Story checkpoints |
+|-------|---------|-------------------|
+| `wasm-execution-seam` | approved | `8ea7bb7` + `d1bae6d` |
+| `real-worker-bindings` | **approved** | `310a4c8`, `3eb91cf`, `9891320`, `5955cb3`, repair `2ea99fd` |
+| `durable-object-conformance-run` | **changes-requested** | `6fc808e`, `440bbac`, `22529d5`, repair `84d5ab9` |
+
+### The halt is the loop working
+
+`84d5ab9` — *"answer the workerd question instead of deleting it"* — **reversed a prior
+deletion of the disclosing sentence** and raised the blocking finding the briefs
+pre-committed to, with its measured cost. All four findings were verified independently at
+the gate rather than taken from the reviewer's summary.
+
+1. **AC-001 is unmet.** `crates/happenstance-cloudflare/src/host.rs:106-221` is a
+   `node:sqlite`-backed `DurableObjectState` shim. Its own module docs say *"It is not a
+   Durable Object runtime, and nothing in this crate may be read as saying it is."*
+   89/89 rules execute — on `wasm32` under `wasm-bindgen-test-runner`, not under `workerd`.
+   Project AC-002, AC-004 and **initiative DoD 4** are reported OPEN by the implementer.
+2. **`cargo deny check bans` is red — confirmed by running it.** `worker 0.8.5` and
+   `worker-macros` both depend unconditionally on `async-trait 0.1.91`, banned under
+   **ADR-0001, binding constraint #1**. So the full `cargo xtask ci` is red today.
+   `crates/happenstance-cloudflare/Cargo.toml:35-45` discloses this and **refuses** to
+   widen `deny.toml`'s `wrappers` list, because that "would turn the measurement into a
+   green checkmark and delete the finding." That refusal is correct and must survive.
+3. **The three store limits are read off Cloudflare's documentation**, seeded from the
+   2 MiB row cap — while HS-S0055 AC-001 says in terms *"never read off a platform page."*
+   No wall is observable on the host at 8 MiB / 16,384 tags / 8,192 inserts. The
+   adapter-side enforcement (`event_store.rs:418-440`) is real and the rule passes in both
+   directions; the defect is in what the numbers **claim**.
+4. **A goalpost moved, and it was downstream of run 1's amendment.** `84d5ab9` reworded
+   `measured-store-limits/spec.md:103`'s **Merge DoD acceptance sentence** `workerd` →
+   `wasm32`, inside a commit whose stated rationale covers path rows only.
+   **Reverted at the gate (`af9eb10`)** with the distinction recorded in the spec:
+   `8fa4d06` licensed widening a **path fence** that a correct implementation could not
+   satisfy; it does not reach an **acceptance sentence**, which is the thing the work is
+   measured against.
+
+### Recorded at the gate
+
+| Story | Outcome |
+|-------|---------|
+| HS-S0048, HS-S0049, HS-S0050, HS-S0051, HS-S0052 | **approved**, held on `report` (`--stay`) |
+| HS-S0054, HS-S0055 | **changes-requested** recorded; back on `implement`/`in-progress` |
+| HS-S0053 | **could not reach `report`** — its `implement` command gate is red on boundary (`CHANGELOG.md`, arriving via the shared repair `84d5ab9`, is outside its fence). Left on `plan`, which is *further back* than a recorded rejection would have put it. The slice seal in `_slices.md` carries the finding; the story-level `verdict` event does not exist for it. |
+
+HS-P0013 was **not** advanced past `implementation`: the project review verdict is
+`changes-requested` and the run halted at a slice review.
+
+### The escalation, and where it goes
+
+Deferred at the human gate to **HS-S0058 `adr-0023-and-atom-resolutions`**, which is where
+the runbook puts ADR authorship. Three questions travel together and ADR-0023 owns all of
+them: the `workerd`-versus-shim runtime substitution (AC-001, project AC-002/AC-004, DoD
+4); the three store-limit numbers (AC-001/AC-002/AC-003 — declare `None` with the
+falsification finding, hold, or ratify the "declared refusal policy" reading); and the
+`worker` → `async-trait` collision with ADR-0001. **None was settled in passing**, and if
+ADR-0023 ratifies the substitution, the ACs and the Merge DoD sentence are amended
+together through the spec path as one named decision.
+
+### Carried forward
+
+1. **HS-S0053's fence needs one row (`CHANGELOG.md`) before its rejection is recordable.**
+   Not done here: the story is held either way, and editing a spec to make a *rejection*
+   land is not worth the precedent while the slice is open.
+2. **The three unstarted stories' fences are unchecked** against the gate-compelled
+   pattern. `84d5ab9` pre-emptively added fenced blocks to slice 3's specs; `evidence-and-verdicts`
+   and `publish-readiness` have not been looked at.
+3. **`publish-ready-crate` (HS-S0059) cannot claim "the gate is green"** while `cargo deny
+   check bans` is red. Its AC-012 and project DoD 1 both say so; the ADR-0023 outcome gates it.
+4. **`pub mod host` is `#[doc(hidden)]`** — every item behind it panics on a real Workers
+   isolate, so HS-S0059's question is "remove a hidden item", not "break a published one".
