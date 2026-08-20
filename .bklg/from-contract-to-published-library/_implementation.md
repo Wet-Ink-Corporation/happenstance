@@ -25,7 +25,7 @@ attributable to the initiative rather than inherited.
 | 1 | `projection-store-freeze` | HS-P0010 | — | **done** | approved 2026-08-15 · `_review.md` · 17/17 · 6 runs |
 | 2 | `typed-layer-and-alpha-release` | HS-P0011 | 1 | **done** | approved 2026-08-16 · `_review.md` · 16/16 · 3 runs · `overall: 3` |
 | 3 | `sqlite-durable-store` | HS-P0012 | 1, 2 | **done** | approved 2026-08-19 · `_review.md` · 14/14 · 6 runs · `overall: 3` · `happenstance-sqlite 0.0.0` reserved |
-| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | 3 runs · 11/12 · slices 1–2 approved (5 stories approved at the gate) · slice 3 changes-requested and **still owed a review** · slice 4 committed but never sealed · **blocked on the human `/redkiln:kb-ingest` wave for ADR-0023** |
+| 4 | `cloudflare-durable-object-store` | HS-P0013 | — | **in-progress** | 5 runs · 12/12 · slices 1–3 sealed approved · slice 4 approved on re-review but **unsealed** (safety classifier) · 11 stories approved at the gate · **HS-S0059 blocked on two maintainer actions: the crates.io upload, and a `deny.toml` disposition** · project review has never run |
 | 5 | `postgres-and-neon-stores` | HS-P0014 | 1 | pending | |
 | 6 | `ladybug-projection-store` | HS-P0015 | 1 | pending | |
 | 7 | `publication-and-positioning` | HS-P0016 | 2, 3, 4, 5, 6 | pending | |
@@ -1755,3 +1755,137 @@ not settled here.
 5. **RUNBOOK.md:302 and phase 9's ADR-0023 work box are deliberately untouched.** Striking
    the queue row before the atom exists would point a reader at a path that is not there.
    They belong after the wave.
+
+## The phase-9 ingest wave — 2026-08-20 (`wf_27591814-543`, wave `2026-08-20-intake-phase-9`)
+
+The human ran `/redkiln:kb-ingest`. Committed at `6b0fe33` on `worktree-kb-intake-2026-08-20`
+and merged into this branch at `3ac4bf1`. **The worktree was based on the initiative branch, not
+clean `main`** — a deliberate deviation, because `references/adr/0023-*.md` exists only here and
+an atom minted on `main` would cite a record absent from its own tree.
+
+Six atoms created (`kb-decision-0023`, `kb-decision-0034`, two `reference`, two
+`open_question`), five `open_question` atoms amended, three map atoms synced, eleven backlinks
+wired. **No accepted decision atom was edited**: ADR-0034 answers CF-40 from outside rather than
+amending ADR-0015, ADR-0012 or ADR-0022. `redkiln validate --kb` passes.
+
+Three things worth keeping:
+
+1. **ES-6 stayed open, and three independent instructions agreed it should.** The verdict judges
+   ADR-0009's *prediction*, not ES-6's *rule*; `store_error_crosses_a_join_handle` is still
+   unwritten and unowned.
+2. **The wave corrected a figure in its own source rather than transcribing it.** The intake said
+   the harness is driven by "one row in the executed-target registry"; `proof.rs:589-600` says
+   three. The atom says "one row added to a three-row registry".
+3. **Two of the three questions escalated to ADR-0023 were recorded open, not signed.** The
+   `deny.toml` ratify-or-refuse call went to `kb-open-question-worker-async-trait-ban-001`
+   because ratifying an ADR-0001 exemption against a red gate with no human present is what
+   `.kb/decisions/README.md:31-33` forbids. The three store-limit numbers are adjudicated by no
+   staged document at all.
+
+The workflow's verify agent halted before finalizing, treating `redkiln doctor` exit 1 as a stop.
+The nine `.bklg` errors it tripped on were confirmed present on this untouched branch and last
+touched by `ae77ac4`; the wave's diff is `.kb/` only. The finalize was completed by hand —
+`03-integration-summary.md` written, the five intake documents cleared, the wave committed.
+`04-retrospective.md` was never authored.
+
+## HS-P0013 `cloudflare-durable-object-store` — run 4, 2026-08-20 (`wf_b2591de3-11b`)
+
+baseRef `156cd27`. No escape hatch: git truth re-entered slice 3 at Review, as intended. Halted
+there, sealed `changes-requested` again (`a9bc873`). No new story commits. `degradedSummary: none`.
+
+**Run 2's substantive findings were gone.** `double-satisfies-real-ac` and `fixmed-dod` — the
+shim-for-`workerd` substitution and the moved acceptance sentence — no longer appear in
+`_slices.md`. ADR-0023 landing resolved them. That is what the wave was for and it worked.
+
+Two documentation-accuracy findings survived, both verified at the gate before being acted on:
+
+1. `crates/happenstance-cloudflare/tests/durable_object_conformance.rs:1` still claimed execution
+   *"against a real Durable Object"*, contradicting `host.rs:41-42`'s binding *"It is not a
+   Durable Object runtime"* at the reader's designated landing point. Untouched since `440bbac`;
+   it survived two repair passes.
+2. `xtask/src/proof.rs:559-563` described `MID_BATCH_FAULT` as declined and its two
+   atomicity-under-fault rules as SKIP lines `measured-store-limits` *"will flip"*. That story is
+   in the same slice and had already flipped it (`support/mod.rs:244` = `SUPPORTED`).
+
+**No implementer is dispatched into a slice whose stories are all committed**, so the tail was
+review → gate → re-review → seal. Re-launching alone would have reproduced it against an
+unchanged tree. At the human's instruction both were fixed by hand in `1c23740`, affected gate
+green, no behaviour changed.
+
+## HS-P0013 `cloudflare-durable-object-store` — run 5, 2026-08-20 (`wf_db8ff5c0-400`)
+
+baseRef `156cd27`. **12 of 12 stories committed.** Halted at slice `publish-readiness`, story
+`publish-ready-crate`, kind `blocked-dependency`. `degradedSummary: 1 warn`.
+
+| Slice | Verdict | This run |
+|-------|---------|----------|
+| `wasm-execution-seam` | approved | — |
+| `real-worker-bindings` | approved | — |
+| `durable-object-conformance-run` | **approved** | sealed `5a1789b`; the `1c23740` repair cleared it |
+| `evidence-and-verdicts` | **approved, UNSEALED** | reviewed `changes-requested` → fixed → re-reviewed `approved`; the seal was blocked |
+| `publish-readiness` | — | `b05c293`; halted before review |
+
+### The slice-4 seal was blocked by a safety classifier, and the reasoning cited this session
+
+`review:evidence-and-verdicts` returned `changes-requested` (CF-14/CF-27 cells over AC-010's
+stated budget; HS-S0058's post-wave pass not performed). The fix pass landed `d3f6ff4` and
+`a12364c`, `3481e09` repaired the gate, and `re-review:evidence-and-verdicts` returned
+**`approved`**, stating it re-ran every gate on the post-fix tree rather than trusting the
+reports — `cargo xtask wasm` green, 89 rules on the Cloudflare row with **zero** SKIP lines,
+227 tests passing.
+
+`seal:evidence-and-verdicts:approved` was then refused twice by a safety classifier as
+self-approval. Its stated evidence was **the orchestrator's own earlier message to the human**,
+which said slice 4's work was unexamined and recommended holding HS-S0056/57. That was true when
+written and false by the time the seal ran. The classifier was reasoning from stale context.
+
+**Left unsealed at the human's decision.** The next run re-reviews slice 4 and seals its own
+verdict. The cost is one review cycle; the alternative is a seal written by something other than
+an adversarial reviewer, and the failure mode of leaving it is repeated work rather than a false
+record.
+
+### `3481e09` fixed the fence pattern properly, and it is the first time that happened here
+
+Run 3's carried-forward item 3 said HS-S0056's boundary needed `Cargo.lock` and that the
+*pattern*, not the four amended specs, was what stayed unfixed. `3481e09` deleted two stray
+`gate-run*.log` files and **added `Cargo.lock` to HS-S0056's declared path list**, citing the
+house convention in sibling specs — a spec row, not a widened repair commit. HS-S0056's gate has
+been green since.
+
+### Recorded at the gate — eleven approved, one unreachable
+
+| Story | Outcome |
+|-------|---------|
+| HS-S0048–HS-S0052 | approved at run 2's gate, still held on `report` |
+| HS-S0053, HS-S0054, HS-S0055 | **approved**, held on `report` (slice 3 sealed) |
+| HS-S0056, HS-S0057, HS-S0058 | **approved**, held on `report` (slice 4 re-reviewed approved) |
+| HS-S0059 | **could not reach `report`** — ledger gate red on AC-010 and AC-012, both blocked on maintainer action. Left on `plan`. Provenance recorded separately at `0ab34a5`. |
+
+HS-S0053 needed one more thing first: `d586747` added `CHANGELOG.md` to its declared path list.
+It was the only story in its slice omitting a row eight of the project's ten specs carry, and the
+omission had left it stranded on `plan` across three runs while its slice was sealed
+`changes-requested` and then `approved` around it. Same shape and reasoning as `3481e09`.
+
+HS-P0013 was **not** advanced past `implementation`.
+
+### What HS-S0059 is actually waiting for — both are the maintainer's
+
+1. **AC-010 — the crates.io name is unheld.** `cargo xtask reserve` deliberately prints rather
+   than runs the upload (`xtask/src/reserve.rs:180-184`); the placeholder is generated and
+   `cargo publish --dry-run` is green. The missing step is one irreversible public upload under
+   the maintainer's identity.
+2. **AC-012 — `cargo deny check bans` is red.** `cargo xtask ci` is green at **every REQUIRED**
+   step, including all seven `wasm_steps()` and `spec-trace`, and red only at the **optional**
+   `licences and advisories` step, where `async-trait` is reached through `worker`/`worker-macros`.
+   The story refused to widen `deny.toml`: it is outside its PR boundary and the identical edit
+   was already reverted by review as finding-deletion (`2ea99fd`). This is the disposition of
+   `kb-open-question-worker-async-trait-ban-001` — the same call the ingest wave declined.
+
+### Carried forward
+
+1. **Slice 4's `approved` verdict is not in git.** A re-launch re-reviews it. Do not hand-seal it.
+2. **HS-S0059 cannot be finished by a workflow.** Both blockers need the maintainer: a publish,
+   and a decision on `deny.toml`. Until AC-012 has a disposition, no run can claim a green gate.
+3. **The project review has never run.** Every run so far halted inside `stories`, so there is no
+   `_review.md`, no `_integration.md`, and no rubric for HS-P0013 yet.
+4. **`04-retrospective.md` for the phase-9 wave was never written.**
