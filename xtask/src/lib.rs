@@ -1,4 +1,4 @@
-//! Nothing but a home for the repository README's doctests.
+//! A home for the repository README's doctests, and for the [`pointers`] register.
 //!
 //! The README at the repository root shows a Quick start, and until this file
 //! existed nothing compiled it — its example used `?` and `.await` at the top
@@ -34,3 +34,10 @@ mod constitution;
 // stay in *this* target: `cargo test --doc` compiles the lib crate's doctests,
 // so the same line in `main.rs` would compile clean and check nothing.
 mod narrative;
+
+// The pointer policy and its register (`docs-that-teach`, HS-S0154). In the
+// *lib*, deliberately: `main.rs` is a separate crate root with private modules,
+// so a register there is unreachable to a consumer. Here it is `pub`, which is
+// what keeps `dead_code` quiet over a register nothing reads yet and what lets
+// a same-package bin write `use xtask::pointers::…` when HS-P0020's step lands.
+pub mod pointers;
