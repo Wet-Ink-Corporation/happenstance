@@ -246,6 +246,6 @@ frozen.
 
 **Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
 `crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
-`crates/happenstance-cloudflare/src/lib.rs:195 (can only ever *inherit*)` ·
+`crates/happenstance-cloudflare/src/lib.rs:246 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

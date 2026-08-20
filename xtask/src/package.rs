@@ -83,7 +83,17 @@ use anyhow::{Context, Result, bail};
 /// An intention, not a derivation: [`publishable_members`] reads the fact out of
 /// the manifests and [`reconcile`] fails when the two disagree. Both exist so
 /// that the failure can say which of them moved — see the module docs.
-const PUBLISHABLE: &[&str] = &["happenstance-core", "happenstance", "happenstance-testkit"];
+const PUBLISHABLE: &[&str] = &[
+    "happenstance-core",
+    "happenstance",
+    "happenstance-testkit",
+    // Phase 9. The first *adapter* in the list, and it arrived here in the same
+    // change that deleted its `publish = false` — which is the only order that
+    // is ever green. Either half alone is the drift [`reconcile`] exists to
+    // report: a crate Cargo will publish that this step does not check, or a
+    // name here Cargo will not publish.
+    "happenstance-cloudflare",
+];
 
 /// The files every published artifact must contain.
 ///

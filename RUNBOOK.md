@@ -4450,6 +4450,21 @@ discharged by assertion.
       *The tail seam (ES-32) — the verdict*; the two ledger rows that promised it
       point at it rather than repeat it.
 - [ ] `publish = false` removed; `cargo xtask ci` green including the wasm32 step.
+      **Half done, and the halves are recorded rather than averaged.** The
+      manifest flag is gone and `happenstance-cloudflare` is in `PUBLISHABLE`
+      (`xtask/src/package.rs`) — the pair that puts this crate inside the step
+      asserting both licence texts and its README are in the packaged artifact,
+      on every run rather than in one working tree. Every one of the seven steps
+      `wasm_steps()` names is green, and so is `cargo xtask ci --fast`, which is
+      the bar this non-terminal project's integration gate holds. The box stays
+      **unticked** because the sentence says *`cargo xtask ci`*, and the full
+      gate is red at one `OPTIONAL` step: `cargo deny check` fails `bans`,
+      because `worker` and `worker-macros` depend unconditionally on
+      `async-trait`, which `deny.toml` bans under ADR-0001. That is
+      `kb-open-question-worker-async-trait-ban-001` — open on purpose, ratified
+      by nobody, and not settled here: widening the `wrappers` list to make this
+      box tickable would delete the finding the ban exists to produce, which is
+      exactly what the slice repair of `2ea99fd` reverted once already.
 
 **Cases this makes writable.** The real-adapter half of E2E-30, E2E-52 and E2E-54.
 

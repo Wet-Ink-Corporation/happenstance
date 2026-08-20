@@ -1,7 +1,26 @@
+// The README's code blocks are compiled as doctests. `cfg(doctest)` keeps the
+// prose out of the rendered documentation — it would otherwise appear twice, once
+// here and once in the module docs below — while still type-checking every
+// example. A README example that does not compile is worse than no example: it is
+// the first thing a reader tries, and the first impression the crate makes. (D10)
+//
+// Only this crate's own README. The repository README lives outside the package
+// and `include_str!` would not resolve once this crate is unpacked from its
+// artifact — a path that resolves in the working tree and vanishes on publication
+// is exactly the failure `cargo package --list` exists to catch, and the list is
+// where this include was checked.
+//
+// The example inside it is marked `no_run` rather than left to execute, and the
+// reason is the crate's own: every `worker` binding resolves to a `wasm-bindgen`
+// stub that panics off-target, so an example that *ran* on the host would be
+// exercising the stub rather than a Durable Object. `no_run` is the narrowest
+// attribute that is honest here — the block is compiled and type-checked on every
+// `cargo test -p happenstance-cloudflare --doc`, which is what the claim needs.
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: bound, implemented, and running the suite on `wasm32` — not yet under `workerd`
+//! # Status: bound, implemented, packaged — and not yet released
 //!
 //! This crate depends on [`worker`] and talks to a real Durable Object's
 //! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
@@ -25,10 +44,42 @@
 //! real Durable Object class can hold, and [`host`]'s own documentation says
 //! what that visibility does and does not promise. Every item in it panics on a
 //! real Workers isolate — `process.getBuiltinModule('node:sqlite')` does not
-//! exist there — so whether it travels to a consumer at all is
-//! `publish-ready-crate`'s decision, and hiding it now keeps that a decision
-//! about removing an undocumented item rather than about breaking a published
-//! one.
+//! exist there — so whether it travels to a consumer at all was left as
+//! `publish-ready-crate`'s decision, and hiding it kept that a decision about
+//! removing an undocumented item rather than about breaking a published one.
+//!
+//! **That decision is taken, and it is that the module travels, hidden.** The
+//! alternative was to strip it before the crate became publishable, and it
+//! fails on reachability rather than on taste: `tests/` is a second compilation
+//! unit that links this crate's *public* surface and nothing else, so the
+//! conformance target and the fixture contract can only name the host if it is
+//! `pub` here. Removing it would take the adapter's only executed conformance
+//! run with it. What `#[doc(hidden)]` then buys is that no consumer is *told*
+//! about an item that panics where they will run it, and that deleting it later
+//! is the removal of an undocumented item rather than a breaking change. The
+//! third option — a `test-host` Cargo feature — buys the same thing and costs a
+//! `cargo hack` powerset dimension on every run of the gate, so it stays
+//! available and unspent.
+//!
+//! # Status: what publication this crate is ready for, and what it is not
+//!
+//! Ready to be packaged, and packaged: both licence texts and a README sit
+//! beside the manifest inside the package directory, `readme = "README.md"` is
+//! stated rather than left to auto-discovery, `publish = false` is gone, and the
+//! crate's name is in `PUBLISHABLE` (`xtask/src/package.rs`) — which is the half
+//! that matters, because it puts this crate inside the gate step that asserts
+//! all three files are in the artifact on every run, forever, rather than
+//! leaving it a fact about one working tree. `reconcile` fails in both
+//! directions, so the manifest flag and the list cannot drift apart.
+//!
+//! **Not released.** No version has been chosen, nothing has been published at a
+//! real version, this crate's API is not frozen, and nothing here promises a
+//! minimum supported Rust version. The crates.io *name* is held by the `0.0.0`
+//! placeholder `cargo xtask reserve` generates — a standalone crate sharing
+//! nothing with this workspace but its metadata — for the reason
+//! `xtask/src/reserve.rs` gives: publishing the real crate at a real version
+//! would make this API semver-binding before the phases that freeze it
+//! deliberately, against evidence.
 //!
 //! # Conformance: what has run, where, and what is deliberately not asked to
 //!
@@ -378,10 +429,11 @@ pub mod event_store;
 // What the visibility does *not* buy is a second public API. The adapter stays
 // a library type any `#[durable_object]` class can hold, this module reaches it
 // through the same `CloudflareEventStore::new(sql)` a production class calls,
-// and the crate documentation above says so. `publish = false` still stands;
-// whether the host travels to a consumer at all is `publish-ready-crate`'s to
-// decide, and it is a smaller decision for the module being one item rather
-// than a `cfg` maze.
+// and the crate documentation above says so. `publish = false` is now gone, and
+// the decision that removal forced has been taken: the module travels, hidden.
+// It has to be `pub` for `tests/` to name it at all, and it is a smaller
+// decision for the module being one item rather than a `cfg` maze — the crate
+// documentation above carries the argument and the alternative that lost.
 //
 // `#[doc(hidden)]`, and the attribute is doing real work rather than tidying the
 // docs. `pub` is a **semver promise** as well as a reachability decision, and

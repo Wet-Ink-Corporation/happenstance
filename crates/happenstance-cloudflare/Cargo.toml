@@ -1,6 +1,10 @@
 [package]
 name = "happenstance-cloudflare"
-description = "Cloudflare Durable Object (Workers SqlStorage) event store adapter for happenstance. Not yet implemented."
+# The sentence the reserved `0.0.0` placeholder already promises
+# (`xtask/src/reserve.rs:93`), so the reservation and the crate describe one
+# thing to anyone browsing rather than two. It used to end "Not yet
+# implemented.", which stopped being true when the last binding landed.
+description = "Cloudflare Durable Object event store adapter for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +13,20 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Stated rather than auto-discovered, for the reason
+# `crates/happenstance-core/Cargo.toml:12-15` gives: Cargo would find it anyway,
+# but the key is what crates.io renders, and a silent default is a poor thing to
+# rely on for the first impression anyone gets of the crate.
+readme = "README.md"
+
+# `publish = false` is gone, and its removal is half of a pair rather than a
+# manifest tidy-up. The other half is `"happenstance-cloudflare"` in
+# `PUBLISHABLE` (`xtask/src/package.rs`), which is what puts this crate inside
+# the gate step that asserts both licence texts and the README are in the
+# packaged artifact. `reconcile` fails in *both* directions, so the two cannot
+# drift apart: a crate Cargo will publish that the step does not check, or a
+# name in the list Cargo will not publish. D11 is what happens without it —
+# three crates whose metadata promised two licences neither of which shipped.
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
@@ -118,6 +135,32 @@ wasm-bindgen-test.workspace = true
 happenstance-core = { workspace = true, features = ["std", "serde"] }
 serde_json.workspace = true
 postcard.workspace = true
+
+# Declared rather than defaulted, and the one key that differs from the other
+# three publishable crates is the one that matters here.
+#
+# docs.rs builds for `x86_64-unknown-linux-gnu` unless told otherwise. This crate
+# compiles there — the `!Send` probes run on the host precisely so a contributor
+# needs no wasm toolchain — but every `worker` binding it links resolves to a
+# `wasm-bindgen` stub that panics when called, so a host-built page would render
+# the documentation of a crate that cannot do anything. `wasm32-unknown-unknown`
+# is the target this crate exists for and the only one where its bindings resolve
+# to a live JavaScript heap, so it is the page a reader should land on.
+#
+# Verified rather than assumed: `cargo doc --no-deps --target
+# wasm32-unknown-unknown` is green under `RUSTDOCFLAGS=-D warnings`, and so is
+# the nightly `--cfg docsrs` build of the same. A crate whose docs.rs build fails
+# renders an error where its front page should be, on a version that can be
+# yanked but never removed.
+#
+# `all-features` costs nothing today — this crate has no Cargo features — and is
+# carried anyway so that the first one added is documented rather than silently
+# absent, which is the shape the other three manifests already use.
+[package.metadata.docs.rs]
+all-features = true
+default-target = "wasm32-unknown-unknown"
+targets = []
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
