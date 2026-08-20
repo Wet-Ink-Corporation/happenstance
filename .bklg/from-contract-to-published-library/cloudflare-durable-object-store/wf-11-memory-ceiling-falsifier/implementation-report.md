@@ -217,7 +217,7 @@ separable.
 
 | SHA | subject |
 | --- | --- |
-| `PENDING` | `feat(cloudflare-durable-object-store): WF-11's falsifier tested where the memory ceiling is real` |
+| `14dbb4b` | `feat(cloudflare-durable-object-store): WF-11's falsifier tested where the memory ceiling is real` |
 
 ## Changes
 
