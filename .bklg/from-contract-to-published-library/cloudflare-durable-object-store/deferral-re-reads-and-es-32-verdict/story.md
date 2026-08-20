@@ -19,7 +19,7 @@ archetype: capability
 slice: evidence-and-verdicts
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T20:45:34.750Z
+updated: 2026-08-20T20:45:43.538Z
 links:
   pr: null
   commits:
@@ -27,7 +27,7 @@ links:
     - 77e674b
     - d3f6ff4
   kb: []
-gate_open: true
+gate_open: false
 schema: 1
 process_rev: b611dd09
 ---
