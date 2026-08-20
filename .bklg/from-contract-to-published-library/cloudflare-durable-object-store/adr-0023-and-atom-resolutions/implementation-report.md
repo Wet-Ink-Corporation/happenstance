@@ -164,4 +164,4 @@ is a second pass that begins with a human running `/redkiln:kb-ingest`.
 
 | SHA | subject |
 | --- | --- |
-| `PENDING` | `feat(cloudflare-durable-object-store): stage ADR-0023 and the CF-40/WF-11 resolutions for the ingest wave` |
+| `d3030c6` | `feat(cloudflare-durable-object-store): stage ADR-0023 and the CF-40/WF-11 resolutions for the ingest wave` |
