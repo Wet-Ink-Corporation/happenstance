@@ -21,10 +21,11 @@ archetype: capability
 slice: publish-readiness
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:10:07.986Z
+updated: 2026-08-20T20:36:48.169Z
 links:
   pr: null
-  commits: []
+  commits:
+    - b05c293
   kb: []
 gate_open: false
 schema: 1
