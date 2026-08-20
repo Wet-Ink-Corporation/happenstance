@@ -365,9 +365,9 @@ pub(crate) struct WasmUnitTarget {
     pub(crate) source_dir: &'static str,
     /// The `cfg` spelling that tree's `wasm32`-only tests are written behind.
     ///
-    /// A per-row field rather than one constant, because the two rows this
-    /// registry carries are gated in genuinely different places and a single
-    /// spelling could only serve one of them. A `#[cfg(test)]` module inside a
+    /// A per-row field rather than one constant, because the rows this registry
+    /// carries are gated in genuinely different places and a single spelling
+    /// could only serve one of them. A `#[cfg(test)]` module inside a
     /// `src/` tree is written `cfg(all(test, target_arch = "wasm32"))`; an
     /// **integration** target is already `#[cfg(test)]` by virtue of being one,
     /// so its `wasm32`-only half is written `cfg(target_arch = "wasm32")` and a
@@ -717,6 +717,68 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
         host: CLOUDFLARE_HOST,
         tests: CLOUDFLARE_FIXTURE_CONTRACT_TESTS,
     },
+    WasmUnitTarget {
+        // WF-11's falsifier, and the third row — which is the whole of
+        // `wf-11-memory-ceiling-falsifier`'s (HS-S0056) `xtask` delta. That is
+        // the contract `wasm-execution-gate-step` took in its AC-006 and
+        // `every-rule-under-workerd` restated in its AC-003, cashed for the
+        // second time: a package, a selector, the tree the runner-free guard
+        // reads, and the tests a rename has to disagree with. No second `Step`,
+        // no second runner variable, no second `--target` plumbing.
+        //
+        // It is deliberately **not** a `WASM_TARGETS` row. Every row there is
+        // held to a `RuleFamily`'s exhaustive enumeration and this target runs
+        // no conformance rule of either suite — WF-11 is a *wire* clause, and
+        // nothing in an event-store suite can observe how much memory an encode
+        // took. What it runs instead is a measurement: an isolate's real memory
+        // ceiling, walked in-process with `core::arch::wasm32::memory_grow`, and
+        // the peak cost of `happenstance-core`'s human-readable payload encode
+        // against the binary one on identical bytes.
+        //
+        // It is a second target rather than two more cases in
+        // `durable_object_conformance`, and that is forced twice over: that
+        // harness is held to three lines and defines nothing, and a probe whose
+        // job is to walk an isolate up to its ceiling must not share that
+        // isolate with the conformance rules.
+        package: "happenstance-cloudflare",
+        selector: &["--test", "wf11_memory_ceiling"],
+        source_dir: "crates/happenstance-cloudflare/tests",
+        gate: WASM32_TARGET_GATE,
+        host: CLOUDFLARE_HOST,
+        tests: WF11_MEMORY_CEILING_TESTS,
+    },
+];
+
+/// The WF-11 probe's two cases, by the name `--list` prints them.
+///
+/// Hand-written here, and that is the **opposite** of the choice
+/// [`WASM_TARGETS`]' Cloudflare row makes — on purpose. That row derives its
+/// expectation from `for_each_event_store_rule!` because the thing being guarded
+/// is a harness against a rule enumeration. There is no enumeration behind these
+/// two names, so the row is a *citation*, which is precisely the case this
+/// file's own opening argument says duplication is for: a rename should have to
+/// be noticed.
+///
+/// **Unprefixed**, unlike every other list in this file, because there is no
+/// `mod $mod_name` wrapper around them — `event_store_conformance!` is not
+/// involved here and the two cases sit at the top level of the target.
+///
+/// **Two, and the count is forced by the instrument.** `wasm32` linear memory is
+/// one global resource shared by every test in a target and `memory_grow` is
+/// one-way, so a ceiling staircase in its own case would leave a grown heap
+/// behind and zero every later peak delta. One case therefore owns the ordering
+/// — anchored encodes first, ceiling second, the computed size last — and the
+/// other is written to be order-independent, comparing encoded *lengths* rather
+/// than memory, so it is immune to whatever the first did.
+///
+/// What this list cannot catch is stated rather than left to be discovered: a
+/// body emptied while both names survive. A name-based artefact cannot see an
+/// assertion that was deleted, and there is no rule enumeration here to derive a
+/// second expectation from. That residual gap is named in the story's
+/// implementation report.
+const WF11_MEMORY_CEILING_TESTS: &[&str] = &[
+    "records_the_ceiling_and_the_encode_peaks",
+    "the_two_encode_paths_produce_the_published_size_ratio",
 ];
 
 /// What both `happenstance-cloudflare` rows need from the machine.
@@ -2200,6 +2262,120 @@ mod tests {
              execution steps means two runner wirings, two `--target` plumbings \
              and two places for the next target to be forgotten."
         );
+    }
+
+    /// HS-S0056 AC-008. The WF-11 memory-ceiling probe is mounted by a **row**.
+    ///
+    /// The second caller of the contract [`wasm-execution-gate-step`] wrote in
+    /// its AC-006 and [`every-rule-under-workerd`] restated in its AC-003: a
+    /// further executed `wasm32` target arrives as a row, never as a second
+    /// `Step`. So this test asserts the row's identity *and*, beside it, the
+    /// three things a parallel step would have needed — a second execution step,
+    /// a second runner variable, and `--target` plumbing naming this target
+    /// directly. Each of those would satisfy every other check in this file
+    /// while leaving the seam with two paths to drift apart.
+    ///
+    /// The probe is **not** a [`WASM_TARGETS`] row: that registry holds every
+    /// row to a [`RuleFamily`]'s exhaustive enumeration, and this target runs no
+    /// conformance rule at all. It measures an isolate's memory ceiling and the
+    /// cost of one encode, which no rule in either suite can observe.
+    #[test]
+    fn the_wf11_probe_is_a_row_and_not_a_second_step() {
+        let row = WASM_UNIT_TARGETS
+            .iter()
+            .find(|unit| unit.selector == ["--test", "wf11_memory_ceiling"])
+            .expect(
+                "the WF-11 memory-ceiling probe has no row in WASM_UNIT_TARGETS, \
+                 so `cargo xtask ci` compiles it under the existing `--tests` \
+                 wasm32 check and executes it nowhere — which is the discover \
+                 stage's named wrong implementation wearing a different hat",
+            );
+
+        assert_eq!(
+            row.package, "happenstance-cloudflare",
+            "the probe lives in the adapter's own crate, because the isolate \
+             whose ceiling it measures is that adapter's runtime"
+        );
+        assert_eq!(
+            row.source_dir, "crates/happenstance-cloudflare/tests",
+            "the runner-free guard reads this tree; a row pointing anywhere else \
+             would pass on a machine with no runner while proving nothing"
+        );
+        assert_eq!(
+            row.gate, WASM32_TARGET_GATE,
+            "an integration target is already `#[cfg(test)]` by being one, so its \
+             wasm32-only half is written `cfg(target_arch = \"wasm32\")`"
+        );
+
+        let execution_steps = crate::REQUIRED
+            .iter()
+            .filter(|step| step.name.contains("wasm32 run of"))
+            .count();
+        assert_eq!(
+            execution_steps, 1,
+            "registering a target is adding a row, never adding a step"
+        );
+        assert!(
+            crate::REQUIRED
+                .iter()
+                .all(|step| step.env.iter().all(|(key, _)| *key != WASM_RUNNER_VAR)),
+            "`{WASM_RUNNER_VAR}` is set per-`Command` in this file and must never \
+             become a second, step-level runner wiring"
+        );
+        assert!(
+            crate::REQUIRED
+                .iter()
+                .all(|step| !step.args.contains(&"wf11_memory_ceiling")),
+            "no gate step may name this target in its own args: that is the \
+             hard-coded `--target` plumbing the row exists to make unnecessary"
+        );
+    }
+
+    /// HS-S0056 AC-009. The probe's row names the tests a rename has to
+    /// disagree with.
+    ///
+    /// `cargo test` exits 0 on `running 0 tests`, so naming the target is
+    /// checking the filename. The row's `tests` are what
+    /// [`wasm_unit_run`] asserts out of `--list` *before* anything runs, which
+    /// is what makes a deleted, renamed, `#[ignore]`d or `cfg`-ed-away probe
+    /// fail the gate rather than pass it.
+    ///
+    /// The names are **unprefixed**, and that is asserted rather than assumed:
+    /// unlike the conformance target there is no `mod $mod_name` wrapper here,
+    /// because `event_store_conformance!` is not involved — so a `::` in either
+    /// name would mean the row is written against a shape the target does not
+    /// have, and every `--list` comparison would fail with a message about a
+    /// missing test rather than about a wrong expectation.
+    #[test]
+    fn the_wf11_probe_row_names_both_of_its_tests_unprefixed() {
+        let row = WASM_UNIT_TARGETS
+            .iter()
+            .find(|unit| unit.selector == ["--test", "wf11_memory_ceiling"])
+            .expect("the WF-11 memory-ceiling probe has no row in WASM_UNIT_TARGETS");
+
+        assert!(
+            !row.tests.is_empty(),
+            "a row that names no test has nothing for a rename to disagree with, \
+             and an emptied probe would exit 0 on `running 0 tests`"
+        );
+        for name in [
+            "records_the_ceiling_and_the_encode_peaks",
+            "the_two_encode_paths_produce_the_published_size_ratio",
+        ] {
+            assert!(
+                row.tests.contains(&name),
+                "the row does not name `{name}`, which the spec fixes as one of \
+                 the probe's two cases"
+            );
+        }
+        for name in row.tests {
+            assert!(
+                !name.contains("::"),
+                "`{name}` is written as though a module wrapped it; the probe's \
+                 two cases sit at the top level of the target and libtest prints \
+                 them unprefixed"
+            );
+        }
     }
 
     /// AC-005. The executed target delegates wholly to its family's enumeration.

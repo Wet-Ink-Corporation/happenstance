@@ -519,6 +519,8 @@ dependencies = [
  "futures-core",
  "happenstance-core",
  "happenstance-testkit",
+ "postcard",
+ "serde_json",
  "thiserror",
  "wasm-bindgen-test",
  "worker",

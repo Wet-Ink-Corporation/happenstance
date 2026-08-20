@@ -97,5 +97,27 @@ futures-core.workspace = true
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
 
+# The three rows WF-11's falsifier needs, and the block they are in is the whole
+# of what keeps them off a consumer's graph.
+#
+# `tests/wf11_memory_ceiling.rs` measures what an `Event`'s payload costs to
+# encode on a runtime with a memory ceiling. Reaching the encoder means enabling
+# `happenstance-core`'s `serde` feature — which is why this row exists at all,
+# and why it is here rather than beside the `[dependencies]` edge: that edge is
+# untouched, no Cargo feature was invented to carry a test, and
+# `cargo tree -p happenstance-cloudflare -e normal` is identical before and
+# after. A feature added to the normal edge would have put an encoding
+# dependency into an adapter's published graph one ADR away from where ADR-0003
+# keeps it, and made `publish-ready-crate` pay for this story's convenience.
+#
+# Target-scoped as well as dev-scoped, for `wasm-bindgen-test`'s reason one row
+# up: the probe is `#![cfg(target_arch = "wasm32")]`, so a host `cargo test`
+# must not have to resolve any of this. The two serialisers are the human-
+# readable and binary halves of the comparison the measurement rests on — the
+# same two the published figures were taken with.
+happenstance-core = { workspace = true, features = ["std", "serde"] }
+serde_json.workspace = true
+postcard.workspace = true
+
 [lints]
 workspace = true

@@ -26,6 +26,43 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **WF-11's falsifier has been fired at, and the answer is on file.** The clause
+  has carried a `[PROVISIONAL]` marker since phase 5 on a falsifier needing two
+  things in one place — a memory ceiling that is real, and a payload large enough
+  to hit it — and until the conformance suite executed on `wasm32` this workspace
+  had neither. `crates/happenstance-cloudflare/tests/wf11_memory_ceiling.rs` is
+  the first memory measurement this repository has ever taken: it walks
+  `core::arch::wasm32::memory_grow` up the isolate under the gate's own `wasm32`
+  step, then drives payloads sized against what it finds through
+  `happenstance-core`'s real human-readable payload encode, with the binary
+  encode of the *same* bytes beside it as the control that stops the number being
+  vacuous.
+
+  What it found, on the runner the gate actually has: no ceiling. The host
+  granted every one of the 2,047 pages the probe asked for — taking linear memory
+  to 142,147,584 bytes, past the platform's own documented 128 MiB per-isolate
+  limit — and refused nothing. So the verdict is *(c) the condition is not
+  constructible here*, which is an answer rather than a shrug: it names the
+  missing element (an isolate that enforces the documented ceiling) and what
+  would supply it, and it records that at that ceiling the arithmetic puts the
+  firing payload at 36,604,834 bytes — thirty-five times the 1 MiB this store
+  will accept.
+
+  The encoder was exercised, and that is asserted rather than assumed. At the
+  340 KiB reference payload the human-readable path costs 464,218 bytes against
+  the binary path's 348,163 — the two figures ADR-0016's own measurement table
+  publishes, reproduced here on `wasm32` from the same published seed — and it
+  grew linear memory by 31 pages against 17 on identical bytes. A run in which
+  those two agreed would mean the encoder was never reached, and the probe fails
+  rather than reporting one.
+
+  No wire format changed, no clause moved, and no public API gained anything:
+  the three dependencies this needed live only in
+  `[target.'cfg(target_arch = "wasm32")'.dev-dependencies]`, so
+  `cargo tree -p happenstance-cloudflare -e normal` is unchanged and `base64` —
+  the crate `happenstance-core`'s `serde` feature adds — is absent from that
+  graph entirely.
+
 - **The Cloudflare Durable Object adapter declares its capacity limits and arms a
   mid-batch fault, so three rules that skipped everywhere now run somewhere.**
   `CloudflareFixture` states `MAX_EVENT_DATA_LEN = 1 MiB`,
