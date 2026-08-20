@@ -7,9 +7,9 @@ title: Reach and the Adapter Path
 parent: HS-I0007
 initiative: docs-that-teach
 project: reach-and-adapter-path
-status: in-review
+status: implementing
 process: project
-stage: design
+stage: implementation
 automation: HITL
 severity: null
 blocked_by: []
@@ -17,7 +17,7 @@ blocks: []
 terminal: false
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T05:56:45.053Z
+updated: 2026-08-20T03:07:10.455Z
 links:
   pr: null
   commits: []
