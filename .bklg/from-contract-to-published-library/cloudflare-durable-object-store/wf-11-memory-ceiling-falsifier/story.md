@@ -7,9 +7,9 @@ title: WF-11's falsifier tested where the memory ceiling is real
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -20,14 +20,15 @@ archetype: capability
 slice: evidence-and-verdicts
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T06:19:25.263Z
+updated: 2026-08-20T20:44:08.416Z
 links:
   pr: null
   commits:
     - 14dbb4b
     - 4aa3820
+    - "3481e09"
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
