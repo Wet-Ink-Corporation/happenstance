@@ -7,9 +7,9 @@ title: Every event-store conformance rule executed on the target, in the same ga
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: in-progress
+status: in-review
 process: story
-stage: implement
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -25,14 +25,16 @@ archetype: capability
 slice: durable-object-conformance-run
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T04:40:26.100Z
+updated: 2026-08-20T20:39:53.827Z
 links:
   pr: null
   commits:
     - 440bbacab4be8746b5eb1f4a19b6020f8efe8fb9
     - 84d5ab9331ab2acbc6afd1dddd2ad66a907834b8
+    - 440bbac
+    - 1c23740
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
