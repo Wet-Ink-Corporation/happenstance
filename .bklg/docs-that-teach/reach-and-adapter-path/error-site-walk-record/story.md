@@ -20,10 +20,11 @@ archetype: capability
 slice: adapter-error-walk
 owner: ryan-britton
 created: 2026-08-17
-updated: 2026-08-17T22:02:33.360Z
+updated: 2026-08-20T14:30:48.609Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 2ac7163
   kb: []
 gate_open: false
 schema: 1
