@@ -21,7 +21,7 @@ human-readable record, the trailer is what resume greps.
 
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
-|       |         |                   |           |
+| pointer-policy | approved | pointer-policy-and-inventory ef2eb6b | (this commit) |
 
 ## Surviving findings
 
