@@ -7,9 +7,9 @@ title: The fixture's numeric limits are measurements, not guesses
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: in-progress
+status: in-review
 process: story
-stage: implement
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -22,14 +22,16 @@ archetype: capability
 slice: durable-object-conformance-run
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T04:41:41.095Z
+updated: 2026-08-20T20:42:37.684Z
 links:
   pr: null
   commits:
     - 22529d516db09d2eb1b1c05ddc75e7e6dcb5097a
     - 84d5ab9331ab2acbc6afd1dddd2ad66a907834b8
+    - 22529d5
+    - 1c23740
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
