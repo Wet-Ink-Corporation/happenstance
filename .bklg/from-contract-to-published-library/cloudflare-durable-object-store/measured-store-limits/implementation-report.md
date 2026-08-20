@@ -7,6 +7,21 @@ updated: "2026-08-19"
 
 # Implementation Report — The fixture's numeric limits are this adapter's declared refusal policy
 
+> **Amended 2026-08-20, ADR-0023-A pass.** The amendment the 2026-08-19 note below said was
+> owed has been taken. ADR-0023 is minted and **accepted** (`kb-decision-0023`), which is the
+> condition `spec.md`'s Merge DoD blockquote set, so **Amendment ADR-0023-A** moved AC-001,
+> AC-002, AC-003 and the Merge DoD one-liner together through the spec path — with
+> `project.md`'s AC-002 / AC-004 / DoD 1 and `initiative.md`'s DoD 4 — to the ratified reading:
+> the three ceilings are a **declared refusal policy, seeded from the documented row cap,
+> confirmed accepted and refused at the boundary**, with the physical wall stated as
+> **unlocated on this runtime** and a `workerd`-class runner named as what would locate it
+> (`kb-open-question-workerd-runner-absent-001`). **All eleven ACs are therefore satisfied**,
+> three of them against amended sentences and AC-004 against its original one. Two names moved
+> in the same pass so a reader who greps and never opens this report is not misled:
+> `Ceilings::MEASURED` → `Ceilings::DECLARED`, and
+> `the_three_store_limits_are_measured_not_defaulted` →
+> `the_three_store_limits_are_declared_not_defaulted`. Nothing about what ran changed.
+
 > **Amended 2026-08-19, slice repair pass.** Two claims were withdrawn on review
 > and are corrected here rather than footnoted. **The title said
 > *measurements, not guesses*, and the three ceilings are neither**: they are
@@ -87,7 +102,7 @@ per-value one.
 
 | AC | Test | Red | Green |
 | --- | --- | --- | --- |
-| AC-004 | `tests/fixture_contract.rs::the_three_store_limits_are_measured_not_defaulted` | `MAX_EVENT_DATA_LEN is None, which says this store has no ceiling on that value. It is not true of a store whose backing API carries SqlError::StorageLimitExceeded …` | all three `Some`; the `NO_STORE_LIMITS` skip line is gone from the run |
+| AC-004 | `tests/fixture_contract.rs::the_three_store_limits_are_declared_not_defaulted` | `MAX_EVENT_DATA_LEN is None, which says this store has no ceiling on that value. It is not true of a store whose backing API carries SqlError::StorageLimitExceeded …` | all three `Some`; the `NO_STORE_LIMITS` skip line is gone from the run |
 | AC-001–003 | `dcb_conformance_wasm::append_reports_exceeded_store_limits` | **skipped**, which is the failure — a rule that certifies nothing while printing an honest-looking line | Ran and passed, all three arms |
 | AC-005 | `::no_declared_ceiling_is_below_its_floor` | vacuous while every constant was `None` (its `let Some(…) else { continue }` is what made it so) and load-bearing the moment numbers landed | 16×, 16×, 8× above the floors; the three guaranteed-minimum rules green in the same run |
 | AC-008 | `dcb_conformance_wasm::arming_a_mid_batch_fault_makes_the_append_fail` | **the negative control**, run deliberately: arm removed, override left in place — the registered `NoopFaultFixture` shape — and the rule went red with `… armed a fault at row 2 of a three-event batch and the append succeeded … Got Ok(SequencePosition(6))` | arm restored; both fault rules Ran and passed |
@@ -113,9 +128,9 @@ go stale.
 
 | Path | Shape of the change |
 | --- | --- |
-| `crates/happenstance-cloudflare/src/event_store.rs` | `Ceilings::MEASURED` replaces `Ceilings::UNMEASURED` as what `new()` carries, with the derivation of each number on the constant. `UNMEASURED` stays, now `#[cfg(all(test, target_arch = "wasm32"))]`, because it is the base every `with_ceilings` test builds from and inheriting production numbers there would make each of those tests depend on a value it is not about |
+| `crates/happenstance-cloudflare/src/event_store.rs` | `Ceilings::DECLARED` (named `MEASURED` until the 2026-08-20 pass, which is a claim the evidence does not support) replaces `Ceilings::UNBOUNDED` as what `new()` carries, with the derivation of each number on the constant. `UNBOUNDED` stays, now `#[cfg(all(test, target_arch = "wasm32"))]`, because it is the base every `with_ceilings` test builds from and inheriting production numbers there would make each of those tests depend on a value it is not about |
 | `crates/happenstance-cloudflare/tests/support/mod.rs` | The three `Option<usize>` constants become `Some(…)`, each with its derivation and the *stated ceiling* caveat; `MID_BATCH_FAULT` flips to `SUPPORTED` with the mechanism stated and an `arm_mid_batch_fault` override |
-| `crates/happenstance-cloudflare/tests/fixture_contract.rs` | Two new host-native cases: `the_three_store_limits_are_measured_not_defaulted` and `no_declared_ceiling_is_below_its_floor` |
+| `crates/happenstance-cloudflare/tests/fixture_contract.rs` | Two new host-native cases: `the_three_store_limits_are_declared_not_defaulted` and `no_declared_ceiling_is_below_its_floor` |
 | `crates/happenstance-cloudflare/src/host.rs` | Nothing new at the time — `arm_throw_after` and the shim's `skip` parameter landed in `durable-object-host-and-fixture`, precisely so this story would inherit a working seam and a control test for it. **The 2026-08-19 slice repair pass removed both** and rewrote the module docs: CF-39's fault is now a real SQLite trigger armed by the fixture, and the docs state what is still owed to `workerd` and who owns it |
 | `crates/happenstance-cloudflare/src/lib.rs` | VT-21's obligation: a table of the three declared limits, what each is refused as, and the *stated ceiling* finding |
 | `experiments/durable-object-limits/**` | **New.** `Cargo.toml` (outside the workspace, bare `[workspace]`), `tests/boundaries.rs` (M1–M5, two phases), `README.md`, `results/run-1.txt`, `results/run-2.txt` |
@@ -174,7 +189,7 @@ moved. Both events are loud rather than silent, because
 **Scope kept.** No new conformance rule and no new mutant: the `None`-declaration
 defect is in a *fixture's declaration*, which no store can fail, so `CLAUDE.md`'s
 rule forbids a suite rule for it. The mechanical guard is the adapter-local
-`the_three_store_limits_are_measured_not_defaulted`; the human guards are the
+`the_three_store_limits_are_declared_not_defaulted`; the human guards are the
 CF-29 changelog entry and `_evidence.md`. CF-40's ownership is **narrowed and
 handed on**, not minted — `.kb/open-questions/cf-40-fixture-limits-ownership.md` is
 unchanged and `sqlite-durable-store` closed without minting an answer, so

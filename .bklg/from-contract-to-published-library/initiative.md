@@ -367,9 +367,16 @@ green gate is a precondition for looking at these, never a substitute for them.
    is green against the durable adapter's fixture, including the concurrency case at
    64 contenders and an acknowledged write surviving a process reopen.
 4. **The constrained-runtime store passes the suite on its own target.** Every rule
-   is green under the edge runtime on `wasm32`, executed in the gate rather than
-   asserted in prose, and its error type is shown either to carry what the caller
-   needs or demonstrably not to.
+   is green **on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, against a
+   real `SqlStorage` mapping, with the platform runtime an open question**, executed in
+   the gate rather than asserted in prose, and its error type is shown either to carry
+   what the caller needs or demonstrably not to. What that run does not prove is named
+   where a reader lands rather than left to be discovered: no isolate, no eviction, no
+   hibernation, no I/O gate and none of the platform's own storage ceilings.
+   *(Amended 2026-08-20 by **Amendment ADR-0023-A**, below — `kb-decision-0023`,
+   `kb-open-question-workerd-runner-absent-001`. As first written this said "under the
+   edge runtime on `wasm32`", which was read as `workerd` by the project and story
+   sentences beneath it.)*
 5. **A store that does not serialise its writers passes the suite**, with the
    position-visibility cost measured rather than estimated.
 6. **A store with no connection, no interactive transaction and no cursor passes the
@@ -405,6 +412,40 @@ green gate is a precondition for looking at these, never a substitute for them.
 16. **The audience is durable.** Persona and journey atoms exist under `.kb/product/`
     with valid frontmatter and pass validation, and the initiative's closeout links
     them.
+
+### Amendment ADR-0023-A — the runtime DoD 4 names (2026-08-20)
+
+**Applied to DoD 4 above.** DoD 4's *"the edge runtime on `wasm32`"* was read, by the
+project and story sentences beneath it, as `workerd`. `cloudflare-durable-object-store`
+delivered the run against a `node:sqlite`-backed `DurableObjectState` shim instead — real
+SQLite, reached through `worker`'s real `wasm-bindgen` externs by the same
+`state.storage().sql()` call a `#[durable_object]` class makes, on the real target, inside one
+`cargo xtask ci`. The implementer escalated the gap as a blocking finding rather than
+absorbing it, and the human gate conditioned the amendment on ADR-0023. ADR-0023 is now minted
+and **accepted** (`kb-decision-0023`), so the amendment is taken here, as a named decision with
+its rationale, in a dedicated pass.
+
+**Why the substitution is ratified rather than the slice re-planned.** A `workerd`-class runner
+inside the gate was **not rejected on merit**. It loses on cost and on this initiative's own
+AC-004: the runbook's shape (`vitest-pool-workers` as its own CI job) is not the same run as the
+rest of the gate, and a JS harness driving `fetch` into the object would re-express the rules
+across an HTTP boundary — a **second enumeration**, which AC-07's *"rather than as a separately
+maintained subset"* forbids by construction. `workerd` is also an external binary with no
+Windows-native story, versioned by a Node lockfile this repository does not own, where every
+other gate tool is `rustup`-pinned or `cargo install`ed from `Cargo.lock`. That is carried as an
+open question rather than a settled *no*: `kb-open-question-workerd-runner-absent-001`.
+
+**What DoD 4 therefore does and does not certify.** It certifies that every rule executes and
+passes against a real `SqlStorage` mapping on the constrained target, in the gate. It does not
+certify any platform behaviour: no isolate, no eviction, no hibernation, no I/O gate, no event
+loop re-entering the object mid-`await`, and none of the platform's own storage ceilings. Two
+consequences are already observed rather than feared — the Cloudflare adapter's three capacity
+ceilings are a **declared refusal policy** rather than located walls, and WF-11's memory-ceiling
+falsifier could not be made to fire at all
+(`kb-reference-wf-11-memory-ceiling-verdict-001`). **Exit criterion 12 and phase 12's first
+publish** are where the remaining qualification is forced: *"conformant on Cloudflare"* becomes a
+promise to a consumer there, and this amendment does not make it one now.
+
 
 ## Open design tensions
 

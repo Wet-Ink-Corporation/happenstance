@@ -196,12 +196,18 @@ pub(crate) struct Ceilings {
 }
 
 impl Ceilings {
-    /// What this store refuses a batch against, in production.
+    /// What this store refuses a batch against, in production: this adapter's
+    /// **declared refusal policy**, not a located physical wall.
     ///
-    /// Each number is a documented platform cap minus this adapter's own
-    /// measured overhead, confirmed accepted on the executing runtime. The
-    /// derivations are in `experiments/durable-object-limits/README.md`; the
-    /// short forms are:
+    /// The name is the claim. Each number is a documented platform cap minus
+    /// this adapter's own measured per-row overhead, confirmed *accepted* on the
+    /// executing runtime and refused one byte, tag or event above — which is the
+    /// whole of what CF-40 asks for. It is deliberately **not** the largest value
+    /// this store could take: no per-value wall is observable on the runtime the
+    /// gate runs against, so no search result exists to name here. The struct
+    /// documentation above says so at length, and
+    /// `experiments/durable-object-limits/README.md` records the failure to
+    /// locate the wall as its central finding. The short forms are:
     ///
     /// * **`event_data_len` — 1 MiB.** A Durable Object's SQL storage documents
     ///   a 2 MiB maximum row size, and this adapter's `event` row carries more
@@ -225,7 +231,7 @@ impl Ceilings {
     ///   count the object has to get through before it yields. Measured: a
     ///   1,024-event batch with one tag each issues 2,055 statements and
     ///   completes. Eight times the `MIN_SUPPORTED_EVENTS_PER_BATCH` floor.
-    pub(crate) const MEASURED: Self = Self {
+    pub(crate) const DECLARED: Self = Self {
         event_data_len: 1024 * 1024,
         tags_per_event: 1024,
         events_per_batch: 1024,
@@ -233,13 +239,13 @@ impl Ceilings {
 
     /// A store that refuses nothing, for the tests that supply their own.
     ///
-    /// Kept after [`MEASURED`](Self::MEASURED) landed rather than deleted,
+    /// Kept after [`DECLARED`](Self::DECLARED) landed rather than deleted,
     /// because it is the base every `with_ceilings` test builds from: those
     /// tests state one small ceiling and inherit "no ceiling" for the other two,
     /// and inheriting the *production* numbers there would make each of them
     /// quietly depend on a value it is not about.
     #[cfg(all(test, target_arch = "wasm32"))]
-    pub(crate) const UNMEASURED: Self = Self {
+    pub(crate) const UNBOUNDED: Self = Self {
         event_data_len: usize::MAX,
         tags_per_event: usize::MAX,
         events_per_batch: usize::MAX,
@@ -289,7 +295,7 @@ impl CloudflareEventStore {
         Self {
             sql,
             identity: RefCell::new(None),
-            ceilings: Ceilings::MEASURED,
+            ceilings: Ceilings::DECLARED,
             page_size: PAGE_SIZE,
         }
     }
@@ -1867,7 +1873,7 @@ mod write_path_tests {
         let sql = durable_object();
         let store = CloudflareEventStore::new(sql.clone()).with_ceilings(Ceilings {
             event_data_len: 8,
-            ..Ceilings::UNMEASURED
+            ..Ceilings::UNBOUNDED
         });
         store.migrate().expect("the schema applies");
 

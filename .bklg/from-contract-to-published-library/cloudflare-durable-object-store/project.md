@@ -192,12 +192,19 @@ Project-grain and testable. This is the spine `_storymap.md` must cover.
   contains no `todo!()` on any adapter path; the scoped
   `#![allow(clippy::todo)]` at `crates/happenstance-cloudflare/src/lib.rs:126` is
   gone, and `cargo clippy … -D warnings` is green without it.
-- **AC-002 — Every event-store conformance rule runs and passes under `workerd`.**
+- **AC-002 — Every event-store conformance rule runs and passes on
+  `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, against a real
+  `SqlStorage` mapping, with the platform runtime an open question.**
   `event_store_conformance!` is invoked with `emit = happenstance_testkit::__emit_wasm`
   against the Durable Object fixture, the emitted rule set is the full
   `for_each_event_store_rule!` enumeration, and the run reports a pass or a named
   failure for every rule. No rule is `#[cfg]`-ed out and no wasm-only subset list
-  exists anywhere in the tree.
+  exists anywhere in the tree. What the run does **not** prove is named where a reader
+  lands rather than left to be discovered: no isolate, no eviction, no hibernation, no
+  I/O gate and none of the platform's own storage ceilings.
+  *(Amended 2026-08-20 by **Amendment ADR-0023-A**, below — `kb-decision-0023`,
+  `kb-open-question-workerd-runner-absent-001`. As first written this said "under
+  `workerd`".)*
 - **AC-003 — Every declined capability reports the fixture's stated reason.** The
   fixture declares its `Capability` constants with real reasons; each rule guarding a
   declined capability still runs and emits its `SKIP <rule>: <reason>` line. The
@@ -206,11 +213,20 @@ Project-grain and testable. This is the spine `_storymap.md` must cover.
   and which is `cfg`-ed off `wasm32`
   (`crates/happenstance-testkit/src/lib.rs:101-110`, `:117-118`) — are stated as a
   documented, reasoned non-invocation, not left as an unexplained absence.
-- **AC-004 — The `workerd` run is inside the gate, not beside it.** A single
-  `cargo xtask ci` on a clean checkout executes the `workerd` run; the step is
+- **AC-004 — The conformance run is inside the gate, not beside it.** A single
+  `cargo xtask ci` on a clean checkout executes it — on `wasm32-unknown-unknown` under
+  `wasm-bindgen-test-runner`, against a real `SqlStorage` mapping, with the platform
+  runtime an open question; the step is
   registered in `xtask/src/main.rs`'s step list **by name, not by index** (the defect
   `RUNBOOK.md:735-737` and `:761-762` name twice); and a configuration in which the
-  step silently does not run fails the gate rather than skipping it.
+  step silently does not run fails the gate rather than skipping it. The same-run
+  requirement is what a separate CI job cannot meet, and is why the runbook's
+  `vitest-pool-workers`-in-its-own-job shape lost; what stays unproven for as long as
+  no `workerd`-class runner is admitted — isolate, eviction, hibernation, I/O gate,
+  platform storage ceilings — is stated in the artefacts the run lands on.
+  *(Amended 2026-08-20 by **Amendment ADR-0023-A**, below — `kb-decision-0023`,
+  `kb-open-question-workerd-runner-absent-001`. As first written this said "the
+  `workerd` run".)*
 - **AC-005 — ES-6 is decided with an artefact.** `CloudflareEventStoreError` carries
   a real `worker::Error`, and a committed test reconstructs from a caller-visible
   error the one fact a caller must branch on — constraint violation versus transport
@@ -251,10 +267,17 @@ Project-grain and testable. This is the spine `_storymap.md` must cover.
 
 Observable at this project's boundary, by someone who did not do the work.
 
-1. From a clean checkout, one `cargo xtask ci` runs the conformance suite under
-   `workerd` on `wasm32` and is green; deleting the `workerd` step or emptying its
+1. From a clean checkout, one `cargo xtask ci` runs the conformance suite on
+   `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, against a real
+   `SqlStorage` mapping, with the platform runtime an open question, and is green;
+   deleting that step's registry row or emptying its
    target fails the gate with a legible message rather than passing quietly (the
-   `proof-artefact` precedent, `xtask/src/main.rs:156-191`).
+   `proof-artefact` precedent, `xtask/src/main.rs:156-191`). What the run does not
+   prove — isolate, eviction, hibernation, I/O gate, platform storage ceilings — is
+   named in the artefacts it lands on.
+   *(Amended 2026-08-20 by **Amendment ADR-0023-A** below — `kb-decision-0023`,
+   `kb-open-question-workerd-runner-absent-001`. As first written this said "under
+   `workerd`" and "the `workerd` step".)*
 2. The suite's output for that run names every rule, with each declined rule carrying
    the fixture's stated reason — inspectable in the gate's own output.
 3. `grep`ing `crates/happenstance-cloudflare/` finds no `todo!()` and no
@@ -270,6 +293,44 @@ Observable at this project's boundary, by someone who did not do the work.
 7. Story-grain and project-grain verification held throughout:
    `cargo xtask affected --base main` per story, `cargo xtask ci --fast` for this
    non-terminal project (`CLAUDE.md` **Commands**).
+
+### Amendment ADR-0023-A — the runtime the acceptance sentences name (2026-08-20)
+
+**Applied above to AC-002, AC-004 and DoD 1.** `measured-store-limits/spec.md`'s human gate
+made this amendment conditional on ADR-0023: *"if ADR-0023 ratifies it, this sentence and
+AC-001/AC-002/AC-003 are amended together through the spec path, as a named decision with its
+rationale."* ADR-0023 is now minted and **accepted** — `kb-decision-0023` — so the condition
+is met, and the amendment is taken in a dedicated pass rather than folded into a repair diff.
+
+**What changed.** *"under `workerd`"* becomes *"on `wasm32-unknown-unknown` under
+`wasm-bindgen-test-runner` against a real `SqlStorage` mapping, with the platform runtime an
+open question."*
+
+**Why.** ADR-0023 records the harness's shape as a finding rather than a choice: the runbook
+queued `vitest-pool-workers` as its own CI job, and a separate CI job cannot satisfy AC-004's
+*same run as the rest of the gate* — this repository has already retired a job
+(`wasm-conformance`) on exactly that argument. What landed executes on the real target through
+`worker`'s real `wasm-bindgen` externs against real SQLite, reached by the same
+`state.storage().sql()` a `#[durable_object]` class calls: the **runtime** is doubled, never
+the adapter. A `workerd`-class runner inside `cargo xtask ci` was **not rejected on merit** —
+it is an escalated blocking finding (`wrangler`/`miniflare`/`vitest-pool-workers`: a Node
+lockfile this repository does not own, an external binary with no Windows-native story, and a
+harness that would re-express the rules across an HTTP boundary and so constitute a second
+enumeration, failing AC-002 by construction) and it is carried as an open question in its own
+right: `kb-open-question-workerd-runner-absent-001`.
+
+**What stays unproven, and where a reader finds it.** No isolate, no eviction, no hibernation,
+no I/O gate, no event loop re-entering the object mid-`await`, and none of the platform's own
+storage ceilings. ADR-0023 states that list in its own decision body;
+`crates/happenstance-cloudflare/src/host.rs` and `src/lib.rs` restate it where a reader of the
+code lands. It is a floor rather than a ceiling: the next clause needing a platform behaviour
+rather than a storage behaviour hits it again.
+
+**What this does not license.** It closes no open question, narrows no run, and touches no
+clause of `spec/SPECIFICATION.md`; no maturity marker moves and no accepted decision atom's
+body is edited. *"Conformant on Cloudflare"* is still qualified, and phase 12 — first publish —
+is where that qualification is forced into a promise or a caveat.
+
 
 ## Dependencies
 

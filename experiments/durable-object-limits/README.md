@@ -10,6 +10,10 @@ This directory is where those numbers came from, kept so that the next person ca
 re-derive them without asking anybody. It exists because the alternative — three
 literals in a fixture with a doc comment saying "measured" — is a label rather
 than a citation, and six months from now it is indistinguishable from a guess.
+The enforcing constant was in fact called `Ceilings::MEASURED` until 2026-08-20,
+which is that failure arriving from inside this very work: the name told a reader
+who never opened this file the one thing *The finding* below says is not true. It
+is `Ceilings::DECLARED` now.
 That is the failure [`experiments/wire-format`](../wire-format/README.md) was
 written about, one measurement over.
 
@@ -109,9 +113,11 @@ is a Node process rather than `workerd`, and it does not enforce the Durable
 Object platform's documented caps. So the three declared numbers are *not* search
 results, and this README will not pretend they are.
 
-What they are is the adapter's own **refusal policy**, derived as *documented
-platform cap minus this adapter's measured overhead* and confirmed accepted on the
-executing runtime:
+What they are is the adapter's own **declared refusal policy** — the phrase the
+fixture, the crate documentation, `CHANGELOG.md`, the evidence package and the
+enforcing constant `Ceilings::DECLARED` all use, deliberately in the same words —
+derived as *documented platform cap minus this adapter's measured overhead* and
+confirmed accepted on the executing runtime:
 
 | Constant | Value | Derivation |
 | --- | --- | --- |

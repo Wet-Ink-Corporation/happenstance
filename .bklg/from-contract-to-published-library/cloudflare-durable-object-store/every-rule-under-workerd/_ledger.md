@@ -16,6 +16,16 @@ story` reads the fenced block below and blocks `implement → report` unless eve
 branch has regressed). Scope changes are a human decision recorded through `redkiln advance`, not a
 quiet ledger edit.
 
+> **Criterion row AC-001 was amended on 2026-08-20 — through the spec path, not here.** The
+> ledger's own rule above is that a criterion is never re-worded by an implementer, and it is
+> not being: `spec.md`'s **Amendment ADR-0023-A** is the named decision that moved it (with this
+> story's Merge DoD, `project.md`'s AC-002 / AC-004 / DoD 1, `measured-store-limits`'
+> AC-001–AC-003 and Merge DoD, and `initiative.md`'s DoD 4), on the condition the human gate of
+> 2026-08-19 set and `kb-decision-0023` has since met. The row below is re-copied from the
+> amended spec so the two cannot disagree; what is still unsettled is
+> `kb-open-question-workerd-runner-absent-001`.
+
+
 ```yaml
 - id: AC-001
   criterion: >-
@@ -23,11 +33,16 @@ quiet ledger edit.
     `!Send` port design so an edge store could exist, WHEN they run one `cargo xtask ci` and read the
     output top to bottom without opening a second tool, a second CI job or a machine they do not
     have, THEN a named wasm32 step reports every rule of the `for_each_event_store_rule!` enumeration
-    having **executed** against `CloudflareFixture` inside a real Durable Object runtime — a per-rule
+    having **executed** against `CloudflareFixture` on `wasm32-unknown-unknown` under
+    `wasm-bindgen-test-runner` against a real `SqlStorage` mapping, with the platform runtime an
+    open question — a per-rule
     pass or a named failure, never a compile line — in the same terminal scroll as the rest of the
-    gate.
+    gate, and the artefacts that run lands on name what it does not prove: no isolate, no eviction,
+    no hibernation, no I/O gate and none of the platform's own storage ceilings. (Amended
+    2026-08-20 by Amendment ADR-0023-A in spec.md — kb-decision-0023,
+    kb-open-question-workerd-runner-absent-001.)
   satisfied: true
-  evidence: "**All 89 event-store rules executed and passed** against a real Durable Object's SQL storage on wasm32-unknown-unknown, in the gate's own step: `cargo run -p xtask -- wasm-conformance` prints `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` and then `test result: ok. 89 passed; 0 failed; 0 ignored`. Per-rule pass lines, not compile lines, in the same terminal scroll as the rest of the gate. The target is crates/happenstance-cloudflare/tests/durable_object_conformance.rs; the row is xtask/src/proof.rs WASM_TARGETS[3]; the driving step is `wasm32 run of the conformance rules` in xtask/src/main.rs's REQUIRED, unchanged."
+  evidence: "**All 89 event-store rules executed and passed** against a real `SqlStorage` mapping on wasm32-unknown-unknown under wasm-bindgen-test-runner — a node:sqlite-backed DurableObjectState shim, NOT workerd — in the gate's own step: `cargo run -p xtask -- wasm-conformance` prints `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` and then `test result: ok. 89 passed; 0 failed; 0 ignored`. Per-rule pass lines, not compile lines, in the same terminal scroll as the rest of the gate. The target is crates/happenstance-cloudflare/tests/durable_object_conformance.rs; the row is xtask/src/proof.rs WASM_TARGETS[3]; the driving step is `wasm32 run of the conformance rules` in xtask/src/main.rs's REQUIRED, unchanged."
   verifying_test: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs executed by `cargo xtask ci` (and `cargo xtask ci --fast`, `cargo xtask wasm`)"
 - id: AC-002
   criterion: >-

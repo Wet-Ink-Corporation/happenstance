@@ -110,7 +110,11 @@ not the same as what a user needed to be told.
   central finding of `experiments/durable-object-limits/`, which is reproducible
   and deliberately not in the gate. What the gate checks on every run is the
   promise CF-40 actually makes — the declared value accepted, one more refused,
-  naming the ceiling it crossed — in both directions.
+  naming the ceiling it crossed — in both directions. The constant that enforces
+  them is called `Ceilings::DECLARED` and the adapter-local guard is called
+  `the_three_store_limits_are_declared_not_defaulted`, so a reader who greps a
+  name and never opens the experiment is told the same thing this paragraph
+  says.
 
 - **The Cloudflare Durable Object adapter now runs the event-store conformance
   suite, on `wasm32-unknown-unknown`, inside `cargo xtask ci`.** Every rule

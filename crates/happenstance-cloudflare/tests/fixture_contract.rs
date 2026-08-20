@@ -371,8 +371,17 @@ fn the_three_store_limits_are_stated_here() {
 /// So the guard is adapter-local: this test lives in this crate, ships in no
 /// suite and gates no other adapter. If it is ever deleted as redundant, the
 /// quiet failure mode is fully restored.
+///
+/// **`declared`, not `measured`, and the word is load-bearing.** What this
+/// asserts is that somebody stated a number, not that anybody found a wall. No
+/// per-value wall is observable on the runtime this suite runs against, so the
+/// three constants are the adapter's declared refusal policy seeded from a
+/// documented platform cap — `Ceilings::DECLARED` says the same thing on the
+/// enforcing side. This test was called `…_are_measured_not_defaulted` until
+/// 2026-08-20; the name told a reader who never opened
+/// `experiments/durable-object-limits/README.md` the one thing that is not true.
 #[test]
-fn the_three_store_limits_are_measured_not_defaulted() {
+fn the_three_store_limits_are_declared_not_defaulted() {
     for (name, declared) in [
         (
             "MAX_EVENT_DATA_LEN",

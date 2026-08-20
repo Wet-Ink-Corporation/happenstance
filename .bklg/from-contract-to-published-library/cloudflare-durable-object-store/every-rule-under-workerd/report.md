@@ -9,7 +9,26 @@ updated: "2026-08-19"
 
 ## Findings Ledger
 
-**Outcome (amended 2026-08-19, slice repair pass): seven of eight ACs satisfied as
+**Outcome (amended 2026-08-20, ADR-0023-A pass): all eight ACs satisfied — AC-001 against a
+sentence the spec path amended on 2026-08-20 — and the blocking finding disposed of by
+ADR-0023 rather than absorbed.**
+
+The blocking finding escalated on 2026-08-19 has been answered, on the path
+`_decomposition.md` option (iii) named. ADR-0023 is minted and **accepted**
+(`kb-decision-0023`): it records the harness's shape as a **finding rather than a choice** —
+the runbook's `vitest-pool-workers`-in-its-own-CI-job shape loses to the initiative's
+same-run requirement — and it does **not** reject a `workerd`-class runner on merit, carrying
+it instead as `kb-open-question-workerd-runner-absent-001`. **Amendment ADR-0023-A** in
+`spec.md` is the remedy the human gate conditioned on that: AC-001, this story's Merge DoD,
+`project.md`'s AC-002 / AC-004 / DoD 1, `measured-store-limits`' AC-001–AC-003 and Merge DoD,
+and `initiative.md`'s DoD 4 all moved together to *"on `wasm32-unknown-unknown` under
+`wasm-bindgen-test-runner` against a real `SqlStorage` mapping, with the platform runtime an
+open question"*, each naming what stays unproven: no isolate, no eviction, no hibernation, no
+I/O gate and none of the platform's own storage ceilings. **Project AC-002, project AC-004 and
+initiative DoD 4 are therefore closed against their amended sentences**, and the qualifier
+travels with them rather than being dropped. Nothing about the execution changed.
+
+**Outcome (recorded 2026-08-19, slice repair pass): seven of eight ACs satisfied as
 written, and one BLOCKING finding escalated. Eighty-nine of eighty-nine event-store rules
 executed and passed on `wasm32-unknown-unknown` inside `cargo xtask ci`, against a
 `node:sqlite`-backed `DurableObjectState` shim shipped in this crate — real SQLite through
@@ -29,7 +48,7 @@ for ratification below.
 
 | AC | Result | Proved by | Mounted into |
 | --- | --- | --- | --- |
-| AC-001 | **satisfied except its words *inside a real Durable Object runtime*** — see the blocking finding | `cargo run -p xtask -- wasm-conformance` → `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` … `test result: ok. 89 passed; 0 failed` | `xtask/src/proof.rs` `WASM_TARGETS[3]`; driven by the existing `wasm32 run of the conformance rules` step |
+| AC-001 | **satisfied against the sentence as amended 2026-08-20** (Amendment ADR-0023-A; `kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`) — the words *inside a real Durable Object runtime* are gone, and what replaced them is what ran | `cargo run -p xtask -- wasm-conformance` → `happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown` … `test result: ok. 89 passed; 0 failed` | `xtask/src/proof.rs` `WASM_TARGETS[3]`; driven by the existing `wasm32 run of the conformance rules` step |
 | AC-002 | satisfied | `rg -n "macro_rules!" crates/happenstance-cloudflare/` empty; `registry::no_orphan_rules` green; `proof::tests::the_executed_wasm_targets_name_no_rule_of_their_own` | `crates/happenstance-cloudflare/tests/durable_object_conformance.rs:60-64` (three lines) |
 | AC-003 | satisfied | `proof::tests::the_cloudflare_conformance_target_is_a_row_and_not_a_second_step` — row identity **and** `REQUIRED` execution-step count == 1. Red beat: `has no row in WASM_TARGETS` | one row; `xtask/src/main.rs` untouched |
 | AC-004 | satisfied | both negative controls performed and both failed *before* the run (emptied target, `cfg`-ed-away target), output pasted in the implementation report; expectation derived from the enumeration, not hand-copied | `xtask/src/proof.rs` `wasm_enumeration` + `wasm_run` |

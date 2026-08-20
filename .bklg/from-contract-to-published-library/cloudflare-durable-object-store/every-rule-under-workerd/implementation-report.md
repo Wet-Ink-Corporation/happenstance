@@ -7,6 +7,22 @@ updated: "2026-08-19"
 
 # Implementation Report — Every event-store conformance rule executed on the target, in the same gate run
 
+> **Amended 2026-08-20, ADR-0023-A pass.** The blocking finding below has been disposed of,
+> not withdrawn. ADR-0023 was minted and **accepted** (`kb-decision-0023`) and it took the first
+> of the two decisions this report says it owed: it **ratifies the substitution**, recording the
+> harness's shape as a finding rather than a choice, with this report's cost table as the
+> evidence and the `workerd`-class runner carried as an open question rather than rejected
+> (`kb-open-question-workerd-runner-absent-001`). It also took the second: what stays open either
+> way is stated in the atom's own body — no isolate, no eviction, no hibernation, no I/O gate, no
+> event loop re-entering the object mid-`await`, and none of the platform's storage ceilings.
+> **Amendment ADR-0023-A** in `spec.md` then carried that into the acceptance sentences, through
+> the spec path and in a dedicated pass: AC-001 and this story's Merge DoD, `project.md`'s AC-002
+> / AC-004 / DoD 1, `measured-store-limits`' AC-001–AC-003 and Merge DoD, and `initiative.md`'s
+> DoD 4. **All eight ACs are satisfied**, and project AC-002, project AC-004 and initiative
+> DoD 4 are **closed against their amended sentences** rather than reported OPEN. Nothing about
+> the execution changed; what changed is that the sentence and the artefact now agree, in the
+> direction the evidence and an accepted decision point.
+
 > **Amended 2026-08-19, slice repair pass.** This report originally opened *"All eight ACs
 > are satisfied"* and claimed initiative DoD 4 closed. Both sentences were withdrawn on
 > review, and the correction is below rather than in a footnote, because the claim is the

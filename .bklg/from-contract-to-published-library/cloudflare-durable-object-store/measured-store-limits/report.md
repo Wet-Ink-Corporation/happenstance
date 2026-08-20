@@ -9,6 +9,36 @@ updated: "2026-08-19"
 
 ## Findings Ledger
 
+**Outcome (amended 2026-08-20, ADR-0023-A pass): all eleven ACs satisfied — three of
+them against sentences the spec path amended on 2026-08-20 rather than against the
+sentences this story began with. The Cloudflare conformance row runs 89 of 89 rules and
+passes. No conformance rule or mutant added, no clause of `spec/SPECIFICATION.md`
+amended, no `.kb/` write from this story.**
+
+**The 2026-08-20 amendment, and why it is not a reworded bar.** The 2026-08-19 outcome
+below reported AC-001 unmet on its words *never read off a platform page*, with AC-002's
+and AC-003's positioning carrying the same seed, and the human gate refused to let the
+slice reword its own acceptance sentences to fit the artefact. It set one condition
+instead: *if* ADR-0023 ratifies the substitution, the sentences move together through the
+spec path as a named decision with its rationale. ADR-0023 is now minted and **accepted**
+(`kb-decision-0023`); it ratifies the harness as a finding rather than a choice and
+carries the `workerd`-class runner as an open question in its own right
+(`kb-open-question-workerd-runner-absent-001`). **Amendment ADR-0023-A** in `spec.md` is
+that amendment: AC-001–AC-003 now say *declared refusal policy, seeded from the documented
+row cap, confirmed accepted and refused at the boundary*, and state in terms that the
+physical wall is **unlocated on this runtime** and that a `workerd`-class runner is what
+would locate it. The Merge DoD one-liner moved with them, and so did `project.md`'s
+AC-002 / AC-004 / DoD 1 and `initiative.md`'s DoD 4. Nothing about what ran changed; what
+changed is the sentence describing what it found — in the direction of the evidence, and
+after the decision that licensed it, not before.
+
+**Two names were corrected in the same pass**, because a reader who greps a symbol and
+never opens this package must not be told the wrong thing: the adapter constant
+`Ceilings::MEASURED` is now `Ceilings::DECLARED`, and the adapter-local guard
+`the_three_store_limits_are_measured_not_defaulted` is now
+`…_are_declared_not_defaulted` — which is also what closes AC-004's remaining caveat
+below, on evidence rather than by amendment.
+
 **Outcome (amended 2026-08-19, slice repair pass): ten of eleven ACs satisfied as
 written. The Cloudflare conformance row runs 89 of 89 rules and passes. No
 conformance rule or mutant added, no clause amended, no `.kb/` write.**
@@ -33,10 +63,10 @@ exemplar and survives a swap of the runtime.
 
 | AC | Result | Proved by | Mounted into |
 | --- | --- | --- | --- |
-| AC-001 | **satisfied except *never read off a platform page*** — 1 MiB is the documented 2 MiB row cap halved and then confirmed accepted, because no wall exists on this host to locate; see the outcome above | `dcb_conformance_wasm::append_reports_exceeded_store_limits` (payload arm) executing in the gate; probe M2B: 1,048,576 accepted and read back, 1,048,577 refused as `ExceedsStoreLimit(EventDataLen)` | `tests/support/mod.rs:247`; enforced at `src/event_store.rs:228`/`:292`/`:418` |
-| AC-002 | satisfied | same rule, tag arm; probe M3B: 1,024 tags → 1,024 `event_tag` rows, 139,264 bytes; 1,025 refused as `ExceedsStoreLimit(TagsPerEvent)` | `tests/support/mod.rs:258` |
-| AC-003 | satisfied | same rule, batch arm; probe M4B: 2,055 statements for 1,024 events; 1,025 refused as `ExceedsStoreLimit(EventsPerBatch)` | `tests/support/mod.rs:270` |
-| AC-004 | **satisfied except its *measured* wording** — the three constants are declared policy, not search results; see the outcome above | **the absence**: no `NO_STORE_LIMITS` line anywhere in the row's output; `tests/fixture_contract.rs::the_three_store_limits_are_measured_not_defaulted`. Red beat: it failed naming `MAX_EVENT_DATA_LEN` | the three constants |
+| AC-001 | **satisfied against the sentence as amended 2026-08-20** (Amendment ADR-0023-A; `kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`) — 1 MiB is the documented 2 MiB row cap halved, confirmed accepted at 1,048,576 and refused at 1,048,577, and the unlocated wall is disclosed in the fixture, the crate docs and the experiment README | `dcb_conformance_wasm::append_reports_exceeded_store_limits` (payload arm) executing in the gate; probe M2B: 1,048,576 accepted and read back, 1,048,577 refused as `ExceedsStoreLimit(EventDataLen)` | `tests/support/mod.rs:247`; enforced by `Ceilings::DECLARED` in `src/event_store.rs`, through `new()` and `check_ceilings` |
+| AC-002 | **satisfied against the sentence as amended 2026-08-20** (Amendment ADR-0023-A) | same rule, tag arm; probe M3B: 1,024 tags → 1,024 `event_tag` rows, 139,264 bytes; 1,025 refused as `ExceedsStoreLimit(TagsPerEvent)` | `tests/support/mod.rs:258` |
+| AC-003 | **satisfied against the sentence as amended 2026-08-20** (Amendment ADR-0023-A) | same rule, batch arm; probe M4B: 2,055 statements for 1,024 events; 1,025 refused as `ExceedsStoreLimit(EventsPerBatch)` | `tests/support/mod.rs:270` |
+| AC-004 | **satisfied** — the criterion is the absence of the `NO_STORE_LIMITS` line and that absence is confirmed; the *measured* wording that caused the 2026-08-19 caveat was in the guard's **name**, and the name is now `…_are_declared_not_defaulted` | **the absence**: no `NO_STORE_LIMITS` line anywhere in the row's output; `tests/fixture_contract.rs::the_three_store_limits_are_declared_not_defaulted`. Red beat: it failed naming `MAX_EVENT_DATA_LEN` | the three constants |
 | AC-005 | satisfied | `::no_declared_ceiling_is_below_its_floor` (16×, 16×, 8×); the three guaranteed-minimum rules green in the same run. No sub-floor measurement occurred | the three constants |
 | AC-006 | satisfied | `experiments/durable-object-limits/` — README, `tests/boundaries.rs`, `results/run-1.txt` and `run-2.txt` byte-identical; outside the workspace by a bare `[workspace]` table, so never in the gate | the experiment directory |
 | AC-007 | satisfied | probe M5: a 2 MiB row accepted on a fresh object **and** on one holding a megabyte, so the boundary is a constant. CF-40's falsifier tested and **not** fired | `_evidence.md` §3 |

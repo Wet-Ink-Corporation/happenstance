@@ -43,7 +43,22 @@ require the declaration to be the physical maximum, and an unstable exact maximu
 is how a green run becomes a flaky one — which is exactly the case
 `measured-store-limits`' own spec anticipated in its clarification 5.
 
-**This is the one thing a `workerd`-class runner would change**, and it is now an
+**Resolved 2026-08-20, and the resolution is what this section was written for.**
+ADR-0023 was minted and **accepted** (`kb-decision-0023`), ratifying the harness as
+a finding rather than a choice and carrying the `workerd`-class runner as an open
+question in its own right (`kb-open-question-workerd-runner-absent-001`) rather
+than rejecting it. **Amendment ADR-0023-A** in `../measured-store-limits/spec.md`
+then took the amendment the human gate conditioned on that ADR: AC-001, AC-002,
+AC-003 and the Merge DoD one-liner now say *declared refusal policy, seeded from
+the documented row cap, confirmed accepted and refused at the boundary*, and say
+in terms that the physical wall is unlocated on this runtime. The adapter constant
+was renamed `Ceilings::MEASURED` → `Ceilings::DECLARED` in the same pass, so a
+reader who greps the symbol and never opens this package is told what §2 says
+rather than its opposite. **Nothing below is withdrawn**; the finding stands
+exactly as recorded, and what changed is that the acceptance sentences now agree
+with it.
+
+**This is the one thing a `workerd`-class runner would change**, and it was an
 **escalated blocking finding** rather than a standing residual — raised with its
 measured cost in `../every-rule-under-workerd/implementation-report.md`, *Blocking
 finding*, on the path `project.md:301-308` and this project's `_decomposition.md`
@@ -187,13 +202,29 @@ slice shows no `.kb/**` path. No clause text and no `[PROVISIONAL]` marker was
 edited. No conformance rule and no mutant was added — the `None`-declaration
 defect is in a *fixture's declaration*, which no store can fail, so `CLAUDE.md`'s
 rule forbids a suite rule for it and the guard is the adapter-local
-`the_three_store_limits_are_measured_not_defaulted` plus the CF-29-shaped changelog
+`the_three_store_limits_are_declared_not_defaulted` plus the CF-29-shaped changelog
 entry.
 
 ## 9. The blocking finding ADR-0023 must resolve **before** any claim rests on it
 
 Added 2026-08-19, slice repair pass. It is numbered last because it is the newest,
 and it should be read first.
+
+> **Discharged 2026-08-20.** ADR-0023 took both decisions this section says it
+> owed. **(1) It ratified the substitution** — `kb-decision-0023` records the
+> harness's shape as a finding rather than a choice, with the cost table below as
+> the evidence, and carries the `workerd`-class runner as
+> `kb-open-question-workerd-runner-absent-001` rather than rejecting it on merit.
+> **(2) It said what stays open either way** — the exclusion list is stated in the
+> atom's own decision body (no isolate, no eviction, no hibernation, no I/O gate,
+> no event loop re-entering the object mid-`await`, none of the platform's storage
+> ceilings), and the two provisional answers named below are both carried: the
+> three ceilings as a declared refusal policy, and what a real isolate restart
+> would do to an acknowledged write. **Amendment ADR-0023-A** in
+> `../measured-store-limits/spec.md` and `../every-rule-under-workerd/spec.md`
+> then moved the acceptance sentences to match, through the spec path and as one
+> named decision. This section is kept rather than deleted: it is the finding the
+> amendment rests on.
 
 **The finding.** No `workerd`-class runner exists inside `cargo xtask ci`, and one
 cannot be made to at acceptable cost. The measured cost table is in

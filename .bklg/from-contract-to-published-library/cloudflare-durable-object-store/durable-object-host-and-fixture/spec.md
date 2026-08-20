@@ -346,7 +346,13 @@ crates/happenstance-cloudflare/Cargo.toml
 Cargo.lock
 xtask/src/proof.rs
 standards/rust/**
+.bklg/from-contract-to-published-library/initiative.md
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/project.md
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/durable-object-host-and-fixture/**
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/every-rule-under-workerd/**
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/measured-store-limits/**
+references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/wasm-execution-gate-step/spec.md
 ```
 
 **Fence amendment — 2026-08-19, slice `durable-object-conformance-run` repair
@@ -365,6 +371,25 @@ an atom of the constitution *says* — a citation repair moves `path:LINE` and
 leaves the anchor and the prose byte-identical. It also does not reopen the
 exclusions above: `spec/SPECIFICATION.md`, `.kb/**`, `publish = false` and the
 measured ceilings all remain outside this fence.
+
+**Fence amendment — 2026-08-20, the ADR-0023-A amendment pass.** Six rows were added. **Four
+of them are one thing: an acceptance sentence cannot be amended at one grain only.** The
+human gate of 2026-08-19 required the amendment to move *"this sentence and
+AC-001/AC-002/AC-003 … together through the spec path, as a named decision with its
+rationale"*, and the sentences that had to move sit at three grains — `initiative.md`'s
+DoD 4, `project.md`'s AC-002 / AC-004 / DoD 1, and the three story specs' own ACs, ledgers
+and reports. A fence that admits only one story's folder makes the ordered remedy
+unperformable, which is the `8fa4d06` condition — *the fence as written was not satisfiable
+by a correct implementation* — arriving one grain up. `references/adr/…0023….md` is the
+fifth: its own status line promised *"when the wave runs, this line becomes `accepted`"*,
+the wave has run, and a long-form record still reading `proposed` would contradict every
+citation this amendment makes. `wasm-execution-gate-step/spec.md` is the sixth and the smallest: it quotes initiative DoD 4 **verbatim** in its *Advances DoD scenario* bullet, as this slice's two specs do, and a verbatim quote of an amended sentence left stale is the two-sources-disagreeing defect this whole pass exists to remove. One line, the quote only; no AC, boundary or verdict of HS-S0048 is touched.
+
+**What this amendment does not license.** Any change to `spec/SPECIFICATION.md`, to a
+maturity marker, or to the body of an accepted decision atom — none is touched. It does not
+license widening an AC to fit an artefact: the widening it carries is the one an **accepted
+decision** ratified, taken in a dedicated pass, with the prior refusal to reword the bar
+(`af9eb10`) preserved in the record above rather than deleted.
 
 ## Behavior and interfaces
 

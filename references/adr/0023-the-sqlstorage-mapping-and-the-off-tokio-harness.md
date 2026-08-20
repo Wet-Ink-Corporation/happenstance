@@ -1,12 +1,11 @@
 # ADR-0023: The `SqlStorage` mapping and the off-tokio harness are one decision, because one run settles both
 
-- **Status:** **proposed.** The atom this record summarises has not been minted
-  yet: `.kb/decisions/0023-*.md` is authored by a `/redkiln:kb-ingest` wave from
-  `.kb/_intake/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md`, and that
-  wave is a human's command. This file is the long form, staged with the intake so
-  the record and the atom land together and the atom has something to summarise.
-  **Do not read a `proposed` record as a settled decision**; when the wave runs,
-  this line becomes `accepted` and the atom links here.
+- **Status:** **accepted**, 2026-08-20. The `/redkiln:kb-ingest` wave ran and minted
+  the atom this record summarises: [`kb-decision-0023`](../../.kb/decisions/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md),
+  `status: accepted`, which links back here through its `source_paths`. This file
+  stays the long form — the transcripts, the rejected alternatives and the cost
+  tables an atom cannot hold; cite it by `file:line` and link the atom.
+  This line said `proposed` until the wave ran, exactly as it promised it would.
 - **Date:** 2026-08-19
 - **Settles:** the ADR queue's row **0023** (`RUNBOOK.md:302`) — *"Cloudflare: the
   `SqlStorage` mapping and the `workerd` harness."* One question, two consequences

@@ -67,7 +67,7 @@ The delta is deliberately thin in code and thick in what cannot happen afterward
 - **Renders surfaces**: **none.** `../_design.md` records **N/A — no user-facing surface** for this project, approved 2026-08-12, with an empty `## Items` block (`../_design.md:10-64`, `:106-111`). This story claims no `path` id because there are none to claim, and it adds **no public API**: the conformance target is a `tests/` target and the only `src/` change is documentation.
 - **Conformance rule(s)**: **none added, and none is owed** — that is the point of the story. The existing event-store family is invoked unchanged through the one enumeration; `registry::no_orphan_rules` and `for_each_event_store_rule!` are untouched by this diff. The rules this story *observes* are the full event-store family emitted against `CloudflareFixture`. Because no rule is added and no fixture newly claims a capability here, **no CF-29 changelog entry for a rule is owed**; a `CHANGELOG.md` entry for the crate's first executed conformance run is house practice and is separate. (`MID_BATCH_FAULT` newly claimed `SUPPORTED` would owe one — that decision and its entry belong to HS-S0053 and HS-S0055, `../_decomposition.md` Testing Notes §3.)
 - **Clause(s)**: **CF-23** (`spec/SPECIFICATION.md:7920-7951`, `[FROZEN]`) — this story is its third harness applied to a real adapter; **not amended**, neither its normative sentences nor its marker. **CF-18**'s emission half (`crates/happenstance-testkit/tests/mutation_coverage.rs:3166-3183`) is observed from outside the process for the first time, by the registry row. **CF-24** (`spec/SPECIFICATION.md:7950`) is the clause whose stated blind spot — it cannot see a rule introduced by a macro expansion — is why the registry row exists. `cargo xtask spec-trace` stays green; no clause text is edited.
-- **Advances DoD scenario**: initiative **DoD 4** — *"The constrained-runtime store passes the suite on its own target. Every rule is green under the edge runtime on `wasm32`, executed in the gate rather than asserted in prose"* (`initiative.md:368-371`). HS-S0048 landed the *executed-in-the-gate* half against the memory fixture; this story lands the **constrained-runtime store** half, which is the sentence's subject. The clause's tail — *"and its error type is shown either to carry what the caller needs or demonstrably not to"* — is `caller-visible-error-verdict`'s (HS-S0052), not this story's. It also discharges the *"the Cloudflare target is what it runs"* half of project AC-004 and all of project AC-002 (`../_storymap.md`, Coverage).
+- **Advances DoD scenario**: initiative **DoD 4** — *"The constrained-runtime store passes the suite on its own target. Every rule is green on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, against a real `SqlStorage` mapping, with the platform runtime an open question, executed in the gate rather than asserted in prose (as amended 2026-08-20 by Amendment ADR-0023-A — `kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`)"* (`initiative.md:368-371`). HS-S0048 landed the *executed-in-the-gate* half against the memory fixture; this story lands the **constrained-runtime store** half, which is the sentence's subject. The clause's tail — *"and its error type is shown either to carry what the caller needs or demonstrably not to"* — is `caller-visible-error-verdict`'s (HS-S0052), not this story's. It also discharges the *"the Cloudflare target is what it runs"* half of project AC-004 and all of project AC-002 (`../_storymap.md`, Coverage).
 
 ## PR boundary
 
@@ -91,7 +91,7 @@ The delta is deliberately thin in code and thick in what cannot happen afterward
 - `publish = false`, licence files, README, name reservation — `publish-ready-crate` (HS-S0059).
 - The WF-11 falsifier, the ES-32 paragraph, the CF-14/CF-27 re-reads — HS-S0056 and HS-S0057, both of which depend on this run existing.
 
-**Merge DoD.** One `cargo xtask ci` on a clean checkout executes every event-store conformance rule against `CloudflareFixture` under the real Durable Object runtime and is green; deleting the registry row, emptying the target or `cfg`-ing it away fails the gate with a message naming what is missing; the concurrency family's non-invocation is readable in the crate's own docs with its reason; every declined capability's reason is visible in the gate's own output; and `cargo xtask affected --base main` plus `cargo xtask ci --fast` are green.
+**Merge DoD** (amended 2026-08-20 by **Amendment ADR-0023-A** above; `kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`)**.** One `cargo xtask ci` on a clean checkout executes every event-store conformance rule against `CloudflareFixture` on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a real `SqlStorage` mapping — with the platform runtime an open question, and no isolate, eviction, hibernation, I/O gate or platform storage ceiling proven by it — and is green; deleting the registry row, emptying the target or `cfg`-ing it away fails the gate with a message naming what is missing; the concurrency family's non-invocation is readable in the crate's own docs with its reason; every declined capability's reason is visible in the gate's own output; and `cargo xtask affected --base main` plus `cargo xtask ci --fast` are green.
 
 ```
 crates/happenstance-cloudflare/tests/**
@@ -102,7 +102,13 @@ xtask/src/proof.rs
 xtask/src/main.rs
 CHANGELOG.md
 standards/rust/**
+.bklg/from-contract-to-published-library/initiative.md
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/project.md
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/durable-object-host-and-fixture/**
 .bklg/from-contract-to-published-library/cloudflare-durable-object-store/every-rule-under-workerd/**
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/measured-store-limits/**
+references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
+.bklg/from-contract-to-published-library/cloudflare-durable-object-store/wasm-execution-gate-step/spec.md
 ```
 
 **Fence amendment — 2026-08-19, slice `durable-object-conformance-run` repair pass.** The
@@ -125,6 +131,25 @@ constitution's *rules*. A citation repair moves `path:LINE` and leaves the ancho
 and the surrounding prose byte-identical; changing what an atom **says** is a change to
 the house style, which needs its own pass and its own reviewer. The same holds one level
 out for `spec/SPECIFICATION.md`, which this story still may not touch at all.
+
+**Fence amendment — 2026-08-20, the ADR-0023-A amendment pass.** Six rows were added. **Four
+of them are one thing: an acceptance sentence cannot be amended at one grain only.** The
+human gate of 2026-08-19 required the amendment to move *"this sentence and
+AC-001/AC-002/AC-003 … together through the spec path, as a named decision with its
+rationale"*, and the sentences that had to move sit at three grains — `initiative.md`'s
+DoD 4, `project.md`'s AC-002 / AC-004 / DoD 1, and the three story specs' own ACs, ledgers
+and reports. A fence that admits only one story's folder makes the ordered remedy
+unperformable, which is the `8fa4d06` condition — *the fence as written was not satisfiable
+by a correct implementation* — arriving one grain up. `references/adr/…0023….md` is the
+fifth: its own status line promised *"when the wave runs, this line becomes `accepted`"*,
+the wave has run, and a long-form record still reading `proposed` would contradict every
+citation this amendment makes. `wasm-execution-gate-step/spec.md` is the sixth and the smallest: it quotes initiative DoD 4 **verbatim** in its *Advances DoD scenario* bullet, as this slice's two specs do, and a verbatim quote of an amended sentence left stale is the two-sources-disagreeing defect this whole pass exists to remove. One line, the quote only; no AC, boundary or verdict of HS-S0048 is touched.
+
+**What this amendment does not license.** Any change to `spec/SPECIFICATION.md`, to a
+maturity marker, or to the body of an accepted decision atom — none is touched. It does not
+license widening an AC to fit an artefact: the widening it carries is the one an **accepted
+decision** ratified, taken in a dedicated pass, with the prior refusal to reword the bar
+(`af9eb10`) preserved in the record above rather than deleted.
 
 ## Behavior and interfaces
 
@@ -156,7 +181,7 @@ Each row is a persona goal crossing the whole stack — the command a person typ
 
 | id | criterion | verification |
 | --- | --- | --- |
-| AC-001 | **GIVEN** a gate reader on a clean checkout who has been told this workspace paid for a two-flavour `!Send` port design so an edge store could exist, **WHEN** they run one `cargo xtask ci` and read the output top to bottom without opening a second tool, a second CI job or a machine they do not have, **THEN** a named wasm32 step reports every rule of the `for_each_event_store_rule!` enumeration having **executed** against `CloudflareFixture` inside a real Durable Object runtime — a per-rule pass or a named failure, never a compile line — in the same terminal scroll as the rest of the gate | `cargo xtask ci`, `cargo xtask ci --fast` and `cargo xtask wasm` end to end over the new registry row (`xtask/src/main.rs:105`, `:784-791`, `:828`, `:853`); the executed target is `crates/happenstance-cloudflare/tests/durable_object_conformance.rs`; the run's per-rule output captured and pasted into the implementation report; the CI `gate` job green on every runner its matrix covers (`.github/workflows/ci.yml:34-39`) |
+| AC-001 | **GIVEN** a gate reader on a clean checkout who has been told this workspace paid for a two-flavour `!Send` port design so an edge store could exist, **WHEN** they run one `cargo xtask ci` and read the output top to bottom without opening a second tool, a second CI job or a machine they do not have, **THEN** a named wasm32 step reports every rule of the `for_each_event_store_rule!` enumeration having **executed** against `CloudflareFixture` **on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a real `SqlStorage` mapping, with the platform runtime an open question** — a per-rule pass or a named failure, never a compile line — in the same terminal scroll as the rest of the gate, **and** the artefacts that run lands on name what it does not prove: no isolate, no eviction, no hibernation, no I/O gate and none of the platform's own storage ceilings (**amended 2026-08-20 by Amendment ADR-0023-A**, below — `kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`) | `cargo xtask ci`, `cargo xtask ci --fast` and `cargo xtask wasm` end to end over the new registry row (`xtask/src/main.rs:105`, `:784-791`, `:828`, `:853`); the executed target is `crates/happenstance-cloudflare/tests/durable_object_conformance.rs`; the run's per-rule output captured and pasted into the implementation report; the CI `gate` job green on every runner its matrix covers (`.github/workflows/ci.yml:34-39`); the exclusion list readable where a reader lands — `crates/happenstance-cloudflare/src/host.rs`'s *What it is not* section and `src/lib.rs`'s status header |
 | AC-002 | **GIVEN** an adapter author on the *Learn when you are finished* journey who suspects the edge suite is quietly a subset — because a bespoke emitter is the one subset nothing in this tree can grep for, **WHEN** they read the entire diff and search the workspace for a second rule list, **THEN** the harness is the shipped `happenstance_testkit::event_store_conformance!` with `emit = happenstance_testkit::__emit_wasm` and `fixture = CloudflareFixture::new()` verbatim in three lines, `crates/happenstance-cloudflare/` defines no `macro_rules!` taking a rule list, no `#[cfg]` sits over any individual rule, and `for_each_event_store_rule!` is still the only enumeration in the tree | diff review against `crates/happenstance-testkit/tests/memory_conformance_wasm.rs:19-27`; `rg -n "macro_rules!" crates/happenstance-cloudflare/` returns nothing; `registry::no_orphan_rules` green under `cargo test --workspace --all-features`; the derived expectation of AC-004 is what makes this mechanical rather than a review promise |
 | AC-003 | **GIVEN** the gate maintainer who built the wasm32 execution seam in `wasm-execution-gate-step` and committed in its **AC-006** that the next target arrives as a *row*, **WHEN** this story mounts the Cloudflare conformance target, **THEN** the whole `xtask` delta is **one row** in the declared executed-target registry in `xtask/src/proof.rs` naming `happenstance-cloudflare` and `durable_object_conformance` — no second `Step` in `const REQUIRED`, no second runner-env wiring, no second `--target` plumbing — and `cargo xtask wasm` picks it up by name with no further edit | a `#[cfg(test)]` unit test in `xtask` (precedent `xtask/src/package.rs`, `xtask/src/proof.rs`) asserting the registry carries a row for this package and target and that `wasm_steps()` resolves the *same* step names as before, run by `cargo test -p xtask`; diff review of `xtask/src/main.rs` showing no added `Step`; `cargo xtask wasm` executing the target |
 | AC-004 | **GIVEN** a gate reader burned once by a step that a deletion fails and an emptying passes (`xtask/src/proof.rs:9-23`), **WHEN** the conformance target is truncated to its attributes, wrapped in `#[cfg(not(target_arch = "wasm32"))]`, has a rule renamed or `#[ignore]`d, or is fed by a hand-written emitter that silently drops three rules, **THEN** the gate **fails before the run**, with a message naming exactly which expected rules are missing — never exiting 0 on `running 0 tests` and never printing green over a suite three rules short | the registry row's expectation **derived** from `happenstance_testkit::__emit_rule_names!` (`crates/happenstance-testkit/src/registry.rs:290-295`) and `mod_name`-prefixed, never hand-copied; `cargo xtask proof-artefact` covering the new row; a `#[cfg(test)]` unit test in `xtask/src/proof.rs` asserting the row's expectation list is non-empty and matches the enumeration; the two negative controls (emptied target, then `cfg`-ed-away target) actually performed and their failure output pasted into the implementation report |
@@ -166,6 +191,53 @@ Each row is a persona goal crossing the whole stack — the command a person typ
 | AC-008 | **GIVEN** the implementers of `measured-store-limits` (HS-S0055) and `adr-0023-and-atom-resolutions` (HS-S0058), who read this story's report as their input, **WHEN** they open it, **THEN** the run is scoped honestly: the ceilings it ran at are named as HS-S0053's *declarations* and explicitly **not** CF-40's discharge; any rule that failed only on `wasm32` is recorded as a named finding with its divergence rather than `#[cfg]`-ed away; every standing detector is still green; and nothing `[FROZEN]` was amended and nothing was written under `.kb/` | `cargo xtask spec-trace` green (CF-14/CF-23/CF-24/CF-27/ES-9 citations); `cargo test -p happenstance-cloudflare` (the four `!Send` probes including `the_probe_is_not_vacuous`, and `send_shape::send_flavour::SendStoreWithLocalError` still compiling) and `cargo test -p happenstance-core` (both `read`-shape tests present, `CLAUDE.md` constraint 3); `git diff --stat` showing no `.kb/**` and no `spec/SPECIFICATION.md` path; report reviewed against `../_storymap.md`, *Standing detectors* and *Coverage* |
 
 **Traceability.** Project **AC-002** (every rule runs and passes, no wasm-only subset) ← AC-001, AC-002, AC-004. Project **AC-003** (declined capabilities report a reason; the concurrency family's non-invocation stated) ← AC-005, AC-006. Project **AC-004** (inside the gate, not beside it) ← AC-001, AC-003, AC-004. AC-007 and AC-008 carry the non-regression halves that keep `publish-ready-crate` (AC-012) and the evidence stories reachable; neither claims a traced project AC of its own.
+
+### Amendment ADR-0023-A — the runtime the acceptance sentences name (2026-08-20)
+
+**Status: applied to AC-001 above, and to the Merge DoD below.** This is the spec-path
+amendment `measured-store-limits/spec.md` conditioned on ADR-0023 (*"if ADR-0023 ratifies
+it, this sentence and AC-001/AC-002/AC-003 are amended together through the spec path, as a
+named decision with its rationale"*). ADR-0023 has since been minted and **accepted** —
+`kb-decision-0023`, *The `SqlStorage` mapping and the off-tokio harness, settled by one body
+of evidence* — so the condition is met and the amendment is taken here, in a dedicated pass,
+rather than in a repair diff. It moves **four** sentences together: this story's AC-001,
+`project.md`'s AC-002 and AC-004, `measured-store-limits`' AC-001–AC-003 and Merge DoD, and
+`initiative.md`'s DoD 4. Nothing else in any of them moves.
+
+**What it changes.** *"inside a real Durable Object runtime"* becomes *"on
+`wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a real `SqlStorage`
+mapping, with the platform runtime an open question"*.
+
+**Why that reading and not the words as written.** ADR-0023 records the harness's shape as a
+**finding rather than a choice**: what the runbook queued — `vitest-pool-workers` in its own
+CI job — loses to the initiative's own requirement that the run be inside the same run as
+the rest of the gate, and reconciling those two is what actually landed. The suite executes
+on the real target, through `worker`'s real `wasm-bindgen` externs, against real SQLite
+reached by the same `state.storage().sql()` a `#[durable_object]` class calls. What is
+doubled is the **runtime**, never the adapter. A `workerd`-class runner inside
+`cargo xtask ci` was **not rejected on merit**; it is an escalated blocking finding with its
+cost measured in this story's implementation report, and it is recorded as an open question
+in its own right: `kb-open-question-workerd-runner-absent-001`, *The gate executes every
+Cloudflare rule on a shim, and nothing owns the runner it is not*.
+
+**What stays unproven, named rather than left to be discovered.** No isolate, no eviction,
+no hibernation, no I/O gate, no event loop re-entering the object mid-`await`, and none of
+the platform's own storage ceilings. That list is ADR-0023's own, stated in its decision
+body; it is a **floor, not a ceiling** — the next clause that needs a platform behaviour
+rather than a storage behaviour hits it again, which is sub-question 2 of the open question.
+Two consequences are already observed rather than feared: the three capacity ceilings
+`measured-store-limits` declares are a refusal policy and not a located wall, and WF-11's
+memory-ceiling falsifier could not be made to fire at all
+(`kb-reference-wf-11-memory-ceiling-verdict-001`).
+
+**What the amendment does not license.** It does not widen the run: every rule still executes,
+the enumeration is still single-sourced, and no `#[cfg]` sits over any rule. It does not close
+`kb-open-question-workerd-runner-absent-001`, and it does not turn *"conformant on Cloudflare"*
+into a claim a consumer may read without the qualifier — phase 12, first publish, is where that
+question is forced. And it amends **acceptance sentences only**: no clause of
+`spec/SPECIFICATION.md` is touched, no maturity marker moves, and no accepted decision atom's
+body is edited.
+
 
 ## Interaction quality
 

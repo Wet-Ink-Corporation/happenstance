@@ -35,6 +35,16 @@ process_rev: b611dd09
 ---
 # The fixture's numeric limits are measurements, not guesses
 
+> **Title superseded 2026-08-20 by Amendment ADR-0023-A** (`spec.md`). The three ceilings
+> are not measurements: they are this adapter's **declared refusal policy**, seeded from a
+> documented platform cap and confirmed accepted and refused at the boundary, because no
+> physical wall is observable on the runtime the gate runs against
+> (`kb-decision-0023`, `kb-open-question-workerd-runner-absent-001`). `spec.md`'s heading
+> carries the corrected title. The heading and `title:` field above are **not** edited
+> here: the `redkiln` CLI is the only writer of an item's system frontmatter, so renaming
+> the item is a `redkiln` command a human runs, and this note is the residual until they
+> do.
+
 > **This is the story item card — status only.** The full specification lives in `spec.md` beside
 > this file: it is the source of truth (scope, behavior, data, and AC-### acceptance criteria with
 > Given/When/Then and `depends_on`). This card intentionally carries **no** spec body — in the story
