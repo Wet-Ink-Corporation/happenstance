@@ -53,10 +53,30 @@ allow-wildcard-paths = true
 # into the graph — a manifest that names the crate itself, or any other crate
 # that pulls it in — is a new wrapper this list does not carry, and the check
 # fails until someone decides it should.
+#
+# That case arrived at phase 9 and was decided, not absorbed. `worker` and
+# `worker-macros` are the second route, and ADR-0035 ratifies them —
+# `references/adr/0035-async-trait-through-worker.md`, amending ADR-0001's
+# exemption set and resolving the open question the phase-9 wave minted for it
+# (`.kb/open-questions/deny-bans-red-on-the-worker-dependency.md`).
+#
+# **The two new wrappers rest on a different argument from the first, and
+# collapsing them loses the reasoning.** `wasm-bindgen-test` is exempt because it
+# ships in nothing. `worker` is a *normal* dependency of `happenstance-cloudflare`
+# and does ship; it is exempt because it uses `async-trait` for **its own**
+# traits, which this workspace neither implements nor derives ports from, so no
+# `happenstance` port passes through the macro. The property ADR-0001 protects —
+# a `!Send` store staying reachable on wasm32 — is untouched, and
+# `crates/happenstance/tests/flavours.rs` still proves that at compile time on
+# every target, which is the guard that was never optional.
+#
+# A third route still fails until someone decides it should not.
 deny = [
     { crate = "async-trait", wrappers = [
         "wasm-bindgen-test",
-    ], reason = "ADR-0001: injects `+ Send`, which forecloses wasm32" },
+        "worker",
+        "worker-macros",
+    ], reason = "ADR-0001: injects `+ Send`, which forecloses wasm32; ADR-0035 exempts the `worker` subtree" },
 ]
 
 [sources]
