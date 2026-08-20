@@ -2,16 +2,27 @@
 id: kb-open-question-cf-40-ownership-001
 title: CF-40's ownership is claimed and disclaimed by the same decision
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
-  CF-40 is the clause requiring a fixture to declare its actual numeric limits — maximum event data length, tags per event, events per batch — as optional constants defaulting to no ceiling, reported through the declined-capability path. ADR-0015 mints it and contradicts itself about whether it owns it: the header and introduction say CF-40 was settled at sign-off and 'lands here', while the Consequences section for the same decision says the fixture-constant ownership question 'is not settled' and that decision 8 'sets out both and declines to choose'. The other claimant is ADR-0012, which already owns CF-39 and MID_BATCH_FAULT in the same fixture-contract area, and ADR-0015's own reasoning is that neither decision may resolve this unilaterally. Both decisions are accepted and neither is edited, so the contradiction stands as imported. What is not decided is which document the fixture's capability surface belongs to as a whole — the question is less about CF-40 than about whether the fixture contract has one owner or is amended by whichever decision needs it next. Forced by phase 8, the first adapter with real limits.
+  CF-40 is the clause requiring a fixture to declare its actual numeric limits — maximum event data length, tags per event, events per batch — as optional constants defaulting to no ceiling, reported through the declined-capability path. ADR-0015 mints it and contradicts itself about whether it owns it: the header and introduction say CF-40 was settled at sign-off and 'lands here', while the Consequences section for the same decision says the fixture-constant ownership question 'is not settled' and that decision 8 'sets out both and declines to choose'. The other claimant is ADR-0012, which already owns CF-39 and MID_BATCH_FAULT in the same fixture-contract area, and ADR-0015's own reasoning is that neither decision may resolve this unilaterally. Both decisions are accepted and neither is edited, so the contradiction stands as imported. What is not decided is which document the fixture's capability surface belongs to as a whole — the question is less about CF-40 than about whether the fixture contract has one owner or is amended by whichever decision needs it next. Forced by phase 8, the first adapter with real limits. Resolved 2026-08-20 by ADR-0034
+  (kb-decision-0034), which confirms CF-40 as ADR-0015's clause — the hedge in that document's own
+  Consequences section superseded by use rather than by argument, because two later decisions cite
+  CF-40 to ADR-0015 and neither claims it — and records the deeper answer as a position rather than
+  an absence: the fixture contract has no single owning document, a CF- clause is minted by the
+  decision that first needs the capability and carries its reason there, and what that costs is
+  stated with it. Sub-question 1 is answered by confirmation rather than by movement; sub-question 2
+  in the negative. Sub-question 3 is not closed and moves to
+  kb-open-question-poll-count-rule-strength-001, where phase 10's POLL_BUDGET is the position's
+  named next test. No accepted decision was edited to produce any of it.
 depends_on: []
 related:
   - kb-decision-0015
   - kb-decision-0012
   - kb-decision-0010
   - kb-decision-0022
+  - kb-decision-0034
+  - kb-decision-0023
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - .kb/_intake/0012-append-shape-and-preconditions.md
@@ -19,7 +30,8 @@ source_paths:
   - references/adr/0012-append-shape-and-preconditions.md
   - crates/happenstance-testkit/src/fixtures.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-10
+  - .kb/_intake/cf-40-fixture-contract-ownership-resolution.md
+last_reviewed: 2026-08-20
 ---
 
 # CF-40's ownership is claimed and disclaimed by the same decision
@@ -98,3 +110,40 @@ minted.
    new fixture capability arrives, does it default to the same
    spread-by-subject pattern this question exposes, or does the answer to
    sub-question 2 change that by then?
+
+## Resolved 2026-08-20 — status `superseded`; sub-question 3 moves out
+
+Everything above is the state of knowledge on 2026-08-10 and is left exactly as it was written. The
+answering atom is `kb-decision-0034`, "The fixture contract has no single owning document, and CF-40
+is ADR-0015's clause" (`.kb/decisions/0034-the-fixture-contract-has-no-single-owner.md`). Nothing in
+it reaches back into ADR-0015, ADR-0012 or ADR-0022: all three are accepted, and the resolution
+cites them from outside rather than editing any of them.
+
+**Sub-question 1 is answered by confirmation, not by movement.** CF-40 stays ADR-0015's clause,
+which is what its header and decision-8 prose already asserted; it does not move to ADR-0012 to sit
+beside CF-39. What decided it was not a better argument but two later decisions behaving as though
+the question were already answered. ADR-0022 records CF-40's clause home as a non-verdict *with a
+named owner* — "CF-40's clause home — which document owns a fixture-constant clause — stays open at
+`kb-open-question-cf-40-ownership-001`"
+(`.kb/decisions/0022-append-condition-strategy.md:93-94`) — and ADR-0023 amends the fixture contract
+again without claiming CF-40 either. The hedge in ADR-0015's own Consequences section is therefore
+superseded by use.
+
+**Sub-question 2 is answered in the negative.** The fixture contract gets no single named owner. A
+`CF-` clause is minted by the decision that first needs the capability and carries its reason there,
+beside the adapter that needed it — and that is now a recorded position rather than an unanswered
+question. What turned the argument into an observation is phase 9: `CloudflareFixture` is the first
+fixture in the workspace to declare all three of CF-40's ceilings and claim CF-39's
+`MID_BATCH_FAULT` at once (`crates/happenstance-cloudflare/tests/support/mod.rs:244,273,284,296`),
+where every fixture before it left all three constants at `None` and
+`append_reports_exceeded_store_limits` reported a skip everywhere and certified nothing. Three ADRs
+have now amended the contract across three phases without colliding. The cost this atom named is
+kept rather than argued away: nobody can answer which document owns CF-40 without reading three
+ADRs, and a reader locating a fixture-contract clause reads the specification's §6 by subject rather
+than one decision record.
+
+**Sub-question 3 is not closed here, and stops being this atom's.** Phase 10's `POLL_BUDGET`-shaped
+capability (ADR-0013 §8) is the position's named next test and is owned by
+`kb-open-question-poll-count-rule-strength-001`. If it collides with piecemeal minting, that
+collision is the evidence that would supersede `kb-decision-0034` — which is why that decision
+carries `reversibility: high` and names its trigger rather than closing the subject.

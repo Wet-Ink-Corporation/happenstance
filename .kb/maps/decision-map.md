@@ -23,7 +23,10 @@ summary: >-
   supersession — and ADR-0032 fully supersedes ADR-0021, flipping its row to superseded.
   kb-decision-0007's own frontmatter stays `accepted` with `superseded_by: null`, unflipped by this
   map edit; kb-decision-0021's frontmatter was flipped by the ingest wave itself, and this map only
-  mirrors it.
+  mirrors it. The 2026-08-20 wave (`2026-08-20-intake-phase-9`) added ADR-0023 (phase 9, the
+  Cloudflare `SqlStorage` mapping and its off-tokio harness) and ADR-0034 (phase 9, the fixture
+  contract has no single owning document) in one section. Neither supersedes any row on this map —
+  both `supersedes: null` — and both are phase 9, the first phase-9 rows the map carries.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -35,7 +38,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
   - .kb/_governance/integration-waves/2026-08-15-intake
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
-last_reviewed: 2026-08-17
+  - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
+last_reviewed: 2026-08-20
 ---
 
 # Decision map
@@ -190,6 +194,22 @@ on.
 0004 stays `status: accepted` because its reasoning (the floor is a preference until first
 publish) is what 0029 acted on, not what it reversed — `superseded_by` is deliberately left
 `null` on 0004, and 0029's `depends_on` carries the edge instead.
+
+## 2026-08-20 phase-9 wave (ADR-0023, ADR-0034)
+
+Two decision atoms, one wave (`2026-08-20-intake-phase-9`), phase 9, `.kb/decisions/`. ADR-0023
+settles how an event store maps onto a Cloudflare Durable Object's `SqlStorage` and what harness
+proves it, merging the SqlStorage-mapping intake with the ES-6 verdict as one body of evidence per
+`kb-playbook-one-decision-per-adr-title-001`'s stated exception rather than as two atoms. ADR-0034
+answers `kb-open-question-cf-40-ownership-001` from outside, without editing any of the three
+accepted decisions it cites — ADR-0015 (CF-40's clause home), ADR-0012 (CF-39 and
+`MID_BATCH_FAULT`) and ADR-0022 (a non-verdict naming a fixture-contract owner) — establishing that
+the fixture contract has no single owning document. Neither atom supersedes any row on this map.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0023 | [`kb-decision-0023`](../decisions/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md) | The SqlStorage mapping and the off-tokio harness, settled by one body of evidence | accepted | 9 | — |
+| ADR-0034 | [`kb-decision-0034`](../decisions/0034-the-fixture-contract-has-no-single-owner.md) | The fixture contract has no single owning document, and CF-40 is ADR-0015's clause | accepted | 9 | — |
 
 ## Adding a row
 

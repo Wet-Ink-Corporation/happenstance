@@ -17,6 +17,7 @@ depends_on:
   - kb-playbook-verify-referent-report-coverage-001
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
+  - kb-reference-phase-8-spec-reconciliation-001
 source_paths:
   - .kb/_intake/lesson-anchoring-citations-in-a-long-lived-document.md
   - xtask/src/spec_trace.rs

@@ -18,7 +18,11 @@ summary: >-
   and ADR-0009 are now imported as decision atoms: ADR-0008 adds that the rule, when written, must
   assert on the future's Output and not on the future, since a future-only check is decorative
   against a !Send error, and ADR-0009 supplies the ThreadSafeEventStore marker the rule's bound
-  would name.
+  would name. Narrowed and not closed on 2026-08-20 by ADR-0023: ADR-0009's prediction was judged
+  against a real !Send error carrying a live JavaScript value — the first runtime that can produce
+  one — and it held, a caller recovering constraint violation from transport fault without Error
+  carrying Send + Sync. store_error_crosses_a_join_handle is still unwritten, still unowned, and
+  still named by a FROZEN clause; the scheduling gap this atom describes is unchanged.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -28,6 +32,7 @@ related:
   - kb-reference-port-traits-compiled-findings-001
   - kb-open-question-es-38-and-gap-read-unowned-001
   - kb-open-question-cf-36-unperformed-cross-reference-001
+  - kb-decision-0023
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/0008-one-derivation-for-both-ports.md
@@ -39,7 +44,8 @@ source_paths:
   - references/evaluation/review-citation-drift.md
   - references/adr/0008-one-derivation-for-both-ports.md
   - references/adr/0009-error-send-sync.md
-last_reviewed: 2026-08-10
+  - .kb/_intake/es-6-verdict-against-adr-0009s-prediction.md
+last_reviewed: 2026-08-20
 ---
 
 # ES-6 is frozen and names a rule that cannot be written
@@ -72,6 +78,18 @@ the rule writable, and the wrong implementation it must reject already exists in
 may be a scheduling gap rather than a design gap — but the clause is `[FROZEN]` today and still
 names an unwritten rule.
 
+That premise has since been observed under execution rather than only reasoned about. Phase 9's
+Cloudflare adapter is the first runtime in the workspace that can produce the case ADR-0009 named —
+an error type that is `!Send` because it carries a live JavaScript value — and `kb-decision-0023`
+records the verdict: the decision holds, and this adapter is the evidence for it rather than the
+exception to it. Four reconstruction tests in `crates/happenstance-cloudflare/src/lib.rs`'s
+`es6_reconstruction` module, executed on `wasm32-unknown-unknown` and pinned in
+`xtask/src/proof.rs`'s executed-target registry, show a caller recovering the one fact they must
+branch on — constraint violation versus transport fault — from what `append` hands back, with no
+`Send + Sync` bound on `Error` and with no public item added to reach it. The suite was demonstrated
+capable of failing: two wrong classifiers were compiled into the real `classify_write`, and the
+evidence-discarding shape was rejected by two tests, the flattening shape by three.
+
 `references/evaluation/review-citation-drift.md` §2 reports the same finding independently, written
 the same day from the `standards/rust/` work with no knowledge of this pass, and records the
 identifier occurring in three comment locations in the crates — convergent evidence that this is a
@@ -99,6 +117,17 @@ neither assigns it an owning phase — ADR-0009 explicitly leaves the suite to p
 surface question of shipping the marker in `happenstance-core` to phase 4 — so the gap is a
 scheduling gap with a named remedy and no owner, which is exactly the condition sub-question 2 is
 about.
+
+`kb-decision-0023` narrows the question the same way and closes none of it, because what it judged
+was ADR-0009's **prediction** and not ES-6's **rule**. The prediction — that the absent bound would
+cost a caller something on the first runtime able to produce a `!Send` error — was tested and held.
+`store_error_crosses_a_join_handle` is still unwritten, still unowned, and still named by a
+`[FROZEN]` clause: writing it is a testkit change against ADR-0009's marker, phase 9 did not take
+it, and ADR-0023 says so in its own terms rather than leaving it to be inferred. If anything the
+remedy is now more attractive rather than less — the derived flavour's tolerance of a `!Send` error
+has been exercised on a real one, so the rule has a live subject as well as
+`SendStoreWithLocalError` as its negative probe — but the check-4 escape hatch, the missing owning
+phase, and both general sub-questions below are exactly where phase 8 left them.
 
 ## What forces it
 

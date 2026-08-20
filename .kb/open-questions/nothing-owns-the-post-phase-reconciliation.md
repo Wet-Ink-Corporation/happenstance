@@ -14,6 +14,12 @@ summary: >-
   clause range against the union of its ADRs' ranges when neither is machine-readable; and what a
   disagreement between the two numbers obliges. Forced by phase 6's exit, which freezes
   ProjectionStore and discharges PS-1 through PS-37, and secondarily by first publish at phase 12.
+  A second pass has now run, for phase 8, and its census is
+  kb-reference-phase-8-spec-reconciliation-001. It supplies evidence for three of the five
+  sub-questions without answering any: 14 of 20 repairs were false sentences no gate step could
+  catch, which argues against a gate step replacing the pass and for the pass having an owner; the
+  clause-range arithmetic had nothing to close against because the phase's sole ADR states no range
+  in any form; and the anchored fraction is 80 of 401, against 69 of 358 at phase 4/5.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -21,13 +27,15 @@ related:
   - kb-open-question-ps-1-no-progress-obligation-001
   - kb-open-question-ps-19-scope-narrower-001
   - kb-open-question-provisional-falsifiers-001
+  - kb-reference-phase-8-spec-reconciliation-001
 source_paths:
   - .kb/_intake/open-question-nothing-owns-the-post-phase-reconciliation.md
   - RUNBOOK.md
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-10
+  - .kb/_intake/0034-what-the-phase-8-reconciliation-cost.md
+last_reviewed: 2026-08-20
 ---
 
 # Nothing owns the specification reconciliation at a phase's exit
@@ -44,7 +52,8 @@ The consequence was measured in August 2026 and is recorded in `RUNBOOK.md` unde
 to happen and that this plan had not scheduled, recorded here so the next one is scheduled rather
 than noticed." The counted defects that pass found are the census owned by
 `kb-reference-phase-4-5-spec-reconciliation-001`; this atom does not restate them — a question
-carrying its own copy of a census is a second census, and the two would drift.
+carrying its own copy of a census is a second census, and the two would drift. The same holds for
+the phase-8 pass below, whose census is `kb-reference-phase-8-spec-reconciliation-001`.
 
 **The rule that would have caught this was already written down, in the same file, and nothing
 implements it.** Stated three separate times in `RUNBOOK.md`: "The rule this leaves behind, for
@@ -92,6 +101,36 @@ concrete before phase 6 closes, the same unscheduled reconciliation runs again, 
 A secondary forcing event is first publish at phase 12, when the specification becomes a promise
 to downstream consumers rather than an internal document. A clause describing a superseded
 implementation is a documentation defect today and a support burden then.
+
+## What the phase-8 pass supplied
+
+The criterion has since been hand-run once, against phase 8 — one pass, one context, no tooling
+written. That is the first evidence it can be executed at all, and equally that nothing but a
+human's intention executes it. Three of its findings bear on the questions above, and none of them
+closes one.
+
+**Most of what the pass repaired was prose no gate step can reach.** A minority of the repairs were
+citation line numbers a machine could plausibly have caught; the majority were sentences that were
+simply false — counts contradicted by the tree, a tense describing as *planned* a schema that had
+already landed, and a `[PROVISIONAL]` falsifier naming an event that had already occurred (the
+failure mode `kb-open-question-provisional-falsifiers-001` is about). That cuts both ways on the
+first sub-question below: it argues *against* believing a gate step could replace the pass, and
+*for* the pass being owned by someone rather than left standing, because the failure mode is
+silent, durable, and reads as authoritative.
+
+**The arithmetic bullet had nothing to close against.** Phase 8 has one ADR, and it states no
+clause range in any form — no frontmatter field, no clause ID in its decision, no parenthesised
+range in its runbook queue row. The second of the two numbers therefore had to be derived from the
+phase's own disagreeing statements, which is the comparison of a number against itself. That is
+the third sub-question arriving as a lived cost rather than a hypothesis; a `clauses:` key in a
+decision atom's frontmatter is named there as a candidate and deliberately not adopted.
+
+**And it left the second sub-question exactly where it was, on purpose** — the pass declined to
+commit a citation baseline beside the list it counts, for the reason
+`kb-playbook-ratchet-gate-landing-001` gives.
+
+The census records both of the first two findings as inputs to an ADR that does not exist yet,
+which restates the fifth sub-question rather than answering it.
 
 ## Ordered sub-questions
 
