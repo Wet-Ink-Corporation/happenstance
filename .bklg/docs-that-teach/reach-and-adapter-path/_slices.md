@@ -22,9 +22,14 @@ human-readable record, the trailer is what resume greps.
 | Slice | Verdict | Story checkpoints | Sealed by |
 | ----- | ------- | ----------------- | --------- |
 | pointer-policy | approved | pointer-policy-and-inventory ef2eb6b | (this commit) |
+| adapter-error-site | changes-requested | adapter-reasoning-account af9a241, store-error-site-rewrite f2c7dbe | (this commit) |
 
 ## Surviving findings
 
 For each slice whose verdict is `changes-requested`, the findings that survived the in-slice fix
 pass, with the `file:line` evidence the reviewer cited. These are the prescription a resumed run —
 or a human — starts from. They are hypotheses for the next reviewer to verify, not facts to trust.
+
+### adapter-error-site
+
+- HS-S0155 (adapter-reasoning-account): story gate red — boundary, provenance — boundary: changed outside declared boundary: CHANGELOG.md, CLAUDE.md, Cargo.lock, Cargo.toml, RUNBOOK.md, [195 files total]; provenance: 16 file(s) changed inside this story's declared boundary and links.commits is empty. Record the checkpoint commit: redkiln record-links <id> --sha <sha>.
