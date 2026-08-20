@@ -7,9 +7,9 @@ title: ADR-0023 accepted, and CF-40 and WF-11 resolved rather than deleted
 parent: HS-P0013
 initiative: from-contract-to-published-library
 project: cloudflare-durable-object-store
-status: ready
+status: in-review
 process: story
-stage: plan
+stage: report
 automation: HITL
 severity: null
 blocked_by:
@@ -23,14 +23,15 @@ archetype: capability
 slice: evidence-and-verdicts
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-20T06:19:32.086Z
+updated: 2026-08-20T20:46:54.882Z
 links:
   pr: null
   commits:
     - d3030c6
     - 63927cc
+    - a12364c
   kb: []
-gate_open: false
+gate_open: true
 schema: 1
 process_rev: b611dd09
 ---
