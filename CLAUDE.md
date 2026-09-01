@@ -36,7 +36,12 @@ crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
 crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
-examples/course-subscriptions/   the canonical DCB worked example.
+examples/course-subscriptions/   the canonical DCB worked example. in memory.
+examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
+                                 command loop and projection runner against
+                                 happenstance-sqlite, one file, read back after every
+                                 handle is dropped. the only place the two crates a
+                                 consumer installs are compiled together.
 examples/outside-projection-adapter/
                                  🔬 the falsifier. a projection adapter written from the
                                  rendered documentation alone, in a crate where the orphan

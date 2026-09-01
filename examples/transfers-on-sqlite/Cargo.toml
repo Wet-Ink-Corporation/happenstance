@@ -1,0 +1,76 @@
+[package]
+name = "transfers-on-sqlite"
+description = "A consuming application: the typed layer's command loop and projection runner, both against happenstance-sqlite on one file on disk."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# Written long-hand, for the reason `outside-projection-adapter` is: this
+# package exists to model *a consuming application's* manifest, and the claim
+# under test is partly a claim about this file — what an application pays to
+# put the typed layer on a real database. `[workspace.dependencies]` sets
+# `default-features = false` on `happenstance`, which would make `std` read as a
+# second feature an application had to ask for; it does not. The lines below are
+# the lines an application writes, minus the two `path` keys.
+[dependencies]
+# The crate a consumer installs, and the whole point of this example: every
+# call into happenstance below goes through the *typed* layer — `commit`,
+# `run_projection`, `DomainEvent`, `DecisionModel`, `Projection` — never
+# through `happenstance-core` directly. The `EventType`, `Tags` and `Query`
+# names still resolve, through the facade's `pub use happenstance_core::*`.
+#
+# `unstable-projection` is spelled here rather than defaulted, and the name is
+# the promise: the projection port is not frozen. An application that only
+# wants the command loop does not write this line.
+#
+# `default-features = false` and the three named explicitly, because the default
+# set carries `memory` and an application that has chosen a durable store has no
+# use for `MemoryEventStore` in its binary. Turning it off is what a consumer
+# would do, and doing it here is what keeps this manifest an honest model of one.
+happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+  "unstable-projection",
+] }
+# The adapter. Both of its roles are on: `event-store` and `projection-store`
+# are its defaults, and this example uses both — against the *same file*, which
+# is the arrangement an application actually deploys and which nothing else in
+# the workspace exercises. The two schemas carry their versions in separate
+# meta tables (`store_meta`, `projection_meta`) rather than in `PRAGMA
+# user_version`, which is what makes sharing one file safe rather than lucky.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite" }
+# **A direct dependency, and a finding rather than an incidental line.**
+# `SqliteBatch::push` takes `rusqlite::types::Value`, and `happenstance-sqlite`
+# re-exports neither the type nor the crate — so an application that writes a
+# projection through this adapter must name `rusqlite` itself, at a version
+# that resolves to the same one the adapter holds. That is a real coupling an
+# application author meets on their first projection, and it is recorded here
+# rather than smoothed over. The same connection is also what creates and reads
+# this example's own read-model table: the projection store migrates the
+# *checkpoint* schema and nothing else, so the read model is the application's.
+#
+# `workspace = true` and **not** long-hand, unlike the two lines above. Spelled
+# out as `{ version = "0.40", features = ["bundled"] }` — which is what an
+# application author would actually type — it resolves rusqlite's *default*
+# features, and that added five packages to `Cargo.lock` that no other member
+# needs. Modelling an outsider's manifest is worth a comment; it is not worth
+# five nodes in this workspace's graph and a second feature set for a crate the
+# adapter already holds. The cost an application pays is the coupling, and the
+# coupling is stated above.
+rusqlite.workspace = true
+# The domain enum's encoding, and the refusal type. Both for the reasons
+# `course-subscriptions` gives: `CommandError`'s domain parameter is bound
+# `core::error::Error`, which `anyhow::Error` does not implement.
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+# `rt` and not just `macros`: the adapter's read stream defers its work into
+# `spawn_blocking`, so this application needs a runtime with a blocking pool
+# under it. `current_thread` has one — the flavour chooses the *driver*, not
+# whether blocking tasks exist.
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

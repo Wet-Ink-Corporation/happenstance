@@ -1790,6 +1790,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "transfers-on-sqlite"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "happenstance",
+ "happenstance-sqlite",
+ "rusqlite",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "trybuild"
 version = "1.0.120"
 source = "registry+https://github.com/rust-lang/crates.io-index"

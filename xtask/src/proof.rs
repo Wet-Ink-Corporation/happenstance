@@ -1,15 +1,17 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries seven targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries eight targets today: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
 //! families; [ADR-0010]), the two `wire` targets the wire format was frozen
 //! against ([ADR-0016]), the projection family's two — its mutant registry's
 //! meta-tests and the harness parity guard — which are what phase 6's proof
 //! artefact rests on and which nothing held until phase 6 closed, and the worked
-//! example's two — `runs`, which is the only thing in the workspace that
-//! *executes* a binary and reads what it printed, and `ui`, the `trybuild` pair
-//! that pins the compiler's own diagnostic when a domain grows a variant.
+//! example's two — `runs`, which was the first thing in the workspace to
+//! *execute* a binary and read what it printed, and `ui`, the `trybuild` pair
+//! that pins the compiler's own diagnostic when a domain grows a variant — and
+//! `transfers-on-sqlite`'s `runs`, the second such binary and the only one that
+//! puts the typed layer and a durable adapter in the same process.
 //!
 //! # Why naming the target was not enough
 //!
@@ -242,6 +244,29 @@ const WORKED_EXAMPLE_TESTS: &[&str] = &[
     "runs::the_transcript_is_the_designed_composition",
 ];
 
+/// The tests that prove the typed layer and a durable adapter compose.
+///
+/// The same argument as [`WORKED_EXAMPLE_TESTS`], against a different absence.
+/// That target runs the typed layer on `MemoryEventStore`; the adapter's own
+/// tests run the conformance suite on `happenstance-core`. Both halves were
+/// tested alone and **nothing in the workspace compiled them together**, so the
+/// sentence a consumer actually cares about — *"`cargo add happenstance
+/// happenstance-sqlite` and it works"* — was held up by neither.
+///
+/// Three names out of the target's ten, and deliberately these three.
+/// `the_example_runs_end_to_end` is *did it run*. The other two are the claims
+/// only a durable store can make and the ones an "it exits 0" rewrite silently
+/// drops: that what was written is still there once every handle is dropped and
+/// the file reopened, and that the projection's checkpoint came back with it so
+/// a restart does not replay the log. The remaining seven are source-reading
+/// assertions over the example's own text, and the subset check (`:34-41`)
+/// means an eleventh needs no edit here.
+const TYPED_LAYER_ON_SQLITE_TESTS: &[&str] = &[
+    "runs::the_example_runs_end_to_end",
+    "runs::the_balances_survive_the_reopen",
+    "runs::the_checkpoint_survives_the_reopen",
+];
+
 /// The compile-fail pair: the guarantee, and the control that gives it meaning.
 ///
 /// Both names, never one. `an_unhandled_variant_fails_to_compile` is the claim —
@@ -305,6 +330,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "course-subscriptions",
         target: "ui",
         tests: COMPILE_FAIL_PAIR,
+        registry: None,
+    },
+    Artefact {
+        package: "transfers-on-sqlite",
+        target: "runs",
+        tests: TYPED_LAYER_ON_SQLITE_TESTS,
         registry: None,
     },
 ];
