@@ -230,6 +230,22 @@ impl MemoryProjectionBatch {
 
     /// Reads a row through the open batch — pending writes layered over
     /// `committed`.
+    ///
+    /// Gated on `conformance` because its only caller is, and a private method
+    /// whose caller is behind a feature is dead code in every build that does
+    /// not ask for it. That combination is reachable and ordinary — `default,
+    /// unstable-projection` without `conformance` is what an application using
+    /// the projection runner resolves — and it failed `RUSTFLAGS="-D warnings"`
+    /// with *method `read_through` is never used*.
+    ///
+    /// **Not `#[expect(dead_code)]`**, which would be actively wrong: `expect`
+    /// fires when the lint it names does *not*, so it would be correct in the
+    /// builds where the method is dead and an `unfulfilled_lint_expectation`
+    /// warning in the `conformance` builds where it is used. `#[allow]` would
+    /// work and loses on two counts — it keeps compiling the body into every
+    /// consumer's build, and it silences the next method to go genuinely dead
+    /// here. A `cfg` that matches the caller's says the true thing.
+    #[cfg(feature = "conformance")]
     fn read_through(&self, committed: Option<u64>, key: &str) -> Option<u64> {
         if let Some(pending) = self.writes.get(key) {
             return Some(*pending);
