@@ -1,7 +1,7 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries eight targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries nine targets today: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
 //! families; [ADR-0010]), the two `wire` targets the wire format was frozen
 //! against ([ADR-0016]), the projection family's two — its mutant registry's
@@ -10,8 +10,10 @@
 //! example's two — `runs`, which was the first thing in the workspace to
 //! *execute* a binary and read what it printed, and `ui`, the `trybuild` pair
 //! that pins the compiler's own diagnostic when a domain grows a variant — and
-//! `transfers-on-sqlite`'s `runs`, the second such binary and the only one that
-//! puts the typed layer and a durable adapter in the same process.
+//! `transfers-on-sqlite`'s two — `runs`, the second such binary and the only
+//! one that puts the typed layer and a durable adapter in the same process, and
+//! `contention`, the only target anywhere that races `happenstance::commit`
+//! itself rather than the `append` beneath it.
 //!
 //! # Why naming the target was not enough
 //!
@@ -267,6 +269,31 @@ const TYPED_LAYER_ON_SQLITE_TESTS: &[&str] = &[
     "runs::the_checkpoint_survives_the_reopen",
 ];
 
+/// The tests that race `happenstance::commit` on a real file.
+///
+/// A third absence, and the narrowest of the three. `src/main.rs` is
+/// single-writer, so its `Retry` bound is never spent; the adapter's own
+/// `tests/concurrency.rs` races the store properly but does it through the
+/// **conformance suite**, against `happenstance-core`'s `append` and a
+/// hand-built `AppendCondition`. Nothing raced the loop that owns the retry —
+/// the one an application calls.
+///
+/// Both names, never one, and for the reason [`COMPILE_FAIL_PAIR`] gives.
+/// `a_contended_commit_retries_rather_than_failing` is the claim, and it is the
+/// one that goes quiet first: it is satisfied by *observing* a retry, and a
+/// version of this file that hoped four threads would overlap rather than
+/// forcing it with a barrier passes on a busy machine and asserts nothing on an
+/// idle one. `no_update_is_lost_under_contention` is what stops a retry that
+/// silently dropped a write from reading as success — it is the arithmetic, and
+/// a loop can report `attempts > 1` and still lose money.
+///
+/// `every_contender_eventually_commits` is the target's third test and is not
+/// listed, per the subset rule at `:34-41`.
+const TYPED_LAYER_CONTENTION_TESTS: &[&str] = &[
+    "a_contended_commit_retries_rather_than_failing",
+    "no_update_is_lost_under_contention",
+];
+
 /// The compile-fail pair: the guarantee, and the control that gives it meaning.
 ///
 /// Both names, never one. `an_unhandled_variant_fails_to_compile` is the claim —
@@ -336,6 +363,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "transfers-on-sqlite",
         target: "runs",
         tests: TYPED_LAYER_ON_SQLITE_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "transfers-on-sqlite",
+        target: "contention",
+        tests: TYPED_LAYER_CONTENTION_TESTS,
         registry: None,
     },
 ];
