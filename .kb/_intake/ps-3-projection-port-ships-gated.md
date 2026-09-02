@@ -74,9 +74,10 @@ likely to be wrong about — whether a batch can be a live borrowed handle — i
 one no passing adapter currently occupies. Freezing now would freeze against one
 storage shape and call it a contract.
 
-The cost of the arm taken is real and is accepted: a consumer must write the word
-`unstable-projection` to get a projection store, the surface makes no semver
-promise, and `cargo-semver-checks` will not police it.
+The cost of the arm taken is real and is accepted: a consumer must name a feature
+to get a projection store at all — `unstable-projection` on `happenstance` and
+`happenstance-core`, `projection-store` on the adapter, which forwards it — the
+surface makes no semver promise, and `cargo-semver-checks` will not police it.
 
 ## What this does not decide
 
@@ -104,14 +105,42 @@ capability, one switch… a crate with two switches for one capability is a crat
 where the weaker one wins silently."* What is in question is only whether that
 switch belongs in `default`.
 
-It is not free to change. `crates/happenstance-sqlite/tests/projection.rs` is
+~~It is not free to change. `crates/happenstance-sqlite/tests/projection.rs` is
 gated on `feature = "projection-store"`, so removing it from `default` means a
 bare `cargo test -p happenstance-sqlite` stops running the projection family —
-the exact defect that manifest already warns about for `proptest`: *"a family
-that needs an extra flag to appear is a family that silently does not run."* The
-gate itself is unaffected, because it runs `--all-features`.
+the exact defect that manifest already warns about for `proptest`.~~
 
-**Owner: `publication-and-positioning`, before the `0.2.0` publish.** It is a
+**That paragraph was wrong on a fact, and the fact is why this was routed rather
+than resolved.** `tests/projection.rs`:44 is gated on `all(feature =
+"projection-store", feature = "conformance")` — **two** features, not one — and
+`conformance` was never in `default`. The cost it warned of therefore did not
+exist. Struck through rather than deleted because a finding that was deferred on
+a mistaken cost should show the mistake, not a tidy conclusion.
+
+**Resolved for `happenstance-sqlite` on 2026-09-02, after this verdict was
+taken.** `projection-store` left that crate's default set; `default` is now
+`["event-store"]` alone. The objection that had held it — that a bare `cargo test
+-p happenstance-sqlite` would stop running the projection family — was measured
+and is false: `tests/projection.rs` is gated on `all(projection-store,
+conformance)` and `conformance` was never in `default`, so that family already ran
+0 tests bare and 24 under `--all-features`. Nothing was lost by moving it.
+
+The feature keeps its name. `event-store` / `projection-store` names **roles** and
+is shared by three adapters; `unstable-projection` names **maturity**, and that
+signal already lives on `happenstance-core`'s own gate, which this flag forwards.
+Renaming one adapter would fragment a three-crate vocabulary to re-spell something
+that is not missing. What the rename would have bought is carried by the manifest
+comment and by a new *Features* section in the crate's README, which states in a
+consumer's terms that the flag opts them into a surface with no semver promise.
+
+**Still owed, and routed: `happenstance-neon` and `happenstance-postgres` carry
+the identical `default = ["event-store", "projection-store"]`.** Both are stubs
+whose projection bodies are `todo!()`, so nothing ships from them today and the
+exposure is latent rather than live. They are not fixed here because they belong
+to `postgres-and-neon-stores`, which has already noticed the same shape —
+`deskeleton-and-package-readiness/discover.md`:45 contemplates *"ship
+`happenstance-neon` with its `projection-store` feature off by default"*. Owner:
+that project, before either crate is published. It is a
 crate-surface decision with a consumer consequence, and it should be taken
 deliberately rather than inherited from a default nobody re-read.
 

@@ -40,7 +40,15 @@ happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", 
 # the workspace exercises. The two schemas carry their versions in separate
 # meta tables (`store_meta`, `projection_meta`) rather than in `PRAGMA
 # user_version`, which is what makes sharing one file safe rather than lucky.
-happenstance-sqlite = { path = "../../crates/happenstance-sqlite" }
+# `projection-store` is named, and naming it is the point. It left this crate's
+# default set at PS-3's verdict, so a bare `cargo add happenstance-sqlite` gets
+# the event store and nothing else. The projection half forwards
+# `happenstance-core/unstable-projection` — a port PS-2's bar has not been met
+# for — and an application that wants it now says so, in the one place a reader
+# of this example will look for what it costs.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
+  "projection-store",
+] }
 # **A direct dependency, and a finding rather than an incidental line.**
 # `SqliteBatch::push` takes `rusqlite::types::Value`, and `happenstance-sqlite`
 # re-exports neither the type nor the crate — so an application that writes a

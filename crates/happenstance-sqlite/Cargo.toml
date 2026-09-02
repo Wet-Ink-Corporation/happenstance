@@ -52,7 +52,9 @@ happenstance-testkit = { workspace = true, features = ["proptest"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
-default = ["event-store", "projection-store"]
+# The event store only. `projection-store` was here until PS-3's verdict and is
+# deliberately not any more — see its own comment below for why.
+default = ["event-store"]
 # Both roles share one driver and one connection story, so they share a crate
 # and are separated by features rather than by another package.
 event-store = []
@@ -60,6 +62,23 @@ event-store = []
 # own off-by-default `unstable-projection` gate, and this feature *enables* it
 # rather than sitting beside it: a crate with two switches for one capability is
 # a crate where the weaker one wins silently.
+#
+# **Enabling this enables an unfrozen port**, and that is the whole reason it is
+# no longer in `default`. `ProjectionStore` is provisional: PS-2's bar is unmet —
+# one adapter has run the projection suite, and PS-2 requires two at opposite
+# ends of the batch-shape axis — so the surface behind this flag makes no semver
+# promise. `cargo add happenstance-sqlite` used to turn it on silently, which
+# made PS-3's *off-by-default* true of `happenstance-core` and `happenstance` and
+# false of the one crate a consumer installs to get a store.
+#
+# The name stays `projection-store` rather than becoming `unstable-projection`,
+# and that was a decision rather than an omission. `event-store` /
+# `projection-store` names **roles** and is shared by `happenstance-neon` and
+# `happenstance-postgres`; `unstable-projection` names **maturity**. Renaming one
+# adapter would fragment a three-crate vocabulary to re-spell a signal that
+# already lives where it belongs — on `happenstance-core`'s own gate, which this
+# flag forwards. What the rename would have bought is bought by this comment and
+# by the crate's README instead.
 projection-store = ["happenstance-core/unstable-projection"]
 # `impl ProjectionProbe for SqliteProjectionStore`, and the probe table it writes
 # through. Off by default, because that table is the *suite's* read model and has

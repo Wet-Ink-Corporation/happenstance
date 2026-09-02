@@ -28,6 +28,29 @@ storage-agnostic event sourcing library built on the
   it against [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit).
   A crate that compiles is not an adapter until it has run that suite.
 
+## Features, and the one that costs you a promise
+
+```toml
+happenstance-sqlite = "0.2.0-alpha.1"                      # the event store
+happenstance-sqlite = { version = "0.2.0-alpha.1", features = ["projection-store"] }
+```
+
+**`event-store` is on by default. `projection-store` is not, and the asymmetry
+is deliberate.**
+
+The event store implements a port whose clauses are frozen. The projection store
+implements one that is not: `ProjectionStore` is provisional, and PS-2's bar for
+freezing it — a hostile store failing the suite, *and* two adapters at opposite
+ends of the batch-shape axis passing it — is met on its first half only. One
+adapter has run the projection suite. So `projection-store` forwards
+`happenstance-core`'s `unstable-projection` gate, and enabling it opts you into a
+surface that makes **no semver promise**: it can change shape in a patch release,
+and `cargo-semver-checks` will not stop it.
+
+That is worth having and it is worth choosing. Nothing about the event store
+changes either way, and a projection built on this today is a projection you may
+have to edit at the next release.
+
 ## The shape it represents
 
 **Serialising, `Send`, native.** One `rusqlite::Connection` behind one `Mutex`,
