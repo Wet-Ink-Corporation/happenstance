@@ -135,12 +135,28 @@ implementer can actually address. `route` is the post-publish URL, which does no
   primary: false
   states: [first-screen-1440x900, first-screen-1024x768, full-page, images-blocked, light-theme, dark-theme]
 
+- id: crates-io-happenstance-sqlite
+  route: "https://crates.io/crates/happenstance-sqlite"
+  selector: "crates/happenstance-sqlite/README.md"
+  renders_from: "readme = \"README.md\" (crates/happenstance-sqlite/Cargo.toml)"
+  pattern: "proof-led identity block"
+  primary: false
+  states: [first-screen-1440x900, first-screen-1024x768, full-page, images-blocked, light-theme, dark-theme]
+
 - id: docs-rs-happenstance
   route: "https://docs.rs/happenstance/0.2.0/happenstance/"
   selector: "crates/happenstance/src/lib.rs (//! module docs)"
   renders_from: "rustdoc under [package.metadata.docs.rs], all-features = true"
   pattern: "module-doc ladder with doc(cfg) gate annotations"
   primary: true
+  states: [first-screen-1440x900, first-screen-1024x768, full-page, all-features, light-theme, dark-theme, docs-build-failed]
+
+- id: docs-rs-happenstance-sqlite
+  route: "https://docs.rs/happenstance-sqlite/0.2.0/happenstance_sqlite/"
+  selector: "crates/happenstance-sqlite/src/lib.rs (//! module docs)"
+  renders_from: "rustdoc under [package.metadata.docs.rs], all-features = true"
+  pattern: "module-doc ladder with doc(cfg) gate annotations"
+  primary: false
   states: [first-screen-1440x900, first-screen-1024x768, full-page, all-features, light-theme, dark-theme, docs-build-failed]
 
 - id: docs-rs-happenstance-core
@@ -184,8 +200,8 @@ project's UX brief (`_decomposition.md`, *UX brief*) and to `personas-and-journe
 
 | Surface family | Pattern chosen | Rejected, and why | Grounding | Known failure mode → mitigation |
 | --- | --- | --- | --- | --- |
-| crates.io (×3) | **Proof-led identity block**: H1 + one-line identity → status callout → disambiguation triad, then evidence below the fold | *Feature tour first* — rejected: the evaluator's decision is "is this real and is it for me", and a feature list answers neither in the one sitting they have (`personas-and-journeys.md`:333-338). *Badge wall first* — rejected: badges are images, and the page must read correctly with images blocked (UX brief, *Accessibility floor*) | UX brief IQ-1 (0 hops to a claim, ≤ 1 to its evidence); existing forms at `README.md`:11-16 (callout) and `crates/happenstance/README.md`:13-20 (triad) | **Truncation upstream of the page.** crates.io shows only the manifest `description` in search results and the crate card — the README never renders there. Mitigation: the `description` field is treated as the lead claim in miniature and budgeted in `## Density budget`; it is re-read for truth at the publish commit like any other published sentence (IQ-7) |
-| docs.rs (×3) | **Module-doc ladder with `doc(cfg)` gate annotations**: one-line summary → `# Status` → `# Using it today` (runnable) → the rest, every gated item shown *with* its gate | *Bare API index* (no module prose) — rejected: the sidebar is an index of names, and a name is not an answer to "is this real". *Prose-only module doc with no runnable example* — rejected by RS-70-1 and by the template's own argument: a runnable example is the one artifact that cannot rot | RS-51-5 (`standards/rust/51-features-and-no-std.md`:188-236); the existing ladder at `crates/happenstance/src/lib.rs`:11-71 | **Silent absence.** A feature-gated item built without `--cfg docsrs` simply is not on the page, which reads as "not supported" — a different and false claim (IQ-2). Mitigation: `all-features = true` on all three manifests (the `happenstance` one is missing today and is in scope) and `doc(cfg)` on every gated public item; the docs build is green under all features before publish (AC-UX-007). Second failure mode: **the docs build fails and the reader lands on a docs.rs error page.** Mitigation: the crates.io README is self-sufficient — no claim on it depends on docs.rs rendering |
+| crates.io (×4) | **Proof-led identity block**: H1 + one-line identity → status callout → disambiguation triad, then evidence below the fold | *Feature tour first* — rejected: the evaluator's decision is "is this real and is it for me", and a feature list answers neither in the one sitting they have (`personas-and-journeys.md`:333-338). *Badge wall first* — rejected: badges are images, and the page must read correctly with images blocked (UX brief, *Accessibility floor*) | UX brief IQ-1 (0 hops to a claim, ≤ 1 to its evidence); existing forms at `README.md`:11-16 (callout) and `crates/happenstance/README.md`:13-20 (triad) | **Truncation upstream of the page.** crates.io shows only the manifest `description` in search results and the crate card — the README never renders there. Mitigation: the `description` field is treated as the lead claim in miniature and budgeted in `## Density budget`; it is re-read for truth at the publish commit like any other published sentence (IQ-7) |
+| docs.rs (×4) | **Module-doc ladder with `doc(cfg)` gate annotations**: one-line summary → `# Status` → `# Using it today` (runnable) → the rest, every gated item shown *with* its gate | *Bare API index* (no module prose) — rejected: the sidebar is an index of names, and a name is not an answer to "is this real". *Prose-only module doc with no runnable example* — rejected by RS-70-1 and by the template's own argument: a runnable example is the one artifact that cannot rot | RS-51-5 (`standards/rust/51-features-and-no-std.md`:188-236); the existing ladder at `crates/happenstance/src/lib.rs`:11-71 | **Silent absence.** A feature-gated item built without `--cfg docsrs` simply is not on the page, which reads as "not supported" — a different and false claim (IQ-2). Mitigation: `all-features = true` on all three manifests (the `happenstance` one is missing today and is in scope) and `doc(cfg)` on every gated public item; the docs build is green under all features before publish (AC-UX-007). Second failure mode: **the docs build fails and the reader lands on a docs.rs error page.** Mitigation: the crates.io README is self-sufficient — no claim on it depends on docs.rs rendering |
 | GitHub root | **Contributor landing**: the full 8-row status table, the full peer statement, repo-relative links | *Mirror the packaged README* — rejected: the audiences differ (contributor vs evaluator) and, decisively, **link resolution differs**. Every link on a packaged surface must be absolute; every link on the root must be repo-relative. The tree already knows this — `crates/happenstance/README.md`:48,54 use absolute GitHub URLs while `README.md`:83-90 uses relative paths | `README.md`:79-98, :218-225; UX brief AC-UX-011 | **Dead links across the boundary.** A relative link copied onto a packaged README resolves against crates.io and 404s. Mitigation: it is anti-pattern AP-6, checked mechanically at the publish commit (AC-UX-011), not read |
 
 ### DT-1 — which claim leads on first contact
@@ -377,9 +393,21 @@ into `crates/`), and its links would be relative on a surface where relative lin
 disambiguation triad is what carries "which crate" on crates.io; the table is what carries "how far
 along is each crate" on GitHub.
 
-### `crates-io-happenstance-core` and `crates-io-happenstance-testkit`
+### `crates-io-happenstance-core`, `crates-io-happenstance-testkit` and `crates-io-happenstance-sqlite`
 
-Same skeleton, two deliberate differences. **`happenstance-core`**: R3's triad points *away* to
+Same skeleton, three deliberate differences — the third added 2026-09-02, when the crate-set re-plan
+put `happenstance-sqlite` in the release and made its page a fourth published surface.
+
+**`happenstance-sqlite`** needs no new composition, and that is a finding rather than an assumption:
+its README was written to the house shape by `sqlite-durable-store`'s packaging story and already
+renders R1 identity, R2 status callout and R3's *"Which crate do I want?"* in that order
+(`crates/happenstance-sqlite/README.md`:1-25). Its R3 points *away* to `happenstance` for application
+authors, the way `happenstance-core`'s does, and adds the sentence this design now relies on —
+*"reach for this crate only to choose where the events live"* — which is the same fold the primary
+surface's first triad entry uses. It carries no census: the clauses describe the contract, not an
+adapter, so R4 is absent here rather than demoted.
+
+Two deliberate differences. **`happenstance-core`**: R3's triad points *away* to
 `happenstance` for application authors — that is its job, and it already does it
 (`crates/happenstance-core/README.md`:14-22). It carries R4's census (it is the crate whose contract
 the clauses describe) and DT-4's promise in its own Guarantees block. **`happenstance-testkit`**:
@@ -464,7 +492,7 @@ whole budget, exactly, and it is why the badges and the census sit below it.
 | `description` (Cargo.toml) | **≤ 120 characters**, one sentence, true standalone | It is the *only* text crates.io shows in a search result and in the crate card; the README never renders there. Today's is ~131 chars and claims typed events, decision models and projection runners — **re-read it for truth at the publish commit** (IQ-7), because it is a published sentence like any other |
 | Identity line | ≤ 2 rendered lines | Leaves 12 of 14 for callout + triad |
 | Status callout | ≤ 3 rendered lines | 4 lines pushes the triad's last bullet off the 1024×768 fold |
-| Disambiguation triad | ≤ 6 rendered lines including its `##` heading; ≤ 3 entries | Three entries × 1–2 lines. A fourth entry means a fourth published crate, which AC-DEP-001 has decided against |
+| Disambiguation triad | ≤ 6 rendered lines including its `##` heading; ≤ 3 entries | Three entries × 1–2 lines. **Reason amended 2026-09-02; the limit is unchanged.** It read *"a fourth entry means a fourth published crate, which AC-DEP-001 has decided against"*, and AC-DEP-001 has since been reversed — `0.2.0` ships four crates. The limit survives because the triad is keyed on **audience**, not on crate count: an application author still wants `happenstance` and then chooses a store, so `happenstance-sqlite` is folded into the first entry rather than added as a fourth, the way `happenstance-testkit` is already folded into the second. Measured at the fold: the amended bullet renders at 90 chars ≈ 1 line against this document's own 95-chars-per-line model, so the triad's line count does not move |
 | Census sentence (DT-5) | ≤ 3 rendered lines; exactly 4 counts, 4 inline definitions, 1 link | Definitions may not move to the link target — IQ-6 forbids orphan vocabulary |
 | Compliance block (AC-009) | ≤ 6 rendered lines: claim 1, implementations 1–2, date 1, link 1 | Longer and it stops reading as a single checkable claim |
 | Guarantees list | **≤ 7 bullets**, each ≤ 3 rendered lines, **exactly 1 link per bullet** | It absorbs DT-4, the MSRV promise and the `wasm32` line on top of the 3 bullets it already has (`crates/happenstance/README.md`:41-49). Seven is the ceiling before it stops being scannable |

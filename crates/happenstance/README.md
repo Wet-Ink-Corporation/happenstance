@@ -5,7 +5,8 @@ An opinionated, storage-agnostic event sourcing library for Rust, built on the
 
 ## Which crate do I want?
 
-- **Writing an application?** This one.
+- **Writing an application?** This one — and a store to keep the events in:
+  [`happenstance-sqlite`](https://crates.io/crates/happenstance-sqlite).
 - **Writing a storage adapter?** Depend on
   [`happenstance-core`](https://crates.io/crates/happenstance-core) instead. It is
   the smaller semver surface, and it is what

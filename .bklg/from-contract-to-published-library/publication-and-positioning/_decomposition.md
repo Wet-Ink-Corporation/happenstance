@@ -661,10 +661,40 @@ manifests, so it names every crate cargo would publish — five, once
 publish-ready"*, leaving the version and the registry decision here.
 
 So `reconcile` naming five is not a crate-set expansion, and the `0.2.0` release
-set decided above is four. Whether `happenstance-cloudflare` joins that release
-is a question this project still owes an answer to; it is out of scope for this
-re-plan, which was asked about SQLite, and it should not be settled by the
-accident of a constant.
+set decided above is four.
+
+**`happenstance-cloudflare` is deferred past `0.2.0`, decided 2026-09-02.** It is
+genuinely publish-ready and the deferral is not a judgement on its quality: it
+carries both licence files, a README, a real description, a reserved name at
+`0.0.0`, no `todo!()` at all, a conformance run under `workerd`, and a docs.rs
+block *more* complete than the one `happenstance-sqlite` needed — with
+`default-target = "wasm32-unknown-unknown"` and a comment explaining that a
+host-built page would document a crate whose bindings are panicking stubs.
+
+It waits on three things instead, and each is about the release rather than the
+adapter:
+
+- **Its own page says so.** *"Status: implemented and measured; not released, and
+  not frozen"* (`crates/happenstance-cloudflare/README.md`). Shipping a crate at
+  `0.2.0` whose front page says it is not frozen either publishes a contradiction
+  or edits away a true sentence.
+- **Its project is not closed.** `cloudflare-durable-object-store` has eleven of
+  twelve stories at `report` and HS-S0059 still at `plan`.
+- **Every extra crate in a first release is one more thing that must be right
+  about an irreversible act.** A `wasm32`-only adapter's audience does not
+  overlap the evaluator this release is aimed at, so it buys reach this release
+  does not need and costs a surface, a docs.rs page and a stability promise.
+
+*"Publish-ready but not published"* is a coherent, stable state, and it is the
+one `cloudflare-durable-object-store`'s own `publish-ready-crate` story
+deliberately stopped at: `publish = false` is already gone, and the release
+simply does not upload it. Its public surface is watched anyway — the `semver`
+job's `package:` list names it as of this decision, *before* it ships, so a break
+introduced while it waits is caught rather than banked.
+
+This is recorded as a **dated deferral rather than an omission**, so that the
+decision atom HS-S0084 authors can state it and a later reader does not have to
+infer it from a crate's absence.
 
 #### What the fourth crate costs, now that it is costed
 

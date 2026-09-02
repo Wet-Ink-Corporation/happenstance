@@ -355,7 +355,15 @@ jobs:
           # installs, and the moment the typed layer grows an API of its own it
           # stops being a duplicate. One extra rustdoc build is cheaper than
           # remembering to add the line later.
-          package: happenstance, happenstance-core, happenstance-testkit
+          # Every crate the release publishes, plus the one that is
+          # publish-ready and waiting. `happenstance-sqlite` joined the release
+          # set at the crate-set re-plan and `happenstance-cloudflare` is
+          # publish-ready but deferred past `0.2.0`; both have a public surface,
+          # and a surface no instrument watches is the thing this job exists to
+          # prevent. Added on the argument the paragraph above already makes —
+          # one extra rustdoc build is cheaper than remembering the line later —
+          # and cloudflare is here *before* it ships for exactly that reason.
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
 
   # A newly published advisory against a dependency nobody has touched is the one
   # class of failure that arrives with no commit behind it, so it needs a clock

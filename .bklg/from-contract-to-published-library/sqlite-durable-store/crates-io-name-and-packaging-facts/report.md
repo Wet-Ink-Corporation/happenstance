@@ -9,13 +9,34 @@ updated: "2026-08-18"
 
 ## Findings Ledger
 
+**Outcome, as amended 2026-09-02: eight of eight ACs satisfied.** This section
+was written when AC-001 was BLOCKED, and the text below is kept rather than
+rewritten, for the reason `publish-0-2-0-alpha-1`'s report gives about its own
+amendment: a report that quietly becomes a success story is worth less than one
+that shows what was outstanding and when it landed.
+
+**AC-001 has since been discharged.** `cargo search happenstance` returns
+`happenstance-sqlite = "0.0.0"` on crates.io, so the handoff named below was
+performed. The date it was performed is not recorded anywhere in this folder —
+only that it had not been at the time of writing — so this amendment is dated
+from the observation, not from the act.
+
+**Why this annotation is not cosmetic.** This report is the authority a later
+reader consults for whether the name is held, and it said *blocked* for as long
+as the name has actually been reserved. That is not hypothetical: the crate-set
+re-plan of 2026-09-02 read this row, concluded the name was unheld, and wrote
+that conclusion into two planning briefs before `cargo search` corrected it. A
+story report records what was true when it was written; only the registry knows
+what is true now, and the two disagreed for weeks. Annotated rather than
+corrected in place, per *annotate, never subtract*.
+
 **Seven of eight ACs satisfied. AC-001 is blocked on a human-authorised,
 irreversible act and is recorded as a named handoff — never as a claim that the
-name was taken.**
+name was taken.** *(Superseded by the amendment above.)*
 
 | AC | Result | What proves it | Where it landed |
 | --- | --- | --- | --- |
-| **AC-001** — the name resolves on crates.io | **BLOCKED — handoff recorded** | Placeholder generated; `cargo publish --dry-run` green (`Packaged 7 files, 15.8KiB`, `Verifying`, `Compiling`, `aborting upload due to dry run`). The upload was **not** performed | `target/reserve/happenstance-sqlite/` (untracked, under `target/`) |
+| **AC-001** — the name resolves on crates.io | **BLOCKED — handoff recorded** *(discharged; observed satisfied 2026-09-02 — see the amendment above)* | Placeholder generated; `cargo publish --dry-run` green (`Packaged 7 files, 15.8KiB`, `Verifying`, `Compiling`, `aborting upload due to dry run`). The upload was **not** performed | `target/reserve/happenstance-sqlite/` (untracked, under `target/`) |
 | **AC-002** — the placeholder names `0.2.0-alpha.1` | **satisfied** | `reserve::tests::every_placeholder_names_the_release_this_project_will_ship`, red first on the base tree; the regenerated placeholder carries it at `README.md:15` and `src/lib.rs:4` | `xtask/src/reserve.rs:258`, `:276` |
 | **AC-003** — the description describes, and `readme` is stated | **satisfied** | `reserve::tests::a_crate_with_a_readme_carries_what_the_placeholder_carries`, red with both strings printed | `crates/happenstance-sqlite/Cargo.toml:3`, `:22` |
 | **AC-004** — both licence texts inside the package | **satisfied** | Same test's second assertion, red with *"the manifest offers a choice of two licences and the package would carry neither"*; `git diff --no-index` against both root files produces no output | `crates/happenstance-sqlite/LICENSE-MIT`, `LICENSE-APACHE` |
