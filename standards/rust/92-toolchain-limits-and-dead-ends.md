@@ -133,7 +133,7 @@ nothing in the tree that names it. ES-1 freezes the scheme besides, so the
 collapse was never a refactor waiting on a toolchain — it is a new ADR.
 
 **Evidence.** `references/evaluation/research-rust-api-guidelines.md:47 (Do not design around it)` ·
-`crates/happenstance-core/src/store.rs:93 (trait_variant::make)` ·
+`crates/happenstance-core/src/store.rs:141 (trait_variant::make)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
 [rust-lang/rust#109417](https://github.com/rust-lang/rust/issues/109417), which

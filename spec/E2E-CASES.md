@@ -89,7 +89,7 @@ exactly 1…*N*, or the contract states that it may grow and says what a caller 
 conclude from the last position it saw.
 
 **Falsifies:** that a checkpoint derived from a streamed read names a complete
-prefix. `crates/happenstance-core/src/store.rs:101-121` specifies laziness, ordering
+prefix. `crates/happenstance-core/src/store.rs:151-171` specifies laziness, ordering
 and inclusivity and says nothing about isolation.
 
 **Rejects:** a self-paginating adapter over one-shot HTTP that issues one
@@ -113,7 +113,7 @@ evaluates item 1 and the moment it evaluates item 4.
 below it.
 
 **Falsifies:** that `read_decision_model`'s returned position is a sound append
-boundary for a multi-item query (`store.rs:198-208`). If item 1's late arrival is
+boundary for a multi-item query (`store.rs:369-379`). If item 1's late arrival is
 missed while `last` sits above it, `is_violated_by` returns `false` for
 `position <= after` and the boundary is not enforced.
 
@@ -146,7 +146,7 @@ definitional events.
 **Falsifies:** that `ReadOptions` is sufficient to bound a decision model.
 `ReadOptions.from` is one `Option<SequencePosition>` for the entire read
 (`crates/happenstance-core/src/query.rs:226-234`) and `read` applies one `ReadOptions`
-to the whole `Query` (`store.rs:118-122`).
+to the whole `Query` (`store.rs:167-171`).
 
 **Rejects:** every adapter, today, and — more usefully — it rejects the
 *workaround*: an application that sets `from = S` for the whole query. That
@@ -214,7 +214,7 @@ whose second event matches.
 **THEN** the store is either byte-identical or fully written — never partially —
 and whichever of the two the contract states is the one observed.
 
-**Falsifies:** that `store.rs:130-133`'s `# Atomicity` paragraph is a complete
+**Falsifies:** that `store.rs:189-192`'s `# Atomicity` paragraph is a complete
 durability statement. It covers partial batches and says nothing about a dropped
 future, which at the edge is the *normal* termination path: client disconnect, CPU
 limit, Durable Object eviction, pod eviction. `AppendError` has three variants and
@@ -270,7 +270,7 @@ alternately to completion.
 **THEN** exactly one succeeds, the other returns `ConditionViolated`, and neither
 panics.
 
-**Falsifies:** that `append(&self, ..)` (`store.rs:148-152`) is safe to call
+**Falsifies:** that `append(&self, ..)` (`store.rs:261-265`) is safe to call
 re-entrantly. The port says nothing about whether a second `append` may be entered
 while a first is in flight, and on the `!Send` flavour both futures interleave at
 every `.await`.
@@ -347,8 +347,8 @@ direction that cannot stream is right.
 **THEN** that position is the maximum observed, not the last yielded.
 
 **Falsifies:** that the crate's only read helper generalises. `read_decision_model`
-hardcodes `ReadOptions::new()` (`store.rs:212`) and derives its boundary from
-`events.last()` (`:213`), which on a backwards read is the **oldest** match.
+hardcodes `ReadOptions::new()` (`store.rs:376`) and derives its boundary from
+`events.last()` (`:377`), which on a backwards read is the **oldest** match.
 
 **Rejects:** any `read_decision_model_with(store, query, options)` that copies the
 existing `.last()` idiom. The failure is not a compile error: it is a condition
@@ -396,7 +396,7 @@ not be refused, and one whose author omitted the condition by mistake.
 **THEN** the two are distinguishable.
 
 **Falsifies:** that `Option<AppendCondition>` is the right shape.
-`append(&events, None)` (`store.rs:151`) renders "I asserted nothing because there
+`append(&events, None)` (`store.rs:264`) renders "I asserted nothing because there
 was nothing to assert" and "I am a decision whose author forgot" as the same bytes
 — and a reconciliation projection must distinguish them, because an observation
 cannot lose a conflict and a decision can.
@@ -922,7 +922,7 @@ writes at append time**, which is the Lamport pair the ledger already decided.
 decomposition explicit rather than emergent.
 
 **Falsifies:** that a peer's push is one unit of work. `EventStore::append` takes
-exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:148-152`), so
+exactly one `Option<&AppendCondition>` for the whole slice (`store.rs:261-265`), so
 seven groups is seven appends with nothing spanning them. That is **correct DCB** —
 the boundary is the query, not the batch — and it is stated nowhere in the contract,
 the testkit or the sync prose.
@@ -1039,7 +1039,7 @@ and a device syncing in that window cuts its slice from a log that says the unit
 doubly held.
 
 **What survives today:** the compensating write is exactly one call —
-`append(&[losing, superseded], Some(&guard))` — and `store.rs:130-133` guarantees
+`append(&[losing, superseded], Some(&guard))` — and `store.rs:189-192` guarantees
 all-or-nothing, conformance-tested by `append_is_atomic` (`suite.rs:1200-1221`). This
 half needs no new seam.
 
@@ -1266,7 +1266,7 @@ they were.
 **THEN** the store holds both or neither.
 
 **Falsifies:** that the port's atomicity guarantee covers the operations a regulated log
-actually performs. `append` is closed over insertion (`store.rs:148-152`); there is no
+actually performs. `append` is closed over insertion (`store.rs:261-265`); there is no
 delete, no redact, no truncate, no tombstone. A conformant adapter must open its own
 transaction outside the port, at which point **the atomicity the port spent its whole
 design defending is being provided by the adapter's private code, unobserved by any
@@ -1381,12 +1381,12 @@ every previous justification was a `cargo check` for `wasm32`.
 
 **Rejects:** any refactor that makes `read` `async`. Putting the stream inside a future
 silently drops `+ Send` from the *stream* on the `Send` flavour and defeats the whole
-two-trait design (`store.rs:104-108`, CLAUDE.md constraint 3). A unit test already
+two-trait design (`store.rs:153-158`, CLAUDE.md constraint 3). A unit test already
 asserts this; this case extends it from a type-level assertion to a compiled command
 path, and adds the free function, `collect`, and `Rc`-sharing to what is covered.
 
 **Second thing it confirms:** `type Error: core::error::Error + 'static`
-(`store.rs:99`) carries **no** `Send` or `Sync` bound, so an adapter error holding a
+(`store.rs:149`) carries **no** `Send` or `Sync` bound, so an adapter error holding a
 `JsValue` or an `Rc<str>` satisfies it today. The claim that the port forces
 stringification at the wasm boundary is false against the current code; it is the cost
 of a *proposed* change (E2E-53), and attributing a proposal's cost to the current code
@@ -1406,9 +1406,9 @@ spawns a handler.
 **THEN** it compiles, and the handler's error can cross a `JoinHandle`.
 
 **Falsifies:** that the two-flavour design is sufficient for a concurrent deployment.
-`#[trait_variant::make(SendEventStore: Send)]` (`store.rs:92`) yields `Send` and `Send`
+`#[trait_variant::make(SendEventStore: Send)]` (`store.rs:141`) yields `Send` and `Send`
 futures, never `Sync`; calling `&self` methods from several tasks requires `S: Sync`. And
-`type Error: core::error::Error + 'static` (`:99`) is not `Send + Sync`, so a spawned
+`type Error: core::error::Error + 'static` (`:149`) is not `Send + Sync`, so a spawned
 handler's error cannot be returned.
 
 **Rejects:** deferring the decision. `trait_variant` copies associated-type bounds
@@ -1494,7 +1494,7 @@ That is the completeness failure, and it needs building explicitly rather than a
 `AppendCondition::new` already makes the position-free form the default
 (`append.rs:65-70`), with `after`/`after_opt` as opt-in builders. **The API already makes
 the replicable shape the easy one**, which is worth recording because the only read helper
-in the crate (`read_decision_model`, `store.rs:198-208`) exists to produce the
+in the crate (`read_decision_model`, `store.rs:369-379`) exists to produce the
 *position-relative* form and has no counterpart for the replicable one. If the sync design
 lands on "conditions must be position-free to replicate", that helper is pointing the
 wrong way, and it belongs in the ADR rather than being inverted silently.

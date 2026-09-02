@@ -35,14 +35,36 @@
 //!
 //! ```text
 //! error[E0034]: multiple applicable items in scope
+//!  --> src/lib.rs:6:19
 //!   |
-//!   |     store.read(&query, options)
-//!   |           ^^^^ multiple `read` found
+//! 6 |     let _ = store.read(&query, options);
+//!   |                   ^^^^ multiple `read` found
+//!   |
+//!   = note: candidate #1 is defined in an impl of the trait `SendEventStore` for the type `MemoryEventStore`
+//!   = note: candidate #2 is defined in an impl of the trait `EventStore` for the type `TraitVariantBlanketType`
+//! help: disambiguate the method for candidate #2
+//!   |
+//! 6 -     let _ = store.read(&query, options);
+//! 6 +     let _ = EventStore::read(&store, &query, options);
+//!   |
 //! ```
+//!
+//! In words, because a caret does not survive a search hit or a screen reader:
+//! `store.read(…)` is ambiguous because both [`EventStore`] and
+//! [`SendEventStore`] are in scope and each of them supplies a `read`.
 //!
 //! Import only the one you are binding on — [`EventStore`] in almost every
 //! case. If you genuinely need both in one module, disambiguate with
 //! fully-qualified syntax: `SendEventStore::read(&store, &query, options)`.
+//!
+//! The block above is a `text` fence and nothing compiles it. The error *code*
+//! is asserted by the compiled `rust,compile_fail,E0034` examples in
+//! `standards/rust/20-two-flavour-ports.md` and `standards/rust/00-prime-directives.md`;
+//! the notes' wording and `TraitVariantBlanketType` are rustc 1.97.1's, asserted by nothing.
+//!
+//! For why there are two flavours at all, and what an adapter looks like once
+//! you accept them, the adapter reading order at `docs/adapter-reading-order.md`
+//! sequences what is already written. Named, not linked: it is a page, not an item.
 //!
 //! ## Naming
 //!
@@ -90,6 +112,32 @@ use crate::query::{Query, ReadOptions};
 ///     Ok(events.len())
 /// }
 /// ```
+// The workspace's first `#[doc(alias)]`, so the rule it is added under is
+// written here rather than left to be inferred. An alias is a *search key* and
+// not a pointer: it moves a reader who is already searching and does nothing
+// for the reader who is reading, so it never substitutes for the cross-reference
+// at the stall in this module's documentation. It is permitted only where the
+// string a reader types is one that rustc, the specification, or a recorded
+// reader question actually emits, and is not the item's own name or a substring
+// of it. Both strings below are rustc's, from the diagnostic reproduced above.
+// Rejected: synonym farming (`eventstore`, `es`, `event-store`), and aliases for
+// concepts rather than for strings. No pointer-register row is filed: an
+// attribute cannot rot independently of the item it sits on, because deleting
+// the item deletes the alias.
+//
+// Two attributes, not the three the design projected, and the reason is
+// mechanical rather than editorial. `SendEventStore` is *derived* — the
+// `trait_variant` expansion builds it with `..tr.clone()`
+// (`trait-variant-0.1.3/src/variant.rs:115-123`), which copies the trait's
+// attributes verbatim — so there is no item on which to write a variant-only
+// alias, and every alias written here lands on both flavours. Two written is
+// four in the search index, which is the coverage the criterion asked for.
+//
+// Residual risk, named: `TraitVariantBlanketType` is an *internal* name of that
+// expansion. If it is renamed upstream the string here goes stale and nothing
+// in this repository catches it.
+#[doc(alias = "E0034")]
+#[doc(alias = "TraitVariantBlanketType")]
 #[trait_variant::make(SendEventStore: Send)]
 pub trait EventStore {
     /// How this adapter fails for its own reasons.
@@ -368,5 +416,668 @@ mod tests {
         // Naming the function is what instantiates the coercion check above;
         // the body is where the assertion lives, so there is nothing to run.
         let _ = error_projections_are_one_type::<crate::MemoryEventStore>;
+    }
+}
+
+/// The module documentation, read as a deliverable rather than as decoration.
+///
+/// Everything here reads this file's own `//!` comment. That is unusual and it is
+/// deliberate: the section `## Import one flavour, not both` exists so that an
+/// adapter author whose build just failed with `error[E0034]` finds rustc's own
+/// words in the file they already have open, and every part of that claim — the
+/// transcript being verbatim, the diagnosis surviving without the caret, the fix
+/// arriving before the pointer — is a property of the *text*, invisible to every
+/// other instrument this workspace owns. A doc comment nothing checks is exactly
+/// the rot the section was rewritten to repair.
+///
+/// It is `cfg(test)` with no feature gate, unlike the type-level module above it:
+/// the text is there in every feature configuration, so nothing here may be
+/// contingent on one.
+#[cfg(test)]
+mod module_doc {
+    #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
+
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// This file's own source. The module doc is the deliverable, so it is
+    /// asserted rather than trusted.
+    const SOURCE: &str = include_str!("store.rs");
+
+    /// The third of the four heading entries — the one every change lands inside.
+    const SECTION: &str = "## Import one flavour, not both";
+
+    /// The transcript, pinned character for character.
+    ///
+    /// **The one place in this workspace where pinning a paragraph is right.**
+    /// Elsewhere a paragraph pin turns ordinary rewording into a build failure;
+    /// here rewording *is* the defect, because the block's whole job is to be the
+    /// string a stuck reader searches for and pastes into a diff against their own
+    /// terminal. Reproduced at the pinned toolchain — `rustc 1.97.1 (8bab26f4f
+    /// 2026-07-14)` — by compiling a deliberate double-import; the run's full
+    /// stderr, the command and the `rustc --version` are recorded in this story's
+    /// folder under `.bklg/docs-that-teach/reach-and-adapter-path/`.
+    ///
+    /// Candidate #1's `help:` hunk is the one thing dropped, which is the
+    /// signed-off design's yield rule (3), exercised at design time. Nothing
+    /// further may be cut, and the two `= note:` lines and the internal type name
+    /// never yield at all.
+    const TRANSCRIPT: &str = "\
+error[E0034]: multiple applicable items in scope
+ --> src/lib.rs:6:19
+  |
+6 |     let _ = store.read(&query, options);
+  |                   ^^^^ multiple `read` found
+  |
+  = note: candidate #1 is defined in an impl of the trait `SendEventStore` for the type `MemoryEventStore`
+  = note: candidate #2 is defined in an impl of the trait `EventStore` for the type `TraitVariantBlanketType`
+help: disambiguate the method for candidate #2
+  |
+6 -     let _ = store.read(&query, options);
+6 +     let _ = EventStore::read(&store, &query, options);
+  |";
+
+    /// The section's source-line cap, raised from 30 to 36 at sign-off when copy
+    /// fidelity was chosen over the density budget (finding F3). The measured
+    /// projection was ~34.
+    const SECTION_LINE_CAP: usize = 36;
+
+    /// The source above this file's first test module.
+    ///
+    /// Without it every assertion about the production text would be satisfiable
+    /// by the tests' own pinned strings, since [`SOURCE`] includes this module too.
+    fn production_source() -> &'static str {
+        SOURCE.split("#[cfg(all(test").next().unwrap()
+    }
+
+    /// The `//!` comment at the top of the file, one entry per line, with the
+    /// comment marker and its single following space removed.
+    ///
+    /// A bare `//!` becomes an empty line, which is what makes the paragraph
+    /// splitting below work. `str::lines` drops a trailing carriage return, so this
+    /// is correct whichever line ending the working tree happens to carry.
+    fn doc_lines() -> Vec<&'static str> {
+        SOURCE
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .map(|line| {
+                if line.trim_end() == "//!" {
+                    ""
+                } else {
+                    line.strip_prefix("//! ")
+                        .expect("every doc line is `//!` or `//! ` and content")
+                }
+            })
+            .collect()
+    }
+
+    /// [`doc_lines`] with every fenced block removed, so a heading count or a
+    /// markup check cannot be fooled by a line inside a transcript.
+    fn doc_lines_outside_fences() -> Vec<&'static str> {
+        let mut inside = false;
+        let mut kept = Vec::new();
+        for line in doc_lines() {
+            if line.starts_with("```") {
+                inside = !inside;
+                continue;
+            }
+            if !inside {
+                kept.push(line);
+            }
+        }
+        kept
+    }
+
+    /// The body of `## Import one flavour, not both` — every line after its heading
+    /// and up to the next `##`, with the blank lines that bracket it trimmed.
+    ///
+    /// This is the unit the density budget is denominated in, and it is the same
+    /// count the design measured: 13 source lines before this story, ~34 after it.
+    fn section_body() -> Vec<&'static str> {
+        let lines = doc_lines();
+        let start = lines
+            .iter()
+            .position(|line| *line == SECTION)
+            .expect("the heading ladder still carries `## Import one flavour, not both`");
+        let rest = &lines[start + 1..];
+        let end = rest
+            .iter()
+            .position(|line| line.starts_with("## "))
+            .unwrap_or(rest.len());
+        let mut body = &rest[..end];
+        while body.first() == Some(&"") {
+            body = &body[1..];
+        }
+        while body.last() == Some(&"") {
+            body = &body[..body.len() - 1];
+        }
+        body.to_vec()
+    }
+
+    /// The lines inside the section's `text` fence, fence markers excluded.
+    fn fence() -> Vec<&'static str> {
+        let body = section_body();
+        let open = body
+            .iter()
+            .position(|line| line.starts_with("```"))
+            .expect("the section carries the diagnostic in a fence");
+        let rest = &body[open + 1..];
+        let close = rest
+            .iter()
+            .position(|line| line.starts_with("```"))
+            .expect("the fence is closed");
+        rest[..close].to_vec()
+    }
+
+    /// The blank-line-separated paragraphs after the fence closes — elements (c),
+    /// (d), (e) and (f) of the signed-off composition, in source order.
+    fn paragraphs_after_fence() -> Vec<Vec<&'static str>> {
+        let body = section_body();
+        let close = body
+            .iter()
+            .rposition(|line| line.starts_with("```"))
+            .expect("the fence is closed");
+        let mut paragraphs = Vec::new();
+        let mut current: Vec<&'static str> = Vec::new();
+        for line in &body[close + 1..] {
+            if line.is_empty() {
+                if !current.is_empty() {
+                    paragraphs.push(core::mem::take(&mut current));
+                }
+            } else {
+                current.push(line);
+            }
+        }
+        if !current.is_empty() {
+            paragraphs.push(current);
+        }
+        paragraphs
+    }
+
+    /// Soft-wrapped lines rejoined with single spaces, so a pinned subject string
+    /// is not broken by where a line happens to wrap.
+    fn joined(lines: &[&str]) -> String {
+        let mut out = String::new();
+        for (index, line) in lines.iter().enumerate() {
+            if index > 0 {
+                out.push(' ');
+            }
+            out.push_str(line);
+        }
+        out
+    }
+
+    /// Whether `prose` names the weaker flavour in its own right rather than only
+    /// as the tail of the stronger one — `SendEventStore` contains `EventStore`, so
+    /// a naive `contains` cannot tell "both traits are named" from "one is".
+    fn names_both_flavours(prose: &str) -> bool {
+        prose.contains("SendEventStore")
+            && prose.replace("SendEventStore", "").contains("EventStore")
+    }
+
+    // ---- AC-001: rustc's own transcript, searchable and verbatim -------------
+
+    /// The block is rustc's output, not a transcription of one.
+    ///
+    /// Equality rather than a handful of `contains` assertions, because every
+    /// weaker form passes on a block somebody has tidied. The reader's move is to
+    /// paste their own terminal beside this one and look for a difference, and any
+    /// edit at all turns that into a false positive.
+    #[test]
+    fn the_fence_is_rustcs_own_e0034_output() {
+        let expected: Vec<&str> = TRANSCRIPT.lines().collect();
+        assert_eq!(
+            fence(),
+            expected,
+            "the `text` fence is no longer the stderr of the recorded reproduction \
+             run. It is not prose and it is not edited to fit: reproduce it again at \
+             the pinned toolchain and paste what that run emitted"
+        );
+    }
+
+    /// The two strings the density budget's yield order says never yield.
+    ///
+    /// Separate from the equality above on purpose. If a later change re-pins the
+    /// transcript for a new toolchain, that test moves with it and this one does
+    /// not: the `= note:` candidate lines and the internal type name are what a
+    /// stuck reader actually searches for, and they survive every re-pin.
+    #[test]
+    fn the_two_note_lines_and_the_internal_type_name_never_yield() {
+        let fence = fence();
+        let notes = fence
+            .iter()
+            .filter(|line| line.trim_start().starts_with("= note:"))
+            .count();
+        assert_eq!(
+            notes, 2,
+            "both `= note:` candidate lines are required content: they name the two \
+             traits and the type each `read` was found on, and they are the lines a \
+             reader pastes into a search box"
+        );
+        assert!(
+            fence
+                .iter()
+                .any(|line| line.contains("TraitVariantBlanketType")),
+            "the internal type name rustc prints in candidate #2 is the string this \
+             workspace explains nowhere else; dropping it puts the reader's search \
+             back where it started"
+        );
+    }
+
+    /// Nothing inside the fence but compiler characters.
+    ///
+    /// A `rust` fence around a diagnostic would buy a green tick that means
+    /// nothing — the `ignore`-fence anti-pattern wearing a compiler — and rendered
+    /// markup inside the block would survive selection and break the reader's diff.
+    #[test]
+    fn the_fence_is_uncompiled_plain_text_a_reader_can_paste() {
+        let body = section_body();
+        assert!(
+            body.contains(&"```text"),
+            "the diagnostic sits in a `text` fence: nothing compiles a compiler \
+             transcript, and a `rust` fence would claim otherwise"
+        );
+        assert!(
+            !body
+                .iter()
+                .any(|line| line.starts_with("```rust") || line.starts_with("```ignore")),
+            "a `rust` or `ignore` fence around the diagnostic is the one tier this \
+             story's specification names so that nobody adds it"
+        );
+        for line in fence() {
+            assert!(
+                !line.contains("](") && !line.contains('<') && !line.contains("**"),
+                "rendered-only markup inside the fence: {line:?}. The block has to \
+                 diff clean against a terminal, so it may carry only what rustc \
+                 printed"
+            );
+        }
+    }
+
+    // ---- AC-002: the ambiguity named in words, never spatially alone ---------
+
+    /// `^^^^ multiple` is spatial. A screen reader linearises it into nothing and
+    /// so does a plain-text search hit, so the diagnosis is restated in words
+    /// immediately after the block.
+    #[test]
+    fn the_ambiguity_is_named_in_words_and_not_only_by_the_caret() {
+        let named = joined(&paragraphs_after_fence()[0]);
+        assert!(
+            named.contains("store.read("),
+            "element (c) must name the method whose call is ambiguous: {named}"
+        );
+        assert!(
+            names_both_flavours(&named),
+            "element (c) must name both flavours, because the caret line names \
+             neither: {named}"
+        );
+        assert!(
+            named.contains("in scope"),
+            "element (c) must state the cause — both being in scope — and not merely \
+             that something is ambiguous: {named}"
+        );
+    }
+
+    /// Both trait names appear in the section's prose, not only inside the fence.
+    ///
+    /// The falsification of the design's anti-pattern 15, executed: delete the
+    /// transcript and the diagnosis has to survive.
+    #[test]
+    fn the_diagnosis_survives_the_fence_being_deleted() {
+        let fence = fence();
+        let outside: Vec<&str> = section_body()
+            .into_iter()
+            .filter(|line| !fence.contains(line))
+            .collect();
+        assert!(
+            names_both_flavours(&joined(&outside)),
+            "with the transcript removed the remaining prose names one flavour or \
+             neither, so colour, highlighting and spatial position are carrying the \
+             diagnosis alone"
+        );
+    }
+
+    // ---- AC-003: unstuck without a hop, the fix ahead of the pointer ---------
+
+    /// The signed-off composition, in source order, with nothing between (c) and (d).
+    ///
+    /// Four paragraphs and exactly four: separating the diagnosis from its fix is
+    /// what turns a self-sufficient page into one that requires a hop, and an
+    /// inserted paragraph is how that happens by accident.
+    #[test]
+    fn the_section_composes_in_the_designs_binding_order() {
+        let paragraphs = paragraphs_after_fence();
+        assert_eq!(
+            paragraphs.len(),
+            4,
+            "the fence is followed by exactly elements (c) the plain-words \
+             diagnosis, (d) the in-place fix, (e) the narrow limit and (f) the \
+             pointer. Nothing may be inserted between (c) and (d)"
+        );
+        assert!(
+            joined(&paragraphs[1]).contains("SendEventStore::read(&store, &query, options)"),
+            "element (d), the fully-qualified escape hatch, must be the paragraph \
+             immediately after the plain-words diagnosis"
+        );
+        assert!(
+            joined(&paragraphs[2]).contains("compile_fail,E0034"),
+            "element (e), the narrow limit, follows the fix"
+        );
+        assert!(
+            joined(&paragraphs[3]).contains("docs/adapter-reading-order.md"),
+            "element (f), the pointer, is last"
+        );
+    }
+
+    /// A reader who never follows the pointer is still correctly unstuck.
+    ///
+    /// Executed rather than asserted: element (f) is deleted here and the rest of
+    /// the section still has to resolve the error on its own.
+    #[test]
+    fn deleting_the_pointer_leaves_the_reader_unstuck() {
+        let paragraphs = paragraphs_after_fence();
+        let kept: Vec<&str> = paragraphs[..paragraphs.len() - 1]
+            .iter()
+            .flatten()
+            .copied()
+            .collect();
+        let remaining = joined(&kept);
+        assert!(
+            !remaining.contains("docs/adapter-reading-order.md"),
+            "the pointer is the last paragraph and nothing else"
+        );
+        assert!(
+            remaining.contains("Import only the one"),
+            "with the reasoning account gone the import rule must still be here"
+        );
+        assert!(
+            remaining.contains("SendEventStore::read(&store, &query, options)"),
+            "with the reasoning account gone the escape hatch must still be here: \
+             deleting the destination may not leave a reader stuck on this page"
+        );
+    }
+
+    // ---- AC-004: the narrow limit, not the broad one -------------------------
+
+    /// The page states what is checked and what is not, and the true half is the
+    /// one that is easy to lose.
+    #[test]
+    fn the_limit_stated_is_the_narrow_one() {
+        let limit = joined(&paragraphs_after_fence()[2]);
+        assert!(
+            limit.contains("`text` fence") && limit.contains("nothing compiles it"),
+            "element (e) must say the fence is uncompiled: {limit}"
+        );
+        assert!(
+            limit.contains("compile_fail,E0034")
+                && limit.contains("standards/rust/20-two-flavour-ports.md")
+                && limit.contains("standards/rust/00-prime-directives.md"),
+            "element (e) must name the compiled negatives that really do assert the \
+             error code, or it discards a guard that exists: {limit}"
+        );
+        assert!(
+            limit.contains("asserted by nothing"),
+            "element (e) must say which half is unasserted — the notes' wording and \
+             the internal type name: {limit}"
+        );
+    }
+
+    /// The broad falsehood, named so it cannot creep back as a simplification.
+    #[test]
+    fn the_page_never_claims_that_nothing_checks_this() {
+        assert!(
+            !joined(&doc_lines()).contains("nothing checks this"),
+            "\"nothing checks this\" is wrong in the direction that discards a real \
+             guard: the error code is asserted by two compiled negatives in the \
+             constitution"
+        );
+    }
+
+    // ---- AC-005: one recessive, correctly-formed pointer ---------------------
+
+    /// Exactly one hop, last, with no heading of its own.
+    #[test]
+    fn one_recessive_pointer_closes_the_section() {
+        let mentions = section_body()
+            .iter()
+            .filter(|line| line.contains("docs/adapter-reading-order.md"))
+            .count();
+        assert_eq!(
+            mentions, 1,
+            "exactly one hop leaves the section. A second pointer is the moment the \
+             page starts requiring a reader to leave it"
+        );
+        let paragraphs = paragraphs_after_fence();
+        let pointer = joined(paragraphs.last().unwrap());
+        assert!(
+            pointer.contains("the adapter reading order"),
+            "the link text is a self-describing noun phrase naming the destination, \
+             because it is all a screen reader or an extracted link list gives the \
+             reader: {pointer}"
+        );
+        assert!(
+            !pointer.contains("http://") && !pointer.contains("https://"),
+            "a bare URL is guarded by nothing and is forbidden to this project \
+             outright: {pointer}"
+        );
+        assert!(
+            !pointer.contains('['),
+            "never an intra-doc link: the destination is a narrative page, not an \
+             item, and no link form resolves in all three of the gate's rustdoc \
+             builds. The named-but-unlinked cross-reference is the rung this pointer \
+             took: {pointer}"
+        );
+    }
+
+    /// The pointer is carried by order and by having no heading, and by nothing else.
+    #[test]
+    fn the_pointer_is_recessive_and_the_section_grows_no_appendix() {
+        assert!(
+            !section_body().iter().any(|line| line.starts_with('#')),
+            "the pointer takes no heading of its own; the moment it stops being \
+             recessive, a reader starts treating the hop as required"
+        );
+        let doc = joined(&doc_lines());
+        for block in ["See also", "Next steps", "Further reading"] {
+            assert!(
+                !doc.contains(block),
+                "a {block:?} block is a second navigation surface bolted onto a page \
+                 that already reads in order"
+            );
+        }
+    }
+
+    // ---- AC-008: the surface obeys the signed-off design ---------------------
+
+    /// Four heading entries, no fifth, no level skipped to reach one.
+    #[test]
+    fn the_heading_ladder_stays_at_four_entries() {
+        let outside = doc_lines_outside_fences();
+        let top = outside.iter().filter(|line| line.starts_with("# ")).count();
+        let second = outside
+            .iter()
+            .filter(|line| line.starts_with("## "))
+            .count();
+        let deeper = outside
+            .iter()
+            .filter(|line| line.starts_with("### "))
+            .count();
+        assert_eq!(
+            (top, second, deeper),
+            (1, 3, 0),
+            "the ladder is `# Why there are two traits` and three `##` entries. A \
+             fifth entry, or a level skipped to reach one, is a page reorganising \
+             itself around a single insertion"
+        );
+    }
+
+    /// No `##` whose entire body is one sentence — a heading that earns its place
+    /// has something under it.
+    #[test]
+    fn no_heading_carries_a_single_sentence_body() {
+        let outside = doc_lines_outside_fences();
+        let heads: Vec<usize> = outside
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.starts_with("## "))
+            .map(|(index, _)| index)
+            .collect();
+        for (position, start) in heads.iter().enumerate() {
+            let end = heads.get(position + 1).copied().unwrap_or(outside.len());
+            let filled = outside[start + 1..end]
+                .iter()
+                .filter(|line| !line.is_empty())
+                .count();
+            assert!(
+                filled >= 3,
+                "`{}` carries {filled} lines of body. A `##` whose whole body is one \
+                 sentence is a heading doing the work of a sentence",
+                outside[*start]
+            );
+        }
+    }
+
+    /// The density budget, with the real number the design measured.
+    #[test]
+    fn the_section_stays_inside_its_density_budget() {
+        let measured = section_body().len();
+        assert!(
+            measured <= SECTION_LINE_CAP,
+            "the section measures {measured} source lines against a cap of \
+             {SECTION_LINE_CAP}. The yield order is (1) the limit sentence \
+             compresses to one clause, (2) the connective prose around the pointer, \
+             (3) the fence's non-`= note:` context lines — and the two `= note:` \
+             lines and the internal type name never yield"
+        );
+    }
+
+    /// Everything added is persistent chrome: nothing folds, tabs or hides.
+    #[test]
+    fn every_element_is_persistent_chrome() {
+        let doc = joined(&doc_lines());
+        for widget in ["<details", "<summary", "<div", "<table", "<span", "style="] {
+            assert!(
+                !doc.contains(widget),
+                "{widget:?} in the module doc. This project installs no revealed and \
+                 no opened-on-demand affordance of its own, and raw HTML also \
+                 defeats rustdoc's own theme contrast"
+            );
+        }
+    }
+
+    // ---- AC-009: the search keys, by a stated rule ---------------------------
+
+    /// The keys are exactly the two strings rustc printed, and each one is still
+    /// visible in the transcript on this page.
+    ///
+    /// The second half is the cheap check the design recorded as *not existing*: an
+    /// alias whose string no longer appears in the block it was taken from has gone
+    /// stale, and nothing else in the workspace would notice.
+    #[test]
+    fn every_search_key_is_a_string_rustc_printed_on_this_page() {
+        let attributes: Vec<&str> = production_source()
+            .lines()
+            .filter(|line| line.starts_with("#[doc(alias"))
+            .collect();
+        assert_eq!(
+            attributes,
+            [
+                "#[doc(alias = \"E0034\")]",
+                "#[doc(alias = \"TraitVariantBlanketType\")]"
+            ],
+            "the rule admits only strings rustc, the specification or a recorded \
+             reader question actually emits — not synonyms, and not the item's own \
+             name"
+        );
+        let fence = joined(&fence());
+        for key in ["E0034", "TraitVariantBlanketType"] {
+            assert!(
+                fence.contains(key),
+                "the search key {key:?} no longer appears in the transcript it was \
+                 taken from, so the key and the page have drifted apart"
+            );
+            assert!(
+                !"SendEventStore".contains(key),
+                "a key may not be the item's own name or a substring of it: {key}"
+            );
+        }
+    }
+
+    /// The workspace lockfile, so a positional claim can be tied to a version.
+    const LOCKFILE: &str = include_str!("../../../Cargo.lock");
+
+    /// The `trait-variant` release whose expansion was actually read.
+    ///
+    /// Bumping this constant is not a chore. It is the signal to re-open
+    /// `variant.rs` and confirm the copying below still happens, because nothing
+    /// else in this repository can see it.
+    const TRAIT_VARIANT_VERIFIED: &str = "0.1.3";
+
+    /// The version `Cargo.lock` resolves `trait-variant` to.
+    ///
+    /// Parsed rather than pinned in the manifest: `trait-variant = "0.1.3"` is a
+    /// caret requirement, so `0.1.4` would resolve without the manifest changing.
+    /// The lockfile is what the gate builds against (`--locked`), so it is the
+    /// only place the *resolved* version can be read.
+    fn resolved_trait_variant() -> &'static str {
+        LOCKFILE
+            .split("name = \"trait-variant\"")
+            .nth(1)
+            .and_then(|rest| rest.split("version = \"").nth(1))
+            .and_then(|rest| rest.split('"').next())
+            .expect("the workspace lockfile resolves the derivation's crate")
+    }
+
+    /// The attributes sit where `trait_variant` copies them onto the derived flavour.
+    ///
+    /// Two attributes, not the three the design projected, and the reason is
+    /// mechanical rather than editorial: `SendEventStore` is *derived*, and the
+    /// expansion rebuilds it with `..tr.clone()`, which copies the trait's
+    /// attributes verbatim. There is no second item to write an attribute on, and
+    /// two written here are four entries in the search index — a superset of the
+    /// three the design asked for. Position is the whole mechanism, so position is
+    /// what is asserted.
+    ///
+    /// **Position is a proxy, and the second assertion is what stops it being a
+    /// silent one.** That the attributes sit above the derivation is necessary and
+    /// not sufficient: the copying itself is upstream behaviour, and a
+    /// `trait-variant` release that stopped doing it would leave this test green
+    /// and `SendEventStore` carrying no search key at all. Nothing in this
+    /// repository can observe the expansion, so the version is asserted instead —
+    /// the gate builds `--locked`, so the resolved version cannot move without
+    /// someone changing it deliberately, and changing it is the moment to re-read
+    /// `variant.rs`. (The other half of the mechanism has a standing guard already:
+    /// `SendEventStore` has no doc comment of its own, so if attributes stopped
+    /// being copied, `missing_docs` — `warn` in the workspace lints and `-D
+    /// warnings` in the gate — would fail the build.)
+    #[test]
+    fn the_search_keys_sit_where_trait_variant_copies_them_to_both_flavours() {
+        let lines: Vec<&str> = production_source().lines().collect();
+        let make = lines
+            .iter()
+            .position(|line| line.trim_end() == "#[trait_variant::make(SendEventStore: Send)]")
+            .expect("the derivation that causes the collision this page documents");
+        assert_eq!(lines[make - 2].trim_end(), "#[doc(alias = \"E0034\")]");
+        assert_eq!(
+            lines[make - 1].trim_end(),
+            "#[doc(alias = \"TraitVariantBlanketType\")]"
+        );
+        assert_eq!(
+            lines[make + 1].trim_end(),
+            "pub trait EventStore {",
+            "the attributes must sit on the trait the derivation copies from, or the \
+             `Send` flavour carries no search key at all"
+        );
+        assert_eq!(
+            resolved_trait_variant(),
+            TRAIT_VARIANT_VERIFIED,
+            "the two attributes above reach `SendEventStore` only because \
+             trait-variant {TRAIT_VARIANT_VERIFIED} rebuilds the derived trait with \
+             `..tr.clone()` (`trait-variant-{TRAIT_VARIANT_VERIFIED}/src/variant.rs:115-123`), \
+             copying the base trait's attributes onto it. The position asserted above \
+             cannot see that, so the version stands in for it: read the new \
+             `variant.rs`, confirm the attributes are still copied, then move this \
+             constant"
+        );
     }
 }

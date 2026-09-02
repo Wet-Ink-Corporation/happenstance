@@ -123,6 +123,20 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     crate::lints::testkit_version()?;
     crate::lints::core_alloc_features()?;
     crate::spec_trace::run(crate::spec_trace::Mode::Check)?;
+    // The narrative tree, on this list and not `lint-constitution`. The
+    // divergence is deliberate and is argued in `lint_narrative`'s own docs: a
+    // story whose whole deliverable is a page under `docs/` is exactly the case
+    // a package-shaped gate reads nothing for, and `.redkiln/config.yaml` wires
+    // this command as that story's grain.
+    crate::lint_narrative::run()?;
+    // The page-need discipline, for the same reason and as one half of a pair.
+    // The other half is `"standards/pages/"` on `INERT` below: that tree reaches
+    // no package, so without this line a rules-only pull request would run
+    // *nothing*, which is strictly worse than the correct-but-slow widening it
+    // replaces. The pages tree has the same shape one step further on — `docs/`
+    // is on the `xtask` arm rather than `INERT`, but a pages-only diff would
+    // still never reach a page-need check without this call.
+    crate::lint_pages::run(crate::lint_pages::Mode::Check)?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;
@@ -133,9 +147,12 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     let affected = affected_packages(&changed, &members);
 
     if affected.is_empty() {
-        // Not a silent pass: a docs-only story genuinely has no package to
-        // compile, and saying so is the difference between "nothing to do" and
-        // "the gate did not look".
+        // Not a silent pass: a story confined to `spec/`, `references/` or a
+        // top-level prose file genuinely has no package to compile, and saying
+        // so is the difference between "nothing to do" and "the gate did not
+        // look". The emptiness this reports no longer covers `docs/`: the
+        // narrative tree is source for `xtask`, so a page-only change reaches
+        // this branch only if the arm above stopped firing.
         println!("no package affected — nothing to compile");
         println!("\naffected gate passed");
         return Ok(());
@@ -207,17 +224,38 @@ pub(crate) fn affected_packages(
                 direct.insert(member.name.clone());
             }
             None => {
-                // Outside every member. `README.md` is a real dependency of
-                // `xtask`, whose lib target compiles it as doctests; the rest —
-                // `docs/`, `.github/`, `.bklg/`, `.kb/` — reaches no package.
-                // Anything unrecognised widens rather than narrows.
-                if path == "README.md" || path.starts_with("standards/rust/") {
-                    // Both are real dependencies of `xtask`, whose lib target
-                    // compiles them as doctests. `standards/rust/` is the Rust
-                    // constitution: its examples are only ever compiled through
-                    // that crate, so without this arm a prose-only change selects
-                    // nothing and the atoms are never built on the pull request
-                    // that breaks them.
+                // Outside every member. Three prose paths are real dependencies
+                // of `xtask`, whose lib target compiles them as doctests; the
+                // rest — `spec/`, `.github/`, `.bklg/`, `.kb/` — reaches no
+                // package. Anything unrecognised widens rather than narrows.
+                if path == "README.md"
+                    || path.starts_with("standards/rust/")
+                    || path.starts_with("docs/")
+                {
+                    // All three are real dependencies of `xtask`, whose lib
+                    // target compiles them as doctests. `standards/rust/` is the
+                    // Rust constitution and `docs/` is the narrative tree: the
+                    // examples in both are only ever compiled through that crate,
+                    // so without this arm a prose-only change selects nothing and
+                    // the pages are never built on the pull request that breaks
+                    // them.
+                    //
+                    // `"docs/"` is a literal here and will be `xtask::narrative`'s
+                    // pinned `TREE` constant on the other side — the harness is a
+                    // *lib*-target module (`xtask/src/narrative.rs`, declared from
+                    // `xtask/src/lib.rs`) and this is a *bin*-target one, so the
+                    // two cannot share a private constant, and a `pub` seam across
+                    // the targets would cost more than seven characters of
+                    // duplication. The pair moves together; this comment is what
+                    // says so, because nothing else can. The structural fix — an
+                    // error by name on a missing tree — is the checker's, not this
+                    // module's.
+                    //
+                    // What this does not verify: selection is not compilation.
+                    // Naming `xtask` means the package is built and tested on
+                    // this change; whether any fence inside a page was compiled
+                    // is `cargo xtask narrative-doctests`' answer, and nothing
+                    // here says anything about whether a page teaches.
                     direct.insert("xtask".to_owned());
                 } else if !is_inert(path) {
                     return members.iter().map(|member| member.name.clone()).collect();
@@ -242,13 +280,24 @@ pub(crate) fn affected_packages(
 /// own `Cargo.toml` opens with a bare `[workspace]` table to keep it that way.
 /// Both reach no package, and both are still checked.
 ///
-/// `standards/rust/` is deliberately **absent**: it is caught by the arm above,
-/// which selects `xtask` because the constitution's examples compile as that
-/// crate's doctests. Adding it here would silently un-compile the corpus.
+/// **Two** trees are deliberately **absent**, and stating them together is what
+/// stops the next contributor reading the first as the sole exception.
+/// `standards/rust/` is the Rust constitution and `docs/` is the narrative tree;
+/// both are caught by the arm above, which selects `xtask` because their examples
+/// compile as that crate's doctests. Adding either here would silently un-compile
+/// a corpus — and leaving one here *shadowed* behind that arm is the same defect
+/// one reordering away, which is why `docs/` was removed rather than left in
+/// place when the narrative tree landed.
 fn is_inert(path: &str) -> bool {
     const INERT: &[&str] = &[
-        "docs/",
         "spec/",
+        // The page-need discipline's rules tree. Nothing compiles it — it is
+        // deliberately not registered with the doctest harness — so it reaches
+        // no package, exactly as `spec/` does. It is still *checked*: the
+        // unconditional list above runs `lint_pages` on every invocation, and
+        // that pairing is the whole entry. Adding this prefix without the call
+        // makes a rules-only pull request read nothing at all.
+        "standards/pages/",
         "references/",
         "experiments/",
         ".github/",
@@ -647,8 +696,14 @@ mod tests {
         assert_eq!(affected.len(), members().len());
     }
 
+    /// Renamed from `a_docs_only_change_selects_nothing`, which stopped being
+    /// true of `docs/` the moment the narrative tree landed there — it never
+    /// asserted on a `docs/` path, so the assertion survives verbatim and only
+    /// the name was false. Deleting it is forbidden: with
+    /// [`an_unrecognised_path_widens_rather_than_narrows`] it is one of the two
+    /// anchors of this module's widening posture.
     #[test]
-    fn a_docs_only_change_selects_nothing() {
+    fn a_top_level_prose_file_selects_nothing() {
         let affected = affected_packages(&changed(&["RUNBOOK.md"]), &members());
         assert!(affected.is_empty());
     }
@@ -699,6 +754,69 @@ mod tests {
     fn the_constitution_arm_does_not_widen_to_all_prose() {
         let affected = affected_packages(&changed(&["references/adapter-shapes.md"]), &members());
         assert!(affected.is_empty());
+    }
+
+    /// The narrative tree is the third corpus compiled only as `xtask`'s
+    /// doctests, and the one whose stories *are* prose-only: until this arm
+    /// existed, the story-grain gate on the very pull request that broke a page
+    /// compiled nothing and printed `affected gate passed`.
+    #[test]
+    fn a_narrative_page_selects_xtask() {
+        let affected = affected_packages(&changed(&["docs/append-conditions.md"]), &members());
+        assert_eq!(affected, changed(&["xtask"]));
+    }
+
+    /// And the same directional pair as the constitution's: one arm, one
+    /// directory, and every neighbouring tree of markdown still inert.
+    #[test]
+    fn the_narrative_arm_does_not_widen_to_all_prose() {
+        let affected = affected_packages(
+            &changed(&["references/evaluation/PRESSURE-TEST.md"]),
+            &members(),
+        );
+        assert!(affected.is_empty());
+    }
+
+    /// Asserted on the predicate rather than through [`affected_packages`],
+    /// because the two directional tests above both pass while `"docs/"` sits
+    /// *shadowed* on `INERT` behind an earlier `else if`. They cannot tell
+    /// "removed" from "unreachable", and the next person to reorder that chain
+    /// re-arms a prefix nobody meant to keep.
+    #[test]
+    fn the_narrative_tree_is_no_longer_inert() {
+        assert!(!is_inert("docs/append-conditions.md"));
+        assert!(!is_inert("docs/README.md"));
+    }
+
+    /// The page-need discipline's rules tree reaches no package, and it is the
+    /// half of a pair: `affected::run` calls `lint_pages::run` unconditionally,
+    /// so this prefix means "no package to build", never "nothing to check".
+    /// Dropping the call and keeping this entry would make a rules-only pull
+    /// request read nothing — strictly worse than the widening it replaces.
+    #[test]
+    fn the_rules_tree_selects_no_package() {
+        for path in [
+            "standards/pages/README.md",
+            "standards/pages/00-one-need.md",
+            "standards/pages/examples/two-needs.md",
+        ] {
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
+    }
+
+    /// And the sibling tree one directory over still selects `xtask`, so the
+    /// arm at `:214-221` was not lazily broadened from `standards/rust/` to
+    /// `standards/`. That widening is one keystroke and would silently
+    /// un-compile the constitution.
+    #[test]
+    fn the_pages_prefix_does_not_swallow_the_constitution() {
+        let affected = affected_packages(
+            &changed(&["standards/rust/81-checks-that-cannot-be-types.md"]),
+            &members(),
+        );
+        assert_eq!(affected, changed(&["xtask"]));
+        assert!(!is_inert("standards/rust/README.md"));
     }
 
     #[test]

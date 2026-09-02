@@ -81,7 +81,10 @@ use anyhow::{Context, Result, bail};
 
 mod affected;
 mod lint_constitution;
+mod lint_narrative;
+mod lint_pages;
 mod lints;
+mod narrative_doctests;
 mod package;
 mod proof;
 mod reserve;
@@ -698,6 +701,35 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The narrative tree's examples, under their own banner. Two steps
+        // rather than one, and this one *first*, because the step below is
+        // unfiltered and therefore compiles these pages too: `run_steps` bails
+        // at the first failure, so the ordering is the whole of what keeps a
+        // broken narrative fence attributed to the narrative corpus. Fixing it
+        // from the other side — filtering the step below — would drop the
+        // repository README's doctest out of the gate, because its test name
+        // carries neither corpus's module path.
+        //
+        // It runs through `cargo run -p xtask` rather than invoking `cargo test`
+        // directly for the reason `proof-artefact` does: a filtered
+        // `cargo test --doc` exits 0 over `running 0 tests`, so the subcommand
+        // asserts the doctests out of `--list` before running them. The
+        // `RUSTDOCFLAGS` below is inherited by the cargo it spawns.
+        name: narrative_doctests::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "narrative-doctests",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // Its own step rather than a line in `tests`, for the reason
         // `proof-artefact` has one: the workspace test step passes just as
         // happily with one fewer doctest as with one more, so an atom whose
@@ -709,6 +741,61 @@ const REQUIRED: &[Step] = &[
         program: "cargo",
         args: &["test", "--locked", "-p", "xtask", "--doc"],
         env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
+        // Compile, then check: the tree's second banner. The step above hands
+        // every registered page to rustdoc; this one reads the tree and the
+        // harness as *files* and answers what `cfg(doctest)` hides — a page
+        // nobody registered, a registration nobody deleted, a tree someone
+        // moved, and a tree someone emptied. Each of those is green under every
+        // other step in this array.
+        //
+        // It sits after `the constitution's examples compile` rather than
+        // between the two compile steps, because those two are adjacent on
+        // purpose and `narrative_doctests`' own test pins the adjacency: the
+        // constitution's step is unfiltered and compiles the narrative pages
+        // too, so their order is the whole of what keeps a broken narrative
+        // fence under the narrative banner. Compile-then-check survives the
+        // move; the compile pair's adjacency would not.
+        name: lint_narrative::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "narrative",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // The page-need discipline, read as files: `standards/pages/` — the
+        // rules — and the pinned narrative tree — the pages the rules govern.
+        // It sits directly after the step above because the two read the same
+        // tree from opposite sides: that one asks whether a page is registered
+        // and compiled, this one asks whether it says which reader's question
+        // it answers.
+        //
+        // `probe: None`, and that is not a formality. This is a directory read
+        // with no external tool and no compilation, so a probe would be a lie
+        // in the shape RS-80-2 names (`standards/rust/80-the-gate.md:98`): a
+        // step that can only be skipped for a reason that cannot occur.
+        name: lint_pages::STEP,
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-pages",
+        ],
+        env: &[],
         probe: None,
     },
     Step {
@@ -939,6 +1026,11 @@ fn main() -> ExitCode {
         Some("proof-artefact") => proof::run(),
         Some("wasm-conformance") => proof::wasm_run(),
         Some("wasm-conformance-enumeration") => proof::wasm_enumeration(),
+        Some("narrative-doctests") => narrative_doctests::run(),
+        // Read-only, and no `--write` arm: unlike `lint-constitution` there is
+        // nothing here a checker could rewrite, so the surface is safe to invoke
+        // at any time and nothing needs undoing.
+        Some("narrative") => lint_narrative::run(),
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),
@@ -947,6 +1039,15 @@ fn main() -> ExitCode {
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lint-pages") => match std::env::args().nth(2).as_deref() {
+            None => lint_pages::run(lint_pages::Mode::Check),
+            Some("--write") => lint_pages::run(lint_pages::Mode::Write),
+            Some(flag) => {
+                eprintln!("unknown flag for lint-pages: {flag}");
+                print_help();
+                return ExitCode::FAILURE;
+            }
+        },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
             Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
@@ -1029,6 +1130,22 @@ fn print_help() {
         proof::ARTEFACTS.len()
     );
     println!("         on an empty target, so the names are checked out of `--list` first.");
+    println!("  narrative-doctests");
+    println!("         Compile every Rust example in docs/, the narrative tree, as doctests");
+    println!("         of xtask's lib target. Same argument as above, one corpus further on:");
+    println!("         a filtered `cargo test --doc` exits 0 over `running 0 tests`, so the");
+    println!("         pages are asserted out of `--list` and counted before they are run.");
+    println!("  narrative");
+    println!("         Check docs/, the narrative tree, as files: the tree is where this");
+    println!("         gate pins it and is not empty, every page is registered in");
+    println!("         xtask/src/narrative.rs, every registration names a page that still");
+    println!("         exists, and no page path is long enough to starve the report.");
+    println!("  lint-pages [--write]");
+    println!("         Check the page-need discipline: every governed page in the narrative");
+    println!("         tree declares exactly one need from the closed set, at a line number,");
+    println!("         and standards/pages/ — the rules that say so — keeps its own shape,");
+    println!("         its ceilings and a router index generated from the atoms. --write");
+    println!("         rewrites that index; nothing else in the tree is ever written.");
     println!("  reserve <name>");
     println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
     println!("         publish command; never publishes anything itself.");
@@ -1089,6 +1206,8 @@ fn lint_steps() -> Vec<&'static Step> {
         "every stated rule count matches the suite",
         "the testkit carries its own version",
         "the Rust constitution is internally consistent",
+        lint_narrative::STEP,
+        lint_pages::STEP,
     ])
 }
 

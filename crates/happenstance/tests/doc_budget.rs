@@ -23,8 +23,20 @@ fn src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
+/// Read a source file with its line endings normalised to `\n`.
+///
+/// Every assertion below matches against literal `\n`, and this repository is
+/// developed on Windows with `core.autocrlf = true` and no `.gitattributes` —
+/// so a *freshly checked out* file is CRLF and a pattern like `"\n}\n"` never
+/// matches, while the same file written by an editor that emits LF passes. The
+/// normalisation is here rather than at each call site because the failure is
+/// silent in one direction: `find` returning `None` reads as "the item is not
+/// in this file", which is indistinguishable from the defect these tests exist
+/// to catch.
 fn read(name: &str) -> String {
-    std::fs::read_to_string(src().join(name)).expect("the crate's own source is readable")
+    std::fs::read_to_string(src().join(name))
+        .expect("the crate's own source is readable")
+        .replace("\r\n", "\n")
 }
 
 /// Every rendering source file. `tests.rs` is `#[cfg(test)]`, so nothing in it

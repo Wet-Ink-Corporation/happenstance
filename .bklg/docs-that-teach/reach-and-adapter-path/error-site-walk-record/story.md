@@ -1,0 +1,41 @@
+---
+id: HS-S0157
+uid: b46288
+type: story
+slug: error-site-walk-record
+title: The observed error-site walk
+parent: HS-P0023
+initiative: docs-that-teach
+project: reach-and-adapter-path
+status: ready
+process: story
+stage: plan
+automation: HITL
+severity: null
+blocked_by:
+  - HS-S0155
+  - HS-S0156
+blocks: []
+archetype: capability
+slice: adapter-error-walk
+owner: ryan-britton
+created: 2026-08-17
+updated: 2026-08-20T14:30:48.609Z
+links:
+  pr: null
+  commits:
+    - 2ac7163
+  kb: []
+gate_open: false
+schema: 1
+process_rev: b611dd09
+---
+# The observed error-site walk
+
+> **This is the story item card — status only.** The full specification lives in `spec.md` beside
+> this file: it is the source of truth (scope, behavior, data, and AC-### acceptance criteria with
+> Given/When/Then and `depends_on`). This card intentionally carries **no** spec body — in the story
+> process each stage authors its own artifact (`discover.md` → `spec.md` → `plan.md` →
+> `implementation-report.md` → `report.md`), and the implement workflow reads `spec.md`, never this
+> card. Machine state (id / status / stage / archetype / slice / blocked_by) lives in the frontmatter
+> above; leaving this body as-is is expected, not a half-run pipeline.

@@ -62,7 +62,7 @@ never heard of — and the `semver` CI job did not warn, because it diffs the pu
 request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:248 (async fn head)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:296 (async fn head)` ·
 `.github/workflows/ci.yml:309 (baseline-rev)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
@@ -119,8 +119,8 @@ permanently locked out of using it — the SQLite author discovers this while
 profiling a projection runner that is doing a full table scan per poll, and the
 only fix is a breaking change to a trait somebody else's crates implement.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:222 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:248 (async fn head)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:270 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:296 (async fn head)` ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) *(the `E0119` row)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
@@ -205,7 +205,7 @@ author can see is implemented — a diagnostic that sends people to rewrite the
 adapter rather than to read `cargo tree -d`.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
-`crates/happenstance-core/src/store.rs:123 (impl Stream<Item =)` ·
+`crates/happenstance-core/src/store.rs:171 (impl Stream<Item =)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
 [RUNBOOK](../../RUNBOOK.md) *(`pub use futures_core;` is proposed and not landed)*
 

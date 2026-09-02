@@ -72,7 +72,7 @@ and an `EventStore`-bound one, as `E0308` between two types that print with the
 same name — and the fix is to delete the hand-written trait, which is now
 implemented by every adapter in the workspace.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:360 (error_projections_are_one_type)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:408 (error_projections_are_one_type)` ·
 `crates/happenstance-core/src/store.rs:17 (EventStore comes free)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(derived, not
 hand-written)* · [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(the
@@ -142,7 +142,7 @@ adapters — and a downstream crate's generic helpers are in none of them. The
 exclusion is found by whoever ports the application to Workers, in a crate whose
 signature they cannot change without a breaking release.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:88 (async fn count_all<S: EventStore>)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:110 (async fn count_all<S: EventStore>)` ·
 `crates/happenstance-core/src/memory.rs:601 (async fn count<S: EventStore>)` ·
 `crates/happenstance-ladybug/tests/port_shape.rs:43 (pub(crate) async fn advance<S: ProjectionStore>)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·

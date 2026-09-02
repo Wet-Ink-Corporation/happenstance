@@ -118,7 +118,7 @@ suggests itself is the `#[allow]` rustc prints: it compiles, deletes the only
 signal, and hands every native caller a stream it cannot hold across an await —
 in a crate whose conformance suite does not exist yet, so nothing else asks.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:108 (putting the stream at the)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:156 (putting the stream at the)` ·
 `crates/happenstance-core/src/memory.rs:614 (send_flavour_stream_is_send_in_generic_code)` ·
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:43 (Nesting the stream inside the future)` ·
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:54 (refining_impl_trait)` ·
