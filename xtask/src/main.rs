@@ -972,6 +972,8 @@ const OPTIONAL: &[Step] = &[
             "-p",
             "happenstance-core",
             "-p",
+            "happenstance",
+            "-p",
             "happenstance-testkit",
             "--all-features",
             "--no-deps",

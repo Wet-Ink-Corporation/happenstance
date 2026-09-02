@@ -67,7 +67,7 @@
 //!
 //! # What arrives here, and what stays below
 //!
-//! The discriminator is **encoding**. [`happenstance_core`](happenstance_core)
+//! The discriminator is **encoding**. [`happenstance_core`]
 //! deals in opaque bytes on purpose — that is what keeps adapters free of
 //! domain knowledge and lets replication forward events without deserialising
 //! them. Anything that knows how a payload is *shaped* belongs here, so that
@@ -142,7 +142,7 @@
 //! dev-dependency. A test double belongs in a second crate rather than in an
 //! application's own dependency graph.
 //!
-//! Adapter authors should depend on [`happenstance_core`](happenstance_core)
+//! Adapter authors should depend on [`happenstance_core`]
 //! directly rather than on this crate: it is the smaller semver surface, and
 //! it is the one the conformance suite is written against.
 //!
