@@ -98,11 +98,26 @@ struct Step {
     /// Environment variables to set for this step only.
     ///
     /// Exists for the three rustdoc steps, whose whole input is `RUSTDOCFLAGS`
-    /// — rustdoc does not read `RUSTFLAGS`, so `ci.yml`'s ambient `-D warnings`
-    /// reaches every rustc invocation in the gate and no rustdoc one. Setting it
-    /// in the process environment instead would leak into every other step, and
-    /// the obvious workaround (`Command::new("sh")` with a `VAR=x cargo …`
+    /// — rustdoc does not read `RUSTFLAGS`, so the ambient `-D warnings`
+    /// reaches every rustc invocation in the gate and no rustdoc one. Setting
+    /// it in the process environment instead would leak into every other step,
+    /// and the obvious workaround (`Command::new("sh")` with a `VAR=x cargo …`
     /// string) is not portable to the Windows this repository is developed on.
+    ///
+    /// *"The ambient `-D warnings`"* used to mean `ci.yml`'s job `env:` alone,
+    /// which made the sentence true on a runner and false on a developer's
+    /// machine — nothing set it locally. `.cargo/config.toml`'s `[build]
+    /// rustflags` now does, so it is true in both places and this field stays
+    /// what its name says.
+    ///
+    /// `RUSTFLAGS` is deliberately **not** set here per step, and the attempt is
+    /// worth recording because it looks obviously right: `cargo xtask` is an
+    /// alias for `cargo run -p xtask`, so flags applied only to the steps'
+    /// children stop matching the fingerprint of the running `xtask.exe`, and
+    /// the `proof-artefact` step's own `cargo run -p xtask` then tries to
+    /// relink the executable it is running inside — `failed to remove file
+    /// target\debug\xtask.exe: Access is denied`. CI never meets that because
+    /// its variable is ambient before cargo builds xtask at all.
     env: &'static [(&'static str, &'static str)],
     /// How to detect whether the tool is installed, for steps that depend on a
     /// cargo subcommand or a toolchain that may be absent.
@@ -1198,6 +1213,58 @@ mod tests {
 
     /// The feature gating the projection module and its re-exports.
     const GATE: &str = "unstable-projection";
+
+    /// The warning policy, spelled once and compared everywhere it appears.
+    ///
+    /// `.cargo/config.toml`'s `[build] rustflags` is what a developer's cargo
+    /// reads; `.github/workflows/ci.yml`'s `RUSTFLAGS:` is what a runner's
+    /// does, and the environment variable **replaces** the config key rather
+    /// than merging with it. So the two must be identical, not merely
+    /// compatible — and this is the check that keeps them so.
+    ///
+    /// They were not. CI set the variable and nothing set it locally, which is
+    /// how `happenstance-core` kept a dead private method through every green
+    /// local gate it ever ran. Widening one side — say to `-D warnings -D
+    /// clippy::pedantic` — must fail here, so whoever widens it widens both.
+    const DENY_WARNINGS: &str = "-D warnings";
+
+    /// The gate and CI deny the same warnings, read out of both files.
+    #[test]
+    fn the_gate_and_ci_deny_the_same_warnings() {
+        let root = workspace_root().unwrap();
+
+        let workflow = fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
+        let in_ci = workflow
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("RUSTFLAGS:"))
+            .map(str::trim)
+            .expect("ci.yml must set RUSTFLAGS in its job env, or CI is laxer than the gate");
+
+        assert_eq!(
+            in_ci, DENY_WARNINGS,
+            "ci.yml denies `{in_ci}`, which is not `{DENY_WARNINGS}`"
+        );
+
+        // Compared as the rendered flag string rather than by parsing TOML: the
+        // key is a list, and what has to match CI is what cargo hands rustc.
+        let config = fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
+        let in_config = config
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("rustflags = "))
+            .map(|list| {
+                list.trim_matches(['[', ']'].as_slice())
+                    .split(',')
+                    .map(|flag| flag.trim().trim_matches('"'))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .expect("`.cargo/config.toml` must set `[build] rustflags`, or a local gate is laxer than CI");
+
+        assert_eq!(
+            in_config, DENY_WARNINGS,
+            "`.cargo/config.toml` denies `{in_config}` and ci.yml denies              `{DENY_WARNINGS}`; a local gate is not what CI runs"
+        );
+    }
 
     /// The fifth `wasm32` step's name, spelled once.
     ///

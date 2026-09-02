@@ -4,3 +4,40 @@
 # `error: no such command: xtask`.
 [alias]
 xtask = "run --package xtask --"
+
+# The warning policy, ambient, so that every cargo invocation in this workspace
+# agrees with the one CI runs.
+#
+# `.github/workflows/ci.yml` sets `RUSTFLAGS: -D warnings` in its job `env:`,
+# which in CI reaches every rustc the gate starts. Locally it reached none:
+# `cargo xtask ci` set no such variable, so `cargo check`, `cargo test` and both
+# `cargo hack` powersets denied warnings on a runner and merely printed them on
+# a developer's machine. The gate's own documentation claimed otherwise, and the
+# claim was false in the place it mattered.
+#
+# What that cost, concretely: `happenstance-core` shipped a dead private method
+# for as long as `unstable-projection` has existed without `conformance`. The
+# local gate went green over it every time; it surfaced only when a new example
+# resolved that feature combination and someone typed `-D warnings` by hand.
+#
+# **Here rather than in `xtask`'s own step environment**, which is where this
+# started and where it cannot work. `cargo xtask` is an alias for `cargo run -p
+# xtask`, so the gate binary is itself built by cargo — set the flag only on the
+# steps' child processes and their fingerprint stops matching the running
+# `xtask.exe`, whereupon the `proof-artefact` step's `cargo run -p xtask` tries
+# to relink the executable it is running inside and Windows answers `failed to
+# remove file target\debug\xtask.exe: Access is denied`. CI never meets this
+# because its variable is ambient *before* cargo builds xtask. A config file is
+# the local spelling of "ambient", and it costs no rebuild at all: one policy,
+# one fingerprint, for the gate and for a plain `cargo test` alike.
+#
+# Registry dependencies are unaffected — cargo passes them `--cap-lints allow`,
+# so this denies warnings in code this workspace owns and nowhere else.
+#
+# The escape hatch is one word, because an exploratory build should not have to
+# fight a policy: `RUSTFLAGS="" cargo check` overrides this entirely, since the
+# environment variable replaces `build.rustflags` rather than merging with it.
+# That is also why CI's `env:` and this key must stay identical rather than
+# complementary, and why a test compares them.
+[build]
+rustflags = ["-D", "warnings"]
