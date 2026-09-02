@@ -93,11 +93,13 @@ path dependency — and completes a write-then-read cycle (DoD 9, AC-03).
   pages (HS-S0092, HS-S0094). The licences, README, description and docs.rs
   configuration are already landed and cost this project nothing.
 
-  **One item is not this project's to close**: the crates.io name is *not*
-  reserved. `sqlite-durable-store`'s packaging story records that AC as blocked
-  on a human handoff — the `0.0.0` placeholder was generated and dry-run, never
-  uploaded. Promotion makes the placeholder redundant but leaves the name unheld
-  until the publish commit.
+  **The name is held**, and an earlier revision of this bullet said it was not.
+  `cargo search` returns `happenstance-sqlite = "0.0.0"` on the registry. The
+  claim to the contrary rested on `sqlite-durable-store`'s packaging story, whose
+  report records that AC as blocked on a human handoff — but the act was
+  performed after the report was written and the report was never updated.
+  Checked against the registry rather than against the backlog, which is the only
+  order that can be right about a fact the backlog does not own.
 - **AC-08's evidence** — where does the "DCB-compliant" claim point, which
   implementations does it name, and dated when?
 

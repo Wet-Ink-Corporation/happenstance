@@ -5,13 +5,15 @@ The SQLite event store and projection store adapters for
 storage-agnostic event sourcing library built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
-> **Status: conformant, not yet published.** This is the first happenstance
-> adapter to pass
+> **Status: conformant, and in the `0.2.0` release set.** This is the first
+> happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
 > concurrency family, the generated model family and the projection family. The
-> crate still carries `publish = false`: releasing it is a separate decision,
-> taken with the rest of the workspace rather than here.
+> `publish = false` this callout used to name is gone: the crate-set re-plan put
+> it in the release beside `happenstance`, `happenstance-core` and
+> `happenstance-testkit`. Only the registry can say whether that release has
+> happened yet.
 
 ## Which crate do I want?
 

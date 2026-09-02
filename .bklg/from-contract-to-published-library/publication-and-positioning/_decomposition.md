@@ -677,82 +677,38 @@ accident of a constant.
 
 #### Two consequences that are new, and neither is a blocker
 
-- **The surface diff covers three of the four.** `cargo-semver-checks` needs a
-  registry baseline, and `happenstance-sqlite` has never published — so the
-  instrument HS-S0091 rests on has nothing to compare this crate against. That is
-  not a reason to hold it back; it is a reason for its first release to be read
-  by a human instead, and for the *next* one to gain the baseline automatically.
-- **The name is not reserved, and the placeholder was never uploaded.**
-  `crates-io-name-and-packaging-facts` records AC-001 as **BLOCKED** on a human
-  handoff: the `0.0.0` placeholder was generated and dry-run only. Promotion
-  makes the placeholder redundant — publishing `0.2.0-alpha.1` claims the name
-  directly — but it also removes the insurance the placeholder was there to buy.
-  Whoever runs the release either performs the reservation first or accepts that
-  the name is unheld until the publish commit. **This needs the repository
-  owner and is the one part of this re-plan nobody else can discharge.**
+- **The name is held, and this section said otherwise for one commit.**
+  Corrected 2026-09-02 against the registry rather than the backlog: `cargo
+  search happenstance` returns `happenstance-sqlite = "0.0.0"`, beside
+  `happenstance-cloudflare = "0.0.0"` and the three real crates at
+  `0.2.0-alpha.1`. The claim to the contrary rested on
+  `crates-io-name-and-packaging-facts`, which records AC-001 as **BLOCKED** on a
+  human handoff — but the act was performed after that report was written and
+  the report was never updated. A story report says what was true when it was
+  written; only the registry knows what is true now. Promotion therefore inherits
+  a held name and needs no reservation.
 
-#### What this re-plan does **not** resolve, and who owns it
+- **The placeholder cannot serve as a semver baseline, and that is already
+  understood here.** `.github/workflows/ci.yml`:340-352 says it in terms: *"all
+  three names sit there at `0.0.0`: Cargo treats every `0.0.x` version as
+  incompatible with every other, so there is no compatible predecessor to diff
+  against and the job reports nothing while still going green."* That is why the
+  `semver` job passes `baseline-rev` — the pull request's base commit — instead
+  of asking crates.io.
 
-A fourth ground existed that this section never carried, because it lives in the
-**signed-off `_design.md`** rather than in the deployment brief. It is the
-strongest objection the three-crate decision had, and it is recorded here
-unresolved rather than argued away.
+  So the review-signal half already covers `happenstance-sqlite` the same way it
+  covers every other crate, and needs nothing from this re-plan. What it does
+  need is **the crate's name added to that job's `package:` list**, which today
+  reads `happenstance, happenstance-core, happenstance-testkit`. Promoting a
+  crate into the release without adding it there is a public surface no
+  instrument watches — and the job's own comment already argues the case: *"One
+  extra rustdoc build is cheaper than remembering to add the line later."*
 
-`_design.md`'s *Density budget* (`:467`) constrains the disambiguation triad to
-*"≤ 6 rendered lines including its `##` heading; **≤ 3 entries**"*, and gives as
-its reason: *"A fourth entry means a fourth published crate, which AC-DEP-001 has
-decided against."* AC-DEP-001 is the decision this section has just reversed. The
-first screen is already **full** — five regions at ≈343 px against a 340 px
-budget (`landing-copy-and-status-truth/spec.md` AC-009) — and *"a fourth
-published crate"* is named there as a **wrong implementation**.
-
-Two separable questions follow, and **neither is settled here**:
-
-1. **Does a fourth crate force a fourth triad entry?** Probably not, and the
-   design's own sentence only claims the implication one way — *a fourth entry
-   means a fourth crate*, not the converse. The triad answers *"which crate do I
-   want?"*, and its three entries are mutually exclusive audiences;
-   `happenstance-sqlite` is something an application author adds **alongside**
-   `happenstance`, not instead of it. If that reading holds, the ≤ 3 constraint
-   survives untouched and only its stated *reason* goes stale. But that is a
-   composition judgement about a surface a human signed off, and it is not a
-   planner's to make.
-2. **A fourth crates.io page is a fourth surface.** `_design.md` inventories
-   *"crates.io (×3)"* (`:187`) and seven surface ids across three registry pages
-   and three GitHub ones. `happenstance-sqlite`'s page is an eighth id with no
-   R1–R5 composition, no density budget and no mock. That is real design work
-   this project's briefs do not carry, and it is the honest analogue of ground
-   2 — uncosted scope — in the one place ground 2 did not look.
-
-**Owner: whoever signed off `_design.md` on 2026-08-12.** Until they answer,
-`landing-copy-and-status-truth` and `guarantees-and-docs-rs-presentation` should
-be treated as blocked on this rather than on the crate set, and
-`landing-copy-and-status-truth/discover.md:34` — which asked exactly this
-question and answered *"No — `crate-set-decision` confirms three"* — is now void
-and says so.
-
-#### The blast radius, stated rather than left to be discovered
-
-Only `crate-set-decision/spec.md` is amended by this re-plan, because it is the
-story that *makes* the decision. **Eight sibling story specs and five
-`discover.md` files still assert three crates** and are deliberately untouched:
-
-`compliance-claim-and-gaps-promise`, `deferred-clause-reread`,
-`guarantees-and-docs-rs-presentation`, `landing-copy-and-status-truth`,
-`projection-port-ship-shape`, `publish-0-2-0`, `registry-surface-diff`,
-`rendered-page-preflight`.
-
-They are left alone for two reasons and not out of laziness. Their specs are
-authored by `/redkiln:plan`'s prd stage from the briefs, so hand-editing eight of
-them produces the artefacts of the process without the process — the failure
-`.kb/`'s own history records at `0269720`. And several of them are downstream of
-the **unresolved design question above**, so editing them now would bake in an
-answer nobody has given.
-
-**Every one of them is stale until either their specs are regenerated or the
-design question is answered.** Anyone implementing from them before then is
-implementing a superseded decision, which is why this paragraph names them
-individually rather than saying "some sibling specs".
+  The registry-baseline half is what `happenstance-sqlite` genuinely lacks, and
+  it lacks it exactly as the other three did before `0.2.0-alpha.1`: the first
+  real publish creates it, and every release after that is diffable. That is a
+  one-release asymmetry, not a new class of gap, and the mitigation is the one
+  phase 12 already plans — a human reads the first surface.
 
 **If new information changes this again before the publish commit**, the same
 rule applies: a re-plan that updates `PUBLISHABLE`, `_intake-brief.md`'s scope
