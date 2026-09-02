@@ -2271,6 +2271,19 @@ fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
 /// would register as a second definition of a name that is otherwise unique —
 /// turning the ambiguity check from a guard into noise. `.git` is skipped for
 /// size alone.
+///
+/// `.claude/` is skipped for `target/`'s reason, in its purest form: linked git
+/// worktrees live under `.claude/worktrees/`, and a linked worktree is a second
+/// checkout of this same repository *inside* it. Every file in the workspace is
+/// then found once per worktree plus once for real, so `store.rs` resolves four
+/// ways and every bare-name citation in the specification reports as ambiguous.
+///
+/// That is not hypothetical. Running the gate from the repository root with
+/// three worktrees present produced **153 traceability problems**, every one of
+/// them a name the checker found four times — while the identical tree passed
+/// from inside a worktree, because a worktree cannot see its siblings. A check
+/// whose verdict depends on which directory it is invoked from is reporting the
+/// invocation, not the specification.
 fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
     fn walk(dir: &Path, root: &Path, out: &mut BTreeMap<String, Vec<String>>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -2280,7 +2293,8 @@ fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
             if path.is_dir() {
-                if name == "target" || name == ".git" || name == "node_modules" {
+                if name == "target" || name == ".git" || name == ".claude" || name == "node_modules"
+                {
                     continue;
                 }
                 walk(&path, root, out);
