@@ -2,7 +2,7 @@
 id: kb-open-question-worker-async-trait-ban-001
 title: The worker dependency re-opens deny.toml's async-trait ban, and neither shape is chosen
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Taking the real worker crate in place of the hand-written stand-in was reversed on a
@@ -23,18 +23,30 @@ summary: >-
   deny.toml beside it, or refuse and let the ban stay red with the exception recorded. Either is
   a decision; leaving it undecided while the gate is red is not. Forced now: publish-ready-crate
   cannot claim a green gate while the ban is red, and its AC-012 and its project's DoD both say
-  so.
+  so. Resolved 2026-09-02 by ADR-0035 (kb-decision-0035), which takes the ratify shape:
+  deny.toml's wrappers list gains worker and worker-macros, with the argument written into the
+  file beside the entry, amending ADR-0001's exemption set without touching ADR-0001's body. The
+  two new wrappers are kept distinct from the wasm-bindgen-test entry rather than collapsed into
+  it, because that one is a dev-dependency in no published artifact and worker is a normal
+  dependency that ships. Sub-question 1 is answered ratify, and one wrappers list carries both
+  names. Sub-question 2 is not reached and stops being this atom's, the ban no longer being red.
+  Sub-question 3 is answered yes: the exemption was minted by the adapter that first needed it,
+  which is the pattern kb-decision-0034 records, and no umbrella ADR over dependency exceptions
+  was required. No accepted decision was edited to produce any of it.
 depends_on: []
 related:
   - kb-decision-0001
   - kb-decision-0029
   - kb-decision-0023
+  - kb-decision-0035
 source_paths:
   - .kb/_intake/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - deny.toml
   - xtask/src/main.rs
-last_reviewed: 2026-08-20
+  - .kb/_intake/0035-async-trait-through-worker.md
+  - references/adr/0035-async-trait-through-worker.md
+last_reviewed: 2026-09-02
 ---
 
 # The worker dependency re-opens deny.toml's async-trait ban, and neither shape is chosen
@@ -102,3 +114,54 @@ quietly skip — a tool that runs and finds a problem always fails the gate.
    pattern in `kb-decision-0034` would recognise — a decision minted by the adapter
    that first needs it, rather than requiring a new umbrella ADR over dependency
    exceptions generally?
+
+## Resolved 2026-09-02 — status `superseded`; the ratify shape was taken
+
+Everything above is the state of knowledge on 2026-08-20 and is left exactly as it was
+written: it was true when written, and the value of the record is that it shows what was
+not known on the day the gate went red. The answering atom is `kb-decision-0035`,
+"`async-trait` is exempted where it is reached through `worker`"
+(`.kb/decisions/0035-async-trait-through-worker.md`), whose long-form record is
+`references/adr/0035-async-trait-through-worker.md`. Nothing in it reaches back into
+ADR-0001: that decision is accepted, its exemption set is amended from outside, and its
+body stays byte-identical — the shape `kb-decision-0029` used against `kb-decision-0004`.
+
+**Sub-question 1 is answered `ratify`, and one `wrappers` list carries both names.**
+`deny.toml`'s single `deny` entry for `async-trait` now lists three wrappers —
+`wasm-bindgen-test`, `worker`, `worker-macros` (`deny.toml:74-80`) — so the second half of
+the sub-question resolves the way the mechanism forces rather than the way taste would:
+`wrappers` matches by crate name, `worker-macros` is a distinct node in the graph, and one
+name could not have covered both. What the decision refused to do is collapse the *reason*.
+`wasm-bindgen-test` is exempt because it is a dev-dependency of the conformance harnesses
+appearing in no published artifact; `worker` is a normal dependency of
+`happenstance-cloudflare` and does ship, and is exempt on the different argument this atom
+already set out above — it uses the macro for its own `DurableObject` trait, which the
+workspace implements without deriving any `happenstance` port from it. Both arguments are
+written into `deny.toml` beside the entry (`deny.toml:49-73`), which is what the ratify
+shape asked for, and the entry's `reason` string names both ADRs.
+
+**Sub-question 2 is not reached, and stops being this atom's.** It was conditional on
+refusing, and refusal is not what happened: `cargo deny check bans` reports `bans ok`, so
+there is no red result to carve out and no named CI exception to design. HS-S0059's AC-012
+became claimable as written rather than needing its acceptance sentence reworded around a
+red step. Two things the decision records rather than hides survive the resolution and
+belong to `kb-decision-0035` rather than here: `cargo deny` was never the load-bearing
+guard — `crates/happenstance/tests/flavours.rs` is, being a compile-time obligation on
+every target where the `deny` step is optional and probed — and a `wrappers` entry pins a
+*name*, so a `worker` major bump that changed how it uses `async-trait` would not be
+caught. That gap is a property of `wrappers`, and the `wasm-bindgen-test` entry has carried
+it since the ban's first run.
+
+**Sub-question 3 is answered yes.** The exemption was minted by the adapter that first
+needed it — `happenstance-cloudflare`, at phase 9 — with the argument recorded beside the
+entry it justifies, and no umbrella ADR over dependency exceptions generally was written or
+required. That is the pattern `kb-decision-0034` records for the fixture contract, and it
+now has an instance outside the fixture contract. What keeps it honest is what keeps the ban
+real: exempting *by name* means a third route into the graph still fails the gate until
+someone decides it should not.
+
+One thing this resolution deliberately does not cover, because the staged record says so in
+terms: it does not adjudicate `happenstance-cloudflare`'s three store-limit numbers.
+HS-P0013's run-2 review found them read off a platform page while HS-S0055 AC-001 forbids
+exactly that. No document has settled it — ADR-0023 did not and ADR-0035 does not — and it
+surfaces in HS-S0055's own record rather than becoming a second question here.

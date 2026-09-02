@@ -18,6 +18,7 @@ depends_on:
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-reference-phase-8-spec-reconciliation-001
+  - kb-playbook-declared-page-need-001
 source_paths:
   - .kb/_intake/lesson-anchoring-citations-in-a-long-lived-document.md
   - xtask/src/spec_trace.rs
@@ -26,7 +27,7 @@ source_paths:
   - standards/rust/README.md
   - references/evaluation/phase-4-5-reconciliation.md
   - references/evaluation/review-citation-drift.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-02
 ---
 
 # Anchoring citations in a document whose targets move under it

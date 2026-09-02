@@ -26,7 +26,17 @@ summary: >-
   mirrors it. The 2026-08-20 wave (`2026-08-20-intake-phase-9`) added ADR-0023 (phase 9, the
   Cloudflare `SqlStorage` mapping and its off-tokio harness) and ADR-0034 (phase 9, the fixture
   contract has no single owning document) in one section. Neither supersedes any row on this map —
-  both `supersedes: null` — and both are phase 9, the first phase-9 rows the map carries.
+  both `supersedes: null` — and both are phase 9, the first phase-9 rows the map carries. The
+  2026-09-02 wave (`2026-09-02-intake`) added two more sections. The first carries ADR-0035 (phase
+  9, exempting `worker`/`worker-macros` from the `async-trait` ban by name) and ADR-0036 (phase 6,
+  evaluating PS-2's freeze bar against real adapters and declining to freeze `ProjectionStore` at
+  `0.2.0`); neither supersedes any row. The second is this map's first non-ADR section: three
+  brand-identity decisions numbered `SD-` rather than `ADR-`, a parallel record series that sits
+  outside the ADR sequence on purpose (`kb-reference-brand-source-locations-001` states why) and
+  carries `phase: null`, since brand work is not one of RUNBOOK.md's fifteen phases. `SD-0002` is
+  shared by two atoms — the mark's own construction and binding rules, and a wider standalone-SVG
+  delivery rule split out because its scope reaches past the mark — and the table's `SD` column
+  says so rather than collapsing them into one row.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -39,7 +49,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-15-intake
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
-last_reviewed: 2026-08-20
+  - .kb/_governance/integration-waves/2026-09-02-intake
+last_reviewed: 2026-09-02
 ---
 
 # Decision map
@@ -210,6 +221,49 @@ the fixture contract has no single owning document. Neither atom supersedes any 
 | --- | --- | --- | --- | --- | --- |
 | ADR-0023 | [`kb-decision-0023`](../decisions/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md) | The SqlStorage mapping and the off-tokio harness, settled by one body of evidence | accepted | 9 | — |
 | ADR-0034 | [`kb-decision-0034`](../decisions/0034-the-fixture-contract-has-no-single-owner.md) | The fixture contract has no single owning document, and CF-40 is ADR-0015's clause | accepted | 9 | — |
+
+## 2026-09-02 intake: async-trait exemption and the projection port (ADR-0035, ADR-0036)
+
+Two decision atoms, one wave (`2026-09-02-intake`), `.kb/decisions/`, spanning phase 9 and phase
+6 — one section per this map's own *Adding a row* convention, since it is one wave rather than one
+phase. ADR-0035 resolves `kb-open-question-worker-async-trait-ban-001`: `deny.toml`'s
+`async-trait` ban gains two `wrappers` entries, `worker` and `worker-macros`, amending
+`kb-decision-0001`'s exemption set from outside rather than editing its body — the same shape
+`kb-decision-0029` used against `kb-decision-0004`. ADR-0036 is PS-3's `SHOULD` evaluated against
+PS-2's `[FROZEN]` two-part bar, part by part, against the real adapter set for the first time:
+part 1 (a hostile store must fail the suite) is met, part 2 (two adapters at opposite ends of the
+batch-shape axis must pass) is not, so `ProjectionStore` is **not** frozen at `0.2.0` and ships
+behind the off-by-default `unstable-projection` feature instead. Neither atom supersedes any row
+on this map — both `supersedes: null`.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0035 | [`kb-decision-0035`](../decisions/0035-async-trait-through-worker.md) | async-trait is exempted where it is reached through worker | accepted | 9 | — |
+| ADR-0036 | [`kb-decision-0036`](../decisions/0036-the-projection-port-ships-gated.md) | The projection port is not frozen at 0.2.0 and ships behind unstable-projection | accepted | 6 | — |
+
+## 2026-09-02 intake: brand identity decisions (SD-0001, SD-0002)
+
+Three decision atoms, the same wave (`2026-09-02-intake`), `.kb/decisions/`, given their own
+section rather than folded into the ADR-0035/ADR-0036 section above: the two halves of the wave
+share a date and an ingest run, not a subject, and this half uses a different numbering sequence
+entirely. `SD-` records are brand-identity decisions that sit deliberately outside the `ADR-`
+sequence in `references/adr/` — `kb-reference-brand-source-locations-001` states why — and carry
+`phase: null` rather than a number from RUNBOOK.md's fifteen phases, since brand work is not one
+of them. `SD-0001` (`kb-decision-sd-0001`) settles what the name "happenstance" means and the
+five rules that places on copy; it does not supersede ADR-0005 (`kb-decision-0005`), which stays
+correct about *why* the rename happened; this decision only assigns a meaning after the fact and
+says so. `SD-0002` is shared by two atoms, split because their scopes differ: `kb-decision-sd-0002`
+carries the mark's own construction (seven equal blocks, the wordmark, the eight binding rules),
+and `kb-decision-standalone-svg-one-colourway-001` carries a wider delivery rule — a standalone SVG
+ships one fixed colour, with surface selection left to the point of use — that generalises past
+the mark to any SVG this repository ships for a surface it does not control. None of the three
+supersedes any row on this map.
+
+| SD | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| SD-0001 | [`kb-decision-sd-0001`](../decisions/sd-0001-the-name-names-the-boundary-of-what-occurred.md) | "Happenstance" names the boundary drawn by what occurred, and what that places on copy | accepted | — | — |
+| SD-0002 | [`kb-decision-standalone-svg-one-colourway-001`](../decisions/standalone-svg-carries-one-colourway.md) | A standalone SVG carries one fixed colour, and the surface is selected at the point of use | accepted | — | — |
+| SD-0002 | [`kb-decision-sd-0002`](../decisions/sd-0002-the-mark-and-the-rules-that-bind-it.md) | Seven equal blocks and a lowercase wordmark, and the rules that bind anything carrying the name | accepted | — | — |
 
 ## Adding a row
 
