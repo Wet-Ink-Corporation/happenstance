@@ -290,8 +290,14 @@ build of `happenstance-core` (three configurations in all with the workspace
 `--all-features` one, because a link from a `memory` page into a `conformance`
 item is broken at neither end of that range and only in the middle, which is
 where a consumer stands),
-and a `cargo package --list` assertion that each of the three publishable crates
-carries both licence files and a README. Then, where the tool or toolchain is
+and a `cargo package --list` assertion that each of the **five** publishable
+crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — carries both licence files
+and a README. The number is spelled with its members now because it had already
+drifted once: this sentence read *"three"* through phase 9's promotion of
+`happenstance-cloudflare` and did not move, so a count on its own turned out to
+be a claim nobody re-reads. `xtask/src/package.rs`'s `reconcile` is what
+actually holds the set honest, in both directions. Then, where the tool or toolchain is
 present: `cargo hack` feature-powerset, `cargo deny`, a wasm32 feature-powerset
 check above the mandatory plain one, and a nightly `--cfg docsrs` rustdoc build.
 It is defined once in `xtask/src/main.rs` and is exactly what CI runs.

@@ -72,12 +72,32 @@ path dependency — and completes a write-then-read cycle (DoD 9, AC-03).
   invites maintenance and dates badly.
 - **PS-3** — does the projection port ship frozen, or behind `unstable-projection`?
   Decided here, on evidence supplied by `projection-store-freeze`.
-- **Which crates publish at `0.2.0`?** Working default: **three only**, since AC-03
-  and DoD 9 name the installable crate in the singular, and `CLAUDE.md`'s
-  `cargo package --list` assertion covers three. But the evaluator persona will
-  look for a SQLite adapter on the landing page. If the answer is more than three,
-  each adapter project owes a name reservation and a README — **and that changes
-  their scope, so decide it early.**
+- ~~**Which crates publish at `0.2.0`?**~~ **Resolved 2026-09-02: four —
+  `happenstance-core`, `happenstance`, `happenstance-testkit` and
+  `happenstance-sqlite`.** The working default was three, and this question
+  answered itself the way it said it would: *"the evaluator persona will look for
+  a SQLite adapter on the landing page."* By the time the question was re-read,
+  `sqlite-durable-store` had landed all fourteen stories and the condition
+  attached to a larger answer — *"each adapter project owes a name reservation
+  and a README"* — was already met for the README and the licences, and met only
+  in part for the reservation. See `_decomposition.md`'s *The crate-set decision*
+  for the full record, which answers the three grounds the four-crate option was
+  first rejected on rather than deleting them.
+
+  Struck through rather than removed, because the reasoning that produced the
+  three-crate default is what makes the reversal legible.
+
+  **This adds scope to this project**, which is what the original note warned it
+  would: a status-table row in `README.md` and a disambiguation entry in
+  `crates/happenstance/README.md`, both carried by the UX stories that own those
+  pages (HS-S0092, HS-S0094). The licences, README, description and docs.rs
+  configuration are already landed and cost this project nothing.
+
+  **One item is not this project's to close**: the crates.io name is *not*
+  reserved. `sqlite-durable-store`'s packaging story records that AC as blocked
+  on a human handoff — the `0.0.0` placeholder was generated and dry-run, never
+  uploaded. Promotion makes the placeholder redundant but leaves the name unheld
+  until the publish commit.
 - **AC-08's evidence** — where does the "DCB-compliant" claim point, which
   implementations does it name, and dated when?
 

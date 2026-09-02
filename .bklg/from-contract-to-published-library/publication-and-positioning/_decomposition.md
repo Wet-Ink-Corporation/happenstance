@@ -573,44 +573,190 @@ one got wrong.
 
 ### The crate-set decision (resolves the grounding's flagged tension)
 
-**Decision: three crates ship at `0.2.0` — `happenstance-core`, `happenstance`,
-`happenstance-testkit`.** This matches `xtask/src/package.rs:86`'s
-`PUBLISHABLE` constant and `CLAUDE.md`'s Commands section
-(*"a `cargo package --list` assertion that each of the **three** publishable
-crates..."*), and it is the working default the decomposition already carried
-forward (`_decomposition.md:302-309`, restated in `_grounding.md`'s "registry
-crate-set tension" section).
+**Decision, as re-planned 2026-09-02: four crates ship at `0.2.0` —
+`happenstance-core`, `happenstance`, `happenstance-testkit` and
+`happenstance-sqlite`.**
 
-**Rejected alternative, named explicitly per AC-001: four crates, adding
-`happenstance-sqlite`**, as stated at `RUNBOOK.md:4450-4451`
-("`happenstance-core`, `happenstance`, `happenstance-testkit` **and
-`happenstance-sqlite`** on crates.io"). Rejected because:
+This reverses the decision recorded here on 2026-08-12, which settled the set at
+three and named four as the alternative that lost. The reversal is a **re-plan**,
+taken under this section's own escape clause (*"if new information changes this
+before the publish commit"*), and it moves `PUBLISHABLE`, `_intake-brief.md`'s
+scope and this brief together, as that clause requires. It is not a silent
+expansion picked up mid-implementation.
 
-- `xtask/src/package.rs:86` and `CLAUDE.md` already encode three as the
-  intention list `reconcile` checks against; shipping a fourth is a change to
-  that constant, not a change this project's briefs can make unilaterally
-  without the deployment brief saying so — which is the whole point of this
-  section.
-- A fourth crate needs its own `LICENSE-MIT`, `LICENSE-APACHE` and `README.md`
-  inside the package directory to pass `package-check`
-  (`xtask/src/package.rs:88-94`, `REQUIRED_FILES`) and its own status-table row,
-  disambiguation entry and docs.rs configuration on the UX surface — real,
-  uncosted scope this project's `_intake-brief.md` does not carry.
-  `sqlite-durable-store` is upstream of this project in the DAG
-  (`project.md`'s Dependencies section), but "upstream and conformant" is not
-  the same claim as "has a publish-ready package surface," and nothing in this
-  project's scope adds that surface.
-- `RUNBOOK.md`'s phase-12 section is independently known stale — it also cites
-  a superseded `#the-46-provisional-clauses` anchor
-  (`RUNBOOK.md:4495`) against the ledger heading corrected to 49 following the
-  phase-4 recount (`RUNBOOK.md:622-635`, `spec/SPECIFICATION.md:220`) — so it
-  is the source overridden here, not `CLAUDE.md`/`xtask/src/package.rs`.
+The three grounds are **answered below rather than deleted**, because a decision
+that reverses another without saying what happened to its reasons is a decision
+nobody can audit.
 
-**If new information changes this before the publish commit**, it is a
-re-plan that updates `PUBLISHABLE`, `_intake-brief.md`'s scope and this brief
-together — not a silent expansion picked up mid-implementation, per
-`_decomposition.md:302-309`'s explicit flag that this must be decided early
-because it changes adapter-project scope.
+**What is new since 2026-08-12.** The original ruling was taken while
+`sqlite-durable-store` was still in flight. That project has since landed all
+fourteen of its stories, including `crates-io-name-and-packaging-facts`, whose
+entire subject is the package surface ground 2 said did not exist.
+
+#### Ground 1 — *"a change to that constant, not a change this project's briefs can make unilaterally"*
+
+**Upheld, and this is that change.** The ground was never an argument about
+`happenstance-sqlite`; it was an argument about *how* the set may move, and it
+asked for exactly the artefact this section now is. `xtask/src/package.rs`'s
+`PUBLISHABLE` and the crate's own manifest have moved together, which is the
+only order `reconcile` is ever green in, and `CLAUDE.md`'s count moved with them.
+
+#### Ground 2 — *"a fourth crate needs its own licences, README, status-table row, disambiguation entry and docs.rs configuration — real, uncosted scope"*
+
+**Discharged in substance, and the residue is costed below.** Three of the five
+items ground 2 named already exist and were landed by
+`sqlite-durable-store`'s `crates-io-name-and-packaging-facts`, not by this
+project: `crates/happenstance-sqlite/{LICENSE-MIT,LICENSE-APACHE,README.md}`, a
+description that describes, and a stated `readme` key.
+
+The claim that *"upstream and conformant is not the same as having a
+publish-ready package surface"* was correct when written and is now testable
+rather than arguable. Both checks were run at the re-plan:
+
+- `cargo run -p xtask -- package-check` — `publishable set agrees with the
+  manifests`, and `happenstance-sqlite: 23 files packaged, including LICENSE-MIT,
+  LICENSE-APACHE, README.md`.
+- `cargo publish --dry-run -p happenstance-sqlite` — `Packaged 23 files,
+  356.8KiB`, then `Verifying`, and the verification build **compiled
+  `happenstance-core v0.2.0-alpha.1` from the registry rather than from the
+  path**, which is the half a workspace check can never exercise.
+
+What genuinely remained of ground 2 was the docs.rs configuration, which is now
+at `crates/happenstance-sqlite/Cargo.toml` — the same two keys the other
+publishable crates carry, added with this re-plan because it is a property of
+publishing rather than of any story.
+
+The two narrative items — the **status-table row** in `README.md` and the
+**disambiguation entry** in `crates/happenstance/README.md` — are real and are
+**not** landed here. They are added to this project's scope (see
+`_intake-brief.md`) and belong to the stories that own that page, HS-S0092 and
+HS-S0094. Landing them from a re-plan would put two authors on one surface.
+
+#### Ground 3 — *"`RUNBOOK.md`'s phase-12 section is independently known stale"*
+
+**Withdrawn as a ground, and the staleness it cites is still owed.** The
+staleness is real and unchanged — `RUNBOOK.md:4495` still cites a superseded
+`#the-46-provisional-clauses` anchor against a ledger corrected to 49. But that
+defect is in the *clause count*, and it was used to discount a *different*
+sentence in the same section. A document being wrong in one identified respect
+is not evidence that its unrelated claims are wrong; the runbook's four-crate
+goal at `RUNBOOK.md:4450-4451` is now the source being **followed**, and the
+anchor defect stays owed by the falsifier-ledger repair that already carries it.
+
+`RUNBOOK.md`'s status table is separately and more seriously stale — it still
+reads phases 6 through 9 as `not started` while all four are built — which is
+further reason not to have treated that file as an authority in either
+direction.
+
+#### Two sets, and they are not the same size
+
+Worth stating because the original ruling conflated them and this section's own
+first sentence used to: **`PUBLISHABLE` is the publish-*ready* set, and the
+release set is what `0.2.0` actually uploads.**
+
+`xtask/src/package.rs`'s constant is derived from and reconciled against the
+manifests, so it names every crate cargo would publish — five, once
+`happenstance-cloudflare` is counted, which `cloudflare-durable-object-store`'s
+`publish-ready-crate` story added and which explicitly *"stops at
+publish-ready"*, leaving the version and the registry decision here.
+
+So `reconcile` naming five is not a crate-set expansion, and the `0.2.0` release
+set decided above is four. Whether `happenstance-cloudflare` joins that release
+is a question this project still owes an answer to; it is out of scope for this
+re-plan, which was asked about SQLite, and it should not be settled by the
+accident of a constant.
+
+#### What the fourth crate costs, now that it is costed
+
+- One more crate in every `cargo package --list` assertion, and one more in the
+  publish order. `happenstance-sqlite` depends on `happenstance-core` and must
+  follow it; it has no other intra-workspace runtime dependency, so it may go
+  last.
+- One more page on docs.rs, under `--all-features`.
+- The two narrative items above.
+
+#### Two consequences that are new, and neither is a blocker
+
+- **The surface diff covers three of the four.** `cargo-semver-checks` needs a
+  registry baseline, and `happenstance-sqlite` has never published — so the
+  instrument HS-S0091 rests on has nothing to compare this crate against. That is
+  not a reason to hold it back; it is a reason for its first release to be read
+  by a human instead, and for the *next* one to gain the baseline automatically.
+- **The name is not reserved, and the placeholder was never uploaded.**
+  `crates-io-name-and-packaging-facts` records AC-001 as **BLOCKED** on a human
+  handoff: the `0.0.0` placeholder was generated and dry-run only. Promotion
+  makes the placeholder redundant — publishing `0.2.0-alpha.1` claims the name
+  directly — but it also removes the insurance the placeholder was there to buy.
+  Whoever runs the release either performs the reservation first or accepts that
+  the name is unheld until the publish commit. **This needs the repository
+  owner and is the one part of this re-plan nobody else can discharge.**
+
+#### What this re-plan does **not** resolve, and who owns it
+
+A fourth ground existed that this section never carried, because it lives in the
+**signed-off `_design.md`** rather than in the deployment brief. It is the
+strongest objection the three-crate decision had, and it is recorded here
+unresolved rather than argued away.
+
+`_design.md`'s *Density budget* (`:467`) constrains the disambiguation triad to
+*"≤ 6 rendered lines including its `##` heading; **≤ 3 entries**"*, and gives as
+its reason: *"A fourth entry means a fourth published crate, which AC-DEP-001 has
+decided against."* AC-DEP-001 is the decision this section has just reversed. The
+first screen is already **full** — five regions at ≈343 px against a 340 px
+budget (`landing-copy-and-status-truth/spec.md` AC-009) — and *"a fourth
+published crate"* is named there as a **wrong implementation**.
+
+Two separable questions follow, and **neither is settled here**:
+
+1. **Does a fourth crate force a fourth triad entry?** Probably not, and the
+   design's own sentence only claims the implication one way — *a fourth entry
+   means a fourth crate*, not the converse. The triad answers *"which crate do I
+   want?"*, and its three entries are mutually exclusive audiences;
+   `happenstance-sqlite` is something an application author adds **alongside**
+   `happenstance`, not instead of it. If that reading holds, the ≤ 3 constraint
+   survives untouched and only its stated *reason* goes stale. But that is a
+   composition judgement about a surface a human signed off, and it is not a
+   planner's to make.
+2. **A fourth crates.io page is a fourth surface.** `_design.md` inventories
+   *"crates.io (×3)"* (`:187`) and seven surface ids across three registry pages
+   and three GitHub ones. `happenstance-sqlite`'s page is an eighth id with no
+   R1–R5 composition, no density budget and no mock. That is real design work
+   this project's briefs do not carry, and it is the honest analogue of ground
+   2 — uncosted scope — in the one place ground 2 did not look.
+
+**Owner: whoever signed off `_design.md` on 2026-08-12.** Until they answer,
+`landing-copy-and-status-truth` and `guarantees-and-docs-rs-presentation` should
+be treated as blocked on this rather than on the crate set, and
+`landing-copy-and-status-truth/discover.md:34` — which asked exactly this
+question and answered *"No — `crate-set-decision` confirms three"* — is now void
+and says so.
+
+#### The blast radius, stated rather than left to be discovered
+
+Only `crate-set-decision/spec.md` is amended by this re-plan, because it is the
+story that *makes* the decision. **Eight sibling story specs and five
+`discover.md` files still assert three crates** and are deliberately untouched:
+
+`compliance-claim-and-gaps-promise`, `deferred-clause-reread`,
+`guarantees-and-docs-rs-presentation`, `landing-copy-and-status-truth`,
+`projection-port-ship-shape`, `publish-0-2-0`, `registry-surface-diff`,
+`rendered-page-preflight`.
+
+They are left alone for two reasons and not out of laziness. Their specs are
+authored by `/redkiln:plan`'s prd stage from the briefs, so hand-editing eight of
+them produces the artefacts of the process without the process — the failure
+`.kb/`'s own history records at `0269720`. And several of them are downstream of
+the **unresolved design question above**, so editing them now would bake in an
+answer nobody has given.
+
+**Every one of them is stale until either their specs are regenerated or the
+design question is answered.** Anyone implementing from them before then is
+implementing a superseded decision, which is why this paragraph names them
+individually rather than saying "some sibling specs".
+
+**If new information changes this again before the publish commit**, the same
+rule applies: a re-plan that updates `PUBLISHABLE`, `_intake-brief.md`'s scope
+and this brief together, per `_decomposition.md:302-309`.
 
 ### Feature flags / config gating
 

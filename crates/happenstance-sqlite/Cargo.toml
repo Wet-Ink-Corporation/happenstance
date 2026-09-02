@@ -14,12 +14,17 @@ categories.workspace = true
 # front page, and a silent default is a poor thing for a first impression to
 # depend on. Same reasoning, same spelling, as `happenstance-core`.
 readme = "README.md"
-# Stays. Whether this crate is published at all is `publication-and-positioning`'s
-# decision, and `xtask/src/package.rs`'s PUBLISHABLE still names three crates —
-# promoting one here without the other would fail `reconcile()` on a
-# promoted-but-unreconciled crate, which is the failure that module was written
-# to produce.
-publish = false
+# Publishable, as of the crate-set re-plan. `publication-and-positioning`'s
+# deployment brief had settled the release at three crates and named this one as
+# the alternative that lost; that decision is re-made in its *The crate-set
+# decision* section, which answers each of the three grounds rather than
+# deleting them.
+#
+# There is deliberately no `publish = false` here now, and its absence is half of
+# an atomic pair: `xtask/src/package.rs`'s PUBLISHABLE names this crate, and
+# `reconcile()` fails on either half alone — a crate cargo would publish that the
+# gate does not check, or a name in the constant cargo would not publish. Moving
+# one without the other is the exact failure that module was written to produce.
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
@@ -72,6 +77,19 @@ projection-store = ["happenstance-core/unstable-projection"]
 # module configured out — is one of them; the impl and the probe table are gated
 # on both, so that combination compiles to nothing rather than failing to compile.
 conformance = ["happenstance-core/conformance"]
+
+# The third of the three things a fourth publishable crate owed, and the only
+# one that was still outstanding — the two licence files and the README landed
+# with the packaging story. Same two keys as the other three publishable crates,
+# for the same reason: without `all-features`, docs.rs renders this crate's
+# default set and `conformance` disappears from the page, and `--cfg docsrs` is
+# what makes a future `doc(cfg(...))` render its gate rather than nothing. No
+# item here carries that attribute yet; the configuration is set now because it
+# is a property of *publishing*, and a page is rendered once per release rather
+# than once per attribute.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
