@@ -262,7 +262,7 @@ supersedes any row on this map.
 | SD | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | SD-0001 | [`kb-decision-sd-0001`](../decisions/sd-0001-the-name-names-the-boundary-of-what-occurred.md) | "Happenstance" names the boundary drawn by what occurred, and what that places on copy | accepted | — | — |
-| SD-0002 | [`kb-decision-standalone-svg-one-colourway-001`](../decisions/sd-0002-standalone-svg-carries-one-colourway.md) | A standalone SVG carries one fixed colour, and the surface is selected at the point of use | accepted | — | — |
+| SD-0002 | [`kb-decision-standalone-svg-one-colourway-001`](../decisions/standalone-svg-carries-one-colourway.md) | A standalone SVG carries one fixed colour, and the surface is selected at the point of use | accepted | — | — |
 | SD-0002 | [`kb-decision-sd-0002`](../decisions/sd-0002-the-mark-and-the-rules-that-bind-it.md) | Seven equal blocks and a lowercase wordmark, and the rules that bind anything carrying the name | accepted | — | — |
 
 ## Adding a row

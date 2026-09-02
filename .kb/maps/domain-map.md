@@ -353,11 +353,14 @@ fifteen phases.
   lowercase, and eight commitments bind anything carrying the name. Equality of the blocks and the
   seven-element count are established by rendering, cited from the two design atoms below rather
   than restated.
-- [`sd-0002-standalone-svg-carries-one-colourway.md`](../decisions/sd-0002-standalone-svg-carries-one-colourway.md)
+- [`standalone-svg-carries-one-colourway.md`](../decisions/standalone-svg-carries-one-colourway.md)
   (`kb-decision-standalone-svg-one-colourway-001`) — a standalone SVG carries one fixed colour;
   `prefers-color-scheme` is selected at the point of use, not embedded in the file. Shares its
-  `SD-0002` identifier with the mark decision above — the sharing and the scope split (this rule
-  reaches past logos to any SVG shipped for a surface it does not control) are recorded in both
+  `SD-0002` **source** identifier with the mark decision above — both derive from that one design
+  decision — but not its filename: two files named `sd-0002-*` in one directory read as one atom
+  split in two, so the file is named for its own id and the SD column carries the provenance. The
+  sharing and the scope split (this rule reaches past logos to any SVG shipped for a surface it does
+  not control) are recorded in both
   bodies.
 
 **Reference**
