@@ -1,0 +1,79 @@
+# Security
+
+## Reporting a vulnerability
+
+**Use GitHub's private vulnerability reporting:** open the
+[Security tab](https://github.com/Wet-Ink-Corporation/happenstance/security/advisories)
+and choose *Report a vulnerability*. That opens a private thread with the
+maintainers, and it is the only channel that gets you a fix before the problem is
+public.
+
+**Please do not open a public issue for a vulnerability**, and please do not send
+a proof of concept to a public discussion. Everything else in this project is
+deliberately in the open — the specification, the backlog, the evidence behind
+every decision — and this is the one exception.
+
+Expect an acknowledgement within a few days. This is a small project and there is
+no on-call rota; if you have had no reply within a week, assume the notification
+was missed rather than ignored, and say so on the same thread.
+
+## What is in scope
+
+The crates this repository publishes, at their published versions:
+
+- `happenstance`
+- `happenstance-core`
+- `happenstance-testkit`
+- `happenstance-sqlite`
+
+`happenstance-cloudflare` is finished and packaged but deliberately not in the
+`0.2.0` release, so the only thing under its name on crates.io is a `0.0.0`
+placeholder with no functionality. Report against the source in this repository
+if you find something there; it joins the list above when it ships.
+
+Things worth reporting, because they are what this library is *for*:
+
+- **A conformance rule that passes an unsound store.** The suite is the thing
+  that decides whether an adapter is safe to depend on, so a rule that can be
+  satisfied by an implementation which loses a write, admits two conflicting
+  appends, or reports a position it did not assign, is a defect in the guarantee
+  itself and not merely a weak test.
+- **An append condition that admits a write it should reject**, or a read that
+  returns events a query did not nominate.
+- **A projection commit that separates the read-model write from its
+  checkpoint**, since the whole point of that port is that they are one unit of
+  work.
+- Anything that lets untrusted event payloads affect control flow. Payloads are
+  opaque bytes to `happenstance-core` by design; if that has stopped being true
+  somewhere, it is a bug worth hearing about.
+
+## What is out of scope
+
+- **Denial of service through deliberate resource exhaustion** — an unbounded
+  query against a store you control, a batch sized to exhaust memory. The limits
+  a store enforces are documented per adapter and are a configuration question
+  rather than a vulnerability.
+- **`todo!()` in a crate marked a stub** in [`README.md`](README.md)'s status
+  table. Those crates are not published and are documented as unfinished.
+- **The testkit's own fault-injection stores.** `FaultyStore`, `GappyMemoryStore`
+  and the mutant registry exist to misbehave; that is their job.
+
+## Supported versions
+
+Pre-1.0, and honestly so. There is no long-term support branch and no backporting:
+a fix lands in the next release, and the release before it is not patched. Pin an
+exact version, read [`CHANGELOG.md`](CHANGELOG.md) at each upgrade, and expect the
+API to move until the first stable `0.2.0`.
+
+| Version | Supported |
+|---|---|
+| `0.2.0-alpha.*` | ✅ current pre-release |
+| anything earlier | ❌ |
+
+## Disclosure
+
+Report privately, and we will agree a disclosure date with you once there is a
+fix or a decision not to fix. If a report turns out to describe intended
+behaviour, that answer comes with the reasoning and, where it belongs, a
+specification clause — this project's habit is to write down why, not merely
+what.

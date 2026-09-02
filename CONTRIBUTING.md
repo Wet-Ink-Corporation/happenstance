@@ -39,6 +39,15 @@ installed, `cargo hack` feature-powerset and `cargo deny`. It is defined once in
 `xtask/src/main.rs`, and CI runs exactly the same command. If it passes locally,
 it passes on CI.
 
+**One CI job does not run on a pull request from a fork, and it is not your
+fault.** *backlog and knowledge base* checks `.bklg/` and `.kb/` using the
+redkiln CLI, which lives in a private sibling repository and needs a credential.
+GitHub deliberately withholds secrets from workflows triggered by a fork, so the
+job is skipped there rather than failed — failing it would report a problem you
+have no way to fix. You will see it as *skipped* in the checks list. A maintainer
+re-runs it from a same-repository branch before merging. Nothing else about the
+gate changes, and `cargo xtask ci` still tells you everything it tells them.
+
 Three of those need a word on why they exist, because each was added after
 something passed that should not have. The docs build runs twice because a broken
 intra-doc link is a hard rustdoc error rather than a warning, and three links

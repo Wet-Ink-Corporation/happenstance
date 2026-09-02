@@ -140,6 +140,28 @@ jobs:
   backlog:
     name: backlog and knowledge base
     runs-on: ubuntu-latest
+    # Skipped on a **fork's** pull request, and nowhere else.
+    #
+    # This is the one carve-out from the "RED rather than skipped" rule stated
+    # below, and it is deliberately narrow because that rule is right. GitHub
+    # does not pass repository or organisation secrets to a workflow triggered by
+    # a pull request from a fork — by design, so a stranger's branch cannot
+    # exfiltrate them. `REDKILN_TOKEN` is therefore not absent-because-nobody-set-it
+    # there; it is unreachable, and a job that fails for a reason the contributor
+    # cannot act on teaches them only that this project's CI is broken.
+    #
+    # The two cases are different and the condition keeps them different. A
+    # missing or revoked secret on a same-repository push or pull request still
+    # turns this job RED, which is the failure the rule below exists to catch.
+    # Only the structurally impossible case is skipped, and a skipped job is
+    # visible in the checks list rather than a passing tick.
+    #
+    # What it costs: a fork's pull request has not had its backlog or knowledge
+    # base checked. Re-run it from a same-repository branch before merging — see
+    # CONTRIBUTING.md, *The gate*.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
 
@@ -153,7 +175,9 @@ jobs:
       #
       # Absent, this job is RED rather than skipped. That is the point: a backlog
       # check that quietly stops running is worth less than no backlog check,
-      # because the green tick keeps arriving.
+      # because the green tick keeps arriving. The single exception is a fork's
+      # pull request, where the secret is unreachable rather than unset; the
+      # job-level `if` above carves that case out and says why.
       #
       # `ref` is pinned to a tag, and pinning is load-bearing rather than
       # cautious. `doctor` reports template and process drift by comparing this
