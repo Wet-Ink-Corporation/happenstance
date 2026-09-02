@@ -61,7 +61,7 @@ against logs of tens of events. The buffering is invisible until the first
 production backfill loads a million-event replay into memory, which is the
 outcome returning a stream at all exists to prevent.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:269 (needs no pin)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1130 (needs no pin)` ·
 `crates/happenstance-postgres/src/read_stream.rs:201 (the design above, and it is what makes every field)` ·
 `crates/happenstance-neon/src/event_store.rs:349 (Every field is)` ·
 `crates/happenstance-testkit/src/registry.rs:300 (the alternative — hand-writing a)` ·
@@ -121,7 +121,7 @@ deliver — ends the stream mid-replay. A truncated read is indistinguishable fr
 a legitimately short one, so the consumer rebuilds a decision model from half a
 log and appends against it.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:383 (std::mem::replace(&mut this.state)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1445 (std::mem::replace(&mut this.state)` ·
 `crates/happenstance-postgres/src/read_stream.rs:209 (Taking the state by value)` ·
 [ES-11](../../spec/SPECIFICATION.md) *(no visible event may be omitted)*
 
@@ -188,7 +188,7 @@ ceiling no later than the first poll and bound every later statement by it.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:26 (does not live long enough)` ·
 `crates/happenstance-postgres/src/read_stream.rs:284 (taking the cursor by value and handing it back)` ·
-`crates/happenstance-testkit/tests/mutation_coverage.rs:1585 (RefetchingPagedStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage.rs:1619 (RefetchingPagedStore)` ·
 [ES-11](../../spec/SPECIFICATION.md) ·
 [ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)

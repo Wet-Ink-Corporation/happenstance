@@ -517,9 +517,17 @@ mod local_current_thread {
 }
 
 // Harness 4 — the same rules under `wasm-bindgen-test`, against the `!Send`
-// store, on the target the two-flavour design exists for. Type-checked by
-// `cargo xtask ci`'s wasm32 harness step on every run; executed by CI's
-// `wasm-conformance` job.
+// store, on the target the two-flavour design exists for. Both halves are `cargo
+// xtask ci`'s: the `wasm32 check of the conformance harnesses` step type-checks
+// it, and the `wasm32 run of the conformance rules` step EXECUTES it under
+// `wasm-bindgen-test-runner`.
+//
+// Executed rather than merely compiled matters more here than for any other
+// harness in the workspace, because this is the only one whose store is
+// genuinely `!Send`. It is registered as a row in `xtask/src/proof.rs`'s
+// `WASM_TARGETS`; until that row landed, the sentence above named CI's
+// `wasm-conformance` job, and that job had been retired — so this file
+// advertised an execution that happened nowhere.
 #[cfg(target_arch = "wasm32")]
 happenstance_testkit::event_store_conformance!(
     mod_name = local_wasm,

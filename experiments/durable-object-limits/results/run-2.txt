@@ -1,0 +1,24 @@
+M1 after one 64 KiB-payload event (same shape): 167936
+M1 after one empty-payload event (type 247 B, 8 tags): 28672
+M1 databaseSize before any append: 28672
+M1 documented Durable Object row cap: 2097152 bytes (SEED, not a result)
+M1 marginal cost of 64 KiB of payload: 139264 bytes
+M1 overhead bound for the empty row: 0 bytes
+M2A runtime: NO refusal observed at or below 8388608 bytes. FINDING, not a ceiling: the physical wall is outside the searchable range on this host, so a declared ceiling is a policy this adapter keeps rather than a wall the runtime imposes.
+M2A runtime: largest payload accepted and read back: 8388608 bytes
+M2B adapter: 1048577 bytes is refused as ExceedsStoreLimit(EventDataLen): true
+M2B adapter: a 1048576-byte payload is accepted: true
+M2B adapter: and reads back as Some(1048576) bytes
+M3A runtime: NO refusal observed at or below 16384 tag rows. FINDING, not a ceiling.
+M3A runtime: largest tag-row count written directly: 16384
+M3B adapter: 1024 tags accepted: true
+M3B adapter: 1025 tags refused as ExceedsStoreLimit(TagsPerEvent): true
+M3B adapter: event_tag rows written for that one event: 1024
+M3B adapter: storage cost of that one event: 139264 bytes
+M4A runtime: NO refusal observed at or below 8192 inserts. FINDING, not a ceiling.
+M4A runtime: largest run of event inserts in one turn: 8192
+M4B adapter: 1025 events refused as ExceedsStoreLimit(EventsPerBatch): true
+M4B adapter: a 1024-event batch is accepted: true
+M4B adapter: statements issued for it (1 tag each): 2055
+M5 a 2097152-byte row onto a fresh object: true
+M5 the same row onto an object already holding 1 MiB: true (equal means the boundary is a constant; unequal means the cap is cumulative and CF-40's falsifier has fired)

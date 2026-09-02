@@ -204,7 +204,7 @@ fails with `error[E0277]: the trait bound … is not satisfied` naming a trait t
 author can see is implemented — a diagnostic that sends people to rewrite the
 adapter rather than to read `cargo tree -d`.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:126 (pub use bytes)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
 `crates/happenstance-core/src/store.rs:123 (impl Stream<Item =)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
 [RUNBOOK](../../RUNBOOK.md) *(`pub use futures_core;` is proposed and not landed)*
@@ -249,8 +249,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:412 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:405 (Where it does *not* fire)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:793 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:786 (Where it does *not* fire)` ·
 `crates/happenstance-testkit/src/fixtures.rs:280 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*

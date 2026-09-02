@@ -84,7 +84,7 @@ remove it.
 
 **Evidence.** `Cargo.toml:100 (Members opt in with)` · `Cargo.toml:103 (missing_docs)` ·
 `Cargo.toml:116 (missing_errors_doc)` ·
-`crates/happenstance-core/Cargo.toml:59 (workspace = true)` ·
+`crates/happenstance-core/Cargo.toml:104 (workspace = true)` ·
 `crates/happenstance-core/src/store.rs:203 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
@@ -95,8 +95,9 @@ remove it.
 **Why.** `rustdoc::broken_intra_doc_links` is `deny`, so an unresolved link is a
 hard error and not a warning — and rustdoc only resolves the configuration it is
 told to build. `cargo doc --all-features` therefore cannot see a link that
-breaks without `memory`, which is why the gate builds the documentation twice
-and the second build is `-p happenstance-core --no-default-features`.
+breaks without `memory`, which is why the gate builds `happenstance-core`'s
+documentation three times: `--all-features`, `--no-default-features`, and the
+default set. Two of the three are not enough — see the second **Rejects** below.
 
 **Do** — name the type, do not link it, and say why in one sentence so the next
 reader does not "fix" it.
@@ -143,9 +144,22 @@ runs `cargo hack check`, not `cargo hack doc` — so the first person to find ou
 would have been a consumer building the crate the `no_std` support was written
 for.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:71 (The name is deliberately not a link here)` ·
+**And once more, one axis over.** The link that breaks is not always a link the
+*ends* of the feature range can see. A page rendered under feature `A` that
+links an item gated on feature `B` resolves under `--all-features` (both open)
+and is never rendered under `--no-default-features` (neither), so both doc steps
+report green while the **default** feature set — the one `cargo add` gives a
+consumer — is a hard error. `MemoryProjectionStore`'s page linking
+`ProjectionProbe::READS_THROUGH_BATCH` was exactly that: `memory` on,
+`conformance` off. The rule does not change; the gate grew a third
+configuration so that the rule is checked where the consumer stands.
+
+**Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:77 (It is not linked because)` ·
-`xtask/src/main.rs:502 (no default features)` · `Cargo.toml:134 (broken_intra_doc_links)`
+`crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
+`xtask/src/main.rs:722 (no default features)` ·
+`xtask/src/main.rs:751 (documentation (default features))` ·
+`Cargo.toml:134 (broken_intra_doc_links)`
 
 ---
 
@@ -233,8 +247,8 @@ one toolchain. crates.io versions can be yanked and never removed, so the broken
 rendering is permanent for that number, and the author learns about it from the
 docs.rs build log rather than from anything they ran.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:85 (feature(doc_cfg))` ·
-`xtask/src/main.rs:45 (nightly rustdoc build with)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
+`xtask/src/main.rs:63 (nightly rustdoc build with)` ·
 [rustc removed features](https://raw.githubusercontent.com/rust-lang/rust/master/compiler/rustc_feature/src/removed.rs) *(checked 2026-08-09, rustc 1.97.1)* ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*
 

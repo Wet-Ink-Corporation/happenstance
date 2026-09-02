@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-sqlite"
-description = "SQLite event store and projection store adapters for happenstance. Not yet implemented."
+description = "SQLite event store and projection store adapters for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,22 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Stated rather than left to Cargo's auto-discovery. Cargo would find the file
+# either way; what this key decides is what crates.io renders as the crate's
+# front page, and a silent default is a poor thing for a first impression to
+# depend on. Same reasoning, same spelling, as `happenstance-core`.
+readme = "README.md"
+# Publishable, as of the crate-set re-plan. `publication-and-positioning`'s
+# deployment brief had settled the release at three crates and named this one as
+# the alternative that lost; that decision is re-made in its *The crate-set
+# decision* section, which answers each of the three grounds rather than
+# deleting them.
+#
+# There is deliberately no `publish = false` here now, and its absence is half of
+# an atomic pair: `xtask/src/package.rs`'s PUBLISHABLE names this crate, and
+# `reconcile()` fails on either half alone — a crate cargo would publish that the
+# gate does not check, or a name in the constant cargo would not publish. Moving
+# one without the other is the exact failure that module was written to produce.
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
@@ -22,7 +37,18 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-happenstance-testkit.workspace = true
+# `proptest` is the testkit's own off-by-default feature, and it is enabled
+# **here** rather than mirrored as a feature of this crate because
+# `cfg(feature = "…")` names the *current* crate's features: `happenstance-sqlite`
+# cannot `cfg` on a dependency's feature at all, which is why
+# `crates/happenstance-testkit/tests/memory_model_conformance.rs`'s inner
+# `#![cfg(all(not(target_arch = "wasm32"), feature = "proptest"))]` works only
+# from inside the testkit. The rejected alternative was a `proptest` feature on
+# this crate forwarding to it: the project's conformance command is
+# `cargo test -p happenstance-sqlite` with no flags, and a family that needs an
+# extra flag to appear is a family that silently does not run. It is a
+# dev-dependency, so nothing it pulls in reaches a consumer of this crate.
+happenstance-testkit = { workspace = true, features = ["proptest"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
@@ -30,7 +56,40 @@ default = ["event-store", "projection-store"]
 # Both roles share one driver and one connection story, so they share a crate
 # and are separated by features rather than by another package.
 event-store = []
-projection-store = []
+# One capability, one switch. `happenstance-core`'s projection port is behind its
+# own off-by-default `unstable-projection` gate, and this feature *enables* it
+# rather than sitting beside it: a crate with two switches for one capability is
+# a crate where the weaker one wins silently.
+projection-store = ["happenstance-core/unstable-projection"]
+# `impl ProjectionProbe for SqliteProjectionStore`, and the probe table it writes
+# through. Off by default, because that table is the *suite's* read model and has
+# no business in an application's database.
+#
+# It forwards one flag on a dependency this crate already has and adds no edge to
+# the graph — which is the whole economic argument for `ProjectionProbe` living in
+# `happenstance-core` rather than in the testkit. The impl cannot go in
+# `tests/projection.rs`: that is a different crate, where neither the trait nor
+# the type is local and the orphan rule answers `error[E0117]`, so it lives in
+# `src/` under this feature and a crate cannot `cfg` on a dependency's feature.
+#
+# Deliberately **not** implying `projection-store`. Three features are eight
+# combinations rather than four, and `conformance` alone — with the port's own
+# module configured out — is one of them; the impl and the probe table are gated
+# on both, so that combination compiles to nothing rather than failing to compile.
+conformance = ["happenstance-core/conformance"]
+
+# The third of the three things a fourth publishable crate owed, and the only
+# one that was still outstanding — the two licence files and the README landed
+# with the packaging story. Same two keys as the other three publishable crates,
+# for the same reason: without `all-features`, docs.rs renders this crate's
+# default set and `conformance` disappears from the page, and `--cfg docsrs` is
+# what makes a future `doc(cfg(...))` render its gate rather than nothing. No
+# item here carries that attribute yet; the configuration is set now because it
+# is a property of *publishing*, and a page is rendered once per release rather
+# than once per attribute.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

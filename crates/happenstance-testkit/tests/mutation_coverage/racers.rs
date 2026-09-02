@@ -359,9 +359,27 @@ racing_fixture!(LockedFixture, LockedStore, "LockedStore");
 /// first and answers correctly; the answer is simply stale by the time it acts
 /// on it, and with one caller at a time nothing can make it stale.
 ///
-/// The provenance is `SELECT 1 FROM events WHERE …` followed by `INSERT`, with
-/// no `BEGIN` between them and no `SERIALIZABLE` under them. It is what an
-/// adapter writes when its driver's convenience API is one statement per call.
+/// The provenance in SQL is **`BEGIN DEFERRED`**, then
+/// `SELECT 1 FROM events WHERE …`, then `INSERT` — and the transaction verb is
+/// the load-bearing word. `BEGIN DEFERRED` is SQLite's default and is what
+/// `rusqlite::Connection::transaction` opens: the read lock is taken at the
+/// probe and only promoted to a write lock at the insert, so between those two
+/// statements another connection may commit and the probe's answer goes stale
+/// while the transaction is still open. It looks atomic, it is inside a
+/// transaction, and it is wrong — which is why `happenstance-sqlite` opens
+/// `BEGIN IMMEDIATE` instead and takes the write lock *before* the condition is
+/// read.
+///
+/// The same defect also arrives with no `BEGIN` at all and no `SERIALIZABLE`
+/// under it, which is what an adapter writes when its driver's convenience API
+/// is one statement per call.
+///
+/// There is deliberately **no `REGISTRY` row** for this store: `fails` would be
+/// empty, because it fails no sequential rule by construction, and
+/// `mutant_registry_is_exhaustive` rejects that. See the comment on its `RACERS`
+/// row, and `crates/happenstance-testkit/README.md:187-190`, which is where that
+/// rule is stated in prose — a concurrency rule's wrong store goes in
+/// `racers.rs` and `RACERS` precisely because it can have no `REGISTRY` row.
 #[derive(Debug)]
 pub(crate) struct RacingProbeStore(Arc<Shared>);
 

@@ -80,7 +80,7 @@ and the driver's real types are met by whoever writes the bodies — one phase
 after the port was frozen against them.
 
 **Evidence.** `crates/happenstance-postgres/src/projection_store.rs:100 (Transaction<'static, Postgres>)` ·
-`crates/happenstance-sqlite/src/projection_store.rs:216 (rustc accepts it present or absent)` ·
+`crates/happenstance-sqlite/src/projection_store.rs:544 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:11 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
@@ -171,8 +171,8 @@ is right there; it collapses at the phase that writes the bodies and finds the
 handle cannot be constructed at all, by which time the clause it supported is
 frozen.
 
-**Evidence.** `crates/happenstance-ladybug/src/live_handle.rs:188 (Real bodies from here down)` ·
-`crates/happenstance-ladybug/src/live_handle.rs:26 (with real bodies, not)` ·
+**Evidence.** `experiments/live-handle-projection-batch/live_handle.rs:188 (Real bodies from here down)` ·
+`experiments/live-handle-projection-batch/live_handle.rs:26 (with real bodies, not)` ·
 `crates/happenstance-sync/src/lib.rs:9 (checker is the instrument)` ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md)
 
@@ -266,7 +266,7 @@ accept the first real one silently. The same shape one level down is an
 attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
-**Evidence.** `./Cargo.toml:125 (the allow protected nothing)` ·
+**Evidence.** `./Cargo.toml:183 (the allow protected nothing)` ·
 `crates/happenstance-ladybug/src/lib.rs:71 (Phase 11 removes both the bodies)` ·
 `crates/happenstance-neon/src/event_store.rs:239 (constructed by decode_append_response)`
 

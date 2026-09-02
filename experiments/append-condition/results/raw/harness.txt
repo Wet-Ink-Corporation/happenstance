@@ -1,0 +1,49 @@
+warning: method `path` is never used
+  --> tests\support\mod.rs:66:12
+   |
+44 | impl<A: AppendStrategy, T: TagStorage> CandidateFixture<A, T> {
+   | ------------------------------------------------------------- method in this implementation
+...
+66 |     pub fn path(&self) -> &std::path::Path {
+   |            ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `append-condition-probes` (test "measure") generated 1 warning
+    Finished `release` profile [optimized] target(s) in 0.05s
+     Running tests\measure.rs (target\release\deps\measure-9b040cbbb180c5c1.exe)
+
+running 15 tests
+test begin_immediate_probe_canonical_blob::append_throughput ... MEASURE	measure::begin_immediate_probe_canonical_blob	append_throughput	11498	10460	11822	append attempts=1 committed=1 rejected=0 refused=0 failed=0 events=512
+ok
+test begin_immediate_probe_canonical_blob::conditional_append_under_contention ... MEASURE	measure::begin_immediate_probe_canonical_blob	conditional_append_under_contention	70473	58413	75997	seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+ok
+test begin_immediate_probe_canonical_blob::replay_with_and_without_a_tag_filter ... MEASURE	measure::begin_immediate_probe_canonical_blob	replay_with_and_without_a_tag_filter	82504	79108	124550	seed attempts=79 committed=79 rejected=0 refused=0 failed=0 events=5000; replay-all attempts=1 committed=1 rejected=0 refused=0 failed=0 events=5000; replay-tagged attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1667
+ok
+test begin_immediate_probe_join_table::append_throughput ... MEASURE	measure::begin_immediate_probe_join_table	append_throughput	13816	12134	14250	append attempts=1 committed=1 rejected=0 refused=0 failed=0 events=512
+ok
+test begin_immediate_probe_join_table::conditional_append_under_contention ... MEASURE	measure::begin_immediate_probe_join_table	conditional_append_under_contention	71532	65897	77721	seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+ok
+test begin_immediate_probe_join_table::replay_with_and_without_a_tag_filter ... MEASURE	measure::begin_immediate_probe_join_table	replay_with_and_without_a_tag_filter	97634	87816	132054	seed attempts=79 committed=79 rejected=0 refused=0 failed=0 events=5000; replay-all attempts=1 committed=1 rejected=0 refused=0 failed=0 events=5000; replay-tagged attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1667
+ok
+test begin_immediate_probe_json1::append_throughput ... MEASURE	measure::begin_immediate_probe_json1	append_throughput	9880	9696	10471	append attempts=1 committed=1 rejected=0 refused=0 failed=0 events=512
+ok
+test begin_immediate_probe_json1::conditional_append_under_contention ... MEASURE	measure::begin_immediate_probe_json1	conditional_append_under_contention	80250	64550	89049	seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+ok
+test begin_immediate_probe_json1::replay_with_and_without_a_tag_filter ... MEASURE	measure::begin_immediate_probe_json1	replay_with_and_without_a_tag_filter	283444	76449	411919	seed attempts=79 committed=79 rejected=0 refused=0 failed=0 events=5000; replay-all attempts=1 committed=1 rejected=0 refused=0 failed=0 events=5000; replay-tagged attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1667
+ok
+test conditional_insert_join_table::append_throughput ... MEASURE	measure::conditional_insert_join_table	append_throughput	51198	48201	110920	append attempts=1 committed=1 rejected=0 refused=0 failed=0 events=512
+ok
+test conditional_insert_join_table::conditional_append_under_contention ... MEASURE	measure::conditional_insert_join_table	conditional_append_under_contention	252973	190808	415295	seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+ok
+test conditional_insert_join_table::replay_with_and_without_a_tag_filter ... MEASURE	measure::conditional_insert_join_table	replay_with_and_without_a_tag_filter	445653	404294	493819	seed attempts=79 committed=79 rejected=0 refused=0 failed=0 events=5000; replay-all attempts=1 committed=1 rejected=0 refused=0 failed=0 events=5000; replay-tagged attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1667
+ok
+test monotonic_guard_join_table::append_throughput ... MEASURE	measure::monotonic_guard_join_table	append_throughput	44369	40903	51790	append attempts=1 committed=1 rejected=0 refused=0 failed=0 events=512
+ok
+test monotonic_guard_join_table::conditional_append_under_contention ... MEASURE	measure::monotonic_guard_join_table	conditional_append_under_contention	273245	164666	336115	seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+ok
+test monotonic_guard_join_table::replay_with_and_without_a_tag_filter ... MEASURE	measure::monotonic_guard_join_table	replay_with_and_without_a_tag_filter	458093	410710	662316	seed attempts=79 committed=79 rejected=0 refused=0 failed=0 events=5000; replay-all attempts=1 committed=1 rejected=0 refused=0 failed=0 events=5000; replay-tagged attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1667
+ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.40s
+

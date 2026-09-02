@@ -42,7 +42,7 @@ passes either way, and only an *absence* probe (61), or the `Rc` the reference
 store actually holds, would have reported it.
 
 **Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:77 (RefCell<Vec<SequencedEvent>>)` ·
-`crates/happenstance-cloudflare/src/js.rs:46 (is what surrenders)` ·
+`crates/happenstance-cloudflare/src/js.rs:77 (is what surrenders)` ·
 [CF-28](../../spec/SPECIFICATION.md) ·
 [std::cell::RefCell](https://doc.rust-lang.org/std/cell/struct.RefCell.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -82,7 +82,7 @@ per method of the trait, and the fix was a single `Mutex` at the field rather
 than anything in any body.
 
 **Evidence.** `crates/happenstance-core/src/memory.rs:657 (across an await, which needs)` ·
-`crates/happenstance-sqlite/src/event_store.rs:87 (flavour captures)` ·
+`crates/happenstance-sqlite/src/event_store.rs:147 (flavour captures)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -122,8 +122,8 @@ and `Arc` is "the thread-safe one" produces a type that is neither `Send` nor
 `EventStore` instead. That compiles, passes the whole suite, and ships an adapter
 no consumer can spawn.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:93 (is not for sharing the store; it is so that a)` ·
-`crates/happenstance-sqlite/src/event_store.rs:255 (is what makes the whole)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:153 (is not for sharing the store; it is so that a)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1116 (is what makes the whole)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -245,7 +245,7 @@ learns it on the day Workers enables threads — after the bound it was cited fo
 frozen.
 
 **Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
-`crates/happenstance-cloudflare/src/js.rs:38 (anything. What it costs is stated rather than hidden — see the crate)` ·
-`crates/happenstance-cloudflare/src/lib.rs:60 (can only ever *inherit*)` ·
+`crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
+`crates/happenstance-cloudflare/src/lib.rs:246 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

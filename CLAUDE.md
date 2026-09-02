@@ -30,13 +30,22 @@ When a construct is unusual, say what the alternative was and why it lost.
 crates/happenstance-core/        the contract. types, ports, errors, in-memory store.
 crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
-crates/happenstance-sqlite/      🔩 skeleton. event store + projection store.
+crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  🔩 skeleton. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
 crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
-examples/course-subscriptions/   the canonical DCB worked example.
+examples/course-subscriptions/   the canonical DCB worked example. in memory.
+examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
+                                 command loop and projection runner against
+                                 happenstance-sqlite, one file, read back after every
+                                 handle is dropped. the only place the two crates a
+                                 consumer installs are compiled together.
+examples/outside-projection-adapter/
+                                 🔬 the falsifier. a projection adapter written from the
+                                 rendered documentation alone, in a crate where the orphan
+                                 rule and the non-dev graph behave as they do for a stranger.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.
@@ -276,9 +285,19 @@ names the contract crate on purpose, a check of the conformance harnesses, and
 builds of `happenstance-cloudflare` and `happenstance-neon`, both of which claim
 that target in their own documentation and neither of which was checked by
 anything until phase 2 — docs, `cargo xtask spec-trace` over
-`SPECIFICATION.md`, a `--no-default-features` doc build of `happenstance-core`,
-and a `cargo package --list` assertion that each of the three publishable crates
-carries both licence files and a README. Then, where the tool or toolchain is
+`SPECIFICATION.md`, a `--no-default-features` **and** a default-features doc
+build of `happenstance-core` (three configurations in all with the workspace
+`--all-features` one, because a link from a `memory` page into a `conformance`
+item is broken at neither end of that range and only in the middle, which is
+where a consumer stands),
+and a `cargo package --list` assertion that each of the **five** publishable
+crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — carries both licence files
+and a README. The number is spelled with its members now because it had already
+drifted once: this sentence read *"three"* through phase 9's promotion of
+`happenstance-cloudflare` and did not move, so a count on its own turned out to
+be a claim nobody re-reads. `xtask/src/package.rs`'s `reconcile` is what
+actually holds the set honest, in both directions. Then, where the tool or toolchain is
 present: `cargo hack` feature-powerset, `cargo deny`, a wasm32 feature-powerset
 check above the mandatory plain one, and a nightly `--cfg docsrs` rustdoc build.
 It is defined once in `xtask/src/main.rs` and is exactly what CI runs.

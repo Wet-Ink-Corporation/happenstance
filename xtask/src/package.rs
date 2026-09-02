@@ -83,7 +83,29 @@ use anyhow::{Context, Result, bail};
 /// An intention, not a derivation: [`publishable_members`] reads the fact out of
 /// the manifests and [`reconcile`] fails when the two disagree. Both exist so
 /// that the failure can say which of them moved — see the module docs.
-const PUBLISHABLE: &[&str] = &["happenstance-core", "happenstance", "happenstance-testkit"];
+const PUBLISHABLE: &[&str] = &[
+    "happenstance-core",
+    "happenstance",
+    "happenstance-testkit",
+    // Phase 8, and the first *adapter* in the list — it precedes the Cloudflare
+    // row because the phases do, not because either is more finished.
+    //
+    // It arrived by a re-plan rather than by a story noticing it could. The
+    // deployment brief had settled the set at three and named four as the
+    // alternative that lost, on three grounds; two of them have since been
+    // discharged by `sqlite-durable-store` landing its packaging surface, and
+    // the third was never an argument against the crate. See
+    // `.bklg/from-contract-to-published-library/publication-and-positioning/_decomposition.md`'s
+    // *The crate-set decision*, which is the record and answers each ground in
+    // turn.
+    "happenstance-sqlite",
+    // Phase 9. It arrived here in the same
+    // change that deleted its `publish = false` — which is the only order that
+    // is ever green. Either half alone is the drift [`reconcile`] exists to
+    // report: a crate Cargo will publish that this step does not check, or a
+    // name here Cargo will not publish.
+    "happenstance-cloudflare",
+];
 
 /// The files every published artifact must contain.
 ///

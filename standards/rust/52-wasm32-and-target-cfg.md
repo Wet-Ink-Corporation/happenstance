@@ -30,9 +30,10 @@ assert_eq!(stamp(RecordedAt::from_millis(1_700_000_000_000)), 1_700_000_000_000)
 ```
 
 **Not** — compiles for every target in the workspace, including the one it
-cannot run on. All four mandatory wasm32 steps are `cargo check`, so nothing in
-`cargo xtask ci` observes it; only the `wasm-conformance` job can, and only if
-some rule drives this path:
+cannot run on. The wasm32 *check* steps are compiles and see none of this; what
+observes a panicking stub is `cargo xtask ci`'s `wasm32 run of the conformance
+rules` step, wherever the runner is installed — which is every CI runner — and
+only if some rule drives this path:
 
 ```rust
 fn elapsed_ms() -> u128 {
@@ -51,9 +52,9 @@ four green wasm32 steps as "it runs on Workers" ships an adapter that aborts the
 module on its first recorded timestamp, found by a user in a Worker — where
 `println!` writes nowhere, so nothing says why.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:117 (The host build is a convenience rather than evidence)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:369 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
-`xtask/src/main.rs:202 (wasm32 build of the contract crate)` ·
+`xtask/src/main.rs:236 (wasm32 build of the contract crate)` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-52-2. A feature is not target-scoped: an item behind a per-target optional dependency needs the target condition too.
@@ -103,9 +104,9 @@ and the author is told the target is fine; the combination that fails is the one
 enables the feature — in a crate they did not write, naming a crate they never
 asked for.
 
-**Evidence.** `crates/happenstance-testkit/Cargo.toml:48 (optional = true)` ·
-`crates/happenstance-testkit/src/fixtures.rs:301 (feature is not target-scoped)` ·
-`xtask/src/main.rs:578 (feature is not target-scoped)`
+**Evidence.** `crates/happenstance-testkit/Cargo.toml:99 (optional = true)` ·
+`crates/happenstance-testkit/src/fixtures.rs:487 (feature is not target-scoped)` ·
+`xtask/src/main.rs:827 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 
@@ -154,9 +155,9 @@ step — goes red on a lint, in a crate whose bodies are all `todo!()`, with a
 message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:154 (Left un-gated it is dead code on wasm)` ·
-`crates/happenstance-cloudflare/src/lib.rs:157 (mod not_send_probe)` ·
-`xtask/src/main.rs:251 (wasm32 build of the Cloudflare adapter)`
+**Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:142 (is denied under)` ·
+`crates/happenstance-cloudflare/src/lib.rs:481 (mod not_send_probe)` ·
+`xtask/src/main.rs:309 (wasm32 build of the Cloudflare adapter)`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
 

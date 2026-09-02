@@ -1,6 +1,10 @@
 [package]
 name = "happenstance-cloudflare"
-description = "Cloudflare Durable Object (Workers SqlStorage) event store adapter for happenstance. Not yet implemented."
+# The sentence the reserved `0.0.0` placeholder already promises
+# (`xtask/src/reserve.rs:93`), so the reservation and the crate describe one
+# thing to anyone browsing rather than two. It used to end "Not yet
+# implemented.", which stopped being true when the last binding landed.
+description = "Cloudflare Durable Object event store adapter for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,19 +13,154 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Stated rather than auto-discovered, for the reason
+# `crates/happenstance-core/Cargo.toml:12-15` gives: Cargo would find it anyway,
+# but the key is what crates.io renders, and a silent default is a poor thing to
+# rely on for the first impression anyone gets of the crate.
+readme = "README.md"
+
+# `publish = false` is gone, and its removal is half of a pair rather than a
+# manifest tidy-up. The other half is `"happenstance-cloudflare"` in
+# `PUBLISHABLE` (`xtask/src/package.rs`), which is what puts this crate inside
+# the gate step that asserts both licence texts and the README are in the
+# packaged artifact. `reconcile` fails in *both* directions, so the two cannot
+# drift apart: a crate Cargo will publish that the step does not check, or a
+# name in the list Cargo will not publish. D11 is what happens without it —
+# three crates whose metadata promised two licences neither of which shipped.
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 thiserror.workspace = true
+# NOTE, replacing the note that used to stand here rather than deleting it. The
+# reversed trade, both halves, because a reviewer checks the swap against the
+# reasoning for the state it replaced:
+#
+# *What the stand-in bought.* `worker` was deliberately absent, on the argument
+# that it drags a large `wasm-bindgen`/`js-sys`/`web-sys` surface and its own
+# licence graph through `cargo deny` on every run of the gate "for no
+# type-checking benefit": the shape the skeleton had to pin was `!Send`,
+# `!Sync`, a synchronous `exec` and a cursor that is not a snapshot, and
+# `js::JsHandle` plus `sql_storage` modelled exactly that and nothing else.
+#
+# *What reversing it costs, measured rather than feared.* The graph gains 40
+# crates (`http`, `matchit`, `strum`, `serde-wasm-bindgen`, `wasm-streams`,
+# `web-sys`, `url` and their leaves); `wasm-bindgen`, `js-sys` and
+# `wasm-bindgen-futures` were already there as `wasm-bindgen-test`'s transitive
+# dependencies, so those three are new *edges* to existing *nodes*.
+# `cargo deny check licenses advisories` is green against `deny.toml`'s
+# unmodified eight-licence allowlist, and `worker`'s declared
+# `rust-version = "1.75"` sits well under ADR-0029's 1.97.1 floor.
+#
+# *And one price that is not paid yet, stated because a silent one is how a
+# guard dies.* `cargo deny check bans` is **red**: `deny.toml` bans
+# `async-trait` (ADR-0001 — it injects `+ Send`, which forecloses wasm32), and
+# `worker` 0.8.5 depends on it unconditionally, as does `worker-macros`. The
+# ban's own comment says such a route "fails until someone decides it should"
+# be a wrapper, and that decision is not this manifest's to take: widening the
+# `wrappers` list here would turn the measurement into a green checkmark and
+# delete the finding. So the finding stands, recorded against AC-008 in
+# `worker-binding-layer/_ledger.md` and escalated to ADR-0023
+# (`adr-0023-and-atom-resolutions`), which is where the wrapper entries land if
+# they are ratified.
+#
+# What it does *not* mean, since a red ban invites the wrong inference:
+# `worker` uses `#[async_trait]` for its own `DurableObject` trait, and no
+# happenstance port gains a bound from it. `happenstance-core` still declares
+# each port once without a `Send` bound and lets `trait_variant` derive the
+# second flavour, and the substantive guards are unmoved —
+# `crates/happenstance/tests/flavours.rs` and this crate's `!Send` probes, which
+# now run on `wasm32` as well as on the host.
+#
+# *What it buys.* The argument that this dependency has no type-checking
+# benefit was true of a crate whose every body was `todo!()` and false of one
+# that talks to a Durable Object. `worker::Error` is the real thrown value ES-6
+# is a claim about, and `worker::SqlStorage` is the API the four modelled
+# properties were modelling. An instrument that models the runtime cannot be
+# falsified by the runtime.
+worker.workspace = true
 
-# NOTE: the `worker` crate is deliberately NOT a dependency. It drags a large
-# `wasm-bindgen`/`js-sys`/`web-sys` surface and its own licence graph through
-# `cargo deny` on every run of the gate, for no type-checking benefit: the shape
-# this skeleton has to pin is `!Send`, `!Sync`, synchronous `exec`, a cursor that
-# is not a snapshot. `js::JsHandle` and `sql_storage` model exactly that and
-# nothing else. Phase 9 swaps them for the real thing.
+# The conformance suite this adapter is measured by, and it is deliberately
+# **not** target-scoped while `wasm-bindgen-test` below is.
+#
+# `wasm-bindgen-test` has to be target-scoped because the attribute it carries
+# resolves in the caller's crate: a host `cargo test` must not have to resolve
+# it at all. `happenstance-testkit` is the opposite case. `Fixture`'s five
+# associated constants — `SECOND_HANDLE`, `REOPEN`, `MID_BATCH_FAULT` and the
+# three `Option<usize>` ceilings — are *facts about this adapter* that need no
+# JavaScript heap to read, and the tests that hold them honest are the ones an
+# ordinary contributor runs in their inner loop with no wasm toolchain
+# installed. Target-scoping this row would have put every one of those
+# assertions behind a runner, which is exactly the "compiled by the gate,
+# executed by nothing" shape the previous milestone spent its budget ending.
+#
+# Nothing lands in `[dependencies]`: a dev-dependency does not travel to a
+# consumer, so the runtime graph `cargo deny` and `cargo hack` see is unchanged
+# by both rows.
+[dev-dependencies]
+happenstance-testkit.workspace = true
+# Named here as well as in `[dependencies]` because an integration target is a
+# second compilation unit: it links this crate and this crate's *dev*-graph, and
+# a regular dependency of the library is not in its extern prelude.
+happenstance-core = { workspace = true, features = ["std"] }
+futures-core.workspace = true
+
+# `wasm-bindgen-test` is target-scoped for the reason
+# `crates/happenstance-testkit/Cargo.toml`'s block gives: the runtime attribute
+# resolves in the caller's crate, never in the testkit, and a host `cargo test`
+# must not have to resolve it at all. It is what emits the `wasm32` twin of the
+# `!Send` probes — the detector has to live on the target where the auto-trait
+# leak it exists to catch can actually appear.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+# The three rows WF-11's falsifier needs, and the block they are in is the whole
+# of what keeps them off a consumer's graph.
+#
+# `tests/wf11_memory_ceiling.rs` measures what an `Event`'s payload costs to
+# encode on a runtime with a memory ceiling. Reaching the encoder means enabling
+# `happenstance-core`'s `serde` feature — which is why this row exists at all,
+# and why it is here rather than beside the `[dependencies]` edge: that edge is
+# untouched, no Cargo feature was invented to carry a test, and
+# `cargo tree -p happenstance-cloudflare -e normal` is identical before and
+# after. A feature added to the normal edge would have put an encoding
+# dependency into an adapter's published graph one ADR away from where ADR-0003
+# keeps it, and made `publish-ready-crate` pay for this story's convenience.
+#
+# Target-scoped as well as dev-scoped, for `wasm-bindgen-test`'s reason one row
+# up: the probe is `#![cfg(target_arch = "wasm32")]`, so a host `cargo test`
+# must not have to resolve any of this. The two serialisers are the human-
+# readable and binary halves of the comparison the measurement rests on — the
+# same two the published figures were taken with.
+happenstance-core = { workspace = true, features = ["std", "serde"] }
+serde_json.workspace = true
+postcard.workspace = true
+
+# Declared rather than defaulted, and the one key that differs from the other
+# three publishable crates is the one that matters here.
+#
+# docs.rs builds for `x86_64-unknown-linux-gnu` unless told otherwise. This crate
+# compiles there — the `!Send` probes run on the host precisely so a contributor
+# needs no wasm toolchain — but every `worker` binding it links resolves to a
+# `wasm-bindgen` stub that panics when called, so a host-built page would render
+# the documentation of a crate that cannot do anything. `wasm32-unknown-unknown`
+# is the target this crate exists for and the only one where its bindings resolve
+# to a live JavaScript heap, so it is the page a reader should land on.
+#
+# Verified rather than assumed: `cargo doc --no-deps --target
+# wasm32-unknown-unknown` is green under `RUSTDOCFLAGS=-D warnings`, and so is
+# the nightly `--cfg docsrs` build of the same. A crate whose docs.rs build fails
+# renders an error where its front page should be, on a version that can be
+# yanked but never removed.
+#
+# `all-features` costs nothing today — this crate has no Cargo features — and is
+# carried anyway so that the first one added is documented rather than silently
+# absent, which is the shape the other three manifests already use.
+[package.metadata.docs.rs]
+all-features = true
+default-target = "wasm32-unknown-unknown"
+targets = []
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

@@ -35,7 +35,7 @@ A second discovery in the same pass compounds it: `ProjectionStore::Batch`
 carries **no trait bounds**, so generic code can `begin` a batch and hand it back
 to `commit`, and cannot write to it. There is no `apply`. The runner ADR-0006
 relocated therefore cannot be written against the port as it stands — in either
-crate. That is a separate question about the port, tracked in the decision ledger
+crate. **[CORRECTED 2026-08-17 by ADR-0031 — see "Correction" at the end of this record.]** That is a separate question about the port, tracked in the decision ledger
 and owned by phase 2; it is recorded here because it is why the relocation went
 unchallenged. Nothing tried to compile against it.
 
@@ -163,3 +163,47 @@ layer, the contract to `happenstance-core` — is untouched and still stands on 
 own reasoning; only the runner allocation moves. The rename it mandates remains
 unexecuted at the time of writing, so the crate names used above are the ones
 ADR-0006 specifies, not the ones on disk today.
+
+## Correction — 2026-08-17, by ADR-0031
+
+**Appended, not rewritten, and appended *below* every cited line range on purpose.**
+`spec/SPECIFICATION.md` cites this record at `:44-50`, `:62-67` and `:76-81`, and two
+backlog specs cite `:62-67` and `:118-121`; `cargo xtask spec-trace` is a gate step. An
+insertion anywhere above those anchors would silently re-point all of them, so the marker
+at `:38` was written into an existing line and the substance lives here.
+
+**The claim at `:36-38` is false.** It reads: *"The runner ADR-0006 relocated therefore
+cannot be written against the port as it stands — in either crate."*
+
+**What is true:** a callback-driven pump **can** be written against `ProjectionStore` as it
+stands, because the closure's caller — not the port — knows the concrete `Batch`. What
+could not be written against the port as it stood is the **conformance suite**.
+`spec/SPECIFICATION.md` §4.9 states this as `[FROZEN]` clause **PS-32**, and §4.3 is where
+the runner/suite distinction lives.
+
+**It was falsified by compilation, not by argument.**
+`references/evaluation/PRESSURE-TEST.md` section 3.4 builds this record's own indicative
+pump — `checkpoint` → `begin` → per-event `apply` → `commit`/`rollback` — against
+`crates/happenstance-testkit/src/projection.rs` unchanged. The generic-code claim in the
+same sentence was never tested; the pump was.
+
+**The correction of record is `kb-decision-0031`**
+(`.kb/decisions/0031-the-runner-collapses-upward.md`), "One runner, in `happenstance` — the
+checkpoint pump collapses upward", which carries the corrected Context in its own body. Per
+`.kb/governance/rewrite-the-referent-never-the-reasoning.md:50-59`, correcting a
+load-bearing factual claim is a superseding decision's act and never a hand-edit to the
+reasoning — so the paragraph above is left exactly as it was written, and this section
+states what is now known instead of pretending the record always said it.
+
+**The supersession is partial.** ADR-0031 supersedes only this record's allocation of a
+checkpoint pump to `happenstance-core`. The discriminator — encoding, not orchestration —
+and all three shape decisions that rode with the split (`Query` as the only nomination
+vocabulary, `Projection::Store` as an associated type, checkpoints per
+`(store, ProjectionId)`) survive untouched and implemented as written. `kb-decision-0007`
+therefore stays `accepted` with `superseded_by: null`, and `kb-decision-0030` still
+depends on one of the three.
+
+**No pump was ever written, and none will be.** `happenstance::run_projection` drives the
+port directly and `happenstance-core` publishes no module-level function that runs — held
+by an executed test at `crates/happenstance/tests/projection_clauses.rs`. That is the
+falsification condition at `:118-121` firing exactly as this record specified it.

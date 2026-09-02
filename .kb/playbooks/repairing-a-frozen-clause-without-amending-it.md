@@ -23,8 +23,15 @@ related:
   - kb-decision-0010
   - kb-decision-0012
   - kb-decision-0015
+  - kb-decision-0017
+  - kb-decision-0018
+  - kb-decision-0019
   - kb-governance-referent-not-reasoning-001
   - kb-open-question-es-6-unwritable-rule-001
+  - kb-decision-0030
+  - kb-open-question-ps-32-adr-0007-correction-owed-001
+  - kb-open-question-cf-36-unperformed-cross-reference-001
+  - kb-open-question-no-ps-rule-name-resolved-001
 source_paths:
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md
   - spec/SPECIFICATION.md
@@ -32,7 +39,7 @@ source_paths:
   - RUNBOOK.md
   - xtask/src/spec_trace.rs
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # Repairing a frozen clause without amending it

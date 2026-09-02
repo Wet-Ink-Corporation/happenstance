@@ -54,6 +54,151 @@ directory's own failure mode: six `file:line` citations in `SPECIFICATION.md` an
 records that it has already recurred since phase 2 closed it, and names the
 forty-line check that now catches the same class in `standards/rust/`.
 
+[`ps-clause-pairing-sweep.md`](ps-clause-pairing-sweep.md) (2026-08-13, pinned to
+`2136dde`) is the second of these, and carries the same lifecycle — dated,
+pinned, **immutable, superseded rather than edited**. It is a byproduct of phase 6
+rather than one of the fourteen: a census of every clause PS-1 – PS-37 in
+[`spec/SPECIFICATION.md`](../../spec/SPECIFICATION.md) §4, asking of each whether
+an implementation exists that satisfies the clause's `MUST` verbatim and fails a
+conformance rule the tables assign to it — the question
+[`xtask/src/spec_trace.rs`](../../xtask/src/spec_trace.rs) states in its own
+header that it cannot answer. It **decides nothing**: seven clauses come out of it
+carrying a defect and none is repaired there, because the pass that discovers and
+the pass that decides were deliberately kept apart
+([`repairing-a-frozen-clause-without-amending-it.md`](../../.kb/playbooks/repairing-a-frozen-clause-without-amending-it.md)).
+
+Its verdict is **isolated** — the hypothesis that §4.11's rule table was populated
+from a systematic assumption is not supported — and its headline is that one
+supporting sentence of `.kb/open-questions/ps-1-states-no-progress-obligation.md`
+does not survive re-derivation. The knowledge-base side of that is now **written**:
+the `2026-08-13-projection-adrs` ingest wave consumed
+`.kb/_intake/2026-08-13-ps-clause-pairing-sweep.md` and amended both
+[`ps-1-states-no-progress-obligation.md`](../../.kb/open-questions/ps-1-states-no-progress-obligation.md)
+and [`ps-19-scope-narrower-than-its-rule.md`](../../.kb/open-questions/ps-19-scope-narrower-than-its-rule.md),
+each keeping its prior body byte-for-byte and gaining one dated section. Both
+questions stay `status: accepted` with their owners unchanged: the sweep answered
+the *"check the other 35 for the same shape"* sub-question of each and settled
+neither question.
+
+One correction has been made to the document since, and it is the exception the
+immutable lifecycle above allows only because it is written down: an **erratum**
+at the foot of the document, dated 2026-08-13, correcting the Src column for the
+five integration-level rules (PS-26 – PS-30) and for PS-20. It changes no verdict,
+no tally and no strength; it exists because a reader re-deriving the verdict from
+that column alone would have reached `systematic` where the prose derives
+`isolated`.
+
+[`projection-batch-shape-evidence.md`](projection-batch-shape-evidence.md)
+(2026-08-14, pinned to `cfd9231`) is the third, and carries the same lifecycle —
+dated, pinned, **immutable, superseded rather than edited**. It is a byproduct of
+phase 6 rather than one of the fourteen, and the runbook was not derived from it:
+it answers one question, *did the two batch shapes disagree, and where?*, off a
+single `cargo xtask ci` run in which two conformance harnesses drove the same
+sixteen projection rules against `MemoryProjectionStore` and against a buffering,
+replay-at-commit store written for the comparison. It carries a disagreement
+vocabulary fixed **before** the ledger was filled, and a per-rule ledger covering
+the whole of `for_each_projection_store_rule!` rather than the rules the author
+remembered.
+
+It **decides nothing**, and that is load-bearing rather than modest: the PS-3
+exposure call belongs to `publication-and-positioning` and the freeze verdict to
+`ladybug-projection-store`, so a document here that recommended either would be
+this project authoring another's decision. Its two substantive results are that
+fourteen rules agreed and two differ only in which fixture declines a capability,
+and that the axis the pair spans is **narrower** than PS-2's — because
+`MemoryProjectionStore` is itself already a deferred write set, which §4.11's
+assignment of the CF-5 variant had assumed otherwise. It is cited from PS-3's
+clause body in [`spec/SPECIFICATION.md`](../../spec/SPECIFICATION.md), so
+`cargo xtask spec-trace` resolves it on every gate run.
+
+[`phase-6-projection-proof.md`](phase-6-projection-proof.md) (2026-08-15, pinned to
+`7620481`) is the fourth, and carries the same lifecycle — dated, pinned,
+**immutable, superseded rather than edited**. A later run is a later document that
+names this one; a correction never lands in place. It is phase 6's **proof
+artefact**: the record of one `cargo xtask ci`, run whole rather than `--fast`, on
+a working tree with no uncommitted changes, after both of the phase's last two
+changes had landed.
+
+It records **nouns**, because the sentence it exists to refuse is
+`cargo xtask ci`: green. That sentence is true and is consistent with a
+`CheckpointOnlyStore` quietly dropped from the registry, a second batch shape that
+is the oracle wearing a hat, and a `wasm32` harness running two rules out of
+sixteen. So the document names the conformance rule the deliberately wrong store
+fails (`commit_is_atomic_with_the_read_model`) **and** the meta-test that asserts
+it fails exactly there — two names, and it says which is which — both fixtures
+that pass and how each was observed, every `OPTIONAL` gate step as ran or skipped
+(four of four **ran**), and what the run does not cover: the MSRV, `wasm32`
+*execution*, and PS-2's bar, which two testkit-side instruments do not clear.
+
+It **decides nothing**, on the same reasoning as the two documents above: no
+freeze verdict, no `unstable-projection` exposure verdict, no restatement of the
+PS-3 finding, and no ratio over the mutant set in any form (ADR-0010).
+
+**It is superseded, and it is kept.**
+[`phase-6-projection-proof-at-closeout.md`](phase-6-projection-proof-at-closeout.md)
+(2026-08-15, pinned to `04b1f4d`) is the fifth of these documents and the later
+run this one's own header asked for. The superseded document is not wrong about
+its subject — at `7620481` the enumeration held sixteen rules and §7.2 daggered
+the seventeenth, and it says so — but it stopped describing the tree at
+`dc363f4`, when `fresh_projection_has_no_checkpoint` landed against PS-38 and
+the daggers came off. Under the lifecycle above, the repair for that is a later
+dated document naming the earlier one, and never an edit; a project closing with
+its proof artefact pointing at a superseded tree is a phase whose exit condition
+is discharged by a description of something else.
+
+The later document carries the same shape and the same refusals: the seventeen
+rules in one enumeration, the two batch shapes and the outside-author fixture,
+five harnesses across three emitters, every `OPTIONAL` gate step as ran or
+skipped (four of four **ran**), and the same three limits — the MSRV, `wasm32`
+*execution*, and PS-2's bar, which no instrument this workspace wrote can clear.
+It adds one row the earlier ledger could not have: the gate step that holds a
+shipped document's rule count to the enumeration, which exists because the
+sentence the earlier document was superseded *by* had also gone stale in four
+other places at once.
+
+Three of the later document's claims are machine-held rather than reviewed —
+`xtask/src/proof.rs`'s own `#[cfg(test)]` module reads **it**, and fails if
+either test name, either fixture name or the limits section's two CI jobs are
+absent. That constant is repointed at each supersession on purpose: a guard left
+reading a superseded artefact still passes, and holds nothing anybody is going to
+read.
+
+[`phase-7-contract-defects.md`](phase-7-contract-defects.md) (2026-08-16, pinned to
+`78a2170`) is the sixth, and carries the same lifecycle — dated, pinned,
+**immutable, superseded rather than edited**. It is the record initiative **BR-01**
+exists to produce: every defect that using the frozen `EventStore` / `Query` /
+`ProjectionStore` contract revealed while the typed layer was built on it, phase 7
+being the first time anything in this repository consumed that contract in anger.
+
+Five entries, each carrying the same six labelled fields — id, the clause ID **with
+its maturity marker**, what was attempted with the call site, what the contract did
+instead, why it is a defect rather than a misuse, and the routing. **Not one is
+fixed**, and the diff is what proves it: the commit that added this document touches
+no path under `crates/**` or `spec/**`, which is AC-A02 expressed in git rather than
+in prose. Two further findings are recorded as explicitly **not** entries — one the
+contract already answers (ES-6 and ADR-0009), one with no clause ID at all, which is
+classified `support` at the moment of finding rather than promoted by inventing a
+citation. It closes with a reconciliation table giving every M2–M6 story that
+declared a routing an explicit disposition, because a story's silence is
+indistinguishable from a finding that was dropped.
+
+[`phase-7-macros-verdict.md`](phase-7-macros-verdict.md) (2026-08-16, pinned to
+`78a2170`) is the seventh, same lifecycle, and it answers one question:
+`RUNBOOK.md:525`'s *is `happenstance-macros` in scope for 0.1?* It is a
+**measurement**, not an opinion — the counting method is stated, the classification
+is published line range by line range over
+[`examples/course-subscriptions/src/main.rs`](../../examples/course-subscriptions/src/main.rs)
+at the pinned commit, and the totals are derived by summing the rows rather than
+asserted beside them, so a reader who disagrees with one range can recompute without
+redoing the work. The ranges partition the file exactly: 532 of 532 lines.
+
+Its verdict is **out**, at both extremes of its one contested block, and it
+**contradicts** [`_design.md`](../../.bklg/from-contract-to-published-library/typed-layer-and-alpha-release/_design.md)'s
+recorded 2.4 : 1 prediction by a factor of about five — which is the outcome that
+prediction was written down as falsifiable to make possible. It reports both
+altitudes side by side, because the doctest's 2.4 : 1 is a real fact about a
+reader's first program and simply not the question AC-013 asked.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`

@@ -221,8 +221,8 @@ goes green — and the diff reads as configuration, so the reviewer approves it.
 Durability is then unchecked for that adapter until someone loses data and reads
 the fixture.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:135 (This one is a MUST)` ·
-`crates/happenstance-testkit/src/contract.rs:50 (A limit is a **fact**)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:146 (This one is a MUST)` ·
+`crates/happenstance-testkit/src/contract.rs:61 (A limit is a **fact**)` ·
 [SPECIFICATION CF-16](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-40](../../spec/SPECIFICATION.md)
@@ -307,7 +307,7 @@ run it, the change is to the rule, in the same commit, with the wrong
 implementation it now rejects added to the testkit's own `tests/`.
 
 **Evidence.** `crates/happenstance-testkit/src/lib.rs:13 (not considered to exist)` ·
-`crates/happenstance-testkit/src/lib.rs:305 (Migrating from)` ·
+`crates/happenstance-testkit/src/lib.rs:484 (Migrating from)` ·
 `crates/happenstance-testkit/src/fixtures.rs:252 (Creates a fixture over an **existing** store)` ·
 `references/adapter-shapes.md:302 (A skeleton falsifies a signature)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md) ·

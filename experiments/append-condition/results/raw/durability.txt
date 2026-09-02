@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests\durability_settings_are_enforced.rs (target\debug\deps\durability_settings_are_enforced-d56870937572b700.exe)
+
+running 3 tests
+test the_journal_mode_is_read_back_not_assumed ... ok
+test a_connection_under_synchronous_off_is_refused ... ok
+test the_shipped_settings_are_accepted_and_reported ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

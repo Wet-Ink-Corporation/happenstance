@@ -2,71 +2,102 @@
 
 > **Load when:** a generic runner will not compile · `S::Error` is not `Send` ·
 > spawning over a store or projection-store type parameter · `error[E0277]` on an
-> associated type · rustc's suggested bound gives `error[E0637]`
+> associated type · a batch held across an await will not `tokio::spawn`
 > **See also:** 20 (flavours) · 22 (RPITIT shapes) · 25 (what removes `Send`) ·
 > 61 (asserting it)
 
 ---
 
-## RS-21-1. Write the associated-type `Send` bounds by hand, higher-ranked over the GAT.
+## RS-21-1. Write the associated-type `Send` bounds by hand; the attribute does not give them to you.
 
 **Why.** `#[trait_variant::make(X: Send)]` bounds return types only; an
 associated type is delegated verbatim — `type Error = <Self as X>::Error` — so
-`S::Error` and `S::Batch<'a>` carry nothing from the attribute. Because `Batch`
-is a GAT the bound has to be higher-ranked, `for<'a> S::Batch<'a>: Send`, and
-that is the one spelling rustc will not print for you.
+`S::Error` and `S::Batch` carry nothing from the attribute. A runner that holds
+a batch across a suspension point needs both bounds written out, and neither is
+implied by the flavour it already asked for.
+
+This rule used to read *"higher-ranked over the GAT"*, and the historical form
+is worth keeping because it is where the obligation was measured. While `Batch`
+was a GAT the second bound had to be `for<'a> S::Batch<'a>: Send`, which rustc
+will not print for you: its own suggestion was
+`<S as SendProjectionStore>::Batch<'_>: Send`, and a `where` clause is not an
+elision context, so that spelling is ``error[E0637]: `'_` cannot be used here``.
+SPECIFICATION PS-5 landed an owned `type Batch;` and the bound became
+`S::Batch: Send` — a spelling a caller can reach unaided. **The shape got
+easier; the obligation did not move.**
 
 **Do**
 
 ```rust
 use std::sync::Arc;
 
-use happenstance_core::{ProjectionId, SendProjectionStore, SequencePosition};
+use happenstance_core::{Authority, ProjectionId, SendProjectionStore, SequencePosition};
 
 fn spawn_a_batch<S>(store: Arc<S>, id: ProjectionId)
 where
     S: SendProjectionStore<Error: Send> + Send + Sync + 'static,
-    for<'a> S::Batch<'a>: Send,
+    S::Batch: Send,
 {
     drop(tokio::spawn(async move {
-        let batch = store.begin().await?;
+        let batch = store.begin();
         // The batch is live across a suspension point, which is what a runner
         // does between applying an event and deciding to commit.
         tokio::task::yield_now().await;
-        store.commit(batch, &id, SequencePosition::FIRST).await
+        store
+            .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+            .await
     }));
 }
 # fn main() {}
 ```
 
-**Not** — rustc's own printed suggestion, which does not compile. A where clause
-is not an elision context, so there is nothing for `'_` to resolve to:
-`error[E0637]`.
+**Not** — the bound set the attribute looks like it already supplied. It reads
+as complete and it is not: the future `tokio::spawn` takes holds `S::Batch`
+across the await, and `SendProjectionStore` marked the *future* `Send` without
+saying anything about what the future carries. The fence is bare `compile_fail`
+on purpose, and this is the exception RS-01-2 names rather than a lapse from it:
+the diagnostic is *"future cannot be sent between threads safely"* and
+`--message-format=json` reports `code: None`, measured on this port, so there is
+no code to write. PS-36 records the same measurement, and the compiling `Do`
+fence above it is the positive control RS-01-2 actually cares about.
 
-```rust,compile_fail,E0637
-# use happenstance_core::SendProjectionStore;
-fn spawn_a_batch<S: SendProjectionStore>(_store: S)
+```rust,compile_fail
+# use std::sync::Arc;
+# use happenstance_core::{Authority, ProjectionId, SendProjectionStore, SequencePosition};
+fn spawn_a_batch<S>(store: Arc<S>, id: ProjectionId)
 where
-    <S as SendProjectionStore>::Batch<'_>: Send,
+    S: SendProjectionStore<Error: Send> + Send + Sync + 'static,
+    // `S::Batch: Send` is missing, and nothing above implies it.
 {
+    drop(tokio::spawn(async move {
+        let batch = store.begin();
+        tokio::task::yield_now().await;
+        store
+            .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+            .await
+    }));
 }
 # fn main() {}
 ```
 
-**Rejects.** A runner author who takes the printed suggestion, hits `E0637`,
-concludes the bound cannot be expressed, and binds a concrete
-`SqliteProjectionStore` instead of the port. The runner compiles and its tests
-pass; the projection layer has silently stopped being storage-agnostic, no
+**Rejects.** A runner author who reads `#[trait_variant::make(SendProjectionStore:
+Send)]` as having made the whole port `Send`, meets a diagnostic about an
+`S::Batch` they never wrote, concludes the bound cannot be expressed, and binds a
+concrete `SqliteProjectionStore` instead of the port. The runner compiles and its
+tests pass; the projection layer has silently stopped being storage-agnostic, no
 conformance rule covers it because conformance is about adapters, and the
 regression appears in review as a shorter signature.
 
-**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:61 (for<'a> S::Batch<'a>: Send)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:57 (cannot be used here)` ·
+**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:96 (S::Batch: Send)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:87 (stops compiling)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:78 (cannot be used here)` ·
 [SPECIFICATION PS-36](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the `Send`
 flavour transitively requires `Batch: Send`, and why no gate can pin it)* ·
 [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(why the bound cannot be
 put on one flavour instead)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
+[ADR-0017](../../.kb/decisions/0017-what-a-projection-batch-owns.md) *(the owned
+`type Batch;` that retired the higher-ranked spelling)* ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md)
 
 ---

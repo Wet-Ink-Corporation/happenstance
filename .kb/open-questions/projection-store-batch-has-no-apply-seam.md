@@ -2,7 +2,7 @@
 id: kb-open-question-projection-batch-no-apply-001
 title: ProjectionStore::Batch carries no bounds, so nothing can write to it
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ProjectionStore::Batch is an associated type with no trait bounds, so generic code can begin a
@@ -14,21 +14,29 @@ summary: >-
   that a provided body cannot hold the Batch GAT across a suspension point under any remedy tried.
   Owned by phase 6, which freezes ProjectionStore and carries ADR-0017 for what a projection batch
   owns and what vocabulary writes into it. Forced by the first real projection adapter: the port
-  has no conformance suite, and a port without one is a guess.
+  has no conformance suite, and a port without one is a guess. Answered 2026-08-13 by ADR-0017
+  (kb-decision-0017), which makes Batch an owned type with no lifetime parameter and declines a
+  universal write vocabulary in favour of a ProjectionProbe in the contract crate behind
+  feature = "conformance": sub-questions 1, 2 and 4 are settled, and sub-question 3 — whether
+  closing this retroactively validates ADR-0006's encoding-versus-orchestration discriminator —
+  is not, and stays with the typed layer.
 depends_on: []
 related:
   - kb-decision-0007
   - kb-decision-0008
+  - kb-decision-0017
   - kb-open-question-ps-1-no-progress-obligation-001
   - kb-open-question-ps-19-scope-narrower-001
   - kb-open-question-global-vs-boundary-visibility-001
   - kb-open-question-projection-id-unvalidated-001
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
+  - .kb/_intake/2026-08-13-adr-0017-projection-batch.md
   - references/adr/0007-projection-runner-decodes.md
+  - references/adr/0017-what-a-projection-batch-owns.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # ProjectionStore::Batch carries no bounds, so nothing can write to it
@@ -91,3 +99,35 @@ until this question is answered, because it is the adapter that would need to ca
    thing that made it untestable is gone?
 4. Who writes the projection conformance suite once the seam exists, and does it reuse
    `happenstance-testkit`'s existing rule-and-fixture machinery or need its own?
+
+## Answered 2026-08-13 — status superseded, and what is left
+
+Everything above is the state of knowledge on 2026-08-10 and is left exactly as it was written.
+ADR-0017, "What a projection batch owns, and the seam that is not a write vocabulary"
+(`.kb/decisions/0017-what-a-projection-batch-owns.md`; full record at
+`references/adr/0017-what-a-projection-batch-owns.md`), now holds the answer, so this atom moves
+to `superseded` rather than `withdrawn`: the question did not stop being worth asking, a later
+atom answers it, and a reader who arrives here needs sending there.
+
+**Sub-question 1 is settled, and not by any of the three shapes it enumerated.** `Batch` becomes
+an owned associated type with no lifetime parameter — the GAT form fails `error[E0195]` on every
+impl (`references/adapter-shapes.md:186-194`), and a `DefId::expect_local` ICE proves it
+implementable only by stores that outlive every batch (`references/adapter-shapes.md:307-365`;
+`crates/happenstance-ladybug/src/live_handle.rs:36-66`). No write vocabulary lands on `Batch` at
+all: the seam is split by consumer, with a `ProjectionProbe: ProjectionStore` in the contract
+crate behind `feature = "conformance"`, bare flavour only, because an adapter's `tests/` is a
+third crate where the orphan rule rejects the impl (`spec/SPECIFICATION.md:5015-5031`). The
+question's premise — that some vocabulary must write into a batch generically — is what the
+decision declines. ADR-0008's GAT-across-a-suspension-point finding did not pick the winner; two
+driver-independent compiler transcripts did.
+
+**Sub-question 2 falls with it**: `Projection::apply`'s indicative parameter type changes shape,
+because the type it named no longer exists in that form. **Sub-question 4 falls too**: the
+conformance surface is `ProjectionProbe` in `happenstance-core`, not new machinery in
+`happenstance-testkit`, and coherence — not preference — put it there.
+
+**Sub-question 3 is not answered and is not closed by this.** Whether closing the apply-seam gap
+retroactively validates or invalidates ADR-0006's encoding-versus-orchestration discriminator
+stays with the typed layer, at HS-P0011. It is recorded here so the omission reads as a decision
+rather than an oversight: this atom is superseded on three of its four sub-questions, and the
+fourth has an owner elsewhere.

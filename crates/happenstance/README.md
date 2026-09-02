@@ -3,21 +3,22 @@
 An opinionated, storage-agnostic event sourcing library for Rust, built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
-> **Status: early, and this crate is currently a facade.** It re-exports
-> [`happenstance-core`](https://crates.io/crates/happenstance-core) and adds
-> nothing yet. It is published anyway so that `cargo add happenstance` is true
-> throughout and the name never has to move once anyone depends on it. The typed
-> layer — codecs, domain events, decision models, the command loop, the
-> projection runner — arrives here.
-
 ## Which crate do I want?
 
-- **Writing an application?** This one.
+- **Writing an application?** This one — and a store to keep the events in:
+  [`happenstance-sqlite`](https://crates.io/crates/happenstance-sqlite).
 - **Writing a storage adapter?** Depend on
   [`happenstance-core`](https://crates.io/crates/happenstance-core) instead. It is
   the smaller semver surface, and it is what
   [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit) measures
   you against.
+
+## Stability
+
+- **The API moves until the first stable `0.2.0`** — expect a small edit at each
+  upgrade, and pin the exact version you built against.
+- **What changed is in [`CHANGELOG.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/CHANGELOG.md)**, per release, in a caller's terms.
+- **Only one alpha resolves at a time:** each is yanked when the next lands.
 
 ## What DCB buys you
 

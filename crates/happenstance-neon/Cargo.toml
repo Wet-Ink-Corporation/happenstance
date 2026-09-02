@@ -12,7 +12,10 @@ categories.workspace = true
 publish = false
 
 [dependencies]
-happenstance-core = { workspace = true, features = ["std"] }
+# `unstable-projection` is named rather than inherited. Feature unification is
+# per build, and this crate is checked twice on its own — once for the host and
+# once for `wasm32`, where nothing else is in the build to unify with.
+happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
 futures-core.workspace = true
 # `std` is added rather than assumed: the workspace entry is
 # `default-features = false` so members state what they need, and `serde_json`

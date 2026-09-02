@@ -16,17 +16,23 @@ summary: >-
   I/O-bound adapter that does not exist. Refuted by a poll-padding decorator over
   PreCommitPositionStore that the rule fails to reject, calibrated against a three-poll adapter.
   Owned by phase 10. If it fires, only the rule changes — the clause it checks does not.
+  Amended 2026-08-20: ADR-0034 records that the fixture contract has no single owning document,
+  so ADR-0013's "whoever owns the fixture contract" has no referent — a POLL_BUDGET capability
+  would be minted by the decision that needs it, and this question is that position's named next
+  test.
 depends_on: []
 related:
   - kb-decision-0013
   - kb-playbook-cold-future-hand-polling-001
   - kb-decision-0010
+  - kb-decision-0034
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - references/adr/0013-position-assignment-and-visibility.md
   - crates/happenstance-testkit/src/concurrency.rs
   - crates/happenstance-testkit/src/fixtures.rs
-last_reviewed: 2026-08-10
+  - .kb/_intake/cf-40-fixture-contract-ownership-resolution.md
+last_reviewed: 2026-08-20
 ---
 
 # The rule that checks the visibility invariant has an uncalibrated window

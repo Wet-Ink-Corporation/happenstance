@@ -19,6 +19,7 @@ summary: >-
 depends_on: []
 related:
   - kb-decision-0013
+  - kb-decision-0018
   - kb-reference-position-visibility-experiment-001
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
@@ -26,7 +27,7 @@ source_paths:
   - references/adr/0013-position-assignment-and-visibility.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 # Whether the visibility invariant needs to be global

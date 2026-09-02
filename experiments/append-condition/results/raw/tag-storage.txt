@@ -1,0 +1,12 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running tests\tag_storage_probe.rs (target\release\deps\tag_storage_probe-272504091b0601cf.exe)
+
+running 1 test
+TAGSTORE	join-table	conditional_append_us=1418	unconditional_append_us=862	probe_cost_us=556	selective_read_us=10744	broad_read_us=75599	unfiltered_read_us=131611	selective_matched=516	broad_matched=16684	total=50050	seeded=50000	rounds=25	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+TAGSTORE	join-table-grouped	conditional_append_us=1773	unconditional_append_us=680	probe_cost_us=1093	selective_read_us=10334	broad_read_us=77128	unfiltered_read_us=126147	selective_matched=516	broad_matched=16684	total=50050	seeded=50000	rounds=25	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+TAGSTORE	canonical-blob	conditional_append_us=1037	unconditional_append_us=414	probe_cost_us=623	selective_read_us=33992	broad_read_us=71351	unfiltered_read_us=116036	selective_matched=516	broad_matched=16684	total=50050	seeded=50000	rounds=25	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+TAGSTORE	json1	conditional_append_us=1024	unconditional_append_us=590	probe_cost_us=434	selective_read_us=49766	broad_read_us=99329	unfiltered_read_us=126410	selective_matched=516	broad_matched=16684	total=50050	seeded=50000	rounds=25	journal_mode=wal synchronous=normal busy_timeout_ms=5000 sqlite=3.53.2
+test the_three_tag_storages_under_one_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 48.24s
+
