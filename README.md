@@ -8,12 +8,16 @@ it.
 [![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 
-> **Status: early, and worth being precise about.** The contract and its 27-rule
-> conformance suite are real and tested. The typed layer is a facade over the
-> contract, and every storage adapter is a documented stub. `0.1.0` is the
-> contract, the suite, the typed layer and SQLite; Postgres, Neon, Ladybug and
-> replication come after it, and the ambition is the whole list rather than the
-> first four. Nothing is published yet. See [status](#status).
+> **Status: early, and worth being precise about.** The contract, the typed layer
+> and a 112-rule conformance suite across four families are real and tested, and
+> **SQLite is a finished adapter that has run the suite** — the event-store,
+> projection, concurrency and model families, against a real file on disk.
+> `0.2.0-alpha.1` is on crates.io — `happenstance`, `happenstance-core` and
+> `happenstance-testkit` — published so the public surface has a baseline later
+> versions can be diffed against, rather than because it is ready to be depended
+> on. This tree is **ahead** of that release: `0.2.0` adds `happenstance-sqlite`
+> to it. Postgres, Neon, Ladybug and replication come after that, and the ambition
+> is the whole list rather than the first four. See [status](#status).
 
 ---
 
@@ -76,37 +80,60 @@ Run the full worked example:
 cargo run -p course-subscriptions
 ```
 
+That one runs in memory, which proves the semantics and nothing about durability.
+For the same library against a real database — the typed layer's command loop and
+its projection runner, both on one SQLite file, with everything read back after
+every handle is dropped:
+
+```console
+cargo run -p transfers-on-sqlite
+```
+
 ## Status
 
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ implemented and tested |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ 89 rules + property tests |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | 🔲 stub, design notes only |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ on crates.io at `0.2.0-alpha.1` |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ on crates.io at `0.2.0-alpha.1` |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0-alpha.1` — 112 rules across four families |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ passes the suite against a real file; ships in `0.2.0` |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ passes the suite under `workerd`; publish-ready, held back from `0.2.0` |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 stub, design notes only |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
-| `happenstance-postgres` | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 planned |
-| `happenstance-neon` | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 planned |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | 🔲 a facade over `happenstance-core` today |
 
-The stubs are not placeholders in the empty sense: each carries the design
+Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
+that the adapter has run `happenstance-testkit` and cleared it, which is what
+this project means by an adapter existing at all. It is not a claim of production
+mileage: nothing here has run anywhere but a test.
+
+The four 🔲 rows are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
 
-[`RUNBOOK.md`](RUNBOOK.md) sequences the remaining work — what comes
-next, why in that order, and what each phase has to prove before it counts as
-finished.
+`happenstance-cloudflare` is the row most easily misread. It is finished and
+packaged — licences, README, reserved name — and is deliberately **not** in the
+`0.2.0` release: its own front page says it is not frozen, and a first release is
+a poor place to promise stability for a `wasm32`-only adapter. It ships when that
+sentence stops being true.
+
+[`RUNBOOK.md`](RUNBOOK.md) explains why the remaining work is ordered as it is —
+sequenced by blast radius, with the artefact each phase has to produce before it
+counts as finished. Read it for that reasoning; the table above is the shorter
+answer to what is built.
 
 ## Quick start
 
 ```toml
 [dependencies]
-happenstance = "0.1"
+happenstance = "0.2.0-alpha.1"
 ```
 
-That version does not resolve yet: the name is held on crates.io at `0.0.0` until
-the typed layer and SQLite land, so today the only way to try this is a git
-dependency on the repository.
+The pre-release has to be named in full — Cargo will not select a pre-release from
+a plain `"0.2"` requirement. It is an early cut and the API will move under it. A
+git dependency on this repository is the other option, and is what to use if you
+want the tree rather than the release.
 
 ```rust
 use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
@@ -199,10 +226,17 @@ reopened; a rule needing something you decline still runs and prints your stated
 reason rather than disappearing.
 
 The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
-that broke. **An adapter is not finished until it passes.** The suite covers
+that broke. **An adapter is not finished until it passes.**
+
+There are 112 rules in four families. The **event-store** family (89) covers
 query semantics, read options, position uniqueness and monotonicity, append
-atomicity, the full append-condition matrix including the exact `after`
-boundary, and the concurrency case DCB exists to prevent.
+atomicity and the full append-condition matrix including the exact `after`
+boundary. The **concurrency** family (5) supplies the second caller a
+one-at-a-time suite cannot, and is the case DCB exists to prevent. The
+**projection** family (17) holds a read-model write and its checkpoint to one
+unit of work. The **model** family (1) replays generated sequences of appends,
+conditional appends and reads against a model and compares every answer — which
+is the one that finds what the worked examples did not think to ask.
 
 ## Development
 
@@ -224,14 +258,31 @@ async traits. happenstance's bet is different: ports plus a *published* conforma
 suite, so that "storage agnostic" is a claim anyone can check and third parties
 can ship adapters against.
 
-## Former name
+## The name
 
-This project was called **eventum** until 2026-08-05. It was renamed because the
+The everyday sense of the word is chance, which is the wrong idea for a durable
+event store and worth displacing early. The sense meant here is the older half of
+the compound: a happenstance is what *happened to be the case*, as against what was
+arranged in advance. That distinction is the one DCB draws. A classical aggregate
+fixes the consistency boundary when the schema is written, before anyone knows
+which decisions will be made against it. A DCB boundary is deliberate but not
+pre-declared — the handler chooses its query, and the boundary is then whatever
+that query happened to match.
+
+The project was called **eventum** until 2026-08-05. It was renamed because the
 bare `eventum` name on crates.io belongs to an unrelated crate, dormant since
 2020, which forced an awkward layout — prefixed crates only, and a `-core` suffix
-that existed for no reason but the collision. `happenstance` is free, so the
-contract crate simply takes the name. Nothing had been published, so no release
-is affected; see [ADR-0005](.kb/decisions/0005-rename-to-happenstance.md).
+that existed for no reason but the collision. `happenstance` was free. Nothing had
+been published, so no release was affected; see
+[ADR-0005](.kb/decisions/0005-rename-to-happenstance.md).
+
+The bare name went to the contract crate for four hours, and then to the typed
+layer where it belongs: `-core` is what an adapter author pins, and the bare name
+is what an application installs — the allocation `serde_core`/`serde`,
+`futures-core`/`futures` and `tracing-core`/`tracing` each arrived at
+independently. See
+[ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md), which supersedes
+the second half of ADR-0005 and explains why that half was wrong.
 
 ## Licence
 
