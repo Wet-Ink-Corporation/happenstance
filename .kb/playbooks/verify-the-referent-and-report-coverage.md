@@ -15,13 +15,14 @@ depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-playbook-anchoring-citations-001
+  - kb-playbook-declared-page-need-001
 source_paths:
   - .kb/_intake/lesson-a-check-that-verifies-the-address-not-the-referent.md
   - xtask/src/spec_trace.rs
   - xtask/src/lint_constitution.rs
   - spec/SPECIFICATION.md
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-02
 ---
 
 # A cross-reference checker verifies the referent, and reports its own coverage

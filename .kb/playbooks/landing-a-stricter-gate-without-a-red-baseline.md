@@ -22,13 +22,14 @@ related:
   - kb-open-question-post-phase-reconciliation-001
   - kb-reference-spec-trace-has-suite-001
   - kb-reference-phase-8-spec-reconciliation-001
+  - kb-playbook-declared-page-need-001
 source_paths:
   - .kb/_intake/lesson-landing-a-stricter-gate-without-a-red-baseline.md
   - xtask/src/spec_trace.rs
   - spec/SPECIFICATION.md
   - RUNBOOK.md
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-02
 ---
 
 # Landing a stricter gate check when the corpus cannot pass it yet

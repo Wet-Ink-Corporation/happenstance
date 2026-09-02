@@ -30,6 +30,14 @@ summary: >-
   census, to "Specification governance & conformance." A second new open question from this wave,
   on the worker crate's `deny.toml` ban collision, is indexed on `open-questions-index.md` only —
   it names no canonical concept or domain path of its own, so this map is not the atom it touches.
+  The 2026-09-02 wave (`2026-09-02-intake`) added ADR-0035 and ADR-0036 to the ports domain along
+  with a new open question on the two adapters that have not yet followed happenstance-sqlite's
+  default-feature fix, and flipped kb-open-question-worker-async-trait-ban-001 to superseded there
+  (by ADR-0035) — the flip itself lives on open-questions-index.md. It also opened two new domains:
+  "Documentation standards: the page-need discipline," one playbook atom from the docs-that-teach
+  initiative; and "Brand identity: the name, the mark, and where it lives," three SD- decisions,
+  two reference atoms and two design-tier concept atoms from four staged brand documents, plus a
+  new open question on the unrun trademark search.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -43,7 +51,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-15-intake
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
-last_reviewed: 2026-08-20
+  - .kb/_governance/integration-waves/2026-09-02-intake
+last_reviewed: 2026-09-02
 ---
 
 # Domain map
@@ -145,7 +154,12 @@ at phase 4. The 2026-08-20 wave added a sixth and seventh, `.kb/decisions/0023` 
 off-tokio harness that proves it, merging in the ES-6 verdict as one body of evidence; ADR-0034
 settles that the fixture contract has no single owning document, answering
 `kb-open-question-cf-40-ownership-001` from outside the three accepted decisions (ADR-0015,
-ADR-0012, ADR-0022) it cites without editing any of them. The full decision list, including
+ADR-0012, ADR-0022) it cites without editing any of them. The 2026-09-02 wave added an eighth and
+ninth, `.kb/decisions/0035` and `.kb/decisions/0036`: ADR-0035 exempts `worker` and
+`worker-macros` from `deny.toml`'s `async-trait` ban by name, amending `.kb/decisions/0001`'s
+exemption set from outside; ADR-0036 evaluates PS-2's `[FROZEN]` freeze bar against the real
+adapter set for the first time and declines to freeze `ProjectionStore` at `0.2.0`, shipping it
+instead behind the off-by-default `unstable-projection` feature. The full decision list, including
 status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated here.
 
 **Reference**
@@ -227,7 +241,13 @@ instead, and nothing currently scheduled produces the two-build evidence),
 suite runs on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a `node:sqlite`
 shim, never under `workerd`; ADR-0023 records the exclusion as an escalated, not a rejected,
 finding, and WF-11's memory-ceiling non-fire is a second independent consequence of the same
-absent runner).
+absent runner),
+`kb-open-question-adapter-default-projection-feature-001` (added 2026-09-02 — ADR-0036 ships
+`ProjectionStore` behind off-by-default `unstable-projection`, `happenstance-sqlite` now forwards
+that gate correctly, and `happenstance-neon`/`happenstance-postgres` still carry
+`default = ["event-store", "projection-store"]` while also naming `happenstance-core`'s
+`unstable-projection` unconditionally in `[dependencies]`, so toggling `default` alone would not
+restore off-by-default there the way it did for `happenstance-sqlite`).
 
 ## The typed layer: decision models, codecs, and payload evolution
 
@@ -292,6 +312,86 @@ self-contained list. The one this domain owns:
 already-validated inputs and `DomainEvent::tags` is total over a fallible `Tags`; no infallible
 route exists in either direction, and it is the single condition that would reopen ADR-0033's
 verdict).
+
+## Documentation standards: the page-need discipline
+
+The area concerned with `standards/pages/` — the rule that every page in the user documentation
+declares, in its own visible body text, the single reader-question it answers, spelled from a
+closed enumerated set and checked mechanically by `xtask/src/lint_pages.rs`. Established by the
+2026-09-02 wave, which brought the `docs-that-teach` initiative's lesson in as one playbook atom.
+This is a new subject area rather than an extension of any domain above: those are about
+`happenstance-core`'s port design and the ADR corpus, and this one is about `docs/`, a directory
+none of them touches.
+
+**Playbooks**
+
+- [`making-the-need-a-page-answers-declared-singular-checkable.md`](../playbooks/making-the-need-a-page-answers-declared-singular-checkable.md)
+  (`kb-playbook-declared-page-need-001`) — a mechanical check verifies a *declaration*, never an
+  *answer*; a written non-author procedure supplies the judgement the check cannot make, and the
+  check's own documentation names the seam between them. The same pairing
+  `kb-playbook-verify-referent-report-coverage-001` establishes on a different subject — a
+  cross-reference checker that verifies an address and reports its own coverage.
+
+## Brand identity: the name, the mark, and where it lives
+
+The area concerned with what "happenstance" means, what the mark and wordmark look like, the
+rules that bind anything carrying the name, and where the source material for all of it lives.
+Established by the 2026-09-02 wave from four staged brand documents. Numbered `SD-` rather than
+`ADR-`, deliberately outside the architecture decision sequence — `kb-reference-brand-source-locations-001`
+states why — and carrying `phase: null` throughout, since brand work is not one of RUNBOOK.md's
+fifteen phases.
+
+**Decisions**
+
+- [`sd-0001-the-name-names-the-boundary-of-what-occurred.md`](../decisions/sd-0001-the-name-names-the-boundary-of-what-occurred.md)
+  (`kb-decision-sd-0001`) — "happenstance" names the boundary DCB draws around what actually
+  occurred rather than a structure chosen in advance, and five rules that places on copy. Assigns
+  a meaning after the fact and says so; does not supersede ADR-0005 (`kb-decision-0005`), which
+  stays correct about why the rename happened.
+- [`sd-0002-the-mark-and-the-rules-that-bind-it.md`](../decisions/sd-0002-the-mark-and-the-rules-that-bind-it.md)
+  (`kb-decision-sd-0002`) — seven equal blocks radiate from a solid disc, the wordmark is always
+  lowercase, and eight commitments bind anything carrying the name. Equality of the blocks and the
+  seven-element count are established by rendering, cited from the two design atoms below rather
+  than restated.
+- [`sd-0002-standalone-svg-carries-one-colourway.md`](../decisions/sd-0002-standalone-svg-carries-one-colourway.md)
+  (`kb-decision-standalone-svg-one-colourway-001`) — a standalone SVG carries one fixed colour;
+  `prefers-color-scheme` is selected at the point of use, not embedded in the file. Shares its
+  `SD-0002` identifier with the mark decision above — the sharing and the scope split (this rule
+  reaches past logos to any SVG shipped for a surface it does not control) are recorded in both
+  bodies.
+
+**Reference**
+
+- [`brand-mark-geometry-and-palette-2026-08.md`](../reference/brand-mark-geometry-and-palette-2026-08.md)
+  (`kb-reference-brand-geometry-palette-001`) — the mark's build-grid geometry, the lockup's four
+  placement constants, and the WCAG 2.1 contrast table the palette rests on, measured 2026-08-18.
+  Draws no conclusion; the decision and design atoms below cite its numbers rather than restate
+  them.
+- [`brand-identity-source-locations-2026-08.md`](../reference/brand-identity-source-locations-2026-08.md)
+  (`kb-reference-brand-source-locations-001`) — a pointer, not a copy: what `assets/brand/` and
+  `references/brand/` each hold, which source answers "how do I apply this" versus "why is it like
+  that", and the `SD-` numbering convention's precedence over the separate strategy workspace the
+  identity was developed in. True of the working tree on 2026-08-18.
+
+**Design patterns** — resolved interaction/visual-composition decisions, `authority_tier: design`
+
+- [`symbol-annotates-the-wordmark.md`](../design/symbol-annotates-the-wordmark.md)
+  (`kb-design-symbol-annotates-the-wordmark-001`) — a symbol beside a wordmark is set small and
+  raised, overlapping the word's advance and nested into the final letter's open counter-space,
+  rather than placed beside the word with an ordinary lockup gap. Holds when the final letter is
+  round or open (e, o, c, a); stops holding on a full-height vertical (l, k, t, d).
+- [`a-radial-mark-between-two-glyph-collisions.md`](../design/a-radial-mark-between-two-glyph-collisions.md)
+  (`kb-design-radial-mark-collisions-001`) — a ring of radial elements sits between the settings
+  gear and the near-universal eight-fold brightness glyph; an odd count (seven) defeats both,
+  verified by rasterising at 16 and 32px rather than by reasoning about the vector. The defence is
+  reasoned and rendered but not yet tested on a stranger.
+
+**Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
+self-contained list. The one this domain owns:
+`kb-open-question-trademark-search-001` (the trademark search on "happenstance" has not been run;
+the anti-appropriation lever the commercial layer rests on is trademark, not copyright, since
+Apache-2.0 §6 grants no trademark rights — gates filing, registration and physical application,
+not the identity's continued use in software today).
 
 ## Adding a domain
 

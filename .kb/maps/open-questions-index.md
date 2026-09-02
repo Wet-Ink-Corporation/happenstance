@@ -36,7 +36,15 @@ summary: >-
   memory-ceiling verdict, `kb-reference-wf-11-memory-ceiling-verdict-001`: the condition is not
   constructible on this runtime). kb-open-question-es-6-unwritable-rule-001,
   kb-open-question-poll-count-rule-strength-001 and kb-open-question-post-phase-reconciliation-001
-  stayed Open but were each annotated in place with the new wave's findings.
+  stayed Open but were each annotated in place with the new wave's findings. The 2026-09-02 wave
+  (`2026-09-02-intake`) flipped kb-open-question-worker-async-trait-ban-001 to Superseded (by
+  ADR-0035, `kb-decision-0035`, which ratifies a `wrappers` entry for `worker`/`worker-macros`) and
+  added two new questions: kb-open-question-adapter-default-projection-feature-001 (ADR-0036 ships
+  `ProjectionStore` gated, `happenstance-sqlite` was fixed to stop forwarding the gate through its
+  own `default`, and `happenstance-neon`/`happenstance-postgres` have not followed) and
+  kb-open-question-trademark-search-001 (no trademark search on "happenstance" has been run, and it
+  gates filing, registration and physical application of the brand identity), the latter opening
+  this map's first "Brand identity" section.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -49,7 +57,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-15-adr-0030-checkpoint-progress
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
-last_reviewed: 2026-08-20
+  - .kb/_governance/integration-waves/2026-09-02-intake
+last_reviewed: 2026-09-02
 ---
 
 # Open-questions index
@@ -259,7 +268,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   runtime (`kb-reference-wf-11-memory-ceiling-verdict-001`), a second,
   independent consequence of the same absent runner. Added 2026-08-20;
   forced by the next platform-shaped clause, and by phase 12.
-- **Open** — [`deny-bans-red-on-the-worker-dependency.md`](../open-questions/deny-bans-red-on-the-worker-dependency.md)
+- **Superseded** — [`deny-bans-red-on-the-worker-dependency.md`](../open-questions/deny-bans-red-on-the-worker-dependency.md)
   (`kb-open-question-worker-async-trait-ban-001`) — taking the real `worker`
   0.8.5 crate (ADR-0023, `kb-decision-0023`) turns `cargo deny check bans`
   red: `worker`/`worker-macros` depend on `async-trait` unconditionally,
@@ -268,7 +277,26 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `Send` bound from this. Neither ratifying a `wrappers` entry nor refusing
   and recording the exception is chosen. Added 2026-08-20; forced by
   `publish-ready-crate`'s AC-012, which cannot claim a green gate while the
-  ban is red.
+  ban is red. **Resolved 2026-09-02** by ADR-0035 (`kb-decision-0035`), which
+  takes the ratify shape: `deny.toml`'s `wrappers` list gains `worker` and
+  `worker-macros`, one entry each, with the argument for each written into
+  the file beside it, amending ADR-0001's exemption set without touching its
+  body. Sub-question 2 is not reached — the ban is green, `bans ok` — and
+  sub-question 3 is answered yes: the exemption was minted by the adapter
+  that first needed it, the pattern `kb-decision-0034` records, with no
+  umbrella ADR over dependency exceptions required.
+- **Open** — [`projection-store-in-adapter-default-features.md`](../open-questions/projection-store-in-adapter-default-features.md)
+  (`kb-open-question-adapter-default-projection-feature-001`) — ADR-0036
+  ships `ProjectionStore` behind off-by-default `unstable-projection`, and
+  `happenstance-sqlite` was fixed 2026-09-02 to stop forwarding the gate
+  through its own `default` set. `happenstance-neon` and
+  `happenstance-postgres` still carry `default = ["event-store",
+  "projection-store"]`, and unlike `happenstance-sqlite`'s exposure, both
+  crates also name `happenstance-core`'s `unstable-projection` unconditionally
+  in `[dependencies]`, outside any feature — so toggling `default` alone
+  would not restore off-by-default there. Owned by the
+  `postgres-and-neon-stores` project; forced before either crate's first
+  publish. Added 2026-09-02.
 
 ## The typed layer: decision models, codecs, and payload evolution
 
@@ -286,6 +314,22 @@ the decision and reference atoms this domain also owns.
   decision record that has not been written. Added 2026-08-17; forced by the
   first API change after 0.1, and named by ADR-0033 as the single condition
   that would reopen the `happenstance-macros` scope verdict.
+
+## Brand identity: the name, the mark, and where it lives
+
+One question, added by the 2026-09-02 wave from two staged brand documents that closed on the
+same unresolved gate. See
+[`domain-map.md`](domain-map.md#brand-identity-the-name-the-mark-and-where-it-lives) for the
+decision, reference and design atoms this domain also owns.
+
+- **Open** — [`trademark-search-gates-the-commercial-layer.md`](../open-questions/trademark-search-gates-the-commercial-layer.md)
+  (`kb-open-question-trademark-search-001`) — no trademark search on
+  "happenstance" has been run. The commercial layer's anti-appropriation
+  lever is trademark, not copyright — Apache-2.0 §6 grants no trademark
+  rights — so the licence protects the code and protects the name not at
+  all. The identity itself is unaffected and ships today; what is gated is
+  filing, registration, or applying the identity to physical goods. Forced
+  by the first of those three, whichever comes first. Added 2026-09-02.
 
 ## Adding an entry
 

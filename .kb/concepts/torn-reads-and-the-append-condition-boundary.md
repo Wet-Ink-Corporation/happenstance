@@ -21,13 +21,14 @@ related:
   - kb-decision-0012
   - kb-decision-0013
   - kb-decision-0022
+  - kb-decision-sd-0001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
   - references/adr/0011-read-laziness-and-isolation.md
   - crates/happenstance-core/src/store.rs
   - crates/happenstance-core/src/append.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-02
 ---
 
 # Why the append condition does not catch a torn read
