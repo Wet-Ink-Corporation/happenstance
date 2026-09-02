@@ -5,6 +5,8 @@ value types, the storage ports, the error taxonomy, and an in-memory reference
 event store. Storage-agnostic, and built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
+
 > **Status: early.** The contract and its conformance suite are real and tested;
 > every storage adapter is a documented stub. The port is not frozen — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md),

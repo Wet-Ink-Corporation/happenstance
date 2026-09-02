@@ -7,6 +7,8 @@ Durable Object into a DCB-compliant event store, writing to that object's own
 `#[durable_object]` class already holds, on `wasm32-unknown-unknown`, inside
 Workers.
 
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
+
 A Durable Object is a single-threaded actor with exclusive ownership of its
 storage, which is most of an event store's hard part already decided: there is
 one writer, the object's own turn is the transaction, and the consistency

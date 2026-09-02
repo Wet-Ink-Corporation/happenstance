@@ -3,6 +3,8 @@
 An opinionated, storage-agnostic event sourcing library for Rust, built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
+
 ## Which crate do I want?
 
 - **Writing an application?** This one — and a store to keep the events in:

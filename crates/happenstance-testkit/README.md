@@ -6,6 +6,8 @@ event store adapters. Eighty-nine rules, each tracing to a MUST in the
 and each shown to reject a named wrong implementation before it was trusted to
 pass.
 
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
+
 > **Status: early, and the reason has moved.** It used to be that
 > deliberately-broken adapters passed the suite. That is no longer true of the
 > event-store family: every rule now has at least one wrong store in this
