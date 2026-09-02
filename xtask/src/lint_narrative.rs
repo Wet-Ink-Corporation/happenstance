@@ -1875,9 +1875,16 @@ mod tests {
     /// The module whose unconditional file-reading list this checker joins.
     const AFFECTED: &str = "xtask/src/affected.rs";
 
+    /// Reads a workspace file with its line endings normalised to a bare newline.
+    ///
+    /// Same reason [`production_source`] normalises: assertions below search
+    /// this text for newline-anchored patterns, and on a CRLF checkout those
+    /// patterns silently never match.
     fn read(rel: &str) -> String {
         let root: PathBuf = workspace_root().unwrap();
-        fs::read_to_string(root.join(rel)).unwrap_or_else(|err| panic!("reading {rel}: {err}"))
+        fs::read_to_string(root.join(rel))
+            .unwrap_or_else(|err| panic!("reading {rel}: {err}"))
+            .replace("\r\n", "\n")
     }
 
     fn page(rel: &str) -> Page {
@@ -1929,12 +1936,52 @@ mod tests {
         problems
     }
 
-    /// This module's own source, without its tests — the half whose prose ships.
+    /// This module's own source, without its tests — the half whose prose ships,
+    /// with its line endings normalised to a bare newline.
+    ///
+    /// **The normalisation is load-bearing, and its absence was a live bug.**
+    /// Callers slice this text with searches anchored on a raw newline — most
+    /// sharply [`the_marker_scan_has_no_allowance_environment_or_cfg_hook`],
+    /// which bounds the scan's body by looking for a line that is exactly a
+    /// closing brace. On a CRLF checkout that search never matches, the bound
+    /// falls back to the end of the production half, and the assertion then
+    /// reads the real [`IGNORE_ALLOWANCES`] constant and the walk that uses it —
+    /// reporting an escape hatch inside a function that has none.
+    ///
+    /// Two tests failed exactly that way the first time this module was checked
+    /// out with CRLF, which is what `core.autocrlf` produces by default and what
+    /// this repository is developed on. They had never failed before because CI
+    /// runs on Linux and the only Windows checkout that had run them happened to
+    /// hold a newline. A test whose result depends on the checkout's line
+    /// endings is testing the checkout.
+    ///
+    /// A [`LazyLock`](std::sync::LazyLock) rather than a signature change, so
+    /// every call site keeps taking a `&'static str`.
     fn production_source() -> &'static str {
-        include_str!("lint_narrative.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap()
+        static SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            include_str!("lint_narrative.rs")
+                .replace("\r\n", "\n")
+                .split("#[cfg(test)]")
+                .next()
+                .unwrap()
+                .to_owned()
+        });
+        &SOURCE
+    }
+
+    /// The helper above actually normalises, asserted rather than assumed.
+    ///
+    /// Cheap, and it is the regression guard: an edit that returned the raw
+    /// `include_str!` again would turn two unrelated assertions red on Windows
+    /// and green on every runner, which is the hardest shape of failure to
+    /// attribute.
+    #[test]
+    fn the_production_source_carries_no_carriage_returns() {
+        assert!(
+            !production_source().contains('\r'),
+            "production_source must normalise line endings, or every \
+             newline-anchored search in this module becomes checkout-dependent"
+        );
     }
 
     /// A harness registering `rel` in both of the two ways the check reads.
