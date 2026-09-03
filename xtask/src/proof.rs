@@ -1966,6 +1966,21 @@ fn list(args: &[&str], env: &[(&str, &str)], label: &str) -> Result<Vec<String>>
         .collect())
 }
 
+/// The named tests one run's own output does not report as having passed.
+///
+/// **Today: none, ever** — which is the defect, written down. [`check`] reads the
+/// run's *exit status* and discards everything it printed, and libtest exits 0
+/// over `0 passed; 31 ignored`, so nothing downstream of that status can
+/// disagree with an `#[ignore]`.
+///
+/// The body is replaced, and this wired into [`check`], by the change
+/// `main.rs`'s `a_named_proof_test_that_did_not_run_fails_the_gate` is red for.
+#[allow(dead_code)]
+pub(crate) fn unexecuted<'a>(named: &[&'a str], run_output: &str) -> Vec<&'a str> {
+    let _ = (named, run_output);
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

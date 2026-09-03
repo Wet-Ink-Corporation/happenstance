@@ -1906,4 +1906,95 @@ mod tests {
             }
         }
     }
+
+    /// The two names `ARTEFACTS` holds for `projection_harness_parity`.
+    ///
+    /// One row of the nine, and the smallest: two names, one target, and a
+    /// transcript short enough to quote whole.
+    const PARITY: &[&str] = &[
+        "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
+        "projection_harness_parity::no_harness_lists_a_rule_by_hand",
+    ];
+
+    /// That target's libtest stdout when its tests run, verbatim from the gate's
+    /// own transcript
+    /// (`experiments/gate-vacuity/results/raw/baseline-ci.txt:7570-7574`).
+    const PARITY_RAN: &str = "running 2 tests
+test projection_harness_parity::each_harness_invokes_the_suite_exactly_once ... ok
+test projection_harness_parity::no_harness_lists_a_rule_by_hand ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// The same target with an `#[ignore = \"…\"]` on both tests, verbatim from
+    /// `experiments/gate-vacuity/results/raw/ignore-all-ignore-reason-ci.txt:7082-7086`.
+    ///
+    /// The process exited **0** over this and the step printed *"2 named tests
+    /// present"* about it.
+    const PARITY_IGNORED: &str = "running 2 tests
+test projection_harness_parity::each_harness_invokes_the_suite_exactly_once ... ignored, measured by experiments/gate-vacuity
+test projection_harness_parity::no_harness_lists_a_rule_by_hand ... ignored, measured by experiments/gate-vacuity
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// The same *count* of passes, from two tests the gate does not name.
+    ///
+    /// Held here because it is what separates the two remediations the audit
+    /// left open: comparing the reported `passed` count against `tests.len()`
+    /// reads `2 passed` and is satisfied, while both named tests are gone.
+    const PARITY_SUBSTITUTED: &str = "running 2 tests
+test projection_harness_parity::a_test_the_gate_does_not_name ... ok
+test projection_harness_parity::another_test_the_gate_does_not_name ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// A proof artefact's named test that did not **run** fails the gate.
+    ///
+    /// This is the assertion behind `proof.rs`'s central claim (`:29-30`, *"the
+    /// names are asserted, out of `--list`, before the tests run"*) and behind
+    /// the other places in this workspace that say an `#[ignore]` on a named
+    /// proof test cannot pass — among them `proof.rs:217`, `:2050` and `:2408`,
+    /// and RS-81-4's own `Rejects:` line.
+    ///
+    /// It was measured false. `experiments/gate-vacuity/results/raw/list-diff.txt`
+    /// is **empty**: libtest's `--list` output is byte-identical with and without
+    /// an `#[ignore]`, so an assertion over that listing cannot observe the
+    /// attribute, and `cargo xtask ci` exits 0 with all 31 named tests ignored.
+    ///
+    /// The wrong implementations it rejects, in order of how tempting they are:
+    /// a presence check over the run's text — both names appear in
+    /// [`PARITY_IGNORED`], on their `ignored` lines — and a comparison of the
+    /// reported `passed` count against `tests.len()`, which [`PARITY_SUBSTITUTED`]
+    /// satisfies with neither named test having run.
+    ///
+    /// It lives in `main.rs` rather than beside its subject for two reasons. This
+    /// file is already where the gate says an `#[ignore]` on a named test is
+    /// caught by the runner rather than by a listing (`:402-404`), so the claim
+    /// and its proof sit together; and a test inside `proof.rs` could not tell an
+    /// implementation reverted from a test reverted along with it.
+    #[test]
+    fn a_named_proof_test_that_did_not_run_fails_the_gate() {
+        assert!(
+            crate::proof::unexecuted(PARITY, PARITY_RAN).is_empty(),
+            "a target whose named tests both passed is reported as unexecuted"
+        );
+
+        assert_eq!(
+            crate::proof::unexecuted(PARITY, PARITY_IGNORED),
+            PARITY.to_vec(),
+            "both named tests were `ignored` and the gate found nothing to say; \
+             this is the measured defect, and a step that reads only the exit \
+             status is checking that the target compiles"
+        );
+
+        assert_eq!(
+            crate::proof::unexecuted(PARITY, PARITY_SUBSTITUTED),
+            PARITY.to_vec(),
+            "two tests passed, neither of them the ones the clauses cite — a \
+             `passed`-count comparison is satisfied here and the names it was \
+             counting are gone"
+        );
+    }
 }
