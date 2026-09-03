@@ -1911,9 +1911,11 @@ mod tests {
     ///
     /// One row of the nine, and the smallest: two names, one target, and a
     /// transcript short enough to quote whole.
+    /// In the row's own order, which is not libtest's — the assertion below
+    /// reads them out of `ARTEFACTS` rather than trusting this copy.
     const PARITY: &[&str] = &[
-        "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
         "projection_harness_parity::no_harness_lists_a_rule_by_hand",
+        "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
     ];
 
     /// That target's libtest stdout when its tests run, verbatim from the gate's
@@ -1976,6 +1978,28 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
     /// implementation reverted from a test reverted along with it.
     #[test]
     fn a_named_proof_test_that_did_not_run_fails_the_gate() {
+        // The fixture's own non-vacuity first, in the shape `proof.rs`'s
+        // `a_registry_count_belongs_to_the_target_it_is_printed_beside` uses:
+        // every assertion below holds trivially over an empty `PARITY`, so
+        // emptying it is a one-token edit that keeps this test green and retires
+        // it. Read out of `ARTEFACTS` rather than believed, so the names are the
+        // row's own and a rename has this to disagree with too.
+        let row = crate::proof::ARTEFACTS
+            .iter()
+            .find(|artefact| artefact.target == "projection_harness_parity")
+            .expect("`projection_harness_parity` is an `ARTEFACTS` row");
+        assert_eq!(
+            row.tests, PARITY,
+            "the transcripts below are that row's, and this test is about names \
+             the gate actually holds"
+        );
+        assert_eq!(
+            PARITY.len(),
+            2,
+            "one name would still exercise the mechanism; zero would exercise \
+             nothing and pass"
+        );
+
         assert!(
             crate::proof::unexecuted(PARITY, PARITY_RAN).is_empty(),
             "a target whose named tests both passed is reported as unexecuted"
