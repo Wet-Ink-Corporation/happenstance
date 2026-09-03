@@ -2722,4 +2722,71 @@ mod tests {
             "check 6 sweeps only {RULE_FILES:?}"
         );
     }
+
+    // ======================================================================
+    // RV-3: this walk and `affected::is_inert` disagree about `experiments/`
+    // ======================================================================
+
+    /// A fabricated workspace root under `std::env::temp_dir()`, never the
+    /// workspace's own trees and never `tempfile` — mirroring
+    /// `lint_pages::tests::fabricated_root`, which this module cannot reuse
+    /// because it is a private helper of a sibling module. The nanosecond stamp
+    /// keeps two parallel tests from sharing a directory.
+    fn fabricated_root(label: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("hs-spec-trace-{label}-{stamp}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// `affected::is_inert` says a file under `experiments/` reaches no
+    /// package — the same footing as `spec/` and `references/` — but this
+    /// module's own [`workspace_index`] walk skips only `target`, `.git`,
+    /// `.claude` and `node_modules`, and `experiments/` is on neither list.
+    /// So a file under `experiments/` is indexed by basename exactly like a
+    /// crate's own source, and a second file elsewhere in the tree sharing
+    /// that basename makes every bare-name citation of it
+    /// [`Target::Ambiguous`] — reddening `spec-trace` over a change
+    /// `affected` would report as touching no package at all (RV-3).
+    ///
+    /// Fixed by teaching this walk the same `experiments/` skip
+    /// `affected::is_inert` already states, which is why the two checks are
+    /// asked the identical question about the identical path here rather than
+    /// one of them being reconstructed from prose: a fix to one side alone,
+    /// with the other read out of a comment, cannot go stale in a way this
+    /// test would catch.
+    #[test]
+    fn experiments_are_inert_to_affected_but_indexed_by_this_walk() {
+        let root = fabricated_root("rv3");
+
+        let crate_dir = root.join("crates/happenstance-sqlite/src");
+        let experiment_dir = root.join("experiments/some-experiment/src");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::create_dir_all(&experiment_dir).unwrap();
+        fs::write(crate_dir.join("store.rs"), "// crate\n").unwrap();
+        fs::write(experiment_dir.join("store.rs"), "// experiment\n").unwrap();
+
+        let experiment_path = "experiments/some-experiment/src/store.rs";
+        assert!(
+            crate::affected::is_inert(experiment_path),
+            "`affected.rs`'s own INERT list must still cover experiments/ — the fix under \
+             test is to this walk, not to that one"
+        );
+
+        let index = workspace_index(&root);
+        fs::remove_dir_all(&root).ok();
+
+        let hits = index.get("store.rs").cloned().unwrap_or_default();
+        assert_eq!(
+            hits.len(),
+            1,
+            "affected.rs treats experiments/ as reaching no package, so this walk must not \
+             index a file under it either — got {hits:?}. As written today it indexes both, \
+             which is exactly how a bare-name citation of `store.rs` goes ambiguous over an \
+             experiment nobody's build depended on"
+        );
+    }
 }

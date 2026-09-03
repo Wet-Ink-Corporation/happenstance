@@ -332,7 +332,12 @@ pub(crate) fn affected_packages(
 /// a corpus — and leaving one here *shadowed* behind that arm is the same defect
 /// one reordering away, which is why `docs/` was removed rather than left in
 /// place when the narrative tree landed.
-fn is_inert(path: &str) -> bool {
+///
+/// `pub(crate)` rather than private: `spec_trace`'s own tests (RV-3) call this
+/// directly to hold its verdict about `experiments/` to `workspace_index`'s, so
+/// the two checks can be asked the same question about the same path instead of
+/// one of them being reconstructed from prose.
+pub(crate) fn is_inert(path: &str) -> bool {
     const INERT: &[&str] = &[
         "spec/",
         // The page-need discipline's rules tree. Nothing compiles it — it is
