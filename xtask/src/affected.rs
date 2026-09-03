@@ -1324,6 +1324,26 @@ mod tests {
     /// omission into a decision with a reason attached.
     #[test]
     fn the_unconditional_block_runs_every_file_reading_check_in_the_gate() {
+        // The membership of the exclusion list, pinned. `RUNS_A_PACKAGE` needs
+        // no pin — a name added there is reconciled against what the module
+        // does, and an excuse for a module that starts no process is reported
+        // as stale — but nothing outside this line can contradict an entry
+        // here. Appending one is how this check is switched off a member at a
+        // time, and the review that raised it routed the question deliberately:
+        // whether `lint-constitution` belongs on the story grain is a decision
+        // with a written rationale, so a *second* name is a second such
+        // decision and not an append nobody reads.
+        assert_eq!(
+            OFF_THE_STORY_GRAIN
+                .iter()
+                .map(|(name, _)| *name)
+                .collect::<Vec<_>>(),
+            ["lint-constitution"],
+            "a name has joined or left the exclusion list. Supersede the argument it \
+             carries — this is the line that says so — rather than editing it here to \
+             match what the block happens to run."
+        );
+
         let main_rs = main_source();
         let subcommands = required_subcommands();
 
