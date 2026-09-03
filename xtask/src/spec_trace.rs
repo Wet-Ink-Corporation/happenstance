@@ -2284,6 +2284,19 @@ fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
 /// from inside a worktree, because a worktree cannot see its siblings. A check
 /// whose verdict depends on which directory it is invoked from is reporting the
 /// invocation, not the specification.
+///
+/// `experiments/` is skipped too, matching `affected::is_inert` (RV-3): it is
+/// outside the workspace by construction — its own `Cargo.toml` opens with a
+/// bare `[workspace]` table — so nothing here compiles it, and it should carry
+/// no more weight for a bare-name citation than it does for the affected-package
+/// gate. Before this skip existed, adding an experiment whose source shared a
+/// basename with anything else in the tree — a plain `store.rs` or `lib.rs`, the
+/// obvious name to reach for — turned every bare citation of the collision into
+/// [`Target::Ambiguous`], reddening `spec-trace` over a change that touched no
+/// package at all. A citation that spells the path in full, such as
+/// `experiments/wire-format/src/lib.rs:NNN`, is unaffected: [`citations`] routes
+/// anything containing `/` straight to [`Target::Path`] and never consults this
+/// index, so nothing here withdraws a citation the specification already makes.
 fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
     fn walk(dir: &Path, root: &Path, out: &mut BTreeMap<String, Vec<String>>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -2293,7 +2306,11 @@ fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
             if path.is_dir() {
-                if name == "target" || name == ".git" || name == ".claude" || name == "node_modules"
+                if name == "target"
+                    || name == ".git"
+                    || name == ".claude"
+                    || name == "node_modules"
+                    || (dir == root && name == "experiments")
                 {
                     continue;
                 }
