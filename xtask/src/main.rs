@@ -1091,11 +1091,11 @@ fn print_help() {
     println!("         the mandatory steps only, dropping that last group; it is the bar a");
     println!("         non-terminal project's integration gate runs, never the release bar.");
     println!("  affected [--base <ref>]");
-    println!("         The story-grain gate: the six file-reading lints and spec-trace,");
-    println!("         then fmt, clippy and tests for the packages this diff could have");
-    println!("         broken and everything depending on them. Base defaults to `main`.");
-    println!("         Errs toward more packages — see the module docs for the two ways it");
-    println!("         can be wrong and why only one of them is allowed to happen.");
+    println!("         The story-grain gate: unconditionally, every check the whole gate");
+    println!("         reads a document for, bar lint-constitution — affected's own docs");
+    println!("         argue that one. Then fmt, clippy and tests for the packages this diff");
+    println!("         could have broken and everything depending on them. Base defaults to");
+    println!("         `main`, and it errs toward more packages — the module docs say why.");
     println!("  wasm   The whole wasm32-unknown-unknown family. Five builds — happenstance-core,");
     println!("         the conformance harnesses, the two wasm32 adapters (cloudflare, neon)");
     println!("         and the typed layer (happenstance, the crate a Workers application");
@@ -1111,13 +1111,13 @@ fn print_help() {
     println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
     println!("         what the checker computes, and fails when they differ. --write");
     println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the six file-reading checks: CF-33 (no clock in the suite),");
-    println!("         CF-6 (no literal position values), CF-29 (a changelog entry per");
-    println!("         rule), CF-32 (the testkit's own version key), §7.4's disposed-rule");
-    println!("         check, and every stated rule count against the enumeration.");
-    println!("         Each is also available on its own as lint-clock,");
-    println!("         lint-position-literals, lint-changelog, lint-testkit-version,");
-    println!("         lint-retired-rules and lint-rule-counts.");
+    println!("  lints  Run just the file-reading checks — every step that reads a document");
+    println!("         rather than compiling a package. The rows below are printed from the");
+    println!("         selection this command runs; each is also a subcommand of its own:");
+    for step in lint_steps() {
+        let subcommand = step.args.last().copied().unwrap_or(step.name);
+        println!("           {subcommand:<25}{}", step.name);
+    }
     println!("  package-check");
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
@@ -1193,12 +1193,12 @@ fn wasm_steps() -> Vec<&'static Step> {
     ])
 }
 
-/// The five checks phase 3 stage 6 added, selected by name.
+/// The file-reading checks, selected by name. *Five* until this line stopped
+/// counting: it said five while the selection below named nine, so
+/// [`print_help`] now prints the selection instead of transcribing it.
 ///
-/// They are ordinary `REQUIRED` steps and `cargo xtask ci` runs them like any
-/// other; this exists so that working on one does not mean running the whole
-/// gate to see it. Each is a file read and a string match, so the whole set
-/// finishes in the time it takes cargo to decide `xtask` is up to date.
+/// Ordinary `REQUIRED` steps, gathered so that working on one does not mean
+/// running the whole gate; each is a file read, so the set is nearly free.
 fn lint_steps() -> Vec<&'static Step> {
     steps_named(&[
         "no retired rule is still live",

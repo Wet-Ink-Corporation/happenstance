@@ -1039,6 +1039,17 @@ const COUNT_BEARING_DOCS: [&str; 4] = [
 /// comment. That is why the check reads all four rather than the one the audit
 /// named: correcting an instance is not the same as retiring a class.
 ///
+/// # Where it runs, and why that took a second correction
+///
+/// `REQUIRED` runs it as `lint-rule-counts`, and so does the story-grain gate
+/// in `affected::run` — which is the entry point that matters most for it, and
+/// the one it was missing from until the pre-publication review found it. The
+/// change that makes a stated count wrong is a story landing a conformance
+/// rule, and `cargo xtask affected` is the gate that story clears at every
+/// `redkiln advance` seam; a check that runs only in the release gate reaches
+/// the author after the branch is merged, if at all. `affected`'s own tests now
+/// hold its unconditional block to every lint this module exports.
+///
 /// # What it does not verify
 ///
 /// Only a **cardinal qualifying `rule` or `rules`** within two words, only in a

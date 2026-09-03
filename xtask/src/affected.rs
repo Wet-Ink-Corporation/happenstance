@@ -35,6 +35,21 @@
 //! and report green over a clause citing a rule that does not exist. The
 //! specification is source in this repository even though rustc never opens it.
 //!
+//! **Every** lint [`crate::lints`] exports, and that is a checked claim rather
+//! than a remembered one: `the_unconditional_block_runs_every_lint_the_module_
+//! exports`, below, reads this file and `lints.rs` and holds one to the other.
+//! It was not true when it was first written. `lints::stated_rule_counts` was
+//! reached by no entry point but `REQUIRED`, so the story that adds a
+//! conformance rule — the only change that lint exists for — was the one change
+//! that never ran it, and five statements of which lints run had drifted into
+//! five different answers with nothing to notice.
+//!
+//! Nothing runs here that `cargo xtask ci` does not. The one thing that runs
+//! there and not here is `lint-constitution`, which is a decision with its own
+//! written rationale rather than an omission to tidy up; the narrative tree is
+//! on this list for the argument recorded beside its call in [`run`], and the
+//! constitution is off it for the same argument pointing the other way.
+//!
 //! # What it does not check
 //!
 //! Everything in `OPTIONAL` — the feature powersets, `cargo deny`, the nightly
@@ -120,6 +135,16 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     crate::lints::no_clock()?;
     crate::lints::no_position_literals()?;
     crate::lints::changelog_names_every_rule()?;
+    // The one check here that runs the other way — four *documents* held to the
+    // code, rather than the code held to a document — and the one this list had
+    // dropped. It belongs on the story grain more than any of its neighbours: a
+    // story that lands a conformance rule is exactly the change that leaves the
+    // testkit's README, both `lib.rs` front pages and `happenstance-core`'s
+    // feature comment stating a count the suite no longer has, and
+    // `.redkiln/config.yaml` wires this command as that story's gate. The
+    // person who breaks is the crates.io reader, and it had already happened
+    // three times.
+    crate::lints::stated_rule_counts()?;
     crate::lints::testkit_version()?;
     crate::lints::core_alloc_features()?;
     crate::spec_trace::run(crate::spec_trace::Mode::Check)?;
