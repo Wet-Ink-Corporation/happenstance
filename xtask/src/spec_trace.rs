@@ -2125,7 +2125,7 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 /// backstop for this table being wrong: if a citation mapped here to `core`
 /// really meant `sync`, the anchor it names will not be found in the file this
 /// sends it to.
-const BARE_NAME_MAP: [(&str, &str); 7] = [
+const BARE_NAME_MAP: [(&str, &str); 8] = [
     ("memory.rs", "crates/happenstance-core/src/memory.rs"),
     ("error.rs", "crates/happenstance-core/src/error.rs"),
     ("identity.rs", "crates/happenstance-core/src/identity.rs"),
@@ -2159,6 +2159,17 @@ const BARE_NAME_MAP: [(&str, &str); 7] = [
     // did not exist when the sentences were written cannot be what they meant,
     // and the anchor check is the backstop if any of them is.
     ("append.rs", "crates/happenstance-core/src/append.rs"),
+    // Not a collision — `workspace_index` no longer indexes anything under
+    // `experiments/` at all (RV-3), so a name that used to resolve there
+    // uniquely now resolves to nothing. §1.6's port table cites this bare at
+    // `live_handle.rs:174`, and the fix for the ambiguity that skip exists to
+    // prevent must not silently withdraw a citation the specification already
+    // makes; the anchor check is still the backstop if this ever points at the
+    // wrong `LiveHandleProjectionStore` line.
+    (
+        "live_handle.rs",
+        "experiments/live-handle-projection-batch/live_handle.rs",
+    ),
 ];
 
 /// What a citation's file name resolved to.
