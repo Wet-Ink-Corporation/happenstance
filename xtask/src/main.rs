@@ -733,10 +733,10 @@ const REQUIRED: &[Step] = &[
         // Its own step rather than a line in `tests`, for the reason
         // `proof-artefact` has one: the workspace test step passes just as
         // happily with one fewer doctest as with one more, so an atom whose
-        // examples quietly stopped being compiled would not show up there. And
-        // `RUSTDOCFLAGS` is the only way `-D warnings` reaches rustdoc — clippy
-        // does not lint doctests at all, so this is the whole of what the
-        // constitution's examples are held to.
+        // examples quietly stopped being compiled would not show up there.
+        // `RUSTDOCFLAGS` reaches nothing lexically inside a fence (RS-01-4),
+        // and clippy never lints doctests either, so this step proves only
+        // that the constitution's examples compile.
         name: "the constitution's examples compile",
         program: "cargo",
         args: &["test", "--locked", "-p", "xtask", "--doc"],
