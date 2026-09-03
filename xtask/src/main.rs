@@ -2021,4 +2021,51 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
              counting are gone"
         );
     }
+
+    /// S-3: `constitution.rs` and this file's own step comment claimed
+    /// `RUSTDOCFLAGS=-D warnings` partially recovers lint coverage inside a
+    /// doctest fence. RS-01-4 (`standards/rust/01-standard-of-evidence.md:180-188`)
+    /// already denied that, and `experiments/gate-vacuity/results/`
+    /// `constitution-fence.md` measured it false a second time, against this
+    /// very corpus: the same `RUSTDOCFLAGS` arm let a `non_snake_case`
+    /// violation compile and run at exit 0. A text scan, not a doctest — the
+    /// false sentence compiles fine, so only reading the prose catches its
+    /// return.
+    ///
+    /// Deliberately not placed in `constitution.rs`: `lint-constitution`'s
+    /// `check_harness` reads that file's `mod` lines as the atom registry, so
+    /// a bare `mod tests {` there is flagged as naming an atom that does not
+    /// exist. This file carries no such reading.
+    #[test]
+    fn constitution_rs_does_not_restate_the_rustdocflags_recovery_claim() {
+        let production = include_str!("constitution.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(
+            !production.contains("recovers rustc's")
+                && !production.contains("the recovery is partial"),
+            "constitution.rs restates the RUSTDOCFLAGS partial-recovery claim RS-01-4 denies"
+        );
+    }
+
+    /// The companion claim, in this file's own step comment: it leaned on
+    /// the same false premise to justify what the constitution's examples
+    /// are "held to".
+    ///
+    /// Scoped to the *line-anchored* `#[cfg(test)]` marker, normalising CRLF
+    /// first — same reason `lint_narrative.rs`'s `production_source()` does
+    /// both: a bare substring split would also cut at line 293's comment,
+    /// which names the attribute in backticks and sits well above this
+    /// module, truncating "production" before the target line is even
+    /// reached.
+    #[test]
+    fn main_rs_does_not_restate_the_rustdocflags_recovery_claim() {
+        let normalised = include_str!("main.rs").replace("\r\n", "\n");
+        let production = normalised.split("\n#[cfg(test)]\n").next().unwrap();
+        assert!(
+            !production.contains("is the only way `-D warnings` reaches rustdoc"),
+            "main.rs restates the RUSTDOCFLAGS partial-recovery claim RS-01-4 denies"
+        );
+    }
 }
