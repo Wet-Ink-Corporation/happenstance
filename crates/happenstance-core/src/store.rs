@@ -438,6 +438,25 @@ pub fn es_13_the_query_must_outlive_the_stream() {}
 ///          whatever that one claims to pin is decorative. Move it beside \
 ///          `es_13_the_query_must_outlive_the_stream` in src/store.rs."
 ///     );
+///
+///     // The other direction, and it is the half a reader would not think to
+///     // ask for: an empty `tests/` file satisfies everything above, so on its
+///     // own this guard stays green the day the pin it points at is deleted.
+///     const HERE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs"));
+///     const CARRIER: &str = "pub fn es_13_the_query_must_outlive_the_stream() {}";
+///
+///     // Matched as a whole *line*, not as a substring. `contains` is satisfied
+///     // by the `const` two lines up — this doctest is inside the file it is
+///     // reading — and passed unchanged with the item renamed, measured.
+///     assert!(
+///         HERE.lines().any(|line| line.trim_start() == CARRIER),
+///         "ES-13's pin has left src/store.rs, where cargo compiles its fence"
+///     );
+///     assert!(
+///         HERE.contains(&[FENCE, "compile_fail"].concat()),
+///         "src/store.rs opens no `compile_fail` fence, so nothing rejects the \
+///          escaping arrangement ES-13's `Rejects:` line forbids"
+///     );
 /// }
 /// ```
 #[doc(hidden)]
