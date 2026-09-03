@@ -992,7 +992,19 @@ mod tests {
             .find("let members = members(&root)?;")
             .expect("the file-reading block must still end where package selection begins");
 
-        rest[..end].to_owned()
+        let block = rest[..end].to_owned();
+
+        // The one widening that would defeat every `contains` below at once,
+        // refused here rather than trusted to the comment above: an end
+        // delimiter moved past the tests, whose failure messages spell the very
+        // calls the checks look for. It is a two-word edit and it stays green.
+        assert!(
+            !block.contains("#[test]"),
+            "the block has swallowed this module's own tests; every check over it would \
+             then be discharged by its own failure messages"
+        );
+
+        block
     }
 
     /// The `pub(crate) fn <name>() -> Result<()>` items of a module, by name.
