@@ -1043,4 +1043,382 @@ mod tests {
              touched."
         );
     }
+
+    // ---- the family, derived from the step table rather than from a module ---
+    //
+    // The check above scans `lints.rs` for exports, and this repository does not
+    // add file-reading checks that way: `lint_narrative`, `lint_pages` and
+    // `lint_constitution` are each their own *module*, dispatched by name and
+    // named in `REQUIRED`. A fourth one, wired into the gate and never wired
+    // into the story grain, is green under an export scan — `lints.rs` exports
+    // nothing new — and green under every other test in this file. So the
+    // subject below is the step table, which is where a check is actually added.
+
+    /// The gate steps that run a package rather than reading a document, and
+    /// why each one is not a file read.
+    ///
+    /// The hand-written half of the reconciliation in [`file_reading_family`].
+    /// The derived half is whether the module behind the entry point ever
+    /// builds a `Command`, and only the difference between the two artefacts
+    /// can say which of two unrelated bugs happened: a check that started
+    /// compiling something, or a name left here after the step it excused
+    /// stopped doing so. That is `xtask/src/package.rs`'s `reconcile` shape
+    /// (RS-81-5), one artefact over.
+    const RUNS_A_PACKAGE: &[(&str, &str)] = &[
+        (
+            "proof-artefact",
+            "asserts each phase's named tests out of `cargo test --list`, then runs them",
+        ),
+        (
+            "wasm-conformance-enumeration",
+            "enumerates each wasm32 target's rules through cargo, for that target",
+        ),
+        (
+            "wasm-conformance",
+            "executes the conformance rules on wasm32 under `wasm-bindgen-test-runner`",
+        ),
+        (
+            "narrative-doctests",
+            "compiles every fence in the narrative tree as `xtask`'s doctests",
+        ),
+        (
+            "package-check",
+            "reads `cargo package --list`, which builds each publishable artifact",
+        ),
+    ];
+
+    /// The file-reading checks the story grain deliberately does not run, and
+    /// the argument for each.
+    ///
+    /// A named list rather than an absence, and that is the whole point of it:
+    /// a check added to the gate and not to [`run`]'s unconditional block has
+    /// to be *decided about* — entered here with the reason, or called — rather
+    /// than dropped by nobody noticing. Reversing an entry supersedes the
+    /// argument it carries; it is not a tidy-up.
+    const OFF_THE_STORY_GRAIN: &[(&str, &str)] = &[(
+        "lint-constitution",
+        "argued off this list in this module's own documentation and beside \
+         `lint_narrative`'s call in `run`: the narrative tree is on the story grain \
+         because a story's whole deliverable can be a page, and the constitution is \
+         off it for the same argument pointing the other way",
+    )];
+
+    /// `xtask/src/<module>.rs`, or `None` when there is no such module.
+    fn module_source(module: &str) -> Option<String> {
+        fs::read_to_string(
+            workspace_root()
+                .unwrap()
+                .join(format!("xtask/src/{module}.rs")),
+        )
+        .ok()
+    }
+
+    /// `xtask/src/main.rs`, as source text.
+    fn main_source() -> String {
+        fs::read_to_string(workspace_root().unwrap().join("xtask/src/main.rs"))
+            .expect("`xtask/src/main.rs` must be readable")
+    }
+
+    /// The reason a hand list gives for a subcommand, if it names one.
+    fn excused(list: &[(&'static str, &'static str)], subcommand: &str) -> Option<&'static str> {
+        list.iter()
+            .find(|(name, _)| *name == subcommand)
+            .map(|(_, why)| *why)
+    }
+
+    /// The subcommand a gate step re-enters `xtask` with, if it does.
+    ///
+    /// `cargo run --locked --quiet -p xtask -- <subcommand>`, read off the
+    /// argument vector rather than off the step's name. `cargo test --locked -p
+    /// xtask --doc` names the package and no subcommand, and answers `None`: it
+    /// compiles a corpus rather than running one of this binary's own entry
+    /// points.
+    fn xtask_subcommand(step: &crate::Step) -> Option<&'static str> {
+        let at = step.args.iter().position(|arg| *arg == "--")?;
+        if step.args.get(at.wrapping_sub(1)) != Some(&"xtask") {
+            return None;
+        }
+        step.args.get(at + 1).copied()
+    }
+
+    /// Every entry point `REQUIRED` reaches by name, in table order.
+    fn required_subcommands() -> Vec<&'static str> {
+        crate::REQUIRED
+            .iter()
+            .filter_map(xtask_subcommand)
+            .collect()
+    }
+
+    /// The path `main`'s dispatch calls for a subcommand — `lints::no_clock`,
+    /// `lint_pages::run`.
+    ///
+    /// A flag-taking arm opens a nested `match`, and its `None` arm is the
+    /// invocation a caller with no flag makes, which is the one the story grain
+    /// would write. An arm this cannot read is reported as a problem by its
+    /// callers rather than skipped: a subcommand nothing resolves is a
+    /// subcommand nothing holds to anything.
+    fn dispatch_target(main_rs: &str, subcommand: &str) -> Option<String> {
+        let arm = main_rs
+            .split_once(&format!("Some(\"{subcommand}\") => "))?
+            .1;
+        let body = if arm.starts_with("match ") {
+            arm.split_once("None => ")?.1
+        } else {
+            arm
+        };
+        let path: String = body
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ':')
+            .collect();
+        path.contains("::").then_some(path)
+    }
+
+    /// The gate's file-reading family: every entry point in the step table
+    /// whose module never builds a `Command`.
+    ///
+    /// Derived, and reconciled against [`RUNS_A_PACKAGE`] in both directions —
+    /// the second return value is one problem per disagreement, naming which of
+    /// the two moved.
+    fn file_reading_family(
+        subcommands: &[&'static str],
+        main_rs: &str,
+        source_of: &dyn Fn(&str) -> Option<String>,
+    ) -> (Vec<&'static str>, Vec<String>) {
+        let mut family = Vec::new();
+        let mut problems = Vec::new();
+
+        for subcommand in subcommands {
+            let Some(target) = dispatch_target(main_rs, subcommand) else {
+                problems.push(format!(
+                    "`{subcommand}` is a step in `REQUIRED` and `main`'s dispatch cannot be \
+                     read for it; a subcommand this check cannot resolve is one it holds to \
+                     nothing"
+                ));
+                continue;
+            };
+            let module = target.split("::").next().unwrap_or(&target).to_owned();
+            let Some(source) = source_of(&module) else {
+                problems.push(format!(
+                    "`{subcommand}` dispatches to `{target}` and `xtask/src/{module}.rs` \
+                     cannot be read"
+                ));
+                continue;
+            };
+
+            // Derived. A module that never builds a `Command` starts no
+            // process, so its whole input is files — which is exactly what
+            // `print_help` calls "reads a document rather than compiling a
+            // package". `lints`, `spec_trace`, `lint_narrative`, `lint_pages`
+            // and `lint_constitution` hold to that; `proof`, `package` and
+            // `narrative_doctests` do not.
+            let spawns = source.contains("Command::new");
+
+            match (spawns, excused(RUNS_A_PACKAGE, subcommand)) {
+                (false, None) => family.push(*subcommand),
+                (true, Some(_)) => {}
+                (true, None) => problems.push(format!(
+                    "`{subcommand}` dispatches to `{target}`, whose module starts a process, \
+                     and no entry of `RUNS_A_PACKAGE` says so — either it reads documents and \
+                     belongs on the family, or name it there with the reason"
+                )),
+                (false, Some(why)) => problems.push(format!(
+                    "`RUNS_A_PACKAGE` excuses `{subcommand}` as \"{why}\", and \
+                     `xtask/src/{module}.rs` starts nothing — it is a file read now, and the \
+                     excuse is what has gone stale"
+                )),
+            }
+        }
+
+        (family, problems)
+    }
+
+    /// The family members [`run`]'s unconditional block never calls, and the
+    /// exclusions that no longer name a check the gate has.
+    fn unwired(family: &[&'static str], main_rs: &str, block: &str) -> Vec<String> {
+        let mut problems = Vec::new();
+
+        for subcommand in family {
+            if excused(OFF_THE_STORY_GRAIN, subcommand).is_some() {
+                continue;
+            }
+            let Some(target) = dispatch_target(main_rs, subcommand) else {
+                problems.push(format!("`{subcommand}`'s dispatch arm cannot be read"));
+                continue;
+            };
+            if !block.contains(&format!("crate::{target}(")) {
+                problems.push(format!(
+                    "`{subcommand}` reads documents on every `cargo xtask ci` and the \
+                     story grain never runs it. `.redkiln/config.yaml` wires \
+                     `cargo xtask affected` at every advance seam, so the change that \
+                     breaks it is the change that clears its own grain. Call \
+                     `crate::{target}` in `run`'s unconditional block, or name it in \
+                     `OFF_THE_STORY_GRAIN` with the argument for leaving it out."
+                ));
+            }
+        }
+
+        for (subcommand, _) in OFF_THE_STORY_GRAIN {
+            if !family.contains(subcommand) {
+                problems.push(format!(
+                    "`OFF_THE_STORY_GRAIN` excuses `{subcommand}`, which is no longer a \
+                     file-reading check of the gate — a stale exclusion widens this check \
+                     without saying so"
+                ));
+            }
+        }
+
+        problems
+    }
+
+    /// The derivation's subject: a step's argument vector, not its name.
+    #[test]
+    fn a_step_that_re_enters_xtask_is_derived_from_its_arguments() {
+        let subcommand = crate::Step {
+            name: "the zzz probe reads a document",
+            program: "cargo",
+            args: &[
+                "run", "--locked", "--quiet", "-p", "xtask", "--", "lint-zzz",
+            ],
+            env: &[],
+            probe: None,
+        };
+        assert_eq!(xtask_subcommand(&subcommand), Some("lint-zzz"));
+
+        // The step directly below it in `REQUIRED`, which names the package and
+        // no subcommand: it compiles the constitution's examples and is not an
+        // entry point of this binary at all.
+        let doctests = crate::Step {
+            name: "the constitution's examples compile",
+            program: "cargo",
+            args: &["test", "--locked", "-p", "xtask", "--doc"],
+            env: &[],
+            probe: None,
+        };
+        assert_eq!(xtask_subcommand(&doctests), None);
+    }
+
+    /// Every file-reading check the gate has, on the gate a story runs.
+    ///
+    /// The class the export scan above could not see. Its subject is
+    /// `REQUIRED` — where a check is added — rather than one module's exports,
+    /// and the two hand lists are what turn "not on the story grain" from an
+    /// omission into a decision with a reason attached.
+    #[test]
+    fn the_unconditional_block_runs_every_file_reading_check_in_the_gate() {
+        let main_rs = main_source();
+        let subcommands = required_subcommands();
+
+        assert!(
+            subcommands.contains(&"lint-rule-counts") && subcommands.contains(&"lint-pages"),
+            "the step-table scan no longer sees the gate's own entry points, so it sees \
+             nothing and would pass over anything; it saw {subcommands:?}"
+        );
+
+        let (family, mut problems) = file_reading_family(&subcommands, &main_rs, &module_source);
+
+        assert!(
+            family.len() >= 8,
+            "the family derived to {} member(s), fewer than the gate has: {family:?}",
+            family.len()
+        );
+
+        problems.extend(unwired(&family, &main_rs, &unconditional_block()));
+
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// The wrong implementation this pair exists to reject, frozen: a
+    /// file-reading check added the way this repository actually adds them.
+    ///
+    /// A module `lint_zzz` that reads a document and starts nothing, a step in
+    /// `REQUIRED` naming it, a dispatch arm — and no call from [`run`]. Both
+    /// export-scanning checks above are green over exactly that, because
+    /// `lints.rs` exports nothing new, and so is every other test in this file.
+    /// It was run as a live mutation of the tree before it was frozen here.
+    #[test]
+    fn a_file_reading_check_added_as_a_module_is_not_silently_dropped() {
+        let main_rs = format!(
+            "{}\n        Some(\"lint-zzz\") => lint_zzz::run(),\n",
+            main_source()
+        );
+        let mut subcommands = required_subcommands();
+        subcommands.push("lint-zzz");
+
+        let source_of = |module: &str| {
+            if module == "lint_zzz" {
+                // The probe's whole body: one file read, no `Command`.
+                Some("pub(crate) fn run() { fs::read_to_string(page); }".to_owned())
+            } else {
+                module_source(module)
+            }
+        };
+
+        let (family, problems) = file_reading_family(&subcommands, &main_rs, &source_of);
+
+        assert!(
+            problems.is_empty(),
+            "the mutation must classify rather than error: {problems:#?}"
+        );
+        assert!(
+            family.contains(&"lint-zzz"),
+            "a module that reads a document and starts no process is a file-reading check"
+        );
+
+        let found = unwired(&family, &main_rs, &unconditional_block());
+
+        assert_eq!(
+            found.len(),
+            1,
+            "exactly the mutation and nothing else: {found:#?}"
+        );
+        assert!(found[0].contains("lint-zzz"), "{}", found[0]);
+        assert!(found[0].contains("crate::lint_zzz::run"), "{}", found[0]);
+    }
+
+    /// `cargo xtask lints`, held to the same family.
+    ///
+    /// [`print_help`] calls that command *"every step that reads a document
+    /// rather than compiling a package"* and prints its rows from this
+    /// selection, so the sentence is true only if the selection is the family.
+    /// It named nine of eleven: `spec-trace` and `lint-core-alloc-features`
+    /// both read a file, compile nothing, and were reachable through
+    /// `cargo xtask lints` only by typing their own names.
+    #[test]
+    fn cargo_xtask_lints_runs_every_file_reading_check_in_the_gate() {
+        let main_rs = main_source();
+        let (family, mut problems) =
+            file_reading_family(&required_subcommands(), &main_rs, &module_source);
+
+        let mut selected: Vec<&'static str> = Vec::new();
+        for step in crate::lint_steps() {
+            match xtask_subcommand(step) {
+                Some(subcommand) => selected.push(subcommand),
+                None => problems.push(format!(
+                    "`cargo xtask lints` selects `{}`, which is not one of this binary's own \
+                     entry points — so it compiles a package rather than reading a document",
+                    step.name
+                )),
+            }
+        }
+
+        for subcommand in &family {
+            if !selected.contains(subcommand) {
+                problems.push(format!(
+                    "`{subcommand}` reads a document and compiles nothing, and \
+                     `cargo xtask lints` does not run it: add it to `lint_steps`, or stop \
+                     calling that command every step that reads a document"
+                ));
+            }
+        }
+        for subcommand in &selected {
+            if !family.contains(subcommand) {
+                problems.push(format!(
+                    "`cargo xtask lints` runs `{subcommand}`, which is not a file-reading \
+                     check of the gate"
+                ));
+            }
+        }
+
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
 }
