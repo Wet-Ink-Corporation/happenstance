@@ -31,6 +31,28 @@
 //! command and discarding its output is the decorative-gate failure CLAUDE.md
 //! names, one level up from the decorative *rule* ADR-0010 is about.
 //!
+//! # And a listing cannot see an `#[ignore]`
+//!
+//! That was the whole of the mechanism, and it was half of one. libtest prints
+//! `name: test` for an ignored test exactly as it prints one that will run:
+//! `experiments/gate-vacuity/results/raw/list-diff.txt` is **empty**, and it is
+//! the diff of this file's own `--list` output for `projection_harness_parity`
+//! with and without an `#[ignore = "…"]` on both of its tests. An assertion over
+//! that listing cannot observe the attribute, and `cargo test` exits 0 over
+//! `0 passed; 2 ignored` — so with that attribute on all thirty-one names these
+//! nine targets carry, `cargo xtask ci` ran all of its steps and exited 0, four
+//! of the nine artefacts having executed nothing while the step printed *"N
+//! named tests present"* about each. The spelling that survives is not even an
+//! obscure one: bare `#[ignore]` is refused by `clippy::pedantic`'s
+//! `ignore_without_reason`, whose own diagnostic ends `help: add a reason with =
+//! ".."`.
+//!
+//! So [`check`] reads the run's own output as well, and [`unexecuted`] is the
+//! half that can disagree with the attribute: a name libtest did not report as
+//! having *passed* fails the step, whatever the exit status said. The listing
+//! assertion is kept rather than replaced — it is what fails a *renamed* test
+//! before a build's worth of tests run, and it names the missing one.
+//!
 //! # The lists here are expectations, and they are meant to be edited
 //!
 //! Each entry's `tests` duplicate names that also live in the target's own
@@ -1392,13 +1414,41 @@ fn check(artefact: &Artefact) -> Result<()> {
         println!("{package}/{target}: {present} named tests present");
     }
 
-    let status = Command::new("cargo")
+    // `.output()` rather than `.status()`, and the transcript forwarded
+    // verbatim, so the step's log is unchanged for a reader. What changes is
+    // that the run's own report is now *read* on the way past: the exit status
+    // cannot tell `2 passed` from `0 passed; 2 ignored`, and neither can the
+    // `--list` assertion above it — libtest prints an ignored test's name in
+    // that listing exactly as it prints a running one's.
+    let run = Command::new("cargo")
         .args(cargo_args(artefact))
-        .status()
+        .output()
         .with_context(|| format!("failed to launch `cargo test` for `{package}`'s `{target}`"))?;
 
-    if !status.success() {
-        bail!("`{package}`'s `{target}` proof artefact failed with {status}");
+    let transcript = String::from_utf8_lossy(&run.stdout);
+    print!("{transcript}");
+    eprint!("{}", String::from_utf8_lossy(&run.stderr));
+
+    if !run.status.success() {
+        bail!(
+            "`{package}`'s `{target}` proof artefact failed with {}",
+            run.status
+        );
+    }
+
+    let silent = unexecuted(tests, &transcript);
+    if !silent.is_empty() {
+        let count = silent.len();
+        bail!(
+            "`{package}`'s `{target}` exited 0 without running {count} of the tests \
+             the gate names: {silent:?}\n\n\
+             The target built and libtest was happy — an `#[ignore = \"…\"]` costs \
+             nothing but a zero in the `passed` column, and `clippy::pedantic`'s \
+             `ignore_without_reason` hands an author that exact spelling in its own \
+             `help:` line. These are the clauses' own names. If one was silenced \
+             deliberately, the clause in `SPECIFICATION.md` that cites it is now \
+             checked by nothing, and that is the change to make first."
+        );
     }
 
     Ok(())
@@ -1966,19 +2016,53 @@ fn list(args: &[&str], env: &[(&str, &str)], label: &str) -> Result<Vec<String>>
         .collect())
 }
 
-/// The named tests one run's own output does not report as having passed.
+/// The named tests one run's own output does not report as having **passed**.
 ///
-/// **Today: none, ever** — which is the defect, written down. [`check`] reads the
-/// run's *exit status* and discards everything it printed, and libtest exits 0
-/// over `0 passed; 31 ignored`, so nothing downstream of that status can
-/// disagree with an `#[ignore]`.
+/// # Why the run's output, and not a second listing
 ///
-/// The body is replaced, and this wired into [`check`], by the change
-/// `main.rs`'s `a_named_proof_test_that_did_not_run_fails_the_gate` is red for.
-#[allow(dead_code)]
+/// The obvious route is closed. `cargo test -- --list --ignored` would name the
+/// silenced tests outright, but the locked `wasm-bindgen-test 0.3.76`
+/// (`Cargo.lock:1985-1986`) offers `--include-ignored` and no run-only-ignored
+/// mode, so it is a mechanism the two arms of this file could never share. A
+/// run's own stdout is the one surface every libtest-shaped runner here prints
+/// in the same shape — and this file was already producing it and throwing it
+/// away, which is the decorative-gate failure one level up from the one the
+/// module documentation opens with.
+///
+/// # Why each name, and not the reported `passed` count
+///
+/// Comparing `tests.len()` against the run's `passed` is the cheaper
+/// comparison and it answers a different question: `2 passed` is also what a
+/// target prints whose two *named* tests were `#[ignore]`d and two others
+/// added. The names are what the clauses cite and what [`ARTEFACTS`] exists to
+/// hold, so the outcome is read per name.
+///
+/// The parse is libtest's per-test outcome line, `test <name> ... ok`, trimmed
+/// and matched whole. A name that appears only on an `ignored` or a `FAILED`
+/// line is *not* reported as having passed — which is the distinction a
+/// substring search over the same text cannot make, because an ignored test
+/// prints its name too.
+///
+/// # What this does not observe
+///
+/// Only the names an [`Artefact`] carries, and only for the targets [`check`]
+/// runs. A tenth test inside one of those targets may still be `#[ignore]`d
+/// without failing here, deliberately and for the reason the module
+/// documentation gives for the subset check — what may not happen in silence is
+/// a name a clause cites going quiet.
 pub(crate) fn unexecuted<'a>(named: &[&'a str], run_output: &str) -> Vec<&'a str> {
-    let _ = (named, run_output);
-    Vec::new()
+    let passed: Vec<&str> = run_output
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("test "))
+        .filter_map(|line| line.strip_suffix(" ... ok"))
+        .collect();
+
+    named
+        .iter()
+        .copied()
+        .filter(|name| !passed.contains(name))
+        .collect()
 }
 
 #[cfg(test)]
