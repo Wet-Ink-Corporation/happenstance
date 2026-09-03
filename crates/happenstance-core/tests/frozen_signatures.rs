@@ -28,8 +28,8 @@
 //! the query by reference from their caller and compile unchanged against the
 //! frozen signature. What does not compile is a local, and
 //! [`escaping_cases_need_the_query_to_outlive_the_stream`] documents the four
-//! diagnostics that arrangement produces, because "it does not compile" is not
-//! useful to anyone who has not tried it.
+//! diagnostics that arrangement produces — the fence that *refuses* it lives
+//! in `src/store.rs`: rustdoc compiles a doc fence from the lib target only.
 
 #![cfg(feature = "memory")]
 #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
@@ -201,6 +201,18 @@ async fn a_caller_still_owns_its_batch_after_appending_it() {
 
 /// The arrangement cases 1 and 2 must not be rewritten into.
 ///
+/// **The refusal is pinned in `src/store.rs`, not here.** It sits on
+/// `happenstance_core::store::es_13_the_query_must_outlive_the_stream`, beside
+/// the compiling control RS-62-1 requires. rustdoc collects doctests from the
+/// **lib target only**, so the `compile_fail` fence that stood here from phase
+/// 4 until F1-04 was read as prose and could never fail: with its body replaced
+/// by a line of English, both `cargo test -p happenstance-core --doc` and
+/// `--test frozen_signatures` still exited `0`. `RUNBOOK.md:3628-3643` recorded
+/// that it never ran; what nothing recorded is that this site said so nowhere,
+/// and a reader here was told the pin was live. `store.rs`'s
+/// `a_doc_fence_in_an_integration_test_target_is_never_compiled` reads this file
+/// and fails if a doc fence is opened in it again.
+///
 /// A query bound to a **local** cannot outlive a stream returned from the
 /// function that declared it, and the diagnostic depends on how the return type
 /// is spelled — which is why ES-13 states the defect rather than pinning a code:
@@ -213,23 +225,11 @@ async fn a_caller_still_owns_its_batch_after_appending_it() {
 /// | returned inside a struct, bare | `error[E0597]` |
 ///
 /// All four are the same defect reported from two ends. Without a lifetime bound
-/// the compiler reasons from the *borrow* — `&query` must outlive the return and
-/// `query` drops at the end of the function. With one, the opaque type is
-/// required to live for `'a`, so it reasons from the *value* instead. The cause
-/// either way is that the opaque type captures the query's lifetime.
-///
-/// ```compile_fail
-/// use futures_core::Stream;
-/// use happenstance_core::{EventStore, Query, ReadOptions, SequencedEvent};
-///
-/// fn escapes<S: EventStore>(store: &S) -> impl Stream<Item = Result<SequencedEvent, S::Error>> {
-///     let query = Query::all();
-///     store.read(&query, ReadOptions::new())
-/// }
-/// ```
+/// the compiler reasons from the *borrow*; with one, it reasons from the
+/// *value*. Either way, the opaque type captures the query's lifetime.
 #[expect(
     dead_code,
-    reason = "the doctest above is the artefact; this item exists to carry it"
+    reason = "the prose is the artefact; the fence it points to lives in store.rs"
 )]
 fn escaping_cases_need_the_query_to_outlive_the_stream() {}
 
