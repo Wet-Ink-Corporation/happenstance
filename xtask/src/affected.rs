@@ -919,4 +919,103 @@ mod tests {
             "expected the testkit among {affected:?}"
         );
     }
+
+    /// [`run`]'s unconditional file-reading block, as source text.
+    ///
+    /// Read from disk rather than reasoned about, because what is being
+    /// asserted is *which calls are written there*. It is the instrument
+    /// `lint_narrative` already points at this exact block
+    /// (`xtask/src/lint_narrative.rs:2282`, `the_checker_joins_the_
+    /// unconditional_file_reading_list`), and the two checks below are that
+    /// one generalised.
+    ///
+    /// Scoped to the block rather than to the file, and that is load-bearing:
+    /// this module's source contains its own tests, so a check for a call
+    /// spelled out in a failure message would be discharged by the failure
+    /// message. Both delimiters panic when they stop matching rather than
+    /// returning an empty haystack every `contains` would fail against — a
+    /// check that can lose its subject and stay green is the shape of defect
+    /// this pair exists to reject.
+    fn unconditional_block() -> String {
+        let source = fs::read_to_string(workspace_root().unwrap().join("xtask/src/affected.rs"))
+            .expect("this module's own source must be readable");
+
+        let start = source
+            .find("=== the file-reading checks ===")
+            .expect("`run` must still announce the file-reading checks by that heading");
+        let rest = &source[start..];
+        let end = rest
+            .find("let members = members(&root)?;")
+            .expect("the file-reading block must still end where package selection begins");
+
+        rest[..end].to_owned()
+    }
+
+    /// The `pub(crate) fn <name>() -> Result<()>` items of a module, by name.
+    fn exported_lints(source: &str) -> Vec<String> {
+        source
+            .lines()
+            .filter_map(|line| line.strip_prefix("pub(crate) fn "))
+            .filter_map(|rest| rest.split_once("() -> Result<()> {"))
+            .map(|(name, _)| name.to_owned())
+            .collect()
+    }
+
+    /// The check whose subject is the documents a story *edits*, on the gate
+    /// that story *runs*.
+    ///
+    /// `stated_rule_counts` runs in the opposite direction to every other step
+    /// in the gate — it holds four documents to the code rather than the code
+    /// to a document — and a story that lands a conformance rule is precisely
+    /// the change that leaves those four stating a count the suite no longer
+    /// has. Leaving it off this list let such a story clear its own grain with
+    /// the testkit's README, both `lib.rs` front pages and
+    /// `happenstance-core`'s feature comment all still saying the old number.
+    /// The person who breaks is the crates.io reader, and that failure had
+    /// already happened three times before anything could see it.
+    #[test]
+    fn the_unconditional_block_runs_the_stated_rule_counts_lint() {
+        assert!(
+            unconditional_block().contains("crate::lints::stated_rule_counts()?;"),
+            "the story-grain gate must run the rule-count check: `.redkiln/config.yaml` \
+             wires this command at every advance seam, and a story that adds a \
+             conformance rule is the one change it exists to catch"
+        );
+    }
+
+    /// The general form of the defect above, and the reason it is a pair.
+    ///
+    /// The wrong implementation this rejects is the one that actually
+    /// happened: a lint added to `lints.rs`, wired into `REQUIRED` so
+    /// `cargo xtask ci` runs it, and never wired into the story grain — where
+    /// it sat unrun for the fifteen commits that made the omission matter.
+    /// The module documentation above claims `crate::lints` runs on every
+    /// invocation; this is what makes that a checked claim rather than a
+    /// remembered one.
+    #[test]
+    fn the_unconditional_block_runs_every_lint_the_module_exports() {
+        let source = fs::read_to_string(workspace_root().unwrap().join("xtask/src/lints.rs"))
+            .expect("`xtask/src/lints.rs` must be readable");
+        let exported = exported_lints(&source);
+
+        assert!(
+            exported.iter().any(|name| name == "no_clock"),
+            "the export scan no longer sees CF-33's lint, so it sees nothing and this \
+             check would pass over anything; it saw {exported:?}"
+        );
+
+        let block = unconditional_block();
+        let missing = exported
+            .iter()
+            .filter(|name| !block.contains(&format!("crate::lints::{name}()?;")))
+            .collect::<Vec<_>>();
+
+        assert!(
+            missing.is_empty(),
+            "`crate::lints` exports {missing:?}, which the story-grain gate never runs. \
+             Either call them in `run`'s unconditional block or stop claiming, in this \
+             module's own documentation, that this module's lints run whatever the diff \
+             touched."
+        );
+    }
 }
