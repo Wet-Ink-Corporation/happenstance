@@ -15,7 +15,11 @@ publish = false
 # `unstable-projection` is named rather than inherited. Feature unification is
 # per build, and this crate is checked twice on its own — once for the host and
 # once for `wasm32`, where nothing else is in the build to unify with.
-happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
+# `unstable-projection` is NOT here, and its absence is the point: it is forwarded
+# by the `projection-store` feature below rather than taken unconditionally. Held
+# here it would reach every consumer of this crate whatever features they chose,
+# which is how a gate that two other crates maintain gets walked around by a third.
+happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 # `std` is added rather than assumed: the workspace entry is
 # `default-features = false` so members state what they need, and `serde_json`
@@ -25,11 +29,17 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [features]
-default = ["event-store", "projection-store"]
+# The event store only. `projection-store` left this set with ADR-0036: it forwards
+# an unfrozen port, and PS-3 says such a port ships behind an off-by-default flag.
+default = ["event-store"]
 # The transport and the error type are unconditional: they are the crate's
 # actual contribution and both roles are written in terms of them.
 event-store = []
-projection-store = []
+# Forwards the contract crate's own gate, the way `happenstance-sqlite` does. It was
+# empty while the dependency above carried the flag unconditionally — so the feature
+# named the capability while doing none of the gating, and turning it off changed
+# nothing a consumer could observe.
+projection-store = ["happenstance-core/unstable-projection"]
 
 [lints]
 workspace = true

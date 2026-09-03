@@ -15,7 +15,11 @@ publish = false
 # `unstable-projection` is named rather than inherited. Feature unification is
 # per build, and the `-p` doc step and every `cargo hack` combination build this
 # crate on its own.
-happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
+# `unstable-projection` is NOT here, and its absence is the point: it is forwarded
+# by the `projection-store` feature below rather than taken unconditionally. Held
+# here it would reach every consumer of this crate whatever features they chose,
+# which is how a gate that two other crates maintain gets walked around by a third.
+happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 thiserror.workspace = true
 # `postgres` is the driver; `runtime-tokio` is the reactor. Nothing else — no
@@ -29,12 +33,18 @@ happenstance-testkit.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
-default = ["event-store", "projection-store"]
+# The event store only. `projection-store` left this set with ADR-0036: it forwards
+# an unfrozen port, and PS-3 says such a port ships behind an off-by-default flag.
+default = ["event-store"]
 # One driver, one pool, one connection story, so the two roles share a crate and
 # are separated by features rather than by another package — the same split
 # `happenstance-sqlite` makes, for the same reason.
 event-store = []
-projection-store = []
+# Forwards the contract crate's own gate, the way `happenstance-sqlite` does. It was
+# empty while the dependency above carried the flag unconditionally — so the feature
+# named the capability while doing none of the gating, and turning it off changed
+# nothing a consumer could observe.
+projection-store = ["happenstance-core/unstable-projection"]
 
 [lints]
 workspace = true
