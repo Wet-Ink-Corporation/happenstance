@@ -44,6 +44,25 @@
 //! that never ran it, and five statements of which lints run had drifted into
 //! five different answers with nothing to notice.
 //!
+//! **Every** file-reading check the *gate* has, which is the wider claim and the
+//! one that survives an adversary:
+//! `the_unconditional_block_runs_every_file_reading_check_in_the_gate`, below,
+//! derives the family from `REQUIRED` — an entry point whose module never builds
+//! a `Command` reads documents and compiles nothing — and holds this block to
+//! it. The export scan above cannot reach that class, because this repository
+//! adds file-reading checks as *modules*: `lint_narrative`, `lint_pages` and
+//! `lint_constitution` export nothing from `lints.rs`, so a fourth one wired
+//! into the gate and not into this block is green under an export scan and
+//! green under every other test in this file. That mutation was run against the
+//! tree before it was frozen as a fixture beside the check.
+//!
+//! Leaving a check off this block is therefore an entry in
+//! `OFF_THE_STORY_GRAIN` carrying the argument for it, never an absence — and a
+//! step that is *not* a file read is an entry in `RUNS_A_PACKAGE` saying what it
+//! runs, reconciled against what its module actually does. Two hand lists, both
+//! held to a derivation, because only the difference between the two can say
+//! which of them moved.
+//!
 //! Nothing runs here that `cargo xtask ci` does not. The one thing that runs
 //! there and not here is `lint-constitution`, which is a decision with its own
 //! written rationale rather than an omission to tidy up; the narrative tree is

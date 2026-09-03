@@ -27,8 +27,8 @@
 //! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; six
-//! file-reading lints described below; a seventh manifest lint for D12, kept out
-//! of that group because it names no clause (ADR-0016 §14); and
+//! file-reading lints described below; a seventh manifest lint for D12, outside
+//! that clause-named group (ADR-0016 §14) and inside `cargo xtask lints`; and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
@@ -1193,20 +1193,20 @@ fn wasm_steps() -> Vec<&'static Step> {
     ])
 }
 
-/// The file-reading checks, selected by name. *Five* until this line stopped
-/// counting: it said five while the selection below named nine, so
-/// [`print_help`] now prints the selection instead of transcribing it.
-///
-/// Ordinary `REQUIRED` steps, gathered so that working on one does not mean
-/// running the whole gate; each is a file read, so the set is nearly free.
+/// Every `REQUIRED` step that reads a document rather than compiling a package,
+/// selected by name. It carried a count until the count went wrong — it said
+/// *five* while naming nine of the eleven — so [`print_help`] prints the
+/// selection, and `affected.rs` holds the selection to the step table.
 fn lint_steps() -> Vec<&'static Step> {
     steps_named(&[
+        "specification traceability",
         "no retired rule is still live",
         "no conformance rule reads a clock",
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
         "every stated rule count matches the suite",
         "the testkit carries its own version",
+        "happenstance-core names serde/alloc and base64/alloc",
         "the Rust constitution is internally consistent",
         lint_narrative::STEP,
         lint_pages::STEP,
