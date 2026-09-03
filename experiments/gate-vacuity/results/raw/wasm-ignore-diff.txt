@@ -1,0 +1,12 @@
+diff --git a/crates/happenstance-cloudflare/src/lib.rs b/crates/happenstance-cloudflare/src/lib.rs
+index 953cf40..dcbae6f 100644
+--- a/crates/happenstance-cloudflare/src/lib.rs
++++ b/crates/happenstance-cloudflare/src/lib.rs
+@@ -632,6 +632,7 @@ mod wasm_tests {
+     use super::not_send_assertions as probe;
+ 
+     #[wasm_bindgen_test]
++    #[ignore = "measured by experiments/gate-vacuity"]
+     fn the_probe_is_not_vacuous() {
+         probe::the_probe_is_not_vacuous();
+     }

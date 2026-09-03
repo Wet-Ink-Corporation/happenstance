@@ -1,0 +1,422 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling thiserror v2.0.20
+   Compiling futures-core v0.3.34
+   Compiling bytes v1.12.1
+   Compiling pin-project-lite v0.2.17
+   Compiling syn v3.0.4
+   Compiling syn v2.0.119
+   Compiling trait-variant v0.1.3
+   Compiling thiserror-impl v2.0.20
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.53.1
+   Compiling happenstance-core v0.2.0-alpha.1 (D:\repos\happenstance\crates\happenstance-core)
+   Compiling happenstance-testkit v0.2.0-alpha.1 (D:\repos\happenstance\crates\happenstance-testkit)
+   Compiling suite-against-wrong-adapters v0.0.0 (D:\repos\happenstance\experiments\suite-against-wrong-adapters)
+    Finished `release` profile [optimized] target(s) in 1m 42s
+     Running tests\census.rs (target\release\deps\census-b7b83d26a390df73.exe)
+
+running 1 test
+test the_suite_against_four_wrong_adapters ... 
+=== rules in the event-store family: 89 ===
+
+-----------------------------------------------------------------
+SUBJECT MemoryEventStore (reference) [Control]
+  declines REOPEN: MemoryEventStore is a Vec behind an RwLock, so there is no durable medium to reopen over: discarding process state is indistinguishable from discarding the events
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 83 passed, 6 skipped, 0 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT LogStore (correct core) [Control]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 83 passed, 6 skipped, 0 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT ForwardPagingBudgetStore [Mutant]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 83 passed, 6 skipped, 0 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT NoopReopenFixture [Mutant]
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 86 passed, 3 skipped, 0 FAILED
+  skipped: ["append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT SwallowedReadFaultStore [Mutant]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 83 passed, 6 skipped, 0 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT StagedCommitStore [Mutant]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 83 passed, 6 skipped, 0 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+
+-----------------------------------------------------------------
+SUBJECT ForwardPagingBudgetStore + InnerJoin [InjectedControl]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 62 passed, 6 skipped, 21 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+  FAIL two_fixture_instances_observe_none_of_each_others_appends [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:222 — assertion `left == right` failed: the append must actually have landed in the first fixture's store — otherwise the isolation assertion below holds for the wrong reason
+  left: []
+ right: ["A"]
+  FAIL query_all_matches_every_event [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:383 — assertion `left == right` failed: Query::all() must match every event, in the order the store assigned
+  left: []
+ right: ["Cee", "Bee", "Ay"]
+  FAIL query_item_types_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:399 — assertion `left == right` failed: an event matches a query item when its type is ONE OF the item's types
+  left: []
+ right: ["A", "C"]
+  FAIL query_items_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:575 — assertion `left == right` failed: all three appended events must be readable back before the first two of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL untagged_events_match_query_all [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:613 — assertion `left == right` failed: an event with no tags at all must still be matched by Query::all() — a tag side table reached with INNER JOIN has no row to join it to
+  left: []
+ right: [1]
+  FAIL duplicate_items_do_not_duplicate_events [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:664 — assertion `left == right` failed: and the store holds exactly two events, so Query::all() must yield two: [1]
+  left: 1
+ right: 2
+  FAIL query_item_order_does_not_change_the_result_set [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:733 — assertion `left == right` failed: and both events must be selected, in position order — otherwise the two reads agree by both being empty, or by both being in item order
+  left: [1]
+ right: [1, 2]
+  FAIL read_from_is_inclusive [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:889 — assertion `left == right` failed: all three appended events must be readable back before the second of their positions can anchor the assertion below
+  left: 0
+ right: 3
+  FAIL read_backwards_reverses_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:920 — assertion `left == right` failed: `backwards` must return events in descending position order
+  left: []
+ right: ["Ay", "Bee", "Cee"]
+  FAIL read_limit_truncates [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:945 — assertion `left == right` failed: `limit` must return the first N matches, not an arbitrary N
+  left: []
+ right: ["Dee", "Cee"]
+  FAIL read_backwards_from_with_limit [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:968 — assertion `left == right` failed: all five appended events must be readable back before the fourth of their positions can anchor the assertion below
+  left: 0
+ right: 5
+  FAIL read_defaults_to_ascending_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:868 — assertion `left == right` failed: all three appended events must come back before their order means anything, got []
+  left: 0
+ right: 3
+  FAIL read_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1066 — assertion `left == right` failed: `limit(2)` must return the first two events MATCHING the query, not whatever matches among the first two rows scanned
+  left: []
+ right: [2, 3]
+  FAIL read_backwards_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1096 — assertion `left == right` failed: under `backwards`, `limit(2)` must return the last two events MATCHING the query, newest first
+  left: []
+ right: [4, 3]
+  FAIL read_from_composes_with_multi_item_query [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1135 — assertion `left == right` failed: `from` must bound EVERY item of the query. An unparenthesised `WHERE a OR b AND position >= ?` bounds only the last one, and the first item's matches come back from the start of the log every time
+  left: [5]
+ right: [3, 5]
+  FAIL positions_are_strictly_monotonic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1623 — assertion `left == right` failed: all four appended events must come back before their order means anything, got []
+  left: 0
+ right: 4
+  FAIL head_is_the_highest_visible_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1810 — the anchor: `Query::all()` matches untagged events (ES-13), so the read this rule judges `head()` against must have yielded the untagged one — otherwise a scoped `head` is being compared with an equally scoped read and the two agree for the wrong reason. Positions visible: [1]
+  FAIL append_returns_last_written_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2631 — assertion `left == right` failed: `append` must return the position assigned to the LAST event in the batch
+  left: Some(SequencePosition(3))
+ right: None
+  FAIL append_is_atomic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2665 — assertion `left == right` failed: a rejected batch must leave NO partial writes behind
+  left: []
+ right: ["Existing"]
+  FAIL condition_rejection_leaves_store_unchanged [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:4917 — assertion `left == right` failed: both appended events must be visible before `unchanged` can mean anything: two empty reads compare equal, and a store that shows nothing would satisfy every assertion below without holding still
+  left: []
+ right: ["A", "B"]
+  FAIL a_live_read_stream_does_not_block_an_append [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5530 — and it must still yield what was visible when it was opened; otherwise a store that returns nothing passes this rule for free
+
+-----------------------------------------------------------------
+SUBJECT NoopReopenFixture + InnerJoin [InjectedControl]
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 64 passed, 3 skipped, 22 FAILED
+  skipped: ["append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+  FAIL two_fixture_instances_observe_none_of_each_others_appends [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:222 — assertion `left == right` failed: the append must actually have landed in the first fixture's store — otherwise the isolation assertion below holds for the wrong reason
+  left: []
+ right: ["A"]
+  FAIL acknowledged_writes_survive_a_reopen [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:348 — assertion `left == right` failed: every event of an acknowledged append must survive a reopen
+  left: []
+ right: ["A", "B"]
+  FAIL query_all_matches_every_event [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:383 — assertion `left == right` failed: Query::all() must match every event, in the order the store assigned
+  left: []
+ right: ["Cee", "Bee", "Ay"]
+  FAIL query_item_types_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:399 — assertion `left == right` failed: an event matches a query item when its type is ONE OF the item's types
+  left: []
+ right: ["A", "C"]
+  FAIL query_items_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:575 — assertion `left == right` failed: all three appended events must be readable back before the first two of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL untagged_events_match_query_all [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:613 — assertion `left == right` failed: an event with no tags at all must still be matched by Query::all() — a tag side table reached with INNER JOIN has no row to join it to
+  left: []
+ right: [1]
+  FAIL duplicate_items_do_not_duplicate_events [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:664 — assertion `left == right` failed: and the store holds exactly two events, so Query::all() must yield two: [1]
+  left: 1
+ right: 2
+  FAIL query_item_order_does_not_change_the_result_set [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:733 — assertion `left == right` failed: and both events must be selected, in position order — otherwise the two reads agree by both being empty, or by both being in item order
+  left: [1]
+ right: [1, 2]
+  FAIL read_from_is_inclusive [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:889 — assertion `left == right` failed: all three appended events must be readable back before the second of their positions can anchor the assertion below
+  left: 0
+ right: 3
+  FAIL read_backwards_reverses_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:920 — assertion `left == right` failed: `backwards` must return events in descending position order
+  left: []
+ right: ["Ay", "Bee", "Cee"]
+  FAIL read_limit_truncates [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:945 — assertion `left == right` failed: `limit` must return the first N matches, not an arbitrary N
+  left: []
+ right: ["Dee", "Cee"]
+  FAIL read_backwards_from_with_limit [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:968 — assertion `left == right` failed: all five appended events must be readable back before the fourth of their positions can anchor the assertion below
+  left: 0
+ right: 5
+  FAIL read_defaults_to_ascending_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:868 — assertion `left == right` failed: all three appended events must come back before their order means anything, got []
+  left: 0
+ right: 3
+  FAIL read_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1066 — assertion `left == right` failed: `limit(2)` must return the first two events MATCHING the query, not whatever matches among the first two rows scanned
+  left: []
+ right: [2, 3]
+  FAIL read_backwards_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1096 — assertion `left == right` failed: under `backwards`, `limit(2)` must return the last two events MATCHING the query, newest first
+  left: []
+ right: [4, 3]
+  FAIL read_from_composes_with_multi_item_query [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1135 — assertion `left == right` failed: `from` must bound EVERY item of the query. An unparenthesised `WHERE a OR b AND position >= ?` bounds only the last one, and the first item's matches come back from the start of the log every time
+  left: [5]
+ right: [3, 5]
+  FAIL positions_are_strictly_monotonic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1623 — assertion `left == right` failed: all four appended events must come back before their order means anything, got []
+  left: 0
+ right: 4
+  FAIL head_is_the_highest_visible_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1810 — the anchor: `Query::all()` matches untagged events (ES-13), so the read this rule judges `head()` against must have yielded the untagged one — otherwise a scoped `head` is being compared with an equally scoped read and the two agree for the wrong reason. Positions visible: [1]
+  FAIL append_returns_last_written_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2631 — assertion `left == right` failed: `append` must return the position assigned to the LAST event in the batch
+  left: Some(SequencePosition(3))
+ right: None
+  FAIL append_is_atomic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2665 — assertion `left == right` failed: a rejected batch must leave NO partial writes behind
+  left: []
+ right: ["Existing"]
+  FAIL condition_rejection_leaves_store_unchanged [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:4917 — assertion `left == right` failed: both appended events must be visible before `unchanged` can mean anything: two empty reads compare equal, and a store that shows nothing would satisfy every assertion below without holding still
+  left: []
+ right: ["A", "B"]
+  FAIL a_live_read_stream_does_not_block_an_append [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5530 — and it must still yield what was visible when it was opened; otherwise a store that returns nothing passes this rule for free
+
+-----------------------------------------------------------------
+SUBJECT SwallowedReadFaultStore + InnerJoin [InjectedControl]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 62 passed, 6 skipped, 21 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+  FAIL two_fixture_instances_observe_none_of_each_others_appends [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:222 — assertion `left == right` failed: the append must actually have landed in the first fixture's store — otherwise the isolation assertion below holds for the wrong reason
+  left: []
+ right: ["A"]
+  FAIL query_all_matches_every_event [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:383 — assertion `left == right` failed: Query::all() must match every event, in the order the store assigned
+  left: []
+ right: ["Cee", "Bee", "Ay"]
+  FAIL query_item_types_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:399 — assertion `left == right` failed: an event matches a query item when its type is ONE OF the item's types
+  left: []
+ right: ["A", "C"]
+  FAIL query_items_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:575 — assertion `left == right` failed: all three appended events must be readable back before the first two of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL untagged_events_match_query_all [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:613 — assertion `left == right` failed: an event with no tags at all must still be matched by Query::all() — a tag side table reached with INNER JOIN has no row to join it to
+  left: []
+ right: [1]
+  FAIL duplicate_items_do_not_duplicate_events [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:664 — assertion `left == right` failed: and the store holds exactly two events, so Query::all() must yield two: [1]
+  left: 1
+ right: 2
+  FAIL query_item_order_does_not_change_the_result_set [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:733 — assertion `left == right` failed: and both events must be selected, in position order — otherwise the two reads agree by both being empty, or by both being in item order
+  left: [1]
+ right: [1, 2]
+  FAIL read_from_is_inclusive [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:889 — assertion `left == right` failed: all three appended events must be readable back before the second of their positions can anchor the assertion below
+  left: 0
+ right: 3
+  FAIL read_backwards_reverses_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:920 — assertion `left == right` failed: `backwards` must return events in descending position order
+  left: []
+ right: ["Ay", "Bee", "Cee"]
+  FAIL read_limit_truncates [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:945 — assertion `left == right` failed: `limit` must return the first N matches, not an arbitrary N
+  left: []
+ right: ["Dee", "Cee"]
+  FAIL read_backwards_from_with_limit [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:968 — assertion `left == right` failed: all five appended events must be readable back before the fourth of their positions can anchor the assertion below
+  left: 0
+ right: 5
+  FAIL read_defaults_to_ascending_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:868 — assertion `left == right` failed: all three appended events must come back before their order means anything, got []
+  left: 0
+ right: 3
+  FAIL read_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1066 — assertion `left == right` failed: `limit(2)` must return the first two events MATCHING the query, not whatever matches among the first two rows scanned
+  left: []
+ right: [2, 3]
+  FAIL read_backwards_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1096 — assertion `left == right` failed: under `backwards`, `limit(2)` must return the last two events MATCHING the query, newest first
+  left: []
+ right: [4, 3]
+  FAIL read_from_composes_with_multi_item_query [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1135 — assertion `left == right` failed: `from` must bound EVERY item of the query. An unparenthesised `WHERE a OR b AND position >= ?` bounds only the last one, and the first item's matches come back from the start of the log every time
+  left: [5]
+ right: [3, 5]
+  FAIL positions_are_strictly_monotonic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1623 — assertion `left == right` failed: all four appended events must come back before their order means anything, got []
+  left: 0
+ right: 4
+  FAIL head_is_the_highest_visible_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1810 — the anchor: `Query::all()` matches untagged events (ES-13), so the read this rule judges `head()` against must have yielded the untagged one — otherwise a scoped `head` is being compared with an equally scoped read and the two agree for the wrong reason. Positions visible: [1]
+  FAIL append_returns_last_written_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2631 — assertion `left == right` failed: `append` must return the position assigned to the LAST event in the batch
+  left: Some(SequencePosition(3))
+ right: None
+  FAIL append_is_atomic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2665 — assertion `left == right` failed: a rejected batch must leave NO partial writes behind
+  left: []
+ right: ["Existing"]
+  FAIL condition_rejection_leaves_store_unchanged [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:4917 — assertion `left == right` failed: both appended events must be visible before `unchanged` can mean anything: two empty reads compare equal, and a store that shows nothing would satisfy every assertion below without holding still
+  left: []
+ right: ["A", "B"]
+  FAIL a_live_read_stream_does_not_block_an_append [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5530 — and it must still yield what was visible when it was opened; otherwise a store that returns nothing passes this rule for free
+
+-----------------------------------------------------------------
+SUBJECT StagedCommitStore + InnerJoin [InjectedControl]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 62 passed, 6 skipped, 21 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+  FAIL two_fixture_instances_observe_none_of_each_others_appends [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:222 — assertion `left == right` failed: the append must actually have landed in the first fixture's store — otherwise the isolation assertion below holds for the wrong reason
+  left: []
+ right: ["A"]
+  FAIL query_all_matches_every_event [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:383 — assertion `left == right` failed: Query::all() must match every event, in the order the store assigned
+  left: []
+ right: ["Cee", "Bee", "Ay"]
+  FAIL query_item_types_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:399 — assertion `left == right` failed: an event matches a query item when its type is ONE OF the item's types
+  left: []
+ right: ["A", "C"]
+  FAIL query_items_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:575 — assertion `left == right` failed: all three appended events must be readable back before the first two of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL untagged_events_match_query_all [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:613 — assertion `left == right` failed: an event with no tags at all must still be matched by Query::all() — a tag side table reached with INNER JOIN has no row to join it to
+  left: []
+ right: [1]
+  FAIL duplicate_items_do_not_duplicate_events [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:664 — assertion `left == right` failed: and the store holds exactly two events, so Query::all() must yield two: [1]
+  left: 1
+ right: 2
+  FAIL query_item_order_does_not_change_the_result_set [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:733 — assertion `left == right` failed: and both events must be selected, in position order — otherwise the two reads agree by both being empty, or by both being in item order
+  left: [1]
+ right: [1, 2]
+  FAIL read_from_is_inclusive [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:889 — assertion `left == right` failed: all three appended events must be readable back before the second of their positions can anchor the assertion below
+  left: 0
+ right: 3
+  FAIL read_backwards_reverses_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:920 — assertion `left == right` failed: `backwards` must return events in descending position order
+  left: []
+ right: ["Ay", "Bee", "Cee"]
+  FAIL read_limit_truncates [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:945 — assertion `left == right` failed: `limit` must return the first N matches, not an arbitrary N
+  left: []
+ right: ["Dee", "Cee"]
+  FAIL read_backwards_from_with_limit [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:968 — assertion `left == right` failed: all five appended events must be readable back before the fourth of their positions can anchor the assertion below
+  left: 0
+ right: 5
+  FAIL read_defaults_to_ascending_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:868 — assertion `left == right` failed: all three appended events must come back before their order means anything, got []
+  left: 0
+ right: 3
+  FAIL read_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1066 — assertion `left == right` failed: `limit(2)` must return the first two events MATCHING the query, not whatever matches among the first two rows scanned
+  left: []
+ right: [2, 3]
+  FAIL read_backwards_limit_applies_after_filtering [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1096 — assertion `left == right` failed: under `backwards`, `limit(2)` must return the last two events MATCHING the query, newest first
+  left: []
+ right: [4, 3]
+  FAIL read_from_composes_with_multi_item_query [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1135 — assertion `left == right` failed: `from` must bound EVERY item of the query. An unparenthesised `WHERE a OR b AND position >= ?` bounds only the last one, and the first item's matches come back from the start of the log every time
+  left: [5]
+ right: [3, 5]
+  FAIL positions_are_strictly_monotonic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1623 — assertion `left == right` failed: all four appended events must come back before their order means anything, got []
+  left: 0
+ right: 4
+  FAIL head_is_the_highest_visible_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1810 — the anchor: `Query::all()` matches untagged events (ES-13), so the read this rule judges `head()` against must have yielded the untagged one — otherwise a scoped `head` is being compared with an equally scoped read and the two agree for the wrong reason. Positions visible: [1]
+  FAIL append_returns_last_written_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2631 — assertion `left == right` failed: `append` must return the position assigned to the LAST event in the batch
+  left: Some(SequencePosition(3))
+ right: None
+  FAIL append_is_atomic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2665 — assertion `left == right` failed: a rejected batch must leave NO partial writes behind
+  left: []
+ right: ["Existing"]
+  FAIL condition_rejection_leaves_store_unchanged [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:4917 — assertion `left == right` failed: both appended events must be visible before `unchanged` can mean anything: two empty reads compare equal, and a store that shows nothing would satisfy every assertion below without holding still
+  left: []
+ right: ["A", "B"]
+  FAIL a_live_read_stream_does_not_block_an_append [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5530 — and it must still yield what was visible when it was opened; otherwise a store that returns nothing passes this rule for free
+
+-----------------------------------------------------------------
+SUBJECT SwallowedReadFaultStore (fault armed by hand) [Diagnostic]
+  declines REOPEN: a Vec behind an Rc, with no durable medium to reopen over — this experiment's axis is what the rule set certifies, not durability
+  declines MID_BATCH_FAULT: this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+  declines MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH: this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+  89 rules: 61 passed, 6 skipped, 22 FAILED
+  skipped: ["acknowledged_writes_survive_a_reopen", "reopened_store_does_not_reissue_an_event_id", "recorded_time_survives_a_reopen", "append_is_atomic_under_a_mid_batch_fault", "arming_a_mid_batch_fault_makes_the_append_fail", "append_reports_exceeded_store_limits"]
+  FAIL query_all_matches_every_event [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:383 — assertion `left == right` failed: Query::all() must match every event, in the order the store assigned
+  left: ["Cee", "Bee"]
+ right: ["Cee", "Bee", "Ay"]
+  FAIL query_item_combines_types_and_tags_with_and [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:519 — assertion `left == right` failed: all three appended events must be readable back before one of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL query_items_are_or [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:575 — assertion `left == right` failed: all three appended events must be readable back before the first two of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL read_from_is_inclusive [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:889 — assertion `left == right` failed: all three appended events must be readable back before the second of their positions can anchor the assertion below
+  left: 2
+ right: 3
+  FAIL read_backwards_reverses_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:920 — assertion `left == right` failed: `backwards` must return events in descending position order
+  left: ["Ay", "Bee"]
+ right: ["Ay", "Bee", "Cee"]
+  FAIL read_backwards_from_with_limit [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:968 — assertion `left == right` failed: all five appended events must be readable back before the fourth of their positions can anchor the assertion below
+  left: 2
+ right: 5
+  FAIL read_defaults_to_ascending_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:868 — assertion `left == right` failed: all three appended events must come back before their order means anything, got [1, 2]
+  left: 2
+ right: 3
+  FAIL read_from_composes_with_multi_item_query [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1144 — assertion `left == right` failed: `backwards` must order the whole match set, not each item's matches
+  left: [5, 3]
+ right: [5, 3, 2, 1]
+  FAIL read_from_and_to_bound_a_closed_window [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1245 — assertion `left == right` failed: `from` and `to` are both inclusive and both bound the same read: a closed window must yield exactly the events between them, ends included, and nothing on either side
+  left: [2, 3]
+ right: [2, 3, 4]
+  FAIL read_to_under_backwards_bounds_the_older_end [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1289 — assertion `left == right` failed: under `backwards`, `to` is the STOPPING bound and therefore the older end: the read starts at the newest event and stops at the one `to` names, inclusive. An adapter that reads `to` as an upper bound in position order irrespective of direction returns the wrong end of the log entirely — and it is correct reading forwards, so nothing else in the suite sees it
+  left: [5, 4]
+ right: [5, 4, 3]
+  FAIL limit_applies_across_items_not_per_item [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1425 — assertion `left == right` failed: `limit(4)` over a two-item query must yield the first four events of the MERGED result, not four per item. A store that writes the budget into one statement per item hands a caller who asked for four a page it did not size — and the caller's own paging arithmetic is built on the number it asked for
+  left: [1, 2]
+ right: [1, 2, 3, 4]
+  FAIL read_from_a_gap_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1523 — assertion `left == right` failed: `from` names a position, not an index: reading backwards from a position NOTHING OCCUPIES must yield the next matching event below it. An equality seek or a `rowid` offset returns empty here, and a projection resuming across a gap then stalls forever with no error anywhere
+  left: [3, 2]
+ right: [3, 2, 1]
+  FAIL positions_are_strictly_monotonic [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1623 — assertion `left == right` failed: all four appended events must come back before their order means anything, got [1, 2]
+  left: 2
+ right: 4
+  FAIL append_stamps_identity_and_time [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:1964 — assertion `left == right` failed: the anchor: all three events must come back before "the same event reached two ways" means anything, got ["Ay", "Bee"]
+  left: 2
+ right: 3
+  FAIL append_stamps_a_local_event_id [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2040 — assertion `left == right` failed: the anchor: both appends must have landed before anything is said about what they were stamped with, got ["Ay", "Bee"]
+  left: 2
+ right: 3
+  FAIL event_ids_are_unique_within_a_store [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2108 — assertion `left == right` failed: the anchor: three events were appended and three must come back, or "their identities are distinct" is a statement about a shorter list. Got ["Ay", "Bee"]
+  left: 2
+ right: 3
+  FAIL append_returns_last_written_position [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2631 — assertion `left == right` failed: `append` must return the position assigned to the LAST event in the batch
+  left: Some(SequencePosition(3))
+ right: Some(SequencePosition(2))
+  FAIL batch_positions_follow_slice_order [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:2967 — assertion `left == right` failed: all three events of the batch must be readable back before their positions mean anything, got ["Aleph", "Beth"]
+  left: 2
+ right: 3
+  FAIL dropped_append_future_leaves_no_partial_batch [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:3177 — ES-22: dropping an `append` future must leave the store fully applied or unchanged — never partially applied. 1 of 3 events survived the drop, which is a batch the caller was never told about and can never resolve. Got ["Existing", "Ex"]
+  FAIL store_accepts_the_guaranteed_minimum_batch_size [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:3966 — assertion `left == right` failed: VT-24 makes 128 events a floor every store MUST accept in one append
+  left: 2
+ right: 128
+  FAIL read_result_is_stable_under_concurrent_append [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5605 — assertion `left == right` failed: all three seeded events must be readable back before a claim about what a later read may not add means anything
+  left: [1, 2]
+ right: [1, 2, 3]
+  FAIL query_items_share_one_snapshot [the rule rejected the store]: FAILED at D:\repos\happenstance\crates\happenstance-testkit\src\suite.rs:5754 — the appended event must really have landed and really have matched the query — otherwise this rule tested nothing
+
+=================================================================
+ANSWER: 4 of 4 wrong implementations fail NOTHING
+=================================================================
+  PASSES THE WHOLE SUITE  ForwardPagingBudgetStore
+  PASSES THE WHOLE SUITE  NoopReopenFixture
+  PASSES THE WHOLE SUITE  SwallowedReadFaultStore
+  PASSES THE WHOLE SUITE  StagedCommitStore
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

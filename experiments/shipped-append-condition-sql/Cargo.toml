@@ -1,0 +1,56 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/append-condition/Cargo.toml` and
+# `experiments/wire-format/Cargo.toml` use, and for the same reason. No entry in
+# the root `members` list changes, no workspace `Cargo.toml` or `Cargo.lock`
+# moves, and nothing here ever runs under `cargo xtask ci`.
+#
+# CF-34 is why that matters more here than it usually would: performance is
+# measured by a separate harness which is not part of the conformance bar,
+# because a benchmark that can turn a merge red teaches people to re-run until
+# green. A crate cargo cannot see is a crate no gate step can accidentally start
+# depending on.
+[workspace]
+
+[package]
+name = "shipped-append-condition-sql"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, and only the parts a store needs.
+happenstance-core = { path = "../../crates/happenstance-core", features = ["std"] }
+# **The adapter under measurement, as a dependency rather than as something this
+# crate re-implements.** Four things are read off its own surface rather than
+# transcribed: `connection::open_configured` and `ConnectionSettings::read_back`
+# (so every figure is printed beside pragmas read off the live connection by the
+# adapter's own code), `SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT` (the
+# chunk width), `SqliteEventStore::planned_statement_count` (the seam
+# `tests/selectivity_cost.rs` times), and the store itself — `tests/emitted_sql.rs`
+# captures the SQL the real adapter emits off a `sqlite3_trace_v2` callback and
+# asserts this crate's `chain` module reproduces it byte for byte.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite" }
+futures-core = "0.3"
+# The same driver, the same version and the same features the workspace names, so
+# the figures are produced by the SQLite the adapter actually links — plus
+# `trace`, which is what lets `tests/emitted_sql.rs` read the emitted statements
+# off a running store instead of asserting a transcription against itself. It
+# adds no crate to the graph: `Cargo.lock` here holds exactly the nodes
+# `experiments/append-condition`'s does, plus `happenstance-sqlite`'s own.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled", "trace"] }
+thiserror = "2"
+
+[dev-dependencies]
+# Taken exactly as an adapter outside this repository would: a dev-dependency,
+# one macro invocation per shape.
+happenstance-testkit = { path = "../../crates/happenstance-testkit" }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+
+# Stated rather than inherited. These are cargo's defaults for `--release`, and
+# writing them down is the point: `results/` says "`--release` for every timed
+# run", and a reader has to be able to check what that meant here without
+# knowing which cargo shipped which default.
+[profile.release]
+debug = false
+lto = false

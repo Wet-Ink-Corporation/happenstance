@@ -1,0 +1,62 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/append-condition/Cargo.toml` and
+# `experiments/wire-format/Cargo.toml` use, for the same reason. No entry in the
+# root `members` list changes, no workspace `Cargo.toml` or `Cargo.lock` moves,
+# and nothing here ever runs under `cargo xtask ci`.
+#
+# Here it is not merely tidy, it is *necessary*. This crate installs a counting
+# `#[global_allocator]`, and a global allocator is a per-binary singleton: a
+# workspace member that declared one would install it into every test binary in
+# the workspace that links it. Worse, `GlobalAlloc` cannot be implemented without
+# `unsafe impl`, and the workspace root sets `unsafe_code = "forbid"` — a *deny*
+# could be waived with an `expect`, but `forbid` cannot be overridden from inside
+# the crate at all. So the instrument physically cannot live in `crates/`, which
+# is the reason it lives here rather than a preference for where it is filed.
+#
+# And CF-34 applies as it does to every experiment: a benchmark may not be part
+# of the conformance bar. A crate cargo cannot see is a crate no gate step can
+# accidentally start depending on.
+[workspace]
+
+[package]
+name = "event-clone-allocations"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, at the pinned tree. `memory` is present on purpose and it is the
+# opposite of `experiments/append-condition`'s reason for leaving it out: the
+# reference store's `read` is one of the two things under measurement here, so
+# the real `MemoryEventStore` has to be in the graph rather than a stand-in.
+#
+# `serde` is on because two of the six clone arms are the encode path, and it is
+# the feature `lib.rs:90-92` says replication adapters turn on.
+happenstance-core = { path = "../../crates/happenstance-core", features = [
+    "std",
+    "memory",
+    "serde",
+] }
+futures-core = "0.3"
+
+[dev-dependencies]
+# The same two formats `crates/happenstance-core/tests/wire.rs` proves the
+# envelope against, at the same versions the workspace pins, so the byte-identity
+# control in `tests/arms_are_equivalent.rs` is checked against the encoders the
+# crate actually ships rather than against a third one chosen here.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+# Only for the `Serialize + DeserializeOwned` bound on the framed-round-trip
+# helper. No derive is used here; the envelope's impls are the crate's own.
+serde = { version = "1", default-features = false }
+
+# `--release` is what `run.sh` times, and these are the settings it times under.
+# Stated rather than defaulted so the README's "Build" row is checkable against
+# the manifest instead of against cargo's documentation.
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16
+panic = "unwind"

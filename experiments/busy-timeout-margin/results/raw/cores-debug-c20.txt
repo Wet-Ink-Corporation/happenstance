@@ -1,0 +1,7 @@
+
+running 1 test
+CORES	label=debug-c20	expected_mask=Some(1048575)	affinity_mask=0xfffff reported_cores=20 measured_cores=5.8
+test the_core_constraint_is_what_was_asked_for ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.51s
+

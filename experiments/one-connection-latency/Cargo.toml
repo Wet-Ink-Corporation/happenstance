@@ -1,0 +1,72 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/append-condition/`,
+# `experiments/event-clone-allocations/` and `experiments/wire-format/` use, and
+# for the same reasons.
+#
+# Two of those reasons are load-bearing here rather than tidy.
+#
+# 1. This crate installs a counting `#[global_allocator]`, which is a per-binary
+#    singleton: a workspace member declaring one would install it into every
+#    test binary in the workspace that links it. And `GlobalAlloc` cannot be
+#    implemented without `unsafe impl`, while the workspace root sets
+#    `unsafe_code = "forbid"` — a *deny* could be waived with an `expect`,
+#    `forbid` cannot be overridden from inside the crate at all. The instrument
+#    physically cannot live under `crates/`.
+# 2. CF-34: performance is measured by a separate harness which is not part of
+#    the conformance bar. A crate cargo cannot see from the root manifest is a
+#    crate no gate step can start depending on by accident.
+[workspace]
+
+[package]
+name = "one-connection-latency"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, at the pinned tree.
+happenstance-core = { path = "../../crates/happenstance-core", features = [
+    "std",
+] }
+# **The real adapter, in the graph.** Instrument (a) and CONTROL 1 call the
+# shipped `SqliteEventStore` and `SqliteProjectionStore` rather than anything
+# written here, so the reactor-stall figure is a figure for the code that
+# publishes. `projection-store` is on because CONTROL 1 *is* the projection
+# store's `commit` — the one body in this crate that already routes through
+# `in_blocking_task`, and therefore the floor the event store should reach.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
+    "event-store",
+    "projection-store",
+] }
+futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# The same driver at the same version the workspace names, so the paged read
+# this crate reproduces is compiled against the SQLite the adapter links.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+thiserror = "2"
+# `time` is what instrument (a) is built out of — a 1 ms `tokio::time::interval`
+# whose missed ticks are the measurement. `rt-multi-thread` is only for the
+# two-worker arm; the reactor-stall arms are all `current_thread`.
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "time",
+] }
+
+[dev-dependencies]
+# CONTROL 2: every `PAGE_SIZE` this crate times has first run the conformance
+# suite at that page size. A page size that drops rows at a boundary is fast and
+# wrong.
+happenstance-testkit = { path = "../../crates/happenstance-testkit" }
+
+# `--release` is what `run.sh` times, and these are the settings it times under.
+# Stated rather than defaulted so README.md's "Build" row is checkable against
+# this manifest instead of against cargo's documentation.
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16
+panic = "unwind"

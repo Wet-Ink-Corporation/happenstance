@@ -1,0 +1,250 @@
+//! What the adapter actually emits, read off a running store.
+//!
+//! `crates/happenstance-sqlite/src/query_sql.rs`'s `item_sql` is private, so
+//! [`Shape::Chain`] is a *transcription* of it — and a transcription is a claim,
+//! not evidence. Reading it twice is not how a claim like that is checked. This
+//! target installs a `sqlite3_trace_v2` callback on the adapter's own connection,
+//! runs a real two-tag conditional `append` and a real paged `Query::all` replay
+//! through the real [`SqliteEventStore`], and prints the statements SQLite was
+//! actually handed.
+//!
+//! Two things come out of it, and both are load-bearing for everything else in
+//! this experiment:
+//!
+//! 1. **The standing guard on the transcription.** The captured guard statement
+//!    is asserted **equal** to the string `chain::guard_sql(chain::arms_sql(
+//!    Shape::Chain, …))` builds. If `query_sql.rs` changes, this test goes red
+//!    and `results/` stops being about SQL nobody runs.
+//! 2. **The paged read statement, captured rather than written out.**
+//!    `tests/query_plan.rs` explains and times the statement `fetch_page` emits
+//!    at page 1,000; taking it from a trace rather than from a string literal is
+//!    what makes the plan a plan *of the shipped read*. Page 1 differs from every
+//!    later page — it carries no `resume_from` — so the steady-state statement is
+//!    page 2's, and this file asserts page 2 and page 3 are one string.
+//!
+//! It is a **debug** target on purpose. It reads SQL rather than a clock, so a
+//! release build would buy nothing and the `run.sh` step that runs it is the one
+//! that must never be skipped for time.
+//!
+//! Run it with `cargo test --manifest-path
+//! experiments/shipped-append-condition-sql/Cargo.toml --test emitted_sql --
+//! --nocapture`.
+
+mod support;
+
+use std::sync::{Mutex, OnceLock};
+
+use happenstance_core::{Event, EventStore, Query, ReadOptions};
+use happenstance_sqlite::event_store::SqliteEventStore;
+use happenstance_testkit::fixtures::{condition, query_of, tagged_event};
+use rusqlite::trace::{TraceEvent, TraceEventCodes};
+use shipped_append_condition_sql::chain::{Selectivity, Shape, arms_sql, guard_sql};
+use shipped_append_condition_sql::{Conditions, seed};
+
+/// Events written before anything is traced.
+///
+/// Three pages of 512 plus a remainder, so that a `Query::all` replay emits a
+/// first page, a steady-state page and a last page — which is the only way to see
+/// that the steady-state statement is one string.
+const EVENTS: usize = 1_100;
+
+/// `PAGE_SIZE` — `crates/happenstance-sqlite/src/event_store.rs:141`.
+const PAGE: usize = 512;
+
+/// Every statement the traced connection has been handed.
+fn log() -> &'static Mutex<Vec<String>> {
+    static LOG: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    LOG.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn record(event: TraceEvent<'_>) {
+    if let TraceEvent::Stmt(_, sql) = event
+        && let Ok(mut entries) = log().lock()
+    {
+        entries.push(sql.to_owned());
+    }
+}
+
+/// Every traced statement containing `needle`, in order.
+fn traced(needle: &str) -> Vec<String> {
+    log()
+        .lock()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter(|sql| sql.contains(needle))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_adapter_emits_the_chain_this_crate_transcribes() {
+    let path = tempdb();
+
+    // Migrate through the adapter, then re-open the *same file* with a traced
+    // connection and wrap it. Tracing from the first statement would fill the log
+    // with migration DDL and say nothing.
+    drop(SqliteEventStore::open(&path).expect("migrating must succeed"));
+
+    let events: Vec<Event> = (1..=EVENTS)
+        .map(|position| {
+            let [row, shard] = seed::seed_tags(position as u64);
+            tagged_event(
+                seed::SEED_TYPE,
+                &[
+                    (
+                        row.split_once(':').expect("a key:value tag").0,
+                        row.split_once(':').expect("a key:value tag").1,
+                    ),
+                    (
+                        shard.split_once(':').expect("a key:value tag").0,
+                        shard.split_once(':').expect("a key:value tag").1,
+                    ),
+                ],
+            )
+        })
+        .collect();
+
+    {
+        // Untraced, and in batches of `MAX_EVENTS_PER_BATCH`, because the adapter
+        // refuses a wider one and because the write path is not what is being
+        // read here.
+        let store = SqliteEventStore::open(&path).expect("opening must succeed");
+        for batch in events.chunks(SqliteEventStore::MAX_EVENTS_PER_BATCH) {
+            EventStore::append(&store, batch, None)
+                .await
+                .expect("seeding must succeed");
+        }
+    }
+
+    let connection =
+        happenstance_sqlite::connection::open_configured(&path).expect("opening must succeed");
+    let conditions = Conditions::require(&connection);
+    println!("== conditions ==");
+    println!(
+        "{} page_size_rows={PAGE} max_arms={}",
+        conditions.line(),
+        SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+    );
+
+    let traced_connection =
+        happenstance_sqlite::connection::open_configured(&path).expect("opening must succeed");
+    traced_connection.trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(record));
+    let store = SqliteEventStore::new(traced_connection).expect("the file is migrated");
+
+    // ---- 1. the guard --------------------------------------------------------
+
+    let query = query_of(&[seed::SEED_TYPE], &[("shard", "cold"), ("row", "r7")]);
+    let doomed = condition(query.clone());
+    let outcome = EventStore::append(&store, &events[..1], Some(&doomed)).await;
+    assert!(
+        outcome.is_err(),
+        "an unbounded guard over a query the log satisfies must be violated: \
+         {outcome:?}"
+    );
+
+    let emitted = traced("SELECT max(position) FROM");
+    assert_eq!(
+        emitted.len(),
+        1,
+        "one guard, one statement — got {emitted:?}"
+    );
+    println!();
+    println!("== the statement a two-tag append-condition guard emits ==");
+    println!("{}", emitted[0]);
+
+    let lookup = traced("FROM tag_cardinality");
+    assert_eq!(lookup.len(), 1, "one selectivity lookup — got {lookup:?}");
+    println!();
+    println!("== the tag_cardinality lookup that precedes it (Selectivity::read_for) ==");
+    println!("{}", lookup[0]);
+
+    let selectivity =
+        Selectivity::read_for(&connection, &query).expect("the lookup must succeed");
+    let items = query.items().expect("the query has items");
+    let mut params = Vec::new();
+    let transcribed = guard_sql(&arms_sql(Shape::Chain, items, &selectivity, 0, &mut params));
+    println!();
+    println!("== this crate's Shape::Chain, for comparison ==");
+    println!("{transcribed}");
+    println!(
+        "TRANSCRIPTION\tchain\tmatches_adapter={}",
+        transcribed == emitted[0]
+    );
+    assert_eq!(
+        transcribed, emitted[0],
+        "the transcription has drifted from `query_sql::item_sql`; every figure \
+         in results/ would be about SQL the adapter does not emit"
+    );
+
+    // ---- 2. the paged read ---------------------------------------------------
+
+    log().lock().expect("the log").clear();
+    let all = Query::all();
+    let mut drained = 0usize;
+    {
+        use futures_core::Stream;
+        let stream = EventStore::read(&store, &all, ReadOptions::default());
+        let mut stream = core::pin::pin!(stream);
+        let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+        loop {
+            match Stream::poll_next(stream.as_mut(), &mut context) {
+                core::task::Poll::Ready(Some(item)) => {
+                    item.expect("every row must decode");
+                    drained += 1;
+                }
+                core::task::Poll::Ready(None) => break,
+                core::task::Poll::Pending => tokio::task::yield_now().await,
+            }
+        }
+    }
+    assert_eq!(drained, EVENTS, "the whole log must come back");
+
+    let pages = traced("FROM event WHERE position IN");
+    println!();
+    println!(
+        "== the statements a paged Query::all replay emits ({} pages) ==",
+        pages.len()
+    );
+    for (index, page) in pages.iter().enumerate() {
+        println!("page {}: {page}", index + 1);
+    }
+    assert!(
+        pages.len() >= 3,
+        "{EVENTS} events at {PAGE} a page is three statements, not {}",
+        pages.len()
+    );
+    assert_ne!(
+        pages[0], pages[1],
+        "page 1 carries no `resume_from`, so it must differ from page 2"
+    );
+    assert_eq!(
+        pages[1], pages[2],
+        "every page after the first must be one string; only the bound values move"
+    );
+    println!();
+    println!("== the steady-state page statement (page 2 == page 1,000) ==");
+    println!("{}", pages[1]);
+
+    drop(store);
+    remove(&path);
+}
+
+fn tempdb() -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "happenstance-shipped-guard-{}-emitted-sql.sqlite3",
+        std::process::id()
+    ));
+    remove(&path);
+    path
+}
+
+fn remove(path: &std::path::Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut candidate = path.to_path_buf().into_os_string();
+        candidate.push(suffix);
+        let _ = std::fs::remove_file(std::path::PathBuf::from(candidate));
+    }
+}

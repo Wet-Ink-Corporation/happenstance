@@ -1,0 +1,78 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running tests\page_lock_hold.rs (target\release\deps\page_lock_hold-f919647dba6ca5a2.exe)
+
+running 1 test
+test page_size_controls_the_lock_hold_and_the_residency ... 
+== instrument (b): lock hold and residency on one shared handle ==
+   seeding 1000000 events, 128 B payload, 2 tags each, batches of 256
+    seeded 800000 / 1000000 events (63.2 s)
+    seeded 1000000 / 1000000 events (85.6 s)
+    seeded 1000000 events in 85.6 s
+   quiet appender baseline (no replay): p50=0.118 ms  p99=7.727 ms  max=15.647 ms  over 11141 appends
+
+
+-- shape: what PAGE_SIZE and width buy a page ---------------------------------
+ page  width  stmts  rows/pg     peak_bytes    bytes/row
+   64      1      1       64          30720          480
+  128      1      1      128          61440          480
+  512      1      1      512         245826          480
+ 2048      1      1     2048         983220          480
+   64    400      1       64         101330         1583
+  128    400      1      128         122834          960
+  512    400      1      512         251748          492
+ 2048    400      1     2048         982490          480
+   64   1200      3      192         179180          933
+  128   1200      3      384         227688          593
+  512   1200      3     1536         811100          528
+ 2048   1200      3     6144        3244482          528
+
+-- hold: how long one page owns the connection mutex --------------------------
+ page  width   pages   quiet_p50    conc_p50    conc_p99    conc_max
+   64      1      97   187.468ms   148.584ms   211.494ms   211.494ms
+  128      1      92   142.018ms   151.188ms   248.534ms   248.534ms
+  512      1      94   146.560ms   151.786ms   225.811ms   225.811ms
+ 2048      1      85   202.576ms   171.090ms   269.621ms   269.621ms
+   64    400      65   223.911ms   232.777ms   341.714ms   341.714ms
+  128    400      67   252.771ms   215.047ms   299.682ms   299.682ms
+  512    400      65   203.339ms   227.495ms   341.807ms   341.807ms
+ 2048    400      62   213.235ms   238.210ms   333.116ms   333.116ms
+   64   1200      22   680.729ms   678.309ms   849.471ms   849.471ms
+  128   1200      23   722.847ms   657.242ms   944.689ms   944.689ms
+  512   1200      23   684.192ms   640.683ms   858.856ms   858.856ms
+ 2048   1200      22   631.711ms   666.190ms   866.684ms   866.684ms
+
+-- cost: what a caller sharing the handle pays --------------------------------
+   (quiet appender baseline: p50=0.118 ms  p99=7.727 ms)
+ page  width   appends     app_p50     app_p99     app_max page_wait_p50
+   64      1      1174     0.100ms   184.339ms   447.438ms      0.921ms
+  128      1      1177     0.099ms   202.897ms   281.856ms      1.365ms
+  512      1       985     0.103ms   186.261ms   226.395ms      0.836ms
+ 2048      1       781     0.108ms   211.136ms   270.119ms      0.774ms
+   64    400       546     0.107ms   299.072ms   525.941ms      0.772ms
+  128    400      1029     0.094ms   251.117ms   452.655ms      1.216ms
+  512    400       603     0.105ms   259.072ms   642.135ms      1.000ms
+ 2048    400       577     0.129ms   281.923ms   333.548ms      0.580ms
+   64   1200       261     0.109ms   819.580ms   852.902ms      1.572ms
+  128   1200       201     0.169ms   782.339ms   945.195ms      0.924ms
+  512   1200       280     0.148ms   799.041ms   859.825ms      1.726ms
+ 2048   1200       163     0.150ms   841.332ms   867.250ms      0.593ms
+
+-- extrapolation: a full 1000000-event replay at each configuration ------
+   (pages_total x quiet hold_p50; an extrapolation, not a measurement)
+   64      1      15625 pages      2929.2 s of held mutex
+  128      1       7813 pages      1109.6 s of held mutex
+  512      1       1954 pages       286.4 s of held mutex
+ 2048      1        489 pages        99.1 s of held mutex
+   64    400      15625 pages      3498.6 s of held mutex
+  128    400       7813 pages      1974.9 s of held mutex
+  512    400       1954 pages       397.3 s of held mutex
+ 2048    400        489 pages       104.3 s of held mutex
+   64   1200      15625 pages     10636.4 s of held mutex
+  128   1200       7813 pages      5647.6 s of held mutex
+  512   1200       1954 pages      1336.9 s of held mutex
+ 2048   1200        489 pages       308.9 s of held mutex
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 289.57s
+

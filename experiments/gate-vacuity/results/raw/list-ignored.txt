@@ -1,0 +1,7 @@
+   Compiling happenstance-testkit v0.2.0-alpha.1 (D:\gv-wt\crates\happenstance-testkit)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.62s
+     Running tests\projection_harness_parity.rs (target\debug\deps\projection_harness_parity-94da3f109e8d4b4d.exe)
+projection_harness_parity::each_harness_invokes_the_suite_exactly_once: test
+projection_harness_parity::no_harness_lists_a_rule_by_hand: test
+
+2 tests, 0 benchmarks

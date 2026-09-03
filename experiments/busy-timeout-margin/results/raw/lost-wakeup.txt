@@ -1,0 +1,11 @@
+
+running 3 tests
+test a_plain_block_on_is_woken_by_another_thread ... WAKEUP	case=plain	completed=true
+ok
+test an_outer_wake_delivered_during_a_nested_block_on ... WAKEUP	case=nested-collision	completed=false	deadline_s=10	verdict=HUNG-past-deadline
+ok
+test nesting_alone_is_harmless ... WAKEUP	case=nested-no-collision	completed=true
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.23s
+

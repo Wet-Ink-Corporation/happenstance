@@ -1,0 +1,40 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/append-condition/Cargo.toml` and
+# `experiments/wire-format/Cargo.toml` use, and for the same reason. No entry in
+# the root `members` list changes, the root `Cargo.lock` does not move, and
+# nothing here ever runs under `cargo xtask ci`.
+#
+# That matters more here than it usually does. This crate exists to produce a
+# *number about the conformance suite*, and four of its ten subjects are stores
+# the suite is being asked to reject. A crate cargo cannot see is a crate no gate
+# step can accidentally start depending on — and, just as important, four
+# deliberately-wrong stores can never be mistaken for adapters the workspace
+# ships.
+[workspace]
+
+[package]
+name = "suite-against-wrong-adapters"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, and only what a store needs. `memory` is absent on purpose for
+# `src/`: nothing here is the reference store.
+happenstance-core = { path = "../../crates/happenstance-core", features = ["std"] }
+futures-core = "0.3"
+
+[dev-dependencies]
+# Taken exactly as an adapter outside this repository would take it: a
+# dev-dependency, and the rule set arrives through one macro invocation
+# (`tests/controls_are_conformant.rs`) or through the public
+# `for_each_event_store_rule!` enumeration (`tests/support/harness.rs`).
+#
+# `memory` is on here — and only here — because `MemoryFixture` is one of the two
+# conformant controls, and it is the *reference* fixture rather than one this
+# crate wrote.
+happenstance-testkit = { path = "../../crates/happenstance-testkit", features = [
+  "memory",
+] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

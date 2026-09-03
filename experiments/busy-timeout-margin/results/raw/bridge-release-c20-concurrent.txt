@@ -1,0 +1,11 @@
+
+running 3 tests
+BUSYWAIT	label=bridge-release-c20-concurrent	rule=positions_are_unique_under_concurrent_appends	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=2528	wait_ms_p99=2228	wait_ms_p90=1428	wait_ms_p50=228	race_us_median=1843068	race_us_min=1041416	race_us_max=2548827	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=7755	lock_events=630	exhausted=0	real_wait_ms_max=2528	affinity_mask=0xfffff reported_cores=20 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test positions_are_unique_under_concurrent_appends ... ok
+BUSYWAIT	label=bridge-release-c20-concurrent	rule=append_returns_the_callers_own_last_position	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=2728	wait_ms_p99=2428	wait_ms_p90=1428	wait_ms_p50=228	race_us_median=1743497	race_us_min=1140554	race_us_max=2748103	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=7805	lock_events=630	exhausted=0	real_wait_ms_max=2728	affinity_mask=0xfffff reported_cores=20 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test append_returns_the_callers_own_last_position ... ok
+BUSYWAIT	label=bridge-release-c20-concurrent	rule=exactly_one_of_n_contenders_commits	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=3328	wait_ms_p99=3028	wait_ms_p90=1928	wait_ms_p50=328	race_us_median=2646468	race_us_min=1542411	race_us_max=3353351	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=8965	lock_events=630	exhausted=0	real_wait_ms_max=3328	affinity_mask=0xfffff reported_cores=20 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test exactly_one_of_n_contenders_commits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 24.92s
+

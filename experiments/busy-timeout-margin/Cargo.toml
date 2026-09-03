@@ -1,0 +1,42 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the same trick `experiments/append-condition/Cargo.toml` and
+# `experiments/wire-format/Cargo.toml` use, and for the same reason. No entry in
+# the root `members` list changes, no workspace `Cargo.toml` or `Cargo.lock`
+# moves, and nothing here ever runs under `cargo xtask ci`.
+#
+# CF-34 is why that matters more here than usual: a benchmark may not be part of
+# the conformance bar, and this crate's whole job is to run the gate's own
+# contention shape *badly* — in debug, on one core — until it fails. A crate
+# cargo cannot see is a crate no gate step can accidentally start depending on.
+[workspace]
+
+[package]
+name = "busy-timeout-margin-probes"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, and only the parts a store needs — the same line
+# `experiments/append-condition` carries, so the store under measurement is the
+# same store.
+happenstance-core = { path = "../../crates/happenstance-core", features = ["std"] }
+futures-core = "0.3"
+# Pinned to the version the workspace names, so the figures are produced by the
+# SQLite `happenstance-sqlite` will actually link.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+thiserror = "2"
+
+[dev-dependencies]
+# `bench` is not needed here — no `event_store_benchmarks!` runs in this crate —
+# but `block_on`, `Fixture` and the `fixtures::` builders are, and they are the
+# default feature set.
+happenstance-testkit = { path = "../../crates/happenstance-testkit" }
+# Only `tests/arms_are_conformant.rs` needs it, and it needs it because
+# `event_store_conformance!` expands to `#[tokio::test]` — the suite is taken
+# exactly as an adapter outside this repository would take it, which is the same
+# line and the same reason `experiments/append-condition/Cargo.toml` carries.
+# NF-002 is satisfied: the workspace already carries tokio, so this adds nothing
+# new to the tree.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

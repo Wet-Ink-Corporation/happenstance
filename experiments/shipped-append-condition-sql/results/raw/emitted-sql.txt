@@ -1,0 +1,28 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests\emitted_sql.rs (target\debug\deps\emitted_sql-73e63adb302ecd73.exe)
+
+running 1 test
+== conditions ==
+journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2 page_size_rows=512 max_arms=400
+
+== the statement a two-tag append-condition guard emits ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+
+== the tag_cardinality lookup that precedes it (Selectivity::read_for) ==
+SELECT tag, events FROM tag_cardinality WHERE tag IN (?,?)
+
+== this crate's Shape::Chain, for comparison ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+TRANSCRIPTION	chain	matches_adapter=true
+
+== the statements a paged Query::all replay emits (3 pages) ==
+page 1: SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position IN (SELECT position FROM event) AND position <= ? ORDER BY position ASC LIMIT ?
+page 2: SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position IN (SELECT position FROM event) AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?
+page 3: SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position IN (SELECT position FROM event) AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?
+
+== the steady-state page statement (page 2 == page 1,000) ==
+SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position IN (SELECT position FROM event) AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?
+test the_adapter_emits_the_chain_this_crate_transcribes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

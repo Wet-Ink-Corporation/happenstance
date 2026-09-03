@@ -1,0 +1,2 @@
+projection_harness_parity::each_harness_invokes_the_suite_exactly_once: test
+projection_harness_parity::no_harness_lists_a_rule_by_hand: test

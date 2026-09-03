@@ -1,0 +1,17 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running tests\page_residency_at_the_ceiling.rs (target\release\deps\page_residency_at_the_ceiling-0c3657ce24be7299.exe)
+
+running 1 test
+test one_page_of_ceiling_sized_events_is_half_a_gigabyte ... 
+== R-1: one page at the declared data ceiling ==
+   PAGE_SIZE = 512 (shipped), MAX_EVENT_DATA_LEN = 1048576 B
+   seeding 520 events at the ceiling, 64 per batch
+   seeded 520 MiB in 5.9 s
+
+   first page: rows=512  peak=537036800 B (512.2 MiB)  hold=583.2 ms
+   the whole read: ReadOptions::limit is None, which is what `run_projection` uses for a rebuild
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.60s
+

@@ -1,0 +1,52 @@
+201 clauses (137 FROZEN, 47 PROVISIONAL, 12 DEFERRED, 5 NON-NORMATIVE), 112 conformance rules, 58 e2e cases, 401 citations checked (80 anchored to their subject, 12 external)
+2 rule(s) claimed by no clause and owing a decision:
+  k_disjoint_boundaries_admit_exactly_k_commits — the central DCB independence proposition — that commands sharing no consistency boundary do not conflict — is enforced by this rule and stated by no clause. The word "disjoint" does not appear in the specification. ES-25's *only if* half forbids the false-positive direction and does not say this, so claiming it there would assert that a FROZEN clause contains a proposition it does not. Owed: an ADR, either widening ES-25 or minting a clause
+  ops_agree_with_the_model — the model family's single rule enforces no single clause's sentence. It replays a generated sequence of appends, conditional appends and reads against a model and compares every answer, so what it checks is the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-18 and ES-25 over inputs no clause enumerates — which is the whole reason the family exists, since the named rules are worked examples and this is not. §6.4 names it, but only as CF-22's illustration of a per-family enumeration, and CF-22's MUST is where the rule list lives rather than what any rule asserts. Claiming it under any one of the clauses it exercises would say that clause is what it checks. Owed: an ADR, either minting the clause the model family has never had — a store agrees with the contract over arbitrary operation sequences, not only over the examples the suite enumerates — or deciding that check 6's bar is per-clause and a cross-clause rule is disposed of some other way
+  spec/SPECIFICATION.md:762 — VT-5 names rule `ingest_preserves_origin_identity`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:813 — VT-6 names rule `restored_peer_does_not_reissue_identities`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:933 — VT-9 names rule `convergent_projection_is_interleaving_independent`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:991 — VT-10 names rule `append_does_not_accept_a_foreign_identity`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1105 — VT-13 names rule `position_next_signals_overflow`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `rejects_invalid_event_types`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `rejects_invalid_tags`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `rejects_c0_del_and_c1_controls`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `rejects_all_seven_bidirectional_controls`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `accepts_the_format_characters_scripts_need`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1153 — VT-14 names rule `accepts_neighbours_of_the_closed_list`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1221 — VT-32 names rule `from_static_and_new_agree`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1221 — VT-32 names rule `from_static_rejects_a_bidirectional_control`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1221 — VT-32 names rule `from_static_rejects_a_c1_control`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1221 — VT-32 names rule `compile_fail`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1272 — VT-33 names rule `a_borrowed_and_an_owned_tag_are_one_value`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1272 — VT-33 names rule `a_map_keyed_by_event_type_is_probed_by_str`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1272 — VT-33 names rule `extend_re_canonicalises`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1272 — VT-33 names rule `owned_into_iterator_yields_canonical_order`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1401 — VT-18 names rule `event_new_accepts_a_held_event_type`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1401 — VT-18 names rule `command_handler_composes_validation_errors`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1487 — VT-20 names rule `rejects_invalid_event_types`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1487 — VT-20 names rule `rejects_invalid_tags`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:1659 — VT-26 names rule `query_items_is_not_constructible_downstream`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2371 — WF-12 names rule `read_options_is_not_serialisable`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2371 — WF-12 names rule `spec_trace`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2371 — WF-12 names rule `compile_fail`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2540 — ES-2 names rule `send_flavour_stream_is_send_in_generic_code`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2540 — ES-2 names rule `trait_variant`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2540 — ES-2 names rule `spawns_from_generic`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2571 — ES-3 names rule `provided_method_future_is_send_in_generic_code`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2611 — ES-4 names rule `provided_method_future_is_send_in_generic_code`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2649 — ES-5 names rule `error_bound_is_identical_on_both_flavours`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:2677 — ES-6 names rule `store_error_crosses_a_join_handle`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:3948 — ES-29 names rule `wire_condition_with_after_is_refused`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:4068 — ES-31 names rule `checkpoint_lag_is_not_a_position_difference`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:4370 — ES-38 names rule `positions_are_not_reused_after_removal`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:4396 — ES-39 names rule `a_store_reports_the_history_it_does_not_hold`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:4422 — ES-40 names rule `condition_over_removed_history_does_not_reject`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5600 — PS-25 names rule `changed_query_starts_a_new_checkpoint`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5647 — PS-26 names rule `failure_policy_is_per_projection`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5659 — PS-27 names rule `skip_and_record_is_atomic`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5707 — PS-28 names rule `pump_reports_the_failing_position`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5734 — PS-29 names rule `one_poisoned_projection_does_not_stall_the_others`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+  spec/SPECIFICATION.md:5761 — PS-30 names rule `panicking_apply_rolls_back`, which is not in crates/happenstance-testkit/src/suite.rs and the clause does not declare it new
+
+xtask failed: 45 traceability problem(s). These are defects in the specification, not in the checker.
+EXIT=1

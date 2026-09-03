@@ -1,0 +1,7 @@
+
+running 1 test
+BUSYWAIT	label=control-release-c20-alone	rule=exactly_one_of_n_contenders_commits	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=3228	wait_ms_p99=2728	wait_ms_p90=1528	wait_ms_p50=178	race_us_median=1439930	race_us_min=762385	race_us_max=3250315	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=7773	lock_events=630	exhausted=0	real_wait_ms_max=3228	affinity_mask=0xfffff reported_cores=20 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test exactly_one_of_n_contenders_commits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 18.29s
+

@@ -1,0 +1,11 @@
+
+running 3 tests
+BUSYWAIT	label=debug-c1	rule=append_returns_the_callers_own_last_position	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=8	wait_ms_p99=3	wait_ms_p90=3	wait_ms_p50=1	race_us_median=60017	race_us_min=23056	race_us_max=238534	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=913	lock_events=630	exhausted=0	real_wait_ms_max=43	affinity_mask=0x1 reported_cores=1 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test append_returns_the_callers_own_last_position ... ok
+BUSYWAIT	label=debug-c1	rule=positions_are_unique_under_concurrent_appends	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=3	wait_ms_p99=3	wait_ms_p90=3	wait_ms_p50=1	race_us_median=51453	race_us_min=21285	race_us_max=85063	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=919	lock_events=630	exhausted=0	real_wait_ms_max=11	affinity_mask=0x1 reported_cores=1 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test positions_are_unique_under_concurrent_appends ... ok
+BUSYWAIT	label=debug-c1	rule=exactly_one_of_n_contenders_commits	arm=begin-immediate-probe	contenders=64	rounds=10	seeded=5000	wait_ms_max=3	wait_ms_p99=3	wait_ms_p90=3	wait_ms_p50=1	race_us_median=68454	race_us_min=13468	race_us_max=81625	committed=10	rejected=630	busy=0	failed=0	no_winner=0	retries=859	lock_events=630	exhausted=0	real_wait_ms_max=9	affinity_mask=0x1 reported_cores=1 measured_cores=n/a	journal_mode=wal synchronous=normal busy_timeout_ms=0 sqlite=3.53.2	busy_handler=counting	cap_ms=5000
+test exactly_one_of_n_contenders_commits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.52s
+

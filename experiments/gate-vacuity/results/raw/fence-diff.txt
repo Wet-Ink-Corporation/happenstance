@@ -1,0 +1,13 @@
+diff --git a/standards/rust/00-prime-directives.md b/standards/rust/00-prime-directives.md
+index 593c9dd..825333b 100644
+--- a/standards/rust/00-prime-directives.md
++++ b/standards/rust/00-prime-directives.md
+@@ -31,6 +31,8 @@ set `Unpin` is each adapter's own obligation and nothing in the gate states it.
+ 
+ ```rust
+ # fn main() {
++# let notSnakeCase = 1u8;
++# assert_eq!(notSnakeCase, 1);
+ #     fn assert_unpin<T: Unpin>() {}
+ #     assert_unpin::<Rows>();
+ # }

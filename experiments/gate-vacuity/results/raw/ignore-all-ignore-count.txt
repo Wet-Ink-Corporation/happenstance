@@ -1,0 +1,11 @@
+31 tests silenced with ignore
+ crates/happenstance-core/tests/wire.rs                            | 3 +++
+ crates/happenstance-sync/tests/wire.rs                            | 2 ++
+ crates/happenstance-testkit/tests/mutation_coverage.rs            | 8 ++++++++
+ crates/happenstance-testkit/tests/projection_harness_parity.rs    | 2 ++
+ crates/happenstance-testkit/tests/projection_mutation_coverage.rs | 7 +++++++
+ examples/course-subscriptions/tests/runs.rs                       | 2 ++
+ examples/course-subscriptions/tests/ui.rs                         | 2 ++
+ examples/transfers-on-sqlite/tests/contention.rs                  | 2 ++
+ examples/transfers-on-sqlite/tests/runs.rs                        | 3 +++
+ 9 files changed, 31 insertions(+)

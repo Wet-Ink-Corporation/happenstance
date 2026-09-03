@@ -1,0 +1,840 @@
+wasm-bindgen-test-runner 0.2.126 matches Cargo.lock's wasm-bindgen 0.2.126
+happenstance-testkit/memory_conformance_wasm: 89 rules enumerated, 9 named, executing on wasm32-unknown-unknown
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests\memory_conformance_wasm.rs (target\wasm32-unknown-unknown\debug\deps\memory_conformance_wasm-42e9b3a928b836ad.wasm)
+running 89 tests
+Invoking test: dcb_conformance_wasm::untagged_events_match_query_all
+test dcb_conformance_wasm::untagged_events_match_query_all ... ok
+Invoking test: dcb_conformance_wasm::two_handles_observe_each_others_appends
+test dcb_conformance_wasm::two_handles_observe_each_others_appends ... ok
+Invoking test: dcb_conformance_wasm::two_fixture_instances_observe_none_of_each_others_appends
+test dcb_conformance_wasm::two_fixture_instances_observe_none_of_each_others_appends ... ok
+Invoking test: dcb_conformance_wasm::tags_may_repeat_a_key
+test dcb_conformance_wasm::tags_may_repeat_a_key ... ok
+Invoking test: dcb_conformance_wasm::tags_differing_only_by_unicode_normalisation_are_distinct
+test dcb_conformance_wasm::tags_differing_only_by_unicode_normalisation_are_distinct ... ok
+Invoking test: dcb_conformance_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+test dcb_conformance_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_tag_count
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_tag_count ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_payload
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_payload ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_batch_size
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_batch_size ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_non_ascii_identifiers
+test dcb_conformance_wasm::store_accepts_non_ascii_identifiers ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_a_max_length_identifier
+test dcb_conformance_wasm::store_accepts_a_max_length_identifier ... ok
+Invoking test: dcb_conformance_wasm::reopened_store_does_not_reissue_an_event_id
+SKIP reopened_store_does_not_reissue_an_event_id: fixture declines `REOPEN` — MemoryEventStore is a Vec behind an RwLock, so there is no durable medium to reopen over: discarding process state is indistinguishable from discarding the events
+test dcb_conformance_wasm::reopened_store_does_not_reissue_an_event_id ... ok
+Invoking test: dcb_conformance_wasm::reissued_unconditional_batch_lands_twice
+test dcb_conformance_wasm::reissued_unconditional_batch_lands_twice ... ok
+Invoking test: dcb_conformance_wasm::reissued_conditional_batch_lands_once
+test dcb_conformance_wasm::reissued_conditional_batch_lands_once ... ok
+Invoking test: dcb_conformance_wasm::reissued_batch_conditioned_on_other_events_lands_twice
+test dcb_conformance_wasm::reissued_batch_conditioned_on_other_events_lands_twice ... ok
+Invoking test: dcb_conformance_wasm::recorded_time_survives_a_reopen
+SKIP recorded_time_survives_a_reopen: fixture declines `REOPEN` — MemoryEventStore is a Vec behind an RwLock, so there is no durable medium to reopen over: discarding process state is indistinguishable from discarding the events
+test dcb_conformance_wasm::recorded_time_survives_a_reopen ... ok
+Invoking test: dcb_conformance_wasm::reading_an_empty_store_yields_nothing
+test dcb_conformance_wasm::reading_an_empty_store_yields_nothing ... ok
+Invoking test: dcb_conformance_wasm::read_to_under_backwards_bounds_the_older_end
+test dcb_conformance_wasm::read_to_under_backwards_bounds_the_older_end ... ok
+Invoking test: dcb_conformance_wasm::read_to_is_inclusive
+test dcb_conformance_wasm::read_to_is_inclusive ... ok
+Invoking test: dcb_conformance_wasm::read_result_is_stable_under_concurrent_append
+test dcb_conformance_wasm::read_result_is_stable_under_concurrent_append ... ok
+Invoking test: dcb_conformance_wasm::read_limit_zero_yields_nothing
+test dcb_conformance_wasm::read_limit_zero_yields_nothing ... ok
+Invoking test: dcb_conformance_wasm::read_limit_truncates
+test dcb_conformance_wasm::read_limit_truncates ... ok
+Invoking test: dcb_conformance_wasm::read_limit_applies_after_filtering
+test dcb_conformance_wasm::read_limit_applies_after_filtering ... ok
+Invoking test: dcb_conformance_wasm::read_from_is_inclusive
+test dcb_conformance_wasm::read_from_is_inclusive ... ok
+Invoking test: dcb_conformance_wasm::read_from_composes_with_multi_item_query
+test dcb_conformance_wasm::read_from_composes_with_multi_item_query ... ok
+Invoking test: dcb_conformance_wasm::read_from_and_to_bound_a_closed_window
+test dcb_conformance_wasm::read_from_and_to_bound_a_closed_window ... ok
+Invoking test: dcb_conformance_wasm::read_from_a_gap_position
+test dcb_conformance_wasm::read_from_a_gap_position ... ok
+Invoking test: dcb_conformance_wasm::read_defaults_to_ascending_order
+test dcb_conformance_wasm::read_defaults_to_ascending_order ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_reverses_order
+test dcb_conformance_wasm::read_backwards_reverses_order ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_limit_applies_after_filtering
+test dcb_conformance_wasm::read_backwards_limit_applies_after_filtering ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_from_with_limit
+test dcb_conformance_wasm::read_backwards_from_with_limit ... ok
+Invoking test: dcb_conformance_wasm::racing_conditional_appends_elect_one_winner
+test dcb_conformance_wasm::racing_conditional_appends_elect_one_winner ... ok
+Invoking test: dcb_conformance_wasm::query_union_is_item_concatenation
+test dcb_conformance_wasm::query_union_is_item_concatenation ... ok
+Invoking test: dcb_conformance_wasm::query_matching_nothing_yields_empty
+test dcb_conformance_wasm::query_matching_nothing_yields_empty ... ok
+Invoking test: dcb_conformance_wasm::query_items_share_one_snapshot
+test dcb_conformance_wasm::query_items_share_one_snapshot ... ok
+Invoking test: dcb_conformance_wasm::query_items_are_or
+test dcb_conformance_wasm::query_items_are_or ... ok
+Invoking test: dcb_conformance_wasm::query_item_types_are_or
+test dcb_conformance_wasm::query_item_types_are_or ... ok
+Invoking test: dcb_conformance_wasm::query_item_tags_match_supersets
+test dcb_conformance_wasm::query_item_tags_match_supersets ... ok
+Invoking test: dcb_conformance_wasm::query_item_tags_are_and
+test dcb_conformance_wasm::query_item_tags_are_and ... ok
+Invoking test: dcb_conformance_wasm::query_item_rejects_partial_tag_overlap
+test dcb_conformance_wasm::query_item_rejects_partial_tag_overlap ... ok
+Invoking test: dcb_conformance_wasm::query_item_order_does_not_change_the_result_set
+test dcb_conformance_wasm::query_item_order_does_not_change_the_result_set ... ok
+Invoking test: dcb_conformance_wasm::query_item_combines_types_and_tags_with_and
+test dcb_conformance_wasm::query_item_combines_types_and_tags_with_and ... ok
+Invoking test: dcb_conformance_wasm::query_all_matches_every_event
+test dcb_conformance_wasm::query_all_matches_every_event ... ok
+Invoking test: dcb_conformance_wasm::positions_are_unique
+test dcb_conformance_wasm::positions_are_unique ... ok
+Invoking test: dcb_conformance_wasm::positions_are_strictly_monotonic
+test dcb_conformance_wasm::positions_are_strictly_monotonic ... ok
+Invoking test: dcb_conformance_wasm::nothing_below_an_observed_position_appears_later
+test dcb_conformance_wasm::nothing_below_an_observed_position_appears_later ... ok
+Invoking test: dcb_conformance_wasm::metadata_distinguishes_absent_from_empty
+test dcb_conformance_wasm::metadata_distinguishes_absent_from_empty ... ok
+Invoking test: dcb_conformance_wasm::limit_applies_across_items_not_per_item
+test dcb_conformance_wasm::limit_applies_across_items_not_per_item ... ok
+Invoking test: dcb_conformance_wasm::interleaved_appends_on_one_handle_elect_one_winner
+test dcb_conformance_wasm::interleaved_appends_on_one_handle_elect_one_winner ... ok
+Invoking test: dcb_conformance_wasm::head_of_an_empty_store_is_none
+test dcb_conformance_wasm::head_of_an_empty_store_is_none ... ok
+Invoking test: dcb_conformance_wasm::head_is_the_highest_visible_position
+test dcb_conformance_wasm::head_is_the_highest_visible_position ... ok
+Invoking test: dcb_conformance_wasm::head_advances_across_two_handles
+test dcb_conformance_wasm::head_advances_across_two_handles ... ok
+Invoking test: dcb_conformance_wasm::event_ids_are_unique_within_a_store
+test dcb_conformance_wasm::event_ids_are_unique_within_a_store ... ok
+Invoking test: dcb_conformance_wasm::event_id_is_not_matchable_by_query
+test dcb_conformance_wasm::event_id_is_not_matchable_by_query ... ok
+Invoking test: dcb_conformance_wasm::empty_batch_is_refused_before_the_condition_is_evaluated
+test dcb_conformance_wasm::empty_batch_is_refused_before_the_condition_is_evaluated ... ok
+Invoking test: dcb_conformance_wasm::duplicate_items_do_not_duplicate_events
+test dcb_conformance_wasm::duplicate_items_do_not_duplicate_events ... ok
+Invoking test: dcb_conformance_wasm::dropped_append_future_leaves_no_partial_batch
+test dcb_conformance_wasm::dropped_append_future_leaves_no_partial_batch ... ok
+Invoking test: dcb_conformance_wasm::contains_event_id_reports_membership
+test dcb_conformance_wasm::contains_event_id_reports_membership ... ok
+Invoking test: dcb_conformance_wasm::condition_without_after_rejects_any_match
+test dcb_conformance_wasm::condition_without_after_rejects_any_match ... ok
+Invoking test: dcb_conformance_wasm::condition_without_after_allows_non_match
+test dcb_conformance_wasm::condition_without_after_allows_non_match ... ok
+Invoking test: dcb_conformance_wasm::condition_with_one_guard_behaves_as_today
+test dcb_conformance_wasm::condition_with_one_guard_behaves_as_today ... ok
+Invoking test: dcb_conformance_wasm::condition_with_an_unheld_tag_does_not_reject
+test dcb_conformance_wasm::condition_with_an_unheld_tag_does_not_reject ... ok
+Invoking test: dcb_conformance_wasm::condition_rejection_leaves_store_unchanged
+test dcb_conformance_wasm::condition_rejection_leaves_store_unchanged ... ok
+Invoking test: dcb_conformance_wasm::condition_rejection_is_reported_as_condition_violated
+test dcb_conformance_wasm::condition_rejection_is_reported_as_condition_violated ... ok
+Invoking test: dcb_conformance_wasm::condition_matches_on_tags
+test dcb_conformance_wasm::condition_matches_on_tags ... ok
+Invoking test: dcb_conformance_wasm::condition_guards_carry_independent_boundaries
+test dcb_conformance_wasm::condition_guards_carry_independent_boundaries ... ok
+Invoking test: dcb_conformance_wasm::condition_against_an_empty_store_admits_the_append
+test dcb_conformance_wasm::condition_against_an_empty_store_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::condition_after_rejects_events_beyond_the_boundary
+test dcb_conformance_wasm::condition_after_rejects_events_beyond_the_boundary ... ok
+Invoking test: dcb_conformance_wasm::condition_after_ignores_non_matching_events
+test dcb_conformance_wasm::condition_after_ignores_non_matching_events ... ok
+Invoking test: dcb_conformance_wasm::condition_after_ignores_events_at_the_boundary
+test dcb_conformance_wasm::condition_after_ignores_events_at_the_boundary ... ok
+Invoking test: dcb_conformance_wasm::condition_after_beyond_the_last_matching_position_admits_the_append
+test dcb_conformance_wasm::condition_after_beyond_the_last_matching_position_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::condition_after_beyond_head_admits_the_append
+test dcb_conformance_wasm::condition_after_beyond_head_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::batch_positions_follow_slice_order
+test dcb_conformance_wasm::batch_positions_follow_slice_order ... ok
+Invoking test: dcb_conformance_wasm::batch_is_not_evaluated_against_its_own_condition
+test dcb_conformance_wasm::batch_is_not_evaluated_against_its_own_condition ... ok
+Invoking test: dcb_conformance_wasm::arming_a_mid_batch_fault_makes_the_append_fail
+SKIP arming_a_mid_batch_fault_makes_the_append_fail: fixture declines `MID_BATCH_FAULT` — this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+test dcb_conformance_wasm::arming_a_mid_batch_fault_makes_the_append_fail ... ok
+Invoking test: dcb_conformance_wasm::appending_equal_events_yields_two_events
+test dcb_conformance_wasm::appending_equal_events_yields_two_events ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_identity_and_time
+test dcb_conformance_wasm::append_stamps_identity_and_time ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_a_recorded_time
+test dcb_conformance_wasm::append_stamps_a_recorded_time ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_a_local_event_id
+test dcb_conformance_wasm::append_stamps_a_local_event_id ... ok
+Invoking test: dcb_conformance_wasm::append_returns_last_written_position
+test dcb_conformance_wasm::append_returns_last_written_position ... ok
+Invoking test: dcb_conformance_wasm::append_reports_exceeded_store_limits
+SKIP append_reports_exceeded_store_limits: fixture declines `MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH` — this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+test dcb_conformance_wasm::append_reports_exceeded_store_limits ... ok
+Invoking test: dcb_conformance_wasm::append_rejects_empty_batch
+test dcb_conformance_wasm::append_rejects_empty_batch ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_event_type_and_tags_byte_for_byte
+test dcb_conformance_wasm::append_preserves_event_type_and_tags_byte_for_byte ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_event_payload
+test dcb_conformance_wasm::append_preserves_event_payload ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_an_empty_payload
+test dcb_conformance_wasm::append_preserves_an_empty_payload ... ok
+Invoking test: dcb_conformance_wasm::append_is_atomic_under_a_mid_batch_fault
+SKIP append_is_atomic_under_a_mid_batch_fault: fixture declines `MID_BATCH_FAULT` — this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+test dcb_conformance_wasm::append_is_atomic_under_a_mid_batch_fault ... ok
+Invoking test: dcb_conformance_wasm::append_is_atomic
+test dcb_conformance_wasm::append_is_atomic ... ok
+Invoking test: dcb_conformance_wasm::acknowledged_writes_survive_a_reopen
+SKIP acknowledged_writes_survive_a_reopen: fixture declines `REOPEN` — MemoryEventStore is a Vec behind an RwLock, so there is no durable medium to reopen over: discarding process state is indistinguishable from discarding the events
+test dcb_conformance_wasm::acknowledged_writes_survive_a_reopen ... ok
+Invoking test: dcb_conformance_wasm::a_live_read_stream_does_not_block_an_append
+test dcb_conformance_wasm::a_live_read_stream_does_not_block_an_append ... ok
+
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.06s
+
+happenstance-testkit/local_conformance: 89 rules enumerated, 6 named, executing on wasm32-unknown-unknown
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests\local_conformance.rs (target\wasm32-unknown-unknown\debug\deps\local_conformance-58aa3d8a372b83ce.wasm)
+running 89 tests
+Invoking test: local_wasm::untagged_events_match_query_all
+test local_wasm::untagged_events_match_query_all ... ok
+Invoking test: local_wasm::two_handles_observe_each_others_appends
+test local_wasm::two_handles_observe_each_others_appends ... ok
+Invoking test: local_wasm::two_fixture_instances_observe_none_of_each_others_appends
+test local_wasm::two_fixture_instances_observe_none_of_each_others_appends ... ok
+Invoking test: local_wasm::tags_may_repeat_a_key
+test local_wasm::tags_may_repeat_a_key ... ok
+Invoking test: local_wasm::tags_differing_only_by_unicode_normalisation_are_distinct
+test local_wasm::tags_differing_only_by_unicode_normalisation_are_distinct ... ok
+Invoking test: local_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+test local_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count ... ok
+Invoking test: local_wasm::store_accepts_the_guaranteed_minimum_tag_count
+test local_wasm::store_accepts_the_guaranteed_minimum_tag_count ... ok
+Invoking test: local_wasm::store_accepts_the_guaranteed_minimum_payload
+test local_wasm::store_accepts_the_guaranteed_minimum_payload ... ok
+Invoking test: local_wasm::store_accepts_the_guaranteed_minimum_batch_size
+test local_wasm::store_accepts_the_guaranteed_minimum_batch_size ... ok
+Invoking test: local_wasm::store_accepts_non_ascii_identifiers
+test local_wasm::store_accepts_non_ascii_identifiers ... ok
+Invoking test: local_wasm::store_accepts_a_max_length_identifier
+test local_wasm::store_accepts_a_max_length_identifier ... ok
+Invoking test: local_wasm::reopened_store_does_not_reissue_an_event_id
+SKIP reopened_store_does_not_reissue_an_event_id: fixture declines `REOPEN` — LocalMemoryEventStore is a Vec behind an Rc<RefCell<_>>, so there is no durable medium to reopen over
+test local_wasm::reopened_store_does_not_reissue_an_event_id ... ok
+Invoking test: local_wasm::reissued_unconditional_batch_lands_twice
+test local_wasm::reissued_unconditional_batch_lands_twice ... ok
+Invoking test: local_wasm::reissued_conditional_batch_lands_once
+test local_wasm::reissued_conditional_batch_lands_once ... ok
+Invoking test: local_wasm::reissued_batch_conditioned_on_other_events_lands_twice
+test local_wasm::reissued_batch_conditioned_on_other_events_lands_twice ... ok
+Invoking test: local_wasm::recorded_time_survives_a_reopen
+SKIP recorded_time_survives_a_reopen: fixture declines `REOPEN` — LocalMemoryEventStore is a Vec behind an Rc<RefCell<_>>, so there is no durable medium to reopen over
+test local_wasm::recorded_time_survives_a_reopen ... ok
+Invoking test: local_wasm::reading_an_empty_store_yields_nothing
+test local_wasm::reading_an_empty_store_yields_nothing ... ok
+Invoking test: local_wasm::read_to_under_backwards_bounds_the_older_end
+test local_wasm::read_to_under_backwards_bounds_the_older_end ... ok
+Invoking test: local_wasm::read_to_is_inclusive
+test local_wasm::read_to_is_inclusive ... ok
+Invoking test: local_wasm::read_result_is_stable_under_concurrent_append
+test local_wasm::read_result_is_stable_under_concurrent_append ... ok
+Invoking test: local_wasm::read_limit_zero_yields_nothing
+test local_wasm::read_limit_zero_yields_nothing ... ok
+Invoking test: local_wasm::read_limit_truncates
+test local_wasm::read_limit_truncates ... ok
+Invoking test: local_wasm::read_limit_applies_after_filtering
+test local_wasm::read_limit_applies_after_filtering ... ok
+Invoking test: local_wasm::read_from_is_inclusive
+test local_wasm::read_from_is_inclusive ... ok
+Invoking test: local_wasm::read_from_composes_with_multi_item_query
+test local_wasm::read_from_composes_with_multi_item_query ... ok
+Invoking test: local_wasm::read_from_and_to_bound_a_closed_window
+test local_wasm::read_from_and_to_bound_a_closed_window ... ok
+Invoking test: local_wasm::read_from_a_gap_position
+test local_wasm::read_from_a_gap_position ... ok
+Invoking test: local_wasm::read_defaults_to_ascending_order
+test local_wasm::read_defaults_to_ascending_order ... ok
+Invoking test: local_wasm::read_backwards_reverses_order
+test local_wasm::read_backwards_reverses_order ... ok
+Invoking test: local_wasm::read_backwards_limit_applies_after_filtering
+test local_wasm::read_backwards_limit_applies_after_filtering ... ok
+Invoking test: local_wasm::read_backwards_from_with_limit
+test local_wasm::read_backwards_from_with_limit ... ok
+Invoking test: local_wasm::racing_conditional_appends_elect_one_winner
+test local_wasm::racing_conditional_appends_elect_one_winner ... ok
+Invoking test: local_wasm::query_union_is_item_concatenation
+test local_wasm::query_union_is_item_concatenation ... ok
+Invoking test: local_wasm::query_matching_nothing_yields_empty
+test local_wasm::query_matching_nothing_yields_empty ... ok
+Invoking test: local_wasm::query_items_share_one_snapshot
+test local_wasm::query_items_share_one_snapshot ... ok
+Invoking test: local_wasm::query_items_are_or
+test local_wasm::query_items_are_or ... ok
+Invoking test: local_wasm::query_item_types_are_or
+test local_wasm::query_item_types_are_or ... ok
+Invoking test: local_wasm::query_item_tags_match_supersets
+test local_wasm::query_item_tags_match_supersets ... ok
+Invoking test: local_wasm::query_item_tags_are_and
+test local_wasm::query_item_tags_are_and ... ok
+Invoking test: local_wasm::query_item_rejects_partial_tag_overlap
+test local_wasm::query_item_rejects_partial_tag_overlap ... ok
+Invoking test: local_wasm::query_item_order_does_not_change_the_result_set
+test local_wasm::query_item_order_does_not_change_the_result_set ... ok
+Invoking test: local_wasm::query_item_combines_types_and_tags_with_and
+test local_wasm::query_item_combines_types_and_tags_with_and ... ok
+Invoking test: local_wasm::query_all_matches_every_event
+test local_wasm::query_all_matches_every_event ... ok
+Invoking test: local_wasm::positions_are_unique
+test local_wasm::positions_are_unique ... ok
+Invoking test: local_wasm::positions_are_strictly_monotonic
+test local_wasm::positions_are_strictly_monotonic ... ok
+Invoking test: local_wasm::nothing_below_an_observed_position_appears_later
+test local_wasm::nothing_below_an_observed_position_appears_later ... ok
+Invoking test: local_wasm::metadata_distinguishes_absent_from_empty
+test local_wasm::metadata_distinguishes_absent_from_empty ... ok
+Invoking test: local_wasm::limit_applies_across_items_not_per_item
+test local_wasm::limit_applies_across_items_not_per_item ... ok
+Invoking test: local_wasm::interleaved_appends_on_one_handle_elect_one_winner
+test local_wasm::interleaved_appends_on_one_handle_elect_one_winner ... ok
+Invoking test: local_wasm::head_of_an_empty_store_is_none
+test local_wasm::head_of_an_empty_store_is_none ... ok
+Invoking test: local_wasm::head_is_the_highest_visible_position
+test local_wasm::head_is_the_highest_visible_position ... ok
+Invoking test: local_wasm::head_advances_across_two_handles
+test local_wasm::head_advances_across_two_handles ... ok
+Invoking test: local_wasm::event_ids_are_unique_within_a_store
+test local_wasm::event_ids_are_unique_within_a_store ... ok
+Invoking test: local_wasm::event_id_is_not_matchable_by_query
+test local_wasm::event_id_is_not_matchable_by_query ... ok
+Invoking test: local_wasm::empty_batch_is_refused_before_the_condition_is_evaluated
+test local_wasm::empty_batch_is_refused_before_the_condition_is_evaluated ... ok
+Invoking test: local_wasm::duplicate_items_do_not_duplicate_events
+test local_wasm::duplicate_items_do_not_duplicate_events ... ok
+Invoking test: local_wasm::dropped_append_future_leaves_no_partial_batch
+test local_wasm::dropped_append_future_leaves_no_partial_batch ... ok
+Invoking test: local_wasm::contains_event_id_reports_membership
+test local_wasm::contains_event_id_reports_membership ... ok
+Invoking test: local_wasm::condition_without_after_rejects_any_match
+test local_wasm::condition_without_after_rejects_any_match ... ok
+Invoking test: local_wasm::condition_without_after_allows_non_match
+test local_wasm::condition_without_after_allows_non_match ... ok
+Invoking test: local_wasm::condition_with_one_guard_behaves_as_today
+test local_wasm::condition_with_one_guard_behaves_as_today ... ok
+Invoking test: local_wasm::condition_with_an_unheld_tag_does_not_reject
+test local_wasm::condition_with_an_unheld_tag_does_not_reject ... ok
+Invoking test: local_wasm::condition_rejection_leaves_store_unchanged
+test local_wasm::condition_rejection_leaves_store_unchanged ... ok
+Invoking test: local_wasm::condition_rejection_is_reported_as_condition_violated
+test local_wasm::condition_rejection_is_reported_as_condition_violated ... ok
+Invoking test: local_wasm::condition_matches_on_tags
+test local_wasm::condition_matches_on_tags ... ok
+Invoking test: local_wasm::condition_guards_carry_independent_boundaries
+test local_wasm::condition_guards_carry_independent_boundaries ... ok
+Invoking test: local_wasm::condition_against_an_empty_store_admits_the_append
+test local_wasm::condition_against_an_empty_store_admits_the_append ... ok
+Invoking test: local_wasm::condition_after_rejects_events_beyond_the_boundary
+test local_wasm::condition_after_rejects_events_beyond_the_boundary ... ok
+Invoking test: local_wasm::condition_after_ignores_non_matching_events
+test local_wasm::condition_after_ignores_non_matching_events ... ok
+Invoking test: local_wasm::condition_after_ignores_events_at_the_boundary
+test local_wasm::condition_after_ignores_events_at_the_boundary ... ok
+Invoking test: local_wasm::condition_after_beyond_the_last_matching_position_admits_the_append
+test local_wasm::condition_after_beyond_the_last_matching_position_admits_the_append ... ok
+Invoking test: local_wasm::condition_after_beyond_head_admits_the_append
+test local_wasm::condition_after_beyond_head_admits_the_append ... ok
+Invoking test: local_wasm::batch_positions_follow_slice_order
+test local_wasm::batch_positions_follow_slice_order ... ok
+Invoking test: local_wasm::batch_is_not_evaluated_against_its_own_condition
+test local_wasm::batch_is_not_evaluated_against_its_own_condition ... ok
+Invoking test: local_wasm::arming_a_mid_batch_fault_makes_the_append_fail
+SKIP arming_a_mid_batch_fault_makes_the_append_fail: fixture declines `MID_BATCH_FAULT` — this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+test local_wasm::arming_a_mid_batch_fault_makes_the_append_fail ... ok
+Invoking test: local_wasm::appending_equal_events_yields_two_events
+test local_wasm::appending_equal_events_yields_two_events ... ok
+Invoking test: local_wasm::append_stamps_identity_and_time
+test local_wasm::append_stamps_identity_and_time ... ok
+Invoking test: local_wasm::append_stamps_a_recorded_time
+test local_wasm::append_stamps_a_recorded_time ... ok
+Invoking test: local_wasm::append_stamps_a_local_event_id
+test local_wasm::append_stamps_a_local_event_id ... ok
+Invoking test: local_wasm::append_returns_last_written_position
+test local_wasm::append_returns_last_written_position ... ok
+Invoking test: local_wasm::append_reports_exceeded_store_limits
+SKIP append_reports_exceeded_store_limits: fixture declines `MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH` — this fixture states no ceiling for any store limit, so there is no capacity refusal for a rule to observe; a store with no ceiling is reporting a fact about itself rather than declining to co-operate
+test local_wasm::append_reports_exceeded_store_limits ... ok
+Invoking test: local_wasm::append_rejects_empty_batch
+test local_wasm::append_rejects_empty_batch ... ok
+Invoking test: local_wasm::append_preserves_event_type_and_tags_byte_for_byte
+test local_wasm::append_preserves_event_type_and_tags_byte_for_byte ... ok
+Invoking test: local_wasm::append_preserves_event_payload
+test local_wasm::append_preserves_event_payload ... ok
+Invoking test: local_wasm::append_preserves_an_empty_payload
+test local_wasm::append_preserves_an_empty_payload ... ok
+Invoking test: local_wasm::append_is_atomic_under_a_mid_batch_fault
+SKIP append_is_atomic_under_a_mid_batch_fault: fixture declines `MID_BATCH_FAULT` — this fixture cannot make its store fail between two rows of one batch; nothing in the port can reach inside an `append`, so the injection has to come from the adapter and this one has none to offer
+test local_wasm::append_is_atomic_under_a_mid_batch_fault ... ok
+Invoking test: local_wasm::append_is_atomic
+test local_wasm::append_is_atomic ... ok
+Invoking test: local_wasm::acknowledged_writes_survive_a_reopen
+SKIP acknowledged_writes_survive_a_reopen: fixture declines `REOPEN` — LocalMemoryEventStore is a Vec behind an Rc<RefCell<_>>, so there is no durable medium to reopen over
+test local_wasm::acknowledged_writes_survive_a_reopen ... ok
+Invoking test: local_wasm::a_live_read_stream_does_not_block_an_append
+test local_wasm::a_live_read_stream_does_not_block_an_append ... ok
+
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.05s
+
+happenstance-testkit/projection_conformance_wasm: 17 rules enumerated, 6 named, executing on wasm32-unknown-unknown
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests\projection_conformance_wasm.rs (target\wasm32-unknown-unknown\debug\deps\projection_conformance_wasm-ece4884d8dd4db1e.wasm)
+running 17 tests
+Invoking test: projection_conformance_wasm::rollback_leaves_both_unchanged
+test projection_conformance_wasm::rollback_leaves_both_unchanged ... ok
+Invoking test: projection_conformance_wasm::reset_is_scoped_to_one_projection
+test projection_conformance_wasm::reset_is_scoped_to_one_projection ... ok
+Invoking test: projection_conformance_wasm::reset_is_not_commit_at_first
+test projection_conformance_wasm::reset_is_not_commit_at_first ... ok
+Invoking test: projection_conformance_wasm::reset_clears_rows_and_checkpoint_together
+test projection_conformance_wasm::reset_clears_rows_and_checkpoint_together ... ok
+Invoking test: projection_conformance_wasm::refused_reset_changes_nothing
+SKIP refused_reset_changes_nothing: fixture declines `RESET_REFUSAL` — MemoryProjectionStore holds no protection policy, so there is no projection it could decline to reset: `reset` returns `Refused` on no path at all, and a store that refused arbitrarily would be a worse oracle
+test projection_conformance_wasm::refused_reset_changes_nothing ... ok
+Invoking test: projection_conformance_wasm::rebuilding_is_distinguishable_from_live
+test projection_conformance_wasm::rebuilding_is_distinguishable_from_live ... ok
+Invoking test: projection_conformance_wasm::rebuild_is_chunk_size_invariant
+test projection_conformance_wasm::rebuild_is_chunk_size_invariant ... ok
+Invoking test: projection_conformance_wasm::fresh_projection_has_no_checkpoint
+test projection_conformance_wasm::fresh_projection_has_no_checkpoint ... ok
+Invoking test: projection_conformance_wasm::failed_commit_leaves_both_unchanged
+SKIP failed_commit_leaves_both_unchanged: fixture declines `COMMIT_FAULT` — MemoryProjectionStore applies the read-model writes and the checkpoint under one write lock, so it has no write that can be made to fail and no moment between the two halves to fail in; arming a fault would mean building fault injection into a shipped store to satisfy a test
+test projection_conformance_wasm::failed_commit_leaves_both_unchanged ... ok
+Invoking test: projection_conformance_wasm::dropped_batch_leaves_store_usable
+test projection_conformance_wasm::dropped_batch_leaves_store_usable ... ok
+Invoking test: projection_conformance_wasm::distinct_projections_advance_independently
+test projection_conformance_wasm::distinct_projections_advance_independently ... ok
+Invoking test: projection_conformance_wasm::commit_rejects_a_regressing_position
+test projection_conformance_wasm::commit_rejects_a_regressing_position ... ok
+Invoking test: projection_conformance_wasm::commit_rejects_a_foreign_batch
+test projection_conformance_wasm::commit_rejects_a_foreign_batch ... ok
+Invoking test: projection_conformance_wasm::commit_is_atomic_with_the_read_model
+test projection_conformance_wasm::commit_is_atomic_with_the_read_model ... ok
+Invoking test: projection_conformance_wasm::commit_advances_the_checkpoint
+test projection_conformance_wasm::commit_advances_the_checkpoint ... ok
+Invoking test: projection_conformance_wasm::commit_accepts_a_position_the_batch_did_not_write
+test projection_conformance_wasm::commit_accepts_a_position_the_batch_did_not_write ... ok
+Invoking test: projection_conformance_wasm::batch_reads_reflect_pending_writes
+test projection_conformance_wasm::batch_reads_reflect_pending_writes ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.02s
+
+happenstance-cloudflare/durable_object_conformance: 89 rules enumerated, 10 named, executing on wasm32-unknown-unknown
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests\durable_object_conformance.rs (target\wasm32-unknown-unknown\debug\deps\durable_object_conformance-5c06329448972d07.wasm)
+running 89 tests
+Invoking test: dcb_conformance_wasm::untagged_events_match_query_all
+test dcb_conformance_wasm::untagged_events_match_query_all ... ok
+Invoking test: dcb_conformance_wasm::two_handles_observe_each_others_appends
+test dcb_conformance_wasm::two_handles_observe_each_others_appends ... ok
+Invoking test: dcb_conformance_wasm::two_fixture_instances_observe_none_of_each_others_appends
+test dcb_conformance_wasm::two_fixture_instances_observe_none_of_each_others_appends ... ok
+Invoking test: dcb_conformance_wasm::tags_may_repeat_a_key
+test dcb_conformance_wasm::tags_may_repeat_a_key ... ok
+Invoking test: dcb_conformance_wasm::tags_differing_only_by_unicode_normalisation_are_distinct
+test dcb_conformance_wasm::tags_differing_only_by_unicode_normalisation_are_distinct ... ok
+Invoking test: dcb_conformance_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+test dcb_conformance_wasm::store_evaluates_a_query_at_the_guaranteed_minimum_item_count ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_tag_count
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_tag_count ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_payload
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_payload ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_batch_size
+test dcb_conformance_wasm::store_accepts_the_guaranteed_minimum_batch_size ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_non_ascii_identifiers
+test dcb_conformance_wasm::store_accepts_non_ascii_identifiers ... ok
+Invoking test: dcb_conformance_wasm::store_accepts_a_max_length_identifier
+test dcb_conformance_wasm::store_accepts_a_max_length_identifier ... ok
+Invoking test: dcb_conformance_wasm::reopened_store_does_not_reissue_an_event_id
+test dcb_conformance_wasm::reopened_store_does_not_reissue_an_event_id ... ok
+Invoking test: dcb_conformance_wasm::reissued_unconditional_batch_lands_twice
+test dcb_conformance_wasm::reissued_unconditional_batch_lands_twice ... ok
+Invoking test: dcb_conformance_wasm::reissued_conditional_batch_lands_once
+test dcb_conformance_wasm::reissued_conditional_batch_lands_once ... ok
+Invoking test: dcb_conformance_wasm::reissued_batch_conditioned_on_other_events_lands_twice
+test dcb_conformance_wasm::reissued_batch_conditioned_on_other_events_lands_twice ... ok
+Invoking test: dcb_conformance_wasm::recorded_time_survives_a_reopen
+test dcb_conformance_wasm::recorded_time_survives_a_reopen ... ok
+Invoking test: dcb_conformance_wasm::reading_an_empty_store_yields_nothing
+test dcb_conformance_wasm::reading_an_empty_store_yields_nothing ... ok
+Invoking test: dcb_conformance_wasm::read_to_under_backwards_bounds_the_older_end
+test dcb_conformance_wasm::read_to_under_backwards_bounds_the_older_end ... ok
+Invoking test: dcb_conformance_wasm::read_to_is_inclusive
+test dcb_conformance_wasm::read_to_is_inclusive ... ok
+Invoking test: dcb_conformance_wasm::read_result_is_stable_under_concurrent_append
+test dcb_conformance_wasm::read_result_is_stable_under_concurrent_append ... ok
+Invoking test: dcb_conformance_wasm::read_limit_zero_yields_nothing
+test dcb_conformance_wasm::read_limit_zero_yields_nothing ... ok
+Invoking test: dcb_conformance_wasm::read_limit_truncates
+test dcb_conformance_wasm::read_limit_truncates ... ok
+Invoking test: dcb_conformance_wasm::read_limit_applies_after_filtering
+test dcb_conformance_wasm::read_limit_applies_after_filtering ... ok
+Invoking test: dcb_conformance_wasm::read_from_is_inclusive
+test dcb_conformance_wasm::read_from_is_inclusive ... ok
+Invoking test: dcb_conformance_wasm::read_from_composes_with_multi_item_query
+test dcb_conformance_wasm::read_from_composes_with_multi_item_query ... ok
+Invoking test: dcb_conformance_wasm::read_from_and_to_bound_a_closed_window
+test dcb_conformance_wasm::read_from_and_to_bound_a_closed_window ... ok
+Invoking test: dcb_conformance_wasm::read_from_a_gap_position
+test dcb_conformance_wasm::read_from_a_gap_position ... ok
+Invoking test: dcb_conformance_wasm::read_defaults_to_ascending_order
+test dcb_conformance_wasm::read_defaults_to_ascending_order ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_reverses_order
+test dcb_conformance_wasm::read_backwards_reverses_order ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_limit_applies_after_filtering
+test dcb_conformance_wasm::read_backwards_limit_applies_after_filtering ... ok
+Invoking test: dcb_conformance_wasm::read_backwards_from_with_limit
+test dcb_conformance_wasm::read_backwards_from_with_limit ... ok
+Invoking test: dcb_conformance_wasm::racing_conditional_appends_elect_one_winner
+test dcb_conformance_wasm::racing_conditional_appends_elect_one_winner ... ok
+Invoking test: dcb_conformance_wasm::query_union_is_item_concatenation
+test dcb_conformance_wasm::query_union_is_item_concatenation ... ok
+Invoking test: dcb_conformance_wasm::query_matching_nothing_yields_empty
+test dcb_conformance_wasm::query_matching_nothing_yields_empty ... ok
+Invoking test: dcb_conformance_wasm::query_items_share_one_snapshot
+test dcb_conformance_wasm::query_items_share_one_snapshot ... ok
+Invoking test: dcb_conformance_wasm::query_items_are_or
+test dcb_conformance_wasm::query_items_are_or ... ok
+Invoking test: dcb_conformance_wasm::query_item_types_are_or
+test dcb_conformance_wasm::query_item_types_are_or ... ok
+Invoking test: dcb_conformance_wasm::query_item_tags_match_supersets
+test dcb_conformance_wasm::query_item_tags_match_supersets ... ok
+Invoking test: dcb_conformance_wasm::query_item_tags_are_and
+test dcb_conformance_wasm::query_item_tags_are_and ... ok
+Invoking test: dcb_conformance_wasm::query_item_rejects_partial_tag_overlap
+test dcb_conformance_wasm::query_item_rejects_partial_tag_overlap ... ok
+Invoking test: dcb_conformance_wasm::query_item_order_does_not_change_the_result_set
+test dcb_conformance_wasm::query_item_order_does_not_change_the_result_set ... ok
+Invoking test: dcb_conformance_wasm::query_item_combines_types_and_tags_with_and
+test dcb_conformance_wasm::query_item_combines_types_and_tags_with_and ... ok
+Invoking test: dcb_conformance_wasm::query_all_matches_every_event
+test dcb_conformance_wasm::query_all_matches_every_event ... ok
+Invoking test: dcb_conformance_wasm::positions_are_unique
+test dcb_conformance_wasm::positions_are_unique ... ok
+Invoking test: dcb_conformance_wasm::positions_are_strictly_monotonic
+test dcb_conformance_wasm::positions_are_strictly_monotonic ... ok
+Invoking test: dcb_conformance_wasm::nothing_below_an_observed_position_appears_later
+test dcb_conformance_wasm::nothing_below_an_observed_position_appears_later ... ok
+Invoking test: dcb_conformance_wasm::metadata_distinguishes_absent_from_empty
+test dcb_conformance_wasm::metadata_distinguishes_absent_from_empty ... ok
+Invoking test: dcb_conformance_wasm::limit_applies_across_items_not_per_item
+test dcb_conformance_wasm::limit_applies_across_items_not_per_item ... ok
+Invoking test: dcb_conformance_wasm::interleaved_appends_on_one_handle_elect_one_winner
+test dcb_conformance_wasm::interleaved_appends_on_one_handle_elect_one_winner ... ok
+Invoking test: dcb_conformance_wasm::head_of_an_empty_store_is_none
+test dcb_conformance_wasm::head_of_an_empty_store_is_none ... ok
+Invoking test: dcb_conformance_wasm::head_is_the_highest_visible_position
+test dcb_conformance_wasm::head_is_the_highest_visible_position ... ok
+Invoking test: dcb_conformance_wasm::head_advances_across_two_handles
+test dcb_conformance_wasm::head_advances_across_two_handles ... ok
+Invoking test: dcb_conformance_wasm::event_ids_are_unique_within_a_store
+test dcb_conformance_wasm::event_ids_are_unique_within_a_store ... ok
+Invoking test: dcb_conformance_wasm::event_id_is_not_matchable_by_query
+test dcb_conformance_wasm::event_id_is_not_matchable_by_query ... ok
+Invoking test: dcb_conformance_wasm::empty_batch_is_refused_before_the_condition_is_evaluated
+test dcb_conformance_wasm::empty_batch_is_refused_before_the_condition_is_evaluated ... ok
+Invoking test: dcb_conformance_wasm::duplicate_items_do_not_duplicate_events
+test dcb_conformance_wasm::duplicate_items_do_not_duplicate_events ... ok
+Invoking test: dcb_conformance_wasm::dropped_append_future_leaves_no_partial_batch
+test dcb_conformance_wasm::dropped_append_future_leaves_no_partial_batch ... ok
+Invoking test: dcb_conformance_wasm::contains_event_id_reports_membership
+test dcb_conformance_wasm::contains_event_id_reports_membership ... ok
+Invoking test: dcb_conformance_wasm::condition_without_after_rejects_any_match
+test dcb_conformance_wasm::condition_without_after_rejects_any_match ... ok
+Invoking test: dcb_conformance_wasm::condition_without_after_allows_non_match
+test dcb_conformance_wasm::condition_without_after_allows_non_match ... ok
+Invoking test: dcb_conformance_wasm::condition_with_one_guard_behaves_as_today
+test dcb_conformance_wasm::condition_with_one_guard_behaves_as_today ... ok
+Invoking test: dcb_conformance_wasm::condition_with_an_unheld_tag_does_not_reject
+test dcb_conformance_wasm::condition_with_an_unheld_tag_does_not_reject ... ok
+Invoking test: dcb_conformance_wasm::condition_rejection_leaves_store_unchanged
+test dcb_conformance_wasm::condition_rejection_leaves_store_unchanged ... ok
+Invoking test: dcb_conformance_wasm::condition_rejection_is_reported_as_condition_violated
+test dcb_conformance_wasm::condition_rejection_is_reported_as_condition_violated ... ok
+Invoking test: dcb_conformance_wasm::condition_matches_on_tags
+test dcb_conformance_wasm::condition_matches_on_tags ... ok
+Invoking test: dcb_conformance_wasm::condition_guards_carry_independent_boundaries
+test dcb_conformance_wasm::condition_guards_carry_independent_boundaries ... ok
+Invoking test: dcb_conformance_wasm::condition_against_an_empty_store_admits_the_append
+test dcb_conformance_wasm::condition_against_an_empty_store_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::condition_after_rejects_events_beyond_the_boundary
+test dcb_conformance_wasm::condition_after_rejects_events_beyond_the_boundary ... ok
+Invoking test: dcb_conformance_wasm::condition_after_ignores_non_matching_events
+test dcb_conformance_wasm::condition_after_ignores_non_matching_events ... ok
+Invoking test: dcb_conformance_wasm::condition_after_ignores_events_at_the_boundary
+test dcb_conformance_wasm::condition_after_ignores_events_at_the_boundary ... ok
+Invoking test: dcb_conformance_wasm::condition_after_beyond_the_last_matching_position_admits_the_append
+test dcb_conformance_wasm::condition_after_beyond_the_last_matching_position_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::condition_after_beyond_head_admits_the_append
+test dcb_conformance_wasm::condition_after_beyond_head_admits_the_append ... ok
+Invoking test: dcb_conformance_wasm::batch_positions_follow_slice_order
+test dcb_conformance_wasm::batch_positions_follow_slice_order ... ok
+Invoking test: dcb_conformance_wasm::batch_is_not_evaluated_against_its_own_condition
+test dcb_conformance_wasm::batch_is_not_evaluated_against_its_own_condition ... ok
+Invoking test: dcb_conformance_wasm::arming_a_mid_batch_fault_makes_the_append_fail
+test dcb_conformance_wasm::arming_a_mid_batch_fault_makes_the_append_fail ... ok
+Invoking test: dcb_conformance_wasm::appending_equal_events_yields_two_events
+test dcb_conformance_wasm::appending_equal_events_yields_two_events ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_identity_and_time
+test dcb_conformance_wasm::append_stamps_identity_and_time ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_a_recorded_time
+test dcb_conformance_wasm::append_stamps_a_recorded_time ... ok
+Invoking test: dcb_conformance_wasm::append_stamps_a_local_event_id
+test dcb_conformance_wasm::append_stamps_a_local_event_id ... ok
+Invoking test: dcb_conformance_wasm::append_returns_last_written_position
+test dcb_conformance_wasm::append_returns_last_written_position ... ok
+Invoking test: dcb_conformance_wasm::append_reports_exceeded_store_limits
+test dcb_conformance_wasm::append_reports_exceeded_store_limits ... ok
+Invoking test: dcb_conformance_wasm::append_rejects_empty_batch
+test dcb_conformance_wasm::append_rejects_empty_batch ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_event_type_and_tags_byte_for_byte
+test dcb_conformance_wasm::append_preserves_event_type_and_tags_byte_for_byte ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_event_payload
+test dcb_conformance_wasm::append_preserves_event_payload ... ok
+Invoking test: dcb_conformance_wasm::append_preserves_an_empty_payload
+test dcb_conformance_wasm::append_preserves_an_empty_payload ... ok
+Invoking test: dcb_conformance_wasm::append_is_atomic_under_a_mid_batch_fault
+test dcb_conformance_wasm::append_is_atomic_under_a_mid_batch_fault ... ok
+Invoking test: dcb_conformance_wasm::append_is_atomic
+test dcb_conformance_wasm::append_is_atomic ... ok
+Invoking test: dcb_conformance_wasm::acknowledged_writes_survive_a_reopen
+test dcb_conformance_wasm::acknowledged_writes_survive_a_reopen ... ok
+Invoking test: dcb_conformance_wasm::a_live_read_stream_does_not_block_an_append
+test dcb_conformance_wasm::a_live_read_stream_does_not_block_an_append ... ok
+
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.28s
+
+happenstance-cloudflare/--lib: 81 tests listed, 16 named, executing on wasm32-unknown-unknown
+  host: Node 22.5 or newer: `crates/happenstance-cloudflare/src/host.rs` reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's default host is Node
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src\lib.rs (target\wasm32-unknown-unknown\debug\deps\happenstance_cloudflare-0804c3610add496e.wasm)
+running 81 tests
+test wasm_tests::the_probe_is_not_vacuous ... ignored, measured by experiments/gate-vacuity
+Invoking test: event_store::write_path_tests::the_error_type_has_no_condition_violated_variant
+test event_store::write_path_tests::the_error_type_has_no_condition_violated_variant ... ok
+Invoking test: event_store::write_path_tests::the_ceiling_itself_is_a_usable_position
+test event_store::write_path_tests::the_ceiling_itself_is_a_usable_position ... ok
+Invoking test: event_store::write_path_tests::store_id_is_read_back_on_a_second_handle
+test event_store::write_path_tests::store_id_is_read_back_on_a_second_handle ... ok
+Invoking test: event_store::write_path_tests::store_id_is_not_reminted_per_handle
+test event_store::write_path_tests::store_id_is_not_reminted_per_handle ... ok
+Invoking test: event_store::write_path_tests::schema_carries_the_identity_columns
+test event_store::write_path_tests::schema_carries_the_identity_columns ... ok
+Invoking test: event_store::write_path_tests::migrate_is_idempotent
+test event_store::write_path_tests::migrate_is_idempotent ... ok
+Invoking test: event_store::write_path_tests::head_of_an_empty_store_is_none
+test event_store::write_path_tests::head_of_an_empty_store_is_none ... ok
+Invoking test: event_store::write_path_tests::head_is_the_highest_position_this_store_assigned
+test event_store::write_path_tests::head_is_the_highest_position_this_store_assigned ... ok
+Invoking test: event_store::write_path_tests::exactly_at_the_ceiling_is_accepted
+test event_store::write_path_tests::exactly_at_the_ceiling_is_accepted ... ok
+Invoking test: event_store::write_path_tests::append_then_head_round_trips
+test event_store::write_path_tests::append_then_head_round_trips ... ok
+Invoking test: event_store::write_path_tests::append_returns_the_last_written_position
+test event_store::write_path_tests::append_returns_the_last_written_position ... ok
+Invoking test: event_store::write_path_tests::an_empty_batch_is_refused_before_the_condition
+test event_store::write_path_tests::an_empty_batch_is_refused_before_the_condition ... ok
+Invoking test: event_store::write_path_tests::a_unique_constraint_message_classifies_as_condition_violated
+test event_store::write_path_tests::a_unique_constraint_message_classifies_as_condition_violated ... ok
+Invoking test: event_store::write_path_tests::a_rejected_condition_writes_nothing
+test event_store::write_path_tests::a_rejected_condition_writes_nothing ... ok
+Invoking test: event_store::write_path_tests::a_position_below_one_is_reported
+test event_store::write_path_tests::a_position_below_one_is_reported ... ok
+Invoking test: event_store::write_path_tests::a_position_above_two_pow_53_is_reported_not_narrowed
+test event_store::write_path_tests::a_position_above_two_pow_53_is_reported_not_narrowed ... ok
+Invoking test: event_store::write_path_tests::a_local_identity_is_a_member
+test event_store::write_path_tests::a_local_identity_is_a_member ... ok
+Invoking test: event_store::write_path_tests::a_foreign_origin_is_not_a_member
+test event_store::write_path_tests::a_foreign_origin_is_not_a_member ... ok
+Invoking test: event_store::write_path_tests::a_failed_batch_leaves_no_partial_rows
+test event_store::write_path_tests::a_failed_batch_leaves_no_partial_rows ... ok
+Invoking test: event_store::write_path_tests::a_discarded_batch_does_not_wedge_or_rewind_the_store
+test event_store::write_path_tests::a_discarded_batch_does_not_wedge_or_rewind_the_store ... ok
+Invoking test: event_store::write_path_tests::a_capacity_refusal_names_a_store_limit
+test event_store::write_path_tests::a_capacity_refusal_names_a_store_limit ... ok
+Invoking test: event_store::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures
+test event_store::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures ... ok
+Invoking test: event_store::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind
+test event_store::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind ... ok
+Invoking test: event_store::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind
+test event_store::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind ... ok
+Invoking test: es6_reconstruction::transport_fault_reaches_the_caller_distinguishably
+test es6_reconstruction::transport_fault_reaches_the_caller_distinguishably ... ok
+Invoking test: es6_reconstruction::the_distinction_is_reachable_from_outside_the_crate
+test es6_reconstruction::the_distinction_is_reachable_from_outside_the_crate ... ok
+Invoking test: es6_reconstruction::constraint_violation_reaches_the_caller_as_condition_violated
+test es6_reconstruction::constraint_violation_reaches_the_caller_as_condition_violated ... ok
+Invoking test: es6_reconstruction::an_unclassifiable_throw_still_says_what_happened
+test es6_reconstruction::an_unclassifiable_throw_still_says_what_happened ... ok
+Invoking test: es6_reconstruction::an_evidence_discarding_classifier_is_rejected
+test es6_reconstruction::an_evidence_discarding_classifier_is_rejected ... ok
+Invoking test: sql_storage::tests::reentrant_borrow_is_reported_not_panicked
+test sql_storage::tests::reentrant_borrow_is_reported_not_panicked ... ok
+Invoking test: sql_storage::tests::exec_is_synchronous_and_yields_rows
+test sql_storage::tests::exec_is_synchronous_and_yields_rows ... ok
+Invoking test: sql_storage::tests::an_integer_above_the_safe_range_is_not_narrowed
+test sql_storage::tests::an_integer_above_the_safe_range_is_not_narrowed ... ok
+Invoking test: sql_storage::tests::a_full_object_is_not_a_generic_throw
+test sql_storage::tests::a_full_object_is_not_a_generic_throw ... ok
+Invoking test: sql_storage::tests::a_cursor_polled_after_another_statement_is_invalidated
+test sql_storage::tests::a_cursor_polled_after_another_statement_is_invalidated ... ok
+Invoking test: js::tests::the_thrown_value_stays_live
+test js::tests::the_thrown_value_stays_live ... ok
+Invoking test: js::tests::an_unrelated_failure_is_not_a_constraint_violation
+test js::tests::an_unrelated_failure_is_not_a_constraint_violation ... ok
+Invoking test: js::tests::a_unique_violation_reads_the_same_live_and_stringified
+test js::tests::a_unique_violation_reads_the_same_live_and_stringified ... ok
+Invoking test: js::tests::a_real_unique_index_violation_classifies
+test js::tests::a_real_unique_index_violation_classifies ... ok
+Invoking test: wasm_tests::the_send_flavour_does_not_imply_a_send_error
+test wasm_tests::the_send_flavour_does_not_imply_a_send_error ... ok
+Invoking test: wasm_tests::the_js_boundary_types_are_not_send
+test wasm_tests::the_js_boundary_types_are_not_send ... ok
+Invoking test: wasm_tests::the_error_type_is_not_send
+test wasm_tests::the_error_type_is_not_send ... ok
+Invoking test: event_store::read_path_tests::two_live_reads_interleave_without_borrowing_the_object
+test event_store::read_path_tests::two_live_reads_interleave_without_borrowing_the_object ... ok
+Invoking test: event_store::read_path_tests::the_well_formed_row_decodes
+test event_store::read_path_tests::the_well_formed_row_decodes ... ok
+Invoking test: event_store::read_path_tests::the_ceiling_is_captured_no_later_than_the_first_poll
+test event_store::read_path_tests::the_ceiling_is_captured_no_later_than_the_first_poll ... ok
+Invoking test: event_store::read_path_tests::tags_and_within_an_item_types_or_within_an_item
+test event_store::read_path_tests::tags_and_within_an_item_types_or_within_an_item ... ok
+Invoking test: event_store::read_path_tests::reading_an_empty_store_yields_nothing
+test event_store::read_path_tests::reading_an_empty_store_yields_nothing ... ok
+Invoking test: event_store::read_path_tests::read_to_under_backwards_bounds_the_older_end
+test event_store::read_path_tests::read_to_under_backwards_bounds_the_older_end ... ok
+Invoking test: event_store::read_path_tests::read_to_is_inclusive
+test event_store::read_path_tests::read_to_is_inclusive ... ok
+Invoking test: event_store::read_path_tests::read_reaches_the_store_only_through_new
+test event_store::read_path_tests::read_reaches_the_store_only_through_new ... ok
+Invoking test: event_store::read_path_tests::read_pages_at_the_shipped_page_size
+test event_store::read_path_tests::read_pages_at_the_shipped_page_size ... ok
+Invoking test: event_store::read_path_tests::read_limit_zero_yields_nothing
+test event_store::read_path_tests::read_limit_zero_yields_nothing ... ok
+Invoking test: event_store::read_path_tests::read_limit_applies_after_filtering
+test event_store::read_path_tests::read_limit_applies_after_filtering ... ok
+Invoking test: event_store::read_path_tests::read_is_usable_from_generic_code_binding_the_bare_port
+test event_store::read_path_tests::read_is_usable_from_generic_code_binding_the_bare_port ... ok
+Invoking test: event_store::read_path_tests::read_is_stable_under_an_interleaved_append
+test event_store::read_path_tests::read_is_stable_under_an_interleaved_append ... ok
+Invoking test: event_store::read_path_tests::read_from_is_inclusive
+test event_store::read_path_tests::read_from_is_inclusive ... ok
+Invoking test: event_store::read_path_tests::read_from_and_to_bound_a_closed_window
+test event_store::read_path_tests::read_from_and_to_bound_a_closed_window ... ok
+Invoking test: event_store::read_path_tests::read_from_a_gap_position
+test event_store::read_path_tests::read_from_a_gap_position ... ok
+Invoking test: event_store::read_path_tests::read_backwards_limit_applies_after_filtering
+test event_store::read_path_tests::read_backwards_limit_applies_after_filtering ... ok
+Invoking test: event_store::read_path_tests::read_backwards_from_with_limit
+test event_store::read_path_tests::read_backwards_from_with_limit ... ok
+Invoking test: event_store::read_path_tests::read_all_replays_every_appended_event
+test event_store::read_path_tests::read_all_replays_every_appended_event ... ok
+Invoking test: event_store::read_path_tests::query_union_is_item_concatenation
+test event_store::read_path_tests::query_union_is_item_concatenation ... ok
+Invoking test: event_store::read_path_tests::one_ceiling_is_captured_per_read_not_one_per_item
+test event_store::read_path_tests::one_ceiling_is_captured_per_read_not_one_per_item ... ok
+Invoking test: event_store::read_path_tests::metadata_none_and_some_empty_stay_distinguishable
+test event_store::read_path_tests::metadata_none_and_some_empty_stay_distinguishable ... ok
+Invoking test: event_store::read_path_tests::limit_applies_across_items_not_per_item
+test event_store::read_path_tests::limit_applies_across_items_not_per_item ... ok
+Invoking test: event_store::read_path_tests::every_page_statement_carries_the_ceiling_bound
+test event_store::read_path_tests::every_page_statement_carries_the_ceiling_bound ... ok
+Invoking test: event_store::read_path_tests::decode_row_returns_recorded_at_as_stored
+test event_store::read_path_tests::decode_row_returns_recorded_at_as_stored ... ok
+Invoking test: event_store::read_path_tests::decode_row_reports_stored_position_at_the_boundary
+test event_store::read_path_tests::decode_row_reports_stored_position_at_the_boundary ... ok
+Invoking test: event_store::read_path_tests::decode_row_reports_stored_event_type
+test event_store::read_path_tests::decode_row_reports_stored_event_type ... ok
+Invoking test: event_store::read_path_tests::decode_row_reports_row_shape
+test event_store::read_path_tests::decode_row_reports_row_shape ... ok
+Invoking test: event_store::read_path_tests::decode_row_reports_column_type
+test event_store::read_path_tests::decode_row_reports_column_type ... ok
+Invoking test: event_store::read_path_tests::decode_row_rebuilds_the_identity_from_the_stored_origin
+test event_store::read_path_tests::decode_row_rebuilds_the_identity_from_the_stored_origin ... ok
+Invoking test: event_store::read_path_tests::an_unrepresentable_position_is_an_error_item_on_the_stream
+test event_store::read_path_tests::an_unrepresentable_position_is_an_error_item_on_the_stream ... ok
+Invoking test: event_store::read_path_tests::an_item_naming_no_tags_matches_an_untagged_event
+test event_store::read_path_tests::an_item_naming_no_tags_matches_an_untagged_event ... ok
+Invoking test: event_store::read_path_tests::all_items_of_one_query_share_one_ceiling
+test event_store::read_path_tests::all_items_of_one_query_share_one_ceiling ... ok
+Invoking test: event_store::read_path_tests::a_replayed_event_carries_everything_it_was_appended_with
+test event_store::read_path_tests::a_replayed_event_carries_everything_it_was_appended_with ... ok
+Invoking test: event_store::read_path_tests::a_read_issued_during_a_suspended_append_completes
+test event_store::read_path_tests::a_read_issued_during_a_suspended_append_completes ... ok
+Invoking test: event_store::read_path_tests::a_null_head_ceiling_is_rejected_on_the_empty_store
+test event_store::read_path_tests::a_null_head_ceiling_is_rejected_on_the_empty_store ... ok
+Invoking test: event_store::read_path_tests::a_live_read_stream_does_not_block_an_append_on_one_handle
+test event_store::read_path_tests::a_live_read_stream_does_not_block_an_append_on_one_handle ... ok
+Invoking test: event_store::read_path_tests::a_cursor_held_across_a_poll_is_rejected
+test event_store::read_path_tests::a_cursor_held_across_a_poll_is_rejected ... ok
+Invoking test: event_store::read_path_tests::a_ceilingless_paging_read_is_rejected
+test event_store::read_path_tests::a_ceilingless_paging_read_is_rejected ... ok
+
+test result: ok. 80 passed; 0 failed; 1 ignored; 0 filtered out; finished in 0.13s
+
+happenstance-cloudflare/--test fixture_contract: 9 tests listed, 9 named, executing on wasm32-unknown-unknown
+  host: Node 22.5 or newer: `crates/happenstance-cloudflare/src/host.rs` reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's default host is Node
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests\fixture_contract.rs (target\wasm32-unknown-unknown\debug\deps\fixture_contract-77d6904798c62f75.wasm)
+running 9 tests
+Invoking test: on_the_object::two_instances_alive_at_once_observe_none_of_each_others_appends
+test on_the_object::two_instances_alive_at_once_observe_none_of_each_others_appends ... ok
+Invoking test: on_the_object::two_handles_from_one_instance_observe_each_others_appends
+test on_the_object::two_handles_from_one_instance_observe_each_others_appends ... ok
+Invoking test: on_the_object::the_hosts_arming_hook_fires_once_and_disarms
+test on_the_object::the_hosts_arming_hook_fires_once_and_disarms ... ok
+Invoking test: on_the_object::the_host_is_reachable_from_an_integration_test
+test on_the_object::the_host_is_reachable_from_an_integration_test ... ok
+Invoking test: on_the_object::the_armed_fault_is_a_real_trigger_inside_the_store
+test on_the_object::the_armed_fault_is_a_real_trigger_inside_the_store ... ok
+Invoking test: on_the_object::migrate_runs_once_per_instance_not_per_connect
+test on_the_object::migrate_runs_once_per_instance_not_per_connect ... ok
+Invoking test: on_the_object::a_supported_capability_has_its_method_overridden
+test on_the_object::a_supported_capability_has_its_method_overridden ... ok
+Invoking test: on_the_object::a_second_handle_does_not_re_mint_the_store_id
+test on_the_object::a_second_handle_does_not_re_mint_the_store_id ... ok
+Invoking test: on_the_object::a_declined_capability_reaches_the_gate_as_a_skip_line
+SKIP append_is_atomic_under_a_mid_batch_fault: fixture declines `MID_BATCH_FAULT` — this fixture arms no trigger on the object's `event` table, so there is nothing to make the k-th row of a batch fail inside the store's own write path
+SKIP acknowledged_writes_survive_a_reopen: fixture declines `REOPEN` — this fixture holds no Durable Object `state` to re-derive a binding from, so it cannot discard handle state without discarding the object's storage with it
+test on_the_object::a_declined_capability_reaches_the_gate_as_a_skip_line ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.03s
+
+happenstance-cloudflare/--test wf11_memory_ceiling: 2 tests listed, 2 named, executing on wasm32-unknown-unknown
+  host: Node 22.5 or newer: `crates/happenstance-cloudflare/src/host.rs` reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's default host is Node
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests\wf11_memory_ceiling.rs (target\wasm32-unknown-unknown\debug\deps\wf11_memory_ceiling-3429285a3da85b68.wasm)
+running 2 tests
+Invoking test: the_two_encode_paths_produce_the_published_size_ratio
+WF-11 control: at a payload of 348160 bytes the human-readable path costs 464218 bytes (13333 basis points of the payload) and the binary path 348163 bytes (10000 basis points). Published: 464218 and 348163.
+test the_two_encode_paths_produce_the_published_size_ratio ... ok
+Invoking test: records_the_ceiling_and_the_encode_peaks
+=== WF-11 falsifier probe ===
+  page = 65536 bytes; linear memory at entry = 63 pages = 4128768 bytes
+  measured in-process, never read off a documentation page. Beside it, for comparison rather than conflation, what the configuration claims: the platform's documented per-isolate limit is 134217728 bytes, and the architectural maximum of a wasm32 linear memory is 65536 pages = 4294967296 bytes. The runner this executes under declares no maximum of its own.
+WF-11 attempt: payload = 65536 bytes (floor anchor: MIN_SUPPORTED_EVENT_DATA_LEN, the smallest payload every conformant store must accept, so 'a store took it but a peer cannot forward it' is a real contradiction); predicted peak = 240295 bytes = 4 pages
+  human-readable: 87453 bytes, grew 5 pages (327680 bytes) | binary: 65558 bytes, grew 2 pages (131072 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 attempt: payload = 348160 bytes (reference anchor: the 340 KiB payload the published measurement table is about); predicted peak = 1276583 bytes = 20 pages
+  human-readable: 464285 bytes, grew 31 pages (2031616 bytes) | binary: 348182 bytes, grew 17 pages (1114112 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 ceiling walk: started at 122 pages, reached 2169 pages (142147584 bytes), refused at nothing — the host granted every request, 11 of 64 grow requests spent, stopped on the probe's own page budget
+WF-11 arithmetic: peak = payload * 11/3. Against 134217728 bytes of documented-platform (no ceiling was measured) headroom the predicted firing payload is 36604834 bytes. This probe's own attempt budget is 8388608 bytes, which is eight times the 1048576 byte MAX_EVENT_DATA_LEN this adapter's fixture declares — deliberately over that store limit, because the falsifier is about forwarding a payload rather than appending one.
+WF-11 attempt: payload = 696320 bytes (staircase toward the predicted firing size); predicted peak = 2553166 bytes = 39 pages
+  human-readable: 928497 bytes, grew 59 pages (3866624 bytes) | binary: 696342 bytes, grew 33 pages (2162688 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 attempt: payload = 1392640 bytes (staircase toward the predicted firing size); predicted peak = 5106343 bytes = 78 pages
+  human-readable: 1856925 bytes, grew 115 pages (7536640 bytes) | binary: 1392662 bytes, grew 65 pages (4259840 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 attempt: payload = 2785280 bytes (staircase toward the predicted firing size); predicted peak = 10212686 bytes = 156 pages
+  human-readable: 3713777 bytes, grew 228 pages (14942208 bytes) | binary: 2785303 bytes, grew 129 pages (8454144 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 attempt: payload = 5570560 bytes (staircase toward the predicted firing size); predicted peak = 20425383 bytes = 312 pages
+  human-readable: 7427485 bytes, grew 455 pages (29818880 bytes) | binary: 5570583 bytes, grew 257 pages (16842752 bytes) | both peaks are memory_size deltas, high-water marks an allocator freeing early cannot flatter | round trip byte-identical
+WF-11 VERDICT: (c) NOT CONSTRUCTIBLE HERE — missing: a memory ceiling this isolate can be made to reach. The host granted every one of the 2047 pages this probe asked for, taking linear memory to 2169 pages = 142147584 bytes — past the platform's own documented per-isolate limit of 134217728 bytes — and refused nothing, so no ceiling was measured and no payload the arithmetic can name would exhaust one; what would supply it: an isolate that actually enforces the platform's documented ceiling — a real Workers isolate rather than this runner, or a runner flag capping the linear memory a test module may grow to. At the platform's 134217728-byte limit the arithmetic puts the firing payload at 36604834 bytes; what was observed: every attempted encode succeeded, the largest at a payload of 5570560 bytes — which the human-readable path rendered into 7427485 bytes, growing linear memory by 455 pages (29818880 bytes), against the binary path's 5570583 bytes and 257 pages (16842752 bytes) on identical bytes
+test records_the_ceiling_and_the_encode_peaks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 filtered out; finished in 1.01s
+
+EXIT=0

@@ -1,0 +1,152 @@
+happenstance-testkit/mutation_coverage: 8 named tests present, 80 registry rows
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests\mutation_coverage.rs (target\debug\deps\mutation_coverage-4dd69248053276c7.exe)
+
+running 10 tests
+test mutation_coverage::every_mutant_states_its_provenance ... ok
+test mutation_coverage::every_rule_has_a_mutant ... ok
+test mutation_coverage::mutant_registry_is_exhaustive ... ok
+test mutation_coverage::projection_capability_reasons_are_authored_once ... ok
+test mutation_coverage::projection_capability_skips_are_reported ... ok
+test mutation_coverage::capability_skips_are_reported ... ok
+test mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim ... ok
+test mutation_coverage::conformant_variants_pass_everything ... ok
+test mutation_coverage::mutants_fail_exactly_their_declared_rules ... ok
+test mutation_coverage::the_model_rule_rejects_exactly_what_it_claims ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+happenstance-testkit/projection_mutation_coverage: 7 named tests present, 21 registry rows
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests\projection_mutation_coverage.rs (target\debug\deps\projection_mutation_coverage-e83876ab78d43eb1.exe)
+
+running 7 tests
+test projection_mutation_coverage::the_second_batch_shape_answers_every_rule_with_a_pass ... ignored, measured by experiments/gate-vacuity
+test projection_mutation_coverage::every_projection_rule_has_a_mutant ... ok
+test projection_mutation_coverage::every_projection_mutant_states_its_provenance ... ok
+test projection_mutation_coverage::projection_mutant_registry_is_exhaustive ... ok
+test projection_mutation_coverage::a_batch_with_no_read_path_is_reported_as_a_skip ... ok
+test projection_mutation_coverage::projection_conformant_variants_pass_everything ... ok
+test projection_mutation_coverage::projection_mutants_fail_exactly_their_declared_rules ... ok
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+happenstance-testkit/projection_harness_parity: 2 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests\projection_harness_parity.rs (target\debug\deps\projection_harness_parity-94da3f109e8d4b4d.exe)
+
+running 2 tests
+test projection_harness_parity::each_harness_invokes_the_suite_exactly_once ... ok
+test projection_harness_parity::no_harness_lists_a_rule_by_hand ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+happenstance-core/wire: 3 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests\wire.rs (target\debug\deps\wire-af3ca41b2f6fac85.exe)
+
+running 19 tests
+test wire::bare_event_postcard_encoding_is_pinned ... ok
+test wire::condition_after_is_visible_to_an_ingest_policy ... ok
+test wire::decode_rejects_a_non_canonical_tag_set ... ok
+test wire::empty_object_is_not_a_condition ... ok
+test wire::decode_rejects_an_unconstrained_query_item ... ok
+test wire::decode_rejects_a_zero_item_query ... ok
+test wire::negative_controls::option_shaped_query_is_indistinguishable_from_none ... ok
+test wire::negative_controls::skipped_event_wire_fails_the_postcard_round_trip ... ok
+test wire::option_query_round_trips ... ok
+test wire::payload_is_base64_in_json ... ok
+test wire::query_all_is_unambiguous ... ok
+test wire::payload_is_raw_in_postcard ... ok
+test wire::sequenced_event_round_trips ... ok
+test wire::store_id_encodes_as_bytes_in_postcard ... ok
+test wire::store_id_encodes_as_hex_in_json ... ok
+test wire::decode_accepts_an_over_capacity_value ... ok
+test wire::negative_controls::length_checked_event_wire_rejects_a_65_kib_payload ... ok
+test wire::round_trips_in_postcard ... ok
+test wire::round_trips_in_json ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+happenstance-sync/wire: 2 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests\wire.rs (target\debug\deps\wire-79e3eba71c54dce8.exe)
+
+running 2 tests
+test wire::rejects_an_unknown_format_version ... ok
+test wire::version_is_readable_before_the_message ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+course-subscriptions/runs: 2 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests\runs.rs (target\debug\deps\runs-e264b497a7a41496.exe)
+
+running 10 tests
+test runs::subscribe_composes_two_models ... ok
+test runs::the_deleted_constructs_are_gone ... ok
+test runs::the_event_set_is_named_once ... ok
+test runs::the_fold_lives_in_the_users_file ... ok
+test runs::the_example_depends_only_on_the_typed_layer ... ok
+test runs::the_loop_absorbs_every_handler ... ok
+test runs::capacity_refusal_carries_the_decoded_capacity ... ok
+test runs::the_binary_completes_the_dcb_cycle ... ok
+test runs::the_transcript_is_the_designed_composition ... ok
+test runs::the_transcript_holds_its_budget ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+course-subscriptions/ui: 2 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests\ui.rs (target\debug\deps\ui-1942d6806347bc99.exe)
+
+running 2 tests
+   Compiling course-subscriptions-tests v0.0.0 (D:\gv-wt\target\tests\trybuild\course-subscriptions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+
+
+test [0m[1mtests/ui/handled_variant.rs[0m ... [0m[32mok
+[0m
+
+test ui::the_negative_control_compiles ... ok
+    Checking course-subscriptions-tests v0.0.0 (D:\gv-wt\target\tests\trybuild\course-subscriptions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+
+
+test [0m[1mtests/ui/unhandled_variant.rs[0m ... [0m[32mok
+[0m
+
+test ui::an_unhandled_variant_fails_to_compile ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+
+transfers-on-sqlite/runs: 3 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests\runs.rs (target\debug\deps\runs-68c029a016b38197.exe)
+
+running 10 tests
+test runs::both_ports_are_driven_through_the_typed_layer ... ok
+test runs::the_application_uses_the_typed_layer_and_not_the_contract_crate ... ok
+test runs::no_fold_carries_a_wildcard_arm ... ok
+test runs::one_file_carries_both_stores ... ok
+test runs::a_transfer_lands_as_one_append_of_two_events ... ok
+test runs::the_balances_survive_the_reopen ... ok
+test runs::the_example_runs_end_to_end ... ok
+test runs::the_checkpoint_survives_the_reopen ... ok
+test runs::the_reopened_store_still_accepts_commands ... ok
+test runs::the_overdrawn_transfer_is_refused_with_its_values ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+transfers-on-sqlite/contention: 2 named tests present
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests\contention.rs (target\debug\deps\contention-2d044522fb82f57f.exe)
+
+running 3 tests
+test a_contended_commit_retries_rather_than_failing ... ok
+test every_contender_eventually_commits ... ok
+test no_update_is_lost_under_contention ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+EXIT=0

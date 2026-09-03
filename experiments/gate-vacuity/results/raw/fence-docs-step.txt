@@ -1,0 +1,249 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+   Doc-tests xtask
+
+running 173 tests
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 193) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 55) ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 104) ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 274) ... ok
+test xtask\src\../../docs/carry-your-invariant.md - narrative::carry_your_invariant (line 102) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 144) ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 175) ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 231) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 159) ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 32) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 101) ... ok
+test xtask\src\../../docs/append-conditions.md - narrative::append_conditions (line 12) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 16) ... ok
+test xtask\src\../../docs/first-encounter.md - narrative::first_encounter (line 96) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 211) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 28) ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 55) ... ok
+test xtask\src\../../docs/carry-your-invariant.md - narrative::carry_your_invariant (line 60) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 133) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 117) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 241) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 184) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 20) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 228) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 245) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 30) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 64) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 79) ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 134) ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 22) ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 37) ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 82) ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 94) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 103) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 137) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 188) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 22) ... ok
+test xtask\src\../../standards/rust/10-newtypes-and-niches.md - constitution::newtypes_and_niches (line 173) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 254) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 39) ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 90) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 110) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 153) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 198) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 21) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 32) ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 66) ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 163) ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 213) ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 22) ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 286) ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 95) ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 115) ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 153) ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 211) ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 31) ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 143) ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 22) ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 40) ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 76) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 140) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 205) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 227) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 23) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 264) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 298) ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 80) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 118) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 151) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 201) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 22) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 49) ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 84) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 140) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 203) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 21) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 223) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 58) ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 98) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 101) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 139) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 157) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 197) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 211) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 24) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 248) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 301) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 45) ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 80) ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 137) ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 181) ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 21) ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 222) ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 83) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 110) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 124) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 163) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 209) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 22) ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 63) ... ok
+test xtask\src\../../standards/rust/50-dependency-hygiene.md - constitution::dependency_hygiene (line 177) ... ok
+test xtask\src\../../standards/rust/51-features-and-no-std.md - constitution::features_and_no_std (line 140) ... ok
+test xtask\src\../../standards/rust/51-features-and-no-std.md - constitution::features_and_no_std (line 28) ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 119) ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 176) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 213) ... ignored
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 23) ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 38) ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 78) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 139) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 179) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 21) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 339) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 290) ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 85) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 140) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 182) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 21) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 213) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 259) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 299) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 40) ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 91) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 139) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 199) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 22) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 240) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 86) ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 94) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 105) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 127) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 176) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 190) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 267) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 297) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 31) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 108) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 144) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 191) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 21) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 218) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 259) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 293) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 337) ... ok
+test xtask\src\../../standards/rust/80-the-gate.md - constitution::the_gate (line 63) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 109) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 170) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 21) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 222) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 242) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 276) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 309) ... ok
+test xtask\src\lib.rs - (line 231) ... ignored
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 346) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 382) ... ok
+test xtask\src\../../standards/rust/81-checks-that-cannot-be-types.md - constitution::checks_that_cannot_be_types (line 67) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 138) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 191) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 21) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 222) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 286) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 316) ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 99) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 162) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 198) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 241) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 255) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 277) ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 33) ... ok
+test xtask\src\../../standards/rust/92-toolchain-limits-and-dead-ends.md - constitution::toolchain_limits_and_dead_ends (line 48) ... ok
+test xtask\src\../../standards/rust/92-toolchain-limits-and-dead-ends.md - constitution::toolchain_limits_and_dead_ends (line 92) ... ok
+test xtask\src\lib.rs - (line 155) ... ok
+test xtask\src\lib.rs - (line 55) ... ok
+
+test result: ok. 171 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+
+running 62 tests
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 190) - compile fail ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 61) - compile fail ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 165) - compile fail ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 244) - compile fail ... ok
+test xtask\src\../../standards/rust/11-const-construction-and-panics.md - constitution::const_construction_and_panics (line 150) - compile fail ... ok
+test xtask\src\../../standards/rust/01-standard-of-evidence.md - constitution::standard_of_evidence (line 115) - compile fail ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 204) - compile fail ... ok
+test xtask\src\../../standards/rust/12-manual-impls-and-derive-traps.md - constitution::manual_impls_and_derive_traps (line 157) - compile fail ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 126) - compile fail ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 214) - compile fail ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 168) - compile fail ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 179) - compile fail ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 115) - compile fail ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 241) - compile fail ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 53) - compile fail ... ok
+test xtask\src\../../standards/rust/20-two-flavour-ports.md - constitution::two_flavour_ports (line 312) - compile fail ... ok
+test xtask\src\../../standards/rust/13-sealing-and-exhaustiveness.md - constitution::sealing_and_exhaustiveness (line 79) - compile fail ... ok
+test xtask\src\../../standards/rust/00-prime-directives.md - constitution::prime_directives (line 124) - compile fail ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 64) - compile fail ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 160) - compile fail ... ok
+test xtask\src\../../standards/rust/22-rpitit-and-lifetime-capture.md - constitution::rpitit_and_lifetime_capture (line 99) - compile fail ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 104) - compile fail ... ok
+test xtask\src\../../standards/rust/21-send-is-not-inherited.md - constitution::send_is_not_inherited (line 247) - compile fail ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 286) - compile fail ... ok
+test xtask\src\../../standards/rust/23-streams-and-state-machines.md - constitution::streams_and_state_machines (line 43) - compile fail ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 167) - compile fail ... ok
+test xtask\src\../../standards/rust/24-the-blocking-bridge.md - constitution::the_blocking_bridge (line 228) - compile fail ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 109) - compile fail ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 30) - compile fail ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 69) - compile fail ... ok
+test xtask\src\../../standards/rust/25-what-removes-send-and-sync.md - constitution::what_removes_send_and_sync (line 164) - compile fail ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 151) - compile fail ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 328) - compile fail ... ok
+test xtask\src\../../standards/rust/30-error-taxonomy.md - constitution::error_taxonomy (line 265) - compile fail ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 238) - compile fail ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 41) - compile fail ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 179) - compile fail ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 99) - compile fail ... ok
+test xtask\src\../../standards/rust/51-features-and-no-std.md - constitution::features_and_no_std (line 167) - compile fail ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 224) - compile fail ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 93) - compile fail ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 138) - compile fail ... ok
+test xtask\src\../../standards/rust/52-wasm32-and-target-cfg.md - constitution::wasm32_and_target_cfg (line 198) - compile fail ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 35) - compile fail ... ok
+test xtask\src\../../standards/rust/41-declarative-macros.md - constitution::declarative_macros (line 75) - compile fail ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 248) - compile fail ... ok
+test xtask\src\../../standards/rust/61-compile-time-assertions.md - constitution::compile_time_assertions (line 121) - compile fail ... ok
+test xtask\src\../../standards/rust/60-what-a-test-must-prove.md - constitution::what_a_test_must_prove (line 50) - compile fail ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 255) - compile fail ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 109) - compile fail ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 162) - compile fail ... ok
+test xtask\src\../../standards/rust/40-public-surface-and-evolution.md - constitution::public_surface_and_evolution (line 195) - compile fail ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 35) - compile fail ... ok
+test xtask\src\../../standards/rust/92-toolchain-limits-and-dead-ends.md - constitution::toolchain_limits_and_dead_ends (line 107) - compile fail ... ok
+test xtask\src\../../standards/rust/92-toolchain-limits-and-dead-ends.md - constitution::toolchain_limits_and_dead_ends (line 28) - compile fail ... ok
+test xtask\src\../../standards/rust/90-skeletons-and-todo.md - constitution::skeletons_and_todo (line 53) - compile fail ... ok
+test xtask\src\../../standards/rust/62-doctests-and-harnesses.md - constitution::doctests_and_harnesses (line 50) - compile fail ... ok
+test xtask\src\../../standards/rust/91-adapter-authoring-recipe.md - constitution::adapter_authoring_recipe (line 91) - compile fail ... ok
+test xtask\src\../../standards/rust/51-features-and-no-std.md - constitution::features_and_no_std (line 199) ... ok
+test xtask\src\../../standards/rust/51-features-and-no-std.md - constitution::features_and_no_std (line 220) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 221) ... ok
+test xtask\src\../../standards/rust/70-rustdoc-obligations.md - constitution::rustdoc_obligations (line 235) ... ok
+
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+
+all doctests ran in 4.13s; merged doctests compilation took 2.08s
+EXIT=0

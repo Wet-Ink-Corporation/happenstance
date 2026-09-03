@@ -1,0 +1,13 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests\conditions_are_enforced.rs (target\debug\deps\conditions_are_enforced-c25a6cc1cf7a2114.exe)
+
+running 3 tests
+REFUSED	refusing to measure: PRAGMA synchronous read back as 0, and the specification names OFF by name as a wrong implementation — a figure taken under it is a figure for a store that fails conformance
+READBACK	journal_mode=memory synchronous=2 busy_timeout_ms=5000 sqlite=3.53.2
+test a_figure_is_refused_under_the_setting_the_specification_names ... ok
+test a_pragma_that_executed_is_not_a_pragma_that_is_in_effect ... ok
+CONDITIONS	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+test the_settings_every_timed_run_uses_are_the_adapters_own ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

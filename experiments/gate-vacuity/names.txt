@@ -1,0 +1,38 @@
+# Every test name `xtask/src/proof.rs`'s ARTEFACTS asserts out of
+# `cargo test -- --list`, transcribed from proof.rs at 56ef6c5, one per line as
+#
+#   <package> <target> <name-as---list-prints-it> <source file>
+#
+# Nine artefacts, thirty-one names. The source file is where the `fn` lives, and
+# it is what `mutate.sh` edits; the name is what `proof.rs` compares against.
+happenstance-testkit mutation_coverage mutation_coverage::every_rule_has_a_mutant crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::mutant_registry_is_exhaustive crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::mutants_fail_exactly_their_declared_rules crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::every_mutant_states_its_provenance crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::conformant_variants_pass_everything crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::capability_skips_are_reported crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::the_model_rule_rejects_exactly_what_it_claims crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit mutation_coverage mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim crates/happenstance-testkit/tests/mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::every_projection_rule_has_a_mutant crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::projection_mutant_registry_is_exhaustive crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::projection_mutants_fail_exactly_their_declared_rules crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::every_projection_mutant_states_its_provenance crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::projection_conformant_variants_pass_everything crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::a_batch_with_no_read_path_is_reported_as_a_skip crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_mutation_coverage projection_mutation_coverage::the_second_batch_shape_answers_every_rule_with_a_pass crates/happenstance-testkit/tests/projection_mutation_coverage.rs
+happenstance-testkit projection_harness_parity projection_harness_parity::no_harness_lists_a_rule_by_hand crates/happenstance-testkit/tests/projection_harness_parity.rs
+happenstance-testkit projection_harness_parity projection_harness_parity::each_harness_invokes_the_suite_exactly_once crates/happenstance-testkit/tests/projection_harness_parity.rs
+happenstance-core wire wire::negative_controls::length_checked_event_wire_rejects_a_65_kib_payload crates/happenstance-core/tests/wire.rs
+happenstance-core wire wire::negative_controls::option_shaped_query_is_indistinguishable_from_none crates/happenstance-core/tests/wire.rs
+happenstance-core wire wire::negative_controls::skipped_event_wire_fails_the_postcard_round_trip crates/happenstance-core/tests/wire.rs
+happenstance-sync wire wire::rejects_an_unknown_format_version crates/happenstance-sync/tests/wire.rs
+happenstance-sync wire wire::version_is_readable_before_the_message crates/happenstance-sync/tests/wire.rs
+course-subscriptions runs runs::the_binary_completes_the_dcb_cycle examples/course-subscriptions/tests/runs.rs
+course-subscriptions runs runs::the_transcript_is_the_designed_composition examples/course-subscriptions/tests/runs.rs
+course-subscriptions ui ui::an_unhandled_variant_fails_to_compile examples/course-subscriptions/tests/ui.rs
+course-subscriptions ui ui::the_negative_control_compiles examples/course-subscriptions/tests/ui.rs
+transfers-on-sqlite runs runs::the_example_runs_end_to_end examples/transfers-on-sqlite/tests/runs.rs
+transfers-on-sqlite runs runs::the_balances_survive_the_reopen examples/transfers-on-sqlite/tests/runs.rs
+transfers-on-sqlite runs runs::the_checkpoint_survives_the_reopen examples/transfers-on-sqlite/tests/runs.rs
+transfers-on-sqlite contention a_contended_commit_retries_rather_than_failing examples/transfers-on-sqlite/tests/contention.rs
+transfers-on-sqlite contention no_update_is_lost_under_contention examples/transfers-on-sqlite/tests/contention.rs

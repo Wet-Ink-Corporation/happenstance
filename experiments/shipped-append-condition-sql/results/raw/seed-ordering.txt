@@ -1,0 +1,23 @@
+   Compiling shipped-append-condition-sql v0.0.0 (D:\repos\happenstance\experiments\shipped-append-condition-sql)
+    Finished `release` profile [optimized] target(s) in 0.65s
+     Running tests\seed_ordering.rs (target\release\deps\seed_ordering-f992a1ce7a9ef3d1.exe)
+
+running 1 test
+test most_selective_first_against_least_selective_first ... SEED	size=500000	events=500000 tag_rows=1000000 unstamped=0 shard_cold=500000/500000 row_r7=5155/5155	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+CARDINALITY	shard_cold=Some(500000)	row_r7=Some(5155)
+SEED-ORDER	size=500000	scenario=accepted-2tag-at-head	boundary=500000	most_selective_first_us_median=511054	least_selective_first_us_median=11839	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	size=500000	scenario=rejected-2tag-unbounded	boundary=0	most_selective_first_us_median=553328	least_selective_first_us_median=13340	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	size=500000	scenario=rejected-2tag-midlog	boundary=250000	most_selective_first_us_median=634239	least_selective_first_us_median=14399	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 49.48s
+

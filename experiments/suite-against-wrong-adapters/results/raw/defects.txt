@@ -1,0 +1,12 @@
+   Compiling suite-against-wrong-adapters v0.0.0 (D:\repos\happenstance\experiments\suite-against-wrong-adapters)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+     Running tests\defect_is_real.rs (target\debug\deps\defect_is_real-d7f01e2a1080173d.exe)
+
+running 4 tests
+test a_noop_reopen_closes_nothing ... ok
+test forward_paging_budget_is_ignored ... ok
+test a_swallowed_read_fault_looks_like_the_end_of_the_stream ... ok
+test the_es22_arm_a_store_takes_depends_on_whether_it_suspends ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

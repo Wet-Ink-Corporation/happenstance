@@ -199,6 +199,46 @@ prediction was written down as falsifiable to make possible. It reports both
 altitudes side by side, because the doctest's 2.4 : 1 is a real fact about a
 reader's first program and simply not the question AC-013 asked.
 
+[`review-pre-publication-2026-09-03.md`](review-pre-publication-2026-09-03.md)
+(2026-09-03, pinned to `56ef6c5`) is the eighth of these, and carries the same
+lifecycle — dated, pinned, **immutable, superseded rather than edited**. It is
+not one of the fourteen, and `RUNBOOK.md` was not derived from it.
+
+It is the first review taken against the tree that will actually be published.
+The fourteen were written at `9fd2337` and `2a65d76`; **652 commits and 77,354
+insertions have landed under `crates/` since**, so most of what `0.2.0` ships
+did not exist when it was last reviewed — `happenstance-testkit` gained 32,594
+lines, `happenstance-core` 10,709, `happenstance` 10,556 and
+`happenstance-sqlite` 8,143.
+
+It **decides nothing**, on the same reasoning as the five documents above: the
+commit that adds it touches no path under `crates/**` or `spec/**`, it writes no
+ADR, amends no clause and changes no frontmatter. Where an entry implies a
+decision it names the decision and its owner and stops. Ninety-two entries carry
+the same seven labelled fields, each with the clause ID **and its maturity
+marker** where one governs and an explicit statement where none does — and the
+absence of a governing clause is itself one of its results, because the typed
+layer sits outside the clause space by design (`spec/SPECIFICATION.md:102-107`)
+and is now the crate most people will `cargo add`.
+
+Two things distinguish it from the fourteen. It ships **six experiments**
+(`experiments/gate-vacuity/`, `suite-against-wrong-adapters/`,
+`event-clone-allocations/`, `shipped-append-condition-sql/`,
+`one-connection-latency/`, `busy-timeout-margin/`), of which **three refuted or
+qualified the finding that commissioned them** — including one remedy the review
+itself had proposed. And it carries a *Corrections* section recording eight
+errors the review made about its own output, three of them found by its own
+completeness critic. Both are there for the reason this directory's first
+section gives: a document that has been corrected and does not say so teaches
+the next reader to trust it more than it has earned.
+
+Its own headline is a fact about timing rather than about quality.
+`happenstance`, `happenstance-core` and `happenstance-testkit` are already on
+crates.io at `0.2.0-alpha.1`, which is a pre-release no `^0.2` requirement
+resolves to — so a breaking change to any of the three is nearly free until
+`0.2.0` and permanent after it. The document is ordered by when a fix stops
+being available, not by severity.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`

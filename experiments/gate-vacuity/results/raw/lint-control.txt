@@ -1,0 +1,11 @@
+warning: variable `notSnakeCase` should have a snake case name
+ --> lint-control.rs:2:9
+  |
+2 |     let notSnakeCase = 1u8;
+  |         ^^^^^^^^^^^^ help: convert the identifier to snake case: `not_snake_case`
+  |
+  = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: 1 warning emitted
+
+EXIT=0

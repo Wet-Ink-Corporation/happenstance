@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src\lib.rs (target\debug\deps\busy_timeout_margin_probes-54cd5dcd57bdb7e8.exe)
+
+running 2 tests
+test busy::tests::the_schedule_reaches_the_cap ... ok
+test busy::tests::totals_is_the_prefix_sum_of_delays ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

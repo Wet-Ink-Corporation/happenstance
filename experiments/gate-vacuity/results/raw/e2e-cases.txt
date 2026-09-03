@@ -1,0 +1,7 @@
+cases: 58
+cases whose body contains no clause identifier: 54
+  E2E-01 E2E-02 E2E-03 E2E-04 E2E-05 E2E-06 E2E-07 E2E-09 E2E-10 E2E-11 E2E-12 E2E-13 E2E-14 E2E-15 E2E-16 E2E-17 E2E-18 E2E-19 E2E-20 E2E-21 E2E-22 E2E-23 E2E-24 E2E-25 E2E-26 E2E-27 E2E-28 E2E-29 E2E-30 E2E-31 E2E-33 E2E-34 E2E-35 E2E-36 E2E-37 E2E-38 E2E-39 E2E-40 E2E-41 E2E-42 E2E-43 E2E-44 E2E-45 E2E-46 E2E-47 E2E-48 E2E-49 E2E-50 E2E-51 E2E-52 E2E-53 E2E-54 E2E-55 E2E-56
+cases claimed by at least one clause `Cases:` line: 58
+orphans (a case no clause claims): 0
+  (none)
+per-case `Clauses:` fields present: 0

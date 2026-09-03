@@ -1,0 +1,13 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests\arms_are_equivalent.rs (target\debug\deps\arms_are_equivalent-19f03faf567bc73a.exe)
+
+running 6 tests
+test both_regimes_round_trip_in_both_formats ... ok
+test the_floor_is_still_sixty_four ... ok
+test the_regimes_build_equal_events ... ok
+test the_regimes_encode_to_identical_bytes ... ok
+test the_replicas_match_the_real_store ... ok
+test the_two_tag_tables_agree ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

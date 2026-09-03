@@ -1,0 +1,22 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running tests\reactor_stall.rs (target\release\deps\reactor_stall-c6a07e14660ed4ef.exe)
+
+running 1 test
+test a_contended_append_stalls_the_whole_reactor ... 
+== instrument (a): reactor stall on one `current_thread` runtime ==
+   tick = 1 ms, second connection holds BEGIN IMMEDIATE for 750 ms
+   settings, read back off the live connection: "journal_mode=wal synchronous=1 busy_timeout_ms=5000"
+
+0. idle: the ticker alone, no contention, no call    call=   762.6 ms   max_gap=   16.177 ms   p99=  16.177 ms   p50= 15.516 ms   ticks=54
+1. SHIPPED SqliteEventStore::append, write lock held call=   870.3 ms   max_gap=  885.761 ms   p99= 885.761 ms   p50= 16.008 ms   ticks=5
+2. CONTROL 1: SHIPPED SqliteProjectionStore::commit, write lock held call=   870.9 ms   max_gap=   27.525 ms   p99=  27.525 ms   p50= 15.484 ms   ticks=62
+3. (c) the same append through an in_blocking_task seam call=   778.9 ms   max_gap=   34.812 ms   p99=  34.812 ms   p50= 15.504 ms   ticks=54
+4. SHIPPED head(), behind an in-flight append on the same handle call=   873.4 ms   max_gap=  717.545 ms   p99= 717.545 ms   p50= 15.860 ms   ticks=15
+5. SHIPPED read(): first poll samples the ceiling on this thread call=   793.4 ms   max_gap=  639.290 ms   p99= 639.290 ms   p50= 15.567 ms   ticks=15
+6. (c) head() through the seam, behind an in-flight inline append call=   777.7 ms   max_gap=   41.573 ms   p99=  41.573 ms   p50= 15.479 ms   ticks=54
+7. (c) residual: replica read() first poll, behind the same append call=   789.4 ms   max_gap=  635.056 ms   p99= 635.056 ms   p50= 15.771 ms   ticks=15
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.29s
+

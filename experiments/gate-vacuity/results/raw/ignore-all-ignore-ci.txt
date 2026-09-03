@@ -1,0 +1,322 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running `target\debug\xtask.exe ci`
+
+=== formatting ===
+
+=== clippy (all targets, all features) ===
+    Checking happenstance-sync v0.2.0-alpha.1 (D:\gv-wt\crates\happenstance-sync)
+    Checking happenstance-testkit v0.2.0-alpha.1 (D:\gv-wt\crates\happenstance-testkit)
+    Checking course-subscriptions v0.2.0-alpha.1 (D:\gv-wt\examples\course-subscriptions)
+    Checking transfers-on-sqlite v0.2.0-alpha.1 (D:\gv-wt\examples\transfers-on-sqlite)
+    Checking happenstance-core v0.2.0-alpha.1 (D:\gv-wt\crates\happenstance-core)
+error: `#[ignore]` without reason
+   --> crates\happenstance-sync\tests\wire.rs:119:5
+    |
+119 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+    = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+   --> crates\happenstance-sync\tests\wire.rs:296:5
+    |
+296 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+  --> examples\course-subscriptions\tests\ui.rs:55:5
+   |
+55 |     #[ignore]
+   |     ^^^^^^^^^
+   |
+   = help: add a reason with `= ".."`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+   = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+  --> examples\course-subscriptions\tests\ui.rs:71:5
+   |
+71 |     #[ignore]
+   |     ^^^^^^^^^
+   |
+   = help: add a reason with `= ".."`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+   --> crates\happenstance-testkit\tests\projection_harness_parity.rs:106:5
+    |
+106 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+    = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+   --> crates\happenstance-testkit\tests\projection_harness_parity.rs:144:5
+    |
+144 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+   --> examples\course-subscriptions\tests\runs.rs:233:5
+    |
+233 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+    = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+   --> examples\course-subscriptions\tests\runs.rs:273:5
+    |
+273 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: could not compile `course-subscriptions` (test "ui") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: `#[ignore]` without reason
+   --> examples\transfers-on-sqlite\tests\runs.rs:109:5
+    |
+109 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+    = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+   --> examples\transfers-on-sqlite\tests\runs.rs:169:5
+    |
+169 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+   --> examples\transfers-on-sqlite\tests\runs.rs:197:5
+    |
+197 |     #[ignore]
+    |     ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: could not compile `happenstance-testkit` (test "projection_harness_parity") due to 2 previous errors
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1031:5
+     |
+1031 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+     = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1057:5
+     |
+1057 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1178:5
+     |
+1178 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1367:5
+     |
+1367 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1443:5
+     |
+1443 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1509:5
+     |
+1509 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\projection_mutation_coverage.rs:1560:5
+     |
+1560 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+   --> examples\transfers-on-sqlite\tests\contention.rs:111:1
+    |
+111 | #[ignore]
+    | ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+    = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+   --> examples\transfers-on-sqlite\tests\contention.rs:157:1
+    |
+157 | #[ignore]
+    | ^^^^^^^^^
+    |
+    = help: add a reason with `= ".."`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: could not compile `transfers-on-sqlite` (test "runs") due to 3 previous errors
+error: could not compile `happenstance-sync` (test "wire") due to 2 previous errors
+error: could not compile `course-subscriptions` (test "runs") due to 2 previous errors
+error: `#[ignore]` without reason
+    --> crates\happenstance-core\tests\wire.rs:1632:9
+     |
+1632 |         #[ignore]
+     |         ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+     = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-core\tests\wire.rs:1716:9
+     |
+1716 |         #[ignore]
+     |         ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-core\tests\wire.rs:1823:9
+     |
+1823 |         #[ignore]
+     |         ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:2806:5
+     |
+2806 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+     = note: `-D clippy::ignore-without-reason` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::ignore_without_reason)]`
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:2827:5
+     |
+2827 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:2963:5
+     |
+2963 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:3134:5
+     |
+3134 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:3157:5
+     |
+3157 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:3261:5
+     |
+3261 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:3782:5
+     |
+3782 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: `#[ignore]` without reason
+    --> crates\happenstance-testkit\tests\mutation_coverage.rs:3858:5
+     |
+3858 |     #[ignore]
+     |     ^^^^^^^^^
+     |
+     = help: add a reason with `= ".."`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignore_without_reason
+
+error: could not compile `happenstance-testkit` (test "projection_mutation_coverage") due to 7 previous errors
+error: could not compile `transfers-on-sqlite` (test "contention") due to 2 previous errors
+error: could not compile `happenstance-core` (test "wire") due to 3 previous errors
+error: could not compile `happenstance-testkit` (test "mutation_coverage") due to 8 previous errors
+
+xtask failed: clippy (all targets, all features) failed with exit code: 101
+error: process didn't exit successfully: `target\debug\xtask.exe ci` (exit code: 1)
+EXIT=1

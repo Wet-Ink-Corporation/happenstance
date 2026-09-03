@@ -1,0 +1,12 @@
+   Compiling one-connection-latency v0.0.0 (D:\repos\happenstance\experiments\one-connection-latency)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+     Running tests\the_copy_has_not_drifted.rs (target\debug\deps\the_copy_has_not_drifted-f1a75329b228ce4a.exe)
+
+running 4 tests
+test the_public_constants_are_the_shipped_ones ... ok
+test row_is_the_shipped_module_under_one_rename ... ok
+test query_sql_is_byte_for_byte_the_shipped_module ... ok
+test the_shipped_page_size_is_still_the_one_this_crate_calls_shipped ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
