@@ -316,6 +316,133 @@ pub trait EventStore {
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error>;
 }
 
+// =====================================================================
+// ES-13's regression pin, and the guard that keeps it where cargo looks
+// =====================================================================
+
+/// ES-13's regression pin: the query must outlive the stream.
+///
+/// A carrier, not an API — the two fences below are the artefact, and a doc
+/// comment needs an item to sit on. It sits in `src/` because rustdoc collects
+/// doctests from the **lib target only**. It lived in
+/// `crates/happenstance-core/tests/frozen_signatures.rs` from phase 4 until
+/// F1-04, where nothing ever compiled it; the guard below is what stops it
+/// drifting back there.
+///
+/// ES-13 freezes [`EventStore::read`] on `&Query` and names taking the query
+/// **by value** as the wrong fix. What the reference costs is that the opaque
+/// return type captures the query's lifetime, so the query has to be owned by
+/// something that outlives the stream: a *parameter* is, and a local never can
+/// be. The diagnostic depends on how the return type is spelled, which is why
+/// ES-13 states the defect rather than pinning a code:
+///
+/// | Arrangement | Diagnostic |
+/// |---|---|
+/// | `store.read(&Query::all(), ..)` bound to a `let` | `error[E0716]` |
+/// | returned, bare `-> impl Stream<..>` | `error[E0597]` |
+/// | returned, `+ '_` or `+ 'a` | `error[E0515]` |
+/// | returned inside a struct, bare | `error[E0597]` |
+///
+/// All four are the same defect reported from two ends. Without a lifetime bound
+/// the compiler reasons from the *borrow* — `&query` must outlive the return and
+/// `query` drops at the end of the function. With one, the opaque type is
+/// required to live for `'a`, so it reasons from the *value* instead. The cause
+/// either way is that the opaque type captures the query's lifetime.
+///
+/// # The control
+///
+/// Paired per RS-62-1, and it carries the half of the check the refusal cannot:
+/// it is the one thing here that goes red when `read`, `Query` or `ReadOptions`
+/// is renamed or moved behind a feature, which a lone `compile_fail` fence
+/// reports as passing.
+///
+/// ```
+/// use futures_core::Stream;
+/// use happenstance_core::{EventStore, Query, ReadOptions, SequencedEvent};
+///
+/// // The query comes from the caller, so it outlives the returned stream.
+/// fn replay<'a, S: EventStore>(
+///     store: &'a S,
+///     query: &'a Query,
+/// ) -> impl Stream<Item = Result<SequencedEvent, S::Error>> + 'a {
+///     store.read(query, ReadOptions::new())
+/// }
+/// # fn main() {}
+/// ```
+///
+/// # The refusal
+///
+/// The same function over a **local** query. The fence carries no error code:
+/// the table above has four of them, and rustdoc 1.97.1 compares an annotated
+/// code, finds no match, and reports the fence as passing anyway (RS-62-1).
+///
+/// ```compile_fail
+/// use futures_core::Stream;
+/// use happenstance_core::{EventStore, Query, ReadOptions, SequencedEvent};
+///
+/// fn escapes<S: EventStore>(store: &S) -> impl Stream<Item = Result<SequencedEvent, S::Error>> {
+///     let query = Query::all();
+///     store.read(&query, ReadOptions::new())
+/// }
+/// # fn main() {}
+/// ```
+#[doc(hidden)]
+pub fn es_13_the_query_must_outlive_the_stream() {}
+
+/// A doc fence inside an integration test target is never handed to a compiler.
+///
+/// rustdoc collects doctests from the **lib target only**, so a fence in a
+/// `tests/` file is compiled as prose: it cannot fail, and it cannot be told
+/// apart from one that has stopped being Rust. Measured rather than reasoned
+/// about — `crates/happenstance-core/tests/frozen_signatures.rs` carried a
+/// `compile_fail` fence claiming to pin ES-13 from phase 4 until F1-04, and with
+/// that fence's body replaced by a line of English both
+/// `cargo test -p happenstance-core --doc` and
+/// `cargo test -p happenstance-core --test frozen_signatures` still exit `0`.
+///
+/// So the pin moved to `es_13_the_query_must_outlive_the_stream` above, and this
+/// is the standing guard on the move: it fails if that file opens a doc fence
+/// again. It reads the file rather than reasoning about it, the way
+/// `mod module_doc` below reads this one.
+///
+/// ```
+/// // Anchored on the package root rather than on relative depth, per RS-62-5:
+/// // the path a packaged `.crate` resolves is then the path checked here.
+/// const ARTEFACT: &str = include_str!(concat!(
+///     env!("CARGO_MANIFEST_DIR"),
+///     "/tests/frozen_signatures.rs"
+/// ));
+///
+/// // Spelled with escapes on purpose. A literal fence inside a doctest inside a
+/// // doc comment is three nested parsers deep, and the needle is the one thing
+/// // here that must not be guessed at by any of them.
+/// const FENCE: &str = "\u{60}\u{60}\u{60}";
+///
+/// fn main() {
+///     let opened: Vec<usize> = ARTEFACT
+///         .lines()
+///         .enumerate()
+///         .filter(|(_, line)| {
+///             let text = line.trim_start();
+///             text.strip_prefix("//!")
+///                 .or_else(|| text.strip_prefix("///"))
+///                 .is_some_and(|body| body.trim_start().starts_with(FENCE))
+///         })
+///         .map(|(index, _)| index + 1)
+///         .collect();
+///
+///     assert!(
+///         opened.is_empty(),
+///         "tests/frozen_signatures.rs opens a doc fence at line(s) {opened:?}. \
+///          cargo hands a doc fence to a compiler from the lib target only, so \
+///          whatever that one claims to pin is decorative. Move it beside \
+///          `es_13_the_query_must_outlive_the_stream` in src/store.rs."
+///     );
+/// }
+/// ```
+#[doc(hidden)]
+pub fn a_doc_fence_in_an_integration_test_target_is_never_compiled() {}
+
 /// Drains a [`read`](EventStore::read) stream into a `Vec`, stopping at the
 /// first error.
 ///
