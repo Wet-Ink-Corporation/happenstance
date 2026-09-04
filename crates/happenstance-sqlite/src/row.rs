@@ -21,11 +21,9 @@
 //! delimiter. Both are load-bearing for anything matching on the column with
 //! `instr`: without them, `course:c1` matches inside `course:c10`.
 
-use happenstance_core::{
-    Event, EventId, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
-};
+use happenstance_core::{Event, EventId, RecordedAt, SequencedEvent, StoreId, Tag, Tags};
 
-use crate::event_store::SqliteEventStoreError;
+use crate::event_store::{SqliteEventStoreError, position_from_row};
 
 /// The byte that separates one encoded tag from the next.
 const UNIT: u8 = 0x1f;
@@ -102,8 +100,12 @@ pub(crate) fn to_event(row: &rusqlite::Row<'_>) -> Result<SequencedEvent, Sqlite
     let origin_position: Option<i64> = row.get(6)?;
     let recorded_at: i64 = row.get(7)?;
 
-    let position = SequencePosition::new(position.unsigned_abs())
-        .ok_or(SqliteEventStoreError::InvalidPosition(position))?;
+    // Both positions go through the one decoder, and neither absolutises. See
+    // `position_from_row` for why the absolutising spelling is a guard that
+    // fires for one input in 2^64: this decode is where it would forge VT-11's
+    // position uniqueness, and the origin decode below is where it would forge
+    // VT-8's `EventId` uniqueness.
+    let position = position_from_row(position)?;
 
     let (origin_store, origin_position) = origin_store
         .zip(origin_position)
@@ -113,8 +115,7 @@ pub(crate) fn to_event(row: &rusqlite::Row<'_>) -> Result<SequencedEvent, Sqlite
             len: origin_store.len(),
         }
     })?;
-    let origin = SequencePosition::new(origin_position.unsigned_abs())
-        .ok_or(SqliteEventStoreError::InvalidPosition(origin_position))?;
+    let origin = position_from_row(origin_position)?;
 
     let mut event = Event::new(event_type, data)
         .map_err(SqliteEventStoreError::StoredEventType)?

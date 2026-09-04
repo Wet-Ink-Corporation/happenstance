@@ -600,6 +600,40 @@ fn as_i64(position: SequencePosition) -> i64 {
     i64::try_from(position.get()).unwrap_or(i64::MAX)
 }
 
+/// A stored position as a [`SequencePosition`], or the error that says why not.
+///
+/// **Zero and negatives are rejected rather than resolved**, and the rejection
+/// is `u64::try_from` rather than `i64::unsigned_abs`. That is the whole of the
+/// decision, and it is worth spelling out because the absolutising form reads
+/// like a guard and is not one: [`SequencePosition`] wraps a `NonZeroU64`, so
+/// `SequencePosition::new` refuses exactly one value, and
+/// `SequencePosition::new(stored.unsigned_abs())` hands it a value it accepts
+/// for every negative there is. A stored `-3` decoded that way becomes position
+/// 3 — a second row at a position another row already holds, which VT-11
+/// forbids, and, because [`crate::row::to_event`] rebuilds the identity from the
+/// stored origin pair, a second event carrying an [`EventId`] another event
+/// already holds, which VT-8 forbids. The `ok_or` beside it fires for one input
+/// in 2^64 and reads, in review, like a guard that fires for all of them.
+///
+/// The stored value is carried into the error **unmodified**, so an operator
+/// reading the log sees the number that is in the file rather than the number
+/// the decode wished were there.
+///
+/// This is `projection_store::position_from_row` verbatim, and deliberately so:
+/// both halves of this crate answer to the same rule, and one of them answering
+/// it a different way is how the halves drift.
+///
+/// # Errors
+///
+/// Returns [`SqliteEventStoreError::InvalidPosition`] if `stored` is zero or
+/// negative.
+pub(crate) fn position_from_row(stored: i64) -> Result<SequencePosition, SqliteEventStoreError> {
+    u64::try_from(stored)
+        .ok()
+        .and_then(SequencePosition::new)
+        .ok_or(SqliteEventStoreError::InvalidPosition(stored))
+}
+
 /// Wraps an adapter failure as the port's store-error arm.
 fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEventStoreError> {
     AppendError::Store(error.into())
@@ -642,7 +676,7 @@ fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEve
 fn evaluate(
     connection: &Connection,
     condition: &AppendCondition,
-) -> rusqlite::Result<Option<SequencePosition>> {
+) -> Result<Option<SequencePosition>, SqliteEventStoreError> {
     for guard in condition.guards() {
         let selectivity = Selectivity::read_for(connection, &guard.query)?;
         let plan = crate::query_sql::chunks(
@@ -665,10 +699,19 @@ fn evaluate(
         }
 
         let boundary = guard.after.map_or(0, as_i64);
-        if let Some(highest) = highest
-            && highest > boundary
-        {
-            return Ok(SequencePosition::new(highest.unsigned_abs()));
+        if let Some(stored) = highest {
+            // Decoded **before** the comparison, never after it. The order is
+            // the whole point: comparing the stored `i64` first is what makes a
+            // corrupt row invisible to the one check whose job is to see it. A
+            // guard whose highest match is stored at `-3` fails `-3 > 0`, so the
+            // guard reports no violation about a row that matches it, and the
+            // append it waves through is the append the condition existed to
+            // refuse. Decoding first turns that silence into a refusal naming
+            // the row.
+            let conflict = position_from_row(stored)?;
+            if stored > boundary {
+                return Ok(Some(conflict));
+            }
         }
     }
     Ok(None)
@@ -692,7 +735,7 @@ fn write_batch(
     store_id: StoreId,
     events: &[Event],
     recorded_at: RecordedAt,
-) -> rusqlite::Result<SequencePosition> {
+) -> Result<SequencePosition, SqliteEventStoreError> {
     let mut positions = Vec::with_capacity(events.len());
     {
         let mut insert = connection.prepare(
@@ -745,9 +788,13 @@ fn write_batch(
         )?;
     }
 
+    // `AUTOINCREMENT` continues from `max(largest rowid, sqlite_sequence)`, so a
+    // file whose rows are already negative hands the next insert a negative
+    // rowid — and absolutising it would acknowledge the write at a position no
+    // row holds and the next honest append will. Refusing inside the
+    // transaction is what makes that a rollback rather than a forged receipt.
     let last = positions.last().copied().unwrap_or_default();
-    SequencePosition::new(last.unsigned_abs())
-        .ok_or(rusqlite::Error::IntegralValueOutOfRange(0, last))
+    position_from_row(last)
 }
 
 /// Inserts every `(tag, position, event_type)` row, chunked to the parameter
@@ -1074,7 +1121,13 @@ impl SendEventStore for SqliteEventStore {
         // `NULL` on an empty table is the `None` arm, not an error.
         let highest: Option<i64> =
             connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
-        Ok(highest.and_then(|value| SequencePosition::new(value.unsigned_abs())))
+        // `transpose`, not `and_then`. The distinction is the whole of it: the
+        // `None` this returns must mean *the table is empty* and nothing else,
+        // and an `and_then` here gives a failed decode the same spelling — so a
+        // store holding a row at position 0 reports itself empty, and the caller
+        // that believes it appends against a boundary of zero into a log that
+        // already has events in it.
+        highest.map(position_from_row).transpose()
     }
 
     /// Whether this store already holds the event `id` names.
@@ -1246,9 +1299,14 @@ impl ReadCursor {
             .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
         let highest: Option<i64> =
             connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
-        self.ceiling = highest
-            .and_then(|value| SequencePosition::new(value.unsigned_abs()))
-            .map_or(Ceiling::Empty, Ceiling::At);
+        // `Ceiling::Empty` is reserved for a table with no rows. Letting a
+        // failed decode land there too is the same swallow `head` carried: the
+        // read then returns an exhausted first page and the caller sees an empty
+        // log rather than a store that cannot describe itself.
+        self.ceiling = match highest {
+            Some(stored) => Ceiling::At(position_from_row(stored)?),
+            None => Ceiling::Empty,
+        };
         Ok(())
     }
 

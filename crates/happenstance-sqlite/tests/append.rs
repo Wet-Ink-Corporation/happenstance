@@ -957,3 +957,101 @@ fn the_store_error_is_still_the_named_type() {
 
     assert_error::<SqliteEventStoreError>();
 }
+
+// ---------------------------------------------------------------------------
+// X-3 — the write path and the guard see a position the contract cannot
+// represent, rather than resolving it into one it can
+// ---------------------------------------------------------------------------
+
+/// Corrupts a row through a connection the store never held.
+///
+/// Out of band on purpose, as in `tests/read.rs`: no conformant caller can reach
+/// this through the port, which is why the decode is the only thing standing
+/// between a row SQLite accepted and a caller's decision model.
+fn corrupt(db: &TempDb, sql: &str) {
+    db.raw()
+        .execute(sql, [])
+        .expect("the corruption is the test environment's, not the adapter's");
+}
+
+/// A guard whose only match sits at a negative position is reported, not
+/// silently satisfied.
+///
+/// This is the half of the defect a decode-side fix alone would leave standing.
+/// `evaluate` compares the raw `i64` against the boundary **before** anything
+/// absolutises it, so `max(position) = -1` against a boundary of `0` fails
+/// `highest > boundary` and the guard reports no violation at all. The corrupt
+/// row is therefore invisible to the one check whose entire job is to see it: a
+/// DCB command loop folds the fact into its decision model, appends against a
+/// condition that cannot observe it, and is told the append succeeded.
+#[tokio::test]
+async fn a_guard_whose_only_match_is_negative_is_reported_rather_than_satisfied() {
+    let db = TempDb::new("negative-guard");
+    let store = db.open();
+    store.append(&[event("Marker")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = -1 WHERE position = 1");
+
+    let outcome = store
+        .append(
+            &[event("Next")],
+            Some(&AppendCondition::new(query_of_types(&["Marker"]))),
+        )
+        .await;
+
+    match outcome {
+        Err(AppendError::Store(SqliteEventStoreError::InvalidPosition(-1))) => {}
+        outcome => panic!(
+            "a guard whose highest match is stored at `-1` must surface as \
+             `AppendError::Store(InvalidPosition(-1))`, and this store answered \
+             {outcome:?}. Comparing the raw `i64` against the boundary first \
+             means `-1 > 0` is false, so the guard reports *no violation* about \
+             a row that matches it — and the append it waves through is the one \
+             the condition existed to refuse"
+        ),
+    }
+}
+
+/// A position SQLite assigns that the contract cannot represent is reported, not
+/// returned as its positive twin.
+///
+/// `AUTOINCREMENT` continues from `max(largest rowid, sqlite_sequence)`, so a
+/// file whose rows are already negative hands the next insert a negative rowid.
+/// Absolutising it returns a position **no row in the file holds**, and one that
+/// a later honest append will hold — so the caller records `4` in a decision
+/// model, and a second event answers to `4` later.
+#[tokio::test]
+async fn a_negative_assigned_position_is_reported_rather_than_returned_absolutised() {
+    let db = TempDb::new("negative-assigned");
+    let store = db.open();
+    store.append(&[event("Seed")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = -5 WHERE position = 1");
+    corrupt(
+        &db,
+        "UPDATE sqlite_sequence SET seq = -5 WHERE name = 'event'",
+    );
+
+    let outcome = store.append(&[event("Next")], None).await;
+
+    match outcome {
+        Err(AppendError::Store(SqliteEventStoreError::InvalidPosition(-4))) => {}
+        outcome => panic!(
+            "an assigned position of `-4` must surface as \
+             `AppendError::Store(InvalidPosition(-4))`, and this store answered \
+             {outcome:?}. `SequencePosition::new((-4i64).unsigned_abs())` is \
+             `Some(4)`, a position the file does not contain and the next honest \
+             append will — so the acknowledgement the caller stores is a \
+             forgery, and VT-11's uniqueness is broken by the store's own \
+             write path"
+        ),
+    }
+
+    // And the refusal leaves nothing behind: the batch is inside the one
+    // `BEGIN IMMEDIATE`, so a decode that fails rolls the insert back.
+    assert_eq!(
+        assigned_positions(&db.raw()),
+        vec![-5],
+        "a refused append must leave the file exactly as it found it"
+    );
+}
