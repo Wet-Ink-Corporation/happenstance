@@ -143,16 +143,25 @@
 //! xtask spec-trace` scans `suite.rs` for `pub async fn`, and a rule written
 //! there needs a clause of its own.
 //!
-//! **One emitter ships rather than three, and that is not a weakening of
-//! CF-23.** The emitter is still a *parameter*; what has changed is which
-//! wrappers make sense. `#[wasm_bindgen_test]` is unreachable — the module does
-//! not exist on `wasm32`, which has no threads to race on — and a
-//! `block_on`-only harness would be identical to the tokio one, because the
-//! parallelism is in [`std::thread::scope`] rather than in the runtime.
-//! [`__emit_concurrency_tokio`](crate::__emit_concurrency_tokio) is spelled
-//! `#[tokio::test(flavor = "multi_thread")]` even so, because an adapter's own
-//! futures may need a multi-threaded reactor under them even when the contention
-//! does not.
+//! **Fewer wrappers make sense here than in the store families, and that is not
+//! a weakening of CF-23.** The emitter is still a *parameter*; what narrows is
+//! the set a racing family can be driven by — `#[wasm_bindgen_test]` has no
+//! candidate, because this module does not exist on `wasm32`.
+//!
+//! | Emitter | Wrapper | Adapter needs |
+//! |---|---|---|
+//! | `__emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt-multi-thread` |
+//! | `__emit_concurrency_blocking` | `#[test]` + `block_on` | **nothing** |
+//!
+//! **The table is the count**, in the crate root's shape and for its reason:
+//! this paragraph opened with a number that was wrong for as long as its second
+//! row has existed. `the_concurrency_page_lists_every_emitter_it_ships` holds
+//! these rows to this file's `macro_rules!` definitions and refuses a spelled
+//! count here; neither name is a link, for the crate root's reason. The default
+//! is `multi_thread` although the parallelism is in [`std::thread::scope`],
+//! because an adapter's futures may need a multi-threaded reactor even when the
+//! contention does not — and the blocking emitter races exactly as hard, which
+//! makes it the honest default for an adapter with **no runtime at all**.
 
 use happenstance_core::{
     AppendError, Event, EventStore, Query, ReadOptions, SequencePosition, SequencedEvent, collect,

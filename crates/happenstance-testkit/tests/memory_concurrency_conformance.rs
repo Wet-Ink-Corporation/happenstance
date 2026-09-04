@@ -67,6 +67,11 @@ happenstance_testkit::event_store_concurrency_conformance!(
 #[test]
 fn the_concurrency_page_lists_every_emitter_it_ships() {
     const PAGE: &str = include_str!("../src/concurrency.rs");
+    // Every spelling a count beside the list could take. Hoisted above the
+    // statements because `clippy::items_after_statements` is denied, which is
+    // itself the house rule that an item is visible from the top of its scope
+    // whatever line it is written on.
+    const SPELLED: &[&str] = &["no", "one", "two", "three", "four", "1", "2", "3", "4"];
 
     let shipped: Vec<&str> = PAGE
         .lines()
@@ -114,7 +119,6 @@ fn the_concurrency_page_lists_every_emitter_it_ships() {
     // And no count beside the list. A number written out is falsified by an
     // edit that never touches it, which is exactly how this page came to say
     // "one" while two shipped.
-    const SPELLED: &[&str] = &["no", "one", "two", "three", "four", "1", "2", "3", "4"];
     for word in SPELLED {
         for phrase in [format!("{word} emitter"), format!("{word} emitters")] {
             assert!(

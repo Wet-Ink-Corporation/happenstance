@@ -697,6 +697,32 @@ not the same as what a user needed to be told.
   exists to catch. Relabelling a real racer as the control is rejected by the
   run rather than by a cross-check — the store still commits sixty-four
   contenders where one may.
+- **`happenstance-testkit`'s concurrency page no longer tells a runtime-free
+  adapter it must bring `tokio`.** The module opened with *"One emitter ships
+  rather than three"* while `__emit_concurrency_blocking` shipped 979 lines
+  below it, giving the opposite reason for existing, and while this crate's own
+  `tests/memory_concurrency_conformance.rs` exercised both.
+
+  That paragraph is not a stale comment. It is the cost statement an adapter
+  author reads before deciding whether to invoke the family: told the only
+  wrapper is `#[tokio::test(flavor = "multi_thread")]`, an adapter with no
+  runtime concludes that racing costs it `tokio` with `rt-multi-thread`. It
+  does not — the blocking emitter needs nothing and races exactly as hard,
+  because the parallelism is in `std::thread::scope` rather than in the
+  runtime. The population that paid is the one the two-flavour design exists
+  for, and they would have found out by reading a file they were never expected
+  to open.
+
+  The count is gone as a *claim*: the page carries a two-row table in the crate
+  root's shape, whose rows are the count, and
+  `the_concurrency_page_lists_every_emitter_it_ships` holds those rows to the
+  `macro_rules!` definitions in the same file and refuses a spelled count
+  returning to the page. A third emitter added without a row turns it red,
+  which a written-out number cannot do — a number is falsified by an edit that
+  never touches it, which is exactly how this one came to say "one". The two
+  emitter names are also plain code font now rather than an intra-doc link to a
+  `#[doc(hidden)]` item, matching the crate root's spelling of the same class of
+  name.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded
