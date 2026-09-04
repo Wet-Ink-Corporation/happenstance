@@ -151,6 +151,43 @@ not the same as what a user needed to be told.
   path was written. Additive, and free only until `0.2.0` turns it into a
   promise.
 >>>>>>> lane/query-ceilings
+- **`happenstance` no longer glob re-exports `happenstance-core`, and the
+  contract's projection surface no longer arrives without the feature that
+  gates it.** The crate root's `pub use happenstance_core::*;` became an
+  explicit, `#[cfg]`-carrying list of every contract item, name by name.
+
+  The glob re-exported whatever the **compiled** contract crate exposed, and the
+  contract gates its projection items on **its own** `unstable-projection`, not
+  on this crate's. `happenstance-testkit` is this crate's dev-dependency and
+  enables that feature unconditionally, so under `cargo test` —
+  and in any consumer graph where a second crate asks for it —
+  `happenstance::Checkpoint`, `::ProjectionId`, `::ProjectionStore`,
+  `::SendProjectionStore`, `::Authority`, `::CommitError`, `::ResetError`,
+  `::ProjectionProbe`, `::projection` and `::MemoryProjectionStore` all resolved
+  with `unstable-projection` **off**. The manifest promises the opposite: *"A
+  reader has to type the word `unstable` before any of them is in their build."*
+  The user-visible shape is an auto-import — `happenstance::Checkpoint` offered
+  by an editor, accepted into library code, compiling under `cargo test` and
+  failing under `cargo build`.
+
+  **Breaking, narrowly**, and free only at `0.2.0-alpha.1`: anyone who reached a
+  leaked path loses it and gains the feature flag that was always meant to be
+  the door. `ProjectionProbe` is gone from this crate outright — the contract
+  gates it on `conformance`, a feature `happenstance` does not forward, so no
+  consumer of this crate could turn it on *or* off. It is a test double and it
+  lives in `happenstance-testkit`.
+
+  The glob's second cost was quieter and is closed by the same change: every
+  future addition to `happenstance-core` was an addition to `happenstance`'s
+  public surface with nobody reviewing it, and a name added to both crates was a
+  hard break in a crate that had not changed. An explicit list makes that
+  collision `error[E0255]` in the commit that causes it.
+
+  `crates/happenstance/tests/contract_surface.rs` is what holds it: it derives
+  each item's gate from `happenstance-core`'s own crate root and compares it
+  against the hand-written list here, so a contract item added behind a feature
+  and mirrored here without one fails at home rather than on docs.rs.
+
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
