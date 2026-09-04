@@ -50,6 +50,68 @@ Four steps, and these same four names every time they come up below.
 | "what I decide from them" | **fold** — over what the read returned | first encounter, step 2 |
 | "only if nothing has moved" | **guard** — an `AppendCondition` over that same query | first encounter, step 3 |
 
+## Where your identifiers come from
+
+Step 1 is the one that changes when the rule stops being an example. `c1` and
+`s1` are literals here; yours arrive as a `String` — off a request, out of a
+queue, from a file — and a tag built out of one can be refused. `Tag::key_value`
+rejects an empty value, a value past the length ceiling, and a set of control
+and bidirectional formatting characters, so the `?` in the fences on this page
+is not ceremony.
+
+The trouble is that the `?` has nowhere to go later. Once your events are a
+type rather than a `Query` written by hand, the method that produces their tags
+is `fn tags(&self) -> Tags`, and it is total — it returns no `Result` and there
+is nothing for a `?` to sit on. Rebuilding the tag inside it leaves exactly one
+way out, an `expect` on a value that came from outside your program, on the
+write path, after the decision has been taken.
+
+So the validation moves to the one place where a `Result` is still welcome:
+your identifier type. Validate once at the edge, keep the `Tag` you were given,
+and hand it out.
+
+```rust
+use happenstance::{InvalidTag, Tag, Tags};
+
+#[derive(Debug, Clone)]
+struct CourseId {
+    id: String,
+    tag: Tag,
+}
+
+impl CourseId {
+    // The only constructor, and the only place a bad identifier is refused.
+    fn new(id: &str) -> Result<Self, InvalidTag> {
+        Ok(Self {
+            id: id.to_owned(),
+            tag: Tag::key_value("course", id)?,
+        })
+    }
+}
+
+fn main() -> Result<(), InvalidTag> {
+    let course = CourseId::new("c1")?; // the edge, where a `?` is at home
+    let refused = CourseId::new("");
+    assert!(refused.is_err(), "an empty value is not a tag");
+
+    // And this is the call that cannot fail. `Tags` has no infallible
+    // constructor from strings, but it does have one from tags that already
+    // exist, so a `tags` method built this way needs no `Result` and no
+    // `expect`.
+    let tags: Tags = [course.tag.clone()].into_iter().collect();
+    assert_eq!(tags.len(), 1);
+    Ok(())
+}
+```
+
+Both worked examples do exactly this and say so inline — `CourseId` and
+`StudentId` in
+[the canonical example](../examples/course-subscriptions/src/main.rs), and the
+same two fields in
+[the SQLite one](../examples/transfers-on-sqlite/src/main.rs). It is the same
+resolution the library takes for a decision model's own scope, applied one
+level down to the event.
+
 ## The guard you would write
 
 The whole cycle is one program. Two tag sets, one item per tag set, one query
