@@ -245,13 +245,16 @@ pub use happenstance_core::*;
 ///
 /// The glob re-exports every *item*; it does not re-export the **crate**, so
 /// `happenstance_core::EventStore` — the spelling in the contract's own
-/// documentation, in every adapter's, and in every diagnostic — does not resolve
-/// through this facade without it. It adds a path, not a type: the glob already
-/// guarantees there is one contract crate here, and this makes it nameable.
+/// documentation, in every adapter's, and in every diagnostic — does not
+/// resolve through this facade without it. It adds a path, not a type: the
+/// glob already guarantees there is one contract crate here, and this makes
+/// it nameable.
 pub use happenstance_core;
 
-/// Compiled proof that the contract crate is reachable from here under its own
-/// name, not only through the glob above.
+/// Compiled proof that the contract crate is nameable here.
+///
+/// Reachable under its own name, that is, and not only through the glob
+/// above.
 ///
 /// The glob puts every *item* in this crate's root; it does not put the
 /// **crate** there. A signature copied out of `happenstance-core`'s own
@@ -265,8 +268,11 @@ pub use happenstance_core;
 /// ```
 ///
 /// ```
-/// fn payload(b: happenstance::happenstance_core::bytes::Bytes) -> usize { b.len() }
-/// # fn main() { assert_eq!(payload(happenstance::bytes::Bytes::from_static(b"{}")), 2); }
+/// use happenstance::happenstance_core::bytes::Bytes;
+/// fn payload(b: Bytes) -> usize { b.len() }
+/// # fn main() {
+/// #     assert_eq!(payload(Bytes::from_static(b"{}")), 2);
+/// # }
 /// ```
 #[cfg(doctest)]
 mod reexported_paths {}
