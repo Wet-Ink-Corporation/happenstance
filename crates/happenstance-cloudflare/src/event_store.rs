@@ -120,8 +120,8 @@
 //!
 //! **What a dropped `append` future does here: nothing, because there is nothing
 //! to drop.** `append` refuses an empty batch, checks the declared ceilings,
-//! reads this object's [`StoreId`](happenstance_core::StoreId), evaluates the
-//! condition and writes the batch — all through
+//! reads this object's [`StoreId`], evaluates the condition and writes the
+//! batch — all through
 //! [`SqlStorage::exec`](crate::sql_storage::SqlStorage::exec), which is
 //! **synchronous**. There is no `.await` anywhere in that body, so a future
 //! polled once has already run to completion by the time `poll` returns.
@@ -130,8 +130,8 @@
 //! This is the statement **ES-23** obliges every adapter to make. The clause is
 //! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
 //! the port refuses to choose between them on a caller's behalf
-//! ([`EventStore::append`](happenstance_core::EventStore::append)'s own
-//! `# Cancellation` section) precisely so that each adapter has to answer.
+//! ([`EventStore::append`]'s own `# Cancellation` section) precisely so that
+//! each adapter has to answer.
 //!
 //! **It does not license the opposite reading either.** A caller MUST NOT treat a
 //! dropped future as evidence about *any* store, this one included: generic code
