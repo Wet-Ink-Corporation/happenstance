@@ -155,7 +155,7 @@ additive**.
 
 ### The library's other answer, one file away
 
-`crates/happenstance/src/runner.rs:499-519`, the arm the audit points at:
+`crates/happenstance/src/runner.rs:579-599`, the arm the audit points at:
 
 ```rust
         match last {

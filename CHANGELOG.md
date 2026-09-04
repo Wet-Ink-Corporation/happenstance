@@ -607,6 +607,33 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`run_projection`'s page now prices its one knob and states what an operator
+  can see while it runs.** Documentation only, on items behind
+  `unstable-projection` that make no semver promise.
+
+  `chunk: NonZeroUsize` had no specification beyond its declaration: the page
+  named it once, as the unit of the buffer, and the doctest supplied `64` with
+  no reason. The new *Choosing `chunk`* section now says what moves in each direction — one
+  transaction per event at the small end; at the large end a write set holding
+  every application since the last commit, which for `SqliteProjectionStore` is
+  an owned statement list, plus more work re-read on a restart because a failed
+  chunk is discarded whole. It also says the number has no default and no named
+  type where its sibling `Retry` has both, that this is a gap rather than a
+  position, and that what settles it is a measurement in `experiments/` that
+  nobody has run.
+
+  *What can be seen while it runs* says the thing the page never did: there is
+  no callback, no channel and no `tracing`, `Progressed` is returned once at the
+  end, and a rebuild over a large log is indistinguishable from a hang unless a
+  second handle polls `ProjectionStore::checkpoint`. That is the page's own
+  recommended rebuild workflow, and it was silent about being silent.
+
+  Neither gap is repaired in code, and both repairs stay free: ADR-0036 records
+  the semver exemption these items carry, so a named type for `chunk` and an
+  observed entry point cost the same after `0.2.0` as before it. Both belong to
+  the projection-store freeze. What the exemption does not buy is silence on the
+  page, which is read today.
+
 - **`Codec`'s page now states what the trait's unsealed-ness does not buy, and
   `CodecError::UnknownTag`'s says which of its two meanings a reader has.** No
   behaviour changed; what changed is that a documented promise stopped being
