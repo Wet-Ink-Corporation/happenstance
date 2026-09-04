@@ -59,12 +59,12 @@ rejects an empty value, a value past the length ceiling, and a set of control
 and bidirectional formatting characters, so the `?` in the fences on this page
 is not ceremony.
 
-The trouble is that the `?` has nowhere to go later. Once your events are a
-type rather than a `Query` written by hand, the method that produces their tags
-is `fn tags(&self) -> Tags`, and it is total — it returns no `Result` and there
-is nothing for a `?` to sit on. Rebuilding the tag inside it leaves exactly one
-way out, an `expect` on a value that came from outside your program, on the
-write path, after the decision has been taken.
+The trouble is that the `?` has nowhere to go later. When your events become a
+type — a `DomainEvent`, rather than a `Query` you assemble by hand — the method
+that hands the library their tags is `fn tags(&self) -> Tags`, and it is total.
+It returns no `Result`, and there is nothing for a `?` to sit on. Rebuilding the
+tag inside it leaves exactly one way out: an `expect` on a value that came from
+outside your program, on the write path, after the decision has been taken.
 
 So the validation moves to the one place where a `Result` is still welcome:
 your identifier type. Validate once at the edge, keep the `Tag` you were given,
