@@ -483,7 +483,7 @@ mod shadowing {
         core_store_bound::<S>();
     }
 
-    /// A **module** is a name the glob re-exports too, and the projection
+    /// A **module** is a name the facade re-exports too, and the projection
     /// runner is the first item in this crate that wanted one already taken.
     /// A private `mod projection` here would shadow `happenstance::projection`
     /// silently — a breaking change to a facade whose whole promise is that

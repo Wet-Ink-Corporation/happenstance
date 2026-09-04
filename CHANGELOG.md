@@ -148,6 +148,43 @@ not the same as what a user needed to be told.
   same `PARAMETER_BUDGET` the multi-row tag insert has chunked to since the write
   path was written. Additive, and free only until `0.2.0` turns it into a
   promise.
+- **`happenstance` no longer glob re-exports `happenstance-core`, and the
+  contract's projection surface no longer arrives without the feature that
+  gates it.** The crate root's `pub use happenstance_core::*;` became an
+  explicit, `#[cfg]`-carrying list of every contract item, name by name.
+
+  The glob re-exported whatever the **compiled** contract crate exposed, and the
+  contract gates its projection items on **its own** `unstable-projection`, not
+  on this crate's. `happenstance-testkit` is this crate's dev-dependency and
+  enables that feature unconditionally, so under `cargo test` —
+  and in any consumer graph where a second crate asks for it —
+  `happenstance::Checkpoint`, `::ProjectionId`, `::ProjectionStore`,
+  `::SendProjectionStore`, `::Authority`, `::CommitError`, `::ResetError`,
+  `::ProjectionProbe`, `::projection` and `::MemoryProjectionStore` all resolved
+  with `unstable-projection` **off**. The manifest promises the opposite: *"A
+  reader has to type the word `unstable` before any of them is in their build."*
+  The user-visible shape is an auto-import — `happenstance::Checkpoint` offered
+  by an editor, accepted into library code, compiling under `cargo test` and
+  failing under `cargo build`.
+
+  **Breaking, narrowly**, and free only at `0.2.0-alpha.1`: anyone who reached a
+  leaked path loses it and gains the feature flag that was always meant to be
+  the door. `ProjectionProbe` is gone from this crate outright — the contract
+  gates it on `conformance`, a feature `happenstance` does not forward, so no
+  consumer of this crate could turn it on *or* off. It is a test double and it
+  lives in `happenstance-testkit`.
+
+  The glob's second cost was quieter and is closed by the same change: every
+  future addition to `happenstance-core` was an addition to `happenstance`'s
+  public surface with nobody reviewing it, and a name added to both crates was a
+  hard break in a crate that had not changed. An explicit list makes that
+  collision `error[E0255]` in the commit that causes it.
+
+  `crates/happenstance/tests/contract_surface.rs` is what holds it: it derives
+  each item's gate from `happenstance-core`'s own crate root and compares it
+  against the hand-written list here, so a contract item added behind a feature
+  and mirrored here without one fails at home rather than on docs.rs.
+
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
@@ -567,6 +604,86 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`DomainEvent::tags` now says what its totality costs, and carries the
+  example that pays it.** Documentation only; the signature is untouched.
+
+  The method returns `Tags` and cannot fail, and `Tags` has no infallible
+  constructor from strings — `Tag::key_value` refuses an empty value, a value
+  past the length ceiling, and a set of control and bidirectional formatting
+  characters. So an identifier that arrived as a `String` cannot become a tag
+  inside `tags`: there is no `Result` for a `?`, and the route left is an
+  `expect` on the write path, inside `commit`, after the decision has been
+  taken. The method carried one line of documentation; its sibling
+  `DecisionModel::scope` carried four for the opposite choice, and every one of
+  the eight rendered examples of `tags` was `Tags::empty()` — the one case where
+  the totality is free.
+
+  The page now names the cost and the resolution — hold the validated `Tag` on
+  your identifier type, pay the `?` in that type's constructor, and `.collect()`
+  through the infallible `FromIterator<Tag> for Tags` — and a compiled
+  `# Examples` fence shows it, refusal included.
+
+  **Whether the signature should be fallible is not settled here** and is not
+  this change's to settle: `.kb/open-questions/d-1-the-validated-type-has-no-total-path.md`
+  is accepted and open. What this repairs is the half that needed no decision —
+  the residual was undocumented on the rendered surface.
+
+- **`run_projection`'s page now prices its one knob and states what an operator
+  can see while it runs.** Documentation only, on items behind
+  `unstable-projection` that make no semver promise.
+
+  `chunk: NonZeroUsize` had no specification beyond its declaration: the page
+  named it once, as the unit of the buffer, and the doctest supplied `64` with
+  no reason. The new *Choosing `chunk`* section now says what moves in each direction — one
+  transaction per event at the small end; at the large end a write set holding
+  every application since the last commit, which for `SqliteProjectionStore` is
+  an owned statement list, plus more work re-read on a restart because a failed
+  chunk is discarded whole. It also says the number has no default and no named
+  type where its sibling `Retry` has both, that this is a gap rather than a
+  position, and that what settles it is a measurement in `experiments/` that
+  nobody has run.
+
+  *What can be seen while it runs* says the thing the page never did: there is
+  no callback, no channel and no `tracing`, `Progressed` is returned once at the
+  end, and a rebuild over a large log is indistinguishable from a hang unless a
+  second handle polls `ProjectionStore::checkpoint`. That is the page's own
+  recommended rebuild workflow, and it was silent about being silent.
+
+  Neither gap is repaired in code, and both repairs stay free: ADR-0036 records
+  the semver exemption these items carry, so a named type for `chunk` and an
+  observed entry point cost the same after `0.2.0` as before it. Both belong to
+  the projection-store freeze. What the exemption does not buy is silence on the
+  page, which is read today.
+
+- **`Codec`'s page now states what the trait's unsealed-ness does not buy, and
+  `CodecError::UnknownTag`'s says which of its two meanings a reader has.** No
+  behaviour changed; what changed is that a documented promise stopped being
+  half-stated.
+
+  `Codec` is not sealed, and its page invites a codec of your own in as many
+  words. Writing one works. *Reading* one back does not, past the moment a
+  second codec is in play: an event is framed with the tag of the codec that
+  wrote it, and a foreign tag is resolved against a fixed chain of `Json`,
+  `Postcard` and `Cbor`. A tag answering to none of them is `UnknownTag`, and
+  for a codec outside this crate there is no registration seam, so no build can
+  ever resolve it except one already reading with that codec. An application on
+  its own codec that later adopts `Json` reads every historical event as
+  `UnknownTag` — an empty fold, and an append condition matching nothing.
+
+  `UnknownTag`'s page previously said the refusal *"means exactly one thing: a
+  tag was written and this build cannot honour it"*, which is true of the three
+  built-ins — where the repair is one feature flag — and permanently untrue of
+  a third-party tag. Both pages now separate the two, and `commit_with`, whose
+  title offers a codec of your own, points at the section.
+
+  **Whether the limit is repaired is not settled here.** A defaulted resolution
+  method on `Codec`, a registry, or sealing the trait and withdrawing the
+  invitation each cost a caller something different; the first two are additive
+  on a published trait and the third is breaking, which is why the choice
+  belongs before `0.2.0` and to an ADR rather than to this change.
+  `crates/happenstance/tests/codec_extension_point.rs` pins today's behaviour so
+  whichever option lands has one place that has to move.
+
 - **`SqliteEventStore::planned_statement_count` counts the real partition, so
   the number it returns for a query of wide items has changed.** The signature is
   untouched and the count is unchanged for every query whose items are narrow —
@@ -619,6 +736,23 @@ not the same as what a user needed to be told.
   rejected for three phases. `MODEL_COVERAGE` is what noticed.
 
 ### Fixed
+
+- **`ProjectionProbe`'s published manifest recipe did not compile when
+  followed.** Its `toml` fence wrote `happenstance-core = "…"` with no
+  features, and every item the recipe sends an adapter author to implement or
+  name — `ProjectionStore` first among them, then `Checkpoint`, `Authority`,
+  `CommitError`, `ResetError` and `ProjectionId` — is behind
+  `unstable-projection`, which is not in the default set. An adapter's port impl
+  is unconditional in its own `src/`, so there was no way to work around it from
+  the adapter side. The line now reads
+  `happenstance-core = { version = "…", features = ["unstable-projection"] }`
+  and says in one comment why the feature cannot be forwarded through the
+  adapter's own `[features]` table the way `conformance` deliberately is.
+
+  A `toml` fence is not a doctest — nothing in the gate compiles it — so
+  `crates/happenstance-core/tests/projection_recipe.rs` now holds it, deriving
+  each requirement from `lib.rs`'s own `#[cfg]` rather than restating it, so a
+  feature renamed everywhere except the fence fails too.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded

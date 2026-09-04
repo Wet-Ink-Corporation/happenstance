@@ -127,11 +127,18 @@ fn crate_root_renders_the_codec_surface() {
     }
 
     // The mount itself: every codec is reachable from the crate root, beside
-    // the glob that must survive.
+    // the contract's own surface.
+    //
+    // This used to require the *glob* — `pub use happenstance_core::*;` — and
+    // that is the assertion that made a leak look like policy: a glob mounts
+    // whatever the compiled contract crate exposes, gated on **its** features
+    // rather than this crate's. The promise the facade actually owes is that
+    // the contract's paths resolve here, and `tests/contract_surface.rs` holds
+    // it name by name and gate by gate.
     let root = read("lib.rs");
     assert!(
-        root.contains("pub use happenstance_core::*;"),
-        "the contract crate's glob re-export must survive"
+        root.contains("pub use happenstance_core::{EventStore, SendEventStore,"),
+        "the contract crate's surface is not re-exported at the crate root"
     );
     for (feature, item) in [("json", "Json"), ("postcard", "Postcard"), ("cbor", "Cbor")] {
         if !shipped_features().contains(&feature.to_owned()) {
@@ -321,9 +328,13 @@ fn crate_root_renders_the_projection_surface() {
         "the Features table says nothing about `unstable-projection`: {table}"
     );
 
-    // The mount: every item is re-exported at the root beside the glob, and
-    // the glob itself survives.
-    assert!(root.contains("pub use happenstance_core::*;"));
+    // The mount: every item is re-exported at the root beside the contract's
+    // own projection surface, which arrives behind the same feature.
+    //
+    // The glob this line used to require is gone; see
+    // `crate_root_renders_the_codec_surface` above, and
+    // `tests/contract_surface.rs`, for why requiring it was the defect.
+    assert!(root.contains("pub use happenstance_core::projection;"));
     for item in [
         "Projection",
         "run_projection",

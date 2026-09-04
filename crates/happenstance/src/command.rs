@@ -239,6 +239,12 @@ where
 /// domain before it names an encoding. One entry point always taking `&C` lost
 /// for exactly that reason.
 ///
+/// A codec of your own is welcome here and carries one limit worth reading
+/// before you commit a log to it: [`Codec`]'s *Reading a tag this build did
+/// not write*. In short, the events it tags are readable by a build holding
+/// that codec and by nothing else — which makes it safe as a log's only
+/// codec, and not as one of several.
+///
 /// Bound on [`EventStore`], the flavour that does **not** require `Send`, so an
 /// `Rc`-backed store on a single-threaded edge runtime is accepted — and a
 /// `Send` store is too, through the blanket impl. Spawning this loop onto a
