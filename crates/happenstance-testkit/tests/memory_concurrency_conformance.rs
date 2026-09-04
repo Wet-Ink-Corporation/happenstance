@@ -34,3 +34,95 @@ happenstance_testkit::event_store_concurrency_conformance!(
     emit = happenstance_testkit::__emit_concurrency_blocking,
     fixture = MemoryFixture::new()
 );
+
+/// The module page lists every emitter this family ships, and states no count.
+///
+/// M-2. `concurrency.rs`'s page opened with *"One emitter ships rather than
+/// three"* for as long as two have shipped, and that paragraph is not a stale
+/// comment — it is the **cost statement** an adapter author reads before
+/// deciding whether to invoke this family. Told the only wrapper is
+/// `#[tokio::test(flavor = "multi_thread")]`, an adapter with no runtime
+/// concludes that racing costs it a `tokio` dev-dependency with
+/// `rt-multi-thread`. It does not: `__emit_concurrency_blocking` needs nothing,
+/// races exactly as hard, and is demonstrated by the second invocation in this
+/// very file. The population that pays is the one the two-flavour design exists
+/// for.
+///
+/// So the check is on the shape rather than on the number. The page carries a
+/// table whose rows *are* the count, in `lib.rs:63-67`'s shape, and this test
+/// holds those rows to the `macro_rules!` definitions in the same file — a
+/// third emitter added without a row turns it red, which a written-out number
+/// cannot do because a number is falsified by an edit that never touches it.
+///
+/// **Rejects: a page that tells a runtime-free adapter it must bring a
+/// runtime.**
+///
+/// # What this does not verify
+///
+/// That the `Adapter needs` column is true — nothing here compiles a caller
+/// against the stated dependency set; the second invocation above is what
+/// demonstrates the blocking row, and an emitter added with a row and no
+/// demonstration passes this test. And it reads only the module page, so a
+/// count restated in an item's own doc comment is out of its reach.
+#[test]
+fn the_concurrency_page_lists_every_emitter_it_ships() {
+    const PAGE: &str = include_str!("../src/concurrency.rs");
+
+    let shipped: Vec<&str> = PAGE
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("macro_rules! __emit_concurrency_"))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .collect();
+    assert!(
+        !shipped.is_empty(),
+        "no `__emit_concurrency_*` macro was found in `concurrency.rs`, so this \
+         test is reading the wrong file and would pass against a page that \
+         listed nothing"
+    );
+
+    // The module page only: `//!`, which ends at the first line that is not one.
+    let page: Vec<&str> = PAGE
+        .lines()
+        .take_while(|line| line.starts_with("//!") || line.trim().is_empty())
+        .collect();
+
+    let listed: Vec<&str> = page
+        .iter()
+        .filter_map(|line| line.trim().strip_prefix("//! |"))
+        .filter_map(|row| row.split('|').next())
+        .filter_map(|cell| cell.trim().strip_prefix("`__emit_concurrency_"))
+        .filter_map(|rest| rest.split('`').next())
+        .collect();
+
+    for emitter in &shipped {
+        assert!(
+            listed.contains(emitter),
+            "`__emit_concurrency_{emitter}` ships and the module page's emitter \
+             table does not list it. The table is what an adapter author counts; \
+             an emitter missing from it is a cost they are told they must pay \
+             and need not."
+        );
+    }
+    for emitter in &listed {
+        assert!(
+            shipped.contains(emitter),
+            "the module page's emitter table lists \
+             `__emit_concurrency_{emitter}`, which this file does not define"
+        );
+    }
+
+    // And no count beside the list. A number written out is falsified by an
+    // edit that never touches it, which is exactly how this page came to say
+    // "one" while two shipped.
+    const SPELLED: &[&str] = &["no", "one", "two", "three", "four", "1", "2", "3", "4"];
+    for word in SPELLED {
+        for phrase in [format!("{word} emitter"), format!("{word} emitters")] {
+            assert!(
+                !page.join(" ").to_lowercase().contains(&phrase),
+                "the module page says {phrase:?}. The table below it is the \
+                 count; a number written beside a list is the claim this \
+                 finding was about"
+            );
+        }
+    }
+}
