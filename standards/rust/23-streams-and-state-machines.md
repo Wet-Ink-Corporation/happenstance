@@ -64,7 +64,7 @@ outcome returning a stream at all exists to prevent.
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1183 (needs no pin)` ·
 `crates/happenstance-postgres/src/read_stream.rs:201 (the design above, and it is what makes every field)` ·
 `crates/happenstance-neon/src/event_store.rs:349 (Every field is)` ·
-`crates/happenstance-testkit/src/registry.rs:304 (the alternative — hand-writing a)` ·
+`crates/happenstance-testkit/src/registry.rs:306 (the alternative — hand-writing a)` ·
 [ES-42](../../spec/SPECIFICATION.md)
 
 ## RS-23-2. Take the state by value with `mem::replace`, never match it through `&mut`.
@@ -188,7 +188,7 @@ ceiling no later than the first poll and bound every later statement by it.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:26 (does not live long enough)` ·
 `crates/happenstance-postgres/src/read_stream.rs:284 (taking the cursor by value and handing it back)` ·
-`crates/happenstance-testkit/tests/mutation_coverage.rs:1721 (RefetchingPagedStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage.rs:1794 (RefetchingPagedStore)` ·
 [ES-11](../../spec/SPECIFICATION.md) ·
 [ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)
@@ -323,7 +323,7 @@ rows already written stay written and no `Result` exists for anyone to read.
 `dropped_append_future_leaves_no_partial_batch` is the only thing that reports it,
 and only for an adapter that has run the suite.
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1862 (YieldingRowAtATimeStore)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1895 (YieldingRowAtATimeStore)` ·
 `crates/happenstance-postgres/src/read_stream.rs:149 (Dropping the cursor drops the transaction)` ·
 [ES-22](../../spec/SPECIFICATION.md) ·
 [E0053](https://doc.rust-lang.org/error_codes/E0053.html) *(checked 2026-08-09, rustc 1.97.1)*

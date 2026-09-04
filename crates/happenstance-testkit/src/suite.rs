@@ -1190,14 +1190,19 @@ pub mod rules {
     /// one statement per item and fails here for its own. A single-item query
     /// would see neither.
     ///
-    /// No `to`, and that is a decision rather than an omission. `from` cuts the
-    /// front of the read while `to` and `limit` both cut the back, so in read
-    /// order the two commute exactly: every implementation that answers
-    /// `from`+`to`+`limit` wrongly answers either this read or
-    /// `read_from_and_to_bound_a_closed_window` wrongly as well. A second rule
-    /// for the three-way composition would have no wrong implementation of its
-    /// own to name, and CF-1 does not permit a rule whose only mutant would be a
-    /// strawman.
+    /// No `to` here, and the reason given for that was **half right and was
+    /// acted on as though it were whole**. `from` cuts the front of the read
+    /// while `to` and `limit` both cut the back, so in read order the two
+    /// commute exactly — that much is true, and it is why the wrong
+    /// implementation an adversarial review proposed for the pair (the budget
+    /// applied before the bound) is not a defect at all and is not registered.
+    ///
+    /// What it does not follow is that no rule was owed. Commuting is an
+    /// argument about the *order* two options are applied in;
+    /// `WindowedPagingBudgetStore` does not reorder them, it **drops** the budget
+    /// because a bound is present, and no amount of commutation reaches that. It
+    /// passed all ninety-two rules that preceded `read_to_composes_with_limit`,
+    /// which is the rule that owns the pair now.
     ///
     /// The two items' matches are contiguous blocks rather than interleaved, for
     /// `limit_applies_across_items_not_per_item`'s reason: interleaving makes
@@ -1386,6 +1391,105 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    /// The upper bound composes with a **multi-item** query.
+    ///
+    /// CF-12's shape, one bound over. `to` commutes with filtering semantically
+    /// and not in generated SQL: `WHERE a OR b AND position <= ?` conjoins the
+    /// window's top with the *last* disjunct alone, so every event matching an
+    /// earlier item comes back regardless of where the window ends. The caller
+    /// it protects is a bounded backfill worker owning `[1, H]` while a tail
+    /// worker owns everything above it — the backfill reads past its own window
+    /// and re-delivers events the tail worker has already processed, with no
+    /// error anywhere.
+    ///
+    /// It rejects `UnparenthesisedToPredicateStore`, and that store is the
+    /// reason this rule exists rather than an illustration of it. It is
+    /// `UnparenthesisedPredicateStore`'s twin with the *lower* bound conjoined
+    /// correctly, so `read_from_composes_with_multi_item_query` passes it; the
+    /// three `to` rules above all issue `Query::all()`, where there is nothing
+    /// for the `OR` to bind wrongly across, so they pass it too. Until this rule
+    /// the only thing in the tree that could see it was the **model** family,
+    /// which is `proptest`-gated and `cfg(not(target_arch = "wasm32"))` — so a
+    /// Cloudflare or Neon adapter carrying the bug passed every rule it actually
+    /// runs. It was registered as a model-only mutant for exactly that reason,
+    /// and it is an ordinary one now.
+    ///
+    /// # Why the read is forwards, unbudgeted, and one assertion
+    ///
+    /// A backwards read here would also reject
+    /// `BackwardsToIsAnUpperBoundStore` and `BackwardsIgnoredStore`, which
+    /// `read_to_under_backwards_bounds_the_older_end` and
+    /// `read_backwards_reverses_order` already own, and a budget would take
+    /// `read_to_composes_with_limit`'s. Neither would be coverage; both would be
+    /// inflation. The axis this rule owns is the query shape.
+    ///
+    /// # What the log and the query are shaped around
+    ///
+    /// Five decisions, each of them a mutant this rule must **not** reject for a
+    /// reason another rule already owns. The suite has measured every one of
+    /// them: an earlier draft of this rule used a three-type item and
+    /// `TypesAreAndStore` failed it, which is
+    /// `query_item_types_are_or`'s finding arriving here under a different name.
+    ///
+    /// - Every event is **tagged**, so `InnerJoinTagStore` cannot fail this rule
+    ///   for `untagged_events_match_query_all`'s reason.
+    /// - Every event carries exactly **one** tag, so `TagJoinFanOutStore` has no
+    ///   second tag to return it twice over.
+    /// - The types **ascend** with position, so `SortByEventTypeStore`'s sort is
+    ///   the identity here and `read_defaults_to_ascending_order` keeps it.
+    /// - The first item is a **single-tag** item and the second a **single-type**
+    ///   one. A multi-type item would let `TypesAreAndStore` fail this rule; two
+    ///   tag items would carry the same (empty) type list and let
+    ///   `ItemDedupByTypeStore` intern one into the other, which is
+    ///   `query_union_is_item_concatenation`'s.
+    /// - The two items' matches **inside the window** are contiguous — the tag
+    ///   item's two, then the type item's one — for
+    ///   `read_from_composes_with_limit`'s reason: interleaving them would make
+    ///   item order and position order disagree inside the window and
+    ///   `ItemOrderedUnionStore` would fail this rule for a reason
+    ///   `query_item_order_does_not_change_the_result_set` owns.
+    ///
+    /// What makes the assertion a statement about the *merged* result is
+    /// therefore not the interleaving but the **leak**: the event above the
+    /// bound matches the **first** item, which is the one a dangling upper bound
+    /// never reaches.
+    ///
+    /// The assertion names three positions the store itself assigned, so a store
+    /// that returns nothing fails it and so does one that returns everything.
+    /// That is the non-vacuity anchor, and it is why there is no separate one.
+    pub async fn read_to_composes_with_multi_item_query<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Matched by the tag item, the tag item, the type item, nothing, and
+        // the tag item. The window ends at the third; the fifth is the one an
+        // unparenthesised upper bound lets through, because it matches the item
+        // the bound never reaches.
+        let by_tag_low = append_ok(&store, &[tagged_event("Ay", &[("side", "left")])]).await;
+        let by_tag_high = append_ok(&store, &[tagged_event("Bee", &[("side", "left")])]).await;
+        let stop = append_ok(&store, &[tagged_event("Cee", &[("edge", "top")])]).await;
+        append_ok(&store, &[tagged_event("Dee", &[("edge", "past")])]).await;
+        append_ok(&store, &[tagged_event("Ee", &[("side", "left")])]).await;
+
+        let query = query_of_items([item_tagged(&[("side", "left")]), item_of_types(&["Cee"])]);
+
+        let window = read_ok(&store, &query, ReadOptions::new().to(stop)).await;
+        assert_eq!(
+            positions_of(&window),
+            [by_tag_low.get(), by_tag_high.get(), stop.get()],
+            "`to` must bound EVERY item of the query. An unparenthesised \
+             `WHERE a OR b AND position <= ?` conjoins the window's top with \
+             the last disjunct alone, and the first item's matches come back \
+             from above the window every time: a bounded backfill re-delivers \
+             events the tail worker has already processed, with no error \
+             anywhere"
+        );
+
+        RuleOutcome::Ran
+    }
+
     // ---------------------------------------------------------------------
     // Read options — the budget (VT-28, ES-14)
     // ---------------------------------------------------------------------
@@ -1534,6 +1638,104 @@ pub mod rules {
             ],
             "and the same reading backwards, because a store truncates at \
              whichever end it scans from"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A window and a budget on the same read, with the **budget** the smaller.
+    ///
+    /// ES-16 and ES-14 together, and it is the last unread pair of read options:
+    /// until this rule the suite composed `to` with `from`, with `backwards` and
+    /// (since `read_to_composes_with_multi_item_query`) with a filtering query,
+    /// and issued `to` beside a `limit` at no call site at all.
+    ///
+    /// It rejects `WindowedPagingBudgetStore`: the budget threaded into the
+    /// paging statement and not into the windowed one, because a closed window is
+    /// a different statement from a page and the paging clause was already on the
+    /// other one. That store is `ForwardPagingBudgetStore` one read option over,
+    /// and **it passed all ninety-two rules that preceded this one** — measured,
+    /// with an empty `fails` list, rather than argued. The caller it breaks is the
+    /// backfill worker ES-16 exists for, writing `.limit(budget - fetched)`
+    /// against the window it was given and being handed the whole window instead:
+    /// a batch nobody sized, and arithmetic about a number the store ignored.
+    ///
+    /// # Why the budget is smaller than the window, and why there is one read
+    ///
+    /// Because the other arrangement has no wrong implementation to name. With a
+    /// budget *larger* than the window the answer is the one `to` alone
+    /// determines, so `ToBoundIgnoredStore` and `ToIsExclusiveStore` would fail
+    /// here for `read_to_is_inclusive`'s reason and nothing else would fail at
+    /// all. With the budget smaller, both of those stores answer **correctly** —
+    /// the budget masks the bound — which is precisely why neither the bound's
+    /// rules nor the budget's can see the store this rule is for.
+    ///
+    /// # `to` and `limit` commute, and that is why this rule is shaped as it is
+    ///
+    /// `read_from_composes_with_limit`'s documentation used the commutation to
+    /// argue that **no** rule was owed here. The commutation is real: in read
+    /// order `from` cuts the front while `to` and `limit` both cut the back, and
+    /// two prefix operations compose to the shorter prefix whichever order they
+    /// run in. So the wrong implementation an adversarial review proposed — the
+    /// row budget applied *before* the upper bound,
+    /// `.take(n).take_while(|e| e.position <= to)` — answers every read exactly
+    /// as the reference implementation does, forwards and backwards alike. It is
+    /// not a defect, and it is deliberately not registered.
+    ///
+    /// What the argument missed is that commuting is not the only way two options
+    /// interact. `WindowedPagingBudgetStore` does not reorder them; it **drops**
+    /// one because the other is present, which no amount of commutation reaches.
+    /// Order and applicability are different questions and only the first was
+    /// answered.
+    ///
+    /// The read is forwards. The backwards composition stays with
+    /// `read_to_under_backwards_bounds_the_older_end` and
+    /// `read_backwards_from_with_limit`: the only wrong implementation that needs
+    /// backwards *and* a window *and* a budget is a store whose windowed
+    /// statement is written ascending with the `LIMIT` inside it and the
+    /// direction applied by an outer `ORDER BY` — a narrower hypothesis, needing
+    /// two statements and one specific SQL shape, and asserting it here would
+    /// make `BackwardsToIsAnUpperBoundStore`, `BackwardsIgnoredStore` and
+    /// `FetchOneExtraStore` fail this rule for reasons three other rules own. It
+    /// is recorded as an extension rather than taken.
+    ///
+    /// Every event is tagged, carries one distinct tag, and the types ascend, for
+    /// `limit_applies_across_items_not_per_item`'s reasons: `InnerJoinTagStore`
+    /// needs a tag to join to, `TagJoinFanOutStore` needs a second tag to fan out
+    /// over, `PayloadDedupStore` needs two byte-identical events, and
+    /// `SortByEventTypeStore`'s sort has to be the identity here or
+    /// `read_defaults_to_ascending_order` loses its store.
+    ///
+    /// The assertion names two positions the store itself assigned, so a store
+    /// that returns nothing fails it and so does one that returns the window.
+    /// That is the non-vacuity anchor.
+    pub async fn read_to_composes_with_limit<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let first = append_ok(&store, &[tagged_event("Ay", &[("chunk", "c1")])]).await;
+        let second = append_ok(&store, &[tagged_event("Bee", &[("chunk", "c2")])]).await;
+        append_ok(&store, &[tagged_event("Cee", &[("chunk", "c3")])]).await;
+        // The window's top: three events above its floor and one below the head,
+        // so the budget is smaller than the window and the window is smaller than
+        // the log. Neither bound is left doing all the work.
+        let window_top = append_ok(&store, &[tagged_event("Dee", &[("chunk", "c4")])]).await;
+        append_ok(&store, &[tagged_event("Ee", &[("chunk", "c5")])]).await;
+
+        let page = read_ok(
+            &store,
+            &Query::all(),
+            ReadOptions::new().to(window_top).limit(2),
+        )
+        .await;
+        assert_eq!(
+            positions_of(&page),
+            [first.get(), second.get()],
+            "a window and a budget bound the SAME read, and the smaller of them \
+             is what the caller gets. An adapter that answers a closed window \
+             with its own statement and threads the row budget only into the \
+             paged one hands back the whole window: the backfill worker asked \
+             for a page of its window and got the window, with no error anywhere"
         );
 
         RuleOutcome::Ran
@@ -2935,7 +3137,7 @@ pub mod rules {
     /// A fixture that declares `READ_FAULT` supported must arm a fault the
     /// store surfaces as an `Err` **item**, not as the end of the stream.
     ///
-    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// [`EventStore::read`] yields
     /// `Result<SequencedEvent, Self::Error>` per item, and the whole value of
     /// that `Err` arm is that a caller can tell *the log ended* from *the fetch
     /// failed*. The wrong implementation is one line, and it is the most natural

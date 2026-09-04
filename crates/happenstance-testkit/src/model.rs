@@ -169,7 +169,7 @@ pub enum Op {
     ///
     /// **All five, since phase 12.** The doc line above said "every read option"
     /// while the variant carried four of them, and the missing one was `to` —
-    /// which made the two `to` branches of [`Model::select`] dead code under a
+    /// which made the two `to` branches of `Model::select` dead code under a
     /// comment explaining why a model that ignores an option is worthless. A
     /// wrong store this file could not disagree with, `WHERE a OR b AND position
     /// <= ?`, is registered as `UnparenthesisedToPredicateStore` and is what

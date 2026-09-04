@@ -83,7 +83,6 @@ use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
     QueryItem, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
-use happenstance_testkit::fixtures::{item_tagged, query_of_items, tagged_event};
 use happenstance_testkit::{Capability, Fixture};
 
 use crate::correct::{self, Allocate, Log, LogError, LogStore, Snapshot, dense};
@@ -981,6 +980,60 @@ impl Defect for ForwardPagingBudgetStore {
     }
 }
 
+/// The budget reaches the paging statement and not the windowed one.
+///
+/// [`ForwardPagingBudgetStore`]'s defect one read option over, and reached the
+/// same way. `to` arrives for the backfill path — ES-16's headline capability, a
+/// worker owning the closed window `[1, H]` while a tail worker owns everything
+/// above it — and a closed window is a *different statement* from a page:
+///
+/// ```text
+/// if let Some(to) = options.to {
+///     self.read_window(options.from, to)   // <- limit never reaches here
+/// } else {
+///     self.read_paged(options.from, options.limit)
+/// }
+/// ```
+///
+/// The reasoning that writes it is not a slip but an argument, and the argument
+/// is wrong: *the caller has given me both ends of the window, so the window is
+/// the bound that matters and the row budget is redundant.* It is redundant
+/// exactly when the budget is larger than the window, which is the case an
+/// author checks by hand, and it is the whole point when the budget is smaller —
+/// which is the case a backfill worker is in on every call but its last.
+/// `SPECIFICATION.md`'s VT-29 states the converse of the same confusion in terms:
+/// `limit` cannot stand in for `to`, because `event.rs:215-217` forbids treating
+/// position arithmetic as a count. Neither can stand in for the other.
+///
+/// The wrong outcome is the one VT-28 was written for, arriving through the one
+/// option combination no rule issued: a caller writing `.limit(budget - fetched)`
+/// against a window is handed the whole window instead, the batch nobody sized
+/// is buffered, and the loop's arithmetic is arithmetic about a number the store
+/// ignored. Nothing errors.
+///
+/// # Why it is a one-step defect on `truncated`
+///
+/// Because that step is handed the whole of [`ReadOptions`], so `to` and `limit`
+/// are both visible where the truncation happens, and nothing about the query is
+/// needed. That is the shape [`Defect`]'s three-step split rewards, and it is why
+/// this store does not reach for [`Defect::select`]: a defect that couples an
+/// option to another *option* is not the same as one coupling an option to the
+/// *predicate*.
+pub(crate) struct WindowedPagingBudgetStore;
+
+impl Defect for WindowedPagingBudgetStore {
+    const NAME: &'static str = "WindowedPagingBudgetStore";
+
+    fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // THE DEFECT: the windowed statement carries `BETWEEN ? AND ?` and no
+        // `LIMIT`, so the budget is applied only where `to` is absent.
+        if options.to.is_some() {
+            return selected;
+        }
+        correct::truncated(selected, options)
+    }
+}
+
 /// `LIMIT` is pushed into the scan and the query's predicate is applied to the
 /// rows that come back.
 ///
@@ -1160,29 +1213,32 @@ impl Defect for UnparenthesisedPredicateStore {
 /// ES-16 exists to forbid, arriving through a query shape ES-16's own rules do
 /// not exercise.
 ///
-/// # Why it is `Kind::ModelOnlyMutant`
+/// # It was `Kind::ModelOnlyMutant`, and what ended that
 ///
-/// It fails no rule in the event-store family, and that is the finding rather
+/// It failed no rule in the event-store family, and that was the finding rather
 /// than an accident. All three `to` rules — `read_to_is_inclusive`,
 /// `read_from_and_to_bound_a_closed_window` and
 /// `read_to_under_backwards_bounds_the_older_end` — issue `Query::all()`, and
 /// with no items there is nothing for the `OR` to bind wrongly across, so this
-/// store's answer is the correct one. The rule that would see it is `to`
-/// composed with a multi-item query, which does not exist; CF-12 closed that gap
-/// for `from` alone. What catches it instead is the **model** family, which
-/// generates multi-item queries and — since phase 12 — an upper bound to go with
-/// them.
+/// store's answer is the correct one. The rule that would see it was `to`
+/// composed with a multi-item query, which did not exist; CF-12 closed that gap
+/// for `from` alone. What caught it instead was the **model** family.
 ///
-/// Registering it is therefore the honest way to hold that boundary in place. If
-/// someone writes the missing rule, this row becomes an ordinary
-/// [`Kind::Mutant`] with one entry in `fails` and the meta-tests say so; if the
-/// generator ever stops reaching `to`, `MODEL_COVERAGE` goes red and names this
-/// store. Either way the claim is checked rather than remembered.
+/// That filing was honest and it was a hole, because *where* the model family
+/// runs is not everywhere: it is behind the `proptest` feature and behind
+/// `cfg(not(target_arch = "wasm32"))`. A Cloudflare or Neon adapter carrying
+/// this precedence bug ran nothing that could see it. The store's own
+/// documentation said what would end that — *"if someone writes the missing
+/// rule, this row becomes an ordinary `Kind::Mutant` with one entry in
+/// `fails`"* — and `read_to_composes_with_multi_item_query` is that rule.
 ///
-/// That the store is defective *at all* is checked separately and without any
-/// feature, by [`to_precedence_scenario`] below — the witness
-/// `Kind::ModelOnlyMutant` requires. See that function, and
-/// [`HidingPlaceStore`], for why the kind needed one.
+/// It is an ordinary [`Kind::Mutant`] now, pinned to that rule's one assertion,
+/// and `MODEL_COVERAGE` still claims the model rejects it: two instruments where
+/// there was one, which is the arrangement every other mutant in the registry
+/// has. The witness that used to stand in for the missing rule
+/// (`to_precedence_scenario`) went with the reclassification, because
+/// `every_model_only_mutant_demonstrates_its_defect` rejects a witness whose
+/// owner is not a model-only mutant — an orphan scenario reads as coverage.
 ///
 /// It cannot be a one-step defect, for [`UnparenthesisedPredicateStore`]'s
 /// reason: the bound and the predicate have to be built together, `matching` is
@@ -1244,38 +1300,6 @@ impl Defect for UnparenthesisedToPredicateStore {
     }
 }
 
-/// The two-event log and the bounded read on which
-/// [`UnparenthesisedToPredicateStore`] disagrees with [`crate::correct`].
-///
-/// The witness `Kind::ModelOnlyMutant` requires, and it lives here rather than in
-/// the registry for the reason the registry's own documentation gives about
-/// distance: the *claim* belongs away from the store, and the *demonstration*
-/// belongs beside it, because whoever writes the defect is the only person who
-/// knows the smallest input that shows it.
-///
-/// Two events, one tagged `side:left` and one `side:right`, and a two-item query
-/// listing `right` **first** so that `left` is the disjunct the dangling bound
-/// attaches to. The read carries `to` at the first event's position. A correct
-/// store returns the first event alone; this one also returns the second,
-/// because the second matches an earlier disjunct and the upper bound never
-/// reaches it. Nothing here needs a generator, a runtime or a feature.
-pub(crate) fn to_precedence_scenario() -> (Vec<SequencedEvent>, Query, ReadOptions) {
-    let events = correct::sequence(
-        &[
-            tagged_event("Ay", &[("side", "left")]),
-            tagged_event("Bee", &[("side", "right")]),
-        ],
-        None,
-        dense,
-    );
-    let bound = events[0].position;
-    let query = query_of_items([
-        item_tagged(&[("side", "right")]),
-        item_tagged(&[("side", "left")]),
-    ]);
-    (events, query, ReadOptions::new().to(bound))
-}
-
 /// A store with **no defect at all**, filed as caught by the model family.
 ///
 /// Not a mutant. It is the adversarial refutation of [`Kind::ModelOnlyMutant`],
@@ -1295,6 +1319,15 @@ pub(crate) fn to_precedence_scenario() -> (Vec<SequencedEvent>, Query, ReadOptio
 /// place — it drives this store through every scenario the witness table holds
 /// and asserts it agrees with `crate::correct` on all of them, so no witness for
 /// it could be written.
+///
+/// **That table is empty at this commit**, so the drive is over nothing today.
+/// The store is kept rather than deleted for the same reason the kind is: the
+/// hole it refutes is a property of the *kind*, which still exists, and the day
+/// a model-only mutant is registered again this control has to be standing
+/// already. What stops the emptiness being a silent hole is that
+/// `the_model_only_bar_rejects_a_store_with_no_defect` no longer asserts the
+/// table is non-empty — it asserts the table is empty **exactly when** the kind
+/// has no members, which is false in both of the ways that matter.
 pub(crate) struct HidingPlaceStore;
 
 impl Defect for HidingPlaceStore {

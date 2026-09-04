@@ -32,6 +32,87 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **A conformance rule for the one pair of read options the suite never put on
+  the same read — breaking in practice, so pin `happenstance-testkit` exactly
+  before taking it.** `happenstance-testkit` gains
+  **`read_to_composes_with_limit`**, the ninety-third event-store rule: a closed
+  window and a row budget together, with the **budget the smaller** of the two.
+
+  The defect it detects is a budget that never reaches the windowed statement,
+  because a closed window is a different statement from a page:
+
+  ```text
+  if let Some(to) = options.to {
+      self.read_window(options.from, to)   // <- limit never reaches here
+  } else {
+      self.read_paged(options.from, options.limit)
+  }
+  ```
+
+  The reasoning behind it is an argument rather than a slip: *the caller gave me
+  both ends of the window, so the window is the bound that matters and the row
+  budget is redundant.* It is redundant exactly while the budget is the larger of
+  the two — which is the case an author checks by hand — and it is the whole
+  point when the budget is smaller, which is the case a backfill worker is in on
+  every call but its last. VT-29 already states the converse of the same
+  confusion: `limit` cannot stand in for `to`. Neither stands in for the other.
+
+  `WindowedPagingBudgetStore` is that adapter, and it **passed all ninety-two
+  rules that preceded this one** — measured, by registering it with an empty
+  failure list and letting the meta-test drive every rule at it, not argued. The
+  bound's own three rules issue no budget; the budget's own rules issue no bound;
+  and with the budget smaller than the window even `ToBoundIgnoredStore` and
+  `ToIsExclusiveStore` answer this read correctly, because the budget masks the
+  bound. What a caller loses is the page it sized: it asked for five hundred
+  events of its window and got the window, with `Ok` everywhere.
+
+  **One argument this retires.** `read_from_composes_with_limit` landed with a
+  note saying no such rule was owed, because `to` and `limit` both cut the back
+  of a read and therefore commute. The commutation is real, and it has been
+  measured: the wrong implementation an adversarial review proposed for the pair
+  — the budget applied before the bound — answers every read exactly as the
+  reference implementation does, in both directions, and is deliberately **not**
+  registered. But commuting is a statement about the *order* two options are
+  applied in, and this defect is about *applicability*: it drops one option
+  because the other is present. The note is corrected in place rather than
+  deleted.
+- **A conformance rule that turns a model-only defect into an ordinary one —
+  breaking in practice, so pin `happenstance-testkit` exactly before taking it.**
+  `happenstance-testkit` gains **`read_to_composes_with_multi_item_query`**, the
+  ninety-second event-store rule: `ReadOptions::to` against a **filtering**
+  query.
+
+  The defect it detects is the textbook operator-precedence bug on the upper
+  bound:
+
+  ```text
+  WHERE type = ? OR tag = ? AND position <= ?
+  ```
+
+  `AND` binds tighter than `OR`, so the window's top is conjoined with the last
+  disjunct alone and every event matching an earlier item comes back from above
+  the window. It is what an adapter produces when the `to` clause is appended to
+  a `WHERE` string that already carries a disjunction someone else built — which
+  is how a `WHERE` clause gets built anywhere the driver cannot take a query
+  tree. The caller it breaks is a bounded backfill worker owning `[1, H]` while a
+  tail worker owns everything above it: the backfill reads past its own window
+  and re-delivers events the tail worker has already processed, with `Ok`
+  everywhere and no error to log.
+
+  **What is new here is not the store but where it can be seen.**
+  `UnparenthesisedToPredicateStore` was already in the registry, filed as caught
+  by the *model* family alone — an honest record of a real hole, and a worse one
+  than it looked: that family is behind the optional `proptest` dependency **and**
+  behind `cfg(not(target_arch = "wasm32"))`. The two adapters in this workspace
+  that will build their predicate by concatenation and run on that target,
+  `happenstance-cloudflare` and `happenstance-neon`, ran nothing at all that
+  could see it. All three existing `to` rules issue `Query::all()`, where there
+  is nothing for the `OR` to bind wrongly across, and the lower bound is
+  conjoined correctly, so `read_from_composes_with_multi_item_query` passes it
+  too. It is an ordinary mutant now, failing exactly one rule.
+
+  CF-12 closed this gap for `from` at phase 3; ES-16 is the clause that closes it
+  for `to`, and its rule list names the new rule.
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
