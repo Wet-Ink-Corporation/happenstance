@@ -132,6 +132,31 @@ sequenced first. Both halves of `X-1` are implemented; the `Selectivity::read_fo
 half is the one that brief's option B would discard, exactly as it predicted, and
 a note recording that sits in its own sequencing section.
 
+## And six from the checks-stronger-than-mechanism lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `prose-guard-retired-and-what-it-owes.md` | `spec-trace`'s prose guard is deleted. What does `kb-open-question-no-ps-rule-name-resolved-001` owe, and what do the 45 declarations that replaced it say? | none | does not expire |
+| `portfolio-check-and-the-port-freeze-bar.md` | CF-25/CF-26 name a portfolio check that does not exist. Built before `ProjectionStore` freezes, or does the freeze name its accepted axis? | none | **the `ProjectionStore` freeze** |
+| `which-reading-of-a-case-naming-no-clause.md` | CF-38's fourth condition reads two ways and they differ by 54 cases. Which one? | none | not blocking; A is landed and green |
+| `cf-36-thirteen-recorded-breaches.md` | CF-36 has been checked for the first time and thirteen clauses breach it. Which of the three repairs does each take? | none | first publish; two of the thirteen sooner |
+| `a-gate-step-whose-first-check-hides-its-second.md` | Three unrelated checks share one gate step and short-circuit on the first `?`. Own steps, or does the step collect? | none | not blocking; it has bitten three times in one day |
+| `trait-variant-caret-and-the-consumer-resolve.md` | Does `trait-variant`'s caret narrow, and does CI learn to resolve freshly? | none to the fix | whenever `0.1.4` publishes |
+| `wf-10-instruments-narrower-than-the-clause.md` | WF-10 says *every value type*; the instruments cover a subset in two directions. Which instrument does each get? | none | not `0.2.0` |
+
+Seven, not six — `wf-10-instruments-narrower-than-the-clause.md` and
+`trait-variant-caret-and-the-consumer-resolve.md` are the two whose remediations
+lie entirely outside that lane's writable surface (`crates/` and
+`.github/workflows/`), so they are records with measurements rather than
+proposals the lane could have taken.
+
+Written by the lane implementing `S-5`, `Q-03`/`Q-04` and `M-4`, in the same
+session as the changes they describe, and **without** the author → two-critic →
+revision pass the first section describes. Same discount. Three of them —
+`prose-guard-retired`, `cf-36-thirteen-recorded-breaches` and
+`which-reading-of-a-case-naming-no-clause` — describe a change that has **landed**
+and ask for a decision about the record it left, rather than proposing one.
+
 ## Three that block other work
 
 - **`fixture-declension-policy.md`** is the keystone for the whole testkit wave: it

@@ -152,6 +152,11 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     println!("\n=== the file-reading checks ===");
     crate::spec_trace::retired_rules()?;
     crate::lints::no_clock()?;
+    // CF-24, and it belongs on the story grain for the same reason
+    // `stated_rule_counts` does: the story that lands a conformance rule is
+    // exactly the one that can leave it out of the macro that drives it, and no
+    // package-shaped step reads a `macro_rules!` body.
+    crate::lints::rules_are_enumerated()?;
     crate::lints::no_position_literals()?;
     crate::lints::changelog_names_every_rule()?;
     // The one check here that runs the other way — four *documents* held to the

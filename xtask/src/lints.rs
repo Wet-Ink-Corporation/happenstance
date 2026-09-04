@@ -34,6 +34,7 @@
 //! every match below runs against source with comments removed and string
 //! literal *contents* blanked, so only code is looked at.
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -1402,10 +1403,8 @@ fn changelog_scope_matches_publishable() -> Result<()> {
     let changelog =
         fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
 
-    let publishable: std::collections::BTreeSet<String> =
-        publishable_from_package_rs(&root)?.into_iter().collect();
-    let scoped: std::collections::BTreeSet<String> =
-        changelog_scope_crates(&changelog)?.into_iter().collect();
+    let publishable: BTreeSet<String> = publishable_from_package_rs(&root)?.into_iter().collect();
+    let scoped: BTreeSet<String> = changelog_scope_crates(&changelog)?.into_iter().collect();
 
     let unscoped: Vec<&String> = publishable.difference(&scoped).collect();
     let stale: Vec<&String> = scoped.difference(&publishable).collect();
@@ -1766,6 +1765,219 @@ fn runbook_status_matches_the_registry() -> Result<()> {
         rows.len()
     );
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// CF-24 — no rule may exist without appearing in its family's enumeration
+// ---------------------------------------------------------------------------
+
+/// One file of the workspace, read relative to its root.
+fn at(root: &Path, rel: &str) -> Result<String> {
+    fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"))
+}
+
+/// One rule family: the file that defines it, and the macro that must list it.
+struct Enumeration {
+    /// The file whose `pub async fn` items are the family's rules.
+    file: &'static str,
+    /// The `for_each_*!` macro that must name every one of them.
+    macro_name: &'static str,
+    /// The file that macro is defined in, which is not always the rule file:
+    /// `for_each_event_store_rule!` lives in `registry.rs` and enumerates
+    /// `suite.rs`.
+    macro_file: &'static str,
+}
+
+/// The families this check covers: all five, and the fifth is declared.
+///
+/// # Why this is not a scanner in the crate
+///
+/// CF-24's deferral paragraph left the mechanical fix because "a third family is
+/// plausible in phase 4 and one scanner written against three is better than
+/// three written one at a time". Three more families arrived. The third took a
+/// *second* scanner — `no_orphan_projection_rules`, which is `registry.rs`'s
+/// `declared_rules` verbatim but for the `include_str!` argument — and the other
+/// two got none. Written here it is one scanner for all five, and it reads the
+/// `macro_rules!` body from outside rather than expanding it, so it does not
+/// have the property the in-crate meta-tests have of enumerating *from* the list
+/// they are checking.
+///
+/// # The fifth row, and why it is not silent
+///
+/// `bench.rs` is not one of [`RULE_FILES`], and whether a benchmark scenario is
+/// "a rule" for CF-24's purposes is CF-34's question, not this scanner's. It is
+/// in the table anyway, because the mechanical fact is decidable without
+/// answering that: a scenario deleted from `for_each_event_store_benchmark!`
+/// keeps its function, compiles, and is run by nothing — measured green across
+/// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
+/// Including it is a decision recorded here; leaving it out silently is the
+/// shape RS-80-2 forbids.
+const ENUMERATIONS: [Enumeration; 5] = [
+    Enumeration {
+        file: "crates/happenstance-testkit/src/suite.rs",
+        macro_name: "for_each_event_store_rule",
+        macro_file: "crates/happenstance-testkit/src/registry.rs",
+    },
+    Enumeration {
+        file: "crates/happenstance-testkit/src/projection.rs",
+        macro_name: "for_each_projection_store_rule",
+        macro_file: "crates/happenstance-testkit/src/projection.rs",
+    },
+    Enumeration {
+        // The family that costs most: five rules on real threads, the only place
+        // a lost update between two OS threads is expressible, and the family
+        // phase 10's non-serialising Postgres store exists to be measured by.
+        file: "crates/happenstance-testkit/src/concurrency.rs",
+        macro_name: "for_each_concurrency_rule",
+        macro_file: "crates/happenstance-testkit/src/concurrency.rs",
+    },
+    Enumeration {
+        file: "crates/happenstance-testkit/src/model.rs",
+        macro_name: "for_each_model_rule",
+        macro_file: "crates/happenstance-testkit/src/model.rs",
+    },
+    Enumeration {
+        file: "crates/happenstance-testkit/src/bench.rs",
+        macro_name: "for_each_event_store_benchmark",
+        macro_file: "crates/happenstance-testkit/src/bench.rs",
+    },
+];
+
+/// A file this check scans that is not one of [`RULE_FILES`], and why.
+///
+/// Derived against declared, per RS-81-5: [`ENUMERATIONS`] must cover every
+/// rule file the rest of the gate knows about, and any file beyond that set must
+/// be named here. A sixth rule file appearing in `RULE_FILES` fails the
+/// reconciliation rather than being quietly unscanned, and a row added here on a
+/// hunch fails it from the other side.
+const ENUMERATED_BEYOND_THE_RULE_FILES: [&str; 1] = ["crates/happenstance-testkit/src/bench.rs"];
+/// CF-24: every rule a family defines appears in that family's enumeration, and
+/// every name the enumeration lists is a rule the family defines.
+///
+/// # Errors
+///
+/// Returns an error if a file cannot be read, if a macro cannot be located, or
+/// if either direction of the comparison finds anything.
+pub(crate) fn rules_are_enumerated() -> Result<()> {
+    let root = workspace_root()?;
+    let mut problems: Vec<String> = Vec::new();
+    let mut checked = 0usize;
+
+    // Derived against declared, both ways, before anything is scanned. A rule
+    // file the gate knows about and this table does not is the exact defect
+    // CF-24 records; a row here for a file nothing else calls a rule file is a
+    // scanner drifting away from what it claims to cover.
+    for file in RULE_FILES {
+        if !ENUMERATIONS.iter().any(|e| e.file == file) {
+            problems.push(format!(
+                "{file} holds conformance rules and no `ENUMERATIONS` row names it, so                  nothing checks that its family's `for_each_*!` macro lists them",
+            ));
+        }
+    }
+    for family in &ENUMERATIONS {
+        if !RULE_FILES.contains(&family.file)
+            && !ENUMERATED_BEYOND_THE_RULE_FILES.contains(&family.file)
+        {
+            problems.push(format!(
+                "`ENUMERATIONS` scans {}, which is neither a rule file nor declared in                  `ENUMERATED_BEYOND_THE_RULE_FILES`",
+                family.file
+            ));
+        }
+    }
+
+    for family in &ENUMERATIONS {
+        let defined = collect_rules(&at(&root, family.file)?);
+        let listed = enumerated_names(
+            &at(&root, family.macro_file)?,
+            family.macro_file,
+            family.macro_name,
+        )?;
+        checked += defined.len();
+
+        for rule in defined.difference(&listed) {
+            problems.push(format!(
+                "{} — `{rule}` is defined and `{}!` does not name it. CF-24: a rule written, \
+                 reviewed, merged, and never run because its registration line was forgotten.",
+                family.file, family.macro_name
+            ));
+        }
+        for name in listed.difference(&defined) {
+            problems.push(format!(
+                "{} — `{}!` names `{name}`, which {} does not define.",
+                family.macro_file, family.macro_name, family.file
+            ));
+        }
+    }
+
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "{} rule(s) out of step with their family's enumeration (CF-24)",
+            problems.len()
+        );
+    }
+    println!(
+        "CF-24: {checked} rule(s) across {} enumeration(s) appear in the macro that drives them",
+        ENUMERATIONS.len()
+    );
+    Ok(())
+}
+
+/// The names a `for_each_*!` macro lists.
+///
+/// The shape is fixed across all five macros and rustfmt pins it: the body is
+/// `$($callback)+! {` followed by one bare identifier per line, comma-separated,
+/// closing on a line that is `}` at the macro's own indentation. Comments are
+/// blanked by [`code_lines`] first, because two of the five carry section
+/// headings inside the list and a raw split on commas takes a heading for a
+/// name.
+///
+/// # Errors
+///
+/// Returns an error if the macro is not in the file, or if its body does not
+/// have that shape — never an empty set, which would make the check pass by
+/// finding nothing.
+fn enumerated_names(source: &str, file: &str, macro_name: &str) -> Result<BTreeSet<String>> {
+    let lines = code_lines(file, source)?;
+    let Some(start) = lines
+        .iter()
+        .position(|l| l.contains(&format!("macro_rules! {macro_name}")))
+    else {
+        bail!("{file} defines no `macro_rules! {macro_name}`");
+    };
+    let Some(open) = lines[start..]
+        .iter()
+        .position(|l| l.contains("$($callback)+! {"))
+        .map(|at| start + at)
+    else {
+        bail!("`{macro_name}!` in {file} has no `$($callback)+! {{` body");
+    };
+    let Some(close) = lines[open + 1..]
+        .iter()
+        .position(|l| l.trim() == "}")
+        .map(|at| open + 1 + at)
+    else {
+        bail!("`{macro_name}!` in {file} has no closing brace for its list");
+    };
+
+    let mut out = BTreeSet::new();
+    for name in lines[open + 1..close]
+        .join(" ")
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
+        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            bail!("`{macro_name}!` in {file} lists `{name}`, which is not a bare identifier");
+        }
+        out.insert(name.to_owned());
+    }
+    if out.is_empty() {
+        bail!("`{macro_name}!` in {file} lists nothing — a check that finds no names passes");
+    }
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -2583,5 +2795,120 @@ State is one of `not started`, `in progress`, `blocked`, `done`.
         let problem = check_citation(&root, "some/fixture.md", &bad).unwrap();
         assert!(problem.starts_with("some/fixture.md:42"));
         assert!(problem.contains("out of bounds"));
+    }
+
+    // ---- M-4: CF-24's orphan scanner covers two of five enumerations -------
+
+    /// Every file the gate already treats as holding conformance rules must
+    /// have an enumeration row. `RULE_FILES` is the derived half — it is what
+    /// `all_rules`, CF-29's changelog check and `spec-trace`'s check 6 all read
+    /// — so a fifth rule file cannot be added without this failing (RS-81-5).
+    #[test]
+    fn every_rule_file_has_an_enumeration() {
+        let missing: Vec<&str> = RULE_FILES
+            .into_iter()
+            .filter(|f| !ENUMERATIONS.iter().any(|e| e.file == *f))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "CF-24 says no rule may exist without appearing in its enumeration, and these \
+             files' enumerations are scanned by nothing: {missing:?}"
+        );
+    }
+
+    /// The unlisted direction, over a fabricated family. This is the state
+    /// CF-24's `Rejects` names verbatim: "a rule written, reviewed, merged, and
+    /// never run because its registration line was forgotten".
+    #[test]
+    fn a_rule_missing_from_its_macro_is_reported() {
+        let listed = enumerated_names(FAMILY_SOURCE, "fake.rs", "for_each_fake_rule").unwrap();
+        let defined = collect_rules(FAMILY_SOURCE);
+
+        assert!(
+            defined.contains("a_rule_nobody_registered"),
+            "the fixture must define the rule"
+        );
+        assert!(
+            !listed.contains("a_rule_nobody_registered"),
+            "and the macro must not list it — got {listed:?}"
+        );
+    }
+
+    /// The other direction: a name in the macro that no `pub async fn` defines.
+    /// It fails to compile in the crate, but this scanner is what says *which*
+    /// name, and it runs before the testkit is built on the story grain.
+    #[test]
+    fn a_macro_name_no_rule_defines_is_reported() {
+        let listed = enumerated_names(FAMILY_SOURCE, "fake.rs", "for_each_fake_rule").unwrap();
+        let defined = collect_rules(FAMILY_SOURCE);
+        let phantom: Vec<&String> = listed.difference(&defined).collect();
+        assert_eq!(phantom.len(), 1, "got {phantom:?}");
+        assert_eq!(phantom[0], "a_name_with_no_function");
+    }
+
+    /// Section headings live inside two of the five macro bodies, and a raw
+    /// split on commas takes one for a name. [`code_lines`] blanks them first,
+    /// which is the only reason the real `for_each_event_store_rule!` parses to
+    /// 93 names rather than to 93 plus fourteen headings.
+    #[test]
+    fn a_comment_inside_the_list_is_not_a_name() {
+        let listed = enumerated_names(FAMILY_SOURCE, "fake.rs", "for_each_fake_rule").unwrap();
+        assert!(
+            listed.iter().all(|n| !n.contains(' ')),
+            "a heading parsed as a name: {listed:?}"
+        );
+        assert_eq!(listed.len(), 2, "got {listed:?}");
+    }
+
+    /// A macro that lists nothing must be an error, never an empty set: an empty
+    /// set makes every rule "unlisted" in one direction and nothing in the
+    /// other, and the shape a broken parser reaches is the quiet one (RS-81-2).
+    #[test]
+    fn a_macro_this_cannot_parse_is_an_error_not_an_empty_set() {
+        assert!(enumerated_names("// nothing here\n", "fake.rs", "for_each_fake_rule").is_err());
+        assert!(
+            enumerated_names(
+                "macro_rules! for_each_fake_rule {\n    ($($callback:tt)+) => {\n        \
+                 $($callback)+! {\n        };\n    };\n}\n",
+                "fake.rs",
+                "for_each_fake_rule",
+            )
+            .is_err(),
+            "an empty list is a parser that stopped reporting, not a family with no rules"
+        );
+    }
+
+    /// One family, in the shape rustfmt pins the real five into: a heading
+    /// comment inside the list, one rule registered and one not, and one
+    /// registered name with no function behind it.
+    const FAMILY_SOURCE: &str = "\
+pub mod rules {
+    pub async fn a_registered_rule<F>(_f: &F) {}
+    pub async fn a_rule_nobody_registered<F>(_f: &F) {}
+}
+
+macro_rules! for_each_fake_rule {
+    ($($callback:tt)+) => {
+        $($callback)+! {
+            // --- A section heading ---------------------------------------
+            a_registered_rule,
+            a_name_with_no_function,
+        }
+    };
+}
+";
+
+    /// The benchmark scenarios are a sixth `pub async fn` family behind a
+    /// `for_each_*!` macro, and deleting a name from that macro was measured to
+    /// pass `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own
+    /// tests. Whether CF-24 *governs* a benchmark scenario is CF-34's question;
+    /// whether one can vanish silently is not.
+    #[test]
+    fn the_benchmark_enumeration_is_scanned() {
+        assert!(
+            ENUMERATIONS.iter().any(|e| e.file.ends_with("/bench.rs")),
+            "a scenario deleted from `for_each_event_store_benchmark!` still compiles, still \
+             has its function, and is run by nothing"
+        );
     }
 }
