@@ -83,6 +83,7 @@ use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
     QueryItem, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
+use happenstance_testkit::fixtures::{item_tagged, query_of_items, tagged_event};
 use happenstance_testkit::{Capability, Fixture};
 
 use crate::correct::{self, Allocate, Log, LogError, LogStore, Snapshot, dense};
@@ -1178,6 +1179,11 @@ impl Defect for UnparenthesisedPredicateStore {
 /// generator ever stops reaching `to`, `MODEL_COVERAGE` goes red and names this
 /// store. Either way the claim is checked rather than remembered.
 ///
+/// That the store is defective *at all* is checked separately and without any
+/// feature, by [`to_precedence_scenario`] below — the witness
+/// `Kind::ModelOnlyMutant` requires. See that function, and
+/// [`HidingPlaceStore`], for why the kind needed one.
+///
 /// It cannot be a one-step defect, for [`UnparenthesisedPredicateStore`]'s
 /// reason: the bound and the predicate have to be built together, `matching` is
 /// handed no options and `ordered` is handed no query, and [`Defect::select`] is
@@ -1238,6 +1244,38 @@ impl Defect for UnparenthesisedToPredicateStore {
     }
 }
 
+/// The two-event log and the bounded read on which
+/// [`UnparenthesisedToPredicateStore`] disagrees with [`crate::correct`].
+///
+/// The witness `Kind::ModelOnlyMutant` requires, and it lives here rather than in
+/// the registry for the reason the registry's own documentation gives about
+/// distance: the *claim* belongs away from the store, and the *demonstration*
+/// belongs beside it, because whoever writes the defect is the only person who
+/// knows the smallest input that shows it.
+///
+/// Two events, one tagged `side:left` and one `side:right`, and a two-item query
+/// listing `right` **first** so that `left` is the disjunct the dangling bound
+/// attaches to. The read carries `to` at the first event's position. A correct
+/// store returns the first event alone; this one also returns the second,
+/// because the second matches an earlier disjunct and the upper bound never
+/// reaches it. Nothing here needs a generator, a runtime or a feature.
+pub(crate) fn to_precedence_scenario() -> (Vec<SequencedEvent>, Query, ReadOptions) {
+    let events = correct::sequence(
+        &[
+            tagged_event("Ay", &[("side", "left")]),
+            tagged_event("Bee", &[("side", "right")]),
+        ],
+        None,
+        dense,
+    );
+    let bound = events[0].position;
+    let query = query_of_items([
+        item_tagged(&[("side", "right")]),
+        item_tagged(&[("side", "left")]),
+    ]);
+    (events, query, ReadOptions::new().to(bound))
+}
+
 /// A store with **no defect at all**, filed as caught by the model family.
 ///
 /// Not a mutant. It is the adversarial refutation of [`Kind::ModelOnlyMutant`],
@@ -1250,7 +1288,13 @@ impl Defect for UnparenthesisedToPredicateStore {
 /// feature powerset builds.
 ///
 /// It exists so that "the kind cannot be used to hide a store nothing catches"
-/// is a *checked* sentence rather than an argument. Nothing registers it.
+/// is a *checked* sentence rather than an argument, and it is **deliberately not
+/// registered**: a row for it would now be rejected by
+/// `every_model_only_mutant_demonstrates_its_defect`, which is the point.
+/// `the_model_only_bar_rejects_a_store_with_no_defect` is where it earns its
+/// place — it drives this store through every scenario the witness table holds
+/// and asserts it agrees with `crate::correct` on all of them, so no witness for
+/// it could be written.
 pub(crate) struct HidingPlaceStore;
 
 impl Defect for HidingPlaceStore {

@@ -64,6 +64,7 @@ mod racers;
 #[path = "mutation_coverage/variants.rs"]
 mod variants;
 
+use happenstance_core::{Query, ReadOptions, SequencedEvent};
 use harness::{Origin, RUNTIME_PANICS, SubjectReport, Verdict};
 
 // =====================================================================
@@ -86,12 +87,34 @@ enum Kind {
     /// a mutant with an empty `fails` list is rejected outright, because a
     /// defect nothing catches is a defect nobody knows about. This kind is what
     /// makes "nothing in this family catches it, and here is what does" a
-    /// *checked* claim. It carries two obligations rather than one — every rule
-    /// of the family must pass or skip for a declared reason, exactly as for a
-    /// mutant with nothing in `fails`, **and** [`MODEL_COVERAGE`] must claim it
-    /// [`ModelOutcome::Rejected`] — and `mutant_registry_is_exhaustive` holds
-    /// both. Drop the second and this becomes a filing cabinet for stores
-    /// nothing detects.
+    /// *checked* claim.
+    ///
+    /// It carries **three** obligations, and the split between them is the whole
+    /// design:
+    ///
+    /// 1. Every rule of the event-store family must pass or skip for a declared
+    ///    reason — exactly as for a mutant with nothing in `fails`. That is the
+    ///    claim *"no rule sees it"*, measured rather than asserted, by
+    ///    `mutants_fail_exactly_their_declared_rules`.
+    /// 2. It must carry a [`Witness`] in [`MODEL_ONLY_WITNESSES`]: a fixed log
+    ///    and read on which its own `Defect::select` answers differently from
+    ///    [`crate::correct`]. That is the claim *"it is defective at all"*, and
+    ///    it holds in **every feature configuration**, which is what obligation
+    ///    3 cannot do.
+    /// 3. [`MODEL_COVERAGE`] must claim it [`ModelOutcome::Rejected`], and the
+    ///    model must deliver it. That is the claim *"the model is what catches
+    ///    it"*.
+    ///
+    /// Obligation 2 was not there when this kind landed, and its absence was a
+    /// real hole rather than a theoretical one. An adversarial review registered
+    /// [`crate::mutants::HidingPlaceStore`] — a bare `impl Defect` with no
+    /// defect whatever — under this kind, satisfying 1 honestly and 3 with a
+    /// lie, and `cargo test --no-default-features --test mutation_coverage`
+    /// reported nine passes, because obligation 3 is behind
+    /// `#[cfg(feature = "proptest")]` and `cargo hack`'s powerset builds that
+    /// configuration. `Kind::Mutant` is unabusable because its bar is data in
+    /// this same table; a kind that borrows a *family* for its bar can have the
+    /// bar compiled out from under it.
     ///
     /// The shape it exists for is a defect that needs a *query* and a *read
     /// option* together, where the family's rules for that option all issue
@@ -844,14 +867,6 @@ const REGISTRY: &[Declared] = &[
              backfill worker owning `[1, H]` while a tail worker owns everything above it: the \
              backfill reads past its own window and re-delivers events the tail worker has \
              already processed, with no error anywhere.",
-        mode: FailureMode::Assertion,
-        expect: &[],
-    },
-    Declared {
-        name: "HidingPlaceStore",
-        kind: Kind::ModelOnlyMutant,
-        fails: &[],
-        provenance: "**the adversarial refutation of `Kind::ModelOnlyMutant`, and it currently              passes.** A bare `impl Defect` carrying only `NAME`: every step is              `crate::correct`'s, so this store has no defect whatever. It is filed here              under a kind whose entire justification is that something else catches it,              and the obligation that would notice — `MODEL_COVERAGE` claiming `Rejected`              and the model delivering it — is behind `#[cfg(feature = \"proptest\")]`.              Under `--no-default-features` this row is accepted in silence, and              `cargo hack`'s feature powerset builds exactly that configuration.",
         mode: FailureMode::Assertion,
         expect: &[],
     },
@@ -2164,6 +2179,68 @@ const REGISTRY: &[Declared] = &[
     },
 ];
 
+/// A deterministic disagreement between a store's own read path and
+/// [`crate::correct`]'s — the bar [`Kind::ModelOnlyMutant`] is held to in
+/// **every** feature configuration.
+///
+/// # Why the kind needed one
+///
+/// [`Kind::Mutant`] is unabusable because its bar is *data in the same table*: a
+/// non-empty `fails` list, checked wherever the registry compiles at all. The
+/// model-only kind was landed with a bar that borrowed another family instead —
+/// `MODEL_COVERAGE` must claim `Rejected` — and a family can be compiled out.
+/// An adversarial review demonstrated it: `HidingPlaceStore`, a store with no
+/// defect whatever, was registered under this kind with an empty `fails` list
+/// and a `MODEL_COVERAGE` row claiming `Rejected`, and
+/// `cargo test --no-default-features --test mutation_coverage` reported nine
+/// passes. `cargo hack`'s feature powerset builds that configuration, so it was
+/// reachable in the real gate.
+///
+/// This table is the repair, and it is deliberately not a second claim. A claim
+/// can be written down falsely; this holds a *scenario* and a **function
+/// pointer to the mutant's own `Defect::select`**, and
+/// `every_model_only_mutant_demonstrates_its_defect` does the comparing. To
+/// satisfy it a store has to actually answer a read differently from the
+/// reference implementation, in a run that needs no generator, no runtime and no
+/// optional dependency.
+///
+/// # Why it is not extended to every mutant
+///
+/// Because for every other kind the rule *is* the witness, and a second one
+/// would be a snapshot of what the rule already asserts —
+/// `mutants_fail_exactly_their_declared_rules` drives each declared failure and
+/// `Declared::expect` pins which assertion fired. The witness exists only where
+/// no rule of this family can see the defect, which is exactly the hole the kind
+/// names.
+/// A `Defect::select`, as a value.
+///
+/// Named for `clippy::type_complexity`, and it earns the name anyway: it is the
+/// signature every mutant's read path has, and writing it once says that the
+/// witness holds *the store's own function* rather than a copy of it.
+type SelectFn =
+    fn(&[SequencedEvent], &Query, ReadOptions) -> Result<Vec<SequencedEvent>, correct::LogError>;
+
+#[derive(Debug)]
+struct Witness {
+    /// The `REGISTRY` row this witness answers for.
+    name: &'static str,
+    /// The mutant's own read path, as a function pointer.
+    ///
+    /// `<T as Defect>::select` rather than a re-implementation, so the thing
+    /// measured is the store itself and a witness cannot drift away from the
+    /// defect it demonstrates.
+    select: SelectFn,
+    /// The log to read, the query, and the options — all fixed.
+    scenario: fn() -> (Vec<SequencedEvent>, Query, ReadOptions),
+}
+
+/// One row per [`Kind::ModelOnlyMutant`] in [`REGISTRY`], and no others.
+const MODEL_ONLY_WITNESSES: &[Witness] = &[Witness {
+    name: "UnparenthesisedToPredicateStore",
+    select: <mutants::UnparenthesisedToPredicateStore as mutants::Defect>::select,
+    scenario: mutants::to_precedence_scenario,
+}];
+
 /// Hands every registered store **type** to `$callback`.
 ///
 /// Mirrors `happenstance_testkit::for_each_event_store_rule!`, and for the same
@@ -2223,7 +2300,6 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedToPredicateStore>,
-            crate::mutants::MutantFixture<crate::mutants::HidingPlaceStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
             crate::mutants::MutantFixture<crate::mutants::AfterValidatedAgainstHeadStore>,
@@ -2522,10 +2598,6 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // `Kind::ModelOnlyMutant`: the one store in this binary that no rule of the
     // event-store family can see. This row is the whole of what catches it.
     ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
-    // The refutation's row, and the claim is a lie: this store has no defect, so
-    // the model agrees with it. Under `--all-features` that lie is caught here.
-    // Under `--no-default-features` this table is not compiled and nothing is.
-    ("HidingPlaceStore", ModelOutcome::Rejected),
     // A *value* boundary rather than a missing field: `Op::Read`'s limit is
     // `Option<usize>` over `1..4` and never proposes the zero this store
     // mishandles.
@@ -2891,9 +2963,10 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 /// that `cargo test mutation_coverage::every_rule_has_a_mutant` resolves.
 mod mutation_coverage {
     use super::{
-        Declared, FailureMode, Kind, Origin, RACERS, REGISTRY, RUNTIME_PANICS, RacerOutcome,
-        Verdict, all_concurrency_rules, all_projection_rules, all_rules, declared, racer_names,
-        racer_reports, registered_names, registered_second_handle, reports,
+        Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
+        RUNTIME_PANICS, RacerOutcome, Verdict, all_concurrency_rules, all_projection_rules,
+        all_rules, declared, racer_names, racer_reports, registered_names,
+        registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
     use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
@@ -3063,20 +3136,37 @@ mod mutation_coverage {
                      the list",
                     entry.name
                 );
-                // The obligation that stops this kind being a filing cabinet.
-                // `Kind::Mutant`'s bar is "something catches it", enforced by a
-                // non-empty `fails`; this kind moves that bar one family over
-                // rather than removing it, and without this assertion a store
-                // nothing detects at all could be parked here and read as
-                // accounted for.
+                // Obligation two, and it is feature-**independent**, which is
+                // the whole repair. The kind shipped with only the `cfg`-gated
+                // obligation below, and an adversarial review registered
+                // `HidingPlaceStore` — a store with no defect at all — under
+                // this kind, with an empty `fails` list and a `MODEL_COVERAGE`
+                // row claiming `Rejected`, and watched
+                // `--no-default-features` report nine passes. `Kind::Mutant` is
+                // unabusable because its bar is data in this same table;
+                // borrowing a family for a bar means the bar can be compiled
+                // out, and `cargo hack`'s powerset compiles exactly that.
                 //
-                // The `cfg` is honest rather than convenient: `MODEL_COVERAGE`
-                // is itself behind `proptest`, so without that feature the
-                // model family is not compiled and this store is driven by
-                // nothing that can see it. That is a property of the feature
-                // and not of the row, and it is the same hole every
-                // `proptest`-gated claim in this file has. The gate builds this
-                // binary with `--all-features`.
+                // Presence here is only half of it: a row can be added as
+                // easily as a claim. `every_model_only_mutant_demonstrates_its_defect`
+                // is the other half — it runs the witness and compares the
+                // store's own answer against `crate::correct`'s.
+                assert!(
+                    MODEL_ONLY_WITNESSES
+                        .iter()
+                        .any(|witness| witness.name == entry.name),
+                    "`{}` is filed as caught only by the model family and carries no \
+                     `MODEL_ONLY_WITNESSES` row, so nothing in this build has shown it is \
+                     defective at all. Add a fixed scenario on which its own `Defect::select` \
+                     disagrees with `crate::correct`",
+                    entry.name
+                );
+
+                // Obligation three, and the one that needs the model family
+                // itself: not merely *a* defect, but one this binary's model
+                // actually rejects. It can only be checked where that family is
+                // compiled, which is why obligation two above exists and does
+                // not depend on it.
                 #[cfg(feature = "proptest")]
                 {
                     let claimed = MODEL_COVERAGE
@@ -3101,6 +3191,114 @@ mod mutation_coverage {
                  rule is over-specified (CF-6)",
                 entry.name
             ),
+        }
+    }
+
+    /// Every [`Kind::ModelOnlyMutant`] really is defective, measured rather
+    /// than claimed — in **every** feature configuration.
+    ///
+    /// The kind's other two obligations are both statements *about* a store: its
+    /// `fails` list is empty, and `MODEL_COVERAGE` says the model rejects it.
+    /// The first is true of a correct store as well, and the second is behind
+    /// `proptest`. Between them they left the configuration `cargo hack` builds
+    /// with no bar at all, and an adversarial review walked `HidingPlaceStore`
+    /// straight through it.
+    ///
+    /// This runs the store's own [`crate::mutants::Defect::select`] against a
+    /// fixed log and read, and requires it to answer differently from
+    /// [`crate::correct::select`]. No generator, no runtime, no feature — the
+    /// same shape as the experiment crate's `defect_is_real.rs`, which exists
+    /// for the same reason one family over.
+    ///
+    /// Both directions, because an orphan witness is a scenario nobody runs
+    /// against anything and reads as coverage.
+    #[test]
+    fn every_model_only_mutant_demonstrates_its_defect() {
+        for entry in REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ModelOnlyMutant)
+        {
+            let witness = MODEL_ONLY_WITNESSES
+                .iter()
+                .find(|witness| witness.name == entry.name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{}` is a `ModelOnlyMutant` with no witness; \
+                         `mutant_registry_is_exhaustive` owns this failure",
+                        entry.name
+                    )
+                });
+
+            let (log, query, options) = (witness.scenario)();
+            let observed = (witness.select)(&log, &query, options);
+            let correct = crate::correct::select(&log, &query, options);
+
+            let disagrees = match &observed {
+                Ok(events) => events != &correct,
+                // A read that fails where the correct one succeeds is a
+                // disagreement too, and the sharpest kind.
+                Err(_) => true,
+            };
+            assert!(
+                disagrees,
+                "`{}` is filed as a defect only the model family can see, and its own witness \
+                 does not show a defect at all: reading {query:?} under {options:?} it answered \
+                 exactly what `crate::correct` answers, {correct:?}. Either the witness is the \
+                 wrong scenario or the store has stopped being wrong",
+                entry.name
+            );
+        }
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let owner = declared(witness.name);
+            assert!(
+                owner.is_some_and(|entry| entry.kind == Kind::ModelOnlyMutant),
+                "`{}` has a `MODEL_ONLY_WITNESSES` row and is not a registered \
+                 `ModelOnlyMutant`, so the scenario is never evaluated against anything and \
+                 reads as coverage",
+                witness.name
+            );
+        }
+    }
+
+    /// The positive control on the bar above: a store with **no defect** cannot
+    /// satisfy it.
+    ///
+    /// Without this, `every_model_only_mutant_demonstrates_its_defect` is
+    /// satisfied by a comparison that always reports a disagreement — the same
+    /// vacuity `conformant_variants_pass_everything` exists to rule out one
+    /// table over. [`crate::mutants::HidingPlaceStore`] is the review's own
+    /// refutation, kept in the tree and driven through **every** scenario the
+    /// witness table holds; it agrees with `crate::correct` on all of them, so
+    /// no witness for it could be written.
+    ///
+    /// What this does and does not prove: it does not prove that *no* scenario
+    /// anywhere would separate a defect-free store from the reference
+    /// implementation — nothing could, and the two are the same function. It
+    /// proves the comparison is a real one, over the exact inputs the bar
+    /// accepts today.
+    #[test]
+    fn the_model_only_bar_rejects_a_store_with_no_defect() {
+        assert!(
+            !MODEL_ONLY_WITNESSES.is_empty(),
+            "no witnesses, so this control asserts nothing"
+        );
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let (log, query, options) = (witness.scenario)();
+            let hiding = <crate::mutants::HidingPlaceStore as crate::mutants::Defect>::select(
+                &log, &query, options,
+            )
+            .expect("the correct read path is infallible");
+            assert_eq!(
+                hiding,
+                crate::correct::select(&log, &query, options),
+                "`HidingPlaceStore` overrides no step of `Defect` and must therefore answer \
+                 every read exactly as `crate::correct` does. It did not, on `{}`'s scenario — \
+                 which means the witness comparison is measuring something other than the \
+                 defect, and every row it passes is suspect",
+                witness.name
+            );
         }
     }
 
