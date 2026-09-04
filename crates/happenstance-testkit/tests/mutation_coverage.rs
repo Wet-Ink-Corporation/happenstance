@@ -1784,10 +1784,23 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "SwallowedReadFaultStore",
         kind: Kind::Mutant,
-        fails: &[],
-        provenance: "`let Ok(page) = fetch().await else { return Poll::Ready(None) };` — a failed              page fetch reported as the end of the stream. It is the most natural way to get a              fallible fetch past a `poll_next` that must return a value, and both adapters that              will need one are already in the tree: `happenstance-cloudflare` over `SqlStorage`              and `happenstance-neon` over one-shot HTTP, neither of which can hold a cursor open              across polls. The port expresses the failure per item and this store declines to use              it. What the consumer sees is a short, SUCCESSFUL read: a projection runner applies              two events of five, commits the checkpoint at the truncation point, and the rest are              never applied — with `Ok` everywhere and no error to log. Who finds out is whoever              reconciles the read model against the log, months later.",
+        fails: &["arming_a_read_fault_makes_the_stream_yield_an_error"],
+        provenance: "`let Ok(page) = fetch().await else { return Poll::Ready(None) };` \
+             — a failed page fetch reported as the end of the stream. It is the most \
+             natural way to get a fallible fetch past a `poll_next` that must return a \
+             value, and both adapters that will need one are already in the tree: \
+             `happenstance-cloudflare` over `SqlStorage` and `happenstance-neon` over \
+             one-shot HTTP, neither of which can hold a cursor open across polls. The port \
+             expresses the failure per item and this store declines to use it. What the \
+             consumer sees is a short, SUCCESSFUL read: a projection runner applies two \
+             events of five, commits the checkpoint at the truncation point, and the rest \
+             are never applied, with `Ok` everywhere and no error to log. Who finds out is \
+             whoever reconciles the read model against the log, months later.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        expect: &[(
+            "arming_a_read_fault_makes_the_stream_yield_an_error",
+            "MUST cause the next read's stream to yield an `Err` ITEM",
+        )],
     },
     Declared {
         name: "AwaitAcrossBorrowStore",
@@ -3941,6 +3954,7 @@ mod mutation_coverage {
                     *reason == DecliningFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningFixture::REOPEN_REASON
                         || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
+                        || *reason == DecliningFixture::READ_FAULT_REASON
                         // CF-40: a fixture with no ceiling reports the testkit's
                         // reason rather than its own, because the sentence is the
                         // same for every store that has none. See

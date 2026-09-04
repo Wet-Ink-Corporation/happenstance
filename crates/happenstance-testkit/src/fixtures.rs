@@ -285,6 +285,19 @@ impl Fixture for MemoryFixture {
          from discarding the events",
     );
 
+    // Stated rather than inherited, because the reference fixture is the one an
+    // adapter author copies and a capability nobody mentions is a capability
+    // nobody thinks about. The reason is the real one and it is REOPEN's shape:
+    // this store reads by iterating a `Vec` it already holds, so there is no
+    // fetch part way through to fail. Injecting one means *wrapping* the store,
+    // which is what `FaultyStore` is for — and `tests/faulty_store_conformance.rs`
+    // is where that wrapper declares this capability supported.
+    const READ_FAULT: Capability = Capability::declined(
+        "MemoryEventStore reads by iterating a Vec it already holds, so there is \
+         no fetch part way through a read to fail; injecting one means wrapping \
+         the store, which is what FaultyStore is for",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`: acquiring this handle is a refcount
         // bump, and pretending otherwise would hide that a real fixture's

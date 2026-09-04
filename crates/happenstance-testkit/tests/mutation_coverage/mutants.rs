@@ -4919,12 +4919,26 @@ impl Fixture for SwallowedReadFaultFixture {
         "a Vec behind an Rc, with no durable medium to reopen over — this \
          instrument's axis is what a read fault does to a paged stream",
     );
+    const READ_FAULT: Capability = Capability::SUPPORTED;
 
     async fn connect(&self) -> Self::Store {
         SwallowedReadFaultStore {
             log: Rc::clone(&self.log),
             fault_after: Rc::clone(&self.fault_after),
         }
+    }
+
+    // Fail the *second* page fetch, so that one page has already been delivered
+    // when the failure arrives. A fault at the first would make the swallowed
+    // answer an empty stream, which a rule could confuse with an empty store; a
+    // fault at the second makes it a **short** read — the shape that is
+    // indistinguishable from a complete read of a smaller log, and the one a
+    // projection runner checkpoints past.
+    //
+    // Set through the `Rc<Cell<_>>` every handle shares, so it reaches the
+    // handle the rule connected before arming.
+    async fn arm_read_fault(&self) {
+        self.fault_after.set(Some(1));
     }
 }
 

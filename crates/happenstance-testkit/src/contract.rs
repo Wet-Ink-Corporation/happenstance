@@ -266,6 +266,55 @@ pub trait Fixture {
          to come from the adapter and this one has none to offer",
     );
 
+    /// Whether this fixture can make its store **fail part way through a
+    /// `read`**.
+    ///
+    /// [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)'s sibling on the other path.
+    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// `Result<SequencedEvent, Self::Error>` **per item**, so the port has an
+    /// error arm on the read side and, until this constant, nothing in the suite
+    /// ever reached it: no rule induced a read fault, no mutant modelled one, and
+    /// `Fixture` had a write-path seam and no read-path analogue.
+    ///
+    /// # Why this is a fixture capability and not a decorator
+    ///
+    /// [`FaultyStore`](crate::FaultyStore) *is* the decorator, and it is the
+    /// reason this capability is worth having rather than a reason it is not:
+    /// a wrapper can fail a stream it produced, which is why
+    /// `tests/faulty_store_conformance.rs` can declare this capability, and it
+    /// cannot fail an adapter's *own* fetch. The defect this exists to catch
+    /// lives inside a `poll_next` an outside caller never sees —
+    /// `let Ok(page) = fetch().await else { return Poll::Ready(None) };` — and
+    /// reaching it needs the store's co-operation, exactly as reaching between
+    /// two rows of an `append` does.
+    ///
+    /// So the injection is the adapter's: a connection dropped between two
+    /// pages, an HTTP round trip that 503s, a cursor invalidated by the server.
+    /// A store with no way to fail a read declines, and the default below is that
+    /// answer.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// [`arming_a_read_fault_makes_the_stream_yield_an_error`](crate::rules::arming_a_read_fault_makes_the_stream_yield_an_error)
+    /// arms the fault and requires the next read's stream to yield an `Err`
+    /// **item** rather than to end. Where inside the read it fires is the
+    /// adapter's business — first poll, page boundary, mid-page — for
+    /// [`arm_commit_fault`](ProjectionFixture::arm_commit_fault)'s reason: a
+    /// `read` is one call whose granularity is the adapter's, and naming an index
+    /// would be the testkit asserting a paging model the port does not have.
+    ///
+    /// CF-39's shape, one path over: a fixture whose
+    /// [`arm_read_fault`](Self::arm_read_fault) does nothing would otherwise
+    /// contribute a green result about a store nothing ever faulted. **A store
+    /// that can absorb every read fault its fixture is able to arm MUST decline
+    /// this capability with that as its stated reason**, rather than declare it
+    /// and contribute a full, successful read.
+    const READ_FAULT: Capability = Capability::declined(
+        "this fixture cannot make its store fail part way through a `read`; the \
+         failure lives inside the adapter's own fetch, so the injection has to \
+         come from the adapter and this one has none to offer",
+    );
+
     /// The largest `data` payload this fixture's store accepts, in bytes, or
     /// `None` if it has no ceiling.
     ///
@@ -358,6 +407,40 @@ pub trait Fixture {
                  either this fixture declares MID_BATCH_FAULT supported and does \
                  not override it, or a rule reached it without a \
                  `require!(F: MID_BATCH_FAULT)` gate"
+            );
+        }
+    }
+
+    /// Arms the store so that the **next** `read` fails part way through.
+    ///
+    /// The fault fires once. Where inside the read it fires is the adapter's
+    /// business — first poll, page boundary, mid-page — and it takes no index
+    /// for [`READ_FAULT`](Self::READ_FAULT)'s stated reason: a `read` is one call
+    /// whose granularity belongs to the adapter, so naming a position would be
+    /// the testkit asserting a paging model the port does not have. What
+    /// [`arming_a_read_fault_makes_the_stream_yield_an_error`](crate::rules::arming_a_read_fault_makes_the_stream_yield_an_error)
+    /// requires is only that the stream yields an `Err` **item** rather than
+    /// ending, which is the one thing the port makes observable.
+    ///
+    /// Arming MUST reach a handle the caller already holds. A rule connects
+    /// before it arms, exactly as the mid-batch rules do, so a fixture whose
+    /// arming is applied at `connect` and nowhere else arms nothing the rule can
+    /// see.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for [`reopen`](Self::reopen)'s reason and with
+    /// the same two ways of reaching it: a fixture that declares
+    /// [`READ_FAULT`](Self::READ_FAULT) supported and forgets the override, or a
+    /// rule that reached here without a `require!` gate.
+    fn arm_read_fault(&self) -> impl Future<Output = ()> {
+        let _ = self;
+        async move {
+            panic!(
+                "`Fixture::arm_read_fault` was called but not implemented: \
+                 either this fixture declares READ_FAULT supported and does not \
+                 override it, or a rule reached it without a \
+                 `require!(F: READ_FAULT)` gate"
             );
         }
     }

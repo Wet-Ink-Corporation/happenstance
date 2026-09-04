@@ -32,6 +32,35 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **A second conformance rule, breaking in practice for the same reason: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
+  `Fixture::READ_FAULT` and `Fixture::arm_read_fault` — both **defaulted**, so no
+  existing fixture has to change and a fixture that says nothing declines and
+  reports a skip.
+
+  It closes a hole with a shape worth stating: `EventStore::read` yields
+  `Result<SequencedEvent, Self::Error>` **per item**, and until now nothing in
+  the suite ever reached that `Err` arm. `Fixture` carried `MID_BATCH_FAULT` for
+  the write path and no read-path analogue, so no rule could induce a read
+  fault, no mutant modelled one, and the wrong implementation is one line:
+
+  ```text
+  let Ok(page) = fetch().await else { return Poll::Ready(None) };
+  ```
+
+  A failed fetch reported as the end of the log. Every consumer downstream reads
+  `Ok`: a projection runner replays a short prefix, checkpoints at the truncation
+  point, and never applies the rest — with no error anywhere to log. The store
+  measured **0 of 89** rules failed with no way to arm it, and **22** with the
+  fault armed by hand; the suite was not blind to the consequence, it had no way
+  to produce one. It is now `SwallowedReadFaultStore` in the testkit's own
+  mutation registry, and `PagedStreamStore` beside it is the same paging store
+  meeting the same fault and yielding the `Err` the port provides for.
+
+  A fixture whose store can absorb every read fault it is able to arm MUST
+  decline the capability with that as its stated reason, which is CF-39's shape
+  one path over.
 - **One conformance rule, and it is breaking in practice: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`read_from_composes_with_limit`**, the ninetieth event-store rule. An

@@ -237,7 +237,7 @@ the result. Every capability-gated rule then passes silently, and the adapter's
 CI reports a full green suite in which `acknowledged_writes_survive_a_reopen`
 never ran and nothing anywhere says so.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1017 (a rule's outcome must be reported)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1100 (a rule's outcome must be reported)` ·
 `crates/happenstance-testkit/src/registry.rs:51 (It is not asked politely)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(the reporting
 obligation this attribute mechanises)*

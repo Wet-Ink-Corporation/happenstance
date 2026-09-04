@@ -243,6 +243,27 @@ impl Fixture for CloudflareFixture {
     /// fault could never satisfy.
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Declined **by scope, not by incapacity**, and the difference matters more
+    /// here than anywhere else in the workspace: this is one of the two adapters
+    /// the read-fault capability was written for.
+    ///
+    /// `SqlStorage` is synchronous inside the object, so this adapter's `read`
+    /// does not fetch a page at a time across an `await` — which is the shape
+    /// the capability exists to fault. The moment it does, the injection is
+    /// already to hand and is the one [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)
+    /// uses: a trigger installed through the object's own SQL. Wiring it is not
+    /// this story's, and declaring the capability while arming nothing is
+    /// `NoopFaultFixture`'s shape one path over — a green result about a read
+    /// nothing ever faulted, which is what the rule's own message forbids.
+    const READ_FAULT: Capability = Capability::declined(
+        "by scope, not by incapacity. This adapter's read does not fetch a page \
+         at a time across an await, so there is no fetch between two pages to \
+         fail; the injection a paged read would need is the one MID_BATCH_FAULT \
+         already uses here, a trigger installed through the object's own SQL, \
+         and declaring the capability before that read exists would report a \
+         green result about a read nothing had faulted",
+    );
+
     /// 1 MiB, and it is a *stated* ceiling rather than the physical maximum.
     ///
     /// The distinction is the honest part. CF-40 asks that the declared value be

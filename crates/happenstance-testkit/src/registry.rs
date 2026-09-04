@@ -214,6 +214,9 @@ macro_rules! for_each_event_store_rule {
             read_result_is_stable_under_concurrent_append,
             query_items_share_one_snapshot,
 
+            // --- The read path's error arm ----------------------------------
+            arming_a_read_fault_makes_the_stream_yield_an_error,
+
             // --- Position visibility ---------------------------------------
             nothing_below_an_observed_position_appears_later,
         }
