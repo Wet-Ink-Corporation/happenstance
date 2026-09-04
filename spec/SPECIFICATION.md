@@ -2751,7 +2751,7 @@ rather than the breadth: `LocalMemoryEventStore`
 `impl EventStore for` in a genuinely downstream crate, sitting beside the
 blanket impl without `error[E0119]` and passing every rule natively and on
 `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:146`) and
+(`crates/happenstance-cloudflare/src/event_store.rs:950`) and
 `happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
 `:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
@@ -4071,7 +4071,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1067`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
-`crates/happenstance-cloudflare/src/event_store.rs:146` and
+`crates/happenstance-cloudflare/src/event_store.rs:950` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
