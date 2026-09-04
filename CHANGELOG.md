@@ -570,6 +570,36 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-sqlite`, `projection-store` feature):
+  `SqliteBatch::push` takes `&'static str`, and the free-form spelling moved to
+  `SqliteBatch::push_raw_sql`.** The batch is the only place in the workspace a
+  consumer is handed a SQL-text seam, and the values flowing through it are
+  exactly the bytes this library guarantees it does not inspect — ADR-0003 makes
+  payloads opaque `Bytes`. So a statement `format!`-ed around an account name
+  decoded out of an event payload compiled, read like the type-level doc
+  invited, and was a SQL injection whose source was the event log. It commits
+  inside the same `BEGIN IMMEDIATE` that advances the checkpoint, so a
+  successful one is recorded as *progress*: nothing replays those events and
+  nothing re-derives the corrupted rows.
+
+  A paragraph would have been a control nothing enforces —
+  `standards/rust/70-rustdoc-obligations.md`, RS-70-5: *"Nothing in the gate
+  reads prose."* `&'static str` is the narrowest type that admits every
+  statement written in source and refuses every statement assembled at run time,
+  and a `compile_fail,E0308` doctest on `push` is what holds it. Every caller in
+  this workspace — the crate's own two probe writers and
+  `examples/transfers-on-sqlite` — already passed a literal and is untouched.
+
+  `push_raw_sql` is the escape hatch, for the one case the narrower type cannot
+  express: a statement whose *shape* is computed, of which an `IN (…)` list
+  sized at run time is the honest example. It is separately named so that
+  reaching for it is a decision.
+
+  What this does **not** settle is the seam's final shape. ADR-0017 answered
+  what the batch owns; whether the parameterised path should be a statement type
+  minted by a macro rather than a bare `&'static str` belongs with whoever
+  freezes `ProjectionStore` under PS-2, because a signature narrowed twice is
+  worse than one narrowed once. A brief is staged in `.kb/_intake/`.
 - **`SqliteEventStore::planned_statement_count` counts the real partition, so
   the number it returns for a query of wide items has changed.** The signature is
   untouched and the count is unchanged for every query whose items are narrow —

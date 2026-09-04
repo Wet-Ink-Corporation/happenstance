@@ -185,7 +185,7 @@ Error, both enums:
     NoRuntime(#[from] TryCurrentError),
 ```
 — `crates/happenstance-sqlite/src/event_store.rs:928, 942, 950`; repeated verbatim in
-`SqliteProjectionStoreError` at `crates/happenstance-sqlite/src/projection_store.rs:452, 464, 468`.
+`SqliteProjectionStoreError` at `crates/happenstance-sqlite/src/projection_store.rs:532, 544, 548`.
 Imports at `crates/happenstance-sqlite/src/event_store.rs:128-131`.
 
 Construction (bring-your-own-connection):
@@ -212,7 +212,7 @@ Projection write vocabulary:
     pub fn push(&mut self, sql: impl Into<String>, params: impl IntoIterator<Item = Value>) {
     pub fn params(&self) -> &[Value] {
 ```
-— `crates/happenstance-sqlite/src/projection_store.rs:423, 382`, where `Value` is
+— `crates/happenstance-sqlite/src/projection_store.rs:473, 382`, where `Value` is
 `rusqlite::types::Value` (`:111`), documented as such at `:367-369`.
 
 **The audit's own correction stands, and I re-verified it.** The happy path is

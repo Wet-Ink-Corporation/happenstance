@@ -132,6 +132,19 @@ sequenced first. Both halves of `X-1` are implemented; the `Selectivity::read_fo
 half is the one that brief's option B would discard, exactly as it predicted, and
 a note recording that sits in its own sequencing section.
 
+## And these from the sqlite-ceilings lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `projection-batch-sql-seam.md` | Is `&'static str` the projection batch's final SQL seam, or does the parameterised path get a minted statement type? | **breaking** (landed) / breaking again for the type | soft — the flag already disclaims semver |
+
+Written by the lane implementing `X-4`, `U-2`, `I-5`, `R-1+J-5` and `R-3`, in the
+same session as the changes they describe, and **without** the author -> two-critic
+-> revision pass. Same discount. Like the query-ceilings lane's brief, one of these
+answers a question the lane had to settle rather than defer: leaving `push` taking
+`impl Into<String>` was not an option the fix could carry, so the narrowing landed
+and the brief states the argument against it.
+
 ## Three that block other work
 
 - **`fixture-declension-policy.md`** is the keystone for the whole testkit wave: it
