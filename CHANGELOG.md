@@ -565,7 +565,7 @@ not the same as what a user needed to be told.
   `tokio` line; a consumer who pins a different *major* gets the
   two-types-that-print-identically failure, and `cargo tree -d` names it. The
   omission is fenced by a `compile_fail,E0433` doctest on the old path
-  (`crates/happenstance-sqlite/src/lib.rs:154`), so re-adding the re-export
+  (`crates/happenstance-sqlite/src/lib.rs:158`), so re-adding the re-export
   turns a test red rather than passing unnoticed.
 
 ### Changed
