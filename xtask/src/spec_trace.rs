@@ -713,6 +713,19 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
+    // 10. Every case is claimed by a clause — CF-38's fourth stated condition,
+    //     which nothing has ever performed. The checker reads `E2E-CASES.md` in
+    //     one direction only, so a `Cases:` line that drops a single-claim case
+    //     orphans it silently. §7.6 names the four cases that can happen to and
+    //     then leaves them unguarded.
+    check_case_ownership(&clauses, &known_cases, &mut problems);
+
+    // 11. CF-36 — a clause backed only by integration- or scenario-level cases
+    //     names no conformance rule. The level markers are in `E2E-CASES.md`
+    //     and nothing has ever read them.
+    let levels = collect_case_levels(&cases_doc);
+    check_case_levels(&clauses, &levels, &mut problems);
+
     // 6. Every conformance rule is claimed by a clause, or disposed of by one,
     //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
     let unclaimed_pending = check_rule_ownership(&clauses, &known_rules, &mut problems);
@@ -1186,6 +1199,40 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
         Unresolvable::Scheduled("the projection runner's own rules"),
     ),
 ];
+
+/// Check 10 — every E2E case is claimed by at least one clause.
+///
+/// Empty on purpose in this commit: this is the check CF-38 lists fourth and
+/// nobody wrote, written down so that its absence can be executed rather than
+/// argued about. `run` reads `E2E-CASES.md` in one direction only —
+/// [`collect_cases`] builds the set check 5 resolves a clause's `Cases:` line
+/// against — and there is no reverse traversal at all.
+fn check_case_ownership(
+    clauses: &[Clause],
+    known_cases: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) {
+    let _ = (clauses, known_cases, problems);
+}
+
+/// Every case's `Level:` marker, by case id.
+///
+/// Empty on purpose in this commit, for the same reason: `grep -c "Level"
+/// xtask/src/spec_trace.rs` returns 0 at `9b06836`, against 58 markers in the
+/// document CF-36 says this file cross-references.
+fn collect_case_levels(cases_doc: &str) -> BTreeMap<String, String> {
+    let _ = cases_doc;
+    BTreeMap::new()
+}
+
+/// Check 11 — CF-36's cross-reference, which nothing performs.
+fn check_case_levels(
+    clauses: &[Clause],
+    levels: &BTreeMap<String, String>,
+    problems: &mut Vec<String>,
+) {
+    let _ = (clauses, levels, problems);
+}
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
 /// record as owing a decision. Returns the third group, for the summary.
@@ -3302,6 +3349,86 @@ mod tests {
         );
     }
 
+    // ---- Q-03/Q-04: the checks five FROZEN clauses name and nobody wrote ----
+
+    /// CF-38's fourth condition. §7.6 names the hazard about itself — *"Single-
+    /// claim cases are the ones a later edit can orphan without anyone
+    /// noticing"* — and then leaves it unguarded: E2E-14 is claimed by SY-6
+    /// alone, and dropping it from that one `Cases:` line reports nothing.
+    #[test]
+    fn a_case_no_clause_claims_is_reported() {
+        let mut problems = Vec::new();
+        let known: BTreeSet<String> = ["E2E-13", "E2E-14"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+
+        check_case_ownership(
+            &one_clause_with("SY-6", "`wire_condition_with_after_is_refused`", "E2E-13"),
+            &known,
+            &mut problems,
+        );
+
+        assert!(
+            problems.iter().any(|p| p.contains("E2E-14")),
+            "a case the whole document has stopped claiming must be named; got {problems:?}"
+        );
+        assert!(
+            !problems.iter().any(|p| p.contains("E2E-13")),
+            "a claimed case is not an orphan; got {problems:?}"
+        );
+    }
+
+    /// CF-36's own instrument. The marker is in the document 58 times and this
+    /// file has never read one.
+    #[test]
+    fn every_case_level_marker_is_collected() {
+        let doc = "### E2E-01 — a case\n\n- **Level:** contract\n\n\
+                   ### E2E-02 — another\n\n- **Level:** integration\n";
+        let levels = collect_case_levels(doc);
+
+        assert_eq!(levels.get("E2E-01").map(String::as_str), Some("contract"));
+        assert_eq!(
+            levels.get("E2E-02").map(String::as_str),
+            Some("integration")
+        );
+    }
+
+    /// CF-36 itself: a clause whose only cases are integration-level may not
+    /// name a conformance rule, because such a rule cannot be run by an adapter
+    /// author against their own crate — which is the one thing the suite is for.
+    #[test]
+    fn a_clause_backed_only_by_integration_cases_may_not_name_a_rule() {
+        let levels: BTreeMap<String, String> = [
+            ("E2E-28".to_owned(), "integration".to_owned()),
+            ("E2E-01".to_owned(), "contract".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-40", "`a_rule_of_its_own`", "E2E-28"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("PS-40")),
+            "got {problems:?}"
+        );
+
+        let mut allowed = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-41", "`a_rule_of_its_own`", "E2E-28, E2E-01"),
+            &levels,
+            &mut allowed,
+        );
+        assert!(
+            allowed.is_empty(),
+            "one contract-level case is enough to satisfy CF-36; got {allowed:?}"
+        );
+    }
+
     // ---- S-5: a prose word may not switch off a clause's rule-name check ----
 
     /// A slice of the document shaped like a clause declaration, so
@@ -3312,6 +3439,24 @@ mod tests {
             "#### {id} — a declaration shaped like the document's\n\n\
              `[FROZEN]`\n\
              `Rule:` {rule_line}\n\
+             `Rejects:` a store that does the opposite\n"
+        );
+        let clauses = parse_clauses(&document);
+        assert_eq!(
+            clauses.len(),
+            1,
+            "the fixture must parse as exactly one clause"
+        );
+        clauses
+    }
+
+    /// A clause fixture carrying a `Cases:` line as well as a `Rule:` one.
+    fn one_clause_with(id: &str, rule_line: &str, cases: &str) -> Vec<Clause> {
+        let document = format!(
+            "#### {id} — a declaration shaped like the document's\n\n\
+             `[FROZEN]`\n\
+             `Rule:` {rule_line}\n\
+             `Cases:` {cases}\n\
              `Rejects:` a store that does the opposite\n"
         );
         let clauses = parse_clauses(&document);
