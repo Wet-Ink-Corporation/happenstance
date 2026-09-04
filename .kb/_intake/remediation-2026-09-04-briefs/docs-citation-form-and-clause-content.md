@@ -273,3 +273,59 @@ The two failing-checker transcripts are reproducible: temporarily rewrite the
 cited line number in `docs/append-conditions.md` to `99999` and run
 `cargo xtask lints`. The 76 → 77 count change is from that step's own `V-6` row
 before and after `ed08f6e`.
+
+---
+
+## Measured after the fact — the decline's own trigger has already fired
+
+**Added by the wave integrator, 2026-09-04, after five lanes ran concurrently.**
+This section adds a measurement and takes no decision; the recommendation above
+stands as its author wrote it.
+
+Option C is declined above *"on the merge-coupling cost"*, with the decline to be
+**"re-examined the first time a brief is ingested carrying drift"**, on the
+argument that *"the gap closes itself at the moment it starts to matter."*
+
+The gap has not closed, and it started to matter earlier than that sentence
+allows. Measured across the whole of `.kb/_intake/` at `bd11598`, against the
+line content each citation named at `9b06836` — the only honest test available
+for a citation form that carries no anchor to re-find itself by:
+
+| | count |
+|---|---:|
+| bare `path:line` citations resolvable at both commits | **699** |
+| whose cited line's **content changed** | **77** |
+| of those, into `references/` (pinned evidence — must **not** be repointed) | 20 |
+| **into live files** | **57** |
+| of the 57, mechanically recoverable (the old text is findable elsewhere in the file) | 25 |
+
+Spread over **sixteen** briefs. The heaviest are `event-metadata-floor.md` (13),
+`after-opt-scope.md` (12) and `adapter-driver-reexport-policy.md` (9); the
+heaviest targets are `happenstance-sqlite/src/event_store.rs` (19),
+`spec/SPECIFICATION.md` (16) and `happenstance-cloudflare/src/event_store.rs` (8).
+
+**The argument this refutes is narrow and worth stating precisely.** It is not
+that the drift is large — 57 of 699 is under 9%, and drift of that order is what
+`citation-anchor-slack.md` measures everywhere else in this repository. It is the
+*timing* claim. "The gap closes itself at the moment it starts to matter" assumes
+the moment that matters is **ingest**, when a brief's citations land inside
+`CITATION_SCAN_DIRS`. But a decision brief's citations are load-bearing at a
+strictly earlier moment: **when the owner reads it to ratify the decision.** That
+is the one moment the brief exists for, and it is the one moment no checker
+covers. Twenty-four findings currently sit unratified behind these briefs.
+
+Two qualifications, so this does not read as stronger than it is. **A drifted
+citation is not necessarily a wrong one** — 25 of the 57 have their original text
+intact elsewhere in the same file, which is drift rather than falsehood, and some
+of the remaining 32 name text that was legitimately rewritten by the very work
+the brief describes. And **the merge-coupling cost the decline names is real**:
+this measurement exists precisely *because* five worktrees moved lines under one
+staging directory at once, which is the condition the decline was protecting
+against, not a refutation of it.
+
+What the measurement does establish is that the re-examination the decline itself
+schedules is owed **now** rather than at first ingest, and that whatever is
+decided, the 57 want repointing before anyone reads these briefs to ratify them.
+That repointing is an integration task and is recorded as one; it is deliberately
+not done per-lane, because a lane repointing a citation into a file another lane
+is still moving produces the same drift one commit later.
