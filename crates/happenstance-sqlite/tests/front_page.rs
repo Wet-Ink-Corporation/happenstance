@@ -173,6 +173,42 @@ fn the_front_page_no_longer_describes_a_skeleton() {
     );
 }
 
+/// The front page never claims the crate still carries `publish = false`, in
+/// any phrasing.
+///
+/// The check above is a phrase list, and a phrase list catches the sentence it
+/// was written against and nothing else: this crate's front page went stale a
+/// second time by spelling the identical false claim differently — `"is
+/// `publish = false` until it passes"` became `"it still carries `publish =
+/// false`"` — and `the_front_page_no_longer_describes_a_skeleton` stayed green
+/// through the rewrite because neither string is a substring of the other.
+///
+/// So this test classifies every sentence that mentions the flag by what it
+/// *says* rather than by matching one spelling of the claim: a sentence
+/// mentioning `publish = false` must say the flag is gone, not that it is
+/// carried, current, or still in force. That is the actual fact this crate's
+/// own `Cargo.toml` and `xtask/src/package.rs`'s `PUBLISHABLE` have already
+/// settled — no `publish = false` in the manifest, and the crate's name in the
+/// list — so any sentence asserting the opposite is wrong regardless of which
+/// words it uses to say so.
+#[test]
+fn the_front_page_never_claims_publish_false_is_still_carried() {
+    const SAYS_GONE: [&str; 4] = ["is gone", "gone:", "no longer", "deliberately no"];
+
+    for sentence in LIB.split('.') {
+        if !sentence.contains("publish = false") {
+            continue;
+        }
+        assert!(
+            SAYS_GONE.iter().any(|marker| sentence.contains(marker)),
+            "src/lib.rs has a sentence mentioning `publish = false` that does not \
+             say the flag is gone: {sentence:?} — the manifest carries no \
+             `publish = false` and `PUBLISHABLE` names this crate, so a sentence \
+             claiming otherwise is stale no matter how it is phrased"
+        );
+    }
+}
+
 /// Removing the markers does not remove what sat behind them.
 ///
 /// Three passages on the crate root carry *compiled results* rather than status,
