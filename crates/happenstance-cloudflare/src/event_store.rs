@@ -2302,6 +2302,99 @@ mod write_path_tests {
         );
     }
 
+    /// **ES-18 [FROZEN]**, asked through the port rather than through the shim:
+    /// *"Either every event in the batch lands or none does."* A batch whose
+    /// compensating `DELETE FROM event_tag` also fails must still leave the
+    /// store holding none of it.
+    ///
+    /// The named wrong implementation is the one this adapter was: give up on
+    /// the statement that removes the **events** because the statement that
+    /// removes the *index over* them threw, and report the leftover to the
+    /// caller as a state they must reconcile by hand. `event_tag` is derived
+    /// data; `event` is what makes a batch landed, and abandoning the second
+    /// because the first failed is a partial batch produced by the ordering of
+    /// two `DELETE`s and by nothing else.
+    ///
+    /// `head` and not `stored_positions`: ES-18 is a clause about what a store
+    /// *holds*, and a caller reads that through the port. A raw `SELECT` sees
+    /// rows this adapter may legitimately still be carrying as refuse.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        arm_throws(&sql, "event_tag", "no space left on device", 2);
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed throw refuses the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "a rejected append leaves the head where it found it, so a retry \
+             re-reads the log it decided against"
+        );
+    }
+
+    /// **ES-18 [FROZEN]**, at the one failure the ordering above cannot rescue:
+    /// the `DELETE` over `event` itself throws, so the rows the batch wrote are
+    /// still physically there when `append` returns.
+    ///
+    /// The clause is still met, and the reason is the write path's shape rather
+    /// than the compensation's success. A batch becomes events only at the
+    /// single `UPDATE … SET origin_store` that stamps identity over the whole
+    /// range — one statement, which SQLite backs out whole — so a batch that
+    /// failed before it is a batch of rows carrying no identity, and a row
+    /// carrying no identity is not an event. The compensating discard is refuse
+    /// collection, not the mechanism.
+    ///
+    /// The named wrong implementation is the adapter that makes the discard
+    /// load-bearing: it reports `PartialBatch` here and leaves the leftovers
+    /// readable, so `head` advances over a batch the caller was told was
+    /// refused.
+    ///
+    /// The fault is arranged in two halves because it needs two different
+    /// mechanisms: a real SQLite trigger refuses the tag insert, and the shim
+    /// throws on the discard's `DELETE FROM event` — which the trigger cannot
+    /// express, because a `DELETE` does not fire a `BEFORE INSERT`.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            &sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "rows the failed batch could not remove are unstamped, and an \
+             unstamped row is not an event"
+        );
+    }
+
     /// AC-008. An empty store has no head.
     #[wasm_bindgen_test]
     async fn head_of_an_empty_store_is_none() {
