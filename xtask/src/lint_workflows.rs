@@ -160,14 +160,10 @@ pub(crate) fn run() -> Result<()> {
         );
         let at = format!("{WORKFLOW_DIR}/{name}");
         let text = fs::read_to_string(path).with_context(|| format!("reading {at}"))?;
-        let lines = lex(&at, &text)?;
+        let (seen, found) = check(&at, &text)?;
 
-        uses_seen += lines
-            .iter()
-            .filter(|line| uses_value(line).is_some())
-            .count();
-        problems.extend(token_scope(&at, &lines));
-        problems.extend(pinned_actions(&at, &lines));
+        uses_seen += seen;
+        problems.extend(found);
     }
 
     // The second half of the anti-vacuity guard, and the half that matters: the
@@ -201,6 +197,29 @@ pub(crate) fn run() -> Result<()> {
         files.len()
     );
     Ok(())
+}
+
+/// Both claims over one workflow: how many action references it made, and every
+/// problem it has.
+///
+/// The composition lives here rather than at the call site, and the tests below
+/// drive *this* rather than the two halves. That is not tidiness. A check whose
+/// halves are each tested on their own is a check that one deleted line where
+/// they are combined switches half of — `lint-workflows` reports success over an
+/// unpinned workflow and every unit test in the module stays green, because
+/// every one of them called the surviving half directly. Going through one
+/// function is what makes the deletion fail a test.
+fn check(at: &str, text: &str) -> Result<(usize, Vec<String>)> {
+    let lines = lex(at, text)?;
+    let seen = lines
+        .iter()
+        .filter(|line| uses_value(line).is_some())
+        .count();
+
+    let mut problems = token_scope(at, &lines);
+    problems.extend(pinned_actions(at, &lines));
+
+    Ok((seen, problems))
 }
 
 /// Split a line into its code and its comment, or fail naming what could not be
@@ -470,11 +489,38 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 ";
 
+    /// Through [`check`] rather than through the two halves, deliberately —
+    /// see that function's own documentation for what a per-half test cannot
+    /// see.
     fn problems(text: &str) -> Vec<String> {
-        let lines = lex("w.yml", text).unwrap();
-        let mut found = token_scope("w.yml", &lines);
-        found.extend(pinned_actions("w.yml", &lines));
-        found
+        check("w.yml", text).unwrap().1
+    }
+
+    /// The reference count [`run`]'s anti-vacuity guard is built on, asserted
+    /// where the fixtures are: a scanner that stops seeing `uses:` lines makes
+    /// every problem below disappear rather than appear.
+    #[test]
+    fn the_reference_count_is_what_the_scanner_actually_saw() {
+        assert_eq!(check("w.yml", PINNED).unwrap().0, 1);
+        assert_eq!(check("w.yml", "permissions: {}\n").unwrap().0, 0);
+
+        // Both spellings, and this is the assertion that costs an adversary
+        // the most for the least code. A step written as `- name:` carries its
+        // `uses:` on a later line with no dash — five of `ci.yml`'s nineteen
+        // are spelled that way — so narrowing [`uses_value`] to the dashed form
+        // alone is a one-word edit that blinds the check to a quarter of the
+        // file while `run`'s anti-vacuity guard stays satisfied by the rest.
+        let both = "\
+permissions: {}
+jobs:
+  j:
+    steps:
+      - uses: owner/a@11d5960a326750d5838078e36cf38b85af677262 # v1
+      - name: install
+        uses: owner/b@11d5960a326750d5838078e36cf38b85af677262 # v2
+";
+        assert_eq!(check("w.yml", both).unwrap().0, 2);
+        assert!(problems(both).is_empty(), "{:?}", problems(both));
     }
 
     #[test]
