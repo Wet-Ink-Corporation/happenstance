@@ -347,6 +347,11 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     // as a `lints::`-shaped export next to `testkit_version` and
     // `stated_rule_counts`, which is where it would otherwise belong.
     no_stale_publication_claims()?;
+    // C2-07b, called from here for the same reason and reported after it: the
+    // negative matcher above names the two historical sentences, which is the
+    // text a reader repairing a page wants first; the positive pin below is
+    // what a *paraphrase* of either has to get past.
+    positive_publication_pin()?;
 
     let root = workspace_root()?;
 
@@ -435,6 +440,439 @@ fn no_stale_publication_claims() -> Result<()> {
     println!(
         "C2-07: {TESTKIT_LIB} and {TESTKIT_README} state no publication claim the repository \
          contradicts"
+    );
+    Ok(())
+}
+
+/// The adapter whose conformance target settles whether *any* adapter has run
+/// the suite.
+///
+/// Named rather than globbed: the README's sentence names this crate, so the
+/// pin has to be able to say *which* adapter stopped mounting the suite. A glob
+/// over `crates/*/tests/` would answer a different question — whether anything
+/// anywhere still mounts it — and would leave the README's own subject
+/// unchecked.
+const ADAPTER_CRATE: &str = "happenstance-sqlite";
+
+/// The adapter's own front page. Its `# Status:` heading is the sentence
+/// `crates/happenstance-testkit/README.md` is pinned to, quoted rather than
+/// paraphrased.
+const ADAPTER_LIB: &str = "crates/happenstance-sqlite/src/lib.rs";
+
+/// The workspace changelog. Its **oldest** released heading is the version this
+/// workspace first published at, and unlike the newest it never moves.
+const CHANGELOG: &str = "CHANGELOG.md";
+
+/// `happenstance-testkit`'s own manifest — the second artefact the publication
+/// fact is reconciled against, per RS-81-5.
+const TESTKIT_MANIFEST: &str = "crates/happenstance-testkit/Cargo.toml";
+
+/// The invocation that makes `crate::lints::SQLITE_CONFORMANCE_TEST` a *mount*
+/// of the suite rather than a file with a promising name.
+///
+/// Fully qualified on purpose. `event_store_model_conformance!` is a different
+/// family and does not contain this string, but a bare `event_store_conformance`
+/// would also be satisfied by the module documentation above the invocation,
+/// which discusses the macro at length (RS-81-2: prose about a construct reads
+/// exactly like the construct).
+const MOUNT: &str = "happenstance_testkit::event_store_conformance!";
+
+/// The changelog's own words for its oldest release entry.
+///
+/// The pin quotes the artefact that settled the fact rather than wording this
+/// module invented, so that a changelog which stops describing that entry as a
+/// release fails here — naming the pin as the thing that moved — instead of the
+/// pin quietly becoming `xtask`'s preference.
+const FIRST_RELEASE_ANCHOR: &str = "The first published release";
+
+/// The token every sentence in the testkit's rustdoc that speaks about this
+/// crate's publication contains, in the true spelling and in the false one
+/// alike.
+///
+/// It is a *counted* token, not a phrase to hunt: `nothing in this workspace is
+/// published yet`, `this crate is not published yet` and `no published version
+/// ever accepted it` all contain it, and only the last of those may stand.
+const PUBLISH_TOKEN: &str = "publish";
+
+/// The counted token for the README's half — present in `No adapter has run
+/// this suite` and in `happenstance-sqlite has run this suite` alike.
+const SUITE_TOKEN: &str = "run this suite";
+
+/// The facts C2-07b's pin is held against, each read from the artefact that
+/// settles it rather than stored here as a sentence.
+///
+/// # Why not `crates.io`
+///
+/// Whether `happenstance-testkit` is on the registry is a fact about the
+/// registry, and a gate step that needs the network is a gate step that fails
+/// on a train. The workspace's own release record answers the question the
+/// rustdoc actually makes a claim about — *did this crate ship, and at what
+/// version* — from two artefacts that disagree loudly when either moves.
+#[derive(Debug)]
+struct PublicationFacts {
+    /// Version and date of the **oldest** released heading in [`CHANGELOG`], or
+    /// `None` when it records no release at all.
+    first_release: Option<(String, String)>,
+    /// Whether [`CHANGELOG`] still describes that entry in the words
+    /// [`FIRST_RELEASE_ANCHOR`] quotes.
+    changelog_keeps_anchor: bool,
+    /// Whether [`TESTKIT_MANIFEST`] withholds the crate from a registry.
+    manifest_withholds: bool,
+    /// The text after `# Status:` on [`ADAPTER_LIB`]'s front page, normalised.
+    adapter_status: Option<String>,
+    /// Whether `crate::lints::SQLITE_CONFORMANCE_TEST` still mounts [`MOUNT`].
+    adapter_mounts_suite: bool,
+}
+
+/// The version and date of the oldest `## [x] — date` heading that is not
+/// `[Unreleased]`.
+///
+/// The *oldest*, because the claim the rustdoc rests on is the **first**
+/// publish. Keyed to the newest instead, the pin would demand a rewrite of a
+/// sentence about history every time a release lands — and the repair that
+/// teaches is deleting the pin.
+fn first_release(changelog: &str) -> Option<(String, String)> {
+    changelog
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("## [")?;
+            let (version, after) = rest.split_once(']')?;
+            if version.eq_ignore_ascii_case("unreleased") {
+                return None;
+            }
+            let date = after.trim().trim_start_matches(['—', '-']).trim();
+            Some((version.to_owned(), date.to_owned()))
+        })
+        .next_back()
+}
+
+/// The text after the `# Status:` heading on a crate's front page.
+///
+/// Read from the heading rather than from the first paragraph under it: the
+/// heading is the one line the adapter's author wrote to be quoted, and it is
+/// the line `crates/happenstance-testkit/README.md` already cites by number.
+fn status_line(front_page: &str) -> Option<String> {
+    front_page.lines().find_map(|line| {
+        let rest = line.trim().strip_prefix("//!")?;
+        let status = collapsed(rest.trim().strip_prefix("# Status:")?);
+        (!status.is_empty()).then_some(status)
+    })
+}
+
+/// Whether `source` mounts [`MOUNT`] in code rather than mentioning it in prose.
+///
+/// The blind spot `crate::lints::stale_publication_claims` documents — *"it
+/// reads `SQLITE_CONFORMANCE_TEST`'s path, not its content: a file emptied to
+/// nothing but its own name would still satisfy the README half"* — is exactly
+/// this function's job to close, so it reads the invocation and not the
+/// filename.
+fn mounts_suite(source: &str) -> bool {
+    source
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with("//"))
+        .any(|line| line.contains(MOUNT))
+}
+
+/// Whether a manifest withholds its crate from a registry.
+///
+/// Read from the **keys**, never from the file's prose: this manifest's comment
+/// block discusses publication at length, so a whole-file `contains` would
+/// report the opposite of the fact. Borrowed, shape and reasoning, from
+/// `crates/happenstance-sqlite/tests/front_page.rs`'s
+/// `manifest_withholds_publication`, which cannot be called from here — it is a
+/// helper inside another crate's integration test.
+fn manifest_withholds_publication(manifest: &str) -> bool {
+    manifest.lines().map(str::trim).any(|line| {
+        line.strip_prefix("publish").is_some_and(|rest| {
+            let rest = rest.trim_start();
+            rest.starts_with('=') && rest.contains("false")
+        })
+    })
+}
+
+/// Prose with its markers stripped, its emphasis removed and its whitespace
+/// collapsed to single spaces.
+///
+/// Applied to both sides of every anchor match, which is what lets an anchor be
+/// written as one readable sentence while the prose carrying it wraps across
+/// three source lines and dresses a version in backticks. Choosing anchors that
+/// happen to fit on one line and carry no formatting works today and breaks the
+/// day somebody re-wraps a paragraph — and the repair a false positive teaches
+/// is deleting the pin.
+///
+/// It is not a Markdown parser, for the same reason `crate::lints`'s `unwrapped`
+/// states plainly that it is not one (RS-81-2,
+/// `standards/rust/81-checks-that-cannot-be-types.md:95`): one marker per line,
+/// prefix only, and emphasis dropped wherever it falls. That is enough to make a
+/// substring search blind to wrapping and to backticks, and no more.
+fn collapsed(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let mut line = line.trim();
+        for marker in ["//!", "///", "//", ">"] {
+            if let Some(rest) = line.strip_prefix(marker) {
+                line = rest.trim();
+                break;
+            }
+        }
+        for word in line.split_whitespace() {
+            let word: String = word.chars().filter(|c| *c != '`' && *c != '*').collect();
+            if word.is_empty() {
+                continue;
+            }
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(&word);
+        }
+    }
+    out
+}
+
+/// The `///` and `//!` blocks of a Rust source file, as collapsed paragraphs.
+///
+/// The paragraph is the unit because a claim about publication lives in one, and
+/// a *second* claim needs a second — which is the whole mechanism of the count
+/// below. A blank doc line ends a paragraph, and so does any line that is not
+/// documentation, so one item's docs never merge with the next item's.
+fn doc_paragraphs(source: &str) -> Vec<String> {
+    let mut paragraphs = Vec::new();
+    let mut current = String::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        let text = trimmed
+            .strip_prefix("//!")
+            .or_else(|| trimmed.strip_prefix("///"));
+        if let Some(text) = text
+            && !text.trim().is_empty()
+        {
+            current.push_str(text);
+            current.push('\n');
+            continue;
+        }
+        if !current.is_empty() {
+            paragraphs.push(collapsed(&std::mem::take(&mut current)));
+        }
+    }
+    if !current.is_empty() {
+        paragraphs.push(collapsed(&current));
+    }
+    paragraphs
+}
+
+/// A Markdown document as collapsed paragraphs, blockquote markers stripped.
+///
+/// A `>`-only line separates two paragraphs of a blockquote exactly as a blank
+/// line separates two of body text, which matters because the README's status
+/// claim is the *second* paragraph of a blockquote whose first paragraph is
+/// about something else entirely.
+fn markdown_paragraphs(text: &str) -> Vec<String> {
+    let mut paragraphs = Vec::new();
+    let mut current = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.strip_prefix('>').unwrap_or(trimmed).trim().is_empty() {
+            if !current.is_empty() {
+                paragraphs.push(collapsed(&std::mem::take(&mut current)));
+            }
+            continue;
+        }
+        current.push_str(trimmed);
+        current.push('\n');
+    }
+    if !current.is_empty() {
+        paragraphs.push(collapsed(&current));
+    }
+    paragraphs
+}
+
+/// The sentence the testkit's rustdoc must carry, composed from the release the
+/// changelog records rather than from a version typed into this file.
+fn publication_anchor(version: &str, date: &str) -> String {
+    format!("first published at {version} on {date}")
+}
+
+/// Everything wrong with what `happenstance-testkit`'s two rendered surfaces say
+/// about the two facts this tree has already settled, each problem worded so
+/// that it names *which artefact moved*.
+///
+/// # Why this is a positive pin where `stale_publication_claims` is a negative one
+///
+/// That check hunts spellings of a falsehood, and a negative matcher over an
+/// unbounded set of phrasings teaches the next paraphrase: every repair
+/// enumerates one more sentence nobody is obliged to write. This one asserts the
+/// *truth* instead — the crate is published at the version the changelog
+/// records, and a named adapter has run the suite — and then counts the token a
+/// contradicting sentence has to use. A paraphrase reinstating either falsehood
+/// must delete a true statement to make room for it, or add a second paragraph
+/// carrying the counted token; both fail, and neither route can be taken without
+/// editing this function.
+///
+/// # What this does not verify
+///
+/// * **A falsehood written without the counted token.** *"Nothing here has
+///   shipped yet"* carries no [`PUBLISH_TOKEN`]; *"no adapter has cleared the
+///   bar"* carries no [`SUITE_TOKEN`]. Both pass every assertion here. That
+///   blind spot is executed in
+///   `tests::the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see`
+///   rather than promised, per RS-81-1
+///   (`standards/rust/81-checks-that-cannot-be-types.md:11`), so nobody reads
+///   this pin as covering ground it does not. Closing it needs a reader.
+/// * **The registry.** Whether `crates.io` serves the crate today is not asked.
+///   The artefacts read here are what this workspace itself recorded about
+///   shipping it, and a gate step that needs the network is one that fails on a
+///   train.
+/// * **That the anchored paragraph is *about* the anchor.** A paragraph carrying
+///   the true sentence and then contradicting it in words containing no counted
+///   token is invisible here, as above.
+fn publication_pin_problems(facts: &PublicationFacts, lib: &str, readme: &str) -> Vec<String> {
+    use crate::lints::{TESTKIT_LIB, TESTKIT_README};
+
+    let mut problems = Vec::new();
+
+    match (&facts.first_release, facts.manifest_withholds) {
+        (Some((version, date)), false) => {
+            let anchor = publication_anchor(version, date);
+            let paragraphs = doc_paragraphs(lib);
+            if !paragraphs.iter().any(|p| p.contains(&anchor)) {
+                problems.push(format!(
+                    "{TESTKIT_LIB} — does not say {anchor:?}. {CHANGELOG} records that release \
+                     and {TESTKIT_MANIFEST} withholds nothing, so the rendered page is the only \
+                     artefact still silent about it — and a page stating nothing cannot be \
+                     paraphrased into stating the opposite (C2-07b)."
+                ));
+            }
+            for paragraph in &paragraphs {
+                if paragraph.contains(PUBLISH_TOKEN) && !paragraph.contains(&anchor) {
+                    problems.push(format!(
+                        "{TESTKIT_LIB} — mentions {PUBLISH_TOKEN:?} in a paragraph that does not \
+                         carry {anchor:?}: {paragraph:?}. One anchored paragraph may speak about \
+                         this crate's publication, because a second is a second claim and \
+                         {CHANGELOG} has already settled which of the two is false (C2-07b)."
+                    ));
+                }
+            }
+        }
+        (None, false) => problems.push(format!(
+            "{CHANGELOG} — records no released version while {TESTKIT_MANIFEST} withholds \
+             nothing: this pin holds a rendered page to the words of a published crate, and it \
+             is the pin that is now stale rather than the page (C2-07b)."
+        )),
+        (Some(_), true) => problems.push(format!(
+            "{TESTKIT_MANIFEST} — carries `publish = false` while {CHANGELOG} records a release: \
+             the two artefacts disagree about whether this crate ships, and no sentence on the \
+             page can be right about both (C2-07b)."
+        )),
+        (None, true) => problems.push(format!(
+            "{TESTKIT_MANIFEST} — withholds the crate and {CHANGELOG} records no release: \
+             nothing is published, so this pin must move before the page does (C2-07b)."
+        )),
+    }
+
+    if !facts.changelog_keeps_anchor {
+        problems.push(format!(
+            "{CHANGELOG} — no longer says {FIRST_RELEASE_ANCHOR:?} of its oldest entry; the pin \
+             quotes words the changelog does not use, so it has become this module's preference \
+             rather than the changelog's decision (C2-07b)."
+        ));
+    }
+
+    match (&facts.adapter_status, facts.adapter_mounts_suite) {
+        (Some(status), true) => {
+            let paragraphs = markdown_paragraphs(readme);
+            if !paragraphs
+                .iter()
+                .any(|p| p.contains(status.as_str()) && p.contains(ADAPTER_CRATE))
+            {
+                problems.push(format!(
+                    "{TESTKIT_README} — has no paragraph naming {ADAPTER_CRATE} that quotes its \
+                     status, {status:?}, in the adapter's own words ({ADAPTER_LIB}). The suite \
+                     is mounted; the README is the artefact still not saying so (C2-07b)."
+                ));
+            }
+            for paragraph in &paragraphs {
+                if paragraph.contains(SUITE_TOKEN) && !paragraph.contains(status.as_str()) {
+                    problems.push(format!(
+                        "{TESTKIT_README} — mentions {SUITE_TOKEN:?} in a paragraph that does not \
+                         quote {status:?}: {paragraph:?}. One anchored paragraph may speak about \
+                         whether an adapter has run the suite (C2-07b)."
+                    ));
+                }
+            }
+        }
+        (_, false) => problems.push(format!(
+            "{ADAPTER_CRATE} — its conformance target no longer mounts `{MOUNT}`, so no adapter \
+             has run the suite and the README's positive claim is the stale one. Move the pin, \
+             not the page (C2-07b)."
+        )),
+        (None, true) => problems.push(format!(
+            "{ADAPTER_LIB} — carries no `# Status:` heading; the pin quotes that heading, so it \
+             is now quoting words that do not exist (C2-07b)."
+        )),
+    }
+
+    problems
+}
+
+/// C2-07b: both of `happenstance-testkit`'s rendered surfaces state the two
+/// facts this tree has already settled, in the words of the artefacts that
+/// settled them.
+///
+/// Called from [`run`] beside [`no_stale_publication_claims`], and for the same
+/// reason that function's doc comment gives: `xtask/src/affected.rs`'s
+/// `exported_lints` scans `xtask/src/lints.rs` for the shape `pub(crate) fn
+/// NAME() -> Result<()>` and would trip over an entry point declared there that
+/// already runs transitively.
+///
+/// The two are not redundant, and neither subsumes the other. That one forbids
+/// two known sentences and names them in its failure text, which is what a
+/// reader repairing the page needs; this one requires two true ones and counts
+/// the token any contradiction has to use, which is what survives a rewrite that
+/// says the same false thing in other words.
+///
+/// # Errors
+///
+/// Returns an error if any of the six artefacts cannot be read, or if
+/// [`publication_pin_problems`] finds a problem.
+fn positive_publication_pin() -> Result<()> {
+    use crate::lints::{SQLITE_CONFORMANCE_TEST, TESTKIT_LIB, TESTKIT_README};
+
+    let root = workspace_root()?;
+    let read =
+        |rel: &str| fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"));
+
+    let lib = read(TESTKIT_LIB)?;
+    let readme = read(TESTKIT_README)?;
+    let changelog = read(CHANGELOG)?;
+    let manifest = read(TESTKIT_MANIFEST)?;
+    let adapter_front_page = read(ADAPTER_LIB)?;
+    let conformance = read(SQLITE_CONFORMANCE_TEST)?;
+
+    let facts = PublicationFacts {
+        first_release: first_release(&changelog),
+        changelog_keeps_anchor: changelog.contains(FIRST_RELEASE_ANCHOR),
+        manifest_withholds: manifest_withholds_publication(&manifest),
+        adapter_status: status_line(&adapter_front_page),
+        adapter_mounts_suite: mounts_suite(&conformance),
+    };
+
+    let problems = publication_pin_problems(&facts, &lib, &readme);
+    if !problems.is_empty() {
+        for problem in &problems {
+            println!("  {problem}");
+        }
+        bail!(
+            "{} unpinned publication fact(s) — `positive_publication_pin` (C2-07b): a rendered \
+             surface of happenstance-testkit no longer states a fact this tree has settled, so \
+             the falsehood it replaced can return in a rewrite that deletes nothing.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "C2-07b: {TESTKIT_LIB} and {TESTKIT_README} state the publication and conformance facts \
+         {CHANGELOG} and {ADAPTER_LIB} settled, in those artefacts' own words"
     );
     Ok(())
 }
@@ -3499,5 +3937,179 @@ mod tests {
                  line breaks on the message so a re-run never reshuffles the list"
             );
         }
+    }
+
+    /// The two facts this tree has settled, in the shape
+    /// [`positive_publication_pin`] derives them in.
+    fn settled_facts() -> PublicationFacts {
+        PublicationFacts {
+            first_release: Some(("0.2.0-alpha.1".to_owned(), "2026-08-16".to_owned())),
+            changelog_keeps_anchor: true,
+            manifest_withholds: false,
+            adapter_status: Some("an adapter, and it has run the suite".to_owned()),
+            adapter_mounts_suite: true,
+        }
+    }
+
+    /// A rustdoc page that states the publication fact, wrapped and backticked
+    /// the way a real one is.
+    const TRUE_LIB: &str = "\
+/// # Migrating from `factory =`\n\
+///\n\
+/// The keyword was `factory =` and took a store expression. There is no\n\
+/// deprecated arm: `factory =` was introduced at `23fd446` and removed at\n\
+/// `1c1a6b7`, before this crate was first published at `0.2.0-alpha.1` on\n\
+/// 2026-08-16, so no published version ever accepted it.\n";
+
+    /// A README that quotes the adapter's own status, in a blockquote whose
+    /// first paragraph is about something else.
+    const TRUE_README: &str = "\
+> **Status: early, and the reason has moved.** Deliberately about something\n\
+> else, so that the paragraph split is exercised rather than assumed.\n\
+>\n\
+> **`happenstance-sqlite` has run this suite** — its own front page says so in\n\
+> those words, *an adapter, and it has run the suite*.\n";
+
+    #[test]
+    fn the_first_release_is_the_oldest_heading_not_the_newest() {
+        const CHANGELOG_TEXT: &str = "\
+## [Unreleased]\n\
+\n\
+## [0.3.0] — 2026-09-01\n\
+\n\
+## [0.2.0-alpha.1] — 2026-08-16\n";
+
+        assert_eq!(
+            first_release(CHANGELOG_TEXT),
+            Some(("0.2.0-alpha.1".to_owned(), "2026-08-16".to_owned())),
+            "keyed to the newest release, the pin would demand a rewrite of a \
+             sentence about history at every release"
+        );
+        assert_eq!(
+            first_release("## [Unreleased]\n"),
+            None,
+            "`[Unreleased]` is not a publication"
+        );
+    }
+
+    #[test]
+    fn mounting_the_suite_is_read_from_the_invocation_not_from_the_prose() {
+        assert!(mounts_suite(&format!("{MOUNT}(SqliteFixture::new());\n")));
+        assert!(
+            !mounts_suite(&format!("//! `{MOUNT}` is a list of examples somebody wrote.\n")),
+            "the blind spot `stale_publication_claims` documents is this \
+             function's job to close: a target emptied to its own documentation \
+             mounts nothing"
+        );
+    }
+
+    #[test]
+    fn the_publication_pin_passes_a_page_that_states_what_the_tree_settled() {
+        assert_eq!(
+            publication_pin_problems(&settled_facts(), TRUE_LIB, TRUE_README),
+            Vec::<String>::new(),
+            "the anchors are written as one sentence and matched through \
+             wrapping, backticks and bold"
+        );
+    }
+
+    /// The pin rejects a restatement of each falsehood by either route, and the
+    /// blind spot it keeps is executed rather than promised (RS-81-1).
+    ///
+    /// The mutations are not the sentences
+    /// [`crate::lints::stale_publication_claims`] holds: each says the same
+    /// false thing in words that matcher does not carry, which is the attack
+    /// that reopened C2-07. Both placements are asserted — *replacing* the true
+    /// sentence and *standing beside* it — because the second is the cheaper
+    /// edit and is the one a negative matcher cannot see at all.
+    #[test]
+    fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
+        let facts = settled_facts();
+
+        const LIB_PARAPHRASE: &str = "\
+/// # Migrating from `factory =`\n\
+///\n\
+/// There is no deprecated arm, because nothing here is published yet and this\n\
+/// is the last release in which that is true.\n";
+        const README_PARAPHRASE: &str = "\
+> **Status: early.**\n\
+>\n\
+> Not one adapter outside this crate's own tests has run this suite.\n";
+
+        assert!(
+            !publication_pin_problems(&facts, LIB_PARAPHRASE, TRUE_README).is_empty(),
+            "the falsehood replaced the true sentence and the pin stayed green"
+        );
+        assert!(
+            !publication_pin_problems(&facts, TRUE_LIB, README_PARAPHRASE).is_empty(),
+            "the falsehood replaced the true sentence and the pin stayed green"
+        );
+
+        let lib_beside = format!("{TRUE_LIB}\n{LIB_PARAPHRASE}");
+        let readme_beside = format!("{TRUE_README}\n{README_PARAPHRASE}");
+        assert!(
+            !publication_pin_problems(&facts, &lib_beside, TRUE_README).is_empty(),
+            "the falsehood was added beside the true statement and the pin \
+             stayed green"
+        );
+        assert!(
+            !publication_pin_problems(&facts, TRUE_LIB, &readme_beside).is_empty(),
+            "the falsehood was added beside the true statement and the pin \
+             stayed green"
+        );
+
+        // The documented blind spot, executed. Neither sentence carries the
+        // token it is counted by, and both are false.
+        let unseen_lib = format!(
+            "{TRUE_LIB}\n/// There is no deprecated arm, because this crate has never reached a \
+             registry.\n"
+        );
+        let unseen_readme =
+            format!("{TRUE_README}\n> No adapter anywhere has yet cleared this bar.\n");
+        assert_eq!(
+            publication_pin_problems(&facts, &unseen_lib, &unseen_readme),
+            Vec::<String>::new(),
+            "a falsehood written without the counted token passes, and that \
+             limit is documented on `publication_pin_problems` rather than \
+             left for a reader to discover"
+        );
+    }
+
+    /// When the tree moves under the pin, the failure names the artefact that
+    /// moved rather than blaming the page (RS-81-5).
+    #[test]
+    fn the_pin_names_which_artefact_moved() {
+        let unpublished = PublicationFacts {
+            first_release: None,
+            ..settled_facts()
+        };
+        let problems = publication_pin_problems(&unpublished, TRUE_LIB, TRUE_README);
+        assert!(
+            problems.iter().any(|p| p.contains("the pin that is now stale")),
+            "with nothing published the page's claim would be the true one; \
+             the pin is what must move: {problems:?}"
+        );
+
+        let withheld = PublicationFacts {
+            manifest_withholds: true,
+            ..settled_facts()
+        };
+        let problems = publication_pin_problems(&withheld, TRUE_LIB, TRUE_README);
+        assert!(
+            problems.iter().any(|p| p.contains(TESTKIT_MANIFEST)),
+            "a release recorded and a `publish = false` in the manifest are two \
+             artefacts disagreeing, and the message says so: {problems:?}"
+        );
+
+        let unmounted = PublicationFacts {
+            adapter_mounts_suite: false,
+            ..settled_facts()
+        };
+        let problems = publication_pin_problems(&unmounted, TRUE_LIB, TRUE_README);
+        assert!(
+            problems.iter().any(|p| p.contains("Move the pin, not the page")),
+            "an adapter that stopped mounting the suite makes the README's \
+             positive claim the false one: {problems:?}"
+        );
     }
 }
