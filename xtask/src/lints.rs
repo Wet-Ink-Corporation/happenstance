@@ -1080,6 +1080,22 @@ const COUNT_BEARING_DOCS: [&str; 4] = [
 /// have, or if **no** document states one at all — a check whose subject can
 /// vanish is one that retires without anybody deciding to.
 pub(crate) fn stated_rule_counts() -> Result<()> {
+    // Bundled here rather than wired as its own step, the way
+    // `changelog_scope_matches_publishable` is bundled into
+    // `changelog_names_every_rule`: the same direction — a document held to the
+    // tree — and the same two constraints on where it can go.
+    //
+    // It is not a `pub(crate) fn`, because `affected.rs`'s export scan
+    // (`the_unconditional_block_runs_every_lint_the_module_exports`) requires
+    // every entry point of that shape in this file to be named in the
+    // story-grain block, and `xtask/src/affected.rs` is not this change's to
+    // edit. And it is bundled *here*, past line 693, rather than into
+    // `changelog_names_every_rule`, because `standards/rust/81-...:88-89` cites
+    // `lints.rs:627` and `:693` by line and `lint-constitution` checks those
+    // citations resolve; inserting above them moves the anchors out from under a
+    // file this change may not correct.
+    runbook_status_matches_the_registry()?;
+
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;
     let legend = counts
@@ -1409,6 +1425,327 @@ fn changelog_scope_matches_publishable() -> Result<()> {
     Ok(())
 }
 
+/// The plan of record, whose `## Status` table routes the next contributor.
+const RUNBOOK: &str = "RUNBOOK.md";
+
+/// The four states `RUNBOOK.md`'s own legend permits, plus the em dash a
+/// *milestone* row carries in place of one.
+///
+/// Asserted rather than assumed. The cheapest way to defeat everything below is
+/// not to argue with it but to spell a state it does not recognise — `pending`,
+/// `todo`, `not-started` — at which point a row that claims nothing passes a
+/// check whose whole subject is what rows claim. An unrecognised state is a
+/// problem, and the message says which words are allowed.
+const PHASE_STATES: [&str; 4] = ["not started", "in progress", "blocked", "done"];
+
+/// One row of `RUNBOOK.md`'s `## Status` table.
+#[derive(Debug)]
+struct PhaseRow {
+    /// 1-based line number in `RUNBOOK.md`, so a problem names the line a
+    /// reader will open.
+    line: usize,
+    /// The `#` cell: a phase number, or `—` for a milestone row.
+    number: String,
+    /// The `Phase` cell with its markdown emphasis and backticks removed.
+    phase: String,
+    /// The `Depends on` cell, split into the phase numbers it names.
+    depends_on: Vec<String>,
+    /// The `State` cell, emphasis stripped and lowercased.
+    state: String,
+    /// The row as written, for the crate-name scan in [`names_crate`].
+    raw: String,
+}
+
+/// A cell with markdown emphasis, backticks and link syntax reduced to its text.
+///
+/// The milestone row spells its version bolded *and* backticked, and
+/// `CHANGELOG.md`'s heading spells it bare; four phase rows spell their state
+/// bolded and the legend spells it bare. Both differences are decoration a
+/// reader does not see, so neither may be a difference this check sees either.
+fn unmark(cell: &str) -> String {
+    cell.replace(['*', '`'], "").trim().to_owned()
+}
+
+/// Whether `text` names `crate_name` as a whole crate name.
+///
+/// The boundary treats `-` as **part of** the name, which is the difference
+/// between this and [`names_rule`] and the reason it is a separate function:
+/// with `-` as a boundary character, `happenstance` matches inside
+/// `happenstance-postgres` and every publishable crate would be found in every
+/// row. Hyphens are name characters in a crate name, so they are name characters
+/// here.
+fn names_crate(text: &str, crate_name: &str) -> bool {
+    let part = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    text.match_indices(crate_name).any(|(at, _)| {
+        let before = text[..at].chars().next_back().is_none_or(|c| !part(c));
+        let after = text[at + crate_name.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !part(c));
+        before && after
+    })
+}
+
+/// The rows of the `## Status` table, in order.
+///
+/// The scan starts at the `## Status` heading and takes the first contiguous run
+/// of `|`-led lines after it, minus the header and separator rows. It stops at
+/// the first line that is not a table row, which is what keeps it off the second
+/// four-column table further down the same document — the effort estimates,
+/// whose first cell is also a phase number and which would otherwise contribute
+/// rows with no state at all.
+///
+/// # Errors
+///
+/// Returns an error if the heading is absent or the run holds no data rows:
+/// either would make every check below pass over an empty list, which is the one
+/// failure mode a table-reading check cannot report on its own.
+fn phase_rows(runbook: &str) -> Result<Vec<PhaseRow>> {
+    let lines: Vec<&str> = runbook.lines().collect();
+    let heading = lines
+        .iter()
+        .position(|l| l.trim() == "## Status")
+        .with_context(|| {
+            format!("{RUNBOOK} — no `## Status` heading; the table moved or was renamed")
+        })?;
+
+    let mut rows = Vec::new();
+    let mut seen_table = false;
+    for (offset, line) in lines[heading + 1..].iter().enumerate() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            if seen_table {
+                break;
+            }
+            continue;
+        }
+        seen_table = true;
+
+        let cells: Vec<String> = trimmed
+            .trim_matches('|')
+            .split('|')
+            .map(|c| c.trim().to_owned())
+            .collect();
+        if cells.len() < 5 {
+            continue;
+        }
+        // The header row and the `|---|` separator, recognised by content rather
+        // than by position so a blank line between heading and table cannot
+        // shift the offsets.
+        if cells[0] == "#" || cells[0].chars().all(|c| c == '-' || c == ':') {
+            continue;
+        }
+
+        rows.push(PhaseRow {
+            line: heading + 2 + offset,
+            number: unmark(&cells[0]),
+            phase: unmark(&cells[1]),
+            depends_on: unmark(&cells[2])
+                .split(',')
+                .map(str::trim)
+                .filter(|d| !d.is_empty() && *d != "—")
+                .map(str::to_owned)
+                .collect(),
+            state: unmark(&cells[3]).to_lowercase(),
+            raw: trimmed.to_owned(),
+        });
+    }
+
+    if rows.is_empty() {
+        bail!("{RUNBOOK} — the `## Status` heading is followed by no table rows");
+    }
+    Ok(rows)
+}
+
+/// The versions `CHANGELOG.md` records as **released** — every `## [x]` heading
+/// carrying a date, and never `[Unreleased]`.
+///
+/// A dated heading is the document's own statement that the version left this
+/// repository. That is the fact the status table is held to below: work that
+/// shipped cannot be work nobody has begun.
+fn released_versions(changelog: &str) -> Vec<String> {
+    changelog
+        .lines()
+        .filter_map(|line| {
+            let rest = line.strip_prefix("## [")?;
+            let (tag, after) = rest.split_once(']')?;
+            (tag != "Unreleased" && after.contains('—')).then(|| tag.to_owned())
+        })
+        .collect()
+}
+
+/// Every phase a row depends on, transitively, through the `Depends on` column.
+///
+/// A milestone row names only its immediate prerequisite; the phases *that*
+/// phase waited on shipped with it just as surely, so the closure is what the
+/// released version actually vouches for.
+fn prerequisites(rows: &[PhaseRow], start: &[String]) -> Vec<String> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut queue: Vec<String> = start.to_vec();
+    while let Some(number) = queue.pop() {
+        if seen.contains(&number) {
+            continue;
+        }
+        if let Some(row) = rows.iter().find(|r| r.number == number) {
+            queue.extend(row.depends_on.iter().cloned());
+        }
+        seen.push(number);
+    }
+    seen.sort_unstable();
+    seen
+}
+
+/// `RUNBOOK.md`'s status table may not disagree with the registry and the
+/// changelog about what has shipped.
+///
+/// # The defect, and why prose could not hold it
+///
+/// This repository's session protocol routes the next contributor by that table.
+/// A row that reads `not started` about work that is finished does not merely
+/// age — it sends somebody to build a crate that is already on crates.io. That
+/// is what it was doing: phases 6, 7, 8 and 9 all read `not started` while
+/// `0.2.0-alpha.1` was released, `happenstance-sqlite` was in
+/// [`publishable_from_package_rs`]'s list, and the suite it exists to pass was
+/// mounted in its own `tests/`. Every other reader of that table is a person,
+/// and four consecutive documents' worth of people read past it.
+///
+/// # The two axes, and why neither is a judgement
+///
+/// Both compare the table against a file outside it, so neither can be settled
+/// by rewording the table.
+///
+/// 1. **A released version vouches for its prerequisites.** `CHANGELOG.md`
+///    records `0.2.0-alpha.1` with a date. The milestone row naming that version
+///    depends on phase 7, which depends on 4 and 6, and so on: every phase in
+///    that closure shipped when the version did, so none of them may be anything
+///    but `done`.
+/// 2. **A publishable crate is not unbegun work.** A phase row naming a crate in
+///    `xtask/src/package.rs`'s `PUBLISHABLE` — the same constant
+///    [`changelog_scope_matches_publishable`] treats as the authority on what
+///    this workspace ships — may not read `not started`.
+///
+/// # What this does not verify
+///
+/// It does not catch a phase whose row names no crate and which no released
+/// version depends on. Phase 9 is exactly that today: `happenstance-cloudflare`
+/// is publishable and its Durable Object conformance suite runs, but the row
+/// spells neither the crate nor a version, so axis 2 has nothing to match and
+/// axis 1 does not reach it. Nor does it check the *other* direction — a row
+/// reading `done` over work that is not — because nothing mechanical in this
+/// tree distinguishes an unwritten phase from an unfinished one, and a check
+/// whose verdict cannot be predicted gets switched off the first time it is
+/// wrong.
+///
+/// # Errors
+///
+/// Returns an error if either document cannot be read or parsed, if a row states
+/// a state outside [`PHASE_STATES`], if no released version matches a milestone
+/// row or no row names a publishable crate — either of which would leave an axis
+/// with nothing to hold — or if the table disagrees with the changelog or the
+/// registry on any row.
+fn runbook_status_matches_the_registry() -> Result<()> {
+    let root = workspace_root()?;
+    let runbook =
+        fs::read_to_string(root.join(RUNBOOK)).with_context(|| format!("reading {RUNBOOK}"))?;
+    let changelog =
+        fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
+    let publishable = publishable_from_package_rs(&root)?;
+
+    let rows = phase_rows(&runbook)?;
+    let mut problems = Vec::new();
+
+    for row in &rows {
+        let milestone = row.number == "—";
+        if !(PHASE_STATES.contains(&row.state.as_str()) || (milestone && row.state == "—")) {
+            problems.push(format!(
+                "{RUNBOOK}:{} — `{}` states `{}`, which is not one of {}. A state this table's \
+                 own legend does not name is a row that claims nothing, and every check here \
+                 passes over it.",
+                row.line,
+                row.phase,
+                row.state,
+                PHASE_STATES.join(", ")
+            ));
+        }
+    }
+
+    // Axis 1 — a released version vouches for every phase it waited on.
+    let mut vouched = 0usize;
+    for version in released_versions(&changelog) {
+        let Some(milestone) = rows.iter().find(|r| r.phase == version) else {
+            continue;
+        };
+        vouched += 1;
+        for number in prerequisites(&rows, &milestone.depends_on) {
+            let Some(row) = rows.iter().find(|r| r.number == number) else {
+                problems.push(format!(
+                    "{RUNBOOK}:{} — `{}` depends on phase {number}, which the table has no row \
+                     for.",
+                    milestone.line, version
+                ));
+                continue;
+            };
+            if row.state != "done" {
+                problems.push(format!(
+                    "{RUNBOOK}:{} — phase {number} reads `{}`, but {CHANGELOG} records `{version}` \
+                     as released and that version's row waits on it. Work that shipped is not \
+                     work nobody has started.",
+                    row.line, row.state
+                ));
+            }
+        }
+    }
+    if vouched == 0 {
+        bail!(
+            "runbook_status_matches_the_registry: no released version in {CHANGELOG} matches a \
+             row of {RUNBOOK}'s status table, so the released-version axis holds nothing. Name \
+             the release in the milestone row, or delete this axis deliberately rather than by \
+             omission."
+        );
+    }
+
+    // Axis 2 — a crate this workspace publishes is not unbegun work.
+    let mut named = 0usize;
+    for row in &rows {
+        for crate_name in publishable.iter().filter(|c| names_crate(&row.raw, c)) {
+            named += 1;
+            if row.state == "not started" {
+                problems.push(format!(
+                    "{RUNBOOK}:{} — phase {} reads `not started` and names `{crate_name}`, which \
+                     {PACKAGE_RS}'s PUBLISHABLE says this workspace publishes. A crate on \
+                     crates.io is not a phase nobody has started.",
+                    row.line, row.number
+                ));
+            }
+        }
+    }
+    if named == 0 {
+        bail!(
+            "runbook_status_matches_the_registry: no row of {RUNBOOK}'s status table names any of \
+             {PACKAGE_RS}'s publishable crates, so the registry axis holds nothing."
+        );
+    }
+
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "runbook_status_matches_the_registry: {} row(s) of {RUNBOOK}'s status table disagree \
+             with {CHANGELOG} or {PACKAGE_RS} about what has shipped. This repository routes its \
+             next contributor by that table.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "runbook_status_matches_the_registry: {} status row(s) agree with {vouched} released \
+         version(s) and {named} publishable-crate mention(s)",
+        rows.len()
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -1606,6 +1943,180 @@ unstable-projection = []
             stale_publication_claims(lib, readme, true).is_empty(),
             "{:?}",
             stale_publication_claims(lib, readme, true)
+        );
+    }
+
+    // ---- runbook_status_matches_the_registry ------------------------------
+    //
+    // The table below is `RUNBOOK.md`'s status table as `4a7ca16` left it, cut
+    // to the rows that carry the argument and quoted rather than paraphrased:
+    // the milestone row's em-dash `#` cell, the bolded `**done**` states and the
+    // backticked version are each a spelling the parser has to see through, and
+    // a paraphrase would quietly drop the one that matters.
+    const STALE_TABLE: &str = "\
+## Status
+
+| # | Phase | Depends on | State | Proof artefact |
+|---|---|---|---|---|
+| 4 | [Freeze the contract](#phase-4) | 2, 3 | **done** | `frozen_signatures.rs` |
+| 6 | [Freeze `ProjectionStore`](#phase-6) | 4 | not started | `CheckpointOnlyStore` failing the suite |
+| 7 | [The typed layer](#phase-7) | 4, 6 | not started | a `trybuild` compile-fail case |
+| — | **`0.2.0-alpha.1`** | 7 | — | — |
+| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro at 64 contenders |
+| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro on a store that does not serialise |
+
+State is one of `not started`, `in progress`, `blocked`, `done`.
+";
+
+    /// The released heading this check reads, and the `[Unreleased]` one it must
+    /// not: an unreleased version vouches for nothing.
+    const CHANGELOG_FIXTURE: &str = "\
+## [Unreleased]
+
+## [0.2.0-alpha.1] — 2026-08-16
+";
+
+    /// `PUBLISHABLE` as `xtask/src/package.rs` spells it today.
+    const PUBLISHED: [&str; 5] = [
+        "happenstance-core",
+        "happenstance",
+        "happenstance-testkit",
+        "happenstance-sqlite",
+        "happenstance-cloudflare",
+    ];
+
+    /// The two axes over a fixture, as strings, so a test can name what fired.
+    fn disagreements(table: &str, changelog: &str) -> Vec<String> {
+        let rows = phase_rows(table).unwrap();
+        let mut out = Vec::new();
+        for version in released_versions(changelog) {
+            let Some(milestone) = rows.iter().find(|r| r.phase == version) else {
+                continue;
+            };
+            for number in prerequisites(&rows, &milestone.depends_on) {
+                if rows
+                    .iter()
+                    .find(|r| r.number == number)
+                    .is_some_and(|r| r.state != "done")
+                {
+                    out.push(format!("{version} waits on phase {number}"));
+                }
+            }
+        }
+        for row in &rows {
+            if row.state == "not started" {
+                for c in PUBLISHED.iter().filter(|c| names_crate(&row.raw, c)) {
+                    out.push(format!("phase {} names {c}", row.number));
+                }
+            }
+        }
+        out
+    }
+
+    /// The table as it shipped, and the three rows it was wrong about.
+    ///
+    /// Phase 4 is in the same closure and is `done`, so its absence here is the
+    /// evidence that the closure is not simply reporting everything it walks.
+    #[test]
+    fn the_shipped_status_table_is_rejected_on_both_axes() {
+        assert_eq!(
+            disagreements(STALE_TABLE, CHANGELOG_FIXTURE),
+            vec![
+                "0.2.0-alpha.1 waits on phase 6",
+                "0.2.0-alpha.1 waits on phase 7",
+                "phase 8 names happenstance-sqlite",
+            ]
+        );
+    }
+
+    /// The same table with the three rows corrected, which is the tree this
+    /// change leaves behind.
+    ///
+    /// Phase 10 stays `not started` and stays green: its row names
+    /// `happenstance-postgres` and `happenstance-neon`, neither of which is
+    /// publishable, and no released version waits on it. A check that could not
+    /// leave a genuinely unstarted phase alone would be one this table is
+    /// rewritten to satisfy.
+    #[test]
+    fn the_corrected_status_table_passes_and_leaves_phase_ten_alone() {
+        // Only the three rows the two axes named, which is the edit this change
+        // makes to the real table. A blanket replace would have corrected phase
+        // 10 as well and the last assertion below is what caught that.
+        let fixed = STALE_TABLE
+            .lines()
+            .map(|line| {
+                if ["| 6 |", "| 7 |", "| 8 |"]
+                    .iter()
+                    .any(|n| line.starts_with(n))
+                {
+                    line.replace("| not started |", "| done |")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            disagreements(&fixed, CHANGELOG_FIXTURE).is_empty(),
+            "{:?}",
+            disagreements(&fixed, CHANGELOG_FIXTURE)
+        );
+        let rows = phase_rows(&fixed).unwrap();
+        assert_eq!(
+            rows.iter().find(|r| r.number == "10").unwrap().state,
+            "not started"
+        );
+    }
+
+    /// The boundary that separates the two axes' subjects, and the reason
+    /// [`names_crate`] is not [`names_rule`].
+    ///
+    /// With `-` treated as a boundary rather than as part of the name, the bare
+    /// `happenstance` matches inside `happenstance-postgres` and every row in
+    /// the table names a publishable crate — the check then fires on phase 10,
+    /// the author widens an exclusion list, and it is off.
+    #[test]
+    fn a_hyphenated_crate_name_does_not_match_its_own_prefix() {
+        let row =
+            "| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) |";
+        assert!(!names_crate(row, "happenstance"));
+        assert!(!names_crate(row, "happenstance-sqlite"));
+        assert!(names_crate(
+            "| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) |",
+            "happenstance-sqlite"
+        ));
+    }
+
+    /// The cheapest defeat, refused: a state the legend does not name.
+    ///
+    /// `pending` is not `not started`, so axis 2's equality test would pass over
+    /// it in silence and the row would claim nothing to anybody. The parser
+    /// reports the vocabulary instead.
+    #[test]
+    fn a_state_outside_the_legend_is_visible_to_the_parser() {
+        let odd = STALE_TABLE.replace("| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started |", "| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | pending |");
+        let rows = phase_rows(&odd).unwrap();
+        let eight = rows.iter().find(|r| r.number == "8").unwrap();
+        assert_eq!(eight.state, "pending");
+        assert!(!PHASE_STATES.contains(&eight.state.as_str()));
+    }
+
+    /// `[Unreleased]` is not a release, and the second table in the document is
+    /// not the status table.
+    #[test]
+    fn only_dated_headings_are_releases_and_only_one_table_is_read() {
+        assert_eq!(
+            released_versions(CHANGELOG_FIXTURE),
+            vec!["0.2.0-alpha.1".to_owned()]
+        );
+
+        let two_tables = format!(
+            "{STALE_TABLE}\n### Estimates\n\n| # | Phase | Days | Cum |\n|---|---|---|---|\n| 0 | Ground clear | 2 | 2 |\n"
+        );
+        let rows = phase_rows(&two_tables).unwrap();
+        assert!(
+            rows.iter().all(|r| r.number != "0"),
+            "the estimate table was read as status rows: {rows:?}"
         );
     }
 }
