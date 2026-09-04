@@ -3567,3 +3567,60 @@ mod read_path_tests {
         assert!(decoded.event.tags().is_empty());
     }
 }
+
+/// The host half, reachable by a plain `cargo test -p happenstance-cloudflare`
+/// with no wasm toolchain installed at all — the pattern `lib.rs`'s
+/// `#[cfg(all(test, not(target_arch = "wasm32")))] mod tests` already uses.
+/// `write_path_tests` and `read_path_tests` above are both
+/// `#[cfg(all(test, target_arch = "wasm32"))]`, because they drive a real
+/// Durable Object through `crate::host`; this module needs none of that
+/// machinery, since it constructs `PartialBatch` directly rather than forcing
+/// a live throw, so it runs on every target rather than only under
+/// `wasm-bindgen-test`.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod source_chain_tests {
+    use core::error::Error;
+
+    use happenstance_core::SequencePosition;
+
+    use super::CloudflareEventStoreError;
+
+    /// G-1. `PartialBatch` is the report of an ES-18 [FROZEN] violation — the
+    /// one failure of this adapter a DCB command loop must not retry — and
+    /// today it reaches every error walker as a leaf: neither `cause` nor
+    /// `while_discarding` is marked `#[source]`, so `Error::source()` returns
+    /// `None` even though the typed cause is sitting right there in the
+    /// variant. RS-30-2 requires the foreign cause to survive as a `#[source]`
+    /// so a `dyn Error` walker — `anyhow`'s `.chain()`, `tracing-error`,
+    /// Sentry-style reporters, a hand-written `while let Some(next) =
+    /// e.source()` loop — no longer stops dead at this variant.
+    ///
+    /// The downcast target is `Box<CloudflareEventStoreError>`, not
+    /// `CloudflareEventStoreError` bare: `std::error::Error` has a blanket
+    /// `impl<T: Error> Error for Box<T>` (needed for `Box<dyn Error>`), and
+    /// thiserror's `#[source]` codegen calls `.as_dyn_error()` on the field by
+    /// method syntax, which finds that impl on `Box<CloudflareEventStoreError>`
+    /// itself before autoderef ever reaches the `CloudflareEventStoreError`
+    /// inside — confirmed empirically against a two-line reproduction using
+    /// the same thiserror 2.0.19. `cause` cannot be unboxed (the enum is
+    /// self-referential; `PartialBatch` is itself a `CloudflareEventStoreError`
+    /// variant, so the field needs indirection to have a finite size), so this
+    /// is the concrete type `#[source]` actually produces here — a caller one
+    /// `downcast_ref::<Box<CloudflareEventStoreError>>()` plus a deref away
+    /// from the original variant, and no longer a dead end.
+    #[test]
+    fn partial_batch_source_chain_reaches_the_original_cause() {
+        let err = CloudflareEventStoreError::PartialBatch {
+            from: SequencePosition::new(1).expect("one is a position"),
+            cause: Box::new(CloudflareEventStoreError::CorruptTags),
+            while_discarding: Box::new(CloudflareEventStoreError::CorruptTags),
+        };
+
+        let source = Error::source(&err)
+            .and_then(|s| s.downcast_ref::<Box<CloudflareEventStoreError>>());
+        assert!(
+            matches!(source.map(|b| &**b), Some(CloudflareEventStoreError::CorruptTags)),
+            "PartialBatch must chain to its cause via #[source], not just print it: {err}"
+        );
+    }
+}
