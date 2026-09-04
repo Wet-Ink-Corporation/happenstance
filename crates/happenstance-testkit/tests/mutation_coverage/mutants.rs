@@ -4742,3 +4742,199 @@ impl Subject for RefetchingPagedFixture {
         Self(Rc::new(RefCell::new(Vec::new())))
     }
 }
+
+// =====================================================================
+// L3-01 — a fetch failure reported as the end of the stream
+// =====================================================================
+
+/// How many events one page of [`SwallowedReadFaultStore`] carries.
+///
+/// Small, so that reading a handful of events is genuinely several fetches and
+/// the fault has somewhere to land other than the first one. `RefetchingPagedStore`
+/// next door pages one event at a time for the opposite reason — it wants the
+/// tear at *every* item — and this one wants a page already delivered before the
+/// failure arrives, because a short read that returned nothing is a shape a rule
+/// could confuse with an empty store.
+pub(crate) const SWALLOWED_PAGE: usize = 2;
+
+/// A paged read whose **fetch failure is reported as the end of the stream**.
+///
+/// The finding's exact line, in a `poll_next` that must return a value:
+///
+/// ```text
+/// let Ok(page) = fetch().await else { return Poll::Ready(None) };
+/// ```
+///
+/// It is the most natural way to get a fallible fetch past a `poll_next`, and
+/// both adapters that will need one are already in the tree: `happenstance-cloudflare`
+/// over `SqlStorage` and `happenstance-neon` over one-shot HTTP, neither of which
+/// can hold a cursor open across polls. The port expresses the failure — `read`
+/// yields `Result<SequencedEvent, Self::Error>` **per item** — and this store
+/// declines to use it.
+///
+/// # What the consumer sees, and why it is unrecoverable
+///
+/// A short, *successful* read. `collect` returns `Ok` over two events where five
+/// were written; a projection runner applies them, commits the checkpoint at the
+/// truncation point, and every event above it is never applied — with `Ok`
+/// everywhere and no error to log. Who finds out is whoever reconciles the read
+/// model against the log, months later.
+///
+/// # Why it is not a [`Defect`]
+///
+/// [`RefetchingPagedStore`]'s reason: `Defect` composes functions over a slice
+/// that `MutantStore::read` samples once, and there is nowhere in it to say
+/// "and this poll answers `None` instead of `Err`". The selection here is
+/// `crate::correct`'s and is used correctly; what is wrong is the stream.
+///
+/// # It is armed, not always-on
+///
+/// Unarmed, this store is completely conformant and passes everything — which is
+/// the point, because that is what the adapter's CI sees on every green day. The
+/// fault comes through [`Fixture::arm_read_fault`], and before that seam existed
+/// no conformance rule could reach it at all: L3-01's measurement was that the
+/// same store fails **0 of 89** with no way to arm it and 22 with the fault armed
+/// by hand.
+#[derive(Debug)]
+pub(crate) struct SwallowedReadFaultStore {
+    log: Rc<RefCell<Vec<SequencedEvent>>>,
+    /// How many page fetches succeed before the next one fails, or `None` for
+    /// "no fault armed". Shared with the fixture and every other handle, so
+    /// arming through the fixture reaches a handle a rule already holds.
+    fault_after: Rc<Cell<Option<usize>>>,
+}
+
+/// The stream [`SwallowedReadFaultStore`] returns.
+///
+/// Every field is `Unpin`, so `poll_next` reaches its state through
+/// [`Pin::get_mut`] and no pin projection is hand-written — which the
+/// workspace's `unsafe_code = "forbid"` would forbid anyway.
+#[derive(Debug)]
+pub(crate) struct SwallowingPagedStream {
+    pages: std::vec::IntoIter<Vec<SequencedEvent>>,
+    page: std::vec::IntoIter<SequencedEvent>,
+    fetched: usize,
+    fault_after: Option<usize>,
+}
+
+impl Stream for SwallowingPagedStream {
+    type Item = Result<SequencedEvent, LogError>;
+
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        loop {
+            if let Some(event) = this.page.next() {
+                return Poll::Ready(Some(Ok(event)));
+            }
+            let Some(next) = this.pages.next() else {
+                return Poll::Ready(None);
+            };
+            if this.fault_after == Some(this.fetched) {
+                // THE DEFECT, and it is the finding's own line:
+                //
+                //     let Ok(page) = fetch().await else { return Poll::Ready(None) };
+                //
+                // The fetch failed. The caller is told the stream ended.
+                return Poll::Ready(None);
+            }
+            this.fetched += 1;
+            this.page = next.into_iter();
+        }
+    }
+}
+
+impl EventStore for SwallowedReadFaultStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        let selected = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)
+            .map(|stored| correct::select(&stored, query, options));
+
+        // A read that could not even start is reported as an empty stream rather
+        // than as the `Err` item the port provides for — the same defect one
+        // level up, and kept here so the store is wrong in one way rather than
+        // wrong in one way and panicking in another.
+        let pages = selected
+            .unwrap_or_default()
+            .chunks(SWALLOWED_PAGE)
+            .map(<[SequencedEvent]>::to_vec)
+            .collect::<Vec<_>>();
+
+        SwallowingPagedStream {
+            pages: pages.into_iter(),
+            page: Vec::new().into_iter(),
+            fetched: 0,
+            fault_after: self.fault_after.get(),
+        }
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let mut stored = self
+            .log
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        correct::commit(&mut stored, events, condition, dense)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
+}
+
+/// One log, and any number of swallowing paged handles onto it.
+#[derive(Debug)]
+pub(crate) struct SwallowedReadFaultFixture {
+    log: Rc<RefCell<Vec<SequencedEvent>>>,
+    fault_after: Rc<Cell<Option<usize>>>,
+}
+
+impl Fixture for SwallowedReadFaultFixture {
+    type Store = SwallowedReadFaultStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a read fault does to a paged stream",
+    );
+
+    async fn connect(&self) -> Self::Store {
+        SwallowedReadFaultStore {
+            log: Rc::clone(&self.log),
+            fault_after: Rc::clone(&self.fault_after),
+        }
+    }
+}
+
+impl Subject for SwallowedReadFaultFixture {
+    const NAME: &'static str = "SwallowedReadFaultStore";
+
+    fn open() -> Self {
+        Self {
+            log: Rc::new(RefCell::new(Vec::new())),
+            fault_after: Rc::new(Cell::new(None)),
+        }
+    }
+}

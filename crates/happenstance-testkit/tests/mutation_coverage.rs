@@ -1782,6 +1782,14 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "SwallowedReadFaultStore",
+        kind: Kind::Mutant,
+        fails: &[],
+        provenance: "`let Ok(page) = fetch().await else { return Poll::Ready(None) };` — a failed              page fetch reported as the end of the stream. It is the most natural way to get a              fallible fetch past a `poll_next` that must return a value, and both adapters that              will need one are already in the tree: `happenstance-cloudflare` over `SqlStorage`              and `happenstance-neon` over one-shot HTTP, neither of which can hold a cursor open              across polls. The port expresses the failure per item and this store declines to use              it. What the consumer sees is a short, SUCCESSFUL read: a projection runner applies              two events of five, commits the checkpoint at the truncation point, and the rest are              never applied — with `Ok` everywhere and no error to log. Who finds out is whoever              reconciles the read model against the log, months later.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "AwaitAcrossBorrowStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2465,6 +2473,7 @@ macro_rules! for_each_mutant {
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
             crate::mutants::RefetchingPagedFixture,
+            crate::mutants::SwallowedReadFaultFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
         }
     };
@@ -2807,6 +2816,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
     ("RefetchingPagedStore", ModelOutcome::Agreed),
+    // Agreed, and it has to be: unarmed, this store is completely conformant,
+    // and nothing in the model family arms a read fault. The row is the
+    // measurement that the generative family is not what catches it.
+    ("SwallowedReadFaultStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),
 ];
 
