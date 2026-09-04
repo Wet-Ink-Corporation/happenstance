@@ -110,7 +110,7 @@ reasoning. Its atom `.kb/decisions/0012-append-shape-and-preconditions.md` is
 | `crates/happenstance-sqlite/tests/append.rs:420, :433` | `after` only | 1 | No |
 | `crates/happenstance-sqlite/tests/append.rs:474-476` | `new` → `and_guard` ×2, no boundary | 3 | No |
 | `crates/happenstance-sqlite/tests/wide_query.rs:262, :281` | `after` only | 1 | No |
-| `README.md:69`; `docs/first-encounter.md:70, :112`; `docs/carry-your-invariant.md:78, :121`; `crates/happenstance-cloudflare/README.md:66` | `after_opt` only | 1 | No |
+| `README.md:69`; `docs/first-encounter.md:70, :112`; `docs/carry-your-invariant.md:140, :183`; `crates/happenstance-cloudflare/README.md:66` | `after_opt` only | 1 | No |
 
 \* The generator's own comment names the hazard and routes around it
 (`crates/happenstance-core/tests/wire.rs:305-309`):
@@ -242,7 +242,7 @@ asserting that the safe order leaves them independent. Plus one sentence on
 - **Costs a caller:** a compile error and a one-line edit per call site. Downstream
   is empty as far as this repository can see; in-tree it is ~15 call sites plus six
   documentation occurrences (`README.md:69`, `docs/first-encounter.md:70, :112`,
-  `docs/carry-your-invariant.md:78, :121`,
+  `docs/carry-your-invariant.md:140, :183`,
   `crates/happenstance-cloudflare/README.md:66`), all single-guard and mechanical.
   One cost is easy to miss: `xtask/tests/first_encounter.rs:423` and `:696` assert
   the **source substring** `after_opt(upto)` in a generated program, so the rename
@@ -485,7 +485,7 @@ real and the mechanism that was supposed to enforce it does not bind here.
    assembled condition.** That is the use case Option 4 forecloses, and the crate
    that would answer it is unwritten (`crates/happenstance-sync/`, `publish = false`).
 8. **Documentation for the multi-guard form.** No shipped page teaches it —
-   `docs/carry-your-invariant.md:90-93` says the multi-guard shape "is described but
+   `docs/carry-your-invariant.md:152-155` says the multi-guard shape "is described but
    is not settled … so nothing above leans on it". Correct today, and it is why a
    rename's documentation blast radius is currently six single-guard lines.
 
