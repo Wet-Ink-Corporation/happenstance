@@ -300,36 +300,50 @@ impl SendEventStore for MemoryEventStore {
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
         let guard = self.read_guard();
 
-        // Filter, order and truncate under the lock, then release it. The
-        // stream that leaves this function borrows nothing.
+        // Filter, order and limit under the lock, then release it. The stream
+        // that leaves this function borrows nothing.
         let matched = guard
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // After filtering and ordering, never before: `limit` cuts the result
+        // set the caller would otherwise have seen. A limit of zero yields
+        // nothing, which is the point of it being `Option<usize>`.
+        //
+        // `unwrap_or(usize::MAX)` is how `Option<usize>` reaches `take`. No
+        // store can hold `usize::MAX` events, so the unlimited case is
+        // unchanged and pays nothing for the branch it no longer takes.
+        let limit = options.limit.unwrap_or(usize::MAX);
+
         // `from` is the starting bound and `to` the stopping one, so reading
         // backwards swaps which side of the position order each sits on. Both
         // are inclusive in both directions.
-        let mut selected: Vec<SequencedEvent> = if options.backwards {
+        //
+        // Where `take` sits in each chain is load-bearing at both ends. Below
+        // `rev()` and below both bounds filters, so it cuts the *result* set
+        // and never the *scanned* one — one link earlier it is the wrong
+        // implementation ES-14 `[FROZEN]` rejects, and in the backwards branch
+        // it would return the lowest matching positions instead of the
+        // highest. Above `cloned()`, so the tail beyond `limit` is never
+        // cloned: collecting first and cutting afterwards made `limit(1)` cost
+        // what an unlimited read costs, which is the whole of the reduction
+        // `limit` is supposed to buy.
+        let selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
                 .filter(|event| options.to.is_none_or(|to| event.position >= to))
+                .take(limit)
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
                 .filter(|event| options.to.is_none_or(|to| event.position <= to))
+                .take(limit)
                 .cloned()
                 .collect()
         };
-
-        // After filtering and ordering, never before: `limit` truncates the
-        // result set the caller would otherwise have seen. A limit of zero
-        // truncates to nothing, which is the point of it being `Option<usize>`.
-        if let Some(limit) = options.limit {
-            selected.truncate(limit);
-        }
 
         drop(guard);
         Snapshot(selected.into_iter())
