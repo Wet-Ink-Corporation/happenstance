@@ -63,7 +63,7 @@ request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:296 (async fn head)` ·
-`.github/workflows/ci.yml:309 (baseline-rev)` ·
+`.github/workflows/ci.yml:408 (baseline-rev)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -164,7 +164,7 @@ ingest path in every peer crate breaks at once — and the author of the additio
 sees a clean workspace build, because nothing in this repository destructures it.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:406 (not public API)` ·
-`crates/happenstance-core/src/event.rs:426 (non_exhaustive)` ·
+`crates/happenstance-core/src/event.rs:435 (non_exhaustive)` ·
 [SPECIFICATION VT-4](../../spec/SPECIFICATION.md) *(the same attribute, on
 `SequencedEvent`, and why `new` is then the whole compatibility surface)*
 

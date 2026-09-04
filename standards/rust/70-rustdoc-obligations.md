@@ -82,8 +82,8 @@ implement against. The adapter author reading the published documentation is the
 first to notice, and by then the version is on crates.io, where a yank does not
 remove it.
 
-**Evidence.** `Cargo.toml:100 (Members opt in with)` · `Cargo.toml:103 (missing_docs)` ·
-`Cargo.toml:116 (missing_errors_doc)` ·
+**Evidence.** `Cargo.toml:158 (Members opt in with)` · `Cargo.toml:161 (missing_docs)` ·
+`Cargo.toml:174 (missing_errors_doc)` ·
 `crates/happenstance-core/Cargo.toml:104 (workspace = true)` ·
 `crates/happenstance-core/src/store.rs:251 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
@@ -159,7 +159,7 @@ configuration so that the rule is checked where the consumer stands.
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
 `xtask/src/main.rs:809 (no default features)` ·
 `xtask/src/main.rs:838 (documentation (default features))` ·
-`Cargo.toml:134 (broken_intra_doc_links)`
+`Cargo.toml:192 (broken_intra_doc_links)`
 
 ---
 

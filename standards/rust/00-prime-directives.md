@@ -82,7 +82,7 @@ item. That is a heap allocation on every event read, chosen under deadline, in a
 crate whose stream type is already named in a public signature and in the
 adapter's own `shapes.rs` assertions.
 
-**Evidence.** `Cargo.toml:102 (unsafe_code = "forbid")` ·
+**Evidence.** `Cargo.toml:160 (unsafe_code = "forbid")` ·
 `crates/happenstance-sqlite/tests/shapes.rs:21 (needs no pin projection)` ·
 `crates/happenstance-testkit/src/registry.rs:299 (std::task::Wake)` ·
 `crates/happenstance-cloudflare/src/js.rs:33 (The escape hatch is an)` ·
