@@ -79,6 +79,26 @@ enum Kind {
     /// A store that is legally different from `MemoryEventStore` and MUST pass
     /// everything (CF-5).
     ConformantVariant,
+    /// A store with a named defect that **no rule of the event-store family can
+    /// see**, and which the *model* family therefore has to.
+    ///
+    /// It looks like a hole in [`Kind::Mutant`]'s contract and is the opposite:
+    /// a mutant with an empty `fails` list is rejected outright, because a
+    /// defect nothing catches is a defect nobody knows about. This kind is what
+    /// makes "nothing in this family catches it, and here is what does" a
+    /// *checked* claim. It carries two obligations rather than one — every rule
+    /// of the family must pass or skip for a declared reason, exactly as for a
+    /// mutant with nothing in `fails`, **and** [`MODEL_COVERAGE`] must claim it
+    /// [`ModelOutcome::Rejected`] — and `mutant_registry_is_exhaustive` holds
+    /// both. Drop the second and this becomes a filing cabinet for stores
+    /// nothing detects.
+    ///
+    /// The shape it exists for is a defect that needs a *query* and a *read
+    /// option* together, where the family's rules for that option all issue
+    /// `Query::all()`. The suite's answer to that for `from` was CF-12's rule;
+    /// where no such rule exists, the generative family is what is left, and
+    /// this kind records which of the two is doing the work.
+    ModelOnlyMutant,
 }
 
 /// Why a mutant's declared rule fails.
@@ -806,6 +826,26 @@ const REGISTRY: &[Declared] = &[
             "read_from_composes_with_multi_item_query",
             "must bound EVERY item of the query",
         )],
+    },
+    Declared {
+        name: "UnparenthesisedToPredicateStore",
+        kind: Kind::ModelOnlyMutant,
+        // Empty, and that is this row's whole content: the three `to` rules all
+        // issue `Query::all()`, and with no items there is nothing for the `OR`
+        // to bind wrongly across. CF-12 closed this gap for `from` and no clause
+        // has closed it for `to`, so what catches this store is the model
+        // family, which generates multi-item queries and an upper bound to go
+        // with them. `MODEL_COVERAGE` carries the claim, and
+        // `mutant_registry_is_exhaustive` requires it to say `Rejected`.
+        fails: &[],
+        provenance: "`WHERE a OR b AND position <= ?` — `UnparenthesisedPredicateStore` one bound \
+             over, and reached the same way: the window's top appended to a `WHERE` string that \
+             already carries a disjunction someone else built. The caller it breaks is a bounded \
+             backfill worker owning `[1, H]` while a tail worker owns everything above it: the \
+             backfill reads past its own window and re-delivers events the tail worker has \
+             already processed, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
     },
     Declared {
         name: "NullHeadPagingStore",
@@ -2174,6 +2214,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::LimitPerItemStore>,
             crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
+            crate::mutants::MutantFixture<crate::mutants::UnparenthesisedToPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
             crate::mutants::MutantFixture<crate::mutants::AfterValidatedAgainstHeadStore>,
@@ -2473,6 +2514,12 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ItemOrderedUnionStore", ModelOutcome::Rejected),
     ("LimitBeforeFilterStore", ModelOutcome::Rejected),
     ("UnparenthesisedPredicateStore", ModelOutcome::Rejected),
+    // The `to` twin, and the only `Kind::ModelOnlyMutant` in the table: no rule
+    // of the event-store family can see it, so this row is the whole of what
+    // catches it. It reads `Rejected` because the generator emits an upper bound
+    // — which it did not until phase 12, and the day it stops again this row is
+    // what goes red.
+    ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
     ("NullHeadPagingStore", ModelOutcome::Rejected),
     ("ConditionBeforeEmptinessStore", ModelOutcome::Agreed),
     ("AfterValidatedAgainstHeadStore", ModelOutcome::Rejected),
@@ -2952,6 +2999,35 @@ mod mutation_coverage {
                      store filed under the wrong kind",
                     entry.name
                 ),
+                Kind::ModelOnlyMutant => {
+                    assert!(
+                        entry.fails.is_empty(),
+                        "`{}` is filed as caught only by the model family and \
+                         declares a rule of the event-store family that it \
+                         fails, so it is an ordinary mutant. Change the kind \
+                         rather than the list",
+                        entry.name
+                    );
+                    // The obligation that stops this kind being a filing
+                    // cabinet. `Kind::Mutant`'s bar is "something catches it",
+                    // enforced by a non-empty `fails`; this kind moves that bar
+                    // one family over rather than removing it, and without this
+                    // assertion a store nothing detects at all could be parked
+                    // here and read as accounted for.
+                    let claimed = MODEL_COVERAGE
+                        .iter()
+                        .find(|(row, _)| *row == entry.name)
+                        .map(|(_, outcome)| *outcome);
+                    assert_eq!(
+                        claimed,
+                        Some(ModelOutcome::Rejected),
+                        "`{}` is filed as caught only by the model family, and \
+                         `MODEL_COVERAGE` claims {claimed:?} rather than \
+                         `Rejected` — so nothing in this binary catches it and \
+                         the kind is a place to hide it",
+                        entry.name
+                    );
+                }
                 Kind::ConformantVariant => assert!(
                     entry.fails.is_empty(),
                     "`{}` is a conformant variant that declares failures; a \
@@ -3004,7 +3080,12 @@ mod mutation_coverage {
             let Some(entry) = declared(report.name) else {
                 continue; // `mutant_registry_is_exhaustive` owns this failure.
             };
-            if entry.kind != Kind::Mutant {
+            // `Kind::ModelOnlyMutant` runs through this loop too, and with an
+            // empty `fails` list every rule takes the undeclared arm — which is
+            // exactly the claim that kind makes: *no rule of this family sees
+            // it*. Filing it as a mutant caught elsewhere would be worth nothing
+            // if the "elsewhere" were assumed rather than measured here.
+            if entry.kind == Kind::ConformantVariant {
                 continue;
             }
 

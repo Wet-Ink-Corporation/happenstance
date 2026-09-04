@@ -1144,6 +1144,100 @@ impl Defect for UnparenthesisedPredicateStore {
     }
 }
 
+/// `WHERE a OR b AND position <= ?`, without the parentheses.
+///
+/// [`UnparenthesisedPredicateStore`]'s twin, one bound over. The lower bound is
+/// conjoined with the whole predicate — correctly — and only the **upper** one is
+/// left dangling off the last disjunct, which is what an adapter produces when
+/// the `to` clause is appended to a `WHERE` string that already carries a cursor
+/// and a disjunction someone else built. `AND` binds tighter than `OR`, so every
+/// event matching an earlier item comes back regardless of the window's top.
+///
+/// The wrong outcome is a bounded backfill worker that reads past its own
+/// window. It was given `[1, H]` while a tail worker owns everything above, and
+/// it re-delivers events the tail worker has already processed — the failure
+/// ES-16 exists to forbid, arriving through a query shape ES-16's own rules do
+/// not exercise.
+///
+/// # Why it is `Kind::ModelOnlyMutant`
+///
+/// It fails no rule in the event-store family, and that is the finding rather
+/// than an accident. All three `to` rules — `read_to_is_inclusive`,
+/// `read_from_and_to_bound_a_closed_window` and
+/// `read_to_under_backwards_bounds_the_older_end` — issue `Query::all()`, and
+/// with no items there is nothing for the `OR` to bind wrongly across, so this
+/// store's answer is the correct one. The rule that would see it is `to`
+/// composed with a multi-item query, which does not exist; CF-12 closed that gap
+/// for `from` alone. What catches it instead is the **model** family, which
+/// generates multi-item queries and — since phase 12 — an upper bound to go with
+/// them.
+///
+/// Registering it is therefore the honest way to hold that boundary in place. If
+/// someone writes the missing rule, this row becomes an ordinary
+/// [`Kind::Mutant`] with one entry in `fails` and the meta-tests say so; if the
+/// generator ever stops reaching `to`, `MODEL_COVERAGE` goes red and names this
+/// store. Either way the claim is checked rather than remembered.
+///
+/// It cannot be a one-step defect, for [`UnparenthesisedPredicateStore`]'s
+/// reason: the bound and the predicate have to be built together, `matching` is
+/// handed no options and `ordered` is handed no query, and [`Defect::select`] is
+/// the only seam that sees both.
+pub(crate) struct UnparenthesisedToPredicateStore;
+
+impl Defect for UnparenthesisedToPredicateStore {
+    const NAME: &'static str = "UnparenthesisedToPredicateStore";
+
+    fn select(
+        events: &[SequencedEvent],
+        query: &Query,
+        options: ReadOptions,
+    ) -> Result<Vec<SequencedEvent>, LogError> {
+        let Some(items) = query.items() else {
+            return Ok(correct::select(events, query, options));
+        };
+        let Some((last, rest)) = items.split_last() else {
+            return Ok(correct::select(events, query, options));
+        };
+
+        let mut selected: Vec<&SequencedEvent> = events
+            .iter()
+            .filter(|event| {
+                // The cursor is conjoined with the whole predicate, which is
+                // right, and is what keeps this store distinct from its twin.
+                let resumed = options.from.is_none_or(|from| {
+                    if options.backwards {
+                        event.position <= from
+                    } else {
+                        event.position >= from
+                    }
+                });
+                let bounded = options.to.is_none_or(|to| {
+                    if options.backwards {
+                        event.position >= to
+                    } else {
+                        event.position <= to
+                    }
+                });
+                let matched_early = rest
+                    .iter()
+                    .any(|item| item.matches(event.event_type(), event.tags()));
+                let matched_last = last.matches(event.event_type(), event.tags());
+                // THE DEFECT: the UPPER bound is conjoined with the last
+                // disjunct instead of with the whole predicate.
+                resumed && (matched_early || (matched_last && bounded))
+            })
+            .collect();
+
+        if options.backwards {
+            selected.reverse();
+        }
+        Ok(correct::truncated(selected, options)
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+}
+
 /// The read window is anchored on `max(position)`, which is `NULL` on an empty
 /// store.
 ///
