@@ -122,6 +122,18 @@ The number is the count of statements that will actually be prepared and run.
 
 The name says "statements"; make it count statements. The lane implemented this rather than briefing it because the alternative was to leave a public function returning a number known to be wrong in the exact case the finding is about — and the changelog entry says so in those words.
 
+#### Say plainly what kind of change this is
+
+**It is a changed meaning of an existing public function, not an addition.** Everything else this lane put on a public surface is additive — two constants on `SqliteEventStore`, three items on `CloudflareEventStore` — and additions cost a reader nothing. This one is different in kind and should not be read alongside them: `pub fn planned_statement_count(query: &Query) -> usize` has the same name, the same signature and the same visibility before and after, and returns a different number for some inputs. Nothing in the type system marks that, and `cargo-semver-checks` cannot see it either, because the surface did not move.
+
+**What a caller who depended on the old meaning loses.** The old number was `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)` and nothing else. Three things a caller could have been doing with it, and what each gets now:
+
+* *Sizing a decision model against the adapter* — "how many statements will my guard cost?" This caller is **strictly better off**: the old answer was `1` for a plan of 51,200 bound parameters, and `prepare` refuses that statement. They were being told a query was fine that could not run.
+* *Deriving the arm width back out of it* — `planned_statement_count(&q) * MAX_QUERY_ARMS_PER_STATEMENT` as an upper bound on items, or `q.items().len() / planned_statement_count(&q)` as the width. This caller is **broken silently**: for a query of wide items the identity no longer holds, and nothing errors. It is the only real loss, and the repair is to read `MAX_QUERY_ARMS_PER_STATEMENT` directly, which is public precisely so that it need not be inferred.
+* *Asserting an exact count in a test* — a wide-item test pinning `1` now fails. That is the change announcing itself, which is the good case.
+
+**Why it is free today, exactly.** `happenstance-sqlite` has never been released. The `0.2.0-alpha.1` of 2026-08-16 published `happenstance`, `happenstance-core` and `happenstance-testkit`; what stands on the registry under this crate's name is the `0.0.0` **name-reservation placeholder** `cargo xtask reserve` generates (`xtask/src/reserve.rs:1-2`), which is a standalone crate carrying none of this code. So there is no released version in which `planned_statement_count` ever had the old meaning, and therefore no caller anywhere who can be broken by the new one. That ends at stable `0.2.0`: the moment this crate ships, the number becomes a promise, and changing what it counts becomes a change no version bump can honestly describe — the signature would not move, so the break would be invisible to every tool a consumer runs.
+
 **The strongest argument against, and it is not weak:** the decision was taken by the lane rather than by the owner of the public surface, and it is the one thing in `X-1` that could not be deferred without leaving the defect half-fixed. If the owner prefers 2B, the change is small and free until `0.2.0`. What cannot be recovered cheaply is 2A landing *after* publication.
 
 **Confidence: high** on the direction, **medium** on the authority.
@@ -144,3 +156,15 @@ There is no earlier deadline. Nothing in the gate depends on either answer, and 
 - **The per-item parameter cost's coupling to the arm shape.** `item_parameters` (`crates/happenstance-sqlite/src/query_sql.rs:287-289`) is a second reading of `item_sql`, and it is correct only for the intersection-chain arm that ships today. If `append-condition-sql-shape.md` chooses an aggregate arm, whoever lands it owns re-deriving that function — the count is *"one per tag and one per type"* under both shapes measured so far, but that is a fact about two shapes, not a theorem.
 - **`Selectivity::read_for`'s existence.** `append-condition-sql-shape.md`'s option B deletes it, and with it the chunk width the `X-1` lane gave it. That brief asked for `X-1` to be sequenced after it and `X-1` ran first; the note recording that is in its §"Sequencing".
 - **The quadratic in `read_for`'s accumulation.** Audit entry `I-5` owns it, the lane left `wanted.contains` exactly as it found it, and chunking the statement does not make the accumulation cheaper. The two changes touch the same function and will conflict if they land in either order without a merge.
+
+---
+
+## One note on method, because it is the third form of the same failure
+
+The citation repointing this lane did — 58 citations across seven staged briefs, plus the checked corpora — was done by a script that computed each new line from `git diff -U0` hunks and **verified it by comparing the cited line's content before and after**. That verification is what made it safe to run at all, and it is *not* what makes it safe to run twice.
+
+Running the same script a second time re-shifted eleven citations, and the content check did not stop it: the already-corrected line number was compared against a line whose content happened to be identical — `    }`, a blank line, a bare `///` — so the guard passed and the shift was applied again. The repair had silently become a corruption. It was caught by re-reading the output, not by the check.
+
+**The discipline: restore from git and run exactly once.** A content check that can pass on coincidentally-identical lines makes a repair non-idempotent, and a non-idempotent repair is one nobody may re-run to be sure — which is the property people most want from a mechanical fix.
+
+This is the same family as repointing by offset rather than by anchor, and this remediation effort has now hit it in **three** forms: a modal offset that left the outlier wrong and green; `lint-constitution`'s ten-line `ANCHOR_SLACK` accepting a citation that points at the wrong occurrence (`citation-anchor-slack.md`, which measures the distribution); and this one. All three share a shape — *a check that passes on a coincidence* — and all three are invisible on a green gate. That is the argument for `citation-anchor-slack.md`'s exact-anchor option, made from a third direction, and it is offered as evidence for that record rather than as a recommendation of this one.

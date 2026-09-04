@@ -219,3 +219,19 @@ for what `README.md:118` says it means, the eventual correction gets more expens
   `52-wasm32-and-target-cfg.md`'s `.github/workflows/ci.yml:198`, whose anchor text
   was removed at `8ea7bb7` — and no mechanical repair can find a line that is not
   there. It needs a human, and the checker should say so rather than guess.
+- **Whether a `--repoint` must be idempotent, and whether a content check is
+  enough to make it so.** *(Added by the query-ceilings lane, 2026-09-04, and
+  not part of this brief's own two-critic pass.)* That lane repointed 58
+  citations with a script that derived each new line from `git diff -U0` hunks
+  and verified it by comparing the cited line's content before and after.
+  Running it a **second** time re-shifted eleven of them, and the content check
+  did not stop it: the already-corrected number was compared against a line whose
+  content happened to be identical — `    }`, a blank line, a bare `///` — so the
+  guard passed and the shift was applied twice. The repair had become a
+  corruption, and it was caught by re-reading the output rather than by any
+  check. Restoring from git and running exactly once is the discipline that
+  worked; whether a shipped `--repoint` can do better than that discipline is a
+  question this brief's options do not reach. It is the same shape as the
+  tolerance measured above — *a check that passes on a coincidence* — which is
+  the third form this effort has met it in, and the third argument for the exact
+  option. The account is in `query-partition-public-surface.md`.

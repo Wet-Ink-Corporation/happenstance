@@ -572,6 +572,20 @@ not the same as what a user needed to be told.
   has to order by it. A one-statement plan — every query any conformance rule
   builds — takes neither the sort nor that decode, and is byte-identical to the
   read this replaced.
+
+  It is proven by execution rather than by arithmetic.
+  `tests/wide_query_ceiling.rs` drives a query past each wall — 1,000 compound
+  terms against a limit of 500, and 32,800 bound parameters against 32,766 —
+  through `EventStore::read` and through an append-condition guard, against the
+  real SQLite behind the `DurableObjectState` shape, and its first case is a
+  control that hands this runtime the unpartitioned statement and watches the
+  driver refuse it. Against the previous implementation six of its seven cases
+  fail with SQLite's own *"too many terms in compound SELECT"* and *"too many
+  SQL variables"*; the seventh is the control, which passes either way because
+  it asserts a fact about the engine. The conformance suite cannot reach either
+  wall — its widest query is 128 items at one tag each — so the target is
+  registered in `xtask/src/proof.rs`'s `WASM_UNIT_TARGETS` and runs under
+  `cargo xtask wasm-conformance`, in 0.35 s.
 - **`happenstance-sqlite` no longer fails past `SQLITE_MAX_VARIABLE_NUMBER` on a
   wide query — on either path, and the append path is the one that held the write
   lock.** `query_sql::chunks` partitioned on item count alone, so a query of 400
