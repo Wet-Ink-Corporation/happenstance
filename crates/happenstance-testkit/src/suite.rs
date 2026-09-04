@@ -2935,7 +2935,7 @@ pub mod rules {
     /// A fixture that declares `READ_FAULT` supported must arm a fault the
     /// store surfaces as an `Err` **item**, not as the end of the stream.
     ///
-    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// [`EventStore::read`] yields
     /// `Result<SequencedEvent, Self::Error>` per item, and the whole value of
     /// that `Err` arm is that a caller can tell *the log ended* from *the fetch
     /// failed*. The wrong implementation is one line, and it is the most natural

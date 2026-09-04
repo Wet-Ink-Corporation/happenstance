@@ -284,7 +284,7 @@ pub trait Fixture {
     /// `read`**.
     ///
     /// [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)'s sibling on the other path.
-    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// [`EventStore::read`] yields
     /// `Result<SequencedEvent, Self::Error>` **per item**, so the port has an
     /// error arm on the read side and, until this constant, nothing in the suite
     /// ever reached it: no rule induced a read fault, no mutant modelled one, and
