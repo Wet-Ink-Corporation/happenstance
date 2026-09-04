@@ -3595,8 +3595,10 @@ impl Subject for NoopFaultFixture {
 /// written on exactly that. `REOPEN` has none: a correct `reopen` over a durable
 /// medium and an empty one over a `Vec` produce byte-identical observations
 /// through `EventStore`, so a rule that rejected this fixture would reject
-/// `DurableFixture` too. What is left is a registry row whose whole content is
-/// that claim, measured — and `REGISTRY` has nowhere to put one today.
+/// `DurableFixture` too. It is registered under `Kind::StatedOnlyDefect`, whose
+/// whole content is that claim, measured — and whose bar is
+/// [`reopen_observed_by_a_stale_handle`] against
+/// [`ClosingFixture`]'s answer to the same scenario.
 #[derive(Debug)]
 pub(crate) struct NoopReopenFixture(LogStore);
 
@@ -3623,6 +3625,117 @@ impl Subject for NoopReopenFixture {
     fn open() -> Self {
         Self(LogStore::new(dense))
     }
+}
+
+/// The control [`NoopReopenFixture`] is measured against: a `reopen` that
+/// genuinely closes something.
+///
+/// [`LosingFixture`]'s honest sibling. Both replace the live log wholesale, so a
+/// handle taken beforehand keeps the old one exactly as a real connection keeps
+/// talking to a closed file; the difference is that this one **replays** what was
+/// committed into the new log rather than starting empty, which is what a
+/// file-backed adapter's `open` does because it reads back rows it wrote.
+///
+/// It is deliberately **not** in `for_each_mutant!`. Its job is to be the other
+/// half of a comparison, exactly as `HidingPlaceStore` is for the model-only
+/// bar, and registering it would make it a conformant variant whose whole suite
+/// is asserted — a bigger claim than this file needs and one `DurableFixture` in
+/// `tests/fixture_instruments.rs` already makes over a `MemoryEventStore`.
+#[derive(Debug)]
+pub(crate) struct ClosingFixture {
+    live: RefCell<Rc<RefCell<Log>>>,
+}
+
+impl Fixture for ClosingFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LogStore::over(&self.live.borrow())
+    }
+
+    async fn reopen(&self) {
+        // Read back the way a replay reads it — every store-assigned fact
+        // included, which is what distinguishes this from `LosingFixture`
+        // (nothing replayed) and `RestampingFixture` (one field re-derived).
+        let committed = {
+            let live = self.live.borrow();
+            let log = live.borrow();
+            log.select(&Query::all(), ReadOptions::new())
+        };
+        *self.live.borrow_mut() = Rc::new(RefCell::new(Log::replayed(dense, committed)));
+    }
+}
+
+impl Subject for ClosingFixture {
+    const NAME: &'static str = "ClosingFixture";
+
+    fn open() -> Self {
+        Self {
+            live: RefCell::new(Rc::new(RefCell::new(Log::new(dense)))),
+        }
+    }
+}
+
+/// What a *stale* handle's write is worth after a reopen, rendered as a string.
+///
+/// The one scenario on which an honest `reopen` and an empty one separate, and
+/// finding it is most of what this witness is: through `EventStore` alone they
+/// do not separate at all, which is L1-2's whole finding. What separates them is
+/// the handle the trait says *may stop working*:
+///
+/// 1. connect, and append `Before` through that handle;
+/// 2. `reopen()`;
+/// 3. append `After` through the **same, now stale** handle;
+/// 4. connect **again**, and read everything.
+///
+/// A fixture that closed something answers `["Before"]` — the stale handle wrote
+/// into a log nothing reaches any more. A fixture whose `reopen` is empty
+/// answers `["Before", "After"]`, because there is only ever one log and the
+/// handle was never stale.
+///
+/// It is not a conformance rule and must not become one. `Fixture::reopen`'s
+/// contract says a pre-reopen handle *may* stop working, not that it must, and a
+/// rule asserting this would reject legitimate fixtures — `DurableFixture` among
+/// them if its handles were shared differently. What it is is a **witness**: a
+/// statement about two named fixtures, run against both, whose value is that a
+/// store with no defect cannot produce the defective answer.
+fn reopen_observed_by_a_stale_handle<F: Fixture>(fixture: &F) -> String {
+    happenstance_testkit::block_on(async {
+        let stale = fixture.connect().await;
+        let before = happenstance_testkit::fixtures::event("Before");
+        assert!(
+            stale.append(&[before], None).await.is_ok(),
+            "the anchor: the scenario says nothing unless the first append lands"
+        );
+
+        fixture.reopen().await;
+
+        let after = happenstance_testkit::fixtures::event("After");
+        let _ = stale.append(&[after], None).await;
+
+        let fresh = fixture.connect().await;
+        let all = happenstance_core::collect(fresh.read(&Query::all(), ReadOptions::new()))
+            .await
+            .expect("the correct read path is infallible");
+        let types: Vec<&str> = all
+            .iter()
+            .map(|event| event.event_type().as_str())
+            .collect();
+        format!("{types:?}")
+    })
+}
+
+/// [`NoopReopenFixture`]'s answer to [`reopen_observed_by_a_stale_handle`].
+pub(crate) fn noop_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&NoopReopenFixture::open())
+}
+
+/// [`ClosingFixture`]'s answer to the same scenario — the control.
+pub(crate) fn closing_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&ClosingFixture::open())
 }
 
 // =====================================================================

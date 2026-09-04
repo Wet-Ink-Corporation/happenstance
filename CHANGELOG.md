@@ -366,6 +366,30 @@ not the same as what a user needed to be told.
   unnoticed — the miss the previous milestone's harness scan could not see,
   because it read one directory. `cargo xtask ci` now runs the adapter's
   eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
+- **CF-17 says what declaring `REOPEN` commits a fixture to, and the registry
+  carries the fixture that lies about it.** A fixture declaring
+  `Fixture::REOPEN` supported MUST make `reopen` discard process state over a
+  medium that outlives the process's hold on it, MUST state the mechanism, and —
+  where its store has no such medium — MUST decline the capability with that as
+  its stated reason. **No rule enforces it, and that is the finding rather than
+  an omission.** `MID_BATCH_FAULT` is closable because arming it forces the
+  append to answer `Err`, which is what CF-39 is written on; reopening has no
+  port-observable consequence at all, so a rule rejecting an empty `reopen` over
+  a `Vec` would reject an honest one over a real file with it.
+
+  What is new is that the hazard is *stated* and its wrong implementation is
+  driven. `NoopReopenFixture` — `REOPEN: SUPPORTED`, `async fn reopen(&self) {}`,
+  over a completely correct volatile store — is registered under a new
+  `Kind::StatedOnlyDefect` in the testkit's own mutation registry, whose bar is
+  that its answer to a fixed scenario differs from an honest control's *and* that
+  the three rules it buys by lying are asserted to have **passed**:
+  `acknowledged_writes_survive_a_reopen`,
+  `reopened_store_does_not_reissue_an_event_id` and
+  `recorded_time_survives_a_reopen`, which are this suite's whole durability
+  certification. The incentive inversion — an over-claiming fixture scoring
+  *better* than an honest one that declines — is now data that goes red if it
+  ever stops being true. No conformance rule was added, so no adapter's build
+  changes.
 
 ### Removed
 

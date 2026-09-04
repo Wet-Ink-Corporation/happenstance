@@ -188,7 +188,7 @@ ceiling no later than the first poll and bound every later statement by it.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:26 (does not live long enough)` ·
 `crates/happenstance-postgres/src/read_stream.rs:284 (taking the cursor by value and handing it back)` ·
-`crates/happenstance-testkit/tests/mutation_coverage.rs:1721 (RefetchingPagedStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage.rs:1761 (RefetchingPagedStore)` ·
 [ES-11](../../spec/SPECIFICATION.md) ·
 [ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)

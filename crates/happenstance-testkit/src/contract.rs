@@ -181,6 +181,51 @@ pub trait Fixture {
     /// restarted from inside a test at all. Naming the stronger operation would
     /// have bought a capability every fixture in the workspace declines, which
     /// is a skip reported on every run and evidence of nothing.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// CF-17, and it is [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)'s CF-39 one
+    /// capability over. A fixture declaring this supported MUST make
+    /// [`reopen`](Self::reopen) **discard process-level state over a medium that
+    /// outlives it**, so that the subsequent [`connect`](Self::connect) reads
+    /// what was durably committed rather than what a live object still happens
+    /// to be holding. The fixture MUST state the mechanism — which file is
+    /// closed, which connection pool is drained, which isolate's storage is read
+    /// again. **A fixture over a store with no medium outside the process MUST
+    /// decline this capability with that as its stated reason**, rather than
+    /// declare it and let three rules certify a `Vec`.
+    ///
+    /// # And what this obligation is *not*, stated rather than discovered later
+    ///
+    /// It is a MUST no rule can enforce, and pretending otherwise would be
+    /// worse than saying so. CF-39 works because arming a mid-batch fault has a
+    /// **port-observable** consequence: the append has to answer `Err`, and
+    /// `arming_a_mid_batch_fault_makes_the_append_fail` is written on exactly
+    /// that. Reopening has none. A correct `reopen` over a durable medium and an
+    /// empty one over a `Vec` produce byte-identical observations through
+    /// [`EventStore`], so any rule that rejected the second would reject the
+    /// first with it — which is why there is no such rule and why one must not
+    /// be written.
+    ///
+    /// What exists instead is the named wrong implementation, driven:
+    /// `NoopReopenFixture` in `tests/mutation_coverage/mutants.rs` declares this
+    /// capability supported, overrides `reopen` with an empty body over a
+    /// completely correct but entirely volatile store, and is registered under
+    /// `Kind::StatedOnlyDefect` — a kind whose bar is that its answer to a fixed
+    /// scenario differs from an honest fixture's, and that the three rules it
+    /// buys by lying are checked to have **passed**. Those three are
+    /// `acknowledged_writes_survive_a_reopen`,
+    /// `reopened_store_does_not_reissue_an_event_id` and
+    /// `recorded_time_survives_a_reopen`: this suite's whole durability
+    /// certification. The incentive runs backwards and the registry now says so
+    /// in a form that goes red if it ever stops being true — an honest volatile
+    /// fixture declines and reports three more skips, and the one that
+    /// over-claims looks *better*.
+    ///
+    /// The one mistake that **is** caught is the other one:
+    /// [`reopen`](Self::reopen)'s provided body panics, so a fixture that
+    /// declares the capability and *forgets* the override aborts loudly. What
+    /// nothing catches is an override that is present, honest-looking and empty.
     const REOPEN: Capability;
 
     /// Whether this fixture can make its store **fail part way through writing

@@ -8018,6 +8018,12 @@ implementation it is shown to reject.
 **CF-17.** The fixture SHOULD be able to **reopen**: invalidate every
 outstanding handle's process-level state such that a subsequent `connect()`
 observes only what was durably committed. The capability constant is `REOPEN`.
+A fixture declaring `REOPEN` supported MUST make `reopen` discard that state
+**over a medium that outlives the process's hold on it**, so that the subsequent
+`connect()` reads what was durably committed rather than what a live object still
+happens to hold. The fixture MUST state the mechanism. A fixture over a store
+with no medium outside the process MUST decline the capability with that as its
+stated reason.
 `[PROVISIONAL — falsified by a legitimate adapter that is durable and cannot
 express even a reopen through this contract. The Durable Object is why the weaker
 half is the one named: its storage outlives the isolate, so it can discard handle
@@ -8038,10 +8044,31 @@ the rule executed rather than reporting a skip everywhere; since phase 8
 `SqliteFixture` in `crates/happenstance-sqlite/tests/support/mod.rs` supplies it
 too, and it is the first that supplies it over a medium outside the process.
 Cases: E2E-07.
-Rejects: nothing on its own — it is an enabling clause, and CF-14 carries the
-rejection. It is `SHOULD` rather than `MUST` because `MemoryEventStore` is
+Rejects: `NoopReopenFixture` in the testkit's own `tests/` — declares the
+capability supported and **overrides `reopen` with an empty body** over a
+completely correct but entirely volatile store, so it never reaches the trait's
+panic. It is what the declaration MUST added above is written against, and it is
+registered as a `Kind::StatedOnlyDefect` rather than as a mutant because **no
+rule of this family can reject it**, and that is a property of the capability
+rather than a gap in the rule set: arming a mid-batch fault has a port-observable
+consequence — the append must answer `Err`, which is what CF-39 is written on —
+and reopening has none. A correct `reopen` over a durable medium and an empty one
+over a `Vec` produce byte-identical observations through `EventStore`, so a rule
+rejecting the second rejects `DurableFixture` with it. The registry carries the
+hazard as data instead: the fixture's answer to a fixed scenario must differ from
+an honest control's, and the three rules it buys by lying —
+`acknowledged_writes_survive_a_reopen`,
+`reopened_store_does_not_reissue_an_event_id`, `recorded_time_survives_a_reopen`
+— are asserted to have **passed**, so the day one of them starts rejecting it the
+record goes red. What the declaration MUST buys is therefore what CF-39 bought for
+the write path and no more: the hazard is *stated* rather than undetectable.
+A *forgotten* override is a different mistake and is already handled: the trait's
+provided body panics and its message names this hazard.
+CF-14 still carries the rejection of a store that loses an acknowledged write.
+The clause is `SHOULD` rather than `MUST` because `MemoryEventStore` is
 legitimately volatile and must stay a first-class fixture; CF-18 is what stops
-that from becoming an excuse.
+that from becoming an excuse, and the MUST added above is conditional on
+declaring, which is a different sentence.
 
 This clause's first draft deferred a split — `restart` into "reopen the handle"
 and "restart the host" — to whichever adapter forced it. The split is
