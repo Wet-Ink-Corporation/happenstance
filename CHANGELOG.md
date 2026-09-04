@@ -607,6 +607,30 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`DomainEvent::tags` now says what its totality costs, and carries the
+  example that pays it.** Documentation only; the signature is untouched.
+
+  The method returns `Tags` and cannot fail, and `Tags` has no infallible
+  constructor from strings — `Tag::key_value` refuses an empty value, a value
+  past the length ceiling, and a set of control and bidirectional formatting
+  characters. So an identifier that arrived as a `String` cannot become a tag
+  inside `tags`: there is no `Result` for a `?`, and the route left is an
+  `expect` on the write path, inside `commit`, after the decision has been
+  taken. The method carried one line of documentation; its sibling
+  `DecisionModel::scope` carried four for the opposite choice, and every one of
+  the eight rendered examples of `tags` was `Tags::empty()` — the one case where
+  the totality is free.
+
+  The page now names the cost and the resolution — hold the validated `Tag` on
+  your identifier type, pay the `?` in that type's constructor, and `.collect()`
+  through the infallible `FromIterator<Tag> for Tags` — and a compiled
+  `# Examples` fence shows it, refusal included.
+
+  **Whether the signature should be fallible is not settled here** and is not
+  this change's to settle: `.kb/open-questions/d-1-the-validated-type-has-no-total-path.md`
+  is accepted and open. What this repairs is the half that needed no decision —
+  the residual was undocumented on the rendered surface.
+
 - **`run_projection`'s page now prices its one knob and states what an operator
   can see while it runs.** Documentation only, on items behind
   `unstable-projection` that make no semver promise.
