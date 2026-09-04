@@ -181,6 +181,14 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // is on the `xtask` arm rather than `INERT`, but a pages-only diff would
     // still never reach a page-need check without this call.
     crate::lint_pages::run(crate::lint_pages::Mode::Check)?;
+    // Called rather than excused, and the decision is the one
+    // `OFF_THE_STORY_GRAIN` exists to force. `.github/workflows/` reaches no
+    // package at all, so a story whose diff is a new CI job — which is exactly
+    // the change that adds an action on a mutable tag, or a workflow with no
+    // `permissions:` key — would otherwise clear its own grain having had its
+    // only deliverable read by nothing. The check opens one directory and
+    // starts no process, so it costs what the neighbours above it cost.
+    crate::lint_workflows::run()?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;

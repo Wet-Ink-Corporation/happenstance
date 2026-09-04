@@ -83,6 +83,7 @@ mod affected;
 mod lint_constitution;
 mod lint_narrative;
 mod lint_pages;
+mod lint_workflows;
 mod lints;
 mod narrative_doctests;
 mod package;
@@ -866,6 +867,7 @@ const REQUIRED: &[Step] = &[
         env: &[],
         probe: None,
     },
+    lint_workflows::STEP,
 ];
 
 const OPTIONAL: &[Step] = &[
@@ -1041,6 +1043,7 @@ fn main() -> ExitCode {
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lint-workflows") => lint_workflows::run(),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),
@@ -1210,6 +1213,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "the Rust constitution is internally consistent",
         lint_narrative::STEP,
         lint_pages::STEP,
+        lint_workflows::STEP.name,
     ])
 }
 
