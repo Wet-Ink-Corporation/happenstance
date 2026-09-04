@@ -114,7 +114,9 @@ fn the_front_page_points_at_the_statement() {
     let root = CRATE_ROOT.replace('\r', "");
     assert!(
         root.contains("`# Cancellation` section"),
-        "this crate's root documentation no longer points at the store module's          `# Cancellation` section, so ES-23's answer is a click away from a          reader who has no reason to guess it is there"
+        "this crate's root documentation no longer points at the store module's \
+         `# Cancellation` section, so ES-23's answer is a click away from a \
+         reader who has no reason to guess it is there"
     );
 }
 
