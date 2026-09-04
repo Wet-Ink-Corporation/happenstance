@@ -841,6 +841,25 @@ mod tests {
     }
 
     #[test]
+    fn a_citation_into_a_root_level_file_is_seen() {
+        // The real defect this parser exists to catch: `Cargo.toml`, `deny.toml`
+        // and `clippy.toml` sit at the repository root, so their citations carry
+        // no slash. A path test that demands one drops them before the extension
+        // filter downstream ever runs — not reported unparseable, not reported
+        // external, just gone — and the workspace lint table's citations rot while
+        // the checker prints "27 atoms, all consistent".
+        let spans = spans("`Cargo.toml:160 (unsafe_code = \"forbid\")`");
+        let first = spans.first().unwrap();
+        let colon = first
+            .rfind_path_colon()
+            .expect("a root-level file is still a path");
+        assert_eq!(&first.text[..colon], "Cargo.toml");
+        let citation = parse_citation(&first.text[colon + 1..]).unwrap();
+        assert_eq!(citation.line, 160);
+        assert_eq!(citation.anchor, "unsafe_code = \"forbid\"");
+    }
+
+    #[test]
     fn a_well_formed_citation_parses() {
         let citation = parse_citation("642 (fn spawns_from_generic)").unwrap();
         assert_eq!(citation.line, 642);
