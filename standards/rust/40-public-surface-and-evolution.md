@@ -255,9 +255,9 @@ that is never compiled is decoration (F1-04, and
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
 `crates/happenstance-core/src/lib.rs:193 (pub use futures_core)` ·
-`crates/happenstance-sqlite/src/lib.rs:112 (pub use rusqlite)` ·
-`crates/happenstance-sqlite/src/lib.rs:154 (compile_fail,E0433)` ·
-`crates/happenstance-cloudflare/src/lib.rs:499 (pub use {happenstance_core, worker})` ·
+`crates/happenstance-sqlite/src/lib.rs:116 (pub use rusqlite)` ·
+`crates/happenstance-sqlite/src/lib.rs:158 (compile_fail,E0433)` ·
+`crates/happenstance-cloudflare/src/lib.rs:503 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:171 (impl Stream<Item =)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 

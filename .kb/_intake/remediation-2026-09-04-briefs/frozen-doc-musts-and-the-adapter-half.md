@@ -30,10 +30,11 @@ adapter half was discharged by neither shipping adapter, from phase 8 until this
 lane. `grep -rn "# Cancellation"` over the tree returned exactly one source site,
 and it was the port's.
 
-This lane landed the statement in both adapters' crate-root documentation, with a
-test target per adapter that fails if the section goes missing **and** fails if
-`append` acquires an `.await` and the statement stops being true. That closes the
-finding.
+This lane landed the statement in both adapters' **store-module** documentation —
+beside the `append` it is about, with a pointer to it on each crate root — and a
+test target per adapter that fails if the section goes missing, fails if the
+pointer goes missing, and fails again if `append` acquires an `.await` and the
+statement stops being true. That closes the finding.
 
 **It does not close the reason the finding went unnoticed for two phases**, and
 that is what this brief is about.
@@ -174,12 +175,25 @@ adapter can copy one — but only if someone knows to look.
   documentation check is a question for the rule set's owner, and it is adjacent
   to `F2-5`, which found that ES-22's second arm has never executed against
   anything.
-- **Where the statement should live.** This lane put it in each crate's root
-  documentation, because that is the page a caller comparing adapters lands on and
-  because an impl-method doc comment would have *replaced* the trait's inherited
-  documentation on the impl page rather than adding to it. A crate that later
-  grows a dedicated `# Cancellation` page in `docs/` may want it moved; the test
-  reads the crate root and would have to move with it.
+- **Where the statement should live.** This lane put it in each adapter's **store
+  module** — `src/event_store.rs` — with a pointer to it on each crate root. Two
+  reasons, and the first was not a choice. `happenstance-sqlite`'s front page is
+  held to a density budget by `tests/front_page.rs`: five `#` headings and 54–94
+  `//!` lines, *"measured from the 76 it carried as an instrument"*. The section
+  is a sixth heading and thirty-odd lines, so the crate root could not carry it,
+  and the first cut of this change failed that test rather than discovering the
+  constraint in review. The second reason is the better one: a statement about
+  what `append` does belongs on the page `append` is on. The rejected third option
+  was a doc comment on the `impl EventStore` method, which would have *replaced*
+  the trait's inherited documentation on the impl page rather than adding to it.
+  A crate that later grows a dedicated `# Cancellation` page in `docs/` may want
+  it moved; the tests read the store module and the crate root, and would have to
+  move with it.
+
+- **Whether `happenstance-cloudflare`'s front page wants a budget of its own.**
+  It has none, and it is by far the longest crate root in the workspace — twenty
+  `#`/`##` headings. That is a question for whoever owns that page, and this lane
+  noticed it only because the sibling crate's budget stopped an edit.
 - **The wording of the statement itself.** Both adapters say the same thing
   because the answer is the same, and the two paragraphs were written together.
   A reviewer who thinks either overstates — in particular the Cloudflare crate's

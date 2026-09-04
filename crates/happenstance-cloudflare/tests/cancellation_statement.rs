@@ -9,7 +9,8 @@
 //!
 //! The port half is discharged at `crates/happenstance-core/src/store.rs`. The
 //! adapter half was not, by either shipping adapter, from phase 8 until this
-//! file. The wrong outcome is not "a missing heading": a caller reads the port,
+//! file. The statement now sits in this crate's store module, beside the
+//! `append` it is about, with a pointer to it on the front page. The wrong outcome is not "a missing heading": a caller reads the port,
 //! is told in terms that the adapter will say which it does, goes to the adapter
 //! and finds nothing. The pessimistic reading builds compensation this store does
 //! not need; the convenient reading is that silence means "safe", which is the
@@ -46,11 +47,21 @@
 //! the wrong conclusion from it, and no scan sees that. What is closed is the
 //! failure that actually happened twice.
 
-/// This crate's rendered front page, where the statement lives.
-const CRATE_ROOT: &str = include_str!("../src/lib.rs");
-
-/// The module holding `append`.
+/// The store module: the page holding both the statement and the body it is
+/// about.
+///
+/// Not the crate root, and that is a constraint rather than a preference.
+/// `happenstance-sqlite`'s front page is held to a density budget by
+/// `tests/front_page.rs` — five `#` headings and 54-94 `//!` lines — so a
+/// sixth heading of thirty-odd lines is a section that page cannot carry.
+/// Both adapters put it here for that reason and for the better one: a
+/// statement about what `append` does belongs on the page `append` is on.
+/// Each crate root carries a pointer to it.
 const EVENT_STORE: &str = include_str!("../src/event_store.rs");
+
+/// The crate root, read only to assert the pointer to the section is still
+/// there — a reader who lands on the front page must not have to guess.
+const CRATE_ROOT: &str = include_str!("../src/lib.rs");
 
 /// The signature the scan is aimed at.
 const APPEND: &str = "async fn append(";
@@ -73,9 +84,9 @@ const NEXT_METHOD: &str = "async fn head(";
 /// forbids an adapter from relaxing.
 #[test]
 fn the_crate_states_what_a_dropped_append_does() {
-    let section = doc_section(CRATE_ROOT, "# Cancellation").unwrap_or_else(|| {
+    let section = doc_section(EVENT_STORE, "# Cancellation").unwrap_or_else(|| {
         panic!(
-            "this crate's root documentation carries no `# Cancellation` section. \
+            "this crate's store module carries no `# Cancellation` section. \
              ES-23 is [FROZEN] and obliges each adapter to state whether a dropped \
              `append` future may still have committed; a caller who reads the port \
              is told the adapter will answer, and arrives here to nothing"
@@ -91,6 +102,20 @@ fn the_crate_states_what_a_dropped_append_does() {
              caller to read a dropped future as evidence either way. Section:\n{section}"
         );
     }
+}
+
+/// AC. The front page points at the statement.
+///
+/// The section is one module down, which is where it belongs and is not where a
+/// reader lands. Without this the statement could be correct, checked, and
+/// findable only by someone who already knew it was there.
+#[test]
+fn the_front_page_points_at_the_statement() {
+    let root = CRATE_ROOT.replace('\r', "");
+    assert!(
+        root.contains("`# Cancellation` section"),
+        "this crate's root documentation no longer points at the store module's          `# Cancellation` section, so ES-23's answer is a click away from a          reader who has no reason to guess it is there"
+    );
 }
 
 /// AC. The fact the statement rests on is still true.
@@ -124,7 +149,7 @@ fn the_append_body_suspends_nowhere() {
     assert!(
         !code_only(&body).contains(".await"),
         "`append` now contains a suspension point, so the `# Cancellation` section \
-         in this crate's root documentation is false as written — and so is the \
+         above it in this module is false as written — and so is the \
          module's account of why the compensating discard's range is exact, which \
          rests on the object not yielding to its event loop mid-batch"
     );

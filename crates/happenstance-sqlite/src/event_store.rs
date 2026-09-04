@@ -112,6 +112,45 @@
 //! creation and read back on every open, beside the schema-version marker that
 //! gives migration 2 something to test against. See
 //! [`SqliteEventStore::remint_identity`] for what that mint-once choice costs.
+//!
+//! # Cancellation
+//!
+//! **What a dropped `append` future does here: nothing, because there is nothing
+//! to drop.** `append` refuses an empty batch, checks this store's declared
+//! ceilings, locks the connection and calls `append_locked` inline. There is no
+//! `.await` anywhere in that body — none anywhere in this module at all — so
+//! a future polled once has already run to completion by the time `poll` returns,
+//! and no outcome depends on whether the caller then drops it. **A dropped
+//! `append` future cannot be cancelled by this adapter.**
+//!
+//! This is the statement **ES-23** obliges every adapter to make. The clause is
+//! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
+//! the port refuses to choose between them on a caller's behalf
+//! ([`EventStore::append`](happenstance_core::EventStore::append)'s own
+//! `# Cancellation` section) precisely so that each adapter has to answer.
+//!
+//! **It does not license the opposite reading either.** A caller MUST NOT treat a
+//! dropped future as evidence about *any* store, this one included: generic code
+//! binds the port rather than this crate, and the next store in the same program
+//! may answer differently. Where an outcome genuinely has to be resolved, ES-24
+//! is the mechanism — a conditional append is at-most-once under verbatim
+//! reissue, so reissuing the identical batch settles it with no identity and no
+//! idempotency key.
+//!
+//! **The answer survives the move this crate is most likely to make.** ADR-0012
+//! and the port's own documentation both name a pooled `rusqlite` adapter working
+//! in `tokio::task::spawn_blocking` as *"the shape that looks cancellation-safe
+//! and is not"* — dropping the `JoinHandle` does not cancel the closure, so the
+//! `COMMIT` still runs. That is the same answer as the one above reached by a
+//! different route: moving the work would change *where* it happens, not whether
+//! a drop can stop it. What such a change would owe this section is the new
+//! reason, not a new verdict.
+//!
+//! It is checked rather than promised. `tests/cancellation_statement.rs` fails if
+//! this section goes missing, and fails again if `append` acquires a suspension
+//! point and the section stops being true — the half ADR-0012 recorded that a
+//! heading-check alone could not have.
+//!
 
 use std::future::Future;
 use std::path::Path;
