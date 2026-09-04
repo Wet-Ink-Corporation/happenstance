@@ -401,22 +401,17 @@ async fn define_course(store: &MemoryEventStore, course: &str, capacity: u32) ->
     let course = CourseId::new(course)?;
     let boundary = CourseDefinition::new(&course)?;
 
-    commit(
-        store,
-        boundary,
-        ATTEMPTS,
-        |defined: &CourseDefinition| {
-            if defined.defined {
-                return Err(Refusal::AlreadyDefined {
-                    course: course.id.clone(),
-                });
-            }
-            Ok(vec![Enrolment::CourseDefined {
-                course: course.clone(),
-                capacity,
-            }])
-        },
-    )
+    commit(store, boundary, ATTEMPTS, |defined: &CourseDefinition| {
+        if defined.defined {
+            return Err(Refusal::AlreadyDefined {
+                course: course.id.clone(),
+            });
+        }
+        Ok(vec![Enrolment::CourseDefined {
+            course: course.clone(),
+            capacity,
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)
@@ -475,23 +470,18 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
     let student = StudentId::new(student)?;
     let boundary = StudentSeat::new(&course, &student)?;
 
-    commit(
-        store,
-        boundary,
-        ATTEMPTS,
-        |seat: &StudentSeat| {
-            if !seat.subscribed {
-                return Err(Refusal::NotSubscribed {
-                    student: student.id.clone(),
-                    course: course.id.clone(),
-                });
-            }
-            Ok(vec![Enrolment::StudentUnsubscribed {
-                course: course.clone(),
-                student: student.clone(),
-            }])
-        },
-    )
+    commit(store, boundary, ATTEMPTS, |seat: &StudentSeat| {
+        if !seat.subscribed {
+            return Err(Refusal::NotSubscribed {
+                student: student.id.clone(),
+                course: course.id.clone(),
+            });
+        }
+        Ok(vec![Enrolment::StudentUnsubscribed {
+            course: course.clone(),
+            student: student.clone(),
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)

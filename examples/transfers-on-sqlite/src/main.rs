@@ -407,21 +407,16 @@ async fn open_account(events: &SqliteEventStore, account: &str) -> Result<()> {
     let account = AccountId::new(account)?;
     let boundary = Balance::new(&account)?;
 
-    commit(
-        events,
-        boundary,
-        ATTEMPTS,
-        |balance: &Balance| {
-            if balance.opened {
-                return Err(Refusal::AlreadyOpen {
-                    account: account.id.clone(),
-                });
-            }
-            Ok(vec![Ledger::AccountOpened {
-                account: account.clone(),
-            }])
-        },
-    )
+    commit(events, boundary, ATTEMPTS, |balance: &Balance| {
+        if balance.opened {
+            return Err(Refusal::AlreadyOpen {
+                account: account.id.clone(),
+            });
+        }
+        Ok(vec![Ledger::AccountOpened {
+            account: account.clone(),
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)
@@ -432,22 +427,17 @@ async fn deposit(events: &SqliteEventStore, account: &str, amount: u32) -> Resul
     let account = AccountId::new(account)?;
     let boundary = Balance::new(&account)?;
 
-    commit(
-        events,
-        boundary,
-        ATTEMPTS,
-        |balance: &Balance| {
-            if !balance.opened {
-                return Err(Refusal::NotOpen {
-                    account: account.id.clone(),
-                });
-            }
-            Ok(vec![Ledger::Deposited {
-                account: account.clone(),
-                amount,
-            }])
-        },
-    )
+    commit(events, boundary, ATTEMPTS, |balance: &Balance| {
+        if !balance.opened {
+            return Err(Refusal::NotOpen {
+                account: account.id.clone(),
+            });
+        }
+        Ok(vec![Ledger::Deposited {
+            account: account.clone(),
+            amount,
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)

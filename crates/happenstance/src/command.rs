@@ -547,7 +547,10 @@ mod tests {
     #[test]
     fn once_is_one_attempt_and_attempts_is_what_it_says() {
         assert_eq!(Retry::once().limit(), 1);
-        assert_eq!(Retry::attempts(NonZeroU32::new(7).unwrap()).limit(), 7);
+        assert_eq!(
+            Retry::attempts(NonZeroU32::new(7).expect("7 is not zero")).limit(),
+            7
+        );
     }
 
     /// No call site converts a literal at run time when const would do.
@@ -571,8 +574,7 @@ mod tests {
         let this_lib_rs = include_str!("lib.rs");
         let course_subscriptions =
             include_str!("../../../examples/course-subscriptions/src/main.rs");
-        let transfers_on_sqlite =
-            include_str!("../../../examples/transfers-on-sqlite/src/main.rs");
+        let transfers_on_sqlite = include_str!("../../../examples/transfers-on-sqlite/src/main.rs");
 
         let sources: [(&str, &str, &[&str]); 4] = [
             (
