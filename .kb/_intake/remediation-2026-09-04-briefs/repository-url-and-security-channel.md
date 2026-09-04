@@ -135,3 +135,42 @@ published before it is fixed. Option B's cost never changes and is one paragraph
 - **Whether the `0.0.0` placeholder reservations should be yanked before a real
   release.** Raised in `adapter-driver-reexport-policy.md` and still open; the same
   registry read that produced this brief's version table is the evidence for it.
+
+---
+
+## Ratified in part, and landed — 2026-09-04
+
+**Option B is taken.** The repository owner supplied `security@wet-ink.net`, and
+`SECURITY.md` now leads with it as the channel that works today, with the GitHub
+private-advisory link kept as the better mechanism *where it is available*.
+
+Three things were written rather than left implicit, and each is there because a
+reporter meets the document in a different state than its author does.
+
+1. **The 404 is stated, not discovered.** The document now says the link does not
+   resolve for everyone and that nothing is wrong with their report if it 404s for
+   them. Without that sentence a reporter follows a broken link, reads *"please do
+   not open a public issue"* immediately after, and correctly concludes there is
+   nowhere to go — which was the whole finding.
+2. **"Report against the source in this repository" was amended.** A reader who
+   cannot reach the repository cannot report against its source. It now says to
+   report against the source rather than against the `0.0.0` placeholder, and adds
+   that while the repository is private they should describe what they found by
+   email and will not be asked for a link they cannot reach.
+3. **The acknowledgement paragraph gained "or by email"**, since its original
+   *"say so on the same thread"* presumes the thread exists.
+
+**What this does not close, and it is the larger half.** The `repository` field
+still 404s on three crates that are on crates.io today, and `homepage` and
+`documentation` remain `null`, so a reader who wants the specification, the ADRs
+or the evidence behind any decision still has exactly one door and it is still
+locked. Option B was always scoped to the reporting channel. **Option A — publish
+the repository — remains open and is the only thing that closes the rest**, and
+the asymmetry from the recommendation above is unchanged: `repository` on
+`happenstance 0.2.0` is immutable on the registry for as long as the registry
+exists.
+
+**Still recommended and not taken:** `documentation = "https://docs.rs/happenstance"`
+in the workspace manifest. One line, works under either answer to Option A, and
+gives the reader a door that opens. Not slipped in with this change, because it is
+a manifest edit rather than the security channel the address was given for.
