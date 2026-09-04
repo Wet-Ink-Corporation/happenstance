@@ -240,3 +240,24 @@ pub use domain::{DecisionModel, DomainEvent};
 pub use runner::{Progressed, Projection, ProjectionError, run_projection};
 
 pub use happenstance_core::*;
+
+/// Compiled proof that the contract crate is reachable from here under its own
+/// name, not only through the glob above.
+///
+/// The glob puts every *item* in this crate's root; it does not put the
+/// **crate** there. A signature copied out of `happenstance-core`'s own
+/// documentation, or out of an adapter's, is written
+/// `happenstance_core::EventStore` — and a reader who installed `happenstance`
+/// rather than the contract should not have to rewrite it to compile it.
+///
+/// ```
+/// fn bound<S: happenstance::happenstance_core::EventStore>(_s: S) {}
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn payload(b: happenstance::happenstance_core::bytes::Bytes) -> usize { b.len() }
+/// # fn main() { assert_eq!(payload(happenstance::bytes::Bytes::from_static(b"{}")), 2); }
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}

@@ -963,3 +963,34 @@ mod es6_reconstruction {
         );
     }
 }
+
+/// Compiled proof that every path this crate promises a caller actually
+/// resolves from outside it — and the statement of what that promise is not.
+///
+/// **Type identity and discoverability**, and nothing more. A consumer of this
+/// crate necessarily has `worker` in their own manifest, because they write the
+/// `#[durable_object]` class the README's example takes a `&worker::State` from;
+/// so the two copies are guaranteed to exist and are unified by nothing but
+/// luck. Re-exporting is what turns that luck into a path. It is not a
+/// substitute for their dependency — features this crate did not enable do not
+/// arrive through it — and it is not a claim about which versions travel
+/// together.
+///
+/// ```
+/// fn state(s: &happenstance_cloudflare::worker::State)
+///     -> &happenstance_cloudflare::worker::State { s }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn thrown(e: happenstance_cloudflare::worker::Error)
+///     -> happenstance_cloudflare::worker::Error { e }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn bound<S: happenstance_cloudflare::happenstance_core::EventStore>(_s: S) {}
+/// # fn main() {}
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}

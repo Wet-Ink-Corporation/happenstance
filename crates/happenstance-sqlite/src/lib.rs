@@ -96,3 +96,51 @@ mod row;
 
 #[cfg(feature = "projection-store")]
 pub mod projection_store;
+
+/// Compiled proof that every path this crate promises a caller actually
+/// resolves from outside it — and the statement of what that promise is not.
+///
+/// The guarantee is the one `happenstance_core`'s own `reexported_paths` states:
+/// **type identity and discoverability**, so that the `rusqlite::Error` a caller
+/// matches on is the one this adapter's error enum actually carries rather than
+/// a second copy that prints the same. It is never a substitute for a
+/// consumer's own dependency.
+///
+/// `tokio` is where that qualification bites, and it is worth reading twice.
+/// This crate takes `tokio` at `features = ["rt"]` (`Cargo.toml:37`), so what
+/// arrives through `happenstance_sqlite::tokio` is a **partial** `tokio` — no
+/// `macros`, no `rt-multi-thread`, no `time`. A consumer who reaches it only
+/// through this path and then writes `#[tokio::main]` gets an `error[E0433]` of
+/// an entirely different kind, and the fix is a `tokio` line in *their* manifest.
+/// The re-export exists so the two crates agree on which `JoinError` they mean;
+/// it does not stand in for the dependency.
+///
+/// ```
+/// fn open(c: happenstance_sqlite::rusqlite::Connection)
+///     -> happenstance_sqlite::rusqlite::Connection { c }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn param(v: happenstance_sqlite::rusqlite::types::Value)
+///     -> happenstance_sqlite::rusqlite::types::Value { v }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn joined(e: happenstance_sqlite::tokio::task::JoinError)
+///     -> happenstance_sqlite::tokio::task::JoinError { e }
+/// # fn main() {}
+/// ```
+///
+/// The contract is in this crate's public signatures rather than merely behind
+/// them — `impl EventStore for SqliteEventStore` names `Query`, `ReadOptions`,
+/// `SequencedEvent`, `Event`, `AppendCondition` and `AppendError` — so it is
+/// reachable under its own name here too:
+///
+/// ```
+/// fn bound<S: happenstance_sqlite::happenstance_core::EventStore>(_s: S) {}
+/// # fn main() {}
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}
