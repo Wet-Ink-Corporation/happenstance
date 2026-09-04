@@ -3536,7 +3536,7 @@ needs it" — and had to be corrected. **That correction landed in `3c704d3`.** 
 `append` doc no longer offers the returned position for a follow-up condition; it
 states the refusal and points at the read instead (`store.rs:179-187`). The
 obligation stands over every future edit to that doc: the sound `after` comes
-from a read — `read_decision_model` (`store.rs:369-379`) — which is what the DCB
+from a read — `read_decision_model` (`store.rs:517-527`) — which is what the DCB
 loop already does.
 
 #### ES-20 — An empty batch is refused, and refused first
@@ -3830,7 +3830,7 @@ rather than a contradiction — underspecified upstream, settled here.
 
 The pairing that falls out is exact and requires no arithmetic:
 `read_decision_model` returns the maximum position observed and
-`AppendCondition::after_opt` consumes it (`store.rs:369-379`, `append.rs:191-212`).
+`AppendCondition::after_opt` consumes it (`store.rs:517-527`, `append.rs:191-212`).
 The pairing that does *not* fall out is the checkpoint resume path, where
 `ProjectionStore::checkpoint` returns an inclusive-consumed position and
 `ReadOptions::from` is inclusive, so the caller must advance by hand through

@@ -72,7 +72,7 @@ and an `EventStore`-bound one, as `E0308` between two types that print with the
 same name — and the fix is to delete the hand-written trait, which is now
 implemented by every adapter in the workspace.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:408 (error_projections_are_one_type)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:556 (error_projections_are_one_type)` ·
 `crates/happenstance-core/src/store.rs:17 (EventStore comes free)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(derived, not
 hand-written)* · [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(the

@@ -181,7 +181,7 @@ compiles everywhere, changes a `[FROZEN]` clause with no ADR, and reaches review
 as a signature that got simpler.
 
 **Evidence.** `crates/happenstance-core/tests/frozen_signatures.rs:62 (fn replay<'a, S: EventStore>)` ·
-`crates/happenstance-core/tests/frozen_signatures.rs:210 (error[E0716])` ·
+`crates/happenstance-core/tests/frozen_signatures.rs:222 (error[E0716])` ·
 `crates/happenstance-core/src/memory.rs:672 (Inlining is E0716)` ·
 [SPECIFICATION ES-13](../../spec/SPECIFICATION.md) *(`[FROZEN]`: `read`
 takes `&Query`, and what by-value costs)* ·

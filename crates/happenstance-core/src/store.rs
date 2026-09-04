@@ -387,7 +387,8 @@ pub trait EventStore {
 /// # fn main() {}
 /// ```
 #[doc(hidden)]
-pub fn es_13_the_query_must_outlive_the_stream() {}
+#[expect(dead_code, reason = "a doc carrier: the fence above is the item")]
+fn es_13_the_query_must_outlive_the_stream() {}
 
 /// A doc fence inside an integration test target is never handed to a compiler.
 ///
@@ -443,7 +444,7 @@ pub fn es_13_the_query_must_outlive_the_stream() {}
 ///     // ask for: an empty `tests/` file satisfies everything above, so on its
 ///     // own this guard stays green the day the pin it points at is deleted.
 ///     const HERE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs"));
-///     const CARRIER: &str = "pub fn es_13_the_query_must_outlive_the_stream() {}";
+///     const CARRIER: &str = "fn es_13_the_query_must_outlive_the_stream() {}";
 ///
 ///     // Matched as a whole *line*, not as a substring. `contains` is satisfied
 ///     // by the `const` two lines up — this doctest is inside the file it is
@@ -460,7 +461,8 @@ pub fn es_13_the_query_must_outlive_the_stream() {}
 /// }
 /// ```
 #[doc(hidden)]
-pub fn a_doc_fence_in_an_integration_test_target_is_never_compiled() {}
+#[expect(dead_code, reason = "a doc carrier: the fence above is the item")]
+fn a_doc_fence_in_an_integration_test_target_is_never_compiled() {}
 
 /// Drains a [`read`](EventStore::read) stream into a `Vec`, stopping at the
 /// first error.
