@@ -73,6 +73,16 @@ author → two-critic → revision pass the section above describes. Each carrie
 own strongest objection and answers it, which is the form, but nobody independent
 argued the other side. Read them with that discount applied.
 
+## And more from the fixture-declension lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `projection-declension-obligations.md` | Which projection capability has anywhere for the honesty obligation to land, now that the trait no longer carries it? | additive + one rule | the first projection adapter |
+
+Written by the lane implementing the ratified Option A of
+`fixture-declension-policy.md`, in the same session as the change it describes, and
+**without** the author → two-critic → revision pass. Same discount.
+
 `op-read-non-exhaustive.md` is here rather than implemented because L2-01 splits
 in two and only one half was that lane's: the generator hole is landed, and the
 attribute is routed to whoever owns the testkit's public surface at first publish.

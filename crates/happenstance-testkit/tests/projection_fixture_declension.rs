@@ -72,8 +72,14 @@ impl ProjectionFixture for Silent {
 #[test]
 fn a_projection_fixture_may_answer_nothing_and_declines_everything() {
     for (name, capability) in [
-        ("SECOND_HANDLE", <Silent as ProjectionFixture>::SECOND_HANDLE),
-        ("RESET_REFUSAL", <Silent as ProjectionFixture>::RESET_REFUSAL),
+        (
+            "SECOND_HANDLE",
+            <Silent as ProjectionFixture>::SECOND_HANDLE,
+        ),
+        (
+            "RESET_REFUSAL",
+            <Silent as ProjectionFixture>::RESET_REFUSAL,
+        ),
         ("COMMIT_FAULT", <Silent as ProjectionFixture>::COMMIT_FAULT),
     ] {
         let reason = capability.reason();

@@ -301,8 +301,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:793 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:786 (Where it does *not* fire)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:881 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:874 (Where it does *not* fire)` ·
 `crates/happenstance-testkit/src/fixtures.rs:280 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*
