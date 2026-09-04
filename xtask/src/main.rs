@@ -28,7 +28,10 @@
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; six
 //! file-reading lints described below; a seventh manifest lint for D12, outside
-//! that clause-named group (ADR-0016 §14) and inside `cargo xtask lints`; and
+//! that clause-named group (ADR-0016 §14) and inside `cargo xtask lints`;
+//! `cargo xtask lint-workflows`, which is the same family one artefact further
+//! out — `.github/workflows/` is the only file here that runs with a
+//! credential, and until it was added nothing in the gate opened it; and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
