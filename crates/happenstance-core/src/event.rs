@@ -431,7 +431,7 @@ impl Event {
 ///
 /// `#[non_exhaustive]`, so a later part is additive: downstream destructures
 /// with `..` or reads fields by name.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct EventParts {
     /// The event's type.
@@ -444,22 +444,22 @@ pub struct EventParts {
     pub metadata: Option<Bytes>,
 }
 
+// Payloads are frequently large and rarely UTF-8; printing the length
+// keeps test failures legible.
+/// Renders a payload as its length rather than its contents.
+struct ByteLen(Option<usize>);
+
+impl fmt::Debug for ByteLen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(len) => write!(f, "<{len} bytes>"),
+            None => f.write_str("None"),
+        }
+    }
+}
+
 impl fmt::Debug for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Payloads are frequently large and rarely UTF-8; printing the length
-        // keeps test failures legible.
-        /// Renders a payload as its length rather than its contents.
-        struct ByteLen(Option<usize>);
-
-        impl fmt::Debug for ByteLen {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                match self.0 {
-                    Some(len) => write!(f, "<{len} bytes>"),
-                    None => f.write_str("None"),
-                }
-            }
-        }
-
         f.debug_struct("Event")
             .field("event_type", &self.event_type)
             .field("data", &ByteLen(Some(self.data.len())))
@@ -1006,5 +1006,31 @@ mod tests {
             !rendered.contains("hunter2"),
             "payload bytes leaked into Debug: {rendered}"
         );
+    }
+}
+
+// AE-5 (RS-12-5): field for field identical to `Event`'s `Debug` impl above —
+// one `into_parts()` call separates the two types, and the `derive(Debug)`
+// this replaces printed `data`'s and `metadata`'s bytes where `Event`
+// redacts them.
+//
+// `clippy::items_after_test_module` fires on the position, not the impl, and
+// is allowed here on purpose: every other constitution-atom citation into
+// this file (`standards/rust/10-newtypes-and-niches.md`,
+// `standards/rust/11-const-construction-and-panics.md`,
+// `standards/rust/12-manual-impls-and-derive-traps.md`'s RS-12-1) anchors a
+// line number inside or before `mod tests` above, each already within a few
+// lines of `lint_constitution`'s slack. Inserting this block anywhere before
+// `mod tests` shifts every one of them out of range; standards/rust/**.md is
+// outside this crate and not this change's to edit.
+#[allow(clippy::items_after_test_module)]
+impl fmt::Debug for EventParts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventParts")
+            .field("event_type", &self.event_type)
+            .field("data", &ByteLen(Some(self.data.len())))
+            .field("tags", &self.tags)
+            .field("metadata", &ByteLen(self.metadata.as_ref().map(Bytes::len)))
+            .finish()
     }
 }
