@@ -980,6 +980,60 @@ impl Defect for ForwardPagingBudgetStore {
     }
 }
 
+/// The budget reaches the paging statement and not the windowed one.
+///
+/// [`ForwardPagingBudgetStore`]'s defect one read option over, and reached the
+/// same way. `to` arrives for the backfill path — ES-16's headline capability, a
+/// worker owning the closed window `[1, H]` while a tail worker owns everything
+/// above it — and a closed window is a *different statement* from a page:
+///
+/// ```text
+/// if let Some(to) = options.to {
+///     self.read_window(options.from, to)   // <- limit never reaches here
+/// } else {
+///     self.read_paged(options.from, options.limit)
+/// }
+/// ```
+///
+/// The reasoning that writes it is not a slip but an argument, and the argument
+/// is wrong: *the caller has given me both ends of the window, so the window is
+/// the bound that matters and the row budget is redundant.* It is redundant
+/// exactly when the budget is larger than the window, which is the case an
+/// author checks by hand, and it is the whole point when the budget is smaller —
+/// which is the case a backfill worker is in on every call but its last.
+/// `SPECIFICATION.md`'s VT-29 states the converse of the same confusion in terms:
+/// `limit` cannot stand in for `to`, because `event.rs:215-217` forbids treating
+/// position arithmetic as a count. Neither can stand in for the other.
+///
+/// The wrong outcome is the one VT-28 was written for, arriving through the one
+/// option combination no rule issued: a caller writing `.limit(budget - fetched)`
+/// against a window is handed the whole window instead, the batch nobody sized
+/// is buffered, and the loop's arithmetic is arithmetic about a number the store
+/// ignored. Nothing errors.
+///
+/// # Why it is a one-step defect on `truncated`
+///
+/// Because that step is handed the whole of [`ReadOptions`], so `to` and `limit`
+/// are both visible where the truncation happens, and nothing about the query is
+/// needed. That is the shape [`Defect`]'s three-step split rewards, and it is why
+/// this store does not reach for [`Defect::select`]: a defect that couples an
+/// option to another *option* is not the same as one coupling an option to the
+/// *predicate*.
+pub(crate) struct WindowedPagingBudgetStore;
+
+impl Defect for WindowedPagingBudgetStore {
+    const NAME: &'static str = "WindowedPagingBudgetStore";
+
+    fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // THE DEFECT: the windowed statement carries `BETWEEN ? AND ?` and no
+        // `LIMIT`, so the budget is applied only where `to` is absent.
+        if options.to.is_some() {
+            return selected;
+        }
+        correct::truncated(selected, options)
+    }
+}
+
 /// `LIMIT` is pushed into the scan and the query's predicate is applied to the
 /// rows that come back.
 ///

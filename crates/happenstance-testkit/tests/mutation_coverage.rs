@@ -816,6 +816,16 @@ const REGISTRY: &[Declared] = &[
         expect: &[],
     },
     Declared {
+        name: "WindowedPagingBudgetStore",
+        kind: Kind::Mutant,
+        // Empty, and the emptiness is what this commit is for: the suite composes
+        // `to` with `limit` at no call site, so nothing sees this store.
+        fails: &[],
+        provenance: "`ForwardPagingBudgetStore`'s defect one read option over. A closed window is              a different statement from a page — `BETWEEN ? AND ?` rather than `LIMIT ?`              — and the budget was threaded into the one that had a paging clause              already. The argument that writes it is that the window is the bound that              matters and the budget is redundant, which is true exactly when the budget              is larger than the window and false on every call a backfill worker makes              but its last. It hands back the whole window to a caller who asked for a              page, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "LimitBeforeFilterStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2359,6 +2369,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::BackwardsToIsAnUpperBoundStore>,
             crate::mutants::MutantFixture<crate::mutants::LimitZeroIsUnlimitedStore>,
             crate::mutants::MutantFixture<crate::mutants::ForwardPagingBudgetStore>,
+            crate::mutants::MutantFixture<crate::mutants::WindowedPagingBudgetStore>,
 
             crate::mutants::MutantFixture<crate::mutants::SharedBatchPositionStore>,
             crate::mutants::MutantFixture<crate::mutants::ReturnsFirstOfBatchStore>,
@@ -2692,6 +2703,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // mishandles.
     ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
     ("ForwardPagingBudgetStore", ModelOutcome::Rejected),
+    ("WindowedPagingBudgetStore", ModelOutcome::Rejected),
     ("LimitPerItemStore", ModelOutcome::Rejected),
     ("ItemDedupByTypeStore", ModelOutcome::Rejected),
     // Append.
