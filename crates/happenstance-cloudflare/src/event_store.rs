@@ -2200,8 +2200,43 @@ mod write_path_tests {
         );
     }
 
+    /// AC-010. The half of "below one" that the **match guard alone** is
+    /// holding: a negative stored position is reported, never reported at its
+    /// positive twin.
+    ///
+    /// `a_position_below_one_is_reported` seeds `0`, and `0` is the one value
+    /// below one that `SequencePosition::new` refuses on its own — so that case
+    /// stays green against a decoder carrying no range guard at all. A negative
+    /// does not. `i64::unsigned_abs` maps `-3` onto `3`, so a decoder that
+    /// reaches for it behind a weakened guard hands back a position the store
+    /// never assigned rather than an error: a second event at an occupied
+    /// [`SequencePosition`] (VT-11) and, through `origin_position`, a second
+    /// event wearing an occupied `EventId` (VT-8), both `[FROZEN]`.
+    ///
+    /// That is the named wrong implementation, and it is not hypothetical:
+    /// `*raw != 0` reads as an equivalent spelling of *"reject the value that
+    /// is not a position"*, and `happenstance-sqlite` reaches `unsigned_abs`
+    /// with no guard in front of it at all. Nothing here rests on the guard
+    /// being the only thing that is right.
+    #[wasm_bindgen_test]
+    async fn a_negative_position_is_reported_not_absolutised() {
+        let (sql, store) = open();
+        sql.exec(
+            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
+             VALUES (-3, 'Unreachable', x'00', x'1f', 0)",
+            &[],
+        )
+        .expect("the seeded row lands");
+
+        let head = store.head().await;
+        assert!(
+            matches!(head, Err(CloudflareEventStoreError::StoredPosition { .. })),
+            "a negative position must be reported, never handed back as its twin: {head:?}"
+        );
+    }
+
     /// A guard on the shared decoder itself: a position at the ceiling is
-    /// accepted, so the two rejections above are not a decoder that refuses
+    /// accepted, so the three rejections above are not a decoder that refuses
     /// everything.
     #[wasm_bindgen_test]
     fn the_ceiling_itself_is_a_usable_position() {
@@ -2384,6 +2419,20 @@ mod read_path_tests {
         items
             .iter()
             .filter_map(|item| item.as_ref().ok().map(|event| event.position))
+            .collect()
+    }
+
+    /// The identities of the items that decoded, ignoring any error item.
+    ///
+    /// The [`ok_positions_of`] argument one column across. `position` and
+    /// `EventId` are two facts a corrupt row can forge independently — a row
+    /// can sit at a position the store really assigned it and still carry a
+    /// narrowed `origin_position` — so the negative controls for the two
+    /// decode sites need one of these each.
+    fn ok_ids_of(items: &[Item]) -> Vec<EventId> {
+        items
+            .iter()
+            .filter_map(|item| item.as_ref().ok().map(|event| event.id))
             .collect()
     }
 
@@ -3493,6 +3542,120 @@ mod read_path_tests {
                 .iter()
                 .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
             "the caller receives the error rather than a narrowed position: {items:?}"
+        );
+    }
+
+    /// AC-007. A negative stored position is reported, never absolutised onto a
+    /// position the store has already handed out.
+    ///
+    /// The sharp form of the criterion
+    /// `write_path_tests::a_negative_position_is_reported_not_absolutised`
+    /// states about `head`. One honest row is appended, and one corrupt row is
+    /// seeded whose position is the honest one **negated** and whose origin pair
+    /// is this incarnation at that same negated value — so a decoder narrowing
+    /// through `i64::unsigned_abs` does not merely fail to reject the row, it
+    /// *forges* the honest event's coordinate and its identity together. That is
+    /// the VT-11 and VT-8 hazard itself, and asserting `Err` alone would not
+    /// reach it: an unstamped corrupt row is reported by a decoder that has
+    /// already narrowed the position.
+    ///
+    /// Read **backwards**, and that is load-bearing rather than incidental.
+    /// Forwards, the negative row sorts first, ends the replay on the error
+    /// item, and the honest event is never yielded — so the collision under test
+    /// could not be observed. Backwards, the honest event is yielded first and
+    /// the corrupt row is reached second, which is what lets both assertions
+    /// below discriminate.
+    #[wasm_bindgen_test]
+    async fn a_negative_position_is_never_absolutised_onto_an_occupied_one() {
+        let (sql, store) = open();
+        let honest = store
+            .append(&[event("Honest")], None)
+            .await
+            .expect("the append lands");
+        let incarnation = store.store_id().expect("the incarnation is readable");
+        // Derived from the position the store actually assigned, never written
+        // as a literal: the specification permits gaps, so the twin of an
+        // honest position is only nameable through that position.
+        let twin = -super::position_as_i64(honest);
+
+        sql.exec(
+            "INSERT INTO event \
+             (position, event_type, data, tags, origin_store, origin_position, recorded_at) \
+             VALUES (?, 'Corrupt', x'00', x'1f', ?, ?, 0)",
+            &[
+                SqlValue::Integer(twin),
+                SqlValue::Blob(incarnation.to_bytes().to_vec()),
+                SqlValue::Integer(twin),
+            ],
+        )
+        .expect("the seeded row lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new().backwards())).await;
+
+        assert_eq!(
+            ok_positions_of(&items),
+            [honest],
+            "the store assigned one position and exactly one event may be yielded at it: {items:?}"
+        );
+        assert_eq!(
+            ok_ids_of(&items),
+            [EventId::new(incarnation, honest)],
+            "and exactly one event may wear the identity that position minted: {items:?}"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
+            "the corrupt row is reported rather than silently dropped: {items:?}"
+        );
+    }
+
+    /// AC-007. The same criterion at [`decode_row`](super::decode_row)'s
+    /// **other** decode site.
+    ///
+    /// `decode_row` decodes two positions, and the second one is not covered by
+    /// the criterion above: an `origin_position` narrowed through
+    /// `i64::unsigned_abs` forges an `EventId` rather than a coordinate, and no
+    /// assertion about `position` can see it. So the corrupt row here sits at a
+    /// position the store really did assign it, and carries this incarnation
+    /// paired with the honest event's position *negated*. A narrowing decoder
+    /// yields two events at two positions wearing one `EventId`, which is
+    /// exactly what VT-8 `[FROZEN]` forbids — and every position assertion in
+    /// this module stays green while it does.
+    #[wasm_bindgen_test]
+    async fn a_negative_origin_position_never_forges_an_occupied_identity() {
+        let (sql, store) = open();
+        let honest = store
+            .append(&[event("Honest")], None)
+            .await
+            .expect("the append lands");
+        let incarnation = store.store_id().expect("the incarnation is readable");
+
+        // No `position` column: the store assigns this row an honest one of its
+        // own, so the only thing wrong with it is the origin pair.
+        sql.exec(
+            "INSERT INTO event \
+             (event_type, data, tags, origin_store, origin_position, recorded_at) \
+             VALUES ('Corrupt', x'00', x'1f', ?, ?, 0)",
+            &[
+                SqlValue::Blob(incarnation.to_bytes().to_vec()),
+                SqlValue::Integer(-super::position_as_i64(honest)),
+            ],
+        )
+        .expect("the seeded row lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        assert_eq!(
+            ok_ids_of(&items),
+            [EventId::new(incarnation, honest)],
+            "one appended event is one identity, whatever a corrupt origin column holds: {items:?}"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
+            "the corrupt origin position is reported rather than narrowed: {items:?}"
         );
     }
 
