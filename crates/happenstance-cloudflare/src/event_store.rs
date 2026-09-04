@@ -773,9 +773,17 @@ pub enum CloudflareEventStoreError {
         /// The first position this batch was given; every row at or above it was
         /// this batch's, and is what the discard was aimed at.
         from: SequencePosition,
-        /// Why the append stopped.
+        /// Why the append stopped — the primary, actionable failure, and the
+        /// one `Error::source()` chains to.
+        #[source]
         cause: Box<CloudflareEventStoreError>,
         /// Why the rows it had written could not be discarded.
+        ///
+        /// Carried beside `cause` rather than replacing it, the way
+        /// `happenstance::runner::Error::Read`'s `rollback` sits beside its own
+        /// `source` (`crates/happenstance/src/runner.rs:174-191`): thiserror
+        /// permits one `#[source]` per variant, `cause` is what a caller must
+        /// act on, and this field stays out of the chain rather than hiding it.
         while_discarding: Box<CloudflareEventStoreError>,
     },
 }
@@ -3616,10 +3624,13 @@ mod source_chain_tests {
             while_discarding: Box::new(CloudflareEventStoreError::CorruptTags),
         };
 
-        let source = Error::source(&err)
-            .and_then(|s| s.downcast_ref::<Box<CloudflareEventStoreError>>());
+        let source =
+            Error::source(&err).and_then(|s| s.downcast_ref::<Box<CloudflareEventStoreError>>());
         assert!(
-            matches!(source.map(|b| &**b), Some(CloudflareEventStoreError::CorruptTags)),
+            matches!(
+                source.map(|b| &**b),
+                Some(CloudflareEventStoreError::CorruptTags)
+            ),
             "PartialBatch must chain to its cause via #[source], not just print it: {err}"
         );
     }
