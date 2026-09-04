@@ -32,6 +32,49 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **One conformance rule, and it is breaking in practice: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`read_from_composes_with_limit`**, the ninetieth event-store rule. An
+  adapter that passes today can go red on it, which is what the note at the top
+  of this file means when it says to treat a minor bump of this crate as a break;
+  CF-29 makes that policy rather than advice. `0.2.0` is the cheap moment to take
+  it, because it is the release that creates the adapter population — the same
+  rule landing at `0.2.1` costs every adapter a red build.
+
+  The defect it detects is a forward read that branches on the presence of a
+  cursor and never threads the caller's budget into that branch:
+
+  ```text
+  if let Some(from) = options.from {
+      self.read_resume(from)          // <- limit never reaches here
+  } else {
+      self.read_paged(options.limit)
+  }
+  ```
+
+  That is the order a SQL adapter is written in — the paging query first, the
+  resume cursor threaded through it afterwards — and it survived every rule the
+  suite had. Three `[FROZEN]` clauses name forwards `from` composed with `limit`
+  as the consumer that motivates them: ES-14's budget over the whole ordered
+  result, VT-28's paging loop writing `.limit(budget - fetched)`, and CF-12's
+  cursor over a multi-item query. The suite composed `from` with `to`, with
+  `backwards`, and with `backwards` **and** `limit` — and issued forwards `from`
+  with `limit` at no call site at all. A store with exactly that defect and its
+  backwards branch left correct passed all eighty-nine rules and was
+  indistinguishable from a conformant one.
+
+  What a caller loses without the rule is a page it sized. A projection runner
+  that asks for five hundred events from its checkpoint is handed the whole
+  stream instead, the read model behind it buffers a batch nobody budgeted for,
+  and the loop's own arithmetic is arithmetic about a number the store ignored.
+  Nothing errors, so nothing retries, and the ceiling that the budget existed to
+  hold stops holding. The rule reads through a **two-item** query at a window
+  that straddles both items' matches, so it also rejects the two adapter shapes
+  that get the merged result wrong under a budget — the unparenthesised
+  `WHERE a OR b AND position >= ?`, whose cursor binds to the last item alone,
+  and the store that emits one statement per query item and writes `LIMIT n` onto
+  each of them.
+
 - **WF-11's falsifier has been fired at, and the answer is on file.** The clause
   has carried a `[PROVISIONAL]` marker since phase 5 on a falsifier needing two
   things in one place — a memory ceiling that is real, and a payload large enough

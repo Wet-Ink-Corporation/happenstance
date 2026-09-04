@@ -218,7 +218,8 @@ struct Declared {
 /// `OFFSET`; `backwards` lost between two structs; an upper bound ignored, read
 /// as exclusive, and never swapped under `backwards`; a budget of zero read as no
 /// budget, a budget written per query item and never re-applied to the union,
-/// `LIMIT n + 1`, and `LIMIT` pushed into the scan ahead of the filter;
+/// `LIMIT n + 1`, `LIMIT` pushed into the scan ahead of the filter, and a budget
+/// spent everywhere except the branch that serves a forward cursor;
 /// `WHERE a OR b AND position >= ?` without parentheses; a paging window anchored on a `max(position)` that is `NULL` on
 /// an empty store; one position bound for a whole batch; `RETURNING` read from
 /// the wrong end and read without checking there is a row; probe-then-insert
@@ -458,6 +459,11 @@ const REGISTRY: &[Declared] = &[
             "limit_applies_across_items_not_per_item",
             "query_union_is_item_concatenation",
             "query_items_share_one_snapshot",
+            // And L1-1's rule for the same reason: its two items match three
+            // events each and nothing matches both, so the budgeted page comes
+            // back empty and this store fails at the arrangement anchor rather
+            // than at the budget.
+            "read_from_composes_with_limit",
         ],
         provenance: "the same joiner bug one level up: the item list assembled with the \
              separator that belongs inside an item.",
@@ -587,6 +593,10 @@ const REGISTRY: &[Declared] = &[
             // The two `to`-only rules leave `from` unset, so it passes those.
             "read_from_and_to_bound_a_closed_window",
             "read_from_a_gap_position",
+            // The budgeted resume too, one composition over: an `OFFSET` of the
+            // cursor's numeric value starts the page at the wrong event, so what
+            // comes back is the wrong three events rather than too many.
+            "read_from_composes_with_limit",
         ],
         provenance: "a position anchor read as an index. `OFFSET` is the parameter already \
              in the paging query, and a `u64` position slots into it without \
@@ -635,6 +645,10 @@ const REGISTRY: &[Declared] = &[
             // but wrong.
             "read_limit_zero_yields_nothing",
             "limit_applies_across_items_not_per_item",
+            // Off by one on the budgeted resume as well. Inflation on the axis
+            // `read_limit_truncates` already owns: L1-1's rule is about a budget
+            // that is never spent, not about one spent a row late.
+            "read_from_composes_with_limit",
         ],
         provenance: "ubiquitous: every cursor-paging implementation fetches `LIMIT n + 1` to \
              answer \"is there more\", and most of them trim. This one forgot, \
@@ -711,7 +725,7 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "ForwardPagingBudgetStore",
         kind: Kind::Mutant,
-        fails: &[],
+        fails: &["read_from_composes_with_limit"],
         provenance: "a forward read that branches on `from` and never threads `limit` into the \
              resume branch — the shape that arises when the cursor is added to a paging \
              query written before it, which is the order every SQL adapter in this \
@@ -749,6 +763,10 @@ const REGISTRY: &[Declared] = &[
             // there at the `limit` assertion rather than at the precedence one,
             // which is what `UnparenthesisedPredicateStore`'s row protects.
             "read_from_composes_with_multi_item_query",
+            // Not inflation either: L1-1's rule pages a window that STRADDLES
+            // the two items' blocks, which is the one shape a per-item budget
+            // cannot produce. It spends three rows on each item and returns five.
+            "read_from_composes_with_limit",
         ],
         provenance: "an adapter that cannot express a disjunction in one statement emits one \
              per `QueryItem`, and the row budget goes onto each of them because \
@@ -766,7 +784,14 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "UnparenthesisedPredicateStore",
         kind: Kind::Mutant,
-        fails: &["read_from_composes_with_multi_item_query"],
+        fails: &[
+            "read_from_composes_with_multi_item_query",
+            // And L1-1's rule, which is the same predicate with a budget on it:
+            // the cursor binds to the `Right` item alone, the whole `Left` block
+            // survives it, and the first three rows of the page are three events
+            // the caller had already checkpointed.
+            "read_from_composes_with_limit",
+        ],
         provenance: "`WHERE a OR b AND position >= ?` — the textbook operator-precedence bug, \
              reached by string-concatenating a cursor clause onto a disjunction someone else \
              built. It is invisible to a single-item query, which is every read-option rule \
