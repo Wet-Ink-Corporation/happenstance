@@ -420,6 +420,31 @@ impl SqliteBatch {
     }
 
     /// Queues a statement to run when the batch commits.
+    ///
+    /// # Security
+    ///
+    /// The statement text is fixed and the values are **bound**, never
+    /// interpolated. A statement assembled out of event data at run time is a
+    /// SQL injection whose source is the log, and it commits inside the same
+    /// `BEGIN IMMEDIATE` that advances the checkpoint — so the projection never
+    /// replays those events and nothing re-derives the rows it corrupted.
+    ///
+    /// That has to be a type obligation rather than a paragraph, because
+    /// nothing in the gate reads prose
+    /// (`standards/rust/70-rustdoc-obligations.md`, RS-70-5). The interpolated
+    /// spelling does not compile:
+    ///
+    /// ```compile_fail,E0308
+    /// use happenstance_sqlite::projection_store::SqliteBatch;
+    /// use happenstance_sqlite::rusqlite::types::Value;
+    ///
+    /// fn queue(batch: &mut SqliteBatch, account: &str) {
+    ///     batch.push(
+    ///         format!("DELETE FROM balance WHERE account = '{account}'"),
+    ///         core::iter::empty::<Value>(),
+    ///     );
+    /// }
+    /// ```
     pub fn push(&mut self, sql: impl Into<String>, params: impl IntoIterator<Item = Value>) {
         self.statements.push(PendingStatement {
             sql: sql.into().into_boxed_str(),
