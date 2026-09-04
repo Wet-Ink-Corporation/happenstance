@@ -1763,9 +1763,9 @@ why the name was left here rather than dropped until it could be written.
 builder stores `Some(0)` verbatim (`query.rs:343-347`),
 `zero_limit_means_zero_events` (`query.rs:523-536`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
-(`crates/happenstance-testkit/src/suite.rs:1413`) and in
+(`crates/happenstance-testkit/src/suite.rs:1507`) and in
 `for_each_event_store_rule!`
-(`crates/happenstance-testkit/src/registry.rs:137`).
+(`crates/happenstance-testkit/src/registry.rs:138`).
 
 This is a deliberate divergence from the DCB reference implementation, which
 treats `limit: 0` as unlimited through JavaScript falsiness, and the ADR that
@@ -3323,7 +3323,10 @@ treating position arithmetic as a count. The workaround —
 works at 211 events and is fatal at 53 million.
 
 - **Rule:** `read_to_is_inclusive`, `read_from_and_to_bound_a_closed_window`,
-  `read_to_under_backwards_bounds_the_older_end` — VT-29 names the same three.
+  `read_to_under_backwards_bounds_the_older_end`,
+  `read_to_composes_with_multi_item_query` — VT-29 names the first three, which
+  are the ones about the *field*. The fourth is this clause's alone and landed
+  later; see the amendment below.
   `ToBoundIgnoredStore` is the options struct matched on the fields it knows and
   `ToIsExclusiveStore` the exclusive reading; `BackwardsToIsAnUpperBoundStore` is
   the third, which this clause did not predict and which only the backwards rule
@@ -3340,6 +3343,22 @@ works at 211 events and is fatal at 53 million.
   unbounded one with no error anywhere. It also rejects an adapter that reads
   `to` as exclusive, which yields a window one event short at every chunk
   boundary and is invisible until the chunks are reassembled.
+
+**Amended: the three rules above all issue `Query::all()`, and one shape needed a
+fourth.** `read_to_composes_with_multi_item_query` is the upper bound against a
+*filtering* query, and it is CF-12's finding one bound over rather than a second
+statement of this clause's own. The adapter it rejects generates
+`WHERE a OR b AND position <= ?` — `AND` binds tighter than `OR`, so the window's
+top is conjoined with the last disjunct alone and every event matching an earlier
+item comes back above the window. With a single-item query there is nothing for
+the `OR` to bind wrongly across, so all three rules above pass it, and the lower
+bound is conjoined correctly, so `read_from_composes_with_multi_item_query`
+passes it too. `UnparenthesisedToPredicateStore` is that store. Until this rule
+it was registered as caught by the **model family alone** — which is behind an
+optional dependency and `cfg(not(target_arch = "wasm32"))`, so the two adapters
+in this workspace that will build their `WHERE` clause by concatenation and run
+on that target, `happenstance-cloudflare` and `happenstance-neon`, ran nothing
+that could see it.
 
 ---
 
@@ -7453,7 +7472,7 @@ eight citations that look current and are not. §6.3 onward is written in the
 present tense, and where CF-15 – CF-21 have since changed what the measurement
 describes, the clause says so in place. Twenty-seven rules,
 enumerated then as now in exactly one place
-(`crates/happenstance-testkit/src/registry.rs:98-140`), and a store that ignores
+(`crates/happenstance-testkit/src/registry.rs:98-141`), and a store that ignores
 tags entirely when evaluating an
 append condition passes all of them; a store that assigns positions outside its
 transaction passes all of them; a store that returns `Ok` from `append` and loses
@@ -7844,6 +7863,14 @@ is the rule that closes it, and it is the second rule this clause claims;
 `UnparenthesisedPredicateStore` and `LimitPerItemStore` fail it too, which is
 what makes it a statement about the *merged* result rather than about either
 item.
+
+**And the `to` side is ES-16's, not this clause's.** This clause's MUST names
+`ReadOptions::from` and stays as written; what the same measurement said about
+the *upper* bound — that no read-option rule composed it with a filtering query
+either — is discharged by `read_to_composes_with_multi_item_query` under **ES-16**,
+where the read semantics of `to` live. It is recorded here because the two rules
+are twins and a reader arriving at the shape from this end should be sent one
+clause over rather than left to conclude the gap is still open.
 
 **CF-13.** A rule MUST assert the visibility invariant — that once a reader has
 observed position *P*, no event at a position at or below *P* becomes visible

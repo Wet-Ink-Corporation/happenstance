@@ -32,6 +32,46 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **A conformance rule that turns a model-only defect into an ordinary one —
+  breaking in practice, so pin `happenstance-testkit` exactly before taking it.**
+  `happenstance-testkit` gains **`read_to_composes_with_multi_item_query`**, the
+  ninety-second event-store rule: `ReadOptions::to` against a **filtering**
+  query.
+
+  The defect it detects is the textbook operator-precedence bug on the upper
+  bound:
+
+  ```text
+  WHERE type = ? OR tag = ? AND position <= ?
+  ```
+
+  `AND` binds tighter than `OR`, so the window's top is conjoined with the last
+  disjunct alone and every event matching an earlier item comes back from above
+  the window. It is what an adapter produces when the `to` clause is appended to
+  a `WHERE` string that already carries a disjunction someone else built — which
+  is how a `WHERE` clause gets built anywhere the driver cannot take a query
+  tree. The caller it breaks is a bounded backfill worker owning `[1, H]` while a
+  tail worker owns everything above it: the backfill reads past its own window
+  and re-delivers events the tail worker has already processed, with `Ok`
+  everywhere and no error to log.
+
+  **What is new here is not the store but where it can be seen.**
+  `UnparenthesisedToPredicateStore` was already in the registry, filed as caught
+  by the *model* family alone — an honest record of a real hole, and a worse one
+  than it looked: that family is behind the optional `proptest` dependency **and**
+  behind `cfg(not(target_arch = "wasm32"))`. The two adapters in this workspace
+  that will build their predicate by concatenation and run on that target,
+  `happenstance-cloudflare` and `happenstance-neon`, ran nothing at all that
+  could see it. All three existing `to` rules issue `Query::all()`, where there
+  is nothing for the `OR` to bind wrongly across, and the lower bound is
+  conjoined correctly, so `read_from_composes_with_multi_item_query` passes it
+  too. It is an ordinary mutant now, failing exactly one rule.
+
+  CF-12 closed this gap for `from` at phase 3; ES-16 is the clause that closes it
+  for `to`, and its rule list names the new rule.
+
+### Added
+
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it

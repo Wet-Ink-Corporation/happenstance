@@ -121,6 +121,28 @@ enum Kind {
     /// `Query::all()`. The suite's answer to that for `from` was CF-12's rule;
     /// where no such rule exists, the generative family is what is left, and
     /// this kind records which of the two is doing the work.
+    ///
+    /// # It has no members at this commit, and that is the healthy outcome
+    ///
+    /// `UnparenthesisedToPredicateStore` was the only store ever filed here — the
+    /// `to` half of exactly the shape above, with all three `to` rules issuing
+    /// `Query::all()`. `read_to_composes_with_multi_item_query` is now the rule
+    /// the kind's own documentation said would end it, so the row is an ordinary
+    /// [`Kind::Mutant`] with one entry in `fails`.
+    ///
+    /// That matters more than a tidy-up, because the gap was worse than "no rule
+    /// sees it": the model family is `proptest`-gated **and**
+    /// `cfg(not(target_arch = "wasm32"))`, so on the two targets that most need
+    /// a generated `WHERE` clause — Cloudflare Workers and Neon — nothing in the
+    /// binary caught it at all. A kind that records "the other family has this"
+    /// is only as good as where the other family runs.
+    ///
+    /// The variant is **kept**, empty. Withdrawing it is a decision about the
+    /// registry's vocabulary and belongs to an ADR pass, not to the lane that
+    /// happened to empty it; and the machinery is dormant rather than wrong —
+    /// [`MODEL_ONLY_WITNESSES`] is empty, the two tests over it are tied to that
+    /// emptiness in both directions, and a store filed here tomorrow is held to
+    /// all three obligations unchanged.
     ModelOnlyMutant,
 }
 
@@ -507,6 +529,11 @@ const REGISTRY: &[Declared] = &[
             // back empty and this store fails at the arrangement anchor rather
             // than at the budget.
             "read_from_composes_with_limit",
+            // And the `to` twin of CF-12's rule, for the same reason once more:
+            // its tag item and its type item share no event, so the window comes
+            // back empty and this store fails at the arrangement anchor rather
+            // than at the bound.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the same joiner bug one level up: the item list assembled with the \
              separator that belongs inside an item.",
@@ -706,6 +733,11 @@ const REGISTRY: &[Declared] = &[
             "read_to_is_inclusive",
             "read_from_and_to_bound_a_closed_window",
             "read_to_under_backwards_bounds_the_older_end",
+            // And the multi-item rule, which is not inflation but the honest
+            // shape of an ignored field: a bound nobody applies is wrong under
+            // every query. What that rule owns alone is the store that applies
+            // it to one disjunct.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the shape every `#[non_exhaustive]` options struct invites, and the one \
              ES-16's `Rejects:` names first: an adapter written before `to` existed \
@@ -724,6 +756,10 @@ const REGISTRY: &[Declared] = &[
             "read_to_is_inclusive",
             "read_from_and_to_bound_a_closed_window",
             "read_to_under_backwards_bounds_the_older_end",
+            // For `ToBoundIgnoredStore`'s reason: an off-by-one on the bound is
+            // an off-by-one under every query shape, and the window this rule
+            // reads ends on an event the store drops.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the other half of ES-16's `Rejects:`. `WHERE position < ?` is the \
              defensible reading of an upper bound in half the APIs anyone has used, \
@@ -834,6 +870,13 @@ const REGISTRY: &[Declared] = &[
             // survives it, and the first three rows of the page are three events
             // the caller had already checkpointed.
             "read_from_composes_with_limit",
+            // And the `to` twin's rule, because this store dangles **both**
+            // bounds off the last disjunct rather than only the upper one. That
+            // is what keeps it distinct from `UnparenthesisedToPredicateStore`
+            // in the other direction: this one is strictly the worse store, and
+            // a strictly worse store failing a superset of the rules is the
+            // registry working.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "`WHERE a OR b AND position >= ?` — the textbook operator-precedence bug, \
              reached by string-concatenating a cursor clause onto a disjunction someone else \
@@ -2264,11 +2307,22 @@ struct Witness {
 }
 
 /// One row per [`Kind::ModelOnlyMutant`] in [`REGISTRY`], and no others.
-const MODEL_ONLY_WITNESSES: &[Witness] = &[Witness {
-    name: "UnparenthesisedToPredicateStore",
-    select: <mutants::UnparenthesisedToPredicateStore as mutants::Defect>::select,
-    scenario: mutants::to_precedence_scenario,
-}];
+///
+/// **Empty since `read_to_composes_with_multi_item_query` landed**, and the
+/// emptiness is a measured claim rather than an oversight.
+/// `UnparenthesisedToPredicateStore` was the kind's only member; the rule that
+/// closed CF-12's gap for `to` sees it, so it is an ordinary [`Kind::Mutant`]
+/// with one entry in `fails` and its witness would now be an orphan — which
+/// `every_model_only_mutant_demonstrates_its_defect`'s second loop rejects by
+/// name.
+///
+/// The **kind** is deliberately left standing. Whether a kind with no members
+/// should be withdrawn (as `Kind::StatedOnlyDefect` was, for a different and
+/// worse reason — its bar was unsound) is a decision, and a decision belongs in
+/// an ADR pass rather than in the lane that emptied it. What holds the emptiness
+/// honest meanwhile is the pair of `is_empty` assertions on the two tests below:
+/// a table with rows and no members is caught, and so is a member with no row.
+const MODEL_ONLY_WITNESSES: &[Witness] = &[];
 
 /// Hands every registered store **type** to `$callback`.
 ///
@@ -2541,7 +2595,10 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// missing one, and `Model::select`'s two `to` branches were therefore dead
 /// code. All three are rejected now, and a fourth store —
 /// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
-/// which is what `Kind::ModelOnlyMutant` records. `LimitZeroIsUnlimitedStore` is
+/// which is what `Kind::ModelOnlyMutant` recorded until
+/// `read_to_composes_with_multi_item_query` landed and made it an ordinary
+/// mutant — the row below stays `Rejected` and the model stays what proves it,
+/// but it is no longer the *only* thing that does. `LimitZeroIsUnlimitedStore` is
 /// the read option still on this list, and it is a *value* boundary rather than
 /// a missing field: `Op::Read` generates `Option<usize>` over `1..4` and never
 /// proposes the zero, which is the exclusion the ten value edges sit behind.
@@ -2625,8 +2682,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ToBoundIgnoredStore", ModelOutcome::Rejected),
     ("ToIsExclusiveStore", ModelOutcome::Rejected),
     ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Rejected),
-    // `Kind::ModelOnlyMutant`: the one store in this binary that no rule of the
-    // event-store family can see. This row is the whole of what catches it.
+    // The `to` twin of the precedence bug. This row was once the whole of what
+    // caught it — `Kind::ModelOnlyMutant` — and it is now a second instrument
+    // beside `read_to_composes_with_multi_item_query`, which is the arrangement
+    // every other row here has.
     ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
     // A *value* boundary rather than a missing field: `Op::Read`'s limit is
     // `Option<usize>` over `1..4` and never proposes the zero this store
@@ -3311,11 +3370,36 @@ mod mutation_coverage {
     /// implementation — nothing could, and the two are the same function. It
     /// proves the comparison is a real one, over the exact inputs the bar
     /// accepts today.
+    ///
+    /// # Why the guard is an equivalence and not `!is_empty()`
+    ///
+    /// It was `assert!(!MODEL_ONLY_WITNESSES.is_empty())`, whose whole content
+    /// was *this control must actually run*. That is right while the kind has a
+    /// member and wrong the moment it does not: with no
+    /// [`Kind::ModelOnlyMutant`] registered, the bar this controls
+    /// (`every_model_only_mutant_demonstrates_its_defect`) iterates over nothing
+    /// too, so a control that ran would be controlling nothing — and a bare
+    /// `!is_empty()` would demand a witness for a store that must not have one.
+    ///
+    /// The equivalence says the same thing in both states: **the witness table
+    /// is empty exactly when the kind has no members.** A row without a member
+    /// is an orphan scenario, which is coverage theatre; a member without a row
+    /// is a defect nothing has shown to be a defect, which is the hole
+    /// `HidingPlaceStore` walked through. Both directions stay checked, and the
+    /// day the kind is used again this control is non-vacuous with it.
     #[test]
     fn the_model_only_bar_rejects_a_store_with_no_defect() {
-        assert!(
-            !MODEL_ONLY_WITNESSES.is_empty(),
-            "no witnesses, so this control asserts nothing"
+        assert_eq!(
+            MODEL_ONLY_WITNESSES.is_empty(),
+            !REGISTRY
+                .iter()
+                .any(|entry| entry.kind == Kind::ModelOnlyMutant),
+            "the witness table and the `ModelOnlyMutant` rows in `REGISTRY` must be empty or              non-empty together: {} witness row(s) against {} registered member(s). A row with              no member is a scenario nobody evaluates; a member with no row is a defect nothing              has shown to be one",
+            MODEL_ONLY_WITNESSES.len(),
+            REGISTRY
+                .iter()
+                .filter(|entry| entry.kind == Kind::ModelOnlyMutant)
+                .count(),
         );
 
         for witness in MODEL_ONLY_WITNESSES {

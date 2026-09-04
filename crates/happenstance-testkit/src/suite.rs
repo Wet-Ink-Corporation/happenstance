@@ -1386,6 +1386,100 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    /// The upper bound composes with a **multi-item** query.
+    ///
+    /// CF-12's shape, one bound over. `to` commutes with filtering semantically
+    /// and not in generated SQL: `WHERE a OR b AND position <= ?` conjoins the
+    /// window's top with the *last* disjunct alone, so every event matching an
+    /// earlier item comes back regardless of where the window ends. The caller
+    /// it protects is a bounded backfill worker owning `[1, H]` while a tail
+    /// worker owns everything above it — the backfill reads past its own window
+    /// and re-delivers events the tail worker has already processed, with no
+    /// error anywhere.
+    ///
+    /// It rejects `UnparenthesisedToPredicateStore`, and that store is the
+    /// reason this rule exists rather than an illustration of it. It is
+    /// `UnparenthesisedPredicateStore`'s twin with the *lower* bound conjoined
+    /// correctly, so `read_from_composes_with_multi_item_query` passes it; the
+    /// three `to` rules above all issue `Query::all()`, where there is nothing
+    /// for the `OR` to bind wrongly across, so they pass it too. Until this rule
+    /// the only thing in the tree that could see it was the **model** family,
+    /// which is `proptest`-gated and `cfg(not(target_arch = "wasm32"))` — so a
+    /// Cloudflare or Neon adapter carrying the bug passed every rule it actually
+    /// runs. It was registered as a model-only mutant for exactly that reason,
+    /// and it is an ordinary one now.
+    ///
+    /// # Why the read is forwards, unbudgeted, and one assertion
+    ///
+    /// A backwards read here would also reject
+    /// `BackwardsToIsAnUpperBoundStore` and `BackwardsIgnoredStore`, which
+    /// `read_to_under_backwards_bounds_the_older_end` and
+    /// `read_backwards_reverses_order` already own, and a budget would take
+    /// `read_to_composes_with_limit`'s. Neither would be coverage; both would be
+    /// inflation. The axis this rule owns is the query shape.
+    ///
+    /// # What the log and the query are shaped around
+    ///
+    /// Five decisions, each of them a mutant this rule must **not** reject for a
+    /// reason another rule already owns. The suite has measured every one of
+    /// them: an earlier draft of this rule used a three-type item and
+    /// `TypesAreAndStore` failed it, which is
+    /// `query_item_types_are_or`'s finding arriving here under a different name.
+    ///
+    /// - Every event is **tagged**, so `InnerJoinTagStore` cannot fail this rule
+    ///   for `untagged_events_match_query_all`'s reason.
+    /// - Every event carries exactly **one** tag, so `TagJoinFanOutStore` has no
+    ///   second tag to return it twice over.
+    /// - The types **ascend** with position, so `SortByEventTypeStore`'s sort is
+    ///   the identity here and `read_defaults_to_ascending_order` keeps it.
+    /// - The first item is a **single-tag** item and the second a **single-type**
+    ///   one. A multi-type item would let `TypesAreAndStore` fail this rule; two
+    ///   tag items would carry the same (empty) type list and let
+    ///   `ItemDedupByTypeStore` intern one into the other, which is
+    ///   `query_union_is_item_concatenation`'s.
+    /// - The two items' matches **inside the window** are contiguous — the tag
+    ///   item's two, then the type item's one — for
+    ///   `read_from_composes_with_limit`'s reason: interleaving them would make
+    ///   item order and position order disagree inside the window and
+    ///   `ItemOrderedUnionStore` would fail this rule for a reason
+    ///   `query_item_order_does_not_change_the_result_set` owns.
+    ///
+    /// What makes the assertion a statement about the *merged* result is
+    /// therefore not the interleaving but the **leak**: the event above the
+    /// bound matches the **first** item, which is the one a dangling upper bound
+    /// never reaches.
+    ///
+    /// The assertion names three positions the store itself assigned, so a store
+    /// that returns nothing fails it and so does one that returns everything.
+    /// That is the non-vacuity anchor, and it is why there is no separate one.
+    pub async fn read_to_composes_with_multi_item_query<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Matched by the tag item, the tag item, the type item, nothing, and
+        // the tag item. The window ends at the third; the fifth is the one an
+        // unparenthesised upper bound lets through, because it matches the item
+        // the bound never reaches.
+        let by_tag_low = append_ok(&store, &[tagged_event("Ay", &[("side", "left")])]).await;
+        let by_tag_high = append_ok(&store, &[tagged_event("Bee", &[("side", "left")])]).await;
+        let stop = append_ok(&store, &[tagged_event("Cee", &[("edge", "top")])]).await;
+        append_ok(&store, &[tagged_event("Dee", &[("edge", "past")])]).await;
+        append_ok(&store, &[tagged_event("Ee", &[("side", "left")])]).await;
+
+        let query = query_of_items([item_tagged(&[("side", "left")]), item_of_types(&["Cee"])]);
+
+        let window = read_ok(&store, &query, ReadOptions::new().to(stop)).await;
+        assert_eq!(
+            positions_of(&window),
+            [by_tag_low.get(), by_tag_high.get(), stop.get()],
+            "`to` must bound EVERY item of the query. An unparenthesised              `WHERE a OR b AND position <= ?` conjoins the window's top with the              last disjunct alone, and the first item's matches come back from              above the window every time: a bounded backfill re-delivers events              the tail worker has already processed, with no error anywhere"
+        );
+
+        RuleOutcome::Ran
+    }
+
     // ---------------------------------------------------------------------
     // Read options — the budget (VT-28, ES-14)
     // ---------------------------------------------------------------------
