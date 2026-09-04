@@ -111,15 +111,6 @@ pub mod projection_store;
 /// See `reexported_paths` below for what this guarantee is and is not.
 pub use rusqlite;
 
-/// Re-exported for [`rusqlite`]'s reason, one crate over: `tokio::task::JoinError`
-/// and `tokio::runtime::TryCurrentError` are variants of this crate's error
-/// enums, so a caller matching on either is naming `tokio`.
-///
-/// **This one carries a sharper qualification, stated on `reexported_paths`:**
-/// the crate takes `tokio` at `features = ["rt"]`, so what arrives through this
-/// path is a *partial* `tokio` and not a substitute for a consumer's own line.
-pub use tokio;
-
 /// Re-exported because the contract is in this crate's public signatures rather
 /// than merely behind them: `impl EventStore for SqliteEventStore` names
 /// `Query`, `ReadOptions`, `SequencedEvent`, `Event`, `AppendCondition` and
@@ -135,14 +126,36 @@ pub use happenstance_core;
 /// a second copy that prints the same. It is never a substitute for a
 /// consumer's own dependency.
 ///
-/// `tokio` is where that qualification bites, and it is worth reading twice.
-/// This crate takes `tokio` at `features = ["rt"]` (`Cargo.toml:37`), so what
-/// arrives through `happenstance_sqlite::tokio` is a **partial** `tokio` — no
-/// `macros`, no `rt-multi-thread`, no `time`. A consumer who reaches it only
-/// through this path and then writes `#[tokio::main]` gets an `error[E0433]` of
-/// an entirely different kind, and the fix is a `tokio` line in *their* manifest.
-/// The re-export exists so the two crates agree on which `JoinError` they mean;
-/// it does not stand in for the dependency.
+/// **`tokio` is the crate deliberately left out of that set, and the omission is
+/// that qualification made concrete.** `tokio::task::JoinError` and
+/// `tokio::runtime::TryCurrentError` are variants of this crate's error enums,
+/// so by RS-40-4's own arithmetic `tokio` belongs here, and it was re-exported
+/// until this release. The feature half is what removed it: this crate takes
+/// `tokio` at `features = ["rt"]` (`Cargo.toml:37`), so what arrived through
+/// `happenstance_sqlite::tokio` was a **partial** `tokio` — no `macros`, no
+/// `rt-multi-thread`, no `time`. A consumer who reached it only through that
+/// path and then wrote `#[tokio::main]` met an `error[E0433]` one layer further
+/// from its cause than the `error[E0308]` the re-export existed to prevent. A
+/// path that has to be read twice before it is safe is not a shorter route to
+/// the type.
+///
+/// What that costs, stated rather than glossed: a caller matching on `JoinError`
+/// writes a `tokio` line of their own, and identity then rests on cargo unifying
+/// the two rather than on this crate guaranteeing it. Semver-compatible
+/// requirements unify, which covers every consumer who already had a `tokio`
+/// line; a consumer who pins a different *major* than this crate resolves gets
+/// the two-types-that-print-identically failure the re-export set exists to
+/// prevent, and `cargo tree -d` is what names it.
+///
+/// And the omission is compiled too, so that re-adding the re-export cannot pass
+/// unnoticed: this is the path a reader following the old documentation would
+/// take, and it must not resolve.
+///
+/// ```compile_fail,E0433
+/// fn joined(e: happenstance_sqlite::tokio::task::JoinError)
+///     -> happenstance_sqlite::tokio::task::JoinError { e }
+/// # fn main() {}
+/// ```
 ///
 /// ```
 /// fn open(c: happenstance_sqlite::rusqlite::Connection)
@@ -153,12 +166,6 @@ pub use happenstance_core;
 /// ```
 /// fn param(v: happenstance_sqlite::rusqlite::types::Value)
 ///     -> happenstance_sqlite::rusqlite::types::Value { v }
-/// # fn main() {}
-/// ```
-///
-/// ```
-/// fn joined(e: happenstance_sqlite::tokio::task::JoinError)
-///     -> happenstance_sqlite::tokio::task::JoinError { e }
 /// # fn main() {}
 /// ```
 ///

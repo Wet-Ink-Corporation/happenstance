@@ -24,12 +24,18 @@ The crates this repository publishes, at their published versions:
 - `happenstance`
 - `happenstance-core`
 - `happenstance-testkit`
-- `happenstance-sqlite`
 
-`happenstance-cloudflare` is finished and packaged but deliberately not in the
-`0.2.0` release, so the only thing under its name on crates.io is a `0.0.0`
-placeholder with no functionality. Report against the source in this repository
-if you find something there; it joins the list above when it ships.
+**Two crates are packaged but not yet on the registry**, and the distinction
+matters when you are deciding what to report against. For both, the only thing
+under the name on crates.io today is a `0.0.0` placeholder with no
+functionality and no dependencies — it never linked a driver and has never put
+anything in front of a consumer. **Report against the source in this
+repository**, and each joins the list above when it ships.
+
+- `happenstance-sqlite` **is** in the `0.2.0` release and simply has not shipped
+  yet.
+- `happenstance-cloudflare` is finished and packaged but deliberately **not** in
+  the `0.2.0` release.
 
 Things worth reporting, because they are what this library is *for*:
 

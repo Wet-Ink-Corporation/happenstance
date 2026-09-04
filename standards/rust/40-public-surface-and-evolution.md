@@ -176,7 +176,7 @@ guarantee that a caller and an adapter cannot be holding two `Bytes` or two
 `Stream`s that look identical. The re-export set is not a courtesy — it is
 *exactly* the crates whose types appear in that crate's own public signatures,
 which is why each adapter re-exports its **driver** (`happenstance-sqlite` its
-`rusqlite` and `tokio`, `happenstance-cloudflare` its `worker`) and the contract
+`rusqlite`, `happenstance-cloudflare` its `worker`) and the contract
 re-exports neither. Reach outside a crate's set and the first symptom is
 `error[E0433]`; reach around it, with a copy of your own, and the symptom is
 worse.
@@ -224,16 +224,39 @@ first one nameable, which is the only reason anyone reaches for it.
 **What a re-export is not, and this half is load-bearing.** It is a
 **type-identity and discoverability** guarantee and nothing else. It does not
 forward the *features* a consumer did not enable, and it is not a substitute for
-their own dependency line. `happenstance-sqlite` is where that bites: it takes
-`tokio` at `features = ["rt"]`, so `happenstance_sqlite::tokio` is a partial
-`tokio`, and a consumer who reaches it only through that path and then writes
-`#[tokio::main]` gets an `error[E0433]` of an entirely different kind. Say so at
-the re-export site, because the reader who needs the sentence arrives at the item,
-not at this file.
+their own dependency line. Say so at the re-export site, because the reader who
+needs the sentence arrives at the item, not at this file.
+
+**And when the crate is taken at a partial feature set, that sentence is not
+enough — decline the re-export instead.** The rule's arithmetic is a *necessary*
+condition, not a sufficient one: a crate whose types appear in your public
+signatures is a *candidate* for the set, and it earns its place only if the path
+you hand the reader is shorter than the one they would have walked anyway.
+`happenstance-sqlite` is the worked case, and it went the other way. Its error
+enums carry `tokio::task::JoinError` and `tokio::runtime::TryCurrentError`, so
+`tokio` qualifies on the arithmetic — and it *was* re-exported. But the crate
+takes `tokio` at `features = ["rt"]`, so `happenstance_sqlite::tokio` was a
+partial `tokio`, and a consumer who reached it and then wrote `#[tokio::main]`
+met an `error[E0433]` *further* from its cause than the `error[E0308]` the
+re-export existed to prevent. The re-export was removed at `0.2.0`; the
+consumer writes their own `tokio` line, and cargo unifies it for every
+semver-compatible requirement.
+
+Two things follow, and the second is the one people get wrong. **State the
+omission where the reader looks for the item**, not only where you decided it —
+`crates/happenstance-sqlite/src/lib.rs`'s `reexported_paths` says why `tokio` is
+absent, in the same doc that proves the others resolve. And **fence it**: a
+`compile_fail,E0433` doctest on the path a reader following the old
+documentation would take, so that re-adding the re-export turns a test red
+rather than passing unnoticed. Put the fence in the **lib**, never in an
+integration-test target — cargo never hands those to a compiler, and a fence
+that is never compiled is decoration (F1-04, and
+[`80-the-gate.md`](80-the-gate.md)).
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
 `crates/happenstance-core/src/lib.rs:193 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:112 (pub use rusqlite)` ·
+`crates/happenstance-sqlite/src/lib.rs:154 (compile_fail,E0433)` ·
 `crates/happenstance-cloudflare/src/lib.rs:463 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:171 (impl Stream<Item =)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
