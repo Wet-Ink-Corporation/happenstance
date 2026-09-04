@@ -2947,7 +2947,7 @@ enum RacerKind {
 ///   CI job timeout is the only thing that notices.
 const RACERS: &[Racer] = &[
     Racer {
-        kind: RacerKind::Racing,
+        kind: RacerKind::ConformantControl,
         name: "LockedStore",
         fails: &[],
         provenance: "the conformant control: one mutex held across the whole append, which is \
@@ -4751,32 +4751,18 @@ mod mutation_coverage {
         );
     }
 
-    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    /// The static half of `the_concurrency_rules_reject_exactly_what_they_claim`:
+    /// what the table says, before any store is driven.
     ///
-    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
-    /// cannot have one: every store it drives fails *no* event-store rule, and
-    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
-    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
-    /// makes it a check rather than a list.
-    ///
-    /// # Why this one matters more than it looks
-    ///
-    /// A racing rule is the easiest kind to write in a form that cannot fail:
-    /// start some threads, assert something true of the *final* state, and the
-    /// test is green whatever happened in between. Every rule in this family was
-    /// written against a store that breaks it, and this test is what keeps that
-    /// true — including through the refactor that quietly turns a rendezvous
-    /// into a race and a rejection into a coin toss. A store that used to be
-    /// rejected and now passes shows up here, by name.
-    #[test]
-    fn the_concurrency_rules_reject_exactly_what_they_claim() {
-        let rules = all_concurrency_rules();
-        let names = racer_names();
-
+    /// Split out because the test crossed `clippy::too_many_lines`, and split
+    /// *here* rather than anywhere else because this is the seam: everything
+    /// above reads `RACERS` and `for_each_racer!`, everything below reads the
+    /// answers a running store gave.
+    fn racer_table_agrees_with_the_enumeration(rules: &[&str], names: &[&str]) {
         // The two lists that drift, held together exactly as
         // `mutant_registry_is_exhaustive` holds `for_each_mutant!` and
         // `REGISTRY`.
-        for name in &names {
+        for name in names {
             let Some(row) = RACERS.iter().find(|row| row.name == *name) else {
                 panic!(
                     "`{name}` is enumerated in `for_each_racer!` but has no \
@@ -4804,6 +4790,22 @@ mod mutation_coverage {
                      is a claim nothing evaluates"
                 );
             }
+
+            // The two halves of the kind, in both directions. A control that
+            // declares a failure is not a control, and a racing store that
+            // declares none is a defect nothing catches — which is the state
+            // `mutant_registry_is_exhaustive` rejects one family over, and the
+            // state an author reaches by emptying a flaky row's list rather
+            // than repairing its rendezvous.
+            assert_eq!(
+                row.fails.is_empty(),
+                row.kind == RacerKind::ConformantControl,
+                "`{name}` is registered as {:?} with {} declared failure(s). A \
+                 conformant control declares none, and a racing store that \
+                 declares none has had its defect disarmed rather than fixed",
+                row.kind,
+                row.fails.len()
+            );
         }
         for row in RACERS {
             assert!(
@@ -4813,7 +4815,31 @@ mod mutation_coverage {
                 row.name
             );
         }
+    }
 
+    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    ///
+    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
+    /// cannot have one: every store it drives fails *no* event-store rule, and
+    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
+    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
+    /// makes it a check rather than a list.
+    ///
+    /// # Why this one matters more than it looks
+    ///
+    /// A racing rule is the easiest kind to write in a form that cannot fail:
+    /// start some threads, assert something true of the *final* state, and the
+    /// test is green whatever happened in between. Every rule in this family was
+    /// written against a store that breaks it, and this test is what keeps that
+    /// true — including through the refactor that quietly turns a rendezvous
+    /// into a race and a rejection into a coin toss. A store that used to be
+    /// rejected and now passes shows up here, by name.
+    #[test]
+    fn the_concurrency_rules_reject_exactly_what_they_claim() {
+        let rules = all_concurrency_rules();
+        let names = racer_names();
+
+        racer_table_agrees_with_the_enumeration(&rules, &names);
         // Both directions, per (store, rule).
         for (store, rule, outcome, description) in racer_reports() {
             let Some(row) = RACERS.iter().find(|row| row.name == store) else {

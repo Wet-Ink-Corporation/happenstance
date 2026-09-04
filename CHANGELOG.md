@@ -679,6 +679,24 @@ not the same as what a user needed to be told.
   quietly becoming an anchor failure. The mutant is derived from the table as
   the broadest `fails` list and then checked against the store the paragraph
   names, so the two cannot come to be about different stores.
+- **The concurrency family's conformant control is registered rather than
+  conventional.** CF-5 is `[FROZEN]` and the event-store and projection
+  families each assert that a conformant member is registered; the concurrency
+  family identified its control by an empty `fails` list and a provenance
+  paragraph. Deleting `LockedStore` outright — its row, its `for_each_racer!`
+  entry, and the store and fixture in `racers.rs` — left all fifteen meta-tests
+  green, which is CF-5's vacuity reintroduced in the one family whose rules are
+  macro-emitted and have no `REGISTRY` row to fall back on.
+
+  `Racer` now carries `kind`, `Declared::kind`'s twin, and the meta-test
+  asserts both that a control is registered and that `kind` and an empty
+  `fails` list agree in both directions. The field is deliberately not
+  `fails.is_empty()`: an empty list is also what a disarmed mutant looks like,
+  and this family documents its own rendezvous flakiness at length, so a
+  control derived from emptiness would be manufactured by exactly the edit it
+  exists to catch. Relabelling a real racer as the control is rejected by the
+  run rather than by a cross-check — the store still commits sixty-four
+  contenders where one may.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded
