@@ -44,10 +44,19 @@ tokio = { workspace = true, features = ["rt"] }
 # `crates/happenstance-testkit/tests/memory_model_conformance.rs`'s inner
 # `#![cfg(all(not(target_arch = "wasm32"), feature = "proptest"))]` works only
 # from inside the testkit. The rejected alternative was a `proptest` feature on
-# this crate forwarding to it: the project's conformance command is
+# this crate forwarding to it: the project's *event-store* conformance command is
 # `cargo test -p happenstance-sqlite` with no flags, and a family that needs an
 # extra flag to appear is a family that silently does not run. It is a
 # dev-dependency, so nothing it pulls in reaches a consumer of this crate.
+#
+# Read "with no flags" as scoped to the event store, which is what `default`
+# selects. It is deliberately not the whole crate's command: `projection-store`
+# left `default` under PS-3's verdict and ADR-0036, and `conformance` was never
+# in it, so `tests/projection.rs` configures out under the flagless command and
+# the projection bar is `--all-features`. This comment read "the project's
+# conformance command" flatly until a test target that reached
+# `projection_store` under default features turned the claim into an
+# `error[E0433]`; the word that was missing is the one added above.
 happenstance-testkit = { workspace = true, features = ["proptest"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 

@@ -10,9 +10,21 @@
 //! [`rusqlite::Connection`]. Nothing is doubled: there is no fake driver, no
 //! in-memory stand-in for the file, and no second hand-rolled encoding.
 //!
-//! The event-store half is gated on the feature that provides it, so the
-//! `cargo hack` feature powerset does not compile a test against a module that
-//! was configured out.
+//! Each half is gated on the feature that provides it, so nothing here compiles
+//! a test against a module that was configured out. The event-store half is the
+//! file-level `#![cfg]` below; the projection half is one `#[test]`, gated at its
+//! own boundary, because `projection-store` is off by default and widening the
+//! file-level attribute would take the pragma readbacks out of the default build
+//! with it.
+//!
+//! That second gate is newer than this sentence's first draft, which claimed the
+//! property for the whole file while one assertion mid-body of
+//! `pragmas_are_in_effect_on_every_connection` reached
+//! `happenstance_sqlite::projection_store` unguarded — so `cargo test -p
+//! happenstance-sqlite` did not compile at all. No gate step caught it: the
+//! `cargo hack` feature powerset runs `--no-dev-deps`, which cannot be combined
+//! with `--all-targets` and so never builds a test target, and every other step
+//! passes `--all-features`.
 
 #![cfg(feature = "event-store")]
 #![allow(clippy::unwrap_used)]
@@ -493,8 +505,9 @@ fn recorded_at_is_returned_as_stored_after_a_reopen() {
 /// accepts one it does not recognise.
 ///
 /// The projection store's half of AC-007 is
-/// [`projection_store_open_configures_its_connection`], split out so that this
-/// one keeps running when `projection-store` is off.
+/// `projection_store_open_configures_its_connection` — not a link, because that
+/// item does not exist in this crate's default configuration — split out so that
+/// this one keeps running when `projection-store` is off.
 #[test]
 fn pragmas_are_in_effect_on_every_connection() {
     let db = TempDb::new("pragmas");
@@ -553,8 +566,8 @@ fn pragmas_are_in_effect_on_every_connection() {
 }
 
 /// AC-007, the projection store's half — that `open_configured` is genuinely the
-/// path [`SqliteProjectionStore::open`] takes, observed rather than asserted
-/// from the source.
+/// path `SqliteProjectionStore::open` takes, observed rather than asserted from
+/// the source.
 ///
 /// On a file nothing else has ever touched, the journal mode left behind is the
 /// one that `open` set before its own migration ran. WAL is a persistent
@@ -565,6 +578,20 @@ fn pragmas_are_in_effect_on_every_connection() {
 /// telling whoever landed the projection migration to assert on the return value
 /// instead. `projection-store-passes-the-borrowed-suite` landed it, so this is
 /// that assertion.
+///
+/// # Why the `cfg` is here and not on the file
+///
+/// This is the only assertion in this target that names
+/// `happenstance_sqlite::projection_store`, and that module is behind
+/// `projection-store` — which left `default` under PS-3's verdict and ADR-0036
+/// and is not coming back. Widening the file-level `#![cfg(feature =
+/// "event-store")]` to cover both would take the pragma readbacks out of the
+/// default build with it, which is the coverage this file exists for; leaving
+/// the reference buried mid-body of a `cfg`-less test made `cargo test -p
+/// happenstance-sqlite` an `error[E0433]` rather than a smaller run. The gate
+/// is therefore written at the test boundary, where a reader can see which
+/// feature buys which test.
+#[cfg(feature = "projection-store")]
 #[test]
 fn projection_store_open_configures_its_connection() {
     let untouched = TempDb::new("projection-open");

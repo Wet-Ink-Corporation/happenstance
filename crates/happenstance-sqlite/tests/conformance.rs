@@ -39,8 +39,21 @@
 //! `[dev-dependencies]` site instead and the invocation is gated on
 //! `not(target_arch = "wasm32")` alone, which the crate-level attribute below
 //! already supplies. `cargo test -p happenstance-sqlite` with no flags is
-//! therefore the whole command, which is what the project's testing brief
-//! promises.
+//! therefore the whole command **for the event store** — both families in this
+//! file, with no extra flag to remember — which is what the project's testing
+//! brief promises.
+//!
+//! It is not the whole command for the *crate*, and this sentence used to say it
+//! was. `projection-store` left `default` under PS-3's verdict and ADR-0036, and
+//! `conformance` was never in it, so `tests/projection.rs` configures out under
+//! the flagless command by design and says so in its own header. The projection
+//! bar is `cargo test -p happenstance-sqlite --all-features`, which is what the
+//! gate runs. Anything in a test target that reaches
+//! `happenstance_sqlite::projection_store` therefore owes a `cfg` at its own
+//! boundary; `tests/migration.rs`'s
+//! `projection_store_open_configures_its_connection` is the one that had to
+//! learn this, having been an `error[E0433]` under default features rather than
+//! a skipped test.
 //!
 //! ## Why only the tokio emitter, and why that is a decision rather than an
 //! omission
