@@ -265,6 +265,52 @@ const CONSTRAINT_CODE_KEY: &str = "code";
 /// recorded alternative, and it is the positive control the crate root's
 /// `!Send` probes need: without a type that the probe reports `true` for, the
 /// whole probe module would also pass if the probe were simply broken.
+///
+/// # Readable, not mintable, and the difference is a lost update
+///
+/// [`is_constraint_violation`](Self::is_constraint_violation) is a substring
+/// test over the message, so whoever writes the message decides what this crate
+/// calls a conflict. The wrong implementation it forbids is not exotic — it is
+/// an error-normalising middleware, a boundary mapper or a test double that
+/// builds one of these with `UNIQUE constraint failed` somewhere in the text. A
+/// DCB command loop then reads a transport fault as a lost append condition and
+/// retries a decision the store never refused; the retry succeeds, so nothing in
+/// any log says otherwise. That is the shape RS-13-1 names one crate over
+/// (`standards/rust/13-sealing-and-exhaustiveness.md`), against a fabricated
+/// `Guard`, with the message here in place of the position there. [`JsThrow`]'s
+/// field has been private since it was written; this one is too.
+///
+/// ```compile_fail
+/// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+///
+/// fn classify(throw: &JsThrow) -> bool {
+///     let stringified = StringifiedThrow {
+///         message: "UNIQUE constraint failed: event.position".to_owned(),
+///     };
+///     stringified.is_constraint_violation()
+/// }
+/// # let _ = classify;
+/// ```
+///
+/// The fence above is spelled bare `compile_fail`, never `compile_fail,E0451`:
+/// rustdoc on 1.97.1 silently ignores an error-code annotation it cannot match,
+/// so the stricter-looking spelling is the weaker check — the measurement is
+/// recorded in `crates/happenstance-testkit/src/contract.rs`. Bare
+/// `compile_fail` passes when the snippet fails to compile for *any* reason, so
+/// the **twin** below is what makes the pair sound. It is the same function with
+/// one expression changed — the struct literal becomes the sanctioned
+/// constructor — and it must compile, so a rename or a wrong path breaks the
+/// twin rather than quietly satisfying its partner.
+///
+/// ```
+/// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+///
+/// fn classify(throw: &JsThrow) -> bool {
+///     let stringified = StringifiedThrow::from_throw(throw);
+///     stringified.is_constraint_violation()
+/// }
+/// # let _ = classify;
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("JavaScript threw: {message}")]
 pub struct StringifiedThrow {
@@ -296,6 +342,41 @@ impl StringifiedThrow {
     /// substring test rather than a code comparison. It is uglier than
     /// [`JsThrow::is_constraint_violation`] and, on the evidence, no less
     /// capable.
+    ///
+    /// # The input is not the caller's to write
+    ///
+    /// The type's own documentation says why. What the pair below adds is the
+    /// half `#[non_exhaustive]` would *not* have closed: an attribute blocks the
+    /// struct literal and forces `..` in a pattern, and does nothing at all to
+    /// an assignment on a value already held (RS-13-1, and RS-13-3's own
+    /// "Remediation" note). A private field is what closes both.
+    ///
+    /// ```compile_fail
+    /// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+    ///
+    /// fn classify(throw: &JsThrow) -> bool {
+    ///     let mut stringified = StringifiedThrow::from_throw(throw);
+    ///     stringified.message = "UNIQUE constraint failed: event.position".to_owned();
+    ///     stringified.is_constraint_violation()
+    /// }
+    /// # let _ = classify;
+    /// ```
+    ///
+    /// And its twin, which must compile: the same function with the assignment
+    /// replaced by the read it is sanctioned to do. Reading the message is the
+    /// capability this type exists to offer — it is the whole content of
+    /// "stringified" — and the seal is on the write.
+    ///
+    /// ```
+    /// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+    ///
+    /// fn classify(throw: &JsThrow) -> bool {
+    ///     let stringified = StringifiedThrow::from_throw(throw);
+    ///     let _text: &str = stringified.message();
+    ///     stringified.is_constraint_violation()
+    /// }
+    /// # let _ = classify;
+    /// ```
     #[must_use]
     pub fn is_constraint_violation(&self) -> bool {
         reads_as_constraint_violation(&self.message)
