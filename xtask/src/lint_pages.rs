@@ -4024,8 +4024,6 @@ mod tests {
     /// edit and is the one a negative matcher cannot see at all.
     #[test]
     fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
-        let facts = settled_facts();
-
         const LIB_PARAPHRASE: &str = "\
 /// # Migrating from `factory =`\n\
 ///\n\
@@ -4035,6 +4033,8 @@ mod tests {
 > **Status: early.**\n\
 >\n\
 > Not one adapter outside this crate's own tests has run this suite.\n";
+
+        let facts = settled_facts();
 
         assert!(
             !publication_pin_problems(&facts, LIB_PARAPHRASE, TRUE_README).is_empty(),
