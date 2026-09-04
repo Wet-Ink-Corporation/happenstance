@@ -3132,6 +3132,114 @@ mod mutation_coverage {
         );
     }
 
+    /// The `MODEL_COVERAGE` heading's counted claim, made falsifiable.
+    ///
+    /// The heading states how many rows are `Agreed` and how many of those are
+    /// misses. Nothing checked either number: the meta-test below walks the
+    /// table row by row and asserts that each row's claimed outcome equals the
+    /// observed one, which is a statement about the *rows* and says nothing
+    /// about the sentence over them. So the sentence drifted — by nineteen, for
+    /// several phases, and again by one within a day of being corrected.
+    ///
+    /// **Rejects: a counted claim over a machine-readable table with nothing
+    /// counting the table.**
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_model_coverage_heading_counts_the_table() {
+        let agreed = MODEL_COVERAGE
+            .iter()
+            .filter(|(_, outcome)| *outcome == ModelOutcome::Agreed)
+            .count();
+
+        // Derived from `REGISTRY` rather than written here: the rows that
+        // *must* be `Agreed` are exactly the conformant variants, and a second
+        // list of their names is a second thing to keep in step.
+        let controls = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ConformantVariant)
+            .count();
+
+        assert_eq!(
+            agreed, 39,
+            "`MODEL_COVERAGE`'s heading says thirty-nine rows are `Agreed` and \
+             the table holds {agreed}"
+        );
+        assert_eq!(
+            agreed - controls,
+            37,
+            "`MODEL_COVERAGE`'s heading says thirty-seven misses and the table \
+             holds {}",
+            agreed - controls
+        );
+    }
+
+    /// The `REGISTRY` caution's discount, made falsifiable.
+    ///
+    /// The paragraph over the table tells a reviewer that the shotgun mutant's
+    /// long `fails` list is *inflation rather than vacuity* — many of its rows
+    /// evidence a rule's setup anchor rather than the property the rule is
+    /// named for — and closes with the reassurance that no rule is covered by
+    /// that mutant alone. That closing clause is what makes the discount safe
+    /// to apply, and it is the one part of the paragraph nothing evaluates.
+    ///
+    /// Where the shotgun mutant *is* a rule's only evidence, the discount has
+    /// to stop, and what stops it is an `expect` pin naming the assertion the
+    /// mutant is supposed to trip. Without one, the day that rule acquires a
+    /// second assertion its only registered evidence may be an anchor failure,
+    /// CF-1's obligation is discharged in name only — and the paragraph told
+    /// the auditor not to look.
+    ///
+    /// **Rejects: a reassurance aimed at exactly the audit it makes
+    /// unnecessary.**
+    #[test]
+    fn the_shotgun_mutants_sole_coverage_is_pinned() {
+        // Derived, then checked against the paragraph. The store whose rows a
+        // reader is told to discount is the one that trips the most rules, so
+        // the test follows the table; the equality below is what keeps the
+        // paragraph and the table talking about the same store.
+        let mut by_breadth: Vec<&Declared> = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::Mutant)
+            .collect();
+        by_breadth.sort_by_key(|entry| core::cmp::Reverse(entry.fails.len()));
+        let shotgun = by_breadth[0];
+        assert!(
+            shotgun.fails.len() > by_breadth[1].fails.len(),
+            "two mutants tie for the broadest `fails` list, so the caution over              `REGISTRY` no longer names a single store"
+        );
+        assert_eq!(
+            shotgun.name, "InnerJoinTagStore",
+            "the caution over `REGISTRY` names `InnerJoinTagStore` as the \
+             mutant whose rows may be read as anchor inflation, and the \
+             broadest mutant is now `{}` — so the paragraph is about a \
+             different store than the table is",
+            shotgun.name
+        );
+
+        let unpinned: Vec<&str> = all_rules()
+            .into_iter()
+            .filter(|rule| {
+                let evidence: Vec<&str> = REGISTRY
+                    .iter()
+                    .filter(|entry| entry.kind == Kind::Mutant && entry.fails.contains(rule))
+                    .map(|entry| entry.name)
+                    .collect();
+                evidence == [shotgun.name]
+            })
+            .filter(|rule| !shotgun.expect.iter().any(|(pinned, _)| pinned == rule))
+            .collect();
+
+        assert!(
+            unpinned.is_empty(),
+            "`{}` is the only evidence for {unpinned:?}, and its row pins no \
+             assertion there. The caution over `REGISTRY` says its rows may \
+             be discounted as anchor inflation; that discount is only safe \
+             where the mutant is not the sole evidence, so a rule it alone \
+             covers owes an `expect` pin naming the assertion it trips",
+            shotgun.name
+        );
+    }
+
     /// CF-2. The registry and the store enumeration agree, and every name in it
     /// is real.
     #[test]
