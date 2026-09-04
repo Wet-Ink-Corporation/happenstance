@@ -398,6 +398,47 @@
 //!   is reported as
 //!   [`event_store::CloudflareEventStoreError::StoredPosition`].
 //!
+//! # Cancellation
+//!
+//! **What a dropped `append` future does here: nothing, because there is nothing
+//! to drop.** `append` refuses an empty batch, checks the declared ceilings,
+//! reads this object's [`StoreId`](happenstance_core::StoreId), evaluates the
+//! condition and writes the batch — all through
+//! [`sql_storage::SqlStorage::exec`], which is **synchronous**. There is no
+//! `.await` anywhere in that body, so a future polled once has already run to
+//! completion by the time `poll` returns. **A dropped `append` future cannot be
+//! cancelled by this adapter.**
+//!
+//! This is the statement **ES-23** obliges every adapter to make. The clause is
+//! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
+//! the port refuses to choose between them on a caller's behalf
+//! ([`EventStore::append`](happenstance_core::EventStore::append)'s own
+//! `# Cancellation` section) precisely so that each adapter has to answer.
+//!
+//! **It does not license the opposite reading either.** A caller MUST NOT treat a
+//! dropped future as evidence about *any* store, this one included: generic code
+//! binds the port rather than this crate, and the next store in the same program
+//! may answer differently. Where an outcome genuinely has to be resolved, ES-24
+//! is the mechanism — a conditional append is at-most-once under verbatim
+//! reissue, so reissuing the identical batch settles it with no identity and no
+//! idempotency key.
+//!
+//! **The absence of a suspension point is load-bearing three times over here**,
+//! which is why it is checked rather than asserted. It is this section's answer;
+//! it is why the object cannot yield to its event loop part way through a batch,
+//! which is what makes the compensating discard's range exact; and it is the
+//! premise `MAX_EVENTS_PER_BATCH`'s derivation is written against. The body says
+//! so of itself in a comment, and a comment is not an instrument —
+//! `tests/cancellation_statement.rs` fails if this section goes missing, and
+//! fails again if `append` acquires an `.await` and the section stops being true.
+//! That second half is what ADR-0012 recorded a heading-check alone could not
+//! have.
+//!
+//! What would *not* change the answer is a caller's runtime evicting the object
+//! mid-turn: the future is not cancelled, the turn is discarded, and what
+//! survives is decided by the Durable Object's own commit rules rather than by
+//! anything the caller dropped.
+//!
 //! # Targets
 //!
 //! `wasm32-unknown-unknown` is the target this crate exists for and the only

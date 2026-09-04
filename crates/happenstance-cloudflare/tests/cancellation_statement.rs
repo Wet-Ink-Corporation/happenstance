@@ -32,13 +32,15 @@
 //!
 //! ADR-0012 states the ceiling on any such check in its own words: *"The gate
 //! check proposed in §5 catches a missing `# Cancellation` section and cannot
-//! catch a section that lies."* That is why there are two tests here rather than
-//! one. [`the_crate_states_what_a_dropped_append_does`] catches the section being
-//! absent or gutted; [`the_append_body_suspends_nowhere`] catches the section
-//! becoming **false**, by asserting the fact it asserts — that `append` has no
-//! suspension point, so a future polled once has already run to completion. An
-//! `.await` added to `append` turns the second red, which is the half ADR-0012
-//! said a heading-check could not have.
+//! catch a section that lies."* That is why there are two checks here rather than
+//! one, with a control behind them. `the_crate_states_what_a_dropped_append_does`
+//! catches the section being absent or gutted;
+//! `the_append_body_suspends_nowhere` catches the section becoming **false**, by
+//! asserting the fact it asserts — that `append` has no suspension point, so a
+//! future polled once has already run to completion. An `.await` added to
+//! `append` turns the second red, which is the half ADR-0012 said a
+//! heading-check could not have; `the_scan_can_see_an_await_when_there_is_one` is
+//! what stops that second check being a search that has never found anything.
 //!
 //! It still cannot catch every lie. A section could state the right fact and draw
 //! the wrong conclusion from it, and no scan sees that. What is closed is the
@@ -162,12 +164,28 @@ fn the_scan_can_see_an_await_when_there_is_one() {
 /// Bounded by the next `//! # ` heading rather than by the end of the block, so a
 /// token appearing three sections later cannot satisfy an assertion about this
 /// one.
+///
+/// **The section is returned with its `//!` prefixes stripped and its whitespace
+/// collapsed**, and that is not tidiness. Doc comments are hard-wrapped, so a
+/// two-word phrase can fall across a line break, and the check would then pass or
+/// fail on where the author put a newline rather than on what the section says.
+/// The first cut of this test did exactly that: two adapters carrying the same
+/// sentence, one green and one red.
 fn doc_section(source: &str, heading: &str) -> Option<String> {
     let source = source.replace('\r', "");
     let start = source.find(&format!("//! {heading}\n"))?;
     let rest = &source[start + 4 + heading.len()..];
     let end = rest.find("\n//! # ").unwrap_or(rest.len());
-    Some(rest[..end].to_owned())
+    Some(
+        rest[..end]
+            .lines()
+            .map(|line| line.trim_start().trim_start_matches("//!"))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }
 
 /// The text of a method body, from its signature to the line that closes it at
