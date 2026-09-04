@@ -1274,8 +1274,20 @@ fn collect_case_levels(cases_doc: &str) -> BTreeMap<String, String> {
             continue;
         };
         if let Some(case) = current.as_ref() {
-            out.entry(case.clone())
-                .or_insert_with(|| rest.trim().to_ascii_lowercase());
+            // The **first word**, because eight of the fifty-eight markers read
+            // `contract (sync)` and the qualifier is not part of the level. This
+            // was found by trying to refute the check rather than by reading the
+            // document: demoting one of those eight to `integration (sync)` gave
+            // a level string matching neither term in [`NOT_CONTRACT_LEVEL`], so
+            // a real breach was read as contract-level and passed. A comparison
+            // against a whole line is a comparison against whatever punctuation
+            // the line happens to carry.
+            let word = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            out.entry(case.clone()).or_insert(word);
         }
     }
     out
@@ -1287,6 +1299,14 @@ fn collect_case_levels(cases_doc: &str) -> BTreeMap<String, String> {
 /// running deployment, so an adapter author cannot run it against their own
 /// crate — which is the one thing the suite is for.
 const NOT_CONTRACT_LEVEL: [&str; 2] = ["integration", "scenario"];
+
+/// Every level word the document is allowed to use.
+///
+/// A closed list, and an unknown word is a failure rather than a silent pass
+/// into the contract-level branch (RS-81-2). The alternative — treat anything
+/// that is not [`NOT_CONTRACT_LEVEL`] as contract-level — is how a typo'd
+/// `intergration` satisfies CF-36 for a clause that breaches it.
+const KNOWN_LEVELS: [&str; 3] = ["contract", "integration", "scenario"];
 
 /// Check 11 — CF-36: a clause backed only by integration- or scenario-level
 /// cases names no conformance rule.
@@ -1305,22 +1325,23 @@ fn check_case_levels(
         if c.rules.is_empty() || c.cases.is_empty() {
             continue;
         }
-        let mut unmarked = Vec::new();
         let mut contract_level = false;
         for case in &c.cases {
             match levels.get(case) {
-                None => unmarked.push(case.as_str()),
+                None => problems.push(format!(
+                    "{CASES} — {case} carries no `Level:` marker, so CF-36's cross-reference \
+                     cannot be run for {}. Every case declares one.",
+                    c.id
+                )),
+                Some(level) if !KNOWN_LEVELS.contains(&level.as_str()) => problems.push(format!(
+                    "{CASES} — {case} declares level `{level}`, which is not one of \
+                     {KNOWN_LEVELS:?}. CF-36 turns on this word, so an unrecognised one is a \
+                     failure rather than a clause that happens to pass."
+                )),
                 Some(level) => {
                     contract_level |= !NOT_CONTRACT_LEVEL.contains(&level.as_str());
                 }
             }
-        }
-        for case in unmarked {
-            problems.push(format!(
-                "{CASES} — {case} carries no `Level:` marker, so CF-36's cross-reference \
-                 cannot be run for {}. Every case declares one.",
-                c.id
-            ));
         }
         if contract_level || CF36_UNDISCHARGED.iter().any(|(id, _)| *id == c.id) {
             continue;
@@ -3674,6 +3695,61 @@ mod tests {
     fn the_level_parser_survives_the_bold_run() {
         let levels = collect_case_levels("### E2E-07 — a case\n\n- **Level:** contract\n");
         assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
+    }
+
+    /// Eight of the fifty-eight markers carry a qualifier — `contract (sync)` —
+    /// and the level is the first word. Comparing the whole line against
+    /// `"integration"` reads `integration (sync)` as contract-level, which is a
+    /// breach passing. Found by refutation, not by reading.
+    #[test]
+    fn a_qualified_level_marker_reads_as_its_first_word() {
+        let levels = collect_case_levels(
+            "### E2E-41 — a case
+
+- **Level:** contract (sync)
+
+             ### E2E-42 — another
+
+- **Level:** integration (sync)
+",
+        );
+        assert_eq!(levels.get("E2E-41").map(String::as_str), Some("contract"));
+        assert_eq!(
+            levels.get("E2E-42").map(String::as_str),
+            Some("integration")
+        );
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("SY-19", "`a_rule_of_its_own`", "E2E-42"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("SY-19")),
+            "a qualified integration marker must still breach CF-36; got {problems:?}"
+        );
+    }
+
+    /// A level word the document is not allowed to use fails, rather than
+    /// falling through to the contract-level branch and satisfying CF-36 by
+    /// accident (RS-81-2).
+    #[test]
+    fn an_unrecognised_level_word_is_a_failure() {
+        let levels: BTreeMap<String, String> = [("E2E-42".to_owned(), "intergration".to_owned())]
+            .into_iter()
+            .collect();
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("SY-19", "`a_rule_of_its_own`", "E2E-42"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("intergration")),
+            "got {problems:?}"
+        );
     }
 
     /// Only the first marker under a heading counts, so a case body that quotes
