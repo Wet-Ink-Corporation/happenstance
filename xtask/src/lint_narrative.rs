@@ -1491,6 +1491,15 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
         },
     },
     DocumentationMust {
+        clause: "CF-17",
+        disposition: Disposition::Excluded {
+            reason: "as CF-39, and the sentence is CF-39's verbatim — `The fixture MUST state \
+                     the mechanism` — an obligation on a fixture over an adapter rather than \
+                     on the contract's own documentation. It arrived when L1-2's remediation \
+                     gave `REOPEN` the declaration obligation `MID_BATCH_FAULT` already had",
+        },
+    },
+    DocumentationMust {
         clause: "CF-35",
         disposition: Disposition::Excluded {
             reason: "the obligation is on this specification's own clauses and is discharged \
