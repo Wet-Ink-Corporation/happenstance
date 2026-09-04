@@ -39,6 +39,7 @@ is visible:
 ```rust
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 // The derive spans `arity` *and* `name`; `borrow` yields only `name`.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,14 +54,45 @@ impl Borrow<str> for Kind {
     }
 }
 
+// What `Hash` is *fed*, rather than what it returns. The disagreement between the
+// owned key and its borrowed probe is the bug, and this is the one face of it no
+// hash seed can flip.
+#[derive(Default)]
+struct Fed(Vec<u8>);
+
+impl Hasher for Fed {
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.extend_from_slice(bytes);
+    }
+    fn finish(&self) -> u64 {
+        0
+    }
+}
+
+fn fed<T: Hash + ?Sized>(value: &T) -> Vec<u8> {
+    let mut hasher = Fed::default();
+    value.hash(&mut hasher);
+    hasher.0
+}
+
 // rs_12_1_counterexample_must_hold_for_every_seed: `RandomState` is drawn afresh
 // per `HashMap`, so one map is one sample and a counterexample asserted on one
-// sample is a coin toss, not evidence.
+// sample is a coin toss, not evidence. `registry.get("CourseDefined") == None` is
+// exactly that coin toss — `get` picks a bucket by hash and then compares by
+// equality *within* it, so on the seeds where the borrowed probe lands in the
+// owned key's bucket `borrow` returns `"CourseDefined"`, the comparison succeeds,
+// and the entry is found: 1,619 of 200,000 seeds measured, one gate run in 126.
 for _ in 0..4096 {
     let mut registry: HashMap<Kind, &str> = HashMap::new();
     registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
 
-    assert_eq!(registry.get("CourseDefined"), None, "rs_12_1_counterexample_must_hold_for_every_seed: the entry is present and unreachable");
+    let owned = Kind { arity: 3, name: "CourseDefined".into() };
+    assert_eq!(registry.get(&owned), Some(&"decode"), "the entry is present");
+    assert_ne!(
+        fed(&owned),
+        fed(<Kind as Borrow<str>>::borrow(&owned)),
+        "and unreachable: `Borrow` requires the owned and borrowed forms to hash alike"
+    );
 }
 
 // `Ord` breaks the same way, and that is the ordering a `BTreeMap` searches by.
