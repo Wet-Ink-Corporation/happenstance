@@ -457,6 +457,11 @@ pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStr
 pub use js::{JsHandle, JsThrow, StringifiedThrow};
 pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
 
+/// The two crates whose types this adapter's own signatures name, re-exported so
+/// a caller cannot end up holding a second, identically-printing copy of either.
+/// `reexported_paths` at the foot of this file states what that does and does not buy.
+pub use {happenstance_core, worker};
+
 /// Compiled proof that the types this crate exists for are `!Send`.
 ///
 /// Autoref specialisation, the only way to observe the *absence* of an auto

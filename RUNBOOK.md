@@ -2868,9 +2868,9 @@ limits). Discharges ES-8 – ES-40, VT-1 – VT-31.
       produce four boundaries and one condition cannot carry them today, which is
       what blocks E2E-04 and E2E-05.
 - [ ] `happenstance_core::prelude` exporting `EventStore` (not `SendEventStore`),
-      so the default import path cannot produce E0034; `pub use futures_core;`
-      beside `pub use bytes;`, since `Stream` appears in `read`'s signature and
-      every adapter is forced to name it.
+      so the default import path cannot produce E0034. This item's second half —
+      `pub use futures_core;` beside `pub use bytes;` — **landed** (`lib.rs:193`),
+      and each adapter re-exports its driver with it. The prelude is what is left.
 - [ ] `ConditionViolated`'s `Display` interpolates the `conflicting_position` the
       store already populates, and names the remedy.
 

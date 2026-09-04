@@ -97,6 +97,35 @@ mod row;
 #[cfg(feature = "projection-store")]
 pub mod projection_store;
 
+/// Re-exported so a caller can name the driver types this crate's own
+/// signatures name — `Connection` on both constructors, `rusqlite::Error` and
+/// `types::Value` inside the error enums and the projection batch — without
+/// adding a second `rusqlite` of their own for the resolver to fork on. A
+/// consumer already carrying `rusqlite` for their own tables, at a requirement
+/// that does not overlap this crate's, writes
+/// `if let SqliteEventStoreError::Sqlite(e) = err` and meets `error[E0308]`
+/// over two types that print identically — on the error path, long after
+/// `open` and `open_in_memory` let them build and append without naming a
+/// foreign type at all.
+///
+/// See `reexported_paths` below for what this guarantee is and is not.
+pub use rusqlite;
+
+/// Re-exported for [`rusqlite`]'s reason, one crate over: `tokio::task::JoinError`
+/// and `tokio::runtime::TryCurrentError` are variants of this crate's error
+/// enums, so a caller matching on either is naming `tokio`.
+///
+/// **This one carries a sharper qualification, stated on `reexported_paths`:**
+/// the crate takes `tokio` at `features = ["rt"]`, so what arrives through this
+/// path is a *partial* `tokio` and not a substitute for a consumer's own line.
+pub use tokio;
+
+/// Re-exported because the contract is in this crate's public signatures rather
+/// than merely behind them: `impl EventStore for SqliteEventStore` names
+/// `Query`, `ReadOptions`, `SequencedEvent`, `Event`, `AppendCondition` and
+/// `AppendError`, and `StoreLimit` is a field of two error variants.
+pub use happenstance_core;
+
 /// Compiled proof that every path this crate promises a caller actually
 /// resolves from outside it — and the statement of what that promise is not.
 ///

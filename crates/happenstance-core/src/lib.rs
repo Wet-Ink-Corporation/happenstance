@@ -185,6 +185,13 @@ pub use projection_memory::{
 /// direct dependency on a specific `bytes` version.
 pub use bytes;
 
+/// Re-exported for the reason [`bytes`] is, one trait over: `Stream` appears at
+/// the *top level* of [`EventStore::read`]'s signature, so every adapter and
+/// every generic caller is forced to name it, and two `Stream` traits that print
+/// identically fail as `error[E0277]` naming a trait the author can see is
+/// implemented.
+pub use futures_core;
+
 /// Compiled proof that every path this crate promises a caller actually
 /// resolves from outside it — and the statement of what that promise is not.
 ///

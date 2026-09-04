@@ -241,6 +241,15 @@ pub use runner::{Progressed, Projection, ProjectionError, run_projection};
 
 pub use happenstance_core::*;
 
+/// The contract crate under its own name, beside the glob above.
+///
+/// The glob re-exports every *item*; it does not re-export the **crate**, so
+/// `happenstance_core::EventStore` — the spelling in the contract's own
+/// documentation, in every adapter's, and in every diagnostic — does not resolve
+/// through this facade without it. It adds a path, not a type: the glob already
+/// guarantees there is one contract crate here, and this makes it nameable.
+pub use happenstance_core;
+
 /// Compiled proof that the contract crate is reachable from here under its own
 /// name, not only through the glob above.
 ///

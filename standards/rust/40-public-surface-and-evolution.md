@@ -170,44 +170,73 @@ sees a clean workspace build, because nothing in this repository destructures it
 
 ## RS-40-4. Name a signature's types through the defining crate's own re-export.
 
-**Why.** `happenstance-core` does `pub use bytes;` on purpose: it costs the crate
-a major bump whenever `bytes` takes one, and buys the guarantee that a caller and
-an adapter cannot be holding two `Bytes` types that look identical. Where there
-is no such re-export the guarantee is the caller's problem, and the first symptom
-is `error[E0433]`.
+**Why.** `happenstance-core` does `pub use bytes;` and `pub use futures_core;` on
+purpose: it costs the crate a major bump whenever either takes one, and buys the
+guarantee that a caller and an adapter cannot be holding two `Bytes` or two
+`Stream`s that look identical. The re-export set is not a courtesy — it is
+*exactly* the crates whose types appear in that crate's own public signatures,
+which is why each adapter re-exports its **driver** (`happenstance-sqlite` its
+`rusqlite` and `tokio`, `happenstance-cloudflare` its `worker`) and the contract
+re-exports neither. Reach outside a crate's set and the first symptom is
+`error[E0433]`; reach around it, with a copy of your own, and the symptom is
+worse.
 
 **Do**
 
 ```rust
 use happenstance_core::bytes::Bytes;
+use happenstance_core::futures_core::Stream;
+
+// `Stream` is at the *top level* of `EventStore::read`'s signature, so an
+// adapter cannot implement the port without naming it — through this path, or
+// through a second `futures-core` that nothing unifies with this one.
+fn readable<S: Stream>(_s: S) {}
 
 # fn main() -> Result<(), Box<dyn core::error::Error>> {
 let payload: Bytes = Bytes::from_static(b"{}");
 let event = happenstance_core::Event::new("Enrolled", payload)?;
 assert_eq!(event.data().len(), 2);
+readable(futures_util::stream::empty::<u8>());
 # Ok(())
 # }
 ```
 
-**Not** — `Stream` is in `read`'s signature and is *not* re-exported, so this is
-the gap as the tree stands:
+**Not** — a re-export lives on the crate whose *signatures* name the type, so a
+path through the wrong crate is refused at the path rather than three steps later:
 
 ```rust,compile_fail,E0433
-fn spawnable<S: happenstance_core::futures_core::Stream>(_s: S) {}
+// `rusqlite` is in `happenstance-sqlite`'s constructors and error enums and in
+// none of the contract's. `happenstance_sqlite::rusqlite` resolves; this is what
+// asking the crate one layer down costs.
+fn open(_c: happenstance_core::rusqlite::Connection) {}
 # fn main() {}
 ```
 
-**Rejects.** An adapter crate that adds `futures-core = "0.3"` of its own and,
-one `cargo update` later, resolves a different major than `happenstance-core`
-did. The two `Stream` traits print identically, so `impl EventStore for MyStore`
-fails with `error[E0277]: the trait bound … is not satisfied` naming a trait the
-author can see is implemented — a diagnostic that sends people to rewrite the
-adapter rather than to read `cargo tree -d`.
+**Rejects.** An adapter crate that ignores the re-export, adds
+`futures-core = "0.3"` of its own and, one `cargo update` later, resolves a
+different major than `happenstance-core` did. The two `Stream` traits print
+identically, so `impl EventStore for MyStore` fails with `error[E0277]: the trait
+bound … is not satisfied` naming a trait the author can see is implemented — a
+diagnostic that sends people to rewrite the adapter rather than to read
+`cargo tree -d`. The re-export does not *prevent* the second copy; it makes the
+first one nameable, which is the only reason anyone reaches for it.
+
+**What a re-export is not, and this half is load-bearing.** It is a
+**type-identity and discoverability** guarantee and nothing else. It does not
+forward the *features* a consumer did not enable, and it is not a substitute for
+their own dependency line. `happenstance-sqlite` is where that bites: it takes
+`tokio` at `features = ["rt"]`, so `happenstance_sqlite::tokio` is a partial
+`tokio`, and a consumer who reaches it only through that path and then writes
+`#[tokio::main]` gets an `error[E0433]` of an entirely different kind. Say so at
+the re-export site, because the reader who needs the sentence arrives at the item,
+not at this file.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
+`crates/happenstance-core/src/lib.rs:193 (pub use futures_core)` ·
+`crates/happenstance-sqlite/src/lib.rs:112 (pub use rusqlite)` ·
+`crates/happenstance-cloudflare/src/lib.rs:463 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:171 (impl Stream<Item =)` ·
-[ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
-[RUNBOOK](../../RUNBOOK.md) *(`pub use futures_core;` is proposed and not landed)*
+[ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 
 ## RS-40-5. Spell an optional capability as an associated `const` whose constructor rejects an empty reason.
 
