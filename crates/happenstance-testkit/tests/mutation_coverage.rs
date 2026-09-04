@@ -3205,6 +3205,95 @@ mod mutation_coverage {
              express, and the heading's shape bullets are what say why",
             agreed - controls
         );
+
+        // And the sentence itself, read out of this file. The two assertions
+        // above pin the *table*; without this one the heading and the numbers
+        // asserted here could still disagree, which is the shape the finding
+        // was about — a claim beside a list, with nothing joining them. There
+        // is no type that says "this doc comment states this count", so the
+        // check reads the source (RS-81-1).
+        //
+        // # What this does not verify
+        //
+        // Only the two sentences it names, and only their numerals spelled as
+        // words. A heading rewritten in different words fails loudly here
+        // rather than passing silently, which is the right way round; what it
+        // cannot see is whether the shape bullets beneath still describe the
+        // misses they claim to. That is what `MODEL_ONLY_WITNESSES` and the
+        // per-row assertions in `the_model_rule_rejects_exactly_what_it_claims`
+        // are for.
+        // Normalised first: a doc comment is wrapped, so the sentence being
+        // looked for is split across `///` lines and no substring search over
+        // the raw file can find it.
+        let source: String = include_str!("mutation_coverage.rs")
+            .replace("///", " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = spelled(agreed);
+        let misses = spelled(agreed - controls);
+
+        let counted = format!("{}{} rows below are", rows[..1].to_uppercase(), &rows[1..]);
+        assert!(
+            source.contains(&counted),
+            "the `MODEL_COVERAGE` heading must say {counted:?}, and it does not. \
+             The table holds {agreed} `Agreed` rows; correct the sentence."
+        );
+        assert!(
+            source.contains(&format!("**{misses} misses**")),
+            "the `MODEL_COVERAGE` heading must say \"**{misses} misses**\", and \
+             it does not. The table holds {agreed} `Agreed` rows of which \
+             {controls} are conformant controls."
+        );
+    }
+
+    /// A count spelled the way this file's prose spells it, for 0..=99.
+    ///
+    /// Written out rather than pulled in: the numbers a coverage heading states
+    /// are the one thing a reader compares across releases, and a dependency
+    /// added so that a test can say "thirty-eight" would be a dependency in the
+    /// conformance crate's own test binary for the sake of one string.
+    #[cfg(feature = "proptest")]
+    fn spelled(n: usize) -> String {
+        const UNITS: [&str; 20] = [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ];
+        const TENS: [&str; 10] = [
+            "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        ];
+
+        assert!(
+            n < 100,
+            "this file's prose spells no number above ninety-nine"
+        );
+        if n < 20 {
+            return UNITS[n].to_owned();
+        }
+        let (tens, unit) = (n / 10, n % 10);
+        if unit == 0 {
+            TENS[tens].to_owned()
+        } else {
+            format!("{}-{}", TENS[tens], UNITS[unit])
+        }
     }
 
     /// The `REGISTRY` caution's discount, made falsifiable.
