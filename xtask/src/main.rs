@@ -884,41 +884,6 @@ const OPTIONAL: &[Step] = &[
         // dev-dependencies removed, which changes the dependency graph and so
         // must rewrite the lock file. The two flags are mutually exclusive by
         // construction, and cargo says so rather than ignoring one.
-        //
-        // What this step cannot see, and the measurement that decided to leave
-        // it that way:
-        //
-        // `--no-dev-deps` also means **no test target is ever compiled here**,
-        // in any feature combination. So a `tests/` file that reaches an item
-        // behind an off-by-default feature is invisible to this step, and
-        // invisible to every other step in the gate too, because all of them
-        // pass `--all-features`. `crates/happenstance-sqlite/tests/migration.rs`
-        // was exactly that for a while: `cargo test -p happenstance-sqlite`
-        // failed to compile with `error[E0433]` while `cargo xtask ci` was
-        // green.
-        //
-        // The obvious repair is `--all-targets`, and it is not available on
-        // *this* step: `cargo hack` 0.6.45 answers
-        // `error: --no-dev-deps may not be used together with --all-targets`,
-        // for the manifest-rewriting reason above. A second step without
-        // `--no-dev-deps` could carry it, and that was measured rather than
-        // assumed before being left out. `cargo hack check --workspace
-        // --feature-powerset --all-targets --keep-going`, on 2026-09-03 at
-        // rustc 1.97.1: **68 of 214 configurations fail.** Four are the
-        // `happenstance-sqlite` E0433 above, now fixed at the test boundary.
-        // The other 64 are `happenstance`, every one of them `error[E0432]` on
-        // `happenstance::Json` and `happenstance::commit` from four test
-        // targets that assume the `json` and `memory` features their crate's
-        // `default` supplies — a real defect of the same shape, in a crate this
-        // change does not own.
-        //
-        // So the flag stays off, and this comment is the alternative to adding
-        // a step that would be red on arrival: a gate step that cannot go green
-        // is not a gate step, and one merged with `|| true` or a skip list is
-        // worse than none (RS-80-2). Adding it is the right move *after*
-        // `happenstance`'s 64 are fixed, at which point the new step also owes
-        // `--locked` — it does not rewrite manifests, so RS-80-4's exemption
-        // does not reach it.
         name: "feature powerset",
         program: "cargo",
         args: &[

@@ -25,6 +25,26 @@
 //! `cargo hack` feature powerset runs `--no-dev-deps`, which cannot be combined
 //! with `--all-targets` and so never builds a test target, and every other step
 //! passes `--all-features`.
+//!
+//! # Why the gate was not widened to catch the next one, and what was measured
+//!
+//! The obvious repair is a second `cargo hack` step carrying `--all-targets`
+//! (the existing one cannot: `cargo hack` 0.6.45 answers *"--no-dev-deps may not
+//! be used together with --all-targets"*, because `--no-dev-deps` rewrites each
+//! manifest). It was measured before being declined. `cargo hack check
+//! --workspace --feature-powerset --all-targets --keep-going`, 2026-09-03 at
+//! rustc 1.97.1: **68 of 214 configurations fail.** Four are this bug, fixed
+//! here. The other 64 are `happenstance`, every one an `error[E0432]` on
+//! `happenstance::Json` and `happenstance::commit` from four test targets that
+//! assume the `json` and `memory` features their crate's `default` supplies —
+//! the same defect in a crate this change does not own.
+//!
+//! So the step stays out rather than arriving red, and this paragraph is what a
+//! step would have been: a gate step that cannot go green is not a gate step,
+//! and one softened with a skip list is worse than none. Adding it is right
+//! once `happenstance`'s 64 are fixed, and it will owe `--locked` — it rewrites
+//! no manifest, so the exemption the existing powerset step relies on does not
+//! reach it.
 
 #![cfg(feature = "event-store")]
 #![allow(clippy::unwrap_used)]
