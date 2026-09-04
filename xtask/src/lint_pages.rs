@@ -672,7 +672,12 @@ fn markdown_paragraphs(text: &str) -> Vec<String> {
     let mut current = String::new();
     for line in text.lines() {
         let trimmed = line.trim();
-        if trimmed.strip_prefix('>').unwrap_or(trimmed).trim().is_empty() {
+        if trimmed
+            .strip_prefix('>')
+            .unwrap_or(trimmed)
+            .trim()
+            .is_empty()
+        {
             if !current.is_empty() {
                 paragraphs.push(collapsed(&std::mem::take(&mut current)));
             }
@@ -3996,7 +4001,9 @@ mod tests {
     fn mounting_the_suite_is_read_from_the_invocation_not_from_the_prose() {
         assert!(mounts_suite(&format!("{MOUNT}(SqliteFixture::new());\n")));
         assert!(
-            !mounts_suite(&format!("//! `{MOUNT}` is a list of examples somebody wrote.\n")),
+            !mounts_suite(&format!(
+                "//! `{MOUNT}` is a list of examples somebody wrote.\n"
+            )),
             "the blind spot `stale_publication_claims` documents is this \
              function's job to close: a target emptied to its own documentation \
              mounts nothing"
@@ -4085,7 +4092,9 @@ mod tests {
         };
         let problems = publication_pin_problems(&unpublished, TRUE_LIB, TRUE_README);
         assert!(
-            problems.iter().any(|p| p.contains("the pin that is now stale")),
+            problems
+                .iter()
+                .any(|p| p.contains("the pin that is now stale")),
             "with nothing published the page's claim would be the true one; \
              the pin is what must move: {problems:?}"
         );
@@ -4107,7 +4116,9 @@ mod tests {
         };
         let problems = publication_pin_problems(&unmounted, TRUE_LIB, TRUE_README);
         assert!(
-            problems.iter().any(|p| p.contains("Move the pin, not the page")),
+            problems
+                .iter()
+                .any(|p| p.contains("Move the pin, not the page")),
             "an adapter that stopped mounting the suite makes the README's \
              positive claim the false one: {problems:?}"
         );

@@ -235,6 +235,17 @@ const FLAG: &str = "publish = false";
 /// the direction that names which side moved.
 const PUBLICATION_ANCHOR: &str = "its absence is half of an atomic pair";
 
+/// The page's own self-contained assertion, quoted whole.
+///
+/// [`PUBLICATION_ANCHOR`] is a sentence *fragment*, and a fragment carries no claim:
+/// a refuter kept it verbatim, rewrote the clause in front of it to say the manifest
+/// still carries the flag, and the pin stayed green while the page said the opposite of
+/// what the manifest settled. The antecedent is the load-bearing half, so the page side
+/// pins both halves together. The manifest words it differently, which is why the two
+/// sides cannot share one string.
+const PAGE_PUBLICATION_ANCHOR: &str =
+    "`publish = false` is gone from its manifest, and its absence is half of an atomic pair";
+
 /// Text with its comment markers stripped and its runs of whitespace collapsed
 /// to single spaces.
 ///
@@ -394,10 +405,10 @@ fn publication_problems(manifest: &str, package_rs: &str, lib: &str) -> Vec<Stri
     let paragraphs = front_page_paragraphs(lib);
     if !paragraphs
         .iter()
-        .any(|paragraph| paragraph.contains(PUBLICATION_ANCHOR))
+        .any(|paragraph| paragraph.contains(PAGE_PUBLICATION_ANCHOR))
     {
         problems.push(format!(
-            "src/lib.rs's crate-root docs do not say {PUBLICATION_ANCHOR:?}; the front page is \
+            "src/lib.rs's crate-root docs do not say {PAGE_PUBLICATION_ANCHOR:?}; the front page is \
              the only artefact a consumer reads, and it no longer states what the manifest \
              settled"
         ));
