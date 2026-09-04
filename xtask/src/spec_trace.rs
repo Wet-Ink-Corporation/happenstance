@@ -718,13 +718,14 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     //     one direction only, so a `Cases:` line that drops a single-claim case
     //     orphans it silently. §7.6 names the four cases that can happen to and
     //     then leaves them unguarded.
-    check_case_ownership(&clauses, &known_cases, &mut problems);
+    let orphaned = check_case_ownership(&clauses, &known_cases, &mut problems);
 
     // 11. CF-36 — a clause backed only by integration- or scenario-level cases
     //     names no conformance rule. The level markers are in `E2E-CASES.md`
     //     and nothing has ever read them.
     let levels = collect_case_levels(&cases_doc);
     check_case_levels(&clauses, &levels, &mut problems);
+    let cf36 = reconcile_cf36(&clauses, &levels, &mut problems);
 
     // 6. Every conformance rule is claimed by a clause, or disposed of by one,
     //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
@@ -753,6 +754,8 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &Coverage {
             citations: citation_coverage,
             unresolvable,
+            cf36,
+            orphaned,
         },
         &unclaimed_pending,
         &problems,
@@ -1202,36 +1205,235 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
 
 /// Check 10 — every E2E case is claimed by at least one clause.
 ///
-/// Empty on purpose in this commit: this is the check CF-38 lists fourth and
-/// nobody wrote, written down so that its absence can be executed rather than
-/// argued about. `run` reads `E2E-CASES.md` in one direction only —
-/// [`collect_cases`] builds the set check 5 resolves a clause's `Cases:` line
-/// against — and there is no reverse traversal at all.
+/// CF-38's fourth stated condition, and the direction this file had never run.
+/// Check 5 resolves a clause's `Cases:` line against [`collect_cases`]; nothing
+/// asked the question the other way, so a `Cases:` line that drops a case
+/// orphaned it in silence.
+///
+/// # Which reading of "a case naming no clause" this is
+///
+/// The clause's words admit two, and they differ by 54 cases. Read as *a case
+/// body that names a clause identifier in its own text*, 54 of the 58 fail
+/// today, because `E2E-CASES.md` predates this specification and carries no
+/// `Clauses:` field of any kind. Read as *a case no clause claims*, zero fail.
+/// This is the second reading, and it is not a convenience: it is the one §7.6
+/// states, computes and reports on, and the one whose stated hazard —
+/// "Single-claim cases are the ones a later edit can orphan without anyone
+/// noticing" — is a live risk rather than a documentation debt. Which reading
+/// CF-37 and CF-38 are owed is a reading of two `[FROZEN]` clauses and belongs
+/// with them; `.kb/_intake/remediation-2026-09-04-briefs/` carries the argument.
 fn check_case_ownership(
     clauses: &[Clause],
     known_cases: &BTreeSet<String>,
     problems: &mut Vec<String>,
-) {
-    let _ = (clauses, known_cases, problems);
+) -> usize {
+    let before = problems.len();
+    let claimed: BTreeSet<&str> = clauses
+        .iter()
+        .flat_map(|c| c.cases.iter().map(String::as_str))
+        .collect();
+    for case in known_cases {
+        if !claimed.contains(case.as_str()) {
+            problems.push(format!(
+                "{CASES} — {case} is claimed by no clause's `Cases:` line. A case no clause \
+                 reaches is a corner of the specification nothing arrives at; claim it, or \
+                 delete it.",
+            ));
+        }
+    }
+    problems.len() - before
 }
 
 /// Every case's `Level:` marker, by case id.
 ///
-/// Empty on purpose in this commit, for the same reason: `grep -c "Level"
-/// xtask/src/spec_trace.rs` returns 0 at `9b06836`, against 58 markers in the
-/// document CF-36 says this file cross-references.
+/// The marker is `- **Level:** contract` under the case's own `### E2E-nn`
+/// heading, and this is the first thing in the workspace to read one: `grep -c
+/// "Level" xtask/src/spec_trace.rs` returned 0 at `9b06836`, against 58 markers
+/// in the document CF-36 says this file cross-references.
 fn collect_case_levels(cases_doc: &str) -> BTreeMap<String, String> {
-    let _ = cases_doc;
-    BTreeMap::new()
+    let mut out = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in cases_doc.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("### E2E-") {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            current = (!digits.is_empty()).then(|| format!("E2E-{digits}"));
+            continue;
+        }
+        // The marker is a bullet, and only the *first* one under a heading
+        // counts: a case body may quote the word later.
+        // The bullet marker only — `trim_start_matches(['-', '*', ' '])` would
+        // eat the `**` of the bold run as well, which is how this silently
+        // found no marker at all on its first run.
+        let bullet = t
+            .strip_prefix("- ")
+            .or_else(|| t.strip_prefix("* "))
+            .unwrap_or(t)
+            .trim_start();
+        let Some(rest) = bullet.strip_prefix("**Level:**") else {
+            continue;
+        };
+        if let Some(case) = current.as_ref() {
+            out.entry(case.clone())
+                .or_insert_with(|| rest.trim().to_ascii_lowercase());
+        }
+    }
+    out
 }
 
-/// Check 11 — CF-36's cross-reference, which nothing performs.
+/// Levels that do not satisfy CF-36 on their own.
+///
+/// A rule backed only by these needs two adapters, a domain vocabulary or a
+/// running deployment, so an adapter author cannot run it against their own
+/// crate — which is the one thing the suite is for.
+const NOT_CONTRACT_LEVEL: [&str; 2] = ["integration", "scenario"];
+
+/// Check 11 — CF-36: a clause backed only by integration- or scenario-level
+/// cases names no conformance rule.
+///
+/// Two failures. A case with no `Level:` marker at all is one, because CF-36's
+/// own `Rule:` line cites the marker's definition (`E2E-CASES.md:19-28`) and a
+/// missing marker makes the cross-reference vacuous for that case rather than
+/// wrong. And a clause that violates CF-36 and is not in
+/// [`CF36_UNDISCHARGED`] is the other.
 fn check_case_levels(
     clauses: &[Clause],
     levels: &BTreeMap<String, String>,
     problems: &mut Vec<String>,
 ) {
-    let _ = (clauses, levels, problems);
+    for c in clauses {
+        if c.rules.is_empty() || c.cases.is_empty() {
+            continue;
+        }
+        let mut unmarked = Vec::new();
+        let mut contract_level = false;
+        for case in &c.cases {
+            match levels.get(case) {
+                None => unmarked.push(case.as_str()),
+                Some(level) => {
+                    contract_level |= !NOT_CONTRACT_LEVEL.contains(&level.as_str());
+                }
+            }
+        }
+        for case in unmarked {
+            problems.push(format!(
+                "{CASES} — {case} carries no `Level:` marker, so CF-36's cross-reference \
+                 cannot be run for {}. Every case declares one.",
+                c.id
+            ));
+        }
+        if contract_level || CF36_UNDISCHARGED.iter().any(|(id, _)| *id == c.id) {
+            continue;
+        }
+        problems.push(format!(
+            "{}:{} — {} names {} conformance rule(s) and every case it cites is \
+             integration- or scenario-level. CF-36 forbids that: such a rule cannot be run \
+             by an adapter author against their own crate. Give the clause a contract-level \
+             case, move the rule to the e2e crate, or record it in `CF36_UNDISCHARGED`.",
+            SPEC,
+            c.line,
+            c.id,
+            c.rules.len()
+        ));
+    }
+}
+
+/// The clauses that violate CF-36 today, and why each is recorded rather than
+/// repaired here.
+///
+/// # This list is a finding, not an exemption
+///
+/// CF-36 is `[FROZEN]` and has never been checked — its own accepted open
+/// question, `kb-open-question-cf-36-unperformed-cross-reference-001`, says so
+/// and dates the gap to 2026-08-17. Running the check for the first time found
+/// thirteen clauses in breach. None of them can be repaired from `xtask/`: the
+/// repair is either a contract-level case, a moved rule name, or a superseding
+/// clause, and all three are edits to `spec/SPECIFICATION.md`.
+///
+/// So the choice was between leaving CF-36 unimplemented for another phase and
+/// landing it with the thirteen written down. Written down, they are counted on
+/// every green run and a fourteenth fails the gate; unimplemented, the
+/// fourteenth is as invisible as these thirteen were. The entries are what
+/// `spec-trace` measured on its first run, at the commit that added the check.
+///
+/// Nine of the thirteen are one fact: the `SY` family names rules for
+/// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
+/// and which does not exist. That is not thirteen independent oversights.
+const CF36_UNDISCHARGED: [(&str, &str); 13] = [
+    (
+        "VT-21",
+        "names `store_accepts_the_guaranteed_minimum_payload` and \
+         `append_reports_exceeded_store_limits` — both live rules in `suite.rs` — against \
+         E2E-42 alone, which is transitive convergence across a peer mesh. The rules are \
+         single-store and the case is not; the mismatch is in the `Cases:` line rather than \
+         in the rules",
+    ),
+    (
+        "WF-9",
+        "the same shape as VT-21, and it shares one of the two rule names with it",
+    ),
+    (
+        "PS-29",
+        "names `one_poisoned_projection_does_not_stall_the_others` against E2E-28, which is \
+         the integration-level case of the same name. The rule is unwritten \
+         (`UNRESOLVABLE_RULE_NAMES`), so whether it can be single-store is open until the \
+         projection runner lands",
+    ),
+    ("PS-30", "the same shape as PS-29, against the same case"),
+    (
+        "SY-2",
+        "the replication family. Its rules would live in `happenstance-sync-testkit`, which \
+         CF-36's own `Rejects` paragraph names as their home and which does not exist \
+         (`crates/happenstance-sync/src/lib.rs:23-24`)",
+    ),
+    ("SY-4", "the replication family, as SY-2"),
+    ("SY-5", "the replication family, as SY-2"),
+    ("SY-7", "the replication family, as SY-2"),
+    ("SY-9", "the replication family, as SY-2"),
+    ("SY-10", "the replication family, as SY-2"),
+    ("SY-24", "the replication family, as SY-2"),
+    ("SY-25", "the replication family, as SY-2"),
+    ("SY-34", "the replication family, as SY-2"),
+];
+
+/// Check 11's other direction — a recorded CF-36 breach that is no longer one.
+///
+/// [`CF36_UNDISCHARGED`] can only shrink, for the same reason
+/// [`UNRESOLVABLE_RULE_NAMES`] can: an entry that outlives its breach turns a
+/// record of a defect into an exemption nobody re-reads. Returns the entries
+/// still in force, for the summary.
+fn reconcile_cf36(
+    clauses: &[Clause],
+    levels: &BTreeMap<String, String>,
+    problems: &mut Vec<String>,
+) -> Vec<&'static str> {
+    let mut live = Vec::new();
+    for (id, why) in &CF36_UNDISCHARGED {
+        let Some(c) = clauses.iter().find(|c| c.id == *id) else {
+            problems.push(format!(
+                "`CF36_UNDISCHARGED` records {id}, which {SPEC} no longer declares. Delete \
+                 the entry: it was recorded because it {why}",
+            ));
+            continue;
+        };
+        let breached = !c.rules.is_empty()
+            && !c.cases.is_empty()
+            && c.cases.iter().all(|case| {
+                levels
+                    .get(case)
+                    .is_some_and(|l| NOT_CONTRACT_LEVEL.contains(&l.as_str()))
+            });
+        if breached {
+            live.push(*id);
+        } else {
+            problems.push(format!(
+                "{id} no longer breaches CF-36, and `CF36_UNDISCHARGED` still records it. \
+                 The list can only shrink; delete the entry, which was recorded because it \
+                 {why}",
+            ));
+        }
+    }
+    live
 }
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
@@ -1457,6 +1659,12 @@ struct Coverage {
     citations: (usize, usize, usize),
     /// [`reconcile_unresolvable`]'s per-kind census.
     unresolvable: [usize; 3],
+    /// The clauses [`reconcile_cf36`] found still in breach of CF-36.
+    cf36: Vec<&'static str>,
+    /// How many cases check 10 found claimed by no clause. Printed even when it
+    /// is zero, because a check whose green says nothing is a check a reader
+    /// cannot tell from an absent one — which is the defect this one repairs.
+    orphaned: usize,
 }
 
 fn report(
@@ -1481,9 +1689,10 @@ fn report(
     let _ = write!(summary, "{}), ", parts.join(", "));
     let _ = write!(
         summary,
-        "{} conformance rules, {} e2e cases",
+        "{} conformance rules, {} e2e cases ({} claimed by no clause)",
         rules.len(),
-        cases.len()
+        cases.len(),
+        coverage.orphaned
     );
     // The coverage number is in the summary rather than in a comment because the
     // failure this step spent a phase inside was not a wrong check, it was a
@@ -1513,6 +1722,14 @@ fn report(
          names, {scheduled} unwritten",
         elsewhere + not_a_rule + scheduled
     );
+
+    if !coverage.cf36.is_empty() {
+        println!(
+            "{} clause(s) name a conformance rule and cite no contract-level case (CF-36), each recorded in `CF36_UNDISCHARGED`: {}",
+            coverage.cf36.len(),
+            coverage.cf36.join(", ")
+        );
+    }
 
     // Printed on a green run, on purpose. An open question that only shows up
     // when something else is already broken is an open question nobody reads.
@@ -3426,6 +3643,130 @@ mod tests {
         assert!(
             allowed.is_empty(),
             "one contract-level case is enough to satisfy CF-36; got {allowed:?}"
+        );
+    }
+
+    /// A case whose `Level:` marker is missing entirely. CF-36's cross-reference
+    /// is vacuous for such a case rather than satisfied by it, so the marker's
+    /// absence must be the failure — not a silent pass.
+    #[test]
+    fn a_case_with_no_level_marker_is_reported() {
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-40", "`a_rule_of_its_own`", "E2E-99"),
+            &BTreeMap::new(),
+            &mut problems,
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("E2E-99") && p.contains("no `Level:` marker")),
+            "got {problems:?}"
+        );
+    }
+
+    /// The bug this parser shipped with for one run, kept as a test because the
+    /// failure mode is the quiet one: `trim_start_matches(['-', '*', ' '])` eats
+    /// the `**` of the bold run as well, every marker goes unread, and every
+    /// clause is then reported as citing an unmarked case — 461 problems that
+    /// say nothing about the document.
+    #[test]
+    fn the_level_parser_survives_the_bold_run() {
+        let levels = collect_case_levels("### E2E-07 — a case\n\n- **Level:** contract\n");
+        assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
+    }
+
+    /// Only the first marker under a heading counts, so a case body that quotes
+    /// the word later cannot change the case's level.
+    #[test]
+    fn a_later_mention_does_not_overwrite_a_cases_level() {
+        let levels = collect_case_levels(
+            "### E2E-07 — a case\n\n- **Level:** contract\n\n\
+             Prose that says more.\n\n- **Level:** integration\n",
+        );
+        assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
+    }
+
+    /// `CF36_UNDISCHARGED` records defects, so it can only shrink. A clause that
+    /// stops breaching CF-36 — because it gained a contract-level case, or
+    /// dropped the rule — must take its entry with it.
+    #[test]
+    fn a_cf36_record_that_outlives_its_breach_is_reported() {
+        let levels: BTreeMap<String, String> = [("E2E-01".to_owned(), "contract".to_owned())]
+            .into_iter()
+            .collect();
+
+        let mut problems = Vec::new();
+        let live = reconcile_cf36(
+            &one_clause_with(
+                "SY-2",
+                "`compensation_is_atomic_with_the_losing_event`",
+                "E2E-01",
+            ),
+            &levels,
+            &mut problems,
+        );
+
+        assert!(live.is_empty());
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("SY-2") && p.contains("can only shrink")),
+            "got {problems:?}"
+        );
+    }
+
+    /// A recorded clause the document has stopped declaring is the other stale
+    /// direction, and it must not be mistaken for a discharged breach.
+    #[test]
+    fn a_cf36_record_naming_no_clause_at_all_is_reported() {
+        let mut problems = Vec::new();
+        reconcile_cf36(&[], &BTreeMap::new(), &mut problems);
+        assert!(
+            problems.iter().any(|p| p.contains("no longer declares")),
+            "got {problems:?}"
+        );
+    }
+
+    /// The whole of check 10 against the real documents. §7.6 states the result
+    /// this asserts — *"None. All 58 cases are claimed by at least one clause."*
+    /// — and until this check that sentence was a hand computation nothing
+    /// reproduced.
+    #[test]
+    fn the_real_documents_orphan_no_case() {
+        let root = workspace_root().unwrap();
+        let clauses = parse_clauses(&read(&root, SPEC).unwrap());
+        let cases = collect_cases(&read(&root, CASES).unwrap());
+        assert_eq!(cases.len(), 58, "§7.6's count of the document");
+
+        let mut problems = Vec::new();
+        check_case_ownership(&clauses, &cases, &mut problems);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// Check 11 against the real documents, both directions. Every case carries
+    /// a level, and the thirteen breaches are exactly the recorded ones.
+    #[test]
+    fn the_real_documents_breach_cf36_exactly_where_recorded() {
+        let root = workspace_root().unwrap();
+        let clauses = parse_clauses(&read(&root, SPEC).unwrap());
+        let cases_doc = read(&root, CASES).unwrap();
+        let levels = collect_case_levels(&cases_doc);
+        assert_eq!(
+            levels.len(),
+            collect_cases(&cases_doc).len(),
+            "every case declares a Level marker"
+        );
+
+        let mut problems = Vec::new();
+        let live = reconcile_cf36(&clauses, &levels, &mut problems);
+        check_case_levels(&clauses, &levels, &mut problems);
+
+        assert!(problems.is_empty(), "{problems:#?}");
+        assert_eq!(
+            live.len(),
+            CF36_UNDISCHARGED.len(),
+            "every recorded breach is still one; got {live:?}"
         );
     }
 
