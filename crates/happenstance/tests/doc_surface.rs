@@ -628,9 +628,12 @@ fn doc_sections(doc: &[String]) -> Vec<(String, String)> {
 /// projection-store freeze. The sentence does not.
 #[test]
 fn run_projection_states_the_single_writer_obligation() {
-    if !cfg!(feature = "unstable-projection") {
-        return;
-    }
+    // No feature guard, deliberately. This test reads `runner.rs` as TEXT and
+    // compiles nothing behind `unstable-projection`, so a `cfg!` here gates the
+    // assertion on a feature it does not depend on — and gates it in the one
+    // direction that lets a bare `cargo test` report `ok` without ever reading
+    // the page. A guard that can only ever silence its own check is exactly the
+    // vacuity RS-81 rejects, and it was this test's own named self-refutation.
 
     let source = read("runner.rs");
     let doc = item_doc(&source, "pub async fn run_projection<");
