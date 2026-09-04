@@ -518,8 +518,6 @@ where
     S: ThreadSafeEventStore + Send + Sync + 'static,
 {
     tokio::spawn(async move {
-        // Bound to a local rather than inlined: edition 2024 RPITIT captures
-        // every in-scope lifetime, and an inlined temporary is E0716.
         let chunk = core::num::NonZeroUsize::new(64).expect("64 is not zero");
 
         // `map_or` rather than `?`: the whole `ProjectionError<S::Error, _>` is
