@@ -121,6 +121,16 @@ pub(crate) enum LogError {
     /// back. The two answer the caller identically and leave two different logs,
     /// which is the whole content of ES-18's second rule.
     WriteFailed,
+    /// A fetch part way through a `read` failed.
+    ///
+    /// [`WriteFailed`](Self::WriteFailed)'s sibling on the read path, and the
+    /// second variant a *conformant* store here produces: the fault
+    /// `Fixture::READ_FAULT` arms. `PagedStreamStore` in `variants.rs` meets it
+    /// between two pages and yields it as an `Err` item, which is what the port
+    /// provides the arm for; `SwallowedReadFaultStore` in `mutants.rs` meets the
+    /// same fault and answers `Poll::Ready(None)`. The two answer the caller
+    /// differently over the same log, which is the whole content of the rule.
+    ReadFailed,
     /// A `NOT NULL` column was handed `NULL`.
     ///
     /// The fourth unproducible-by-a-correct-store variant.
@@ -170,6 +180,7 @@ impl core::fmt::Display for LogError {
                 f.write_str("the condition's `after` names a position this store never assigned")
             }
             Self::WriteFailed => f.write_str("the write of one row of the batch failed"),
+            Self::ReadFailed => f.write_str("a fetch part way through the read failed"),
             Self::NotNullViolation => f.write_str("NOT NULL constraint failed: event.data"),
             Self::ValueTooLarge => f.write_str("value too large for column: event.data"),
             Self::TooManyParameters => f.write_str("too many SQL variables"),
@@ -508,19 +519,47 @@ pub(crate) struct Snapshot {
     /// like every other one rather than before the first poll.
     error: Option<LogError>,
     events: std::vec::IntoIter<SequencedEvent>,
+    /// How many items to yield before an armed fetch failure arrives, or `None`
+    /// for "no fault armed".
+    ///
+    /// The **correct** answer to `Fixture::READ_FAULT`: an `Err` *item* part way
+    /// through, which is the arm the port provides and the one
+    /// `mutants::SwallowingPagedStream` refuses to use.
+    fail_after: Option<usize>,
+    /// Items yielded so far, which is what `fail_after` is counted against.
+    yielded: usize,
 }
 
 impl Snapshot {
     /// A stream over `selected`, or over the failure that prevented reading it.
     pub(crate) fn new(selected: Result<Vec<SequencedEvent>, LogError>) -> Self {
+        Self::faulted(selected, None)
+    }
+
+    /// [`new`](Self::new), with a fetch failure armed after `fail_after` items.
+    ///
+    /// A second constructor rather than a parameter on the first, because every
+    /// other store in this binary reads with no fault at all: threading a `None`
+    /// through a dozen call sites would put the read-fault axis into stores that
+    /// have nothing to do with it.
+    pub(crate) fn faulted(
+        selected: Result<Vec<SequencedEvent>, LogError>,
+        fail_after: Option<usize>,
+    ) -> Self {
         match selected {
             Ok(events) => Self {
                 error: None,
                 events: events.into_iter(),
+                fail_after,
+                yielded: 0,
             },
             Err(err) => Self {
                 error: Some(err),
                 events: Vec::new().into_iter(),
+                // A read that could not start already carries an error; arming a
+                // second one would make this stream wrong in two ways.
+                fail_after: None,
+                yielded: 0,
             },
         }
     }
@@ -534,7 +573,17 @@ impl Stream for Snapshot {
         if let Some(err) = this.error.take() {
             return Poll::Ready(Some(Err(err)));
         }
-        Poll::Ready(this.events.next().map(Ok))
+        // Fires once and is spent, so a caller that reads again gets the whole
+        // log.
+        if this.fail_after == Some(this.yielded) {
+            this.fail_after = None;
+            return Poll::Ready(Some(Err(LogError::ReadFailed)));
+        }
+        let next = this.events.next();
+        if next.is_some() {
+            this.yielded += 1;
+        }
+        Poll::Ready(next.map(Ok))
     }
 }
 

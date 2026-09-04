@@ -3557,6 +3557,306 @@ impl Subject for NoopFaultFixture {
 }
 
 // =====================================================================
+// CF-17 — the fixture whose reopen closes nothing
+// =====================================================================
+
+/// A fixture that declares `REOPEN` supported and overrides `reopen` with an
+/// **empty body**, over a completely correct but entirely volatile store.
+///
+/// [`NoopFaultFixture`]'s sibling one capability over, and the defect is again
+/// not in the store at all: `LogStore` is correct, and what is wrong is a
+/// fixture claiming a capability it does not supply. The cost is the whole of
+/// this suite's durability certification —
+/// `acknowledged_writes_survive_a_reopen`,
+/// `reopened_store_does_not_reissue_an_event_id` and
+/// `recorded_time_survives_a_reopen` all run, assert, and observe a live
+/// in-process `Vec` that no reopen ever went near.
+///
+/// # Why it is plausible
+///
+/// The author who writes this one is the author of a real adapter over a
+/// connection pool that "handles reconnection". They read `reopen`'s
+/// documentation as being about *handles* — which is what it says, because that
+/// is the half every fixture in the workspace can honour — rather than about the
+/// *medium*, and write the honest-looking answer. They then ship a crate whose
+/// README says it passes `acknowledged_writes_survive_a_reopen`, and ES-35's
+/// durability claim has never been driven across a process boundary. Who finds
+/// out is the first operator to restart the service.
+///
+/// An empty body is load-bearing, exactly as it is for [`NoopFaultFixture`]:
+/// `Fixture::reopen`'s provided body panics and its message names this hazard,
+/// so a *forgotten* override aborts loudly. What passes is an override that is
+/// present, honest-looking and empty.
+///
+/// # What no rule can do about it, and why it is not in `REGISTRY`
+///
+/// Nothing here fails. `MID_BATCH_FAULT` is closable because arming it has a
+/// port-observable consequence — the append must answer `Err` — and CF-39 is
+/// written on exactly that. `REOPEN` has none: a correct `reopen` over a durable
+/// medium and an empty one over a `Vec` produce byte-identical observations
+/// through `EventStore`.
+///
+/// That was first written into `REGISTRY` under a fourth kind whose obligation
+/// was a scenario separating this fixture from an honest one, and the obligation
+/// was **unsatisfiable in principle**: see
+/// [`LiveHandleReopenFixture`], which is honest, durable-shaped and answers
+/// every such scenario the way this fixture does. The kind was withdrawn rather
+/// than papered over, and what is left is
+/// `reopen_over_claiming_is_undetectable_and_this_is_the_record` in
+/// `mutation_coverage.rs`, which measures the two things that **are**
+/// measurable — this fixture fails no rule, and it converts three reported skips
+/// into three passes — and states the third rather than pretending to check it.
+///
+/// It is therefore deliberately absent from `for_each_mutant!` and `REGISTRY`.
+/// `Kind::Mutant` rejects an empty `fails` list, that assertion is right, and it
+/// was not weakened to make room for this.
+#[derive(Debug)]
+pub(crate) struct NoopReopenFixture(LogStore);
+
+impl Fixture for NoopReopenFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    // THE DEFECT, first half: the claim.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+
+    // THE DEFECT, second half: an override with an empty body. Nothing is
+    // closed, nothing is reopened, and nothing in the trait ties
+    // `REOPEN: Capability::SUPPORTED` to doing either.
+    async fn reopen(&self) {}
+}
+
+impl Subject for NoopReopenFixture {
+    const NAME: &'static str = "NoopReopenFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+/// [`NoopReopenFixture`]'s honest twin: the same volatile store, **declining**
+/// `REOPEN` instead of lying about it.
+///
+/// One line apart, which is the whole of the measurement it exists for. The
+/// liar converts three reported skips into three passes and reports a better
+/// score than this fixture does, so a fixture author choosing between them is
+/// paid to choose wrongly. `reopen_over_claiming_is_undetectable_and_this_is_the_record`
+/// drives both and pins the difference.
+#[derive(Debug)]
+pub(crate) struct HonestVolatileFixture(LogStore);
+
+impl Fixture for HonestVolatileFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over: discarding \
+         process state here is indistinguishable from discarding the events",
+    );
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+}
+
+impl Subject for HonestVolatileFixture {
+    const NAME: &'static str = "HonestVolatileFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+/// The control [`NoopReopenFixture`] is measured against: a `reopen` that
+/// genuinely closes something.
+///
+/// [`LosingFixture`]'s honest sibling. Both replace the live log wholesale, so a
+/// handle taken beforehand keeps the old one exactly as a real connection keeps
+/// talking to a closed file; the difference is that this one **replays** what was
+/// committed into the new log rather than starting empty, which is what a
+/// file-backed adapter's `open` does because it reads back rows it wrote.
+///
+/// It is deliberately **not** in `for_each_mutant!`. Its job is to be the other
+/// half of a comparison, exactly as `HidingPlaceStore` is for the model-only
+/// bar, and registering it would make it a conformant variant whose whole suite
+/// is asserted — a bigger claim than this file needs and one `DurableFixture` in
+/// `tests/fixture_instruments.rs` already makes over a `MemoryEventStore`.
+#[derive(Debug)]
+pub(crate) struct ClosingFixture {
+    live: RefCell<Rc<RefCell<Log>>>,
+}
+
+impl Fixture for ClosingFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LogStore::over(&self.live.borrow())
+    }
+
+    async fn reopen(&self) {
+        // Read back the way a replay reads it — every store-assigned fact
+        // included, which is what distinguishes this from `LosingFixture`
+        // (nothing replayed) and `RestampingFixture` (one field re-derived).
+        let committed = {
+            let live = self.live.borrow();
+            let log = live.borrow();
+            log.select(&Query::all(), ReadOptions::new())
+        };
+        *self.live.borrow_mut() = Rc::new(RefCell::new(Log::replayed(dense, committed)));
+    }
+}
+
+impl Subject for ClosingFixture {
+    const NAME: &'static str = "ClosingFixture";
+
+    fn open() -> Self {
+        Self {
+            live: RefCell::new(Rc::new(RefCell::new(Log::new(dense)))),
+        }
+    }
+}
+
+/// What a *stale* handle's write is worth after a reopen, rendered as a string.
+///
+/// The one scenario on which an honest `reopen` and an empty one separate, and
+/// finding it is most of what this witness is: through `EventStore` alone they
+/// do not separate at all, which is L1-2's whole finding. What separates them is
+/// the handle the trait says *may stop working*:
+///
+/// 1. connect, and append `Before` through that handle;
+/// 2. `reopen()`;
+/// 3. append `After` through the **same, now stale** handle;
+/// 4. connect **again**, and read everything.
+///
+/// A fixture that closed something answers `["Before"]` — the stale handle wrote
+/// into a log nothing reaches any more. A fixture whose `reopen` is empty
+/// answers `["Before", "After"]`, because there is only ever one log and the
+/// handle was never stale.
+///
+/// It is not a conformance rule and must not become one. `Fixture::reopen`'s
+/// contract says a pre-reopen handle *may* stop working, not that it must, and a
+/// rule asserting this would reject legitimate fixtures — `DurableFixture` among
+/// them if its handles were shared differently. What it is is a **witness**: a
+/// statement about two named fixtures, run against both, whose value is that a
+/// store with no defect cannot produce the defective answer.
+fn reopen_observed_by_a_stale_handle<F: Fixture>(fixture: &F) -> String {
+    happenstance_testkit::block_on(async {
+        let stale = fixture.connect().await;
+        let before = happenstance_testkit::fixtures::event("Before");
+        assert!(
+            stale.append(&[before], None).await.is_ok(),
+            "the anchor: the scenario says nothing unless the first append lands"
+        );
+
+        fixture.reopen().await;
+
+        let after = happenstance_testkit::fixtures::event("After");
+        let _ = stale.append(&[after], None).await;
+
+        let fresh = fixture.connect().await;
+        let all = happenstance_core::collect(fresh.read(&Query::all(), ReadOptions::new()))
+            .await
+            .expect("the correct read path is infallible");
+        let types: Vec<&str> = all
+            .iter()
+            .map(|event| event.event_type().as_str())
+            .collect();
+        format!("{types:?}")
+    })
+}
+
+/// [`NoopReopenFixture`]'s answer to [`reopen_observed_by_a_stale_handle`].
+pub(crate) fn noop_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&NoopReopenFixture::open())
+}
+
+/// [`ClosingFixture`]'s answer to the same scenario — the control.
+pub(crate) fn closing_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&ClosingFixture::open())
+}
+
+/// The **other** honest reopen, and the one the workspace actually ships.
+///
+/// [`ClosingFixture`] models a reopen that replaces the live log, so a handle
+/// taken beforehand keeps the old one. That is one legitimate implementation and
+/// it is not the one `happenstance-sqlite` has. `SqliteFixture::reopen` closes
+/// every connection the *fixture* is holding and checkpoints the write-ahead
+/// log; the **file** is not replaced, because reopening a file does not replace
+/// it, and a handle the caller still owns is its own live
+/// `rusqlite::Connection` onto that same file. So a stale handle keeps working,
+/// and its writes are visible to everything opened afterwards.
+///
+/// This fixture is that, in miniature: the medium is never replaced, and
+/// `reopen` drops only what the fixture itself holds.
+///
+/// # Why it is in the tree, and what it is not
+///
+/// It is **honest**. It supports `REOPEN` truthfully — over a medium that
+/// survives, a fresh `connect` really does read what was durably committed — and
+/// it passes every rule. It is not a mutant and is deliberately not registered.
+///
+/// What it is is the **falsifier for every reopen rule anyone will ever
+/// propose**. It answers the stale-handle scenario `["Before", "After"]`, which
+/// is `NoopReopenFixture`'s answer, not `ClosingFixture`'s. Two honest fixtures
+/// therefore sit on opposite sides of that partition, and the liar sits with one
+/// of them — so the scenario separates two *styles of `reopen` implementation*
+/// and not honest from defective. Anyone who writes a rule from that partition
+/// rejects `happenstance-sqlite`.
+#[derive(Debug)]
+pub(crate) struct LiveHandleReopenFixture {
+    /// The durable medium. Never replaced: reopening a file does not replace the
+    /// file.
+    log: Rc<RefCell<Log>>,
+    /// The handle the fixture keeps for itself, which is the only thing its
+    /// `reopen` can close. Dropping and re-deriving it is the whole of what a
+    /// file-backed `reopen` does that anything can observe from inside the
+    /// process, and it reaches no handle a caller owns.
+    own: RefCell<Option<LogStore>>,
+}
+
+impl Fixture for LiveHandleReopenFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LogStore::over(&self.log)
+    }
+
+    async fn reopen(&self) {
+        // Close what this fixture holds and open it again from the medium. The
+        // medium is untouched, which is the honest part: an acknowledged write
+        // survives, and that is what the three durability rules ask.
+        *self.own.borrow_mut() = None;
+        *self.own.borrow_mut() = Some(LogStore::over(&self.log));
+    }
+}
+
+impl Subject for LiveHandleReopenFixture {
+    const NAME: &'static str = "LiveHandleReopenFixture";
+
+    fn open() -> Self {
+        Self {
+            log: Rc::new(RefCell::new(Log::new(dense))),
+            own: RefCell::new(None),
+        }
+    }
+}
+
+/// [`LiveHandleReopenFixture`]'s answer to the same scenario.
+pub(crate) fn live_handle_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&LiveHandleReopenFixture::open())
+}
+
+// =====================================================================
 // The eight that cannot be one step
 // =====================================================================
 
@@ -4558,5 +4858,215 @@ impl Subject for RefetchingPagedFixture {
 
     fn open() -> Self {
         Self(Rc::new(RefCell::new(Vec::new())))
+    }
+}
+
+// =====================================================================
+// L3-01 — a fetch failure reported as the end of the stream
+// =====================================================================
+
+/// How many events one page of [`SwallowedReadFaultStore`] carries.
+///
+/// Small, so that reading a handful of events is genuinely several fetches and
+/// the fault has somewhere to land other than the first one. `RefetchingPagedStore`
+/// next door pages one event at a time for the opposite reason — it wants the
+/// tear at *every* item — and this one wants a page already delivered before the
+/// failure arrives, because a short read that returned nothing is a shape a rule
+/// could confuse with an empty store.
+pub(crate) const SWALLOWED_PAGE: usize = 2;
+
+/// A paged read whose **fetch failure is reported as the end of the stream**.
+///
+/// The finding's exact line, in a `poll_next` that must return a value:
+///
+/// ```text
+/// let Ok(page) = fetch().await else { return Poll::Ready(None) };
+/// ```
+///
+/// It is the most natural way to get a fallible fetch past a `poll_next`, and
+/// both adapters that will need one are already in the tree: `happenstance-cloudflare`
+/// over `SqlStorage` and `happenstance-neon` over one-shot HTTP, neither of which
+/// can hold a cursor open across polls. The port expresses the failure — `read`
+/// yields `Result<SequencedEvent, Self::Error>` **per item** — and this store
+/// declines to use it.
+///
+/// # What the consumer sees, and why it is unrecoverable
+///
+/// A short, *successful* read. `collect` returns `Ok` over two events where five
+/// were written; a projection runner applies them, commits the checkpoint at the
+/// truncation point, and every event above it is never applied — with `Ok`
+/// everywhere and no error to log. Who finds out is whoever reconciles the read
+/// model against the log, months later.
+///
+/// # Why it is not a [`Defect`]
+///
+/// [`RefetchingPagedStore`]'s reason: `Defect` composes functions over a slice
+/// that `MutantStore::read` samples once, and there is nowhere in it to say
+/// "and this poll answers `None` instead of `Err`". The selection here is
+/// `crate::correct`'s and is used correctly; what is wrong is the stream.
+///
+/// # It is armed, not always-on
+///
+/// Unarmed, this store is completely conformant and passes everything — which is
+/// the point, because that is what the adapter's CI sees on every green day. The
+/// fault comes through [`Fixture::arm_read_fault`], and before that seam existed
+/// no conformance rule could reach it at all: L3-01's measurement was that the
+/// same store fails **0 of 89** with no way to arm it and 22 with the fault armed
+/// by hand.
+#[derive(Debug)]
+pub(crate) struct SwallowedReadFaultStore {
+    log: Rc<RefCell<Vec<SequencedEvent>>>,
+    /// How many page fetches succeed before the next one fails, or `None` for
+    /// "no fault armed". Shared with the fixture and every other handle, so
+    /// arming through the fixture reaches a handle a rule already holds.
+    fault_after: Rc<Cell<Option<usize>>>,
+}
+
+/// The stream [`SwallowedReadFaultStore`] returns.
+///
+/// Every field is `Unpin`, so `poll_next` reaches its state through
+/// [`Pin::get_mut`] and no pin projection is hand-written — which the
+/// workspace's `unsafe_code = "forbid"` would forbid anyway.
+#[derive(Debug)]
+pub(crate) struct SwallowingPagedStream {
+    pages: std::vec::IntoIter<Vec<SequencedEvent>>,
+    page: std::vec::IntoIter<SequencedEvent>,
+    fetched: usize,
+    fault_after: Option<usize>,
+}
+
+impl Stream for SwallowingPagedStream {
+    type Item = Result<SequencedEvent, LogError>;
+
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        loop {
+            if let Some(event) = this.page.next() {
+                return Poll::Ready(Some(Ok(event)));
+            }
+            let Some(next) = this.pages.next() else {
+                return Poll::Ready(None);
+            };
+            if this.fault_after == Some(this.fetched) {
+                // THE DEFECT, and it is the finding's own line:
+                //
+                //     let Ok(page) = fetch().await else { return Poll::Ready(None) };
+                //
+                // The fetch failed. The caller is told the stream ended.
+                return Poll::Ready(None);
+            }
+            this.fetched += 1;
+            this.page = next.into_iter();
+        }
+    }
+}
+
+impl EventStore for SwallowedReadFaultStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        let selected = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)
+            .map(|stored| correct::select(&stored, query, options));
+
+        // A read that could not even start is reported as an empty stream rather
+        // than as the `Err` item the port provides for — the same defect one
+        // level up, and kept here so the store is wrong in one way rather than
+        // wrong in one way and panicking in another.
+        let pages = selected
+            .unwrap_or_default()
+            .chunks(SWALLOWED_PAGE)
+            .map(<[SequencedEvent]>::to_vec)
+            .collect::<Vec<_>>();
+
+        SwallowingPagedStream {
+            pages: pages.into_iter(),
+            page: Vec::new().into_iter(),
+            fetched: 0,
+            fault_after: self.fault_after.get(),
+        }
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let mut stored = self
+            .log
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        correct::commit(&mut stored, events, condition, dense)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let stored = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::head_of(&stored))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let stored = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(correct::contains(&stored, id))
+    }
+}
+
+/// One log, and any number of swallowing paged handles onto it.
+#[derive(Debug)]
+pub(crate) struct SwallowedReadFaultFixture {
+    log: Rc<RefCell<Vec<SequencedEvent>>>,
+    fault_after: Rc<Cell<Option<usize>>>,
+}
+
+impl Fixture for SwallowedReadFaultFixture {
+    type Store = SwallowedReadFaultStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a read fault does to a paged stream",
+    );
+    const READ_FAULT: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        SwallowedReadFaultStore {
+            log: Rc::clone(&self.log),
+            fault_after: Rc::clone(&self.fault_after),
+        }
+    }
+
+    // Fail the *second* page fetch, so that one page has already been delivered
+    // when the failure arrives. A fault at the first would make the swallowed
+    // answer an empty stream, which a rule could confuse with an empty store; a
+    // fault at the second makes it a **short** read — the shape that is
+    // indistinguishable from a complete read of a smaller log, and the one a
+    // projection runner checkpoints past.
+    //
+    // Set through the `Rc<Cell<_>>` every handle shares, so it reaches the
+    // handle the rule connected before arming.
+    async fn arm_read_fault(&self) {
+        self.fault_after.set(Some(1));
+    }
+}
+
+impl Subject for SwallowedReadFaultFixture {
+    const NAME: &'static str = "SwallowedReadFaultStore";
+
+    fn open() -> Self {
+        Self {
+            log: Rc::new(RefCell::new(Vec::new())),
+            fault_after: Rc::new(Cell::new(None)),
+        }
     }
 }

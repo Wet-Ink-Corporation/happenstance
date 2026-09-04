@@ -2055,7 +2055,7 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
 /// Per the drift allowlist that came before it (`3712c9b`), the count is
 /// computed and printed rather than written here, so this comment cannot come to
 /// disagree with the array beneath it.
-const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
+const UNCLAIMED_PENDING_ADR: [(&str, &str); 3] = [
     (
         "k_disjoint_boundaries_admit_exactly_k_commits",
         "the central DCB independence proposition — that commands sharing no \
@@ -2083,6 +2083,24 @@ const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
          over the examples the suite enumerates — or deciding that check 6's \
          bar is per-clause and a cross-clause rule is disposed of some other \
          way",
+    ),
+    (
+        "arming_a_read_fault_makes_the_stream_yield_an_error",
+        "`EventStore::read` yields `Result<SequencedEvent, Self::Error>` per \
+         item, and **no clause requires a rule to induce a read fault** — the \
+         absence is the finding, not an attribution error. ES-2 governs the \
+         signature and says nothing about the coverage of its `Err` arm; every \
+         clause that could claim this rule would have to acquire a sentence it \
+         does not have, which is an edit to the specification rather than a \
+         reading of it. The rule was landed by the lane remediating L3-01, \
+         which is explicitly not the specification owner: §7.4 is where a rule \
+         no clause names is disposed of, and CF-24's discipline is that a rule \
+         with no clause is as much a problem as a clause with no rule. Owed: an \
+         ADR, either minting the clause — a store MUST surface a failure part \
+         way through a read as an `Err` item and MUST NOT report it as the end \
+         of the stream — or widening ES-2 to say what its error arm obliges. \
+         The argument is in \
+         `.kb/_intake/remediation-2026-09-04-briefs/read-fault-clause-and-capability.md`",
     ),
 ];
 

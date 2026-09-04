@@ -84,7 +84,7 @@ adapter's own `shapes.rs` assertions.
 
 **Evidence.** `Cargo.toml:160 (unsafe_code = "forbid")` ·
 `crates/happenstance-sqlite/tests/shapes.rs:21 (needs no pin projection)` ·
-`crates/happenstance-testkit/src/registry.rs:299 (std::task::Wake)` ·
+`crates/happenstance-testkit/src/registry.rs:303 (std::task::Wake)` ·
 `crates/happenstance-cloudflare/src/js.rs:33 (The escape hatch is an)` ·
 [SPECIFICATION ES-42](../../spec/SPECIFICATION.md#es-42--reads-return-type-carries-no-unpin-bound)
 
@@ -306,6 +306,6 @@ compiler by hand. A floor nobody runs is a number in a manifest, and the consume
 who finds out is the first one who is not on the pinned toolchain.
 
 **Evidence.** `Cargo.toml:8 (rust-version = "1.97.1")` ·
-`crates/happenstance-testkit/tests/mutation_coverage/correct.rs:418 (stored, condition)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/correct.rs:429 (stored, condition)` ·
 [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
 [ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md)

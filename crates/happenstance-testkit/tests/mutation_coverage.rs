@@ -1742,6 +1742,27 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "SwallowedReadFaultStore",
+        kind: Kind::Mutant,
+        fails: &["arming_a_read_fault_makes_the_stream_yield_an_error"],
+        provenance: "`let Ok(page) = fetch().await else { return Poll::Ready(None) };` \
+             — a failed page fetch reported as the end of the stream. It is the most \
+             natural way to get a fallible fetch past a `poll_next` that must return a \
+             value, and both adapters that will need one are already in the tree: \
+             `happenstance-cloudflare` over `SqlStorage` and `happenstance-neon` over \
+             one-shot HTTP, neither of which can hold a cursor open across polls. The port \
+             expresses the failure per item and this store declines to use it. What the \
+             consumer sees is a short, SUCCESSFUL read: a projection runner applies two \
+             events of five, commits the checkpoint at the truncation point, and the rest \
+             are never applied, with `Ok` everywhere and no error to log. Who finds out is \
+             whoever reconciles the read model against the log, months later.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "arming_a_read_fault_makes_the_stream_yield_an_error",
+            "MUST cause the next read's stream to yield an `Err` ITEM",
+        )],
+    },
+    Declared {
         name: "AwaitAcrossBorrowStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2344,6 +2365,7 @@ macro_rules! for_each_mutant {
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
             crate::mutants::RefetchingPagedFixture,
+            crate::mutants::SwallowedReadFaultFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
         }
     };
@@ -2680,6 +2702,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
     ("RefetchingPagedStore", ModelOutcome::Agreed),
+    // Agreed, and it has to be: unarmed, this store is completely conformant,
+    // and nothing in the model family arms a read fault. The row is the
+    // measurement that the generative family is not what catches it.
+    ("SwallowedReadFaultStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),
 ];
 
@@ -3302,6 +3328,145 @@ mod mutation_coverage {
         }
     }
 
+    /// The rules a fixture buys by lying about `REOPEN` — the ones it converts
+    /// from reported skips into passes.
+    ///
+    /// The whole of this suite's durability certification, and the reason the
+    /// incentive runs backwards. Written out rather than derived, so that a rule
+    /// leaving the set is an edit somebody makes on purpose; every name is
+    /// checked against `for_each_event_store_rule!` below, so a typo is a
+    /// failure rather than a silently empty claim.
+    const CERTIFIED_BY_OVER_CLAIMING_REOPEN: &[&str] = &[
+        "acknowledged_writes_survive_a_reopen",
+        "reopened_store_does_not_reissue_an_event_id",
+        "recorded_time_survives_a_reopen",
+    ];
+
+    /// CF-17's hazard, recorded as what it is: **nothing detects it**, and the
+    /// two consequences that *are* measurable are measured here.
+    ///
+    /// # Why this is a test and not a `REGISTRY` row
+    ///
+    /// It was a row. `NoopReopenFixture` — `REOPEN: SUPPORTED`, an empty
+    /// `reopen`, over a completely correct but entirely volatile store — cannot
+    /// be a [`Kind::Mutant`], because it fails nothing and that assertion is
+    /// right and was not weakened. It was given a fourth kind whose obligation
+    /// was a **scenario separating it from an honest fixture**, and an
+    /// adversarial review showed that obligation to be wrong twice over: the
+    /// row's two `fn() -> String` pointers had no tie to the store named in it,
+    /// so two string literals satisfied the bar; and the scenario that was
+    /// written separated two *styles of `reopen` implementation* rather than
+    /// honest from defective.
+    ///
+    /// The second finding is the one that killed the kind rather than the row.
+    /// [`crate::mutants::ClosingFixture`] and
+    /// [`crate::mutants::LiveHandleReopenFixture`] are **both honest**, and they
+    /// answer the stale-handle scenario differently; the liar answers with the
+    /// second. `LiveHandleReopenFixture` is `SqliteFixture` in miniature — the
+    /// workspace's only real durable adapter fixture — so a rule written from
+    /// that partition rejects `happenstance-sqlite`. The audit said this in
+    /// advance: *a correct `reopen` over a durable medium and an empty one over
+    /// a `Vec` produce byte-identical observations through `EventStore`*. If
+    /// that is true then **no scenario can demonstrate this defect**, and an
+    /// obligation demanding one is unsatisfiable in principle. The honest move
+    /// was to withdraw the obligation, not to keep hunting for a scenario.
+    ///
+    /// # What is left, and it is not nothing
+    ///
+    /// Three assertions, all measured rather than asserted:
+    ///
+    /// 1. The liar **fails no rule**, driven through every one of them. That is
+    ///    the claim "nothing sees it", and it goes red the day something does.
+    /// 2. It converts [`CERTIFIED_BY_OVER_CLAIMING_REOPEN`] from reported skips
+    ///    into passes, while its honest twin — the same store, one line apart,
+    ///    declining `REOPEN` — reports them as skips. That is the incentive
+    ///    inversion, in-tree and reproducible, rather than a score quoted from
+    ///    an experiment nobody in review ran.
+    /// 3. Two honest fixtures land on opposite sides of the sharpest partition
+    ///    anyone has proposed, with the liar on one of them. That is the
+    ///    standing falsifier for every reopen rule that will ever be proposed,
+    ///    and it is why CF-17's obligation is a MUST no rule enforces.
+    ///
+    /// What is **not** here is a check that the defect is real. Nothing in this
+    /// workspace can supply one, and a test that appeared to would be worse than
+    /// this comment.
+    #[test]
+    fn reopen_over_claiming_is_undetectable_and_this_is_the_record() {
+        let rules = all_rules();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            assert!(
+                rules.contains(rule),
+                "`{rule}` is not a rule of this family. Check the spelling against \
+                 `for_each_event_store_rule!` — a claim naming a rule that does not exist is \
+                 evaluated against nothing"
+            );
+        }
+
+        // 1 — the liar fails nothing, over every rule there is.
+        let liar = run_subject::<crate::mutants::NoopReopenFixture>();
+        let rejected: Vec<&str> = liar
+            .outcomes
+            .iter()
+            .filter(|(_, verdict)| matches!(verdict, Verdict::Panicked { .. }))
+            .map(|(rule, _)| *rule)
+            .collect();
+        assert!(
+            rejected.is_empty(),
+            "`NoopReopenFixture` declares `REOPEN` supported over a store that reopens nothing, \
+             and this record says no rule of this family can reject it. These did: {rejected:?}. \
+             That is good news and it means the record is out of date — promote the fixture to a \
+             `Kind::Mutant` row declaring exactly these rules, and delete this test rather than \
+             relaxing it"
+        );
+
+        // 2 — the incentive inversion: the same store, one line apart.
+        let honest = run_subject::<crate::mutants::HonestVolatileFixture>();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            let lied = liar
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the liar"));
+            assert!(
+                matches!(lied, Verdict::Passed),
+                "`{rule}` is claimed as one an over-claiming fixture converts into a pass, and \
+                 against `NoopReopenFixture` it {}",
+                lied.describe()
+            );
+
+            let told_the_truth = honest
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the honest twin"));
+            assert!(
+                matches!(told_the_truth, Verdict::Skipped { .. }),
+                "`{rule}` must be a reported *skip* against a fixture that honestly declines \
+                 `REOPEN`, or there is no inversion to report: the liar and the honest twin are \
+                 the same store one line apart. It {}",
+                told_the_truth.describe()
+            );
+        }
+
+        // 3 — the falsifier. Two honest fixtures, opposite answers, and the liar
+        //     sitting with one of them.
+        let replaying = crate::mutants::closing_reopen_observed();
+        let live_handle = crate::mutants::live_handle_reopen_observed();
+        let lying = crate::mutants::noop_reopen_observed();
+        assert_ne!(
+            replaying, live_handle,
+            "the two honest reopen styles must answer the stale-handle scenario differently, or \
+             this assertion has stopped being the falsifier it exists to be. `ClosingFixture` \
+             replaces the live log; `LiveHandleReopenFixture` does not, because reopening a file \
+             does not replace the file"
+        );
+        assert_eq!(
+            lying, live_handle,
+            "`NoopReopenFixture` must answer exactly as an HONEST durable-shaped fixture does. \
+             That equality is the whole reason no rule may be written here: \
+             `LiveHandleReopenFixture` is `SqliteFixture` in miniature, and a rule that rejected \
+             the liar on this observation would reject the workspace's only durable adapter with \
+             it. If this has stopped holding, something has become observable and CF-17 may be \
+             enforceable after all — which is a finding, not a test to adjust"
+        );
+    }
+
     /// CF-3. Both directions: a mutant fails every rule it declares, and every
     /// rule it does not declare either **passes** or **skips for a reason the
     /// fixture stated in advance**.
@@ -3688,6 +3853,7 @@ mod mutation_coverage {
                     *reason == DecliningFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningFixture::REOPEN_REASON
                         || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
+                        || *reason == DecliningFixture::READ_FAULT_REASON
                         // CF-40: a fixture with no ceiling reports the testkit's
                         // reason rather than its own, because the sentence is the
                         // same for every store that has none. See

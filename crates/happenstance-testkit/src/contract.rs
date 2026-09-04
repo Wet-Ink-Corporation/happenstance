@@ -181,6 +181,65 @@ pub trait Fixture {
     /// restarted from inside a test at all. Naming the stronger operation would
     /// have bought a capability every fixture in the workspace declines, which
     /// is a skip reported on every run and evidence of nothing.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// CF-17, and it is [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)'s CF-39 one
+    /// capability over. A fixture declaring this supported MUST make
+    /// [`reopen`](Self::reopen) **discard process-level state over a medium that
+    /// outlives it**, so that the subsequent [`connect`](Self::connect) reads
+    /// what was durably committed rather than what a live object still happens
+    /// to be holding. The fixture MUST state the mechanism — which file is
+    /// closed, which connection pool is drained, which isolate's storage is read
+    /// again. **A fixture over a store with no medium outside the process MUST
+    /// decline this capability with that as its stated reason**, rather than
+    /// declare it and let three rules certify a `Vec`.
+    ///
+    /// # And what this obligation is *not*, stated rather than discovered later
+    ///
+    /// It is a MUST no rule can enforce, and pretending otherwise would be
+    /// worse than saying so. CF-39 works because arming a mid-batch fault has a
+    /// **port-observable** consequence: the append has to answer `Err`, and
+    /// `arming_a_mid_batch_fault_makes_the_append_fail` is written on exactly
+    /// that. Reopening has none. A correct `reopen` over a durable medium and an
+    /// empty one over a `Vec` produce byte-identical observations through
+    /// [`EventStore`], so any rule that rejected the second would reject the
+    /// first with it — which is why there is no such rule and why one must not
+    /// be written.
+    ///
+    /// The sentence above is stronger than "no rule happens to catch it", and
+    /// the evidence is in the tree rather than in the argument.
+    /// `LiveHandleReopenFixture` in `tests/mutation_coverage/mutants.rs` is
+    /// `happenstance-sqlite`'s fixture in miniature — an honest reopen that
+    /// closes the connections the *fixture* holds and leaves the medium alone,
+    /// because reopening a file does not replace the file. It is indistinguishable
+    /// from an empty `reopen` on every observation anyone has proposed, including
+    /// the sharpest one: what a handle taken *before* the call can still do
+    /// afterwards. So a rule built on any of them rejects the workspace's only
+    /// durable adapter.
+    ///
+    /// What exists instead is the named wrong implementation, driven:
+    /// `NoopReopenFixture` in `tests/mutation_coverage/mutants.rs` declares this
+    /// capability supported and overrides `reopen` with an empty body over a
+    /// completely correct but entirely volatile store.
+    /// `reopen_over_claiming_is_undetectable_and_this_is_the_record` drives it
+    /// through every rule and pins the two things that **are** measurable: it
+    /// fails none of them, and it converts
+    /// `acknowledged_writes_survive_a_reopen`,
+    /// `reopened_store_does_not_reissue_an_event_id` and
+    /// `recorded_time_survives_a_reopen` — this suite's whole durability
+    /// certification — from reported skips into passes, while its honest twin,
+    /// the same store one line apart, reports them as skips. The incentive runs
+    /// backwards: the fixture that over-claims scores *better*.
+    ///
+    /// It is deliberately **not** in that binary's `REGISTRY`. A registry row
+    /// would have to claim something is checked, and nothing is; the record is a
+    /// test that says so in its own name.
+    ///
+    /// The one mistake that **is** caught is the other one:
+    /// [`reopen`](Self::reopen)'s provided body panics, so a fixture that
+    /// declares the capability and *forgets* the override aborts loudly. What
+    /// nothing catches is an override that is present, honest-looking and empty.
     const REOPEN: Capability;
 
     /// Whether this fixture can make its store **fail part way through writing
@@ -219,6 +278,55 @@ pub trait Fixture {
         "this fixture cannot make its store fail between two rows of one batch; \
          nothing in the port can reach inside an `append`, so the injection has \
          to come from the adapter and this one has none to offer",
+    );
+
+    /// Whether this fixture can make its store **fail part way through a
+    /// `read`**.
+    ///
+    /// [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT)'s sibling on the other path.
+    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// `Result<SequencedEvent, Self::Error>` **per item**, so the port has an
+    /// error arm on the read side and, until this constant, nothing in the suite
+    /// ever reached it: no rule induced a read fault, no mutant modelled one, and
+    /// `Fixture` had a write-path seam and no read-path analogue.
+    ///
+    /// # Why this is a fixture capability and not a decorator
+    ///
+    /// [`FaultyStore`](crate::FaultyStore) *is* the decorator, and it is the
+    /// reason this capability is worth having rather than a reason it is not:
+    /// a wrapper can fail a stream it produced, which is why
+    /// `tests/faulty_store_conformance.rs` can declare this capability, and it
+    /// cannot fail an adapter's *own* fetch. The defect this exists to catch
+    /// lives inside a `poll_next` an outside caller never sees —
+    /// `let Ok(page) = fetch().await else { return Poll::Ready(None) };` — and
+    /// reaching it needs the store's co-operation, exactly as reaching between
+    /// two rows of an `append` does.
+    ///
+    /// So the injection is the adapter's: a connection dropped between two
+    /// pages, an HTTP round trip that 503s, a cursor invalidated by the server.
+    /// A store with no way to fail a read declines, and the default below is that
+    /// answer.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// [`arming_a_read_fault_makes_the_stream_yield_an_error`](crate::rules::arming_a_read_fault_makes_the_stream_yield_an_error)
+    /// arms the fault and requires the next read's stream to yield an `Err`
+    /// **item** rather than to end. Where inside the read it fires is the
+    /// adapter's business — first poll, page boundary, mid-page — for
+    /// [`arm_commit_fault`](ProjectionFixture::arm_commit_fault)'s reason: a
+    /// `read` is one call whose granularity is the adapter's, and naming an index
+    /// would be the testkit asserting a paging model the port does not have.
+    ///
+    /// CF-39's shape, one path over: a fixture whose
+    /// [`arm_read_fault`](Self::arm_read_fault) does nothing would otherwise
+    /// contribute a green result about a store nothing ever faulted. **A store
+    /// that can absorb every read fault its fixture is able to arm MUST decline
+    /// this capability with that as its stated reason**, rather than declare it
+    /// and contribute a full, successful read.
+    const READ_FAULT: Capability = Capability::declined(
+        "this fixture cannot make its store fail part way through a `read`; the \
+         failure lives inside the adapter's own fetch, so the injection has to \
+         come from the adapter and this one has none to offer",
     );
 
     /// The largest `data` payload this fixture's store accepts, in bytes, or
@@ -313,6 +421,40 @@ pub trait Fixture {
                  either this fixture declares MID_BATCH_FAULT supported and does \
                  not override it, or a rule reached it without a \
                  `require!(F: MID_BATCH_FAULT)` gate"
+            );
+        }
+    }
+
+    /// Arms the store so that the **next** `read` fails part way through.
+    ///
+    /// The fault fires once. Where inside the read it fires is the adapter's
+    /// business — first poll, page boundary, mid-page — and it takes no index
+    /// for [`READ_FAULT`](Self::READ_FAULT)'s stated reason: a `read` is one call
+    /// whose granularity belongs to the adapter, so naming a position would be
+    /// the testkit asserting a paging model the port does not have. What
+    /// [`arming_a_read_fault_makes_the_stream_yield_an_error`](crate::rules::arming_a_read_fault_makes_the_stream_yield_an_error)
+    /// requires is only that the stream yields an `Err` **item** rather than
+    /// ending, which is the one thing the port makes observable.
+    ///
+    /// Arming MUST reach a handle the caller already holds. A rule connects
+    /// before it arms, exactly as the mid-batch rules do, so a fixture whose
+    /// arming is applied at `connect` and nowhere else arms nothing the rule can
+    /// see.
+    ///
+    /// # Panics
+    ///
+    /// The provided body panics, for [`reopen`](Self::reopen)'s reason and with
+    /// the same two ways of reaching it: a fixture that declares
+    /// [`READ_FAULT`](Self::READ_FAULT) supported and forgets the override, or a
+    /// rule that reached here without a `require!` gate.
+    fn arm_read_fault(&self) -> impl Future<Output = ()> {
+        let _ = self;
+        async move {
+            panic!(
+                "`Fixture::arm_read_fault` was called but not implemented: \
+                 either this fixture declares READ_FAULT supported and does not \
+                 override it, or a rule reached it without a \
+                 `require!(F: READ_FAULT)` gate"
             );
         }
     }
@@ -572,7 +714,36 @@ pub trait ProjectionFixture {
     ///
     /// It stays spelled as a [`Capability`] rather than as a `bool` so the
     /// failure carries the fixture's own words.
-    const SECOND_HANDLE: Capability;
+    ///
+    /// # Why a MUST is nevertheless defaulted
+    ///
+    /// Every capability on this trait is defaulted, this one included, and the
+    /// default is a **declension**: a fixture that says nothing is read as
+    /// having answered "no", never as having answered "yes". A default may
+    /// decline on an author's behalf; it may never declare on their behalf,
+    /// because a declaration is a promise about a store only that store's
+    /// author is in a position to make.
+    ///
+    /// Nothing about the MUST is weakened by that, because the compiler was
+    /// never what enforced it. Requiredness bought an `error[E0046]` once, on
+    /// the day an author wrote their impl; `must!` inside every rule of this
+    /// family buys a red suite on **every** run, quoting the reason back, on
+    /// the path an adapter's own CI executes. The second is the stronger of the
+    /// two and it is the one that was already there.
+    ///
+    /// `Silent` in `tests/projection_fixture_declension.rs` holds both halves
+    /// of that paragraph honest: it writes not one capability constant, so it
+    /// stops compiling if any of the three goes back to being required, and it
+    /// is *rejected* by
+    /// [`commit_advances_the_checkpoint`](crate::projection::rules::commit_advances_the_checkpoint)
+    /// rather than skipped by it.
+    const SECOND_HANDLE: Capability = Capability::declined(
+        "this fixture has not said whether it can open a second, independent \
+         handle onto its projection store, and the default answer to an \
+         unanswered MUST is no: every rule in this family reads the read model \
+         and the checkpoint back through a fresh handle, so a fixture that \
+         cannot open one cannot observe PS-1 at all",
+    );
 
     /// Whether this fixture's store can be made to **refuse** a reset for a
     /// projection it protects.
@@ -585,23 +756,67 @@ pub trait ProjectionFixture {
     /// [`MemoryProjectionFixture`](crate::fixtures::MemoryProjectionFixture)
     /// declines with the real reason.
     ///
-    /// It is **required rather than defaulted**, unlike
-    /// [`Fixture::MID_BATCH_FAULT`], and that is a deliberate difference of one
-    /// line per fixture. A default would have to carry a *testkit-written*
-    /// reason, and the projection family's declension policy is that the fixture
-    /// writes the reason — a store's account of a trade only it can describe.
-    /// The one standing exception to that policy on the event-store side
-    /// ([`NO_CEILING_REASON`]) exists because "this store has no ceiling" is the
-    /// same sentence for every store that says it; "this store refuses no reset"
-    /// is not, because *why* it refuses none is the interesting half.
+    /// # The policy that used to be stated here, and why it was retracted
+    ///
+    /// This constant was **required rather than defaulted**, unlike
+    /// [`Fixture::MID_BATCH_FAULT`], under a stated trait-level rule: *a default
+    /// would have to carry a testkit-written reason, and the projection
+    /// family's declension policy is that the fixture writes the reason — a
+    /// store's account of a trade only it can describe.* The rule is retracted.
+    /// Its argument is preserved above rather than deleted, because it is still
+    /// the reason an adapter author **should** override this constant, and it is
+    /// the cost the retraction accepts.
+    ///
+    /// What it was measured against was the wrong precedent. The comparison it
+    /// drew was to [`NO_CEILING_REASON`], and CF-40 governs a *fact* — an
+    /// `Option<usize>` ceiling, which that clause says MUST NOT be spelled as a
+    /// `Capability` because `None` there is not a trade. The on-point precedent
+    /// is **CF-39**, which governs `MID_BATCH_FAULT`: a genuine trade, of very
+    /// nearly this shape, **defaulted** on its trait, whose default reason is
+    /// written in the fixture's own voice — and which recovers the honesty a
+    /// default gives up as a *clause-level* MUST rather than as requiredness.
+    /// A rule stated in one doc paragraph and contradicted by the specification's
+    /// treatment of its nearest neighbour is the thing that owed an argument.
+    ///
+    /// The direct measurement of what requiredness buys runs the other way too.
+    /// [`Fixture::REOPEN`] is required; `NoopReopenFixture` in
+    /// `experiments/suite-against-wrong-adapters/tests/support/wrong_fixtures.rs`
+    /// answers it, falsely, and scores *better* than an honest fixture that
+    /// declines — 86 passed and 3 skipped against 83 passed and 6 skipped.
+    /// Requiredness compels a sentence; it does not compel a true one.
+    ///
+    /// So the default below is the testkit's, and it says only what the testkit
+    /// is in a position to know — that the fixture did not answer. An adapter
+    /// author who leaves it standing has a `SKIP` line in their CI log written
+    /// by somebody else, which is the whole of what this trade costs and is
+    /// worth overriding to avoid.
     ///
     /// It is read by exactly one rule,
     /// [`refused_reset_changes_nothing`](crate::projection::rules::refused_reset_changes_nothing),
     /// which is PS-18's; a fixture that declines it gets that rule as a reported
-    /// skip carrying its own stated reason, and a fixture that declares it must
+    /// skip carrying its stated reason, and a fixture that declares it must
     /// also override [`protect_from_reset`](Self::protect_from_reset), which is
     /// the mechanism this constant gates.
-    const RESET_REFUSAL: Capability;
+    ///
+    /// # What is *not* here, and is owed
+    ///
+    /// [`COMMIT_FAULT`](Self::COMMIT_FAULT) carries a CF-39-shaped clause-level
+    /// MUST saying what declaring it commits a fixture to, and that obligation
+    /// is what makes its default safe. This constant carries no equivalent: a
+    /// fixture may declare `RESET_REFUSAL`, implement
+    /// [`protect_from_reset`](Self::protect_from_reset) as a no-op, and turn
+    /// `refused_reset_changes_nothing` into a green result about a store that
+    /// protected nothing — the trait's provided body panics, so only an
+    /// *override* that does nothing reaches it, which is exactly the shape
+    /// CF-39 was written for one port over. Minting that clause is the
+    /// specification owner's act and is not taken here; it is recorded in
+    /// `.kb/_intake/remediation-2026-09-04-briefs/projection-declension-obligations.md`.
+    const RESET_REFUSAL: Capability = Capability::declined(
+        "this fixture has not said whether its store can refuse a reset; PS-18 \
+         leaves what to protect to the domain, so a store with no protection \
+         policy has nothing to refuse and this is that answer given by default \
+         rather than by its author",
+    );
 
     /// Whether this fixture can make a `commit` **report failure**.
     ///
@@ -614,18 +829,28 @@ pub trait ProjectionFixture {
     /// the checkpoint write. Every store that can do it does it differently,
     /// which is what makes it a capability rather than testkit machinery.
     ///
-    /// # Why it is *required* rather than defaulted
+    /// # Why it was required, and why it is now defaulted
     ///
     /// [`Fixture::MID_BATCH_FAULT`] carries a default declension and this one
-    /// deliberately does not, for [`RESET_REFUSAL`](Self::RESET_REFUSAL)'s
-    /// reason: a default has to carry a *testkit-written* reason, and this
-    /// family's declension policy is that the fixture writes it. "This store has
-    /// no ceiling" is the same sentence for every store that says it, which is
-    /// why [`NO_CEILING_REASON`] exists; *why a particular store cannot make a
-    /// commit fail* is not — an in-memory map applies both halves under one lock,
-    /// a one-shot HTTP backend has no interactive transaction to abort, and a
-    /// pooled adapter usually can. The cost is one line per fixture and the
-    /// return is that no fixture author is left un-asked.
+    /// deliberately did not, for [`RESET_REFUSAL`](Self::RESET_REFUSAL)'s
+    /// retracted reason: a default has to carry a *testkit-written* reason, and
+    /// this family's declension policy was that the fixture writes it. "This
+    /// store has no ceiling" is the same sentence for every store that says it,
+    /// which is why [`NO_CEILING_REASON`] exists; *why a particular store cannot
+    /// make a commit fail* is not — an in-memory map applies both halves under
+    /// one lock, a one-shot HTTP backend has no interactive transaction to
+    /// abort, and a pooled adapter usually can. The cost was one line per
+    /// fixture and the return was that no fixture author was left un-asked.
+    ///
+    /// That is still true, and it is still the reason to override this
+    /// constant. What it is not is a reason to make it *required*, and this
+    /// capability is the one where the difference is sharpest, because its
+    /// nearest relative — `MID_BATCH_FAULT`, a trade of the same shape, over
+    /// the same kind of adapter-supplied injection — was decided the other way
+    /// in the specification, defaulted, with **CF-39** carrying the honesty as
+    /// a clause-level MUST. The section below is this port's copy of that MUST,
+    /// and it was already here before the default was: requiredness was never
+    /// the thing holding this line.
     ///
     /// # What declaring it commits the fixture to
     ///
@@ -637,7 +862,12 @@ pub trait ProjectionFixture {
     /// absorb every fault its fixture is able to arm MUST **decline** this
     /// capability with that as its stated reason, rather than declare it and
     /// contribute an `Ok`.
-    const COMMIT_FAULT: Capability;
+    const COMMIT_FAULT: Capability = Capability::declined(
+        "this fixture has not said whether it can make a commit report failure; \
+         nothing a caller holds can make a conformant `commit` fail, so the \
+         injection has to come from the adapter and this fixture has offered \
+         none",
+    );
 
     /// Arms the store so that the **next** `commit` fails.
     ///

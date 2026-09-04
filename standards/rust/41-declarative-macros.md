@@ -90,7 +90,7 @@ emitter, and arrives at "a macro cannot return a value", which is false.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
 `crates/happenstance-testkit/src/registry.rs:102 (meta-test below needs)` ·
-`crates/happenstance-testkit/src/registry.rs:413 (for_each_event_store_rule!(crate::__emit_rule_names))`
+`crates/happenstance-testkit/src/registry.rs:417 (for_each_event_store_rule!(crate::__emit_rule_names))`
 
 ## RS-41-3. Order arms most-literal-first; the first arm that matches is the one that expands.
 
@@ -237,7 +237,7 @@ the result. Every capability-gated rule then passes silently, and the adapter's
 CI reports a full green suite in which `acknowledged_writes_survive_a_reopen`
 never ran and nothing anywhere says so.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:884 (a rule's outcome must be reported)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1114 (a rule's outcome must be reported)` ·
 `crates/happenstance-testkit/src/registry.rs:51 (It is not asked politely)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(the reporting
 obligation this attribute mechanises)*

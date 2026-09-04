@@ -2,6 +2,16 @@
 
 Decision record: **C2-04-fixture-declension**. Brief only — no ADR prose, no atom, no code.
 
+> **RATIFIED AND LANDED — Option A.** The repository owner ratified Option A and
+> the `lane/fixture-declension` branch implemented it: `ProjectionFixture`'s three
+> capability constants are now defaulted declensions, and the trait-level "the
+> fixture writes the reason" rule is retracted in `contract.rs`, with its argument
+> preserved as the reason to *override* rather than as a requirement. Every
+> `contract.rs:NNN` citation below describes the tree **before** that change and is
+> left as written, because this document is the input to the decision rather than a
+> description of the result. `projection-declension-obligations.md` in this
+> directory carries what the retraction left owed and did not take.
+
 ---
 
 ## Why this is owed

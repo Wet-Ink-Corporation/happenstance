@@ -32,6 +32,35 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **A second conformance rule, breaking in practice for the same reason: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
+  `Fixture::READ_FAULT` and `Fixture::arm_read_fault` — both **defaulted**, so no
+  existing fixture has to change and a fixture that says nothing declines and
+  reports a skip.
+
+  It closes a hole with a shape worth stating: `EventStore::read` yields
+  `Result<SequencedEvent, Self::Error>` **per item**, and until now nothing in
+  the suite ever reached that `Err` arm. `Fixture` carried `MID_BATCH_FAULT` for
+  the write path and no read-path analogue, so no rule could induce a read
+  fault, no mutant modelled one, and the wrong implementation is one line:
+
+  ```text
+  let Ok(page) = fetch().await else { return Poll::Ready(None) };
+  ```
+
+  A failed fetch reported as the end of the log. Every consumer downstream reads
+  `Ok`: a projection runner replays a short prefix, checkpoints at the truncation
+  point, and never applies the rest — with no error anywhere to log. The store
+  measured **0 of 89** rules failed with no way to arm it, and **22** with the
+  fault armed by hand; the suite was not blind to the consequence, it had no way
+  to produce one. It is now `SwallowedReadFaultStore` in the testkit's own
+  mutation registry, and `PagedStreamStore` beside it is the same paging store
+  meeting the same fault and yielding the `Err` the port provides for.
+
+  A fixture whose store can absorb every read fault it is able to arm MUST
+  decline the capability with that as its stated reason, which is CF-39's shape
+  one path over.
 - **One conformance rule, and it is breaking in practice: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`read_from_composes_with_limit`**, the ninetieth event-store rule. An
@@ -366,6 +395,38 @@ not the same as what a user needed to be told.
   unnoticed — the miss the previous milestone's harness scan could not see,
   because it read one directory. `cargo xtask ci` now runs the adapter's
   eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
+- **CF-17 says what declaring `REOPEN` commits a fixture to, and the registry
+  carries the fixture that lies about it.** A fixture declaring
+  `Fixture::REOPEN` supported MUST make `reopen` discard process state over a
+  medium that outlives the process's hold on it, MUST state the mechanism, and —
+  where its store has no such medium — MUST decline the capability with that as
+  its stated reason. **No rule enforces it, and that is the finding rather than
+  an omission.** `MID_BATCH_FAULT` is closable because arming it forces the
+  append to answer `Err`, which is what CF-39 is written on; reopening has no
+  port-observable consequence at all, so a rule rejecting an empty `reopen` over
+  a `Vec` would reject an honest one over a real file with it.
+
+  The claim is stronger than "no rule happens to catch it", and the testkit now
+  carries the evidence rather than the argument: `LiveHandleReopenFixture` is
+  `happenstance-sqlite`'s fixture in miniature — an honest reopen that closes the
+  connections the *fixture* holds and leaves the medium alone, because reopening
+  a file does not replace it — and it is indistinguishable from an empty `reopen`
+  on every observation anyone has proposed. An honest reopen that *replaces* the
+  live log is distinguishable, so two honest fixtures sit on opposite sides of
+  that partition with the liar on one of them.
+
+  What is new is that the hazard is *stated* and its wrong implementation is
+  driven. `NoopReopenFixture` — `REOPEN: SUPPORTED`, `async fn reopen(&self) {}`,
+  over a completely correct volatile store — is pinned by
+  `reopen_over_claiming_is_undetectable_and_this_is_the_record`, which drives it
+  through every rule and asserts the two things that are measurable: it fails
+  none of them, and it converts `acknowledged_writes_survive_a_reopen`,
+  `reopened_store_does_not_reissue_an_event_id` and
+  `recorded_time_survives_a_reopen` — this suite's whole durability certification
+  — from reported skips into passes, while an honest twin one line apart reports
+  them as skips. The incentive inversion is now measured in-tree and goes red if
+  it ever stops being true. No conformance rule was added, so no adapter's build
+  changes.
 
 ### Removed
 

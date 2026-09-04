@@ -2928,6 +2928,107 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    // ---------------------------------------------------------------------
+    // 5. The read path's error arm — a fetch failure is not end-of-stream
+    // ---------------------------------------------------------------------
+
+    /// A fixture that declares `READ_FAULT` supported must arm a fault the
+    /// store surfaces as an `Err` **item**, not as the end of the stream.
+    ///
+    /// [`EventStore::read`](happenstance_core::EventStore::read) yields
+    /// `Result<SequencedEvent, Self::Error>` per item, and the whole value of
+    /// that `Err` arm is that a caller can tell *the log ended* from *the fetch
+    /// failed*. The wrong implementation is one line, and it is the most natural
+    /// way to get a fallible fetch past a `poll_next` that must return a value:
+    ///
+    /// ```text
+    /// let Ok(page) = fetch().await else { return Poll::Ready(None) };
+    /// ```
+    ///
+    /// `SwallowedReadFaultStore` in `tests/mutation_coverage/mutants.rs` is that
+    /// store, and it is not exotic: both adapters that will need a fallible
+    /// fetch are already in the workspace — `happenstance-cloudflare` over
+    /// `SqlStorage` and `happenstance-neon` over one-shot HTTP, neither of which
+    /// can hold a cursor open across polls.
+    ///
+    /// # What the caller loses, which is why this is worth a rule
+    ///
+    /// Everything downstream reads `Ok`. A projection runner sees a short
+    /// replay, commits its checkpoint at the truncation point, and the events
+    /// above it are never applied — with no error anywhere to log. Whoever finds
+    /// out is whoever reconciles the read model against the log, months later.
+    /// The consumer half of the contract is already correct: `collect` returns
+    /// `Poll::Ready(Err(..))` on a mid-stream `Err`, so a store that uses the
+    /// arm it was given is reported faithfully.
+    ///
+    /// # Where the fault fires is the fixture's, and why
+    ///
+    /// [`arm_read_fault`](crate::Fixture::arm_read_fault) takes no index. A
+    /// `read` is one call whose granularity — page, chunk, item — belongs to the
+    /// adapter, and demanding a fault "after the *k*-th event" would be this
+    /// suite asserting a paging model the port does not have. What is asserted
+    /// is the one thing the port makes observable: an `Err` reaches the caller.
+    ///
+    /// # The control read is the anchor
+    ///
+    /// Without it, an `Err` here could be a store that refuses every read of
+    /// four events for reasons of its own, and the rule would certify a fault
+    /// that never fired. With it, the same read is known to succeed unarmed.
+    ///
+    /// CF-39's argument one path over: a fixture whose `arm_read_fault` does
+    /// nothing passes vacuously, so a store that can absorb every read fault its
+    /// fixture is able to arm MUST **decline** the capability with that as its
+    /// stated reason rather than declare it and contribute a full, successful
+    /// read.
+    pub async fn arming_a_read_fault_makes_the_stream_yield_an_error<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: READ_FAULT);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Four events rather than one, so that a store paging in twos has a page
+        // boundary to fail at and a swallowed failure is a *short* read rather
+        // than an empty one — the shape that is indistinguishable from a
+        // complete read of a smaller store.
+        let seeded = [event("Read"), event("Read"), event("Read"), event("Read")];
+        append_ok(&store, &seeded).await;
+
+        // The anchor: unarmed, this exact read succeeds and returns all four.
+        let control = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            control.len(),
+            seeded.len(),
+            "the anchor: without a read that succeeds unarmed, an `Err` below \
+             could be a store refusing this read for reasons of its own"
+        );
+
+        // Armed after `connect`, deliberately: an adapter whose arming is
+        // applied only when a handle is opened arms nothing a rule already
+        // holding one can see, and the trait says so.
+        fixture.arm_read_fault().await;
+        let outcome = collect(store.read(&Query::all(), ReadOptions::new())).await;
+
+        assert!(
+            outcome.is_err(),
+            "a fixture declaring `READ_FAULT` supported MUST cause the next \
+             read's stream to yield an `Err` ITEM, and this one ended without \
+             error. That is `let Ok(page) = fetch().await else {{ return \
+             Poll::Ready(None) }};` — a fetch failure reported as the end of the \
+             log, which every consumer downstream reads as `Ok`: a projection \
+             runner replays a short prefix, checkpoints at the truncation point \
+             and never applies the rest. If instead this fixture's store absorbs \
+             every fault it can arm, it must DECLINE the capability with that as \
+             its stated reason rather than contribute a successful read. Got {} \
+             event(s) and no error, against {} appended",
+            outcome.map_or(0, |events| events.len()),
+            seeded.len()
+        );
+
+        RuleOutcome::Ran
+    }
+
     /// An empty batch is refused.
     pub async fn append_rejects_empty_batch<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
         let fixture = open().await;
