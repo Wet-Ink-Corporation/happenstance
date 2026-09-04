@@ -32,6 +32,43 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **Every published crate now re-exports the crates its own public signatures
+  name.** `happenstance-core` re-exports `futures_core` (it already re-exported
+  `bytes`); `happenstance-sqlite` re-exports `rusqlite` and `happenstance_core`;
+  `happenstance-cloudflare` re-exports `worker` and `happenstance_core`; and
+  `happenstance` re-exports `happenstance_core`. Before this, `pub use
+  happenstance_core;` appeared in **no** crate, so a consumer implementing
+  against `SqliteEventStore` had no way to name `Query` or `AppendCondition`
+  except by adding a `happenstance-core` line the resolver was free to fork on.
+
+  What a re-export buys is *type identity and discoverability* — the
+  `rusqlite::Error` you match on is the one the adapter's error enum actually
+  carries, rather than a second copy that prints the same and meets you as
+  `error[E0308]` on the error path. It is not a substitute for your own
+  dependency line and it forwards no features you did not enable. Each path is
+  proved to resolve from outside its crate by a doctest.
+
+### Removed
+
+- **`happenstance-sqlite` no longer re-exports `tokio`.** It did, briefly and
+  unreleased. `tokio::task::JoinError` and `tokio::runtime::TryCurrentError` are
+  variants of this crate's error enums, so `tokio` qualified for the set on the
+  arithmetic above — but this crate takes it at `features = ["rt"]`, so
+  `happenstance_sqlite::tokio` was a **partial** `tokio`, with no `macros`, no
+  `rt-multi-thread` and no `time`. A consumer who reached the type through that
+  path and then wrote `#[tokio::main]` got an `error[E0433]` *further* from its
+  cause than the mismatch the re-export was there to prevent, which makes it a
+  longer route to the type rather than a shorter one.
+
+  **If you match on `JoinError` or `TryCurrentError`, add `tokio = "1"` to your
+  own manifest.** Cargo unifies it with this crate's for any semver-compatible
+  requirement, so type identity survives for every consumer who already had a
+  `tokio` line; a consumer who pins a different *major* gets the
+  two-types-that-print-identically failure, and `cargo tree -d` names it. The
+  omission is fenced by a `compile_fail,E0433` doctest on the old path
+  (`crates/happenstance-sqlite/src/lib.rs:154`), so re-adding the re-export
+  turns a test red rather than passing unnoticed.
+
 - **WF-11's falsifier has been fired at, and the answer is on file.** The clause
   has carried a `[PROVISIONAL]` marker since phase 5 on a falsifier needing two
   things in one place — a memory ceiling that is real, and a payload large enough

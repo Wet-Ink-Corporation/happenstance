@@ -914,3 +914,53 @@ lockstep question as needing its own ADR against CF-32.
 
 **Both critiques are reproduced verbatim** under *Recommendation → The strongest
 arguments against*, in the order received.
+
+---
+
+## Ratified, and one member of the set removed — 2026-09-04
+
+**Status: this brief is settled.** The repository owner ratified the recommendation,
+the code landed (`D-1`/`D-4`), and then ruled on the one member the brief itself had
+flagged as weakest.
+
+**`tokio` is out of `happenstance-sqlite`'s re-export set.** The brief carried it on the
+arithmetic Option A/C states — `tokio::task::JoinError` and
+`tokio::runtime::TryCurrentError` are variants of the crate's public error enums, so the
+crate's signatures name `tokio` — and recorded, at the site and in `RS-40-4`, that the
+crate takes `tokio` at `features = ["rt"]`, so `happenstance_sqlite::tokio` was a
+*partial* `tokio`. The owner ruled that the caveat does not rescue the path: a consumer
+who reaches the type that way and then writes `#[tokio::main]` meets an `error[E0433]`
+*further* from its cause than the `error[E0308]` the whole set exists to prevent, which
+makes it a longer route to the type rather than a shorter one, and documentation that
+has to be read twice before a path is safe is not a fix.
+
+**A third option was offered and declined**, and it is recorded because it remains
+available at `0.3.0` if the removal proves wrong: re-export only the two types that
+actually appear in the signatures (`pub use tokio::task::JoinError;` and
+`pub use tokio::runtime::TryCurrentError;`), which satisfies RS-40-4's arithmetic while
+making nothing partial reachable. The owner chose the whole removal over it.
+
+**What that does to `RS-40-4`, and why the atom was amended rather than left standing.**
+As written, the rule said the re-export set is *"**exactly** the crates whose types
+appear in that crate's own public signatures"*. Under this decision
+`happenstance-sqlite` is a standing counter-example to its own constitution, so the atom
+now says what is actually true: the arithmetic is a **necessary** condition and not a
+sufficient one — a crate whose types appear in your signatures is a *candidate*, and it
+earns the re-export only if the path handed to the reader is shorter than the one they
+would have walked anyway. A crate taken at a partial feature set fails that second test.
+The amendment carries the worked case, the requirement to state the omission at the
+item, and the requirement to fence it.
+
+**The omission is compiled, not merely documented.** `crates/happenstance-sqlite/src/lib.rs`
+carries a `compile_fail,E0433` doctest on the exact path a reader following the old
+documentation would take. It was proven non-vacuous by restoring `pub use tokio;` and
+watching it report *"Test compiled successfully, but it's marked `compile_fail`"*. It is
+in the **lib**, not an integration-test target, for `F1-04`'s reason: cargo never hands
+those to a compiler, and a fence that is never compiled is decoration.
+
+**What this does not settle.** Whether the residual identity risk is worth a line in
+`SECURITY.md`-adjacent release notes: without the re-export, a consumer's `tokio` and
+this crate's unify only while the two requirements stay semver-compatible, and a
+consumer pinning a different *major* gets the two-types-that-print-identically failure
+the set exists to prevent. `cargo tree -d` names it, and the `CHANGELOG.md` entry says
+so; whether that is the right place for the warning to live is the release owner's.
