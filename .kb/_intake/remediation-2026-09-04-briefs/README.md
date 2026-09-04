@@ -78,7 +78,7 @@ argued the other side. Read them with that discount applied.
 | Brief | Question | Semver | Free until |
 |---|---|---|---|
 | `projection-declension-obligations.md` | Which projection capability has anywhere for the honesty obligation to land, now that the trait no longer carries it? | additive + one rule | the first projection adapter |
-| `stated-only-defects-and-the-reopen-must.md` | Is `Kind::StatedOnlyDefect` the right home for a defect nothing can check, and who owns CF-17's marker now its text carries a MUST? | none | the second row under that kind |
+| `stated-only-defects-and-the-reopen-must.md` | Is a registry *kind* the right home for a defect nothing can check, and who owns CF-17's marker now its text carries a MUST? **Revision 2: no, the kind was withdrawn.** | none | not blocking |
 | `read-fault-clause-and-capability.md` | Does `EventStore::read`'s `Err` arm get a clause, now that it has a rule, a capability and a mutant? | none (the rule is landed) | phase 12 |
 
 Written by the lane implementing the ratified Option A of

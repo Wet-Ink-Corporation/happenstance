@@ -207,20 +207,34 @@ pub trait Fixture {
     /// first with it — which is why there is no such rule and why one must not
     /// be written.
     ///
+    /// The sentence above is stronger than "no rule happens to catch it", and
+    /// the evidence is in the tree rather than in the argument.
+    /// `LiveHandleReopenFixture` in `tests/mutation_coverage/mutants.rs` is
+    /// `happenstance-sqlite`'s fixture in miniature — an honest reopen that
+    /// closes the connections the *fixture* holds and leaves the medium alone,
+    /// because reopening a file does not replace the file. It is indistinguishable
+    /// from an empty `reopen` on every observation anyone has proposed, including
+    /// the sharpest one: what a handle taken *before* the call can still do
+    /// afterwards. So a rule built on any of them rejects the workspace's only
+    /// durable adapter.
+    ///
     /// What exists instead is the named wrong implementation, driven:
     /// `NoopReopenFixture` in `tests/mutation_coverage/mutants.rs` declares this
-    /// capability supported, overrides `reopen` with an empty body over a
-    /// completely correct but entirely volatile store, and is registered under
-    /// `Kind::StatedOnlyDefect` — a kind whose bar is that its answer to a fixed
-    /// scenario differs from an honest fixture's, and that the three rules it
-    /// buys by lying are checked to have **passed**. Those three are
+    /// capability supported and overrides `reopen` with an empty body over a
+    /// completely correct but entirely volatile store.
+    /// `reopen_over_claiming_is_undetectable_and_this_is_the_record` drives it
+    /// through every rule and pins the two things that **are** measurable: it
+    /// fails none of them, and it converts
     /// `acknowledged_writes_survive_a_reopen`,
     /// `reopened_store_does_not_reissue_an_event_id` and
-    /// `recorded_time_survives_a_reopen`: this suite's whole durability
-    /// certification. The incentive runs backwards and the registry now says so
-    /// in a form that goes red if it ever stops being true — an honest volatile
-    /// fixture declines and reports three more skips, and the one that
-    /// over-claims looks *better*.
+    /// `recorded_time_survives_a_reopen` — this suite's whole durability
+    /// certification — from reported skips into passes, while its honest twin,
+    /// the same store one line apart, reports them as skips. The incentive runs
+    /// backwards: the fixture that over-claims scores *better*.
+    ///
+    /// It is deliberately **not** in that binary's `REGISTRY`. A registry row
+    /// would have to claim something is checked, and nothing is; the record is a
+    /// test that says so in its own name.
     ///
     /// The one mistake that **is** caught is the other one:
     /// [`reopen`](Self::reopen)'s provided body panics, so a fixture that

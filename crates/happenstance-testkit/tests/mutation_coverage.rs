@@ -122,46 +122,6 @@ enum Kind {
     /// where no such rule exists, the generative family is what is left, and
     /// this kind records which of the two is doing the work.
     ModelOnlyMutant,
-    /// A store with a named defect that **no family in this workspace can
-    /// see**, and whose obligation is therefore *stated* rather than checked.
-    ///
-    /// [`Kind::ModelOnlyMutant`] one step further out. That kind says "no rule
-    /// of the event-store family sees it, and here is what does"; this one says
-    /// "nothing does, and here is why nothing can". The audit that produced the
-    /// first entry put it exactly that way: the remediation available converts
-    /// the hazard *"from undetectable to stated, which is what CF-39 bought for
-    /// the write path and no more"*.
-    ///
-    /// # When it is the honest answer, and when it is an excuse
-    ///
-    /// It is the honest answer only where the defect has **no port-observable
-    /// consequence**. `Fixture::MID_BATCH_FAULT` is closable because arming it
-    /// forces the append to answer `Err`, so CF-39 could be written and
-    /// `NoopFaultFixture` fails a rule. `Fixture::REOPEN` is not: a correct
-    /// `reopen` over a durable medium and an empty one over a `Vec` produce
-    /// byte-identical observations through `EventStore`, so a rule rejecting
-    /// the empty one rejects the honest one with it. Anyone reaching for this
-    /// kind must be able to name the rule they tried to write and the
-    /// legitimate fixture it would also have rejected.
-    ///
-    /// # It carries three obligations, and none of them borrows a family
-    ///
-    /// 1. `fails` is empty, driven and measured by
-    ///    `mutants_fail_exactly_their_declared_rules` — the claim *"nothing sees
-    ///    it"*, rather than an assertion of it.
-    /// 2. It carries a [`StatedOnly`] row in [`STATED_ONLY_DEFECTS`] whose
-    ///    `observed` and `control` answers to one fixed scenario **differ**.
-    ///    That is the claim *"it is defective at all"*, and it is the obligation
-    ///    [`Kind::ModelOnlyMutant`] shipped without — see that variant's
-    ///    documentation for what an adversarial review then walked through the
-    ///    gap. There is no `#[cfg]` on it and there must never be one.
-    /// 3. That row lists, in `certifies`, the rules the store turns into
-    ///    **passes** by lying, and each is checked to have passed. That is the
-    ///    hazard itself as data: the incentive inversion is that an over-claiming
-    ///    fixture scores *better* than an honest one, and the day a rule starts
-    ///    rejecting the store, this list goes red and the row is promoted to
-    ///    [`Kind::Mutant`].
-    StatedOnlyDefect,
 }
 
 /// Why a mutant's declared rule fails.
@@ -2007,29 +1967,6 @@ const REGISTRY: &[Declared] = &[
             "cause the write of the k-th event to fail",
         )],
     },
-    Declared {
-        name: "NoopReopenFixture",
-        kind: Kind::StatedOnlyDefect,
-        // Empty, and it is not an oversight. `MID_BATCH_FAULT` is closable
-        // because arming it has a port-observable consequence — the append must
-        // answer `Err` — which is what CF-39 is written on. `REOPEN` has none: a
-        // correct `reopen` over a durable medium and an empty one over a `Vec`
-        // produce byte-identical observations through `EventStore`, so any rule
-        // that rejected this fixture would reject `DurableFixture` with it.
-        fails: &[],
-        provenance: "a fixture that declares `REOPEN` supported and overrides `reopen` with an \
-             EMPTY BODY, over a completely correct but entirely volatile store. \
-             `NoopFaultFixture` one capability over, and not a forgotten override — that reaches \
-             the trait's provided body, which panics and names this exact mistake. The author \
-             who writes this one is the author of a real adapter over a pool that \"handles \
-             reconnection\", who reads `reopen`'s documentation as being about handles rather \
-             than about the medium and writes the honest-looking answer. They ship a crate whose \
-             README says it passes `acknowledged_writes_survive_a_reopen`, and ES-35's \
-             durability claim has never been driven across a process boundary. Who finds out is \
-             the first operator to restart the service.",
-        mode: FailureMode::Assertion,
-        expect: &[],
-    },
     // --- Value edges ---------------------------------------------------
     //
     // Ten stores that are correct for every value the rest of this binary
@@ -2325,63 +2262,6 @@ const MODEL_ONLY_WITNESSES: &[Witness] = &[Witness {
     scenario: mutants::to_precedence_scenario,
 }];
 
-/// The bar [`Kind::StatedOnlyDefect`] carries, as data.
-///
-/// [`Witness`]'s sibling one kind over, and shaped differently on purpose. A
-/// model-only mutant's defect is in its **read path**, so the witness can hold
-/// `<T as Defect>::select` and compare it against `crate::correct`'s. A
-/// stated-only defect is in the **fixture**, where there is no step to hold and
-/// no reference implementation to compare against — so the row holds two
-/// answers to one scenario instead, the subject's and an honest control's, and
-/// requires them to differ.
-///
-/// That is what stops the kind being a place to park a store nobody checked. A
-/// fixture with no defect answers the scenario exactly as the control does, and
-/// no row for it could be written.
-#[derive(Debug)]
-struct StatedOnly {
-    /// The [`REGISTRY`] row this answers for.
-    name: &'static str,
-    /// The clause whose MUST the store breaks, for the reader who wants to know
-    /// what "stated" means here rather than being told it means something.
-    clause: &'static str,
-    /// One sentence naming what the two answers below are answers *to*.
-    scenario: &'static str,
-    /// The subject's answer, rendered.
-    observed: fn() -> String,
-    /// An honest fixture's answer to the same scenario.
-    ///
-    /// Not a constant string. A pinned expectation drifts into a snapshot of
-    /// whatever the code does, which is the failure `Declared`'s own
-    /// documentation refuses two tables up; a control that is *run* goes red when
-    /// the scenario stops separating anything.
-    control: fn() -> String,
-    /// The rules this store turns into **passes** by lying, each of which is
-    /// checked to have passed.
-    ///
-    /// The hazard as data. L1-2's finding is not that a rule fails — none does —
-    /// but that the over-claimer scores *better* than an honest fixture, and the
-    /// rules it converts are the ones named here. The day one of them starts
-    /// rejecting the store, this list goes red and the row belongs under
-    /// [`Kind::Mutant`] instead.
-    certifies: &'static [&'static str],
-}
-
-/// One row per [`Kind::StatedOnlyDefect`] in [`REGISTRY`], and no others.
-const STATED_ONLY_DEFECTS: &[StatedOnly] = &[StatedOnly {
-    name: "NoopReopenFixture",
-    clause: "CF-17",
-    scenario: "append through a handle, reopen, append again through that same now-stale handle, \
-               and read everything back through a fresh one",
-    observed: mutants::noop_reopen_observed,
-    control: mutants::closing_reopen_observed,
-    certifies: &[
-        "acknowledged_writes_survive_a_reopen",
-        "reopened_store_does_not_reissue_an_event_id",
-        "recorded_time_survives_a_reopen",
-    ],
-}];
-
 /// Hands every registered store **type** to `$callback`.
 ///
 /// Mirrors `happenstance_testkit::for_each_event_store_rule!`, and for the same
@@ -2454,7 +2334,6 @@ macro_rules! for_each_mutant {
             crate::mutants::NoTransactionFixture,
             crate::mutants::YieldingRowAtATimeFixture,
             crate::mutants::NoopFaultFixture,
-            crate::mutants::NoopReopenFixture,
 
             crate::mutants::MutantFixture<crate::mutants::EmptyPayloadIsNullStore>,
             crate::mutants::MutantFixture<crate::mutants::MetadataConflatingStore>,
@@ -2784,12 +2663,6 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoTransactionStore", ModelOutcome::Agreed),
     ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
     ("NoopFaultFixture", ModelOutcome::Agreed),
-    // Agreed, and it could not be otherwise: the defect is in the *fixture*, and
-    // the model family reads through a store that is correct in every respect the
-    // model can express. It is recorded rather than omitted for the reason this
-    // table exists — a table of only the stores the model catches answers the
-    // wrong question.
-    ("NoopReopenFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -3117,8 +2990,8 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 mod mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
-        RUNTIME_PANICS, RacerOutcome, STATED_ONLY_DEFECTS, Verdict, all_concurrency_rules,
-        all_projection_rules, all_rules, declared, racer_names, racer_reports, registered_names,
+        RUNTIME_PANICS, RacerOutcome, Verdict, all_concurrency_rules, all_projection_rules,
+        all_rules, declared, racer_names, racer_reports, registered_names,
         registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
@@ -3337,30 +3210,6 @@ mod mutation_coverage {
                     );
                 }
             }
-            Kind::StatedOnlyDefect => {
-                assert!(
-                    entry.fails.is_empty(),
-                    "`{}` is filed as a defect nothing can see and declares a \
-                     rule it fails, so something does see it. Change the kind \
-                     rather than the list",
-                    entry.name
-                );
-                // The obligation `Kind::ModelOnlyMutant` shipped without, and it
-                // is deliberately unconditional: a bar behind a `cfg` is a bar
-                // `cargo hack`'s powerset compiles out. Presence is only half —
-                // `every_stated_only_defect_demonstrates_its_defect` runs the
-                // row's two function pointers and compares their answers.
-                assert!(
-                    STATED_ONLY_DEFECTS
-                        .iter()
-                        .any(|stated| stated.name == entry.name),
-                    "`{}` is filed as a defect nothing can see and carries no \
-                     `STATED_ONLY_DEFECTS` row, so nothing in this build has shown it is \
-                     defective at all. Add a fixed scenario on which it answers differently \
-                     from an honest control",
-                    entry.name
-                );
-            }
             Kind::ConformantVariant => assert!(
                 entry.fails.is_empty(),
                 "`{}` is a conformant variant that declares failures; a \
@@ -3438,140 +3287,6 @@ mod mutation_coverage {
         }
     }
 
-    /// Every [`Kind::StatedOnlyDefect`] really is defective, and really is
-    /// certified by the rules it claims to fool — measured, in **every** feature
-    /// configuration.
-    ///
-    /// The kind's first obligation, an empty `fails` list, is true of a
-    /// perfectly correct fixture as well; on its own the kind would be a place
-    /// to park a store nobody checked, which is exactly what an adversarial
-    /// review demonstrated one kind over. So the row holds two function
-    /// pointers, and this runs both:
-    ///
-    /// * `observed` against `control` — the subject and an honest fixture,
-    ///   answering one fixed scenario. They must **differ**. No generator, no
-    ///   runtime, no optional dependency, and no `cfg`.
-    /// * `certifies` — every rule named there must have **passed** for this
-    ///   subject. That is the incentive inversion as an assertion rather than as
-    ///   a sentence in a document: these are the rules the store buys by lying,
-    ///   and the day one of them starts rejecting it, this goes red and the row
-    ///   belongs under [`Kind::Mutant`].
-    ///
-    /// Both directions, because an orphan row is a scenario nobody runs against
-    /// anything and reads as coverage.
-    #[test]
-    fn every_stated_only_defect_demonstrates_its_defect() {
-        let observed_reports = reports();
-
-        for entry in REGISTRY
-            .iter()
-            .filter(|entry| entry.kind == Kind::StatedOnlyDefect)
-        {
-            let stated = STATED_ONLY_DEFECTS
-                .iter()
-                .find(|stated| stated.name == entry.name)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "`{}` is a `StatedOnlyDefect` with no row; \
-                         `mutant_registry_is_exhaustive` owns this failure",
-                        entry.name
-                    )
-                });
-
-            let observed = (stated.observed)();
-            let control = (stated.control)();
-            assert_ne!(
-                observed, control,
-                "`{}` is filed as a defect nothing can see, and its own witness does not show a \
-                 defect at all: on the scenario \"{}\" it answered exactly what an honest \
-                 control answers. Either the scenario has stopped separating them or the \
-                 fixture has stopped being wrong — and if it is the first, the row is \
-                 certifying nothing while reading as though it certified {}",
-                entry.name, stated.scenario, stated.clause
-            );
-
-            let report = observed_reports
-                .iter()
-                .find(|report| report.name == entry.name)
-                .unwrap_or_else(|| panic!("`{}` was not driven", entry.name));
-            for rule in stated.certifies {
-                let verdict = report.verdict(rule).unwrap_or_else(|| {
-                    panic!(
-                        "`{}` claims to be certified by `{rule}`, which is not a rule of this \
-                         family. Check the spelling against `for_each_event_store_rule!`",
-                        entry.name
-                    )
-                });
-                assert!(
-                    matches!(verdict, Verdict::Passed),
-                    "`{}` claims `{rule}` certifies it — the whole hazard being that an \
-                     over-claiming fixture scores *better* than an honest one, which reports \
-                     this as a skip. It {}. If a rule has begun rejecting this store, that is \
-                     good news and the row belongs under `Kind::Mutant`; say so rather than \
-                     deleting the claim",
-                    entry.name,
-                    verdict.describe()
-                );
-            }
-        }
-
-        for stated in STATED_ONLY_DEFECTS {
-            let owner = declared(stated.name);
-            assert!(
-                owner.is_some_and(|entry| entry.kind == Kind::StatedOnlyDefect),
-                "`{}` has a `STATED_ONLY_DEFECTS` row and is not a registered \
-                 `StatedOnlyDefect`, so the scenario is never evaluated against anything and \
-                 reads as coverage",
-                stated.name
-            );
-        }
-    }
-
-    /// The positive control [`Kind::StatedOnlyDefect`] was never given: a
-    /// fixture with **no defect** must not be able to answer a row's scenario
-    /// the way the defective subject does.
-    ///
-    /// `Kind::ModelOnlyMutant` grew exactly this test after an adversarial
-    /// review walked a defect-free store through its bar, and the stated-only
-    /// kind was written beside it without inheriting it. That omission is why
-    /// nothing in the binary noticed that the row's two `fn() -> String`
-    /// pointers have no tie to the store named in `name` — two string literals
-    /// satisfy the comparison, and so does the tree's own honest
-    /// `ClosingFixture` registered under the kind with its `control` pointed at
-    /// a third store.
-    ///
-    /// The honest fixture driven here is
-    /// [`crate::mutants::LiveHandleReopenFixture`], and it is not an arbitrary
-    /// choice: it is `SqliteFixture` in miniature. `happenstance-sqlite` is the
-    /// workspace's only real durable adapter fixture, its `reopen` closes the
-    /// connections the *fixture* holds and leaves the file alone, and a handle
-    /// the caller still owns is its own live connection onto that file. If the
-    /// row's scenario is measuring honest-against-defective, an honest durable
-    /// fixture must answer as the control does.
-    #[test]
-    fn the_stated_only_bar_rejects_a_store_with_no_defect() {
-        assert!(
-            !STATED_ONLY_DEFECTS.is_empty(),
-            "no rows, so this control asserts nothing"
-        );
-
-        for stated in STATED_ONLY_DEFECTS {
-            let honest = crate::mutants::live_handle_reopen_observed();
-            assert_eq!(
-                honest,
-                (stated.control)(),
-                "`{}`'s scenario \"{}\" does not separate honest from defective. A fixture with \
-                 no defect at all — an honest reopen over a medium that survives, which is \
-                 `SqliteFixture`'s shape — answers it differently from the row's own control, \
-                 so the row is measuring something other than the defect it claims to \
-                 demonstrate, and a rule written from this partition would reject the \
-                 workspace's only durable adapter",
-                stated.name,
-                stated.scenario
-            );
-        }
-    }
-
     /// The positive control on the bar above: a store with **no defect** cannot
     /// satisfy it.
     ///
@@ -3611,6 +3326,145 @@ mod mutation_coverage {
                 witness.name
             );
         }
+    }
+
+    /// The rules a fixture buys by lying about `REOPEN` — the ones it converts
+    /// from reported skips into passes.
+    ///
+    /// The whole of this suite's durability certification, and the reason the
+    /// incentive runs backwards. Written out rather than derived, so that a rule
+    /// leaving the set is an edit somebody makes on purpose; every name is
+    /// checked against `for_each_event_store_rule!` below, so a typo is a
+    /// failure rather than a silently empty claim.
+    const CERTIFIED_BY_OVER_CLAIMING_REOPEN: &[&str] = &[
+        "acknowledged_writes_survive_a_reopen",
+        "reopened_store_does_not_reissue_an_event_id",
+        "recorded_time_survives_a_reopen",
+    ];
+
+    /// CF-17's hazard, recorded as what it is: **nothing detects it**, and the
+    /// two consequences that *are* measurable are measured here.
+    ///
+    /// # Why this is a test and not a `REGISTRY` row
+    ///
+    /// It was a row. `NoopReopenFixture` — `REOPEN: SUPPORTED`, an empty
+    /// `reopen`, over a completely correct but entirely volatile store — cannot
+    /// be a [`Kind::Mutant`], because it fails nothing and that assertion is
+    /// right and was not weakened. It was given a fourth kind whose obligation
+    /// was a **scenario separating it from an honest fixture**, and an
+    /// adversarial review showed that obligation to be wrong twice over: the
+    /// row's two `fn() -> String` pointers had no tie to the store named in it,
+    /// so two string literals satisfied the bar; and the scenario that was
+    /// written separated two *styles of `reopen` implementation* rather than
+    /// honest from defective.
+    ///
+    /// The second finding is the one that killed the kind rather than the row.
+    /// [`crate::mutants::ClosingFixture`] and
+    /// [`crate::mutants::LiveHandleReopenFixture`] are **both honest**, and they
+    /// answer the stale-handle scenario differently; the liar answers with the
+    /// second. `LiveHandleReopenFixture` is `SqliteFixture` in miniature — the
+    /// workspace's only real durable adapter fixture — so a rule written from
+    /// that partition rejects `happenstance-sqlite`. The audit said this in
+    /// advance: *a correct `reopen` over a durable medium and an empty one over
+    /// a `Vec` produce byte-identical observations through `EventStore`*. If
+    /// that is true then **no scenario can demonstrate this defect**, and an
+    /// obligation demanding one is unsatisfiable in principle. The honest move
+    /// was to withdraw the obligation, not to keep hunting for a scenario.
+    ///
+    /// # What is left, and it is not nothing
+    ///
+    /// Three assertions, all measured rather than asserted:
+    ///
+    /// 1. The liar **fails no rule**, driven through every one of them. That is
+    ///    the claim "nothing sees it", and it goes red the day something does.
+    /// 2. It converts [`CERTIFIED_BY_OVER_CLAIMING_REOPEN`] from reported skips
+    ///    into passes, while its honest twin — the same store, one line apart,
+    ///    declining `REOPEN` — reports them as skips. That is the incentive
+    ///    inversion, in-tree and reproducible, rather than a score quoted from
+    ///    an experiment nobody in review ran.
+    /// 3. Two honest fixtures land on opposite sides of the sharpest partition
+    ///    anyone has proposed, with the liar on one of them. That is the
+    ///    standing falsifier for every reopen rule that will ever be proposed,
+    ///    and it is why CF-17's obligation is a MUST no rule enforces.
+    ///
+    /// What is **not** here is a check that the defect is real. Nothing in this
+    /// workspace can supply one, and a test that appeared to would be worse than
+    /// this comment.
+    #[test]
+    fn reopen_over_claiming_is_undetectable_and_this_is_the_record() {
+        let rules = all_rules();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            assert!(
+                rules.contains(rule),
+                "`{rule}` is not a rule of this family. Check the spelling against \
+                 `for_each_event_store_rule!` — a claim naming a rule that does not exist is \
+                 evaluated against nothing"
+            );
+        }
+
+        // 1 — the liar fails nothing, over every rule there is.
+        let liar = run_subject::<crate::mutants::NoopReopenFixture>();
+        let rejected: Vec<&str> = liar
+            .outcomes
+            .iter()
+            .filter(|(_, verdict)| matches!(verdict, Verdict::Panicked { .. }))
+            .map(|(rule, _)| *rule)
+            .collect();
+        assert!(
+            rejected.is_empty(),
+            "`NoopReopenFixture` declares `REOPEN` supported over a store that reopens nothing, \
+             and this record says no rule of this family can reject it. These did: {rejected:?}. \
+             That is good news and it means the record is out of date — promote the fixture to a \
+             `Kind::Mutant` row declaring exactly these rules, and delete this test rather than \
+             relaxing it"
+        );
+
+        // 2 — the incentive inversion: the same store, one line apart.
+        let honest = run_subject::<crate::mutants::HonestVolatileFixture>();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            let lied = liar
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the liar"));
+            assert!(
+                matches!(lied, Verdict::Passed),
+                "`{rule}` is claimed as one an over-claiming fixture converts into a pass, and \
+                 against `NoopReopenFixture` it {}",
+                lied.describe()
+            );
+
+            let told_the_truth = honest
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the honest twin"));
+            assert!(
+                matches!(told_the_truth, Verdict::Skipped { .. }),
+                "`{rule}` must be a reported *skip* against a fixture that honestly declines \
+                 `REOPEN`, or there is no inversion to report: the liar and the honest twin are \
+                 the same store one line apart. It {}",
+                told_the_truth.describe()
+            );
+        }
+
+        // 3 — the falsifier. Two honest fixtures, opposite answers, and the liar
+        //     sitting with one of them.
+        let replaying = crate::mutants::closing_reopen_observed();
+        let live_handle = crate::mutants::live_handle_reopen_observed();
+        let lying = crate::mutants::noop_reopen_observed();
+        assert_ne!(
+            replaying, live_handle,
+            "the two honest reopen styles must answer the stale-handle scenario differently, or \
+             this assertion has stopped being the falsifier it exists to be. `ClosingFixture` \
+             replaces the live log; `LiveHandleReopenFixture` does not, because reopening a file \
+             does not replace the file"
+        );
+        assert_eq!(
+            lying, live_handle,
+            "`NoopReopenFixture` must answer exactly as an HONEST durable-shaped fixture does. \
+             That equality is the whole reason no rule may be written here: \
+             `LiveHandleReopenFixture` is `SqliteFixture` in miniature, and a rule that rejected \
+             the liar on this observation would reject the workspace's only durable adapter with \
+             it. If this has stopped holding, something has become observable and CF-17 may be \
+             enforceable after all — which is a finding, not a test to adjust"
+        );
     }
 
     /// CF-3. Both directions: a mutant fails every rule it declares, and every

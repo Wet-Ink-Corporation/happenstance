@@ -228,7 +228,7 @@ and the day a `Failed` variant lands those emitters build unchanged and report
 nothing for it — the failure is swallowed by the arm the attribute forced them to
 write, and the adapter's CI is green on a suite that found a defect.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1098 (Deliberately exhaustive)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1112 (Deliberately exhaustive)` ·
 `crates/happenstance-core/src/limits.rs:53 (non_exhaustive)` ·
 [SPECIFICATION VT-25](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) ·

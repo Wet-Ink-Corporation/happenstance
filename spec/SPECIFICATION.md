@@ -8048,19 +8048,29 @@ Rejects: `NoopReopenFixture` in the testkit's own `tests/` — declares the
 capability supported and **overrides `reopen` with an empty body** over a
 completely correct but entirely volatile store, so it never reaches the trait's
 panic. It is what the declaration MUST added above is written against, and it is
-registered as a `Kind::StatedOnlyDefect` rather than as a mutant because **no
-rule of this family can reject it**, and that is a property of the capability
-rather than a gap in the rule set: arming a mid-batch fault has a port-observable
-consequence — the append must answer `Err`, which is what CF-39 is written on —
-and reopening has none. A correct `reopen` over a durable medium and an empty one
-over a `Vec` produce byte-identical observations through `EventStore`, so a rule
-rejecting the second rejects `DurableFixture` with it. The registry carries the
-hazard as data instead: the fixture's answer to a fixed scenario must differ from
-an honest control's, and the three rules it buys by lying —
+**not** a registered mutant, because **no rule of this family can reject it**,
+and that is a property of the capability rather than a gap in the rule set:
+arming a mid-batch fault has a port-observable consequence — the append must
+answer `Err`, which is what CF-39 is written on — and reopening has none. A
+correct `reopen` over a durable medium and an empty one over a `Vec` produce
+byte-identical observations through `EventStore`.
+That is measured rather than argued. `LiveHandleReopenFixture` in the testkit's
+own `tests/` is `SqliteFixture` in miniature — an honest reopen that closes the
+connections the *fixture* holds and leaves the medium alone, because reopening a
+file does not replace it — and it answers every proposed separating observation
+exactly as `NoopReopenFixture` does, including the sharpest one: what a handle
+taken *before* the call can still do afterwards. An honest reopen that
+*replaces* the live log answers differently. So two honest fixtures sit on
+opposite sides of that partition with the liar on one of them, and a rule built
+from it rejects `happenstance-sqlite`.
+`reopen_over_claiming_is_undetectable_and_this_is_the_record` is what carries the
+hazard instead: it drives the fixture through every rule and pins the two things
+that are measurable — it fails none, and it converts
 `acknowledged_writes_survive_a_reopen`,
-`reopened_store_does_not_reissue_an_event_id`, `recorded_time_survives_a_reopen`
-— are asserted to have **passed**, so the day one of them starts rejecting it the
-record goes red. What the declaration MUST buys is therefore what CF-39 bought for
+`reopened_store_does_not_reissue_an_event_id` and `recorded_time_survives_a_reopen`
+from reported skips into passes, while an honest twin one line apart reports them
+as skips. So the day a rule starts rejecting it, the record goes red.
+What the declaration MUST buys is therefore what CF-39 bought for
 the write path and no more: the hazard is *stated* rather than undetectable.
 A *forgotten* override is a different mistake and is already handled: the trait's
 provided body panics and its message names this hazard.

@@ -3588,17 +3588,28 @@ impl Subject for NoopFaultFixture {
 /// so a *forgotten* override aborts loudly. What passes is an override that is
 /// present, honest-looking and empty.
 ///
-/// # What no rule can do about it, and where that is recorded
+/// # What no rule can do about it, and why it is not in `REGISTRY`
 ///
 /// Nothing here fails. `MID_BATCH_FAULT` is closable because arming it has a
 /// port-observable consequence — the append must answer `Err` — and CF-39 is
 /// written on exactly that. `REOPEN` has none: a correct `reopen` over a durable
 /// medium and an empty one over a `Vec` produce byte-identical observations
-/// through `EventStore`, so a rule that rejected this fixture would reject
-/// `DurableFixture` too. It is registered under `Kind::StatedOnlyDefect`, whose
-/// whole content is that claim, measured — and whose bar is
-/// [`reopen_observed_by_a_stale_handle`] against
-/// [`ClosingFixture`]'s answer to the same scenario.
+/// through `EventStore`.
+///
+/// That was first written into `REGISTRY` under a fourth kind whose obligation
+/// was a scenario separating this fixture from an honest one, and the obligation
+/// was **unsatisfiable in principle**: see
+/// [`LiveHandleReopenFixture`], which is honest, durable-shaped and answers
+/// every such scenario the way this fixture does. The kind was withdrawn rather
+/// than papered over, and what is left is
+/// `reopen_over_claiming_is_undetectable_and_this_is_the_record` in
+/// `mutation_coverage.rs`, which measures the two things that **are**
+/// measurable — this fixture fails no rule, and it converts three reported skips
+/// into three passes — and states the third rather than pretending to check it.
+///
+/// It is therefore deliberately absent from `for_each_mutant!` and `REGISTRY`.
+/// `Kind::Mutant` rejects an empty `fails` list, that assertion is right, and it
+/// was not weakened to make room for this.
 #[derive(Debug)]
 pub(crate) struct NoopReopenFixture(LogStore);
 
@@ -3621,6 +3632,39 @@ impl Fixture for NoopReopenFixture {
 
 impl Subject for NoopReopenFixture {
     const NAME: &'static str = "NoopReopenFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+/// [`NoopReopenFixture`]'s honest twin: the same volatile store, **declining**
+/// `REOPEN` instead of lying about it.
+///
+/// One line apart, which is the whole of the measurement it exists for. The
+/// liar converts three reported skips into three passes and reports a better
+/// score than this fixture does, so a fixture author choosing between them is
+/// paid to choose wrongly. `reopen_over_claiming_is_undetectable_and_this_is_the_record`
+/// drives both and pins the difference.
+#[derive(Debug)]
+pub(crate) struct HonestVolatileFixture(LogStore);
+
+impl Fixture for HonestVolatileFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over: discarding \
+         process state here is indistinguishable from discarding the events",
+    );
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+}
+
+impl Subject for HonestVolatileFixture {
+    const NAME: &'static str = "HonestVolatileFixture";
 
     fn open() -> Self {
         Self(LogStore::new(dense))
