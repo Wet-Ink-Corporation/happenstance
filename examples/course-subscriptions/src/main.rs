@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// attempt and the bound is never spent: a visible bound on an unexercised
 /// path. Built at compile time: `attempts` is `const fn`, so there is no
 /// fallible conversion to spell at the call site.
-const ATTEMPTS: Retry = Retry::attempts(NonZeroU32::new(3).unwrap());
+const ATTEMPTS: NonZeroU32 = NonZeroU32::new(3).unwrap();
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -401,17 +401,22 @@ async fn define_course(store: &MemoryEventStore, course: &str, capacity: u32) ->
     let course = CourseId::new(course)?;
     let boundary = CourseDefinition::new(&course)?;
 
-    commit(store, boundary, ATTEMPTS, |defined: &CourseDefinition| {
-        if defined.defined {
-            return Err(Refusal::AlreadyDefined {
-                course: course.id.clone(),
-            });
-        }
-        Ok(vec![Enrolment::CourseDefined {
-            course: course.clone(),
-            capacity,
-        }])
-    })
+    commit(
+        store,
+        boundary,
+        Retry::attempts(ATTEMPTS),
+        |defined: &CourseDefinition| {
+            if defined.defined {
+                return Err(Refusal::AlreadyDefined {
+                    course: course.id.clone(),
+                });
+            }
+            Ok(vec![Enrolment::CourseDefined {
+                course: course.clone(),
+                capacity,
+            }])
+        },
+    )
     .await
     .map(|_| ())
     .map_err(rejected)
@@ -433,7 +438,7 @@ async fn subscribe(store: &MemoryEventStore, course: &str, student: &str) -> Res
     commit(
         store,
         boundary,
-        ATTEMPTS,
+        Retry::attempts(ATTEMPTS),
         |(seats, seat): &(Seats, StudentSeat)| {
             let Some(capacity) = seats.capacity else {
                 return Err(Refusal::NotDefined {
@@ -470,18 +475,23 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
     let student = StudentId::new(student)?;
     let boundary = StudentSeat::new(&course, &student)?;
 
-    commit(store, boundary, ATTEMPTS, |seat: &StudentSeat| {
-        if !seat.subscribed {
-            return Err(Refusal::NotSubscribed {
-                student: student.id.clone(),
-                course: course.id.clone(),
-            });
-        }
-        Ok(vec![Enrolment::StudentUnsubscribed {
-            course: course.clone(),
-            student: student.clone(),
-        }])
-    })
+    commit(
+        store,
+        boundary,
+        Retry::attempts(ATTEMPTS),
+        |seat: &StudentSeat| {
+            if !seat.subscribed {
+                return Err(Refusal::NotSubscribed {
+                    student: student.id.clone(),
+                    course: course.id.clone(),
+                });
+            }
+            Ok(vec![Enrolment::StudentUnsubscribed {
+                course: course.clone(),
+                student: student.clone(),
+            }])
+        },
+    )
     .await
     .map(|_| ())
     .map_err(rejected)
