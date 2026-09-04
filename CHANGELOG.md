@@ -607,6 +607,35 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`Codec`'s page now states what the trait's unsealed-ness does not buy, and
+  `CodecError::UnknownTag`'s says which of its two meanings a reader has.** No
+  behaviour changed; what changed is that a documented promise stopped being
+  half-stated.
+
+  `Codec` is not sealed, and its page invites a codec of your own in as many
+  words. Writing one works. *Reading* one back does not, past the moment a
+  second codec is in play: an event is framed with the tag of the codec that
+  wrote it, and a foreign tag is resolved against a fixed chain of `Json`,
+  `Postcard` and `Cbor`. A tag answering to none of them is `UnknownTag`, and
+  for a codec outside this crate there is no registration seam, so no build can
+  ever resolve it except one already reading with that codec. An application on
+  its own codec that later adopts `Json` reads every historical event as
+  `UnknownTag` — an empty fold, and an append condition matching nothing.
+
+  `UnknownTag`'s page previously said the refusal *"means exactly one thing: a
+  tag was written and this build cannot honour it"*, which is true of the three
+  built-ins — where the repair is one feature flag — and permanently untrue of
+  a third-party tag. Both pages now separate the two, and `commit_with`, whose
+  title offers a codec of your own, points at the section.
+
+  **Whether the limit is repaired is not settled here.** A defaulted resolution
+  method on `Codec`, a registry, or sealing the trait and withdrawing the
+  invitation each cost a caller something different; the first two are additive
+  on a published trait and the third is breaking, which is why the choice
+  belongs before `0.2.0` and to an ADR rather than to this change.
+  `crates/happenstance/tests/codec_extension_point.rs` pins today's behaviour so
+  whichever option lands has one place that has to move.
+
 - **`SqliteEventStore::planned_statement_count` counts the real partition, so
   the number it returns for a query of wide items has changed.** The signature is
   untouched and the count is unchanged for every query whose items are narrow —
