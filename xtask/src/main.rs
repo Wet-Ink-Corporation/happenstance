@@ -578,6 +578,24 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // CF-24. The in-crate scanners cover two of the five enumerations and
+        // are each other's copy; this reads the macro bodies from outside, so a
+        // family that never acquires a scanner of its own is still covered.
+        name: "every rule appears in its family's enumeration",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-enumerations",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // CF-6's cheap second line. `GappedPositionStore` is the enforcement and
         // it runs in the step above this file's `proof-artefact` entry; this
         // catches the habit at the spelling, which is the half that names the
@@ -1043,6 +1061,7 @@ fn main() -> ExitCode {
         Some("lint-testkit-version") => lints::testkit_version(),
         Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
+        Some("lint-enumerations") => lints::rules_are_enumerated(),
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
@@ -1208,6 +1227,7 @@ fn lint_steps() -> Vec<&'static Step> {
         "specification traceability",
         "no retired rule is still live",
         "no conformance rule reads a clock",
+        "every rule appears in its family's enumeration",
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
         "every stated rule count matches the suite",
