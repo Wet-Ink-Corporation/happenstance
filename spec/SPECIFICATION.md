@@ -8288,9 +8288,9 @@ three families with one list each is the arrangement, not the exception.
 
 **The model family landed at stage 5**, and it is the worked example of the
 paragraph above rather than a plan for one. Its enumeration is
-`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:706`, and it
+`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:772`, and it
 lives beside the single rule it names, `ops_agree_with_the_model` at
-`crates/happenstance-testkit/src/model.rs:592`. `event_store_model_conformance!`
+`crates/happenstance-testkit/src/model.rs:658`. `event_store_model_conformance!`
 is built by invoking it exactly as `event_store_conformance!` is built by
 invoking `for_each_event_store_rule!`. Two things it settles, and both were
 open:

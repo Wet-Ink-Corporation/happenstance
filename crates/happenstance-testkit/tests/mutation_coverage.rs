@@ -2402,18 +2402,34 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// that actually matters — *what is this test blind to* — and it answers it in a
 /// form that goes red when the answer changes.
 ///
-/// # The twenty-one it does not catch are three shapes, not twenty-one
+/// # What it does not catch is a handful of shapes, not a list
 ///
-/// Twenty-three rows below are marked [`ModelOutcome::Agreed`]. Two of those are
-/// the conformant controls and *must* be, which leaves **twenty-one misses** — a
-/// number that has more than doubled since stage 5, when this heading last said
-/// eight and the table it documents said eighteen, and that gained one at phase 8
-/// when `RestampingFixture` arrived. Every one of the twenty-one
-/// carries a defect the model **cannot
-/// express**, and the boundary is sharp enough to state in one line: the model
-/// drives *one handle*, on *one fixture*, through a *strictly sequential* stream
-/// of *non-empty* batches of *typical* values, and it never reopens and never
-/// arms a fixture.
+/// **Count the table rather than this sentence.** Thirty-nine rows below are
+/// marked [`ModelOutcome::Agreed`] at this commit; two of them are the
+/// conformant controls and *must* be, which leaves **thirty-seven misses**. This
+/// heading said *twenty-one* and the paragraph under it said *twenty-three rows*
+/// for several phases while the table itself said forty and forty-two — the
+/// drift the pre-publication review found wherever a number was written beside
+/// the list it describes, and one this file had already warned about in another
+/// place. The shapes below are still the shapes; they no longer enumerate every
+/// name, and the honest instrument is a count of the table.
+///
+/// Every miss carries a defect the model **cannot express**, and the boundary is
+/// sharp enough to state in one line: the model drives *one handle*, on *one
+/// fixture*, through a *strictly sequential* stream of *non-empty* batches of
+/// *typical* values, and it never reopens and never arms a fixture.
+///
+/// **Three names left this list at phase 12**, and they are worth naming because
+/// what moved was the *generator* rather than any store. `ToBoundIgnoredStore`,
+/// `ToIsExclusiveStore` and `BackwardsToIsAnUpperBoundStore` were misses for one
+/// reason: [`Op`]`::Read` carried four of the five read options, `to` was the
+/// missing one, and `Model::select`'s two `to` branches were therefore dead
+/// code. All three are rejected now, and a fourth store —
+/// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
+/// which is what `Kind::ModelOnlyMutant` records. `LimitZeroIsUnlimitedStore` is
+/// the read option still on this list, and it is a *value* boundary rather than
+/// a missing field: `Op::Read` generates `Option<usize>` over `1..4` and never
+/// proposes the zero, which is the exclusion the ten value edges sit behind.
 ///
 /// * `EmptyBatchIsANoOpStore`, `EmptyBatchPanicsStore`,
 ///   `ConditionBeforeEmptinessStore` — the empty batch, which [`Op`] does not
@@ -2486,9 +2502,20 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // edges sit on, one method over.
     ("EmptyHeadIsFirstStore", ModelOutcome::Agreed),
     ("DefaultQueryHeadStore", ModelOutcome::Agreed),
-    ("ToBoundIgnoredStore", ModelOutcome::Agreed),
-    ("ToIsExclusiveStore", ModelOutcome::Agreed),
-    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Agreed),
+    // The upper bound, and all three moved from `Agreed` to `Rejected` at phase
+    // 12 without any of them changing. What changed is the generator: `Op::Read`
+    // now carries a `to`, so `Model::select`'s two `to` branches execute. They
+    // sat under the *head* comment above only because that is where the table
+    // put them, and they were never about `head`.
+    ("ToBoundIgnoredStore", ModelOutcome::Rejected),
+    ("ToIsExclusiveStore", ModelOutcome::Rejected),
+    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Rejected),
+    // `Kind::ModelOnlyMutant`: the one store in this binary that no rule of the
+    // event-store family can see. This row is the whole of what catches it.
+    ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
+    // A *value* boundary rather than a missing field: `Op::Read`'s limit is
+    // `Option<usize>` over `1..4` and never proposes the zero this store
+    // mishandles.
     ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
     ("ForwardPagingBudgetStore", ModelOutcome::Rejected),
     ("LimitPerItemStore", ModelOutcome::Rejected),
@@ -2514,12 +2541,6 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ItemOrderedUnionStore", ModelOutcome::Rejected),
     ("LimitBeforeFilterStore", ModelOutcome::Rejected),
     ("UnparenthesisedPredicateStore", ModelOutcome::Rejected),
-    // The `to` twin, and the only `Kind::ModelOnlyMutant` in the table: no rule
-    // of the event-store family can see it, so this row is the whole of what
-    // catches it. It reads `Rejected` because the generator emits an upper bound
-    // — which it did not until phase 12, and the day it stops again this row is
-    // what goes red.
-    ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
     ("NullHeadPagingStore", ModelOutcome::Rejected),
     ("ConditionBeforeEmptinessStore", ModelOutcome::Agreed),
     ("AfterValidatedAgainstHeadStore", ModelOutcome::Rejected),
@@ -2992,28 +3013,59 @@ mod mutation_coverage {
                 );
             }
 
-            match entry.kind {
-                Kind::Mutant => assert!(
-                    !entry.fails.is_empty(),
-                    "`{}` is a mutant that fails nothing, which is a conformant \
-                     store filed under the wrong kind",
+            assert_kind_agrees_with_the_failure_list(entry);
+        }
+
+        assert!(
+            REGISTRY
+                .iter()
+                .any(|entry| entry.kind == Kind::ConformantVariant),
+            "no conformant variant is registered, so \
+             `conformant_variants_pass_everything` asserts over nothing — which \
+             is the vacuity of CF-5 reintroduced one level up"
+        );
+    }
+
+    /// Each [`Kind`]'s claim about what `fails` may hold — and, for
+    /// [`Kind::ModelOnlyMutant`], about what catches the store instead.
+    ///
+    /// Split out of `mutant_registry_is_exhaustive` rather than inlined,
+    /// because the three arms are one question — *does this row's kind agree
+    /// with the rest of the row* — and the enclosing test is a list of
+    /// unrelated ones.
+    fn assert_kind_agrees_with_the_failure_list(entry: &Declared) {
+        match entry.kind {
+            Kind::Mutant => assert!(
+                !entry.fails.is_empty(),
+                "`{}` is a mutant that fails nothing, which is a conformant \
+                 store filed under the wrong kind",
+                entry.name
+            ),
+            Kind::ModelOnlyMutant => {
+                assert!(
+                    entry.fails.is_empty(),
+                    "`{}` is filed as caught only by the model family and \
+                     declares a rule of the event-store family that it fails, \
+                     so it is an ordinary mutant. Change the kind rather than \
+                     the list",
                     entry.name
-                ),
-                Kind::ModelOnlyMutant => {
-                    assert!(
-                        entry.fails.is_empty(),
-                        "`{}` is filed as caught only by the model family and \
-                         declares a rule of the event-store family that it \
-                         fails, so it is an ordinary mutant. Change the kind \
-                         rather than the list",
-                        entry.name
-                    );
-                    // The obligation that stops this kind being a filing
-                    // cabinet. `Kind::Mutant`'s bar is "something catches it",
-                    // enforced by a non-empty `fails`; this kind moves that bar
-                    // one family over rather than removing it, and without this
-                    // assertion a store nothing detects at all could be parked
-                    // here and read as accounted for.
+                );
+                // The obligation that stops this kind being a filing cabinet.
+                // `Kind::Mutant`'s bar is "something catches it", enforced by a
+                // non-empty `fails`; this kind moves that bar one family over
+                // rather than removing it, and without this assertion a store
+                // nothing detects at all could be parked here and read as
+                // accounted for.
+                //
+                // The `cfg` is honest rather than convenient: `MODEL_COVERAGE`
+                // is itself behind `proptest`, so without that feature the
+                // model family is not compiled and this store is driven by
+                // nothing that can see it. That is a property of the feature
+                // and not of the row, and it is the same hole every
+                // `proptest`-gated claim in this file has. The gate builds this
+                // binary with `--all-features`.
+                #[cfg(feature = "proptest")]
+                {
                     let claimed = MODEL_COVERAGE
                         .iter()
                         .find(|(row, _)| *row == entry.name)
@@ -3028,24 +3080,15 @@ mod mutation_coverage {
                         entry.name
                     );
                 }
-                Kind::ConformantVariant => assert!(
-                    entry.fails.is_empty(),
-                    "`{}` is a conformant variant that declares failures; a \
-                     variant that fails a rule is either a mutant or evidence \
-                     the rule is over-specified (CF-6)",
-                    entry.name
-                ),
             }
+            Kind::ConformantVariant => assert!(
+                entry.fails.is_empty(),
+                "`{}` is a conformant variant that declares failures; a \
+                 variant that fails a rule is either a mutant or evidence the \
+                 rule is over-specified (CF-6)",
+                entry.name
+            ),
         }
-
-        assert!(
-            REGISTRY
-                .iter()
-                .any(|entry| entry.kind == Kind::ConformantVariant),
-            "no conformant variant is registered, so \
-             `conformant_variants_pass_everything` asserts over nothing — which \
-             is the vacuity of CF-5 reintroduced one level up"
-        );
     }
 
     /// CF-3. Both directions: a mutant fails every rule it declares, and every

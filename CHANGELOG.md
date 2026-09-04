@@ -352,6 +352,45 @@ not the same as what a user needed to be told.
   because it read one directory. `cargo xtask ci` now runs the adapter's
   eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
 
+### Changed
+
+- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` gained a
+  `to` field, and the model can now disagree about an upper bound.** The variant
+  was documented as carrying *"every read option in play"* and carried four of
+  five. `to` was the missing one, so the generator emitted no upper bound,
+  `Model::apply` never called `.to(..)`, and the two `to` branches of
+  `Model::select` were dead code — under a comment stating, correctly, that a
+  model which ignores an option *"would agree with every implementation, which
+  is the one thing a reference model must not do"*.
+
+  It had agreed with three. `ToBoundIgnoredStore` (the options struct matched on
+  the fields the adapter recognises), `ToIsExclusiveStore` and
+  `BackwardsToIsAnUpperBoundStore` were all recorded as passing the model, and
+  all three are rejected now without any of them changing. A fourth store was
+  written for this release and exists only because the model can see it:
+  `UnparenthesisedToPredicateStore`, `WHERE a OR b AND position <= ?` — the
+  precedence bug the suite already registers for the *lower* bound, one bound
+  over. Every rule that exercises `to` issues `Query::all()`, so no rule in the
+  ninety can see it; the wrong outcome is a bounded backfill worker reading past
+  its own window and re-delivering events the tail worker has already processed.
+
+  What breaks: `Op` is reachable as `happenstance_testkit::model::Op` whenever
+  the `proptest` feature is on, and adding a field to a struct-form variant of a
+  `pub enum` with no `#[non_exhaustive]` breaks any downstream `match` written
+  with a struct pattern, and any construction. `Op::Read { query, from,
+  backwards, limit }` becomes `Op::Read { query, from, to, backwards, limit }`,
+  with `to: Anchor::Unset` reproducing the old behaviour. Whether the variant
+  should also carry `#[non_exhaustive]` — so that the *next* field is not a
+  second break — is deliberately not settled here; it belongs with the crate's
+  public surface at first publish, and a brief for it is staged in
+  `.kb/_intake/`.
+
+  The `to` bound is generated weighted towards absent, four reads in five, and
+  that weighting is measured rather than tidy: sampling it the way the other
+  four options are sampled dilutes every combination of them, and the first
+  version of the change lost `LimitPerItemStore` — a defect the model had
+  rejected for three phases. `MODEL_COVERAGE` is what noticed.
+
 ## [0.2.0-alpha.1] — 2026-08-16
 
 **The first published release, and it is a pre-release on purpose.** The API is

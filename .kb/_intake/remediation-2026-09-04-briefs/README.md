@@ -60,6 +60,25 @@ shape, because the instrument that would decide it does not exist yet.
 | `append-batch-ownership.md` | Does `EventStore::append` take ownership? | none | `0.2.0` |
 | `msrv-premise.md` | Does ADR-0029 survive re-derivation? | additive | stable `0.2.0` |
 
+## A fourteenth, added later and produced differently
+
+`op-read-non-exhaustive.md` — *Should `Op::Read` carry variant-level
+`#[non_exhaustive]`, and does it have to land in the same release as the `to`
+field?* · **breaking** · free until `0.2.0`.
+
+It was written by the lane implementing `L1-1` and `L2-01`, after the thirteen
+above, and it did **not** go through the author → two-critic → revision pass the
+section above describes: it carries its own strongest objection and answers it,
+which is the form, but nobody independent argued the other side. Read it with that
+discount applied.
+
+It is here rather than implemented because L2-01 splits in two and only one half
+was that lane's: the generator hole is landed, and the attribute is routed to
+whoever owns the testkit's public surface at first publish. The two are coupled —
+the field addition already spent the break the attribute would otherwise share —
+so the brief is about a window that is already closing rather than one that has
+not opened.
+
 ## Three that block other work
 
 - **`fixture-declension-policy.md`** is the keystone for the whole testkit wave: it
