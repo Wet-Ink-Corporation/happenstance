@@ -71,7 +71,10 @@ const CORE_MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
 /// the port and eighteen wrong stores sat in
 /// `crates/happenstance-testkit/tests/projection_mutation_coverage/mutants.rs`.
 /// The same commit range that falsified the sentence also shipped it.
-const TESTKIT_README: &str = "crates/happenstance-testkit/README.md";
+///
+/// `pub(crate)`: `xtask/src/lint_pages.rs::no_stale_publication_claims` (C2-07)
+/// reads it too, for the reason on `TESTKIT_LIB`'s doc comment below.
+pub(crate) const TESTKIT_README: &str = "crates/happenstance-testkit/README.md";
 
 /// Every line of a Rust source file with comments removed and string-literal
 /// contents blanked, one output line per input line.
@@ -1120,6 +1123,128 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     Ok(())
 }
 
+/// The testkit's own rustdoc — the second rendered surface C2-07 names,
+/// alongside [`TESTKIT_README`].
+///
+/// `pub(crate)`, and the whole C2-07 group below with it up to
+/// [`stale_publication_claims`]: the *check* itself — the
+/// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
+/// rather than here, deliberately. `exported_lints`
+/// (`xtask/src/affected.rs:1016-1023`) scans this file for exactly the shape
+/// `pub(crate) fn NAME() -> Result<()> {` and requires `affected::run`'s
+/// unconditional block to call each one it finds by name — the invariant
+/// that catches a lint wired into `REQUIRED` and forgotten in the story
+/// grain. A seventh entry point of that shape here would trip the same check
+/// for the wrong reason: it already runs in the story grain, transitively,
+/// because `affected::run` calls `lint_pages::run` unconditionally
+/// (`xtask/src/affected.rs:183`) and `lint_pages::run` calls this check.
+/// `xtask/src/affected.rs` is not a path this change owns, so the fix is to
+/// keep the checked shape out of this file rather than teach a name-matching
+/// scanner about an indirection it cannot see through.
+pub(crate) const TESTKIT_LIB: &str = "crates/happenstance-testkit/src/lib.rs";
+
+/// The claim C2-07 is named for. `happenstance-testkit` has been on
+/// crates.io at `0.2.0-alpha.1` since `448e1ac` (2026-08-16, recorded at
+/// `CHANGELOG.md:306`), so a reader meeting this sentence on the rendered
+/// page meets a claim the registry already contradicted the day it shipped.
+pub(crate) const STALE_NOTHING_PUBLISHED: &str = "nothing in this workspace is published yet";
+
+/// The commit that introduced the `factory =` keyword the rustdoc explains
+/// the removal of.
+pub(crate) const FACTORY_INTRODUCED: &str = "23fd446";
+
+/// The commit that removed `factory =` — two days later and eight days
+/// before the first publish, so no published version of
+/// `happenstance-testkit` ever accepted it. That is the durable
+/// justification C2-07's remediation asks for in place of a claim about the
+/// registry: a fact about two commits cannot go stale in the direction
+/// [`STALE_NOTHING_PUBLISHED`] did.
+pub(crate) const FACTORY_REMOVED: &str = "1c1a6b7";
+
+/// The claim the README's status blockquote carried. It is false for exactly
+/// as long as [`SQLITE_CONFORMANCE_TEST`] exists: that file mounts the suite.
+pub(crate) const STALE_NO_ADAPTER: &str = "No adapter has run this suite";
+
+/// The file whose existence falsifies [`STALE_NO_ADAPTER`]. Its own rustdoc,
+/// `crates/happenstance-sqlite/src/lib.rs:3`, opens `# Status: an adapter,
+/// and it has run the suite`.
+pub(crate) const SQLITE_CONFORMANCE_TEST: &str = "crates/happenstance-sqlite/tests/conformance.rs";
+
+/// One line, its leading `///`, `//!` or `>` marker stripped and the line
+/// dropped if that leaves nothing — so a phrase [`stale_publication_claims`]
+/// searches for reads as one line even when the source hard-wraps it, the way
+/// `crates/happenstance-testkit/README.md`'s blockquote splits `No adapter
+/// has run this` from `suite` at a line boundary with `> ` in between.
+///
+/// Only one marker per line, and only a prefix: this is not a Markdown
+/// parser, the way [`code_lines`] states plainly it is not a Rust lexer for
+/// the same reason (RS-81-2, `standards/rust/81-checks-that-cannot-be-types.md:95`).
+/// It is enough to make a substring search blind to hard-wrapping, and no
+/// more.
+fn unwrapped(text: &str) -> String {
+    text.lines()
+        .filter_map(|line| {
+            let mut t = line.trim();
+            for prefix in ["///", "//!", ">"] {
+                if let Some(rest) = t.strip_prefix(prefix) {
+                    t = rest.trim();
+                    break;
+                }
+            }
+            (!t.is_empty()).then(|| t.to_owned())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The problems C2-07 checks for, decided from text rather than paths — the
+/// half `lint_pages::no_stale_publication_claims` hands to a filesystem read
+/// is only `sqlite_conformance_exists`, so this half is unit-testable without
+/// a workspace checkout.
+///
+/// # Why the rustdoc half also checks the *replacement*, not only the claim
+///
+/// A grep for [`STALE_NOTHING_PUBLISHED`] alone is satisfied by deleting the
+/// sentence, which teaches nothing durable: C2-07's own "why a defect" names
+/// the cost as the sentence reading as *licence* to remove a deprecated arm
+/// again, and a deletion leaves no justification in its place for the next
+/// person to read before doing that. So once the stale claim is gone, this
+/// requires the two commits it should be replaced with — the fact that
+/// cannot go stale in the same direction.
+pub(crate) fn stale_publication_claims(
+    lib: &str,
+    readme: &str,
+    sqlite_conformance_exists: bool,
+) -> Vec<String> {
+    let lib = unwrapped(lib);
+    let readme = unwrapped(readme);
+    let mut problems = Vec::new();
+
+    if lib.contains(STALE_NOTHING_PUBLISHED) {
+        problems.push(format!(
+            "{TESTKIT_LIB} — claims `{STALE_NOTHING_PUBLISHED}`, but happenstance-testkit has \
+             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:306). \
+             Ground the `factory =` justification in {FACTORY_INTRODUCED} and {FACTORY_REMOVED} \
+             instead (C2-07)."
+        ));
+    } else if !lib.contains(FACTORY_INTRODUCED) || !lib.contains(FACTORY_REMOVED) {
+        problems.push(format!(
+            "{TESTKIT_LIB} — the stale `{STALE_NOTHING_PUBLISHED}` claim is gone, but the \
+             migration note names neither {FACTORY_INTRODUCED} nor {FACTORY_REMOVED} — the two \
+             commits its replacement justification must rest on (C2-07)."
+        ));
+    }
+
+    if readme.contains(STALE_NO_ADAPTER) && sqlite_conformance_exists {
+        problems.push(format!(
+            "{TESTKIT_README} — claims `{STALE_NO_ADAPTER}`, but {SQLITE_CONFORMANCE_TEST} \
+             already mounts it (C2-07)."
+        ));
+    }
+
+    problems
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -1242,5 +1367,81 @@ unstable-projection = []
         assert_eq!(cardinal("Eighty-nine"), Some(89));
         assert_eq!(cardinal("the"), None);
         assert_eq!(cardinal(""), None);
+    }
+
+    /// The exact sentence C2-07 was written for, verbatim from
+    /// `crates/happenstance-testkit/src/lib.rs:486-489` as it stood at HEAD
+    /// before the fix. Quoted rather than paraphrased for the same reason
+    /// `the_shipped_sentence_this_check_was_written_for_is_rejected` above
+    /// quotes its README sentence: the wrap is the hard part to reproduce by
+    /// hand.
+    #[test]
+    fn c2_07_rejects_the_shipped_migration_note() {
+        let lib = "\
+/// The keyword was `factory =` and took a store expression. There is no
+/// deprecated arm, because nothing in this workspace is published yet and this
+/// is the last release in which that is true. Change the keyword and hand it a
+/// [`Fixture`] instead of a store.
+";
+        let problems = stale_publication_claims(lib, "", false);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains(TESTKIT_LIB));
+        assert!(problems[0].contains(STALE_NOTHING_PUBLISHED));
+    }
+
+    /// The exact sentence C2-07's README half was written for, verbatim from
+    /// `crates/happenstance-testkit/README.md:18` as it stood at HEAD, with
+    /// `happenstance-sqlite`'s conformance test present — which is the
+    /// workspace's actual state, not a hypothetical one.
+    #[test]
+    fn c2_07_rejects_the_shipped_readme_sentence_once_an_adapter_has_run_the_suite() {
+        let readme = "\
+> What is still early is everything around that. **No adapter has run this
+> suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
+";
+        // A correct rustdoc half, so only the README half is under test here.
+        let lib = "/// Ground it in `23fd446` and `1c1a6b7`.\n";
+        let problems = stale_publication_claims(lib, readme, true);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains(TESTKIT_README));
+        assert!(problems[0].contains(STALE_NO_ADAPTER));
+    }
+
+    /// The claim is true, and stays true, while no adapter's conformance test
+    /// exists — the check must not fire ahead of the fact it is grounded in.
+    #[test]
+    fn c2_07_readme_claim_passes_while_no_adapter_has_run_the_suite() {
+        let readme = "> **No adapter has run this suite**; the workspace's storage crates \
+                       are skeletons.\n";
+        let lib = "/// Ground it in `23fd446` and `1c1a6b7`.\n";
+        assert!(stale_publication_claims(lib, readme, false).is_empty());
+    }
+
+    /// Deleting the stale sentence without grounding the replacement in the
+    /// two commits is not the fix C2-07 asks for: it is the sentence's
+    /// silent removal, which the finding's own "why a defect" names as
+    /// reading like licence to do the same thing again.
+    #[test]
+    fn c2_07_rejects_a_bare_deletion_with_no_replacement_grounding() {
+        let lib = "/// The keyword was `factory =`. Change it and hand the macro a \
+                    [`Fixture`] instead of a store.\n";
+        let problems = stale_publication_claims(lib, "", false);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains(FACTORY_INTRODUCED));
+        assert!(problems[0].contains(FACTORY_REMOVED));
+    }
+
+    /// The corrected form: both halves pass together.
+    #[test]
+    fn c2_07_passes_the_corrected_text() {
+        let lib = "/// There is no deprecated arm: `factory =` was introduced at `23fd446` \
+                    and removed at `1c1a6b7`, eight days before this crate's first publish, so \
+                    no published version ever accepted it.\n";
+        let readme = "> **`happenstance-sqlite` has run this suite** — its own rustdoc says so.\n";
+        assert!(
+            stale_publication_claims(lib, readme, true).is_empty(),
+            "{:?}",
+            stale_publication_claims(lib, readme, true)
+        );
     }
 }

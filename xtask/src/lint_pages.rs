@@ -336,6 +336,18 @@ struct Page {
 /// Fails when either pinned tree cannot be read, when either is empty, or when
 /// any check finds a problem.
 pub(crate) fn run(mode: Mode) -> Result<()> {
+    // C2-07, called from here rather than run as a check of its own: this
+    // module's `run` is the only entry point `xtask/src/main.rs`'s dispatch
+    // already wires to a bare subcommand (`lint-pages`), and C2-07's fix is
+    // scoped to `crates/happenstance-testkit/*`, this file and
+    // `xtask/src/lints.rs` — adding a new named step belongs to `main.rs`'s
+    // `REQUIRED` table, which is out of scope here. See
+    // `no_stale_publication_claims`'s own doc comment, and the doc comment on
+    // `lints::TESTKIT_LIB`, for why the check itself lives *here* rather than
+    // as a `lints::`-shaped export next to `testkit_version` and
+    // `stated_rule_counts`, which is where it would otherwise belong.
+    no_stale_publication_claims()?;
+
     let root = workspace_root()?;
 
     let atoms = rule_atoms(&root)?;
@@ -355,6 +367,76 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     check_orientation_ceiling(&pages, &mut problems);
 
     report(&pages, &atoms, problems)
+}
+
+/// C2-07: neither of `happenstance-testkit`'s two rendered surfaces may tell
+/// its reader a fact the repository already contradicts.
+///
+/// # Why this lives here and not beside `lints::testkit_version`
+///
+/// It reuses `lints::stale_publication_claims` and `lints`'s testkit-fact
+/// constants — it is a testkit rendered-surface check in every way that
+/// matters, and belongs there by subject. But `xtask/src/affected.rs`'s
+/// `exported_lints` scans `lints.rs` for the exact shape `pub(crate) fn
+/// NAME() -> Result<()> {` and requires `affected::run`'s unconditional block
+/// to call each one it finds by name (`xtask/src/affected.rs:1016-1071`) —
+/// the invariant that catches a lint wired into `REQUIRED` and forgotten in
+/// the story grain. This check already runs in the story grain: `run` above
+/// is called unconditionally by `affected::run`
+/// (`xtask/src/affected.rs:183`), and `run` calls this. Giving it that same
+/// shape in `lints.rs` would trip the scanner over reachability it cannot see
+/// through a name match, and `xtask/src/affected.rs` is not a path this
+/// change owns. So the entry point stays here, where `run` already reaches
+/// it, and only the reusable, unit-testable half —
+/// `lints::stale_publication_claims`, which does not have this shape — lives
+/// in `lints.rs`.
+///
+/// # What this does not verify
+///
+/// That the commit shas the rustdoc must name are the *right* two — a
+/// rewritten history with different hashes at the same content would still
+/// satisfy this. Nor does it call crates.io: whether `happenstance-testkit`
+/// is actually published is a fact about the registry this gate step does
+/// not control, which is exactly why the corrected sentence is a claim about
+/// two commits instead (RS-81-1,
+/// `standards/rust/81-checks-that-cannot-be-types.md:11`). And it reads
+/// `lints::SQLITE_CONFORMANCE_TEST`'s *path*, not its content — a file
+/// emptied to nothing but its own name would still satisfy the README half.
+///
+/// # Errors
+///
+/// Returns an error if either document cannot be read, or if
+/// [`crate::lints::stale_publication_claims`] finds a problem in either.
+fn no_stale_publication_claims() -> Result<()> {
+    use crate::lints::{
+        SQLITE_CONFORMANCE_TEST, TESTKIT_LIB, TESTKIT_README, stale_publication_claims,
+    };
+
+    let root = workspace_root()?;
+    let lib = fs::read_to_string(root.join(TESTKIT_LIB))
+        .with_context(|| format!("reading {TESTKIT_LIB}"))?;
+    let readme = fs::read_to_string(root.join(TESTKIT_README))
+        .with_context(|| format!("reading {TESTKIT_README}"))?;
+    let sqlite_conformance_exists = root.join(SQLITE_CONFORMANCE_TEST).exists();
+
+    let problems = stale_publication_claims(&lib, &readme, sqlite_conformance_exists);
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "{} stale publication claim(s) in the surfaces a happenstance-testkit reader meets \
+             (C2-07: crates/happenstance-testkit tells its reader something the repository \
+             already contradicts).",
+            problems.len()
+        );
+    }
+
+    println!(
+        "C2-07: {TESTKIT_LIB} and {TESTKIT_README} state no publication claim the repository \
+         contradicts"
+    );
+    Ok(())
 }
 
 /// Prints the run's outcome, and is the only place that decides how.
