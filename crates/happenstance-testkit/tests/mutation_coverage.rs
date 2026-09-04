@@ -852,15 +852,17 @@ const REGISTRY: &[Declared] = &[
     },
     Declared {
         name: "UnparenthesisedToPredicateStore",
-        kind: Kind::ModelOnlyMutant,
-        // Empty, and that is this row's whole content: the three `to` rules all
-        // issue `Query::all()`, and with no items there is nothing for the `OR`
-        // to bind wrongly across. CF-12 closed this gap for `from` and no clause
-        // has closed it for `to`, so what catches this store is the model
-        // family, which generates multi-item queries and an upper bound to go
-        // with them. `MODEL_COVERAGE` carries the claim, and
-        // `mutant_registry_is_exhaustive` requires it to say `Rejected`.
-        fails: &[],
+        kind: Kind::Mutant,
+        // One entry, and the entry is this row's whole content. It was
+        // `Kind::ModelOnlyMutant` with an empty list, because the three `to`
+        // rules all issued `Query::all()` and with no items there is nothing
+        // for the `OR` to bind wrongly across — so the only thing in the tree that
+        // could see this store was the model family, which is `proptest`-gated
+        // and `cfg(not(target_arch = "wasm32"))`. A Cloudflare or Neon adapter
+        // carrying this precedence bug passed every rule it actually runs.
+        // `read_to_composes_with_multi_item_query` is the rule that closes it:
+        // CF-12's shape, one bound over.
+        fails: &["read_to_composes_with_multi_item_query"],
         provenance: "`WHERE a OR b AND position <= ?` — `UnparenthesisedPredicateStore` one bound \
              over, and reached the same way: the window's top appended to a `WHERE` string that \
              already carries a disjunction someone else built. The caller it breaks is a bounded \
@@ -868,7 +870,13 @@ const REGISTRY: &[Declared] = &[
              backfill reads past its own window and re-delivers events the tail worker has \
              already processed, with no error anywhere.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The rule makes one assertion, and other mutants fail it from other
+        // directions — an ignored bound, an exclusive one. This is the row that
+        // names the precedence bug.
+        expect: &[(
+            "read_to_composes_with_multi_item_query",
+            "must bound EVERY item of the query",
+        )],
     },
     Declared {
         name: "NullHeadPagingStore",
