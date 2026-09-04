@@ -653,6 +653,33 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **The two non-vacuity reports in `happenstance-testkit`'s mutation-coverage
+  binary each stated a property their table did not have, and both are now
+  counted rather than asserted in prose.** No conformance rule was added and no
+  adapter's build changes; what changes is whether the numbers an evaluator
+  reads mean anything.
+
+  `MODEL_COVERAGE`'s heading said thirty-nine `Agreed` rows and thirty-seven
+  misses while the table held forty and thirty-eight. The same sentence had
+  been stale by nineteen for several phases, was corrected earlier in the same
+  wave, and drifted again by one inside the day when a mutant landed — because
+  the meta-test walks the table row by row and asserts nothing about the
+  sentence over it. `the_model_coverage_heading_counts_the_table` now asserts
+  both numbers, deriving the count of conformant controls it subtracts from
+  `REGISTRY` rather than writing it a second time.
+
+  The caution over `REGISTRY` closed by telling a reviewer that no rule is
+  covered by the shotgun mutant alone — the sentence a reviewer uses to stop
+  checking, and false as written: `untagged_events_match_query_all` appears in
+  exactly one `fails` list in the whole event-store registry, and it is
+  `InnerJoinTagStore`'s. The paragraph now says what holds, and
+  `the_shotgun_mutants_sole_coverage_is_pinned` requires an `expect` pin
+  wherever that mutant is a rule's only evidence, so the day the rule acquires
+  a second assertion the pin fails rather than its only registered evidence
+  quietly becoming an anchor failure. The mutant is derived from the table as
+  the broadest `fails` list and then checked against the store the paragraph
+  names, so the two cannot come to be about different stores.
+
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded
   `.join(" UNION ")` with no `max_arms`, no chunk and no parameter budget

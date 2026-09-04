@@ -318,9 +318,24 @@ struct Declared {
 /// `two_fixture_instances_observe_none_of_each_others_appends` fails at "the
 /// append must actually have landed", `read_from_is_inclusive` and
 /// `query_items_are_or` at their `all.len()` guards. Those rows evidence the
-/// anchor, not the headline property, and they are inflation rather than vacuity
-/// — no rule in the table is covered by that mutant alone. The `expect` field is
-/// what makes the distinction visible where it has been written down.
+/// anchor, not the headline property, and they are inflation rather than
+/// vacuity.
+///
+/// This paragraph used to close by saying that no rule in the table is covered
+/// by that mutant alone. That was false, and it was the one sentence a reviewer
+/// uses to stop checking: `untagged_events_match_query_all` appears in exactly
+/// one `fails` list in the whole event-store registry, and it is this one. The
+/// intent survives where the sentence did not — for that rule
+/// `InnerJoinTagStore` is the headline mutant rather than an inflation row,
+/// because the rule body carries a single assertion and so has no anchor to
+/// fail at. That is a property of the rule today rather than of the registry,
+/// which is why it is now pinned rather than restated: the `expect` field names
+/// the assertion, and `the_shotgun_mutants_sole_coverage_is_pinned` requires a
+/// pin wherever this mutant is a rule's only evidence. The day that rule
+/// acquires a second assertion the pin fails, rather than the discount quietly
+/// becoming wrong while the paragraph tells the auditor not to look. Elsewhere
+/// the `expect` field is what makes the distinction visible where it has been
+/// written down.
 ///
 /// *Not covered, and each of these is a real axis rather than an oversight:*
 ///
@@ -452,7 +467,16 @@ const REGISTRY: &[Declared] = &[
              writes first, and it is invisible until an untagged event is \
              written.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The one rule in the whole event-store registry this store is the
+        // *only* evidence for, so it is the one row here that may not be read
+        // as anchor inflation. Pinned to the head relation itself: the rule
+        // carries a single assertion today, and this is what makes a second
+        // one visible rather than silently converting the mutant's only
+        // registered evidence into an anchor failure.
+        expect: &[(
+            "untagged_events_match_query_all",
+            "must still be matched by Query::all()",
+        )],
     },
     Declared {
         name: "TypesAreAndStore",
@@ -2596,15 +2620,23 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///
 /// # What it does not catch is a handful of shapes, not a list
 ///
-/// **Count the table rather than this sentence.** Thirty-nine rows below are
-/// marked [`ModelOutcome::Agreed`] at this commit; two of them are the
-/// conformant controls and *must* be, which leaves **thirty-seven misses**. This
-/// heading said *twenty-one* and the paragraph under it said *twenty-three rows*
-/// for several phases while the table itself said forty and forty-two — the
-/// drift the pre-publication review found wherever a number was written beside
-/// the list it describes, and one this file had already warned about in another
-/// place. The shapes below are still the shapes; they no longer enumerate every
-/// name, and the honest instrument is a count of the table.
+/// **Count the table rather than this sentence** — and something now does.
+/// Forty rows below are marked [`ModelOutcome::Agreed`] at this commit; two of
+/// them are the conformant controls and *must* be, which leaves **thirty-eight
+/// misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// against the table, and the count of controls it subtracts is derived from
+/// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
+/// time.
+///
+/// That check is here because the sentence has now drifted twice, at two
+/// scales. This heading said *twenty-one* and the paragraph under it said
+/// *twenty-three rows* for several phases while the table itself said forty and
+/// forty-two — the drift the pre-publication review found wherever a number was
+/// written beside the list it describes. It was corrected to thirty-nine and
+/// thirty-seven, and was stale again by one inside the day, because a mutant
+/// landed and nothing counted. **A corrected number is not a fix for a number
+/// nothing counts.** The shapes below are still the shapes; they no longer
+/// enumerate every name, and the honest instrument is the assertion.
 ///
 /// Every miss carries a defect the model **cannot express**, and the boundary is
 /// sharp enough to state in one line: the model drives *one handle*, on *one
@@ -3160,15 +3192,17 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 39,
-            "`MODEL_COVERAGE`'s heading says thirty-nine rows are `Agreed` and \
-             the table holds {agreed}"
+            agreed, 40,
+            "`MODEL_COVERAGE`'s heading says forty rows are `Agreed` and the \
+             table holds {agreed}. The heading is prose and this is what \
+             makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            37,
-            "`MODEL_COVERAGE`'s heading says thirty-seven misses and the table \
-             holds {}",
+            38,
+            "`MODEL_COVERAGE`'s heading says thirty-eight misses and the table \
+             holds {}. Every one of them is a defect the model cannot \
+             express, and the heading's shape bullets are what say why",
             agreed - controls
         );
     }
