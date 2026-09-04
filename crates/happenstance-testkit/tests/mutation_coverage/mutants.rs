@@ -1238,6 +1238,25 @@ impl Defect for UnparenthesisedToPredicateStore {
     }
 }
 
+/// A store with **no defect at all**, filed as caught by the model family.
+///
+/// Not a mutant. It is the adversarial refutation of [`Kind::ModelOnlyMutant`],
+/// transcribed from the review that found the hole: a bare `impl Defect`
+/// carrying only `NAME`, so every step is `crate::correct`'s and the store is
+/// byte-for-byte the reference implementation. Filed with an empty `fails` list
+/// and a `MODEL_COVERAGE` row claiming `Rejected`, it satisfies both of the
+/// obligations that kind was written with — and one of them is not compiled
+/// without the `proptest` feature, which is a configuration `cargo hack`'s
+/// feature powerset builds.
+///
+/// It exists so that "the kind cannot be used to hide a store nothing catches"
+/// is a *checked* sentence rather than an argument. Nothing registers it.
+pub(crate) struct HidingPlaceStore;
+
+impl Defect for HidingPlaceStore {
+    const NAME: &'static str = "HidingPlaceStore";
+}
+
 /// The read window is anchored on `max(position)`, which is `NULL` on an empty
 /// store.
 ///

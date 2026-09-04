@@ -848,6 +848,14 @@ const REGISTRY: &[Declared] = &[
         expect: &[],
     },
     Declared {
+        name: "HidingPlaceStore",
+        kind: Kind::ModelOnlyMutant,
+        fails: &[],
+        provenance: "**the adversarial refutation of `Kind::ModelOnlyMutant`, and it currently              passes.** A bare `impl Defect` carrying only `NAME`: every step is              `crate::correct`'s, so this store has no defect whatever. It is filed here              under a kind whose entire justification is that something else catches it,              and the obligation that would notice — `MODEL_COVERAGE` claiming `Rejected`              and the model delivering it — is behind `#[cfg(feature = \"proptest\")]`.              Under `--no-default-features` this row is accepted in silence, and              `cargo hack`'s feature powerset builds exactly that configuration.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "NullHeadPagingStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2215,6 +2223,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedToPredicateStore>,
+            crate::mutants::MutantFixture<crate::mutants::HidingPlaceStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
             crate::mutants::MutantFixture<crate::mutants::AfterValidatedAgainstHeadStore>,
@@ -2513,6 +2522,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // `Kind::ModelOnlyMutant`: the one store in this binary that no rule of the
     // event-store family can see. This row is the whole of what catches it.
     ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
+    // The refutation's row, and the claim is a lie: this store has no defect, so
+    // the model agrees with it. Under `--all-features` that lie is caught here.
+    // Under `--no-default-features` this table is not compiled and nothing is.
+    ("HidingPlaceStore", ModelOutcome::Rejected),
     // A *value* boundary rather than a missing field: `Op::Read`'s limit is
     // `Option<usize>` over `1..4` and never proposes the zero this store
     // mishandles.
