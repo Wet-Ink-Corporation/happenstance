@@ -152,9 +152,11 @@ fn prose_added_to_this_page_stays_below_the_fence() {
         assert!(
             section(&page, heading) > fence,
             "`{heading}` was added above the doctest fence. Every line above \
-             the fence pushes the `run_projection(` call inside it further \
-             from the line `SPECIFICATION.md` cites, and `spec-trace` resolves \
-             a citation within twelve lines"
+             the fence pushes the `run_projection(` call inside it down, and \
+             three sentences of `SPECIFICATION.md` cite this item at \
+             `runner.rs:401` — a line inside that fence. `spec-trace` does not \
+             anchor those three, so it will not tell you: this is where it is \
+             said"
         );
     }
 }

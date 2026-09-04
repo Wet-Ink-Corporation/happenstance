@@ -486,13 +486,24 @@ where
 /// projection-store freeze — so what is published now is the obligation,
 /// not a mechanism nobody has run.
 ///
-// This section is the page's last rather than sitting beside `# Rebuilding`,
-// where the subject would put it. Three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:401` as the location of this item, and
-// `spec-trace` resolves that to the `run_projection` call inside the fence
-// above, within its twelve-line window. Any prose added *before* that fence
-// pushes the call out of the window and fails the gate. Moving this section
-// up is correct, and it costs the three citations moving with it.
+// The three sections above sit *after* the fence rather than beside the subject
+// each belongs to, because three sentences of `SPECIFICATION.md` cite
+// `crates/happenstance/src/runner.rs:401` as the location of this item and that
+// line number is only right while the fence stays where it is: prose added
+// above it pushes the `run_projection` call down and leaves the three citations
+// pointing at whatever now occupies 401.
+//
+// **The gate does not catch that, and this comment used to say it did.**
+// `spec-trace` counts a citation and only *anchors* it where it can derive a
+// subject from the prose beside it — 80 of 401, and these three are not among
+// them. Measured rather than assumed: moving `# Choosing `chunk`` above the
+// fence puts the call 39 lines from the cited line, and `spec-trace` reports the
+// same "80 anchored" and exits 0. What actually holds the line is
+// `crates/happenstance/tests/projection_runner_page.rs`, which asserts the two
+// sections this lane added stay below the fence and says why.
+//
+// Moving a section up is still *allowed*; it costs the three citations moving
+// with it, and nothing but a reader will tell you.
 pub async fn run_projection<S, P, C>(
     events: &S,
     models: &P::Store,
