@@ -527,155 +527,6 @@ fn names_rule(text: &str, rule: &str) -> bool {
     })
 }
 
-/// Where `xtask/src/package.rs` declares the crates this workspace intends to
-/// publish.
-///
-/// `PUBLISHABLE` itself is private to that module — on purpose, per RS-81-5:
-/// `reconcile` already answers "does this list match what Cargo will publish",
-/// and widening its visibility to answer a second, unrelated question (does
-/// `CHANGELOG.md`'s scope line match it) would be a second copy of the const's
-/// *meaning* reachable from two places that could drift from each other. This
-/// reads the same bytes `reconcile` guards instead.
-const PACKAGE_RS: &str = "xtask/src/package.rs";
-
-/// Substrings found between successive pairs of `delim` in `text`.
-///
-/// A text unbalanced in `delim` (an odd count) silently stops after its last
-/// complete pair — callers that need the whole list to be present check that
-/// separately, the way [`publishable_from_package_rs`] and
-/// [`changelog_scope_crates`] both do.
-fn delimited(text: &str, delim: char) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find(delim) {
-        let after = &rest[start + delim.len_utf8()..];
-        let Some(end) = after.find(delim) else {
-            break;
-        };
-        out.push(after[..end].to_string());
-        rest = &after[end + delim.len_utf8()..];
-    }
-    out
-}
-
-/// The crate names inside `package::PUBLISHABLE`, read as source text.
-///
-/// # Errors
-///
-/// Returns an error if `xtask/src/package.rs` cannot be read, if it no longer
-/// declares `const PUBLISHABLE: &[&str] = &[` with a matching `];`, or if that
-/// span contains no quoted names. Any of the three would otherwise make this
-/// silently compare `CHANGELOG.md`'s scope line against an empty or partial
-/// list — passing over exactly the drift this check exists to catch.
-fn publishable_from_package_rs(root: &Path) -> Result<Vec<String>> {
-    let src = fs::read_to_string(root.join(PACKAGE_RS))
-        .with_context(|| format!("reading {PACKAGE_RS}"))?;
-
-    const OPEN: &str = "const PUBLISHABLE: &[&str] = &[";
-    let after_open = src
-        .find(OPEN)
-        .with_context(|| format!("{PACKAGE_RS} — no `{OPEN}`; PUBLISHABLE moved or was renamed"))?
-        + OPEN.len();
-    let body = &src[after_open..];
-    let close = body
-        .find("];")
-        .with_context(|| format!("{PACKAGE_RS} — PUBLISHABLE's `[` has no matching `];`"))?;
-
-    let names = delimited(&body[..close], '"');
-    if names.is_empty() {
-        bail!("{PACKAGE_RS} — parsed zero crate names out of PUBLISHABLE");
-    }
-    Ok(names)
-}
-
-/// The crates `CHANGELOG.md`'s opening scope sentence names.
-///
-/// Reads only the line containing "Notable changes to", not the whole file —
-/// `happenstance-sqlite` appears twice more in `CHANGELOG.md`, both times
-/// inside historical entries about other crates, and neither occurrence is a
-/// statement of what the document covers.
-///
-/// # Errors
-///
-/// Returns an error if no such line exists, or if it names no crate at all —
-/// both would otherwise make the comparison in
-/// [`changelog_scope_matches_publishable`] pass vacuously.
-fn changelog_scope_crates(changelog: &str) -> Result<Vec<String>> {
-    let line = changelog
-        .lines()
-        .find(|l| l.contains("Notable changes to"))
-        .with_context(|| format!("{CHANGELOG} — no scope sentence (\"Notable changes to\")"))?;
-    let names = delimited(line, '`');
-    if names.is_empty() {
-        bail!("{CHANGELOG} — the scope sentence names no crate: {line:?}");
-    }
-    Ok(names)
-}
-
-/// The changelog's stated scope names exactly the crates this workspace
-/// publishes.
-///
-/// Neither list is hard-coded here: [`publishable_from_package_rs`] reads
-/// `PUBLISHABLE` and [`changelog_scope_crates`] reads the scope sentence, so a
-/// crate promoted to publishable after this lands — the next `happenstance-*`
-/// to drop its `publish = false` — fails this the same way `happenstance-sqlite`
-/// does today, with no second edit required here. CLAUDE.md records why that
-/// matters: a scope sentence spelling three crates by name already drifted once
-/// when a fourth joined, because spelling the members is not what keeps a
-/// sentence honest — something reading it is.
-///
-/// # What this does not verify
-///
-/// That `[Unreleased]` carries an entry for the newly-scoped crate's actual
-/// changes, only that the document says the crate is in scope at all.
-///
-/// # Errors
-///
-/// Returns an error if either file cannot be read or parsed (see the two
-/// functions above), or if the two crate sets disagree — the message names
-/// which crates are on which side, because "missing from the scope line" and
-/// "no longer publishable" are different bugs.
-pub(crate) fn changelog_scope_matches_publishable() -> Result<()> {
-    let root = workspace_root()?;
-    let changelog =
-        fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
-
-    let publishable: std::collections::BTreeSet<String> =
-        publishable_from_package_rs(&root)?.into_iter().collect();
-    let scoped: std::collections::BTreeSet<String> =
-        changelog_scope_crates(&changelog)?.into_iter().collect();
-
-    let unscoped: Vec<&String> = publishable.difference(&scoped).collect();
-    let stale: Vec<&String> = scoped.difference(&publishable).collect();
-
-    if !unscoped.is_empty() || !stale.is_empty() {
-        let mut msg = format!(
-            "changelog_scope_matches_publishable: {CHANGELOG}'s scope sentence disagrees with \
-             {PACKAGE_RS}'s PUBLISHABLE."
-        );
-        if !unscoped.is_empty() {
-            msg.push_str(&format!(
-                " Publishable but not in scope: {unscoped:?} — add it to the scope sentence and \
-                 give it `[Unreleased]` entries."
-            ));
-        }
-        if !stale.is_empty() {
-            msg.push_str(&format!(
-                " In scope but not publishable: {stale:?} — either it lost `publish = false` \
-                 without joining PUBLISHABLE, or the scope sentence is stale."
-            ));
-        }
-        bail!(msg);
-    }
-
-    println!(
-        "changelog_scope_matches_publishable: {CHANGELOG}'s scope sentence names exactly \
-         {PACKAGE_RS}'s {} publishable crate(s)",
-        publishable.len()
-    );
-    Ok(())
-}
-
 /// CF-29: every conformance rule has a changelog entry naming a defect.
 ///
 /// Two questions, and only the first has a clean answer: does the rule's name
@@ -698,9 +549,8 @@ pub(crate) fn changelog_scope_matches_publishable() -> Result<()> {
 /// Returns an error if either file cannot be read, or if any rule in
 /// [`RULE_FILES`] has no changelog entry naming a defect.
 pub(crate) fn changelog_names_every_rule() -> Result<()> {
-    // Bundled into this subcommand rather than wired as its own `lint-*` step:
-    // both read `CHANGELOG.md`, and `lint-changelog` is `cargo xtask lints`'s
-    // one hook into this file for prose about the document as a whole.
+    // Bundled here, not wired as its own step: `lint-changelog` is `cargo xtask
+    // lints`'s one hook into this file for prose about the document as a whole.
     changelog_scope_matches_publishable()?;
 
     let root = workspace_root()?;
@@ -1397,6 +1247,166 @@ pub(crate) fn stale_publication_claims(
     }
 
     problems
+}
+
+/// Where `xtask/src/package.rs` declares the crates this workspace intends to
+/// publish.
+///
+/// `PUBLISHABLE` itself is private to that module — on purpose, per RS-81-5:
+/// `reconcile` already answers "does this list match what Cargo will publish",
+/// and widening its visibility to answer a second, unrelated question (does
+/// `CHANGELOG.md`'s scope line match it) would be a second copy of the const's
+/// *meaning* reachable from two places that could drift from each other. This
+/// reads the same bytes `reconcile` guards instead.
+const PACKAGE_RS: &str = "xtask/src/package.rs";
+
+/// Substrings found between successive pairs of `delim` in `text`.
+///
+/// A text unbalanced in `delim` (an odd count) silently stops after its last
+/// complete pair — callers that need the whole list to be present check that
+/// separately, the way [`publishable_from_package_rs`] and
+/// [`changelog_scope_crates`] both do.
+fn delimited(text: &str, delim: char) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find(delim) {
+        let after = &rest[start + delim.len_utf8()..];
+        let Some(end) = after.find(delim) else {
+            break;
+        };
+        out.push(after[..end].to_string());
+        rest = &after[end + delim.len_utf8()..];
+    }
+    out
+}
+
+/// The crate names inside `package::PUBLISHABLE`, read as source text.
+///
+/// # Errors
+///
+/// Returns an error if `xtask/src/package.rs` cannot be read, if it no longer
+/// declares `const PUBLISHABLE: &[&str] = &[` with a matching `];`, or if that
+/// span contains no quoted names. Any of the three would otherwise make this
+/// silently compare `CHANGELOG.md`'s scope line against an empty or partial
+/// list — passing over exactly the drift this check exists to catch.
+fn publishable_from_package_rs(root: &Path) -> Result<Vec<String>> {
+    let src = fs::read_to_string(root.join(PACKAGE_RS))
+        .with_context(|| format!("reading {PACKAGE_RS}"))?;
+
+    const OPEN: &str = "const PUBLISHABLE: &[&str] = &[";
+    let after_open = src
+        .find(OPEN)
+        .with_context(|| format!("{PACKAGE_RS} — no `{OPEN}`; PUBLISHABLE moved or was renamed"))?
+        + OPEN.len();
+    let body = &src[after_open..];
+    let close = body
+        .find("];")
+        .with_context(|| format!("{PACKAGE_RS} — PUBLISHABLE's `[` has no matching `];`"))?;
+
+    let names = delimited(&body[..close], '"');
+    if names.is_empty() {
+        bail!("{PACKAGE_RS} — parsed zero crate names out of PUBLISHABLE");
+    }
+    Ok(names)
+}
+
+/// The crates `CHANGELOG.md`'s opening scope sentence names.
+///
+/// Reads only the *paragraph* starting at the line containing "Notable changes
+/// to" — the contiguous run of non-blank lines from there to the next blank
+/// line or end of file — not the whole file. Markdown wraps prose across lines,
+/// and this sentence does; a single-line read would silently see only its first
+/// clause. `happenstance-sqlite` also appears twice more in `CHANGELOG.md`,
+/// both times inside historical entries about other crates, and neither
+/// occurrence is a statement of what the document covers, which is why the scan
+/// stops at the paragraph's blank-line boundary rather than continuing.
+///
+/// # Errors
+///
+/// Returns an error if no such paragraph exists, or if it names no crate at
+/// all — both would otherwise make the comparison in
+/// [`changelog_scope_matches_publishable`] pass vacuously.
+fn changelog_scope_crates(changelog: &str) -> Result<Vec<String>> {
+    let lines: Vec<&str> = changelog.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.contains("Notable changes to"))
+        .with_context(|| format!("{CHANGELOG} — no scope sentence (\"Notable changes to\")"))?;
+    let end = lines[start..]
+        .iter()
+        .position(|l| l.trim().is_empty())
+        .map_or(lines.len(), |offset| start + offset);
+    let paragraph = lines[start..end].join(" ");
+
+    let names = delimited(&paragraph, '`');
+    if names.is_empty() {
+        bail!("{CHANGELOG} — the scope sentence names no crate: {paragraph:?}");
+    }
+    Ok(names)
+}
+
+/// The changelog's stated scope names exactly the crates this workspace
+/// publishes.
+///
+/// Neither list is hard-coded here: [`publishable_from_package_rs`] reads
+/// `PUBLISHABLE` and [`changelog_scope_crates`] reads the scope sentence, so a
+/// crate promoted to publishable after this lands — the next `happenstance-*`
+/// to drop its `publish = false` — fails this the same way `happenstance-sqlite`
+/// does today, with no second edit required here. CLAUDE.md records why that
+/// matters: a scope sentence spelling three crates by name already drifted once
+/// when a fourth joined, because spelling the members is not what keeps a
+/// sentence honest — something reading it is.
+///
+/// # What this does not verify
+///
+/// That `[Unreleased]` carries an entry for the newly-scoped crate's actual
+/// changes, only that the document says the crate is in scope at all.
+///
+/// # Errors
+///
+/// Returns an error if either file cannot be read or parsed (see the two
+/// functions above), or if the two crate sets disagree — the message names
+/// which crates are on which side, because "missing from the scope line" and
+/// "no longer publishable" are different bugs.
+pub(crate) fn changelog_scope_matches_publishable() -> Result<()> {
+    let root = workspace_root()?;
+    let changelog =
+        fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
+
+    let publishable: std::collections::BTreeSet<String> =
+        publishable_from_package_rs(&root)?.into_iter().collect();
+    let scoped: std::collections::BTreeSet<String> =
+        changelog_scope_crates(&changelog)?.into_iter().collect();
+
+    let unscoped: Vec<&String> = publishable.difference(&scoped).collect();
+    let stale: Vec<&String> = scoped.difference(&publishable).collect();
+
+    if !unscoped.is_empty() || !stale.is_empty() {
+        let mut msg = format!(
+            "changelog_scope_matches_publishable: {CHANGELOG}'s scope sentence disagrees with \
+             {PACKAGE_RS}'s PUBLISHABLE."
+        );
+        if !unscoped.is_empty() {
+            msg.push_str(&format!(
+                " Publishable but not in scope: {unscoped:?} — add it to the scope sentence and \
+                 give it `[Unreleased]` entries."
+            ));
+        }
+        if !stale.is_empty() {
+            msg.push_str(&format!(
+                " In scope but not publishable: {stale:?} — either it lost `publish = false` \
+                 without joining PUBLISHABLE, or the scope sentence is stale."
+            ));
+        }
+        bail!(msg);
+    }
+
+    println!(
+        "changelog_scope_matches_publishable: {CHANGELOG}'s scope sentence names exactly \
+         {PACKAGE_RS}'s {} publishable crate(s)",
+        publishable.len()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

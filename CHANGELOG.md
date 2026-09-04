@@ -1,6 +1,12 @@
 # Changelog
 
-Notable changes to `happenstance`, `happenstance-core` and `happenstance-testkit`.
+Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — every crate this
+workspace currently publishes.
+
+`cargo xtask lints` derives that set from `xtask/src/package.rs`'s
+`PUBLISHABLE` and fails this file if the two disagree, so the scope above
+stays exactly as wide as what actually ships.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
