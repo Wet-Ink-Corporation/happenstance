@@ -34,6 +34,7 @@
 //! every match below runs against source with comments removed and string
 //! literal *contents* blanked, so only code is looked at.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -1306,10 +1307,11 @@ fn delimited(text: &str, delim: char) -> Vec<String> {
 /// silently compare `CHANGELOG.md`'s scope line against an empty or partial
 /// list — passing over exactly the drift this check exists to catch.
 fn publishable_from_package_rs(root: &Path) -> Result<Vec<String>> {
+    const OPEN: &str = "const PUBLISHABLE: &[&str] = &[";
+
     let src = fs::read_to_string(root.join(PACKAGE_RS))
         .with_context(|| format!("reading {PACKAGE_RS}"))?;
 
-    const OPEN: &str = "const PUBLISHABLE: &[&str] = &[";
     let after_open = src
         .find(OPEN)
         .with_context(|| format!("{PACKAGE_RS} — no `{OPEN}`; PUBLISHABLE moved or was renamed"))?
@@ -1403,16 +1405,18 @@ fn changelog_scope_matches_publishable() -> Result<()> {
              {PACKAGE_RS}'s PUBLISHABLE."
         );
         if !unscoped.is_empty() {
-            msg.push_str(&format!(
+            let _ = write!(
+                msg,
                 " Publishable but not in scope: {unscoped:?} — add it to the scope sentence and \
                  give it `[Unreleased]` entries."
-            ));
+            );
         }
         if !stale.is_empty() {
-            msg.push_str(&format!(
+            let _ = write!(
+                msg,
                 " In scope but not publishable: {stale:?} — either it lost `publish = false` \
                  without joining PUBLISHABLE, or the scope sentence is stale."
-            ));
+            );
         }
         bail!(msg);
     }
