@@ -113,7 +113,7 @@ was displaced by **this remediation's own** L1-1 lane, traced with `git log -S`.
 |---|---:|---|
 | **Closed** — code landed, gate green | **27** | wave one: `S-1` `S-2` `S-3` `RV-1` `RV-2` `RV-3` `F1-04` `C2-07` `P-4` `U-3` `T1` `AE-5` `H2` `G-1` `V-4` `V-5` `V-6` `F1-05` `D-1` `D-4` · wave two: `X-3` `L1-1` `L2-01` `L1-2` `L3-01` `X-1` `X-2` |
 | **Briefed** — decision authored, code awaits ratification | **22 briefs** | see `.kb/_intake/remediation-2026-09-04-briefs/` — nine added in wave two, each stating it did **not** get the two-critic pass the original thirteen had |
-| **Untouched** | **43** | listed below |
+| **Untouched** | **45** | listed below — derived from the list, not the arithmetic; see note |
 | **Found by us, not in the audit** | **6** | SQLite default-features · repository URL 404s · `SECURITY.md` scope · `lint-constitution` skipped every root-level citation · `cargo xtask lints` blinded **by this remediation** · `spec/E2E-CASES.md` citations checked by nothing |
 | Audit's "unopened" items closed | 4 of 7 | #1 CI · #2 re-exports · #5 suite cost · #6 registry facts · #7 runners |
 
@@ -171,7 +171,13 @@ dependency graph, not the macro.
 
 ---
 
-## The 50 untouched, grouped as the audit groups them
+## The 45 untouched, grouped as the audit groups them
+
+> **The count is 45, not 50 − 7.** Five of the seven closed in wave two came off
+> this list (`X-3`, `X-1`, `X-2`, `L1-1`, `L2-01`); `L1-2` and `L3-01` were never
+> on it — they sat in the *briefed* column, blocked on the fixture-declension
+> decision, and were closed once it was ratified. Subtracting seven from fifty
+> gives 43 and is wrong. This number is derived by counting the ids below.
 
 ```
 Typed-layer shapes         B-1 B-2 R-2 Y-5
