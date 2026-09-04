@@ -25,7 +25,10 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use happenstance_testkit::fixtures::MemoryFixture;
+use core::future::Future;
+
+use happenstance_testkit::Fixture as _;
+use happenstance_testkit::fixtures::{MemoryFixture, MemoryHandle};
 
 happenstance_testkit::event_store_concurrency_conformance!(MemoryFixture::new());
 
@@ -128,5 +131,68 @@ fn the_concurrency_page_lists_every_emitter_it_ships() {
                  finding was about"
             );
         }
+    }
+}
+
+/// A read that fails under contention is named as a read that failed.
+///
+/// L2-04. `incomplete_batches` folds a failed read into the same `Vec<String>`
+/// it fills with part-written batch names, and the rule's only assertion over
+/// that vector reports it under ES-18: *"either every event of a batch is
+/// visible or none is"*, with a `[FROZEN]` clause id attached. An adapter whose
+/// read transiently fails while a writer is working — `SQLITE_BUSY` past the
+/// handler's ceiling, a pool with no reader slot, a 503 from a one-shot HTTP
+/// backend — is told by name that its `append` is writing rows outside a
+/// transaction, and goes looking for a missing `BEGIN` in code that has one.
+///
+/// The helper's own documentation is right that a read failing under contention
+/// is a defect this rule is entitled to name. What is wrong is the channel, and
+/// the pattern for fixing it is 260 lines above in the same file: two opposite
+/// defects get two assertions, because *"a single message describing both is a
+/// message that identifies neither"*.
+///
+/// **Rejects: a correct assertion printing an incorrect diagnosis.**
+#[test]
+#[should_panic(expected = "could not be read while an append was in flight")]
+fn a_read_that_fails_under_contention_is_not_reported_as_a_partial_batch() {
+    happenstance_testkit::block_on(
+        happenstance_testkit::concurrency::rules::a_concurrent_reader_never_sees_a_partial_batch(
+            || async { FlakyReadFixture::new() },
+        ),
+    )
+    .report("a_concurrent_reader_never_sees_a_partial_batch");
+}
+
+/// A store whose every read fails, and which is otherwise the reference one.
+///
+/// The input no in-process store produces, and the only way to reach the
+/// read-failure arm of `incomplete_batches`: `MemoryEventStore` cannot fail a
+/// read, and no registered racer makes one fail — the arm was reachable in
+/// principle and by nothing in the tree. `u32::MAX` armings rather than one
+/// because the reader polls in a loop and the rule takes a throwaway reading
+/// before the loop starts.
+#[derive(Debug)]
+struct FlakyReadFixture(happenstance_testkit::SendFaultyStore<MemoryHandle>);
+
+impl FlakyReadFixture {
+    fn new() -> Self {
+        let handle = happenstance_testkit::block_on(MemoryFixture::new().connect());
+        Self(happenstance_testkit::SendFaultyStore::new(handle).fail_next_read(u32::MAX))
+    }
+}
+
+impl happenstance_testkit::Fixture for FlakyReadFixture {
+    type Store = happenstance_testkit::SendFaultyStore<MemoryHandle>;
+
+    const SECOND_HANDLE: happenstance_testkit::Capability =
+        happenstance_testkit::Capability::SUPPORTED;
+
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the wrapped store is a MemoryEventStore, so there is no durable medium \
+         to reopen over and the wrapper adds none",
+    );
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        core::future::ready(self.0.clone())
     }
 }

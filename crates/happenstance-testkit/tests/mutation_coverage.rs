@@ -579,7 +579,15 @@ const REGISTRY: &[Declared] = &[
              both `read` and the condition probe, which is why it shows up on \
              both.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The widening is the whole defect, and the rule that catches it is the
+        // only place an author meets it. `read_ok` already owns the error half
+        // one layer down, so the assertion in
+        // `query_matching_nothing_yields_empty` can only ever fire on a store
+        // that returned *events* — this pin is what holds its message to that.
+        expect: &[(
+            "query_matching_nothing_yields_empty",
+            "must yield no events",
+        )],
     },
     Declared {
         name: "TagJoinFanOutStore",
