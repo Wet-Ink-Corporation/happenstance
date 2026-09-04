@@ -2071,7 +2071,7 @@ const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
         "the model family's single rule enforces no single clause's sentence. \
          It replays a generated sequence of appends, conditional appends and \
          reads against a model and compares every answer, so what it checks is \
-         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-18 and ES-25 \
+         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-16, ES-18 and \n         ES-25 \
          over inputs no clause enumerates — which is the whole reason the \
          family exists, since the named rules are worked examples and this is \
          not. §6.4 names it, but only as CF-22's illustration of a per-family \
