@@ -949,15 +949,41 @@ fn position_as_i64(position: SequencePosition) -> i64 {
 ///   `Number.MAX_SAFE_INTEGER` becomes on the way out of Workers SQL, because
 ///   the value is widened through a JS number. Reporting it is the difference
 ///   between a declared store limit and a silently wrong position.
+///
+/// # `u64::try_from` rather than `i64::unsigned_abs`
+///
+/// The two agree on every value the match guard admits, so this is a spelling
+/// and not a behaviour — and it is the honest spelling of the two.
+/// `unsigned_abs` maps `-3` onto `3`, and it reads as correct whether or not
+/// anything in front of it excludes a negative, which is exactly how it survives
+/// a reading: the guard is what makes it a no-op, and the guard is one edit
+/// away. `try_from` cannot express that mistake. It *fails* on a negative, so it
+/// stays right if the guard is ever narrowed, widened or moved.
+///
+/// That makes the arm's `ok_or` doubly unreachable rather than newly reachable,
+/// and it is kept for the reason it was there before: `SequencePosition::new` is
+/// the only thing that decides what a position is, and this is the total
+/// spelling of asking it. What made the line safe to touch at all is the fence
+/// beneath it — see
+/// `write_path_tests::a_negative_position_is_reported_not_absolutised` and its
+/// two read-path siblings.
+///
+/// One consequence of the swap is worth stating rather than leaving to be
+/// discovered. Those three criteria were shown red against `unsigned_abs` under
+/// a guard weakened to `*raw != 0`; with `try_from` here the same weakening
+/// leaves them green, because the decoder is then correct without the guard.
+/// That is the defence this buys, and it moves what the criteria fence: they now
+/// reject a narrowing spelling returning to this line — which is the actual trap
+/// — rather than a guard edit on its own.
 fn decode_position(
     value: &SqlValue,
     column: &'static str,
 ) -> Result<SequencePosition, CloudflareEventStoreError> {
     match value {
-        SqlValue::Integer(raw) if *raw >= 1 && *raw <= MAX_SAFE_POSITION => {
-            SequencePosition::new(raw.unsigned_abs())
-                .ok_or(CloudflareEventStoreError::StoredPosition { raw: *raw })
-        }
+        SqlValue::Integer(raw) if *raw >= 1 && *raw <= MAX_SAFE_POSITION => u64::try_from(*raw)
+            .ok()
+            .and_then(SequencePosition::new)
+            .ok_or(CloudflareEventStoreError::StoredPosition { raw: *raw }),
         SqlValue::Integer(raw) => Err(CloudflareEventStoreError::StoredPosition { raw: *raw }),
         SqlValue::Real(raw) => Err(CloudflareEventStoreError::StoredPosition {
             raw: truncate_millis(*raw),
