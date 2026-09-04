@@ -484,9 +484,10 @@ mod query_items_is_not_constructible_downstream {}
 /// # Migrating from `factory =`
 ///
 /// The keyword was `factory =` and took a store expression. There is no
-/// deprecated arm, because nothing in this workspace is published yet and this
-/// is the last release in which that is true. Change the keyword and hand it a
-/// [`Fixture`] instead of a store.
+/// deprecated arm: `factory =` was introduced at `23fd446` and removed at
+/// `1c1a6b7`, eight days before this crate was first published at
+/// `0.2.0-alpha.1` on 2026-08-16, so no published version ever accepted it.
+/// Change the keyword and hand it a [`Fixture`] instead of a store.
 #[macro_export]
 macro_rules! event_store_conformance {
     // The general form. Listed first so that arm matching never has to back out

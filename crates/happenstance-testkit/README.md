@@ -15,8 +15,12 @@ pass.
 > stores fails *exactly* the rules its registry row claims — so a rule that
 > stopped discriminating is a red build rather than a green one.
 >
-> What is still early is everything around that. **No adapter has run this
-> suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
+> What is still early is everything around that. **`happenstance-sqlite` has
+> run this suite** — its own front page says so in those words, *an adapter,
+> and it has run the suite* (`crates/happenstance-sqlite/src/lib.rs:3`), and
+> `tests/conformance.rs` mounts it three times — but every other storage crate
+> is still a skeleton.
+> The `ProjectionStore`
 > suite is now all seventeen rules the specification names, each with a wrong
 > store in this crate's `tests/` that fails it — but the port it checks is still
 > `[PROVISIONAL]` and ships behind an off-by-default feature, because both

@@ -102,6 +102,13 @@
 //!   reader has to be told" instead of "MUST document" is never a candidate, so
 //!   the pin cannot notice it going unclassified — which is the one direction
 //!   the derived-versus-hand-written comparison cannot protect.
+//! * **[`DECIDED_DOCUMENTATION`] reaches only the decisions somebody wrote
+//!   down in it.** It is a hand-written array and there is no derivation behind
+//!   it, deliberately — an accepted decision states what it changed in prose,
+//!   and no scan can turn that into a phrase pair. So a decision executed
+//!   everywhere except in a doc comment is caught only if an entry for it
+//!   exists, and the day one is missing is a day this step is silent about
+//!   exactly the defect it was built for.
 //! * **The pin proves a discharge is *present*, never that it is *adequate*.**
 //!   A site carrying its anchor is a site whose load-bearing sentence is still
 //!   there. Whether the paragraph around it still teaches an adapter author
@@ -1505,6 +1512,175 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
     },
 ];
 
+/// One phrase an accepted decision put into the contract's documentation, and
+/// one it took out.
+///
+/// Distinct from [`DocumentationMust`], and deliberately a second array rather
+/// than a widening of the first. That one is **derived**: a candidate is a
+/// `[FROZEN]` clause whose body words one of [`DOCUMENTATION_OBLIGATIONS`], and
+/// [`check_pin_census`] fails on any entry the derivation does not reach. A
+/// decision that *changes what a doc comment already says* is reachable by no
+/// such derivation — the specification words no `MUST document` for it, and the
+/// clause it settles may not be frozen — so an entry for one would be reported
+/// as a stale classification by the very check that keeps the first array
+/// honest.
+///
+/// ADR-0011 is the case that forced it. It replaced `EventStore::read`'s
+/// laziness promise with "evaluated against one state sampled no later than the
+/// first poll", and added a ceiling obligation `store.rs` never carried at all.
+/// The decision was accepted, `spec/SPECIFICATION.md` executed it in ES-11, the
+/// testkit executed it in `read_result_is_stable_under_concurrent_append` — and
+/// the doc comment a third-party adapter author implements against went on
+/// promising the thing that was replaced, because nothing in this repository
+/// read an accepted decision and the surface it names in the same breath.
+///
+/// The anchor is required to appear in the **decision** as well as at the site,
+/// which is what stops the pin drifting into a preference: an entry can only
+/// hold the documentation to words the decision actually used.
+#[derive(Debug, Clone, Copy)]
+struct DecidedDocumentation {
+    /// The accepted decision atom, repo-relative and `/`-separated.
+    decision: &'static str,
+    /// The documented surface the decision falls on, likewise.
+    site: &'static str,
+    /// The decided phrase, verbatim, in the decision **and** at the site.
+    anchor: &'static str,
+    /// The wording the decision replaced, which the site must no longer carry —
+    /// `None` where the decision added an obligation that was simply absent,
+    /// since there is then nothing to have stopped saying.
+    replaced: Option<&'static str>,
+}
+
+/// Every accepted decision whose execution is a sentence in a doc comment.
+///
+/// An entry is added when a decision is **executed**, not when it is accepted:
+/// pinning an unexecuted decision lands the gate red on a tree nobody broke,
+/// which is condition (c) of [`FROZEN_DOC_MUSTS`]' derivation rule, one level
+/// up and for the same reason.
+const DECIDED_DOCUMENTATION: &[DecidedDocumentation] = &[
+    DecidedDocumentation {
+        decision: ".kb/decisions/0011-read-laziness-and-isolation.md",
+        site: "crates/happenstance-core/src/store.rs",
+        anchor: "sampled no later than the first poll",
+        replaced: Some("nothing is executed until it is first polled"),
+    },
+    DecidedDocumentation {
+        decision: ".kb/decisions/0011-read-laziness-and-isolation.md",
+        site: "crates/happenstance-core/src/store.rs",
+        anchor: "bound every later statement by it",
+        replaced: None,
+    },
+];
+
+/// Refuses a decided-documentation pin that cannot fail.
+///
+/// # Errors
+///
+/// When [`DECIDED_DOCUMENTATION`] is empty; when one decision names one anchor
+/// twice, which lets a dedup absorb an entry; when an anchor is blank, which
+/// every text contains; or when the replaced wording *is* the anchor, which
+/// asks the site to say and not say one sentence.
+fn guard_decided(pin: &[DecidedDocumentation]) -> Result<()> {
+    if pin.is_empty() {
+        bail!(
+            "the decided-documentation pin enumerates nothing, so every check over it is vacuous"
+        );
+    }
+
+    let mut seen: BTreeSet<(&str, &str)> = BTreeSet::new();
+    for entry in pin {
+        if entry.anchor.trim().is_empty() {
+            bail!(
+                "the decided-documentation pin holds a blank anchor for `{}`; every text \
+                 contains it",
+                entry.decision
+            );
+        }
+        if !seen.insert((entry.decision, entry.anchor)) {
+            bail!(
+                "the decided-documentation pin names `{}` with the same anchor twice",
+                entry.decision
+            );
+        }
+        if let Some(replaced) = entry.replaced
+            && normalised(replaced) == normalised(entry.anchor)
+        {
+            bail!(
+                "the decided-documentation pin for `{}` calls its own anchor replaced; the \
+                 site cannot both say and not say it",
+                entry.decision
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The decided-documentation pin, checked against one workspace root.
+///
+/// Four problems, four sentences, because they mean four different things about
+/// which side moved: the pin quotes a decision that does not say it; the
+/// decision still says what the pin calls replaced; the site does not carry the
+/// decided phrase; the site still carries the replaced one. "They disagree"
+/// would be none of them.
+fn check_decided(root: &Path, pin: &[DecidedDocumentation], problems: &mut Vec<String>) {
+    for entry in pin {
+        let DecidedDocumentation {
+            decision,
+            site,
+            anchor,
+            replaced,
+        } = *entry;
+
+        match fs::read_to_string(root.join(decision)) {
+            Ok(text) => {
+                let text = normalised(&text);
+                if !text.contains(&normalised(anchor)) {
+                    problems.push(format!(
+                        "{decision} — DECIDED_DOCUMENTATION quotes `{anchor}`, which this \
+                         decision does not say; the pin wrote its own wording"
+                    ));
+                }
+                if let Some(replaced) = replaced
+                    && text.contains(&normalised(replaced))
+                {
+                    problems.push(format!(
+                        "{decision} — DECIDED_DOCUMENTATION calls `{replaced}` replaced, and \
+                         this decision still says it"
+                    ));
+                }
+            }
+            Err(err) => problems.push(format!(
+                "{decision} — reading the decision DECIDED_DOCUMENTATION pins failed ({err}); \
+                 the path moved"
+            )),
+        }
+
+        match fs::read_to_string(root.join(site)) {
+            Ok(text) => {
+                let text = normalised(&text);
+                if !text.contains(&normalised(anchor)) {
+                    problems.push(format!(
+                        "{site} — DECIDED_DOCUMENTATION: `{decision}` decided `{anchor}`, and \
+                         this file does not say it"
+                    ));
+                }
+                if let Some(replaced) = replaced
+                    && text.contains(&normalised(replaced))
+                {
+                    problems.push(format!(
+                        "{site} — DECIDED_DOCUMENTATION: `{decision}` replaced `{replaced}`, \
+                         and this file still says it"
+                    ));
+                }
+            }
+            Err(err) => problems.push(format!(
+                "{site} — reading the site DECIDED_DOCUMENTATION pins for `{decision}` failed \
+                 ({err}); the path moved"
+            )),
+        }
+    }
+}
+
 /// Doc-comment text with its markers stripped and its whitespace collapsed.
 ///
 /// Applied to **both** sides of every anchor match, which is what lets an anchor
@@ -1828,6 +2004,7 @@ fn check(root: &Path) -> Result<()> {
     // Once because the set is shared by every check below that needs it.
     let clauses = Clauses::new(clause_ids(root)?);
     guard_pin(FROZEN_DOC_MUSTS)?;
+    guard_decided(DECIDED_DOCUMENTATION)?;
     let spec = fs::read_to_string(root.join(SPECIFICATION))
         .with_context(|| format!("reading {SPECIFICATION}"))?;
 
@@ -1838,6 +2015,7 @@ fn check(root: &Path) -> Result<()> {
         fs::read_to_string(root.join(HARNESS)).with_context(|| format!("reading {HARNESS}"))?;
     let mut problems = problems(&pages, &harness, &clauses);
     check_pin(root, FROZEN_DOC_MUSTS, &clauses, &spec, &mut problems);
+    check_decided(root, DECIDED_DOCUMENTATION, &mut problems);
 
     if problems.is_empty() {
         println!("{}", summary(&pages));
@@ -4285,6 +4463,94 @@ One writer at a time.
                 );
             }
         }
+    }
+
+    // ---- T1: an accepted decision's execution in a doc comment -------------
+
+    /// The pin's own entries, against the real checkout.
+    ///
+    /// The only decided-documentation assertion that touches the tree, and the
+    /// one the finding is about: `EventStore::read`'s doc comment must carry
+    /// what ADR-0011 decided and must no longer carry the laziness promise that
+    /// decision replaced. It is the crate's *published* surface — the sentence a
+    /// third-party adapter author reads before writing `poll_next` — so a
+    /// failure here is a stranger being told something the reference adapter in
+    /// the same crate does not do.
+    #[test]
+    fn store_rs_carries_adr_0011s_ceiling_and_not_the_laziness_it_replaced() {
+        let root: PathBuf = workspace_root().unwrap();
+        let mut found = Vec::new();
+
+        check_decided(&root, DECIDED_DOCUMENTATION, &mut found);
+
+        assert!(found.is_empty(), "{found:#?}");
+    }
+
+    /// Both directions, over real files, so neither can rot into decoration.
+    ///
+    /// The anchor half uses a phrase neither the decision nor `store.rs` has
+    /// ever carried; the replaced half pairs an anchor both files carry with a
+    /// "replaced" phrase only `store.rs` carries, so it isolates the surviving
+    /// wording and reports exactly one problem. Both halves are chosen to hold
+    /// on either side of the fix, so neither can be made to pass by editing the
+    /// doc comment the pin above is about.
+    #[test]
+    fn a_missing_decided_phrase_and_a_surviving_replaced_one_are_two_problems() {
+        let root: PathBuf = workspace_root().unwrap();
+        let decision = ".kb/decisions/0011-read-laziness-and-isolation.md";
+        let site = "crates/happenstance-core/src/store.rs";
+
+        let mut absent = Vec::new();
+        check_decided(
+            &root,
+            &[DecidedDocumentation {
+                decision,
+                site,
+                anchor: "a sentence neither the decision nor store.rs has carried",
+                replaced: None,
+            }],
+            &mut absent,
+        );
+        assert_eq!(absent.len(), 2, "{absent:#?}");
+        assert!(absent[0].starts_with(decision), "{absent:#?}");
+        assert!(absent[1].starts_with(site), "{absent:#?}");
+
+        let mut survived = Vec::new();
+        check_decided(
+            &root,
+            &[DecidedDocumentation {
+                decision,
+                site,
+                anchor: "ReadOptions",
+                replaced: Some("Reads the events matching `query`"),
+            }],
+            &mut survived,
+        );
+        assert_eq!(survived.len(), 1, "{survived:#?}");
+        assert!(survived[0].contains("still says it"), "{survived:#?}");
+    }
+
+    #[test]
+    fn a_decided_pin_that_cannot_fail_is_refused_before_any_check_runs() {
+        guard_decided(&[]).expect_err("an empty pin makes every check over it vacuous");
+
+        guard_decided(&[DecidedDocumentation {
+            decision: ".kb/decisions/0011-read-laziness-and-isolation.md",
+            site: "crates/happenstance-core/src/store.rs",
+            anchor: "   ",
+            replaced: None,
+        }])
+        .expect_err("a blank anchor is contained by every text there is");
+
+        guard_decided(&[DecidedDocumentation {
+            decision: ".kb/decisions/0011-read-laziness-and-isolation.md",
+            site: "crates/happenstance-core/src/store.rs",
+            anchor: "bound every later statement by it",
+            replaced: Some("bound every later statement by it"),
+        }])
+        .expect_err("a site cannot both say and not say one sentence");
+
+        guard_decided(DECIDED_DOCUMENTATION).expect("the shipping pin must pass its own guard");
     }
 
     // ======================================================================

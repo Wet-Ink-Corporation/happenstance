@@ -150,14 +150,14 @@ pub trait EventStore {
 
     /// Reads the events matching `query`, in the order `options` asks for.
     ///
-    /// The returned stream is **lazy**: nothing is executed until it is first
-    /// polled, and failures surface as `Err` items rather than up front. That
-    /// is what lets an adapter stream a million-event replay without buffering
-    /// it, and it is why this method is not `async` — putting the stream at the
-    /// top level of the return type is what allows [`SendEventStore`] to mark
-    /// the *stream* `Send`, not merely the future that produces it.
-    ///
-    /// Use [`collect`] when a `Vec` is genuinely what you want.
+    /// Evaluated against one state **sampled no later than the first poll**; laziness
+    /// is permitted, never required. An adapter issuing more than one statement per
+    /// `read` must capture a position ceiling no later than that poll and bound every
+    /// later statement by it. Failures surface as `Err` items rather than up front.
+    /// This method is not `async` because putting the stream at the top level of the
+    /// return type is what allows [`SendEventStore`] to mark the *stream* `Send`, not
+    /// merely the future that produces it, and it is what lets an adapter stream a
+    /// million-event replay without buffering it. Use [`collect`] for a `Vec`.
     ///
     /// # Ordering
     ///
