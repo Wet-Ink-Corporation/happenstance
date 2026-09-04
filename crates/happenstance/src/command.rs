@@ -25,12 +25,13 @@ use crate::domain::DomainEvent;
 /// `NonZeroU32` rather than `u32`, because `attempts(0)` has no honest meaning.
 ///
 /// ```
+/// use core::num::NonZeroU32;
 /// use happenstance::Retry;
 ///
-/// let bounded = Retry::attempts(3.try_into()?);  // at most three
-/// let no_retry = Retry::once();                  // submit once
+/// // At most three attempts, or exactly one.
+/// let bounded = Retry::attempts(NonZeroU32::new(3).unwrap());
+/// let no_retry = Retry::once();
 /// # let _ = (bounded, no_retry);
-/// # Ok::<(), core::num::TryFromIntError>(())
 /// ```
 ///
 /// The unbounded spelling does not compile, which is the point:
@@ -377,6 +378,7 @@ fn violation<E>(err: AppendError<E>) -> ConditionViolated {
 #[cfg(test)]
 mod tests {
     use core::convert::Infallible;
+    use core::num::NonZeroU32;
 
     use happenstance_core::bytes::Bytes;
     use happenstance_core::{EventType, MemoryEventStore, SequencePosition, Tags};
@@ -545,10 +547,7 @@ mod tests {
     #[test]
     fn once_is_one_attempt_and_attempts_is_what_it_says() {
         assert_eq!(Retry::once().limit(), 1);
-        assert_eq!(
-            Retry::attempts(7.try_into().expect("7 is not zero")).limit(),
-            7
-        );
+        assert_eq!(Retry::attempts(NonZeroU32::new(7).unwrap()).limit(), 7);
     }
 
     /// No call site converts a literal at run time when const would do.
