@@ -158,9 +158,9 @@ false, and the decision that wrote it is the reason.
 
 Let-chains are now used in the library source of **three published crates**:
 `crates/happenstance-core/src/projection_memory.rs:329`;
-`crates/happenstance-sqlite/src/event_store.rs:516`, `:668` and
+`crates/happenstance-sqlite/src/event_store.rs:559`, `:719` and
 `src/projection_store.rs:835`; `crates/happenstance-cloudflare/src/js.rs:237` and
-`src/event_store.rs:833`, `:901`. (`happenstance` and `happenstance-testkit`
+`src/event_store.rs:901`, `:901`. (`happenstance` and `happenstance-testkit`
 have none in `src/`; they inherit the floor through `happenstance-core`.)
 
 ### 4. The measured floor of every crate, bisected

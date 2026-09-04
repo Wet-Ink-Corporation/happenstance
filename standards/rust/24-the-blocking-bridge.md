@@ -65,7 +65,7 @@ author has no test for, because a rule that only ever calls `read` from inside a
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:14 (tokio::task::spawn_blocking)` ·
 `crates/happenstance-sqlite/src/event_store.rs:24 (Laziness stops being a nicety)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1007 (Nothing is executed here on purpose)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1075 (Nothing is executed here on purpose)` ·
 [ES-2](../../spec/SPECIFICATION.md) ·
 [ES-11](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
@@ -130,8 +130,8 @@ variant of `Self::Error` to match on, so the retry path the port's error model
 exists for is unreachable.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:30 (turns that from a panic into an)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1529 (Handle::try_current())` ·
-`crates/happenstance-sqlite/src/event_store.rs:928 (no tokio runtime is available)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1606 (Handle::try_current())` ·
+`crates/happenstance-sqlite/src/event_store.rs:996 (no tokio runtime is available)` ·
 `crates/happenstance-testkit/src/registry.rs:318 (deliberately not bounded on)` ·
 [CF-23](../../spec/SPECIFICATION.md)
 
@@ -242,7 +242,7 @@ instead, which passes the entire conformance suite and quietly removes the
 adapter from every consumer that spawns, which is the one thing the two-flavour
 split exists to keep available.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1179 (boundary would)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1534 (runtime.spawn_blocking(move ||)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1247 (boundary would)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1611 (runtime.spawn_blocking(move ||)` ·
 [ES-2](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)

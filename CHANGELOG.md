@@ -32,6 +32,21 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sqlite` publishes its second query ceiling:
+  `SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`.** SQLite pushes back in
+  two units and the crate declared one of them. `MAX_QUERY_ARMS_PER_STATEMENT`
+  bounds the arms of a `UNION` against `SQLITE_MAX_COMPOUND_SELECT`; this bounds
+  the bound parameters of one statement against `SQLITE_MAX_VARIABLE_NUMBER`,
+  which the translation spends one per tag and one per type of every item in a
+  chunk. The two axes move independently: 400 items of a single tag each is 400
+  arms and 400 parameters, and the same 400 items at `MAX_TAGS_PER_EVENT` tags
+  apiece is still 400 arms and **51,200** parameters against a limit of 32,766.
+
+  It is public for the reason the arm width is public — a test that has to guess
+  the boundary is a test that stops crossing it — and its value is `30_000`, the
+  same `PARAMETER_BUDGET` the multi-row tag insert has chunked to since the write
+  path was written. Additive, and free only until `0.2.0` turns it into a
+  promise.
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
@@ -451,6 +466,20 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`SqliteEventStore::planned_statement_count` counts the real partition, so
+  the number it returns for a query of wide items has changed.** The signature is
+  untouched and the count is unchanged for every query whose items are narrow —
+  which is every query any test in this workspace had built. For a query of 400
+  items carrying 128 tags each it used to return `1`, and that one statement
+  could not be prepared. It now returns the number of statements that will
+  actually run.
+
+  Anyone who had pinned the old number for a wide-tag query was pinning a plan
+  the driver refuses. Whether this function continues to mean *"arms"* or is
+  understood from here as *"the partition"*, and whether
+  `MAX_QUERY_ARMS_PER_STATEMENT` stays public now that it is no longer the whole
+  partition, are public-surface decisions deliberately not settled here; a brief
+  for both is staged in `.kb/_intake/`.
 - **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` gained a
   `to` field, and the model can now disagree about an upper bound.** The variant
   was documented as carrying *"every read option in play"* and carried four of
@@ -487,6 +516,36 @@ not the same as what a user needed to be told.
   four options are sampled dilutes every combination of them, and the first
   version of the change lost `LimitPerItemStore` — a defect the model had
   rejected for three phases. `MODEL_COVERAGE` is what noticed.
+
+### Fixed
+
+- **`happenstance-sqlite` no longer fails past `SQLITE_MAX_VARIABLE_NUMBER` on a
+  wide query — on either path, and the append path is the one that held the write
+  lock.** `query_sql::chunks` partitioned on item count alone, so a query of 400
+  items — the crate's own chunk width, exactly — carrying `MAX_TAGS_PER_EVENT`
+  tags apiece was planned as one statement binding 51,200 of SQLite's 32,766
+  parameters. `Selectivity::read_for` was not partitioned at all: it accumulates
+  every distinct tag of every multi-tag item across the *whole* query into one
+  `IN (…)`, so 16,384 ordinary two-tag items reached the same wall with no wide
+  item anywhere, and it reached it *first*, because it runs before the chunking
+  on both callers.
+
+  Both shapes are ones a conformant caller may construct — nothing in
+  `happenstance-core`'s `Query` bounds tags per item, and 128 is this store's own
+  `MAX_TAGS_PER_EVENT` — and both arrived as `AppendError::Store` wrapping
+  SQLite's *"too many SQL variables"*. On the append path that is inside
+  `BEGIN IMMEDIATE`, with the write lock held and the caller's decision already
+  taken, which is the timing VT-24 rejects by name; VT-23's `Rejects:` line names
+  the implementation itself, *"an adapter that generates one SQL parameter per
+  item and silently fails past a driver limit"*.
+
+  Both sites now partition on both of SQLite's pushdown limits, at the one entry
+  point the module already had. Nothing is refused that was served before: a
+  wider query becomes more statements, merged exactly as the arm partition's
+  already are. `crates/happenstance-sqlite/tests/wide_tags.rs` is the standing
+  guard — the conformance suite cannot reach either wall, because its floor is
+  128 items at one tag each — and it asserts the partition one parameter under
+  the budget, exactly at it, and one over.
 
 ## [0.2.0-alpha.1] — 2026-08-16
 

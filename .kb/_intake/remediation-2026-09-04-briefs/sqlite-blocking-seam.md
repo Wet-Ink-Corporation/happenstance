@@ -16,7 +16,7 @@ is the defect.** `crates/happenstance-sqlite/src/projection_store.rs:97-98`:
 
 The event store did not apply it. Three of `SendEventStore`'s four methods take a
 blocking `std::sync::Mutex` and run `rusqlite` inline, on whatever thread polled
-them (`event_store.rs:1039-1042`, `:1070-1073`, `:1091-1094`).
+them (`event_store.rs:1107-1110`, `:1138-1141`, `:1159-1162`).
 
 **It is measured, with a control.** `experiments/one-connection-latency/results/raw/reactor-stall.txt`,
 one `current_thread` runtime, a 1 ms `tokio::time::interval`, a second connection
@@ -88,7 +88,7 @@ the record rather than discovered by a test.
 
 ### The write path runs inline — by omission, not by decision
 
-`append` (`event_store.rs:1018-1053`) contains no `.await` anywhere:
+`append` (`event_store.rs:1086-1121`) contains no `.await` anywhere:
 
 ```rust
 let recorded_at = now();
@@ -108,8 +108,8 @@ Self::append_locked(
 )
 ```
 
-`head` (`:1069-1078`) and `contains_event_id` (`:1090-1106`) are the same shape.
-`settings` (`:406-412`) takes the seventh lock but is a synchronous `pub fn`, so
+`head` (`:1137-1146`) and `contains_event_id` (`:1158-1174`) are the same shape.
+`settings` (`:449-455`) takes the seventh lock but is a synchronous `pub fn`, so
 a caller already knows it blocks.
 
 **Read `references/adr/0022-append-condition-strategy.md:387-425` before calling
@@ -160,7 +160,7 @@ forced consequence (`event_store.rs:24-28`):
 
 But ES-11 requires the ceiling to be fixed *no later than the first poll*, so
 `sample_ceiling` takes the mutex on the polling thread, before the hop
-(`:1239-1246`):
+(`:1307-1314`):
 
 ```rust
 fn sample_ceiling(&mut self) -> Result<(), SqliteEventStoreError> {
@@ -214,7 +214,7 @@ signature, not in the seam.** The projection store's seam is cheap because
 moves it into the closure and the only clone in it is `let id = id.clone();`
 (`projection_store.rs:605-609`). `SendEventStore::append` takes
 `events: &[Event]` and `condition: Option<&AppendCondition>`
-(`event_store.rs:1018-1022`). `spawn_blocking` demands `'static`, so the seam has
+(`event_store.rs:1086-1090`). `spawn_blocking` demands `'static`, so the seam has
 to buy ownership the port declined to give it. The two modules are not the same
 problem wearing two hats; one was handed ownership and one was not.
 
@@ -245,7 +245,7 @@ append — one event, a handful of owned tags — is 5 to 10 allocations.
 
 ### The captured `Handle` has one door in and no door out
 
-`event_store.rs:326-332`:
+`event_store.rs:369-375`:
 
 ```rust
 fn with_store_id(connection: Connection, store_id: StoreId) -> Self {
@@ -259,7 +259,7 @@ fn with_store_id(connection: Connection, store_id: StoreId) -> Self {
 
 `projection_store.rs:216-222` is identical. `poll_next:1469-1475` and
 `projection_store.rs:330-335` both prefer the captured handle and consult
-`Handle::try_current()` only when it is `None`. `new` and `open` (`:316`, `:357`)
+`Handle::try_current()` only when it is `None`. `new` and `open` (`:359`, `:400`)
 are the only constructors and neither takes a handle; there is no setter, no
 builder, and the struct's three fields (`:159-188`) hold no path either.
 
@@ -468,7 +468,7 @@ isolation from it.
 runtime and served from another `append`s and `head`s perfectly (they run inline)
 and every `read` hangs or yields one `Worker` item and terminates, while
 `NoRuntime` — the variant documented for exactly this — is unreachable
-(`event_store.rs:876-882`). In `projection_store.rs` the same capture gates
+(`event_store.rs:944-950`). In `projection_store.rs` the same capture gates
 *every write*: a checkpoint that never advances, reported as `Worker(JoinError)`,
 which a projection runner reads as transient and retries forever. *Costs an
 adapter author:* nothing. *Semver:* none. *Forecloses:* nothing today; after
@@ -612,7 +612,7 @@ predicts, H2 is a constructor solving nothing.
 * R2 does not remove the wait, only reschedules it, and it needs a waker
   registration `SqliteReadStream` does not have — so its cost is a rewrite of a
   state machine whose current shape is defended by two named failing tests
-  (`event_store.rs:1229-1233`).
+  (`event_store.rs:1297-1301`).
 * R3 is entangled with a decision this record does not own. It needs the store to
   carry its path — which is the same missing field the J-3+J-4 `Clone`/`connect()`
   question needs, and that question has a different owner, a different semver

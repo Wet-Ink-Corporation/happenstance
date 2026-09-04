@@ -2688,7 +2688,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 twelve real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode failures
-(`crates/happenstance-sqlite/src/event_store.rs:857-950`), and
+(`crates/happenstance-sqlite/src/event_store.rs:972-1065`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2996,7 +2996,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:973` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:1298` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site: the store captures a `tokio::runtime::Handle` at construction
 and falls back to `Handle::try_current`, so the lazy spawn has a runtime to hop
@@ -4029,7 +4029,7 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:952`,
+`crates/happenstance-sqlite/src/event_store.rs:1067`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
 `crates/happenstance-cloudflare/src/event_store.rs:146` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl

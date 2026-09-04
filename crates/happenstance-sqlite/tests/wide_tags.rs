@@ -281,6 +281,91 @@ async fn a_read_whose_distinct_tags_exceed_the_variable_limit_is_served() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The partition boundary itself — one parameter under, exactly at, one over
+// ---------------------------------------------------------------------------
+
+/// A query of `items` items whose tag counts are `widths`, item *i* carrying
+/// `widths[i]` distinct tags.
+///
+/// Every tag is unique to its item and its position, so the parameter cost of
+/// the query is exactly `widths.iter().sum()` and the arm count is
+/// `widths.len()`.
+fn query_of_widths(widths: &[usize]) -> Query {
+    Query::from_items(widths.iter().enumerate().map(|(item, width)| {
+        let pairs: Vec<(String, String)> = (0..*width)
+            .map(|tag| (format!("k{item}"), format!("v{tag}")))
+            .collect();
+        QueryItem::tagged(tags_from(&pairs)).unwrap()
+    }))
+    .unwrap()
+}
+
+/// Off-by-one at a partition boundary is the defect this class of fix
+/// reintroduces, so the boundary is asserted from below, on it, and above it.
+///
+/// The arm axis is deliberately held slack — every case is
+/// `MAX_QUERY_ARMS_PER_STATEMENT` items, never more — so that what moves the
+/// answer is the parameter count and nothing else. A ceiling is a promise about
+/// the statement that *is* issued: at exactly the budget the plan is one
+/// statement, and one parameter over it is two.
+#[test]
+fn the_parameter_partition_splits_one_parameter_over_the_budget_and_not_before() {
+    let arms = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+    let budget = SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
+    // A flat width plus a remainder on the last item, so the total is exact.
+    let flat = budget / arms;
+    let mut widths = vec![flat; arms];
+    widths[arms - 1] += budget - flat * arms;
+    assert_eq!(widths.iter().sum::<usize>(), budget);
+
+    let at = query_of_widths(&widths);
+    assert_eq!(
+        SqliteEventStore::planned_statement_count(&at),
+        1,
+        "a plan of exactly {budget} parameters is one statement: the budget is \
+         the largest a statement may carry, not the smallest it may not"
+    );
+
+    let mut under = widths.clone();
+    under[0] -= 1;
+    assert_eq!(
+        SqliteEventStore::planned_statement_count(&query_of_widths(&under)),
+        1,
+        "one parameter under the budget is still one statement"
+    );
+
+    let mut over = widths.clone();
+    over[0] += 1;
+    assert_eq!(
+        SqliteEventStore::planned_statement_count(&query_of_widths(&over)),
+        2,
+        "one parameter over the budget is two statements, and exactly two: a \
+         partition that restarted its parameter count without restarting its \
+         chunk would report more"
+    );
+}
+
+/// The arm axis still binds where it is the tighter of the two.
+///
+/// The regression this rejects is a partition that replaced one limit with the
+/// other rather than taking both: at one tag per item, 900 items is 900
+/// parameters — nowhere near the budget — and must still be three statements.
+#[test]
+fn the_arm_partition_still_binds_on_narrow_items() {
+    let arms = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+    let items = arms * 2 + 100;
+    let query = query_of_widths(&vec![1; items]);
+    assert!(
+        items < SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        "the fixture must sit below the parameter budget or it proves nothing"
+    );
+    assert_eq!(
+        SqliteEventStore::planned_statement_count(&query),
+        items.div_ceil(arms)
+    );
+}
+
 /// And on the append path, inside the write transaction.
 #[tokio::test]
 async fn a_guard_whose_distinct_tags_exceed_the_variable_limit_is_not_refused() {

@@ -162,7 +162,7 @@ And the successor is already fixed (`:266`): *"If that fires, the successor is `
 
 #### The borrow-binding shape: `happenstance-sqlite`
 
-`crates/happenstance-sqlite/src/event_store.rs:690-711` — `write_batch`, the multi-row insert the falsifier names:
+`crates/happenstance-sqlite/src/event_store.rs:758-779` — `write_batch`, the multi-row insert the falsifier names:
 
 ```rust
 fn write_batch(
@@ -208,7 +208,7 @@ The reference store, still disqualified by that same passage — `crates/happens
 
 #### The owning shape, which ADR-0012's census predates: `happenstance-cloudflare`
 
-`crates/happenstance-cloudflare/src/event_store.rs:559-580` — `write_rows`, one `INSERT … RETURNING position` per event:
+`crates/happenstance-cloudflare/src/event_store.rs:602-631` — `write_rows`, one `INSERT … RETURNING position` per event:
 
 ```rust
         for event in events {
@@ -360,7 +360,7 @@ So `EventStore::append`'s `&[Event]` (`crates/happenstance-core/src/store.rs:261
 **Semver class:** `none` today; defers the class to whenever the measurement reports.
 **Forecloses:** nothing. It buys the option and pays for the instrument.
 
-**What the evidence says about its expected outcome:** it depends entirely on which adapter is measured, which is what item 4 exists to force. Against **SQLite** the adapter-side delta is expected to be a null, and that is readable off `event_store.rs:702-711` without running anything: it binds every column from the borrow. Against **`happenstance-cloudflare`** it is not a null by inspection either way — `write_rows` copies payload, metadata and type into owned `SqlValue`s per event, so by-value could move them, and the size of that against a `sql.exec` round trip is unknown. Scheduling this option against SQLite would produce the null; scheduling it against Cloudflare is a real question. **The saving on that axis scales with payload size, not tag count**, so it is a different quantity from the 66x clone finding rather than a larger version of it.
+**What the evidence says about its expected outcome:** it depends entirely on which adapter is measured, which is what item 4 exists to force. Against **SQLite** the adapter-side delta is expected to be a null, and that is readable off `event_store.rs:770-779` without running anything: it binds every column from the borrow. Against **`happenstance-cloudflare`** it is not a null by inspection either way — `write_rows` copies payload, metadata and type into owned `SqlValue`s per event, so by-value could move them, and the size of that against a `sql.exec` round trip is unknown. Scheduling this option against SQLite would produce the null; scheduling it against Cloudflare is a real question. **The saving on that axis scales with payload size, not tag count**, so it is a different quantity from the 66x clone finding rather than a larger version of it.
 
 ### Option B — Keep `&[Event]`; correct the four documentation sites; restate ES-17's falsifier so it names an instrument that could exist; leave the marker where the human puts it
 
@@ -500,7 +500,7 @@ ADR-0012 disqualifies by name."*
 **Verified in the tree:** `crates/happenstance-cloudflare/src/` contains no `todo!()`;
 `crates/happenstance-cloudflare/tests/durable_object_conformance.rs:64` invokes
 `event_store_conformance!`; `Cargo.toml:22` records that `publish = false` is gone; and
-`write_rows` (`src/event_store.rs:559-580`) builds `SqlValue::Text(… .to_owned())`,
+`write_rows` (`src/event_store.rs:602-631`) builds `SqlValue::Text(… .to_owned())`,
 `SqlValue::Blob(event.data().to_vec())` and `SqlValue::Blob(metadata.to_vec())` **per event**,
 because the worker layer marshals into JS and cannot bind a borrow. ADR-0012's two-shape census
 was written at phase 4 and this adapter got real bodies at phase 9; the first draft repeated the
