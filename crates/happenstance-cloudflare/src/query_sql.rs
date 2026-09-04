@@ -142,3 +142,145 @@ pub(crate) fn placeholders(n: usize) -> String {
     }
     out
 }
+
+/// The host half, reachable by a plain `cargo test -p happenstance-cloudflare`
+/// with no wasm toolchain installed — the pattern `event_store.rs`'s
+/// `source_chain_tests` and `lib.rs`'s own `mod tests` already use.
+///
+/// **Why the pushdown walls are tested here rather than under the runner.**
+/// The translation below is pure Rust: it takes a [`Query`] and returns a
+/// string and a binding list, and it reaches no Durable Object, no JavaScript
+/// heap and no `SqlStorage`. So the property these cases assert — *how many
+/// arms and how many bound parameters does one statement of the plan carry* —
+/// is fully observable on the host, and the wasm runner would add a JS boundary
+/// to a question that has nothing to do with one.
+///
+/// What that costs, stated rather than left implicit: these cases do **not**
+/// execute the statement, so they do not watch `prepare` refuse it. They assert
+/// against SQLite's own documented walls — `SQLITE_MAX_COMPOUND_SELECT`'s 500
+/// terms and `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 bound parameters — which are
+/// facts about the driver rather than about this adapter's chosen widths, and
+/// which the sibling adapter's `tests/wide_tags.rs` has separately watched a
+/// real SQLite enforce. Executing them here would need a
+/// `#[wasm_bindgen_test]` case, and every wasm harness this crate runs is
+/// enumerated by hand in `xtask/src/proof.rs`.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use happenstance_core::{Query, QueryItem, Tags};
+
+    use super::*;
+
+    /// `SQLITE_MAX_COMPOUND_SELECT`, the default this runtime's SQLite is built
+    /// with: how many terms one compound `SELECT` may carry.
+    const COMPOUND_SELECT_TERMS: usize = 500;
+
+    /// `SQLITE_MAX_VARIABLE_NUMBER`, likewise: bound parameters per statement.
+    const BOUND_PARAMETERS: usize = 32_766;
+
+    /// The plan for `query`, as the shipped translation produces it.
+    ///
+    /// One statement today, because nothing partitions. This is the only line
+    /// the change under test moves; every assertion below is stated against the
+    /// plan rather than against the spelling that produced it.
+    fn plan(query: &Query) -> Vec<(String, Vec<SqlValue>)> {
+        let mut bindings = Vec::new();
+        let sql = positions_matching(query, &mut bindings);
+        vec![(sql, bindings)]
+    }
+
+    /// Arms in one statement: a `UNION` of *n* arms is *n* compound terms.
+    fn arms_in(sql: &str) -> usize {
+        sql.matches(" UNION ").count() + 1
+    }
+
+    /// A query of `items` items, each carrying `tags` tags unique to it.
+    fn query_of(items: usize, tags: usize) -> Query {
+        Query::from_items((0..items).map(|item| {
+            let pairs: Vec<(String, String)> = (0..tags)
+                .map(|tag| (format!("k{item}"), format!("v{tag}")))
+                .collect();
+            QueryItem::tagged(
+                Tags::from_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                    .expect("the fixture's tags are well formed"),
+            )
+            .expect("an item carrying tags is constructible")
+        }))
+        .expect("a non-empty item list is a query")
+    }
+
+    /// The arm axis. `arms` joins with `" UNION "` and nothing bounds the join.
+    ///
+    /// A `Query` bounds nothing by design and VT-23 requires every store to
+    /// evaluate at least 128 items with no ceiling above that, so a decision
+    /// model wider than SQLite's compound-`SELECT` limit is one a conformant
+    /// caller may build — and the sibling adapter chunks at 400 precisely
+    /// because it is.
+    #[test]
+    fn no_statement_of_the_plan_exceeds_the_compound_select_ceiling() {
+        let query = query_of(COMPOUND_SELECT_TERMS * 2, 1);
+        for (sql, _) in plan(&query) {
+            assert!(
+                arms_in(&sql) <= COMPOUND_SELECT_TERMS,
+                "one statement carries {} compound terms against SQLite's limit \
+                 of {COMPOUND_SELECT_TERMS}; a wide query must be chunked and \
+                 merged, never refused at the pushdown limit",
+                arms_in(&sql)
+            );
+        }
+    }
+
+    /// The parameter axis, which is independent of the arm one.
+    ///
+    /// `item_sql` binds one parameter per tag and one per type, so 400 items —
+    /// comfortably inside any plausible arm width — carrying this store's own
+    /// declared `tags_per_event` apiece is 409,600 bound parameters. Nothing in
+    /// `happenstance-core`'s `query.rs` bounds tags per query item, and the
+    /// number a caller reads off this adapter's own front page is 1,024.
+    #[test]
+    fn no_statement_of_the_plan_exceeds_the_bound_parameter_ceiling() {
+        let wide = crate::event_store::Ceilings::DECLARED.tags_per_event;
+        let query = query_of(400, wide);
+        for (_, bindings) in plan(&query) {
+            assert!(
+                bindings.len() <= BOUND_PARAMETERS,
+                "one statement binds {} parameters against SQLite's limit of \
+                 {BOUND_PARAMETERS}; the arm count says nothing about the \
+                 parameter count, and a partition on one is not a partition on \
+                 the other",
+                bindings.len()
+            );
+        }
+    }
+
+    /// And the caller has to be able to find out before deploying.
+    ///
+    /// This is the half of the finding that is not a clause violation: VT-23
+    /// says *"a store or an ingest policy MAY refuse a larger one"* and imposes
+    /// no documentation obligation, unlike VT-21, VT-22 and VT-24. The defect is
+    /// that two adapters published under one contract at the same version have
+    /// materially different query capability and neither front page says so, so
+    /// an application developed against `happenstance-sqlite` — the pairing this
+    /// workspace's own local-first story recommends — finds out on deploy.
+    ///
+    /// A source scan, in the shape `tests/fixture_contract.rs`'s
+    /// `the_three_store_limits_are_stated_here` already uses: a ceiling that is
+    /// declared in code and absent from the page a reader lands on is a ceiling
+    /// nobody can discover.
+    #[test]
+    fn the_front_page_declares_the_query_ceilings() {
+        const FRONT_PAGE: &str = include_str!("lib.rs");
+
+        for name in [
+            "MAX_QUERY_ARMS_PER_STATEMENT",
+            "MAX_QUERY_PARAMETERS_PER_STATEMENT",
+        ] {
+            assert!(
+                FRONT_PAGE.contains(name),
+                "`{name}` is not named on the crate's front page. The three \
+                 refusal ceilings are documented there and the two query \
+                 ceilings are not, so a caller sizing a decision model against \
+                 this adapter has nothing to read."
+            );
+        }
+    }
+}
