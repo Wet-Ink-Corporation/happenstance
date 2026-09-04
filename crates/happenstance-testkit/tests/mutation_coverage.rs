@@ -719,6 +719,11 @@ const REGISTRY: &[Declared] = &[
             // `read_limit_truncates` already owns: L1-1's rule is about a budget
             // that is never spent, not about one spent a row late.
             "read_from_composes_with_limit",
+            // And off by one inside a window, for the same reason once more: a
+            // budget spent a row late is spent a row late under every bound.
+            // What that rule owns alone is the budget dropped entirely because
+            // a bound was present.
+            "read_to_composes_with_limit",
         ],
         provenance: "ubiquitous: every cursor-paging implementation fetches `LIMIT n + 1` to \
              answer \"is there more\", and most of them trim. This one forgot, \
@@ -818,12 +823,19 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "WindowedPagingBudgetStore",
         kind: Kind::Mutant,
-        // Empty, and the emptiness is what this commit is for: the suite composes
-        // `to` with `limit` at no call site, so nothing sees this store.
-        fails: &[],
+        // One entry, and one is the whole claim. This store passed all
+        // ninety-two rules that preceded `read_to_composes_with_limit`,
+        // measured with an empty list rather than argued: the bound's own rules
+        // issue no budget, the budget's own rules issue no bound, and a budget
+        // smaller than the window is the one arrangement in which neither can
+        // stand in for the other.
+        fails: &["read_to_composes_with_limit"],
         provenance: "`ForwardPagingBudgetStore`'s defect one read option over. A closed window is              a different statement from a page — `BETWEEN ? AND ?` rather than `LIMIT ?`              — and the budget was threaded into the one that had a paging clause              already. The argument that writes it is that the window is the bound that              matters and the budget is redundant, which is true exactly when the budget              is larger than the window and false on every call a backfill worker makes              but its last. It hands back the whole window to a caller who asked for a              page, with no error anywhere.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        expect: &[(
+            "read_to_composes_with_limit",
+            "the smaller of them is what the caller gets",
+        )],
     },
     Declared {
         name: "LimitBeforeFilterStore",

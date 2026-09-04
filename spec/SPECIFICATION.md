@@ -1763,7 +1763,7 @@ why the name was left here rather than dropped until it could be written.
 builder stores `Some(0)` verbatim (`query.rs:343-347`),
 `zero_limit_means_zero_events` (`query.rs:523-536`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
-(`crates/happenstance-testkit/src/suite.rs:1507`) and in
+(`crates/happenstance-testkit/src/suite.rs:1512`) and in
 `for_each_event_store_rule!`
 (`crates/happenstance-testkit/src/registry.rs:138`).
 
@@ -3193,6 +3193,20 @@ not *n* per query item and not an arbitrary *n*.
   from a conformant one. The caller that composition serves is the one this
   clause and VT-28 are both written about: a paging loop resuming from its
   checkpoint.
+  `read_to_composes_with_limit` is the seventh, and it is the budget beside an
+  **upper bound** — ES-16's window and this clause's budget on one read, with the
+  budget the smaller of the two. It was argued to be unnecessary and the argument
+  was half right: `to` and `limit` both cut the back of the read and commute
+  exactly, so a store that applies them in the wrong order answers every read
+  correctly. Commuting is a statement about *order*, and the defect that arrives
+  here is about *applicability*: `WindowedPagingBudgetStore` answers a closed
+  window with its own statement — `BETWEEN ? AND ?` rather than `LIMIT ?` — and
+  the budget was threaded into the paged statement alone, on the argument that a
+  window makes a budget redundant. It is redundant only while the budget is the
+  larger of the two, which is the case an author checks by hand and the opposite
+  of the one a backfill worker is in on every call but its last. That store
+  passed all ninety-two rules that preceded this one, measured with an empty
+  `fails` list rather than argued.
 - **Cases:** E2E-12, E2E-13.
 - **Rejects:** an adapter implementing a multi-item query as one statement per
   item with `LIMIT n` on each — the same shape ES-12 rejects, failing here for an
@@ -3359,6 +3373,13 @@ optional dependency and `cfg(not(target_arch = "wasm32"))`, so the two adapters
 in this workspace that will build their `WHERE` clause by concatenation and run
 on that target, `happenstance-cloudflare` and `happenstance-neon`, ran nothing
 that could see it.
+
+A fifth rule exercises `to` and is **ES-14's** rather than this clause's:
+`read_to_composes_with_limit` puts a window and a row budget on one read, with
+the budget the smaller. What it rejects is a store that drops the budget because
+the window is present, which is a failure of the *budget* obligation met through
+this clause's field — so it is listed there, and named here so that a reader
+counting this clause's rules knows where the fifth went.
 
 ---
 
@@ -7472,7 +7493,7 @@ eight citations that look current and are not. §6.3 onward is written in the
 present tense, and where CF-15 – CF-21 have since changed what the measurement
 describes, the clause says so in place. Twenty-seven rules,
 enumerated then as now in exactly one place
-(`crates/happenstance-testkit/src/registry.rs:98-141`), and a store that ignores
+(`crates/happenstance-testkit/src/registry.rs:98-142`), and a store that ignores
 tags entirely when evaluating an
 append condition passes all of them; a store that assigns positions outside its
 transaction passes all of them; a store that returns `Ok` from `append` and loses

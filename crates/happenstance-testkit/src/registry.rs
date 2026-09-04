@@ -137,6 +137,7 @@ macro_rules! for_each_event_store_rule {
             read_to_composes_with_multi_item_query,
             read_limit_zero_yields_nothing,
             limit_applies_across_items_not_per_item,
+            read_to_composes_with_limit,
             read_from_a_gap_position,
 
             // --- Sequence positions ----------------------------------------

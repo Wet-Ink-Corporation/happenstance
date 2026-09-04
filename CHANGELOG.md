@@ -32,6 +32,50 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **A conformance rule for the one pair of read options the suite never put on
+  the same read — breaking in practice, so pin `happenstance-testkit` exactly
+  before taking it.** `happenstance-testkit` gains
+  **`read_to_composes_with_limit`**, the ninety-third event-store rule: a closed
+  window and a row budget together, with the **budget the smaller** of the two.
+
+  The defect it detects is a budget that never reaches the windowed statement,
+  because a closed window is a different statement from a page:
+
+  ```text
+  if let Some(to) = options.to {
+      self.read_window(options.from, to)   // <- limit never reaches here
+  } else {
+      self.read_paged(options.from, options.limit)
+  }
+  ```
+
+  The reasoning behind it is an argument rather than a slip: *the caller gave me
+  both ends of the window, so the window is the bound that matters and the row
+  budget is redundant.* It is redundant exactly while the budget is the larger of
+  the two — which is the case an author checks by hand — and it is the whole
+  point when the budget is smaller, which is the case a backfill worker is in on
+  every call but its last. VT-29 already states the converse of the same
+  confusion: `limit` cannot stand in for `to`. Neither stands in for the other.
+
+  `WindowedPagingBudgetStore` is that adapter, and it **passed all ninety-two
+  rules that preceded this one** — measured, by registering it with an empty
+  failure list and letting the meta-test drive every rule at it, not argued. The
+  bound's own three rules issue no budget; the budget's own rules issue no bound;
+  and with the budget smaller than the window even `ToBoundIgnoredStore` and
+  `ToIsExclusiveStore` answer this read correctly, because the budget masks the
+  bound. What a caller loses is the page it sized: it asked for five hundred
+  events of its window and got the window, with `Ok` everywhere.
+
+  **One argument this retires.** `read_from_composes_with_limit` landed with a
+  note saying no such rule was owed, because `to` and `limit` both cut the back
+  of a read and therefore commute. The commutation is real, and it has been
+  measured: the wrong implementation an adversarial review proposed for the pair
+  — the budget applied before the bound — answers every read exactly as the
+  reference implementation does, in both directions, and is deliberately **not**
+  registered. But commuting is a statement about the *order* two options are
+  applied in, and this defect is about *applicability*: it drops one option
+  because the other is present. The note is corrected in place rather than
+  deleted.
 - **A conformance rule that turns a model-only defect into an ordinary one —
   breaking in practice, so pin `happenstance-testkit` exactly before taking it.**
   `happenstance-testkit` gains **`read_to_composes_with_multi_item_query`**, the
@@ -69,9 +113,6 @@ not the same as what a user needed to be told.
 
   CF-12 closed this gap for `from` at phase 3; ES-16 is the clause that closes it
   for `to`, and its rule list names the new rule.
-
-### Added
-
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it

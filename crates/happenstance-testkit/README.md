@@ -1,7 +1,7 @@
 # happenstance-testkit
 
 The conformance suite for [happenstance](https://github.com/Wet-Ink-Corporation/happenstance)
-event store adapters. Ninety-two rules, each tracing to a MUST in the
+event store adapters. Ninety-three rules, each tracing to a MUST in the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/)
 and each shown to reject a named wrong implementation before it was trusted to
 pass.

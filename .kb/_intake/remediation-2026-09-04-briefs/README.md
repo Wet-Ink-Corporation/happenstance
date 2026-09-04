@@ -85,6 +85,19 @@ Written by the lane implementing the ratified Option A of
 `fixture-declension-policy.md`, in the same session as the change it describes, and
 **without** the author → two-critic → revision pass. Same discount.
 
+## And one from the `to`-composition lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `model-only-kind-has-no-members.md` | `Kind::ModelOnlyMutant` has no members now that a rule sees its only store. Withdraw the kind, keep it dormant, or make the emptiness the measurement? | none (private to a test target) | not blocking; review trigger is phase 12 |
+
+Written by the lane that landed `read_to_composes_with_multi_item_query` and
+`read_to_composes_with_limit`, in the same session as the change it describes, and
+**without** the author → two-critic → revision pass. Same discount. It is worth
+reading beside `stated-only-defects-and-the-reopen-must.md`, which answered a
+question that looks identical and is not: that kind was withdrawn for an
+**unsound bar**, this one is empty with a bar that has been attacked and held.
+
 `op-read-non-exhaustive.md` is here rather than implemented because L2-01 splits
 in two and only one half was that lane's: the generator hole is landed, and the
 attribute is routed to whoever owns the testkit's public surface at first publish.

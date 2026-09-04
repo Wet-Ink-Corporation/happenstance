@@ -10,7 +10,7 @@ it.
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 > **Status: early, and worth being precise about.** The contract, the typed layer
-> and a 115-rule conformance suite across four families are real and tested, and
+> and a 116-rule conformance suite across four families are real and tested, and
 > **SQLite is a finished adapter that has run the suite** — the event-store,
 > projection, concurrency and model families, against a real file on disk.
 > `0.2.0-alpha.1` is on crates.io — `happenstance`, `happenstance-core` and
@@ -96,7 +96,7 @@ cargo run -p transfers-on-sqlite
 |---|---|---|
 | [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ on crates.io at `0.2.0-alpha.1` |
 | [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ on crates.io at `0.2.0-alpha.1` |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0-alpha.1` — 115 rules across four families |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0-alpha.1` — 116 rules across four families |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ passes the suite against a real file; ships in `0.2.0` |
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ passes the suite under `workerd`; publish-ready, held back from `0.2.0` |
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 stub, design notes only |
@@ -229,7 +229,7 @@ reason rather than disappearing.
 The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
 that broke. **An adapter is not finished until it passes.**
 
-There are 115 rules in four families. The **event-store** family (92) covers
+There are 116 rules in four families. The **event-store** family (93) covers
 query semantics, read options, position uniqueness and monotonicity, append
 atomicity and the full append-condition matrix including the exact `after`
 boundary. The **concurrency** family (5) supplies the second caller a
