@@ -532,4 +532,132 @@ mod tests {
             items.div_ceil(arms)
         );
     }
+
+    /// The merge every multi-statement page runs, driven directly.
+    ///
+    /// It is worth saying why these cases exist at all. Nothing in the gate
+    /// builds a plan of more than one statement — the conformance suite's widest
+    /// query is 128 items at one tag each, which is inside both ceilings by two
+    /// orders of magnitude — so the partition above ships with a merge behind it
+    /// that no executing test reaches. The cases above prove the *plan* is cut
+    /// correctly; these prove the pieces are put back together correctly, which
+    /// is the other half and the half a green suite would not have noticed was
+    /// missing.
+    ///
+    /// Four wrong implementations, each rejected by a named case below:
+    /// concatenating without ordering; ordering forwards under `backwards`;
+    /// truncating before de-duplicating, which spends the page budget on
+    /// duplicates and returns a short page that reads as the end of the result
+    /// set; and truncating only once at the end, which is *not* wrong in its
+    /// answer but is the residency the divergence from the sibling exists to
+    /// avoid — so it is pinned as an equivalence rather than as a defect.
+    mod merge {
+        use crate::event_store::absorb;
+
+        /// One chunk's worth of rows, as `(position, tag)` pairs.
+        fn chunk(positions: &[i64], tag: char) -> Vec<(i64, char)> {
+            positions.iter().map(|p| (*p, tag)).collect()
+        }
+
+        /// The merge, fed chunk by chunk, as `drain_plan` feeds it.
+        fn merge(chunks: &[Vec<(i64, char)>], backwards: bool, want: usize) -> Vec<i64> {
+            let mut merged: Vec<(i64, char)> = Vec::new();
+            for incoming in chunks {
+                merged.extend(incoming.iter().copied());
+                absorb(&mut merged, backwards, want);
+            }
+            merged.into_iter().map(|(position, _)| position).collect()
+        }
+
+        /// Rows from different chunks interleave by position, not by chunk.
+        ///
+        /// The wrong implementation is a concatenation: the caller's stream
+        /// yields in position order and resumes the next page from the last
+        /// position it yielded, so a page that hands back chunk 2's rows after
+        /// chunk 1's would resume from the wrong place and skip the rest of
+        /// chunk 1 entirely.
+        #[test]
+        fn the_page_is_ordered_across_chunks_not_within_them() {
+            let plan = [chunk(&[1, 4, 7], 'a'), chunk(&[2, 3, 9], 'b')];
+            assert_eq!(merge(&plan, false, 10), vec![1, 2, 3, 4, 7, 9]);
+        }
+
+        /// And in the caller's direction.
+        #[test]
+        fn a_backwards_page_is_ordered_descending() {
+            let plan = [chunk(&[1, 4, 7], 'a'), chunk(&[2, 3, 9], 'b')];
+            assert_eq!(merge(&plan, true, 10), vec![9, 7, 4, 3, 2, 1]);
+        }
+
+        /// An event matching items in two chunks is one row.
+        ///
+        /// `UNION` removes a duplicate within a statement and can say nothing
+        /// about two statements. Without this the caller sees the same event
+        /// twice, which is the property `duplicate_items_do_not_duplicate_events`
+        /// exists to forbid — and which the suite checks only inside one
+        /// statement, because it never builds two.
+        #[test]
+        fn an_event_matched_by_two_chunks_is_yielded_once() {
+            let plan = [chunk(&[1, 5, 9], 'a'), chunk(&[5, 9, 11], 'b')];
+            assert_eq!(merge(&plan, false, 10), vec![1, 5, 9, 11]);
+        }
+
+        /// De-duplication happens before truncation, so a full page is `want`
+        /// **distinct** rows.
+        ///
+        /// The other order returns three rows for a page of four, and the read
+        /// stream reads a short page as the end of the result set — so the
+        /// duplicates would not merely waste the budget, they would truncate the
+        /// caller's replay.
+        #[test]
+        fn a_page_of_want_rows_is_want_distinct_rows() {
+            let plan = [chunk(&[1, 2, 3, 4], 'a'), chunk(&[2, 3, 5, 6], 'b')];
+            let page = merge(&plan, false, 4);
+            assert_eq!(page, vec![1, 2, 3, 4]);
+            assert_eq!(
+                page.len(),
+                4,
+                "the page is full, not short by its duplicates"
+            );
+        }
+
+        /// Truncating after every chunk gives the same answer as truncating once
+        /// at the end — which is the claim the divergence from the sibling rests
+        /// on, and the one that would be quietly wrong if it were false.
+        ///
+        /// Checked over every arrangement of a small universe rather than on one
+        /// example: three chunks drawn from twelve positions, forwards and
+        /// backwards, at every page size from one to six.
+        #[test]
+        fn truncating_after_every_chunk_agrees_with_truncating_once() {
+            let universe: Vec<i64> = (1..=12).collect();
+            for seed in 0..64u32 {
+                let plan: Vec<Vec<(i64, char)>> = (0..3)
+                    .map(|c| {
+                        let positions: Vec<i64> = universe
+                            .iter()
+                            .copied()
+                            .filter(|p| (seed.rotate_left(c * 5) >> (p % 12)) & 1 == 1)
+                            .collect();
+                        chunk(&positions, char::from(b'a' + u8::try_from(c).unwrap_or(0)))
+                    })
+                    .collect();
+
+                for backwards in [false, true] {
+                    for want in 1..=6 {
+                        let mut once: Vec<(i64, char)> =
+                            plan.iter().flat_map(|c| c.iter().copied()).collect();
+                        absorb(&mut once, backwards, want);
+                        let once: Vec<i64> = once.into_iter().map(|(p, _)| p).collect();
+
+                        assert_eq!(
+                            merge(&plan, backwards, want),
+                            once,
+                            "incremental truncation must equal one truncation at the                              end (seed {seed}, backwards {backwards}, want {want})"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

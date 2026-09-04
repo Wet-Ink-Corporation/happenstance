@@ -1415,13 +1415,38 @@ fn drain_plan(
             for row in drain_page(sql, statement, bindings)? {
                 merged.push((page_position(&row)?, row));
             }
-            merged.sort_by_key(|(position, _)| if backwards { -*position } else { *position });
-            merged.dedup_by_key(|(position, _)| *position);
-            merged.truncate(want);
+            absorb(&mut merged, backwards, want);
         }
         return Ok(merged.into_iter().map(|(_, row)| row).collect());
     };
     drain_page(sql, statement, bindings)
+}
+
+/// Orders, de-duplicates and truncates the rows gathered so far.
+///
+/// Split out from [`drain_plan`] so that it can be *executed by a test*. It is
+/// otherwise reachable only through a plan of more than one statement, and
+/// nothing in the gate builds one: the conformance suite's widest query is
+/// `MIN_SUPPORTED_QUERY_ITEMS` items at one tag each, which is 128 arms and 128
+/// parameters, inside both ceilings by two orders of magnitude. A merge no test
+/// runs is dead code behind a green suite, which is the failure this workspace
+/// exists to retire — so the arithmetic lives here, generic over what it is
+/// carrying, and `query_sql`'s host tests drive it over integers.
+///
+/// `sort_by` rather than a negated key: a comparator has no value it cannot
+/// order, where negating the key is a panic in debug on `i64::MIN`. The sort is
+/// stable, so `dedup_by_key` keeps the row from the earliest chunk — they are
+/// the same row, since the two chunks matched the same event through different
+/// items, and "the same row" is what makes the choice free rather than lucky.
+///
+/// De-duplicating **before** truncating is not interchangeable with the other
+/// order: `want` distinct positions is the page the caller asked for, and
+/// truncating first would spend the budget on duplicates and return a short
+/// page that looks like the end of the result set.
+pub(crate) fn absorb<T>(merged: &mut Vec<(i64, T)>, backwards: bool, want: usize) {
+    merged.sort_by(|(a, _), (b, _)| if backwards { b.cmp(a) } else { a.cmp(b) });
+    merged.dedup_by_key(|(position, _)| *position);
+    merged.truncate(want);
 }
 
 /// The `position` column of a read row, as the integer the merge orders by.
