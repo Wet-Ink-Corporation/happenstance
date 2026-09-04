@@ -14,9 +14,10 @@
 //! instrument, and it is the bar this crate has now cleared.
 //!
 //! Whether the crate is *published* is a different question with a different
-//! owner. `publish = false` is gone from its manifest, and its name is in
-//! `PUBLISHABLE` (`xtask/src/package.rs`), so this crate is ready to be
-//! packaged and is in the `0.2.0` release set — but having passed the suite and
+//! owner. `publish = false` is gone from its manifest, and its absence is half
+//! of an atomic pair: `PUBLISHABLE` (`xtask/src/package.rs`) names this crate,
+//! and `reconcile` fails on either half alone. So this crate is packaged by the
+//! gate and is in the `0.2.0` release set — but having passed the suite and
 //! being live on a registry are still two claims, and only the first is made
 //! here. Only the registry can say whether that release has happened yet.
 //!
