@@ -3527,6 +3527,51 @@ mod mutation_coverage {
         }
     }
 
+    /// The positive control [`Kind::StatedOnlyDefect`] was never given: a
+    /// fixture with **no defect** must not be able to answer a row's scenario
+    /// the way the defective subject does.
+    ///
+    /// `Kind::ModelOnlyMutant` grew exactly this test after an adversarial
+    /// review walked a defect-free store through its bar, and the stated-only
+    /// kind was written beside it without inheriting it. That omission is why
+    /// nothing in the binary noticed that the row's two `fn() -> String`
+    /// pointers have no tie to the store named in `name` — two string literals
+    /// satisfy the comparison, and so does the tree's own honest
+    /// `ClosingFixture` registered under the kind with its `control` pointed at
+    /// a third store.
+    ///
+    /// The honest fixture driven here is
+    /// [`crate::mutants::LiveHandleReopenFixture`], and it is not an arbitrary
+    /// choice: it is `SqliteFixture` in miniature. `happenstance-sqlite` is the
+    /// workspace's only real durable adapter fixture, its `reopen` closes the
+    /// connections the *fixture* holds and leaves the file alone, and a handle
+    /// the caller still owns is its own live connection onto that file. If the
+    /// row's scenario is measuring honest-against-defective, an honest durable
+    /// fixture must answer as the control does.
+    #[test]
+    fn the_stated_only_bar_rejects_a_store_with_no_defect() {
+        assert!(
+            !STATED_ONLY_DEFECTS.is_empty(),
+            "no rows, so this control asserts nothing"
+        );
+
+        for stated in STATED_ONLY_DEFECTS {
+            let honest = crate::mutants::live_handle_reopen_observed();
+            assert_eq!(
+                honest,
+                (stated.control)(),
+                "`{}`'s scenario \"{}\" does not separate honest from defective. A fixture with \
+                 no defect at all — an honest reopen over a medium that survives, which is \
+                 `SqliteFixture`'s shape — answers it differently from the row's own control, \
+                 so the row is measuring something other than the defect it claims to \
+                 demonstrate, and a rule written from this partition would reject the \
+                 workspace's only durable adapter",
+                stated.name,
+                stated.scenario
+            );
+        }
+    }
+
     /// The positive control on the bar above: a store with **no defect** cannot
     /// satisfy it.
     ///

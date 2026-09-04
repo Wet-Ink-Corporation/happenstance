@@ -3738,6 +3738,80 @@ pub(crate) fn closing_reopen_observed() -> String {
     reopen_observed_by_a_stale_handle(&ClosingFixture::open())
 }
 
+/// The **other** honest reopen, and the one the workspace actually ships.
+///
+/// [`ClosingFixture`] models a reopen that replaces the live log, so a handle
+/// taken beforehand keeps the old one. That is one legitimate implementation and
+/// it is not the one `happenstance-sqlite` has. `SqliteFixture::reopen` closes
+/// every connection the *fixture* is holding and checkpoints the write-ahead
+/// log; the **file** is not replaced, because reopening a file does not replace
+/// it, and a handle the caller still owns is its own live
+/// `rusqlite::Connection` onto that same file. So a stale handle keeps working,
+/// and its writes are visible to everything opened afterwards.
+///
+/// This fixture is that, in miniature: the medium is never replaced, and
+/// `reopen` drops only what the fixture itself holds.
+///
+/// # Why it is in the tree, and what it is not
+///
+/// It is **honest**. It supports `REOPEN` truthfully — over a medium that
+/// survives, a fresh `connect` really does read what was durably committed — and
+/// it passes every rule. It is not a mutant and is deliberately not registered.
+///
+/// What it is is the **falsifier for every reopen rule anyone will ever
+/// propose**. It answers the stale-handle scenario `["Before", "After"]`, which
+/// is `NoopReopenFixture`'s answer, not `ClosingFixture`'s. Two honest fixtures
+/// therefore sit on opposite sides of that partition, and the liar sits with one
+/// of them — so the scenario separates two *styles of `reopen` implementation*
+/// and not honest from defective. Anyone who writes a rule from that partition
+/// rejects `happenstance-sqlite`.
+#[derive(Debug)]
+pub(crate) struct LiveHandleReopenFixture {
+    /// The durable medium. Never replaced: reopening a file does not replace the
+    /// file.
+    log: Rc<RefCell<Log>>,
+    /// The handle the fixture keeps for itself, which is the only thing its
+    /// `reopen` can close. Dropping and re-deriving it is the whole of what a
+    /// file-backed `reopen` does that anything can observe from inside the
+    /// process, and it reaches no handle a caller owns.
+    own: RefCell<Option<LogStore>>,
+}
+
+impl Fixture for LiveHandleReopenFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LogStore::over(&self.log)
+    }
+
+    async fn reopen(&self) {
+        // Close what this fixture holds and open it again from the medium. The
+        // medium is untouched, which is the honest part: an acknowledged write
+        // survives, and that is what the three durability rules ask.
+        *self.own.borrow_mut() = None;
+        *self.own.borrow_mut() = Some(LogStore::over(&self.log));
+    }
+}
+
+impl Subject for LiveHandleReopenFixture {
+    const NAME: &'static str = "LiveHandleReopenFixture";
+
+    fn open() -> Self {
+        Self {
+            log: Rc::new(RefCell::new(Log::new(dense))),
+            own: RefCell::new(None),
+        }
+    }
+}
+
+/// [`LiveHandleReopenFixture`]'s answer to the same scenario.
+pub(crate) fn live_handle_reopen_observed() -> String {
+    reopen_observed_by_a_stale_handle(&LiveHandleReopenFixture::open())
+}
+
 // =====================================================================
 // The eight that cannot be one step
 // =====================================================================
