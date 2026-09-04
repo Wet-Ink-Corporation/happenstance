@@ -709,6 +709,20 @@ const REGISTRY: &[Declared] = &[
         expect: &[("read_limit_zero_yields_nothing", "must yield nothing")],
     },
     Declared {
+        name: "ForwardPagingBudgetStore",
+        kind: Kind::Mutant,
+        fails: &[],
+        provenance: "a forward read that branches on `from` and never threads `limit` into the \
+             resume branch — the shape that arises when the cursor is added to a paging \
+             query written before it, which is the order every SQL adapter in this \
+             workspace will be written in. The backwards branch is left correct, so \
+             `read_backwards_from_with_limit` passes. The caller it breaks is a projection \
+             resuming from its checkpoint with a budget: it asks for five hundred events \
+             and is handed the whole stream, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "LimitBeforeFilterStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2111,6 +2125,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ToIsExclusiveStore>,
             crate::mutants::MutantFixture<crate::mutants::BackwardsToIsAnUpperBoundStore>,
             crate::mutants::MutantFixture<crate::mutants::LimitZeroIsUnlimitedStore>,
+            crate::mutants::MutantFixture<crate::mutants::ForwardPagingBudgetStore>,
 
             crate::mutants::MutantFixture<crate::mutants::SharedBatchPositionStore>,
             crate::mutants::MutantFixture<crate::mutants::ReturnsFirstOfBatchStore>,
@@ -2409,6 +2424,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ToIsExclusiveStore", ModelOutcome::Agreed),
     ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Agreed),
     ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
+    ("ForwardPagingBudgetStore", ModelOutcome::Rejected),
     ("LimitPerItemStore", ModelOutcome::Rejected),
     ("ItemDedupByTypeStore", ModelOutcome::Rejected),
     // Append.

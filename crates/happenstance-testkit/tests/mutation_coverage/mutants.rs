@@ -935,6 +935,51 @@ impl Defect for LimitZeroIsUnlimitedStore {
     }
 }
 
+/// The forward resume branch never spends the caller's budget.
+///
+/// `from` arrives for the projection-resume path, which originally passed no
+/// limit, and the branch written to serve it never threads `limit` through:
+///
+/// ```text
+/// if let Some(from) = options.from {
+///     self.read_resume(from)          // <- limit never reaches here
+/// } else {
+///     self.read_paged(options.limit)
+/// }
+/// ```
+///
+/// That is the order every SQL adapter in this workspace will be written in —
+/// the paging query first, the cursor threaded in afterwards — and the
+/// workspace's own runner cannot meet it: `run_projection` sets `from` and no
+/// limit deliberately, one read for the whole run, so nothing in-tree issues the
+/// composition that would notice.
+///
+/// The backwards branch is left correct, and that is what makes this a scalpel
+/// rather than a broken store: the suite *does* compose backwards `from` with
+/// `limit`, in `read_backwards_from_with_limit`, so a store that lost the budget
+/// in both directions would go red for a reason that is not this defect's.
+///
+/// The wrong outcome is a silently over-large page. A projection runner that
+/// asks for five hundred events from its checkpoint is handed the whole stream,
+/// the read-model store behind it buffers a batch nobody sized, and the caller's
+/// own paging arithmetic is arithmetic about a number the store ignored. Nothing
+/// errors.
+pub(crate) struct ForwardPagingBudgetStore;
+
+impl Defect for ForwardPagingBudgetStore {
+    const NAME: &'static str = "ForwardPagingBudgetStore";
+
+    fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // THE DEFECT: the resume branch returns the whole ordered tail, and the
+        // budget is applied only where `from` is absent. Backwards is left
+        // alone, because the resume path this bug grows in reads forwards.
+        if options.from.is_some() && !options.backwards {
+            return selected;
+        }
+        correct::truncated(selected, options)
+    }
+}
+
 /// `LIMIT` is pushed into the scan and the query's predicate is applied to the
 /// rows that come back.
 ///
