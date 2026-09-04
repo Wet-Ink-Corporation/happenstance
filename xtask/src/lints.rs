@@ -1636,6 +1636,13 @@ fn prerequisites(rows: &[PhaseRow], start: &[String]) -> Vec<String> {
 /// whose verdict cannot be predicted gets switched off the first time it is
 /// wrong.
 ///
+/// Axis 2 scans the **whole** row, proof-artefact cell included, and phase 5's
+/// cell names `happenstance-core` for that reason — two mentions are found
+/// today, not one. That direction is the safe one: a future phase that is
+/// genuinely unstarted and happens to name a published crate in its criterion
+/// fires a false positive, which a reader resolves by reading the row, and not
+/// a false negative, which nobody sees at all.
+///
 /// # Errors
 ///
 /// Returns an error if either document cannot be read or parsed, if a row states
