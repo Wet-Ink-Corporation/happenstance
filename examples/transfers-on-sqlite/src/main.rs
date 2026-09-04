@@ -58,6 +58,7 @@
 
 #![allow(clippy::print_stdout, reason = "the transcript is the point")]
 
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
@@ -80,8 +81,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Spelled at every call site for the reason `course-subscriptions` gives: a
 /// loop whose only exit is success is a hang with better manners. This run is
-/// single-writer, so the bound is never spent.
-const ATTEMPTS: u32 = 3;
+/// single-writer, so the bound is never spent. Built at compile time, the
+/// same way: `attempts` is `const fn`.
+const ATTEMPTS: Retry = Retry::attempts(NonZeroU32::new(3).unwrap());
 
 /// How many events one projection chunk commits at a time.
 ///
@@ -405,21 +407,16 @@ async fn open_account(events: &SqliteEventStore, account: &str) -> Result<()> {
     let account = AccountId::new(account)?;
     let boundary = Balance::new(&account)?;
 
-    commit(
-        events,
-        boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
-        |balance: &Balance| {
-            if balance.opened {
-                return Err(Refusal::AlreadyOpen {
-                    account: account.id.clone(),
-                });
-            }
-            Ok(vec![Ledger::AccountOpened {
-                account: account.clone(),
-            }])
-        },
-    )
+    commit(events, boundary, ATTEMPTS, |balance: &Balance| {
+        if balance.opened {
+            return Err(Refusal::AlreadyOpen {
+                account: account.id.clone(),
+            });
+        }
+        Ok(vec![Ledger::AccountOpened {
+            account: account.clone(),
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)
@@ -430,22 +427,17 @@ async fn deposit(events: &SqliteEventStore, account: &str, amount: u32) -> Resul
     let account = AccountId::new(account)?;
     let boundary = Balance::new(&account)?;
 
-    commit(
-        events,
-        boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
-        |balance: &Balance| {
-            if !balance.opened {
-                return Err(Refusal::NotOpen {
-                    account: account.id.clone(),
-                });
-            }
-            Ok(vec![Ledger::Deposited {
-                account: account.clone(),
-                amount,
-            }])
-        },
-    )
+    commit(events, boundary, ATTEMPTS, |balance: &Balance| {
+        if !balance.opened {
+            return Err(Refusal::NotOpen {
+                account: account.id.clone(),
+            });
+        }
+        Ok(vec![Ledger::Deposited {
+            account: account.clone(),
+            amount,
+        }])
+    })
     .await
     .map(|_| ())
     .map_err(rejected)
@@ -479,7 +471,7 @@ async fn transfer(events: &SqliteEventStore, from: &str, to: &str, amount: u32) 
     commit(
         events,
         boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
+        ATTEMPTS,
         |(payer, payee): &(Balance, Balance)| {
             if !payer.opened {
                 return Err(Refusal::NotOpen {

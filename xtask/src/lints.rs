@@ -1097,6 +1097,17 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // file this change may not correct.
     runbook_status_matches_the_registry()?;
 
+    // V-6 (`references/evaluation/review-pre-publication-2026-09-03.md`): a
+    // second, unrelated document-held-to-the-tree check, bundled for exactly
+    // the same reason and under exactly the same constraint. Wiring
+    // `citation_ranges_resolve` as its own `lint-*` step would mean adding a
+    // `Step` to `main.rs`'s `REQUIRED` array and a match arm beside it, and
+    // making it `pub(crate)` would obligate `affected.rs`'s export scan the
+    // same way `runbook_status_matches_the_registry` is exempted from above —
+    // neither file is this fix's to edit. `xtask/src/lints.rs` is; this is
+    // its one door into `cargo xtask lints`.
+    citation_ranges_resolve()?;
+
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;
     let legend = counts
@@ -1757,6 +1768,315 @@ fn runbook_status_matches_the_registry() -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// V-6 — a citation names a place, and the place may have moved
+// ---------------------------------------------------------------------------
+
+/// Where `citation_ranges_resolve` looks for `path:START-END` citations.
+///
+/// V-6's own remediation names these three. Two subtrees of `.kb/` are
+/// excluded even though the constant says `.kb/` whole:
+/// `.kb/_governance/integration-waves/` is a wave's own audit trail — dated
+/// minutes of what a corpus looked like at ingest time, read under the same
+/// rule as `references/evaluation/*` (RS-01-3,
+/// `standards/rust/01-standard-of-evidence.md:132`) rather than held current —
+/// and `.kb/_intake/` is staging that `/redkiln:kb-ingest` clears (CLAUDE.md's
+/// repository map). Scanning either would hold this lint to citations nobody
+/// is keeping in step with the tree, which is a different failure from V-6's:
+/// noisy rather than blind.
+const CITATION_SCAN_DIRS: [&str; 3] = ["examples", "docs", ".kb"];
+
+/// Repository-relative subtrees [`CITATION_SCAN_DIRS`] does not descend into.
+/// See that constant's doc comment for why.
+const CITATION_SCAN_EXCLUDE: [&str; 2] = [".kb/_governance", ".kb/_intake"];
+
+/// A `path:START` or `path:START-END` citation, and the line of the scanned
+/// file it was written on (for the failure message, not for the check).
+struct Citation {
+    written_at: usize,
+    target: String,
+    start: usize,
+    end: usize,
+}
+
+/// A backtick-quoted span, parsed as a citation if it has the shape
+/// `some/path.rs:START` or `some/path.rs:START-END`.
+///
+/// # What this does not parse, on purpose
+///
+/// A path with no `/` — `store.rs:205`, the shape a citation takes when it
+/// means "relative to the crate this prose already sits inside", which
+/// several citations in this workspace's own `.kb/` use — is not recognised
+/// at all: without a directory to anchor it, the *right* root is exactly the
+/// fact this scanner cannot know without reading the paragraph around it, and
+/// guessing would trade a blind spot for a false positive. It is a
+/// documented gap, not a silent one.
+fn parse_citation(span: &str, written_at: usize) -> Option<Citation> {
+    let colon = span.rfind(':')?;
+    let path = &span[..colon];
+    let rest = &span[colon + 1..];
+    let ext = Path::new(path).extension().and_then(|e| e.to_str());
+    let ext_ok =
+        matches!(ext, Some(e) if e.eq_ignore_ascii_case("rs") || e.eq_ignore_ascii_case("md"));
+    if !path.contains('/') || !ext_ok {
+        return None;
+    }
+    let path_chars_ok = path
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-'));
+    if !path_chars_ok {
+        return None;
+    }
+    let (start_s, end_s) = rest.split_once('-').unwrap_or((rest, rest));
+    let start: usize = start_s.parse().ok()?;
+    let end: usize = end_s.parse().ok()?;
+    if start == 0 || end < start {
+        return None;
+    }
+    Some(Citation {
+        written_at,
+        target: path.to_owned(),
+        start,
+        end,
+    })
+}
+
+/// Every citation on one already-de-commented line of prose.
+///
+/// No state carried between lines, and that is a second documented gap
+/// rather than an oversight: V-6's own fixtures write
+/// ``` `examples/course-subscriptions/src/main.rs:194-207` (the domain enum)
+/// and `:341-379` (the fold) ```, and the second span names no path of its
+/// own — it means "the same file as the citation before it" to a reader, and
+/// nothing here tracks that. It is caught only because the *first* citation
+/// on the same line is independently stale.
+fn citations_in_line(line: &str, written_at: usize, out: &mut Vec<Citation>) {
+    let mut rest = line;
+    while let Some(open) = rest.find('`') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('`') else {
+            break;
+        };
+        if let Some(citation) = parse_citation(&after[..close], written_at) {
+            out.push(citation);
+        }
+        rest = &after[close + 1..];
+    }
+}
+
+/// A trimmed Rust source line that reads as a continuation of an enclosing
+/// construct rather than the start of one.
+///
+/// # What this catches, and what a stronger version of it broke
+///
+/// Exactly V-6's own shape: `Self::CourseDefined { .. } =>
+/// Self::EVENT_TYPES[0].clone(),` is a match arm, and `Self::`/`self.` are
+/// expression positions — they cannot open an item, an attribute or a doc
+/// comment, so seeing one at the start of a cited line is unambiguous. That
+/// is the whole signal, and it is deliberately the only one. A first version
+/// of this function instead required the line to *open* with a keyword
+/// (`fn`, `struct`, `///`, ...) and rejected everything else; run once
+/// against every citation [`citation_ranges_resolve`] currently finds under
+/// [`CITATION_SCAN_DIRS`], it flagged a bare `///` continuation line inside a
+/// multi-paragraph doc comment and a snippet deliberately cited from the
+/// middle of a chained call — both legitimate citations already in this
+/// tree, and both would have needed a fix this change does not own to reach
+/// green. This function does not catch V-6's *other* citation
+/// (`main.rs:341`, a bare `match event {`) for the same reason: `match` is
+/// too common a legitimate citation target to blacklist safely.
+fn looks_mid_construct(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("Self::") || t.starts_with("self.")
+}
+
+/// Whether a citation's range is defensible: present in `lines`, non-blank at
+/// its first line, and — only when the target is a Rust source file — not
+/// [`looks_mid_construct`] there.
+///
+/// Pure and filesystem-free on purpose, so every case below is a four-line
+/// fixture rather than a file on disk: [`citation_ranges_resolve`] is the one
+/// caller that touches a filesystem.
+///
+/// # What this does not verify
+///
+/// That the citation says what the sentence around it claims — only that the
+/// range it names exists and its first line is not obviously the wrong kind
+/// of place to send a reader. A citation that resolves cleanly to the wrong
+/// construct entirely (a real method that is not the one under discussion)
+/// passes. Confirming the claim is what a reviewer is for; this catches the
+/// cheaper, mechanical failure of a citation nobody re-pointed after the file
+/// moved under it.
+fn citation_resolves(
+    lines: &[&str],
+    start: usize,
+    end: usize,
+    is_rust: bool,
+) -> Result<(), String> {
+    if start == 0 || start > lines.len() || end > lines.len() {
+        return Err(format!(
+            "range {start}-{end} is out of bounds ({} line(s) in the target)",
+            lines.len()
+        ));
+    }
+    if !is_rust {
+        return Ok(());
+    }
+    let first = lines[start - 1];
+    if first.trim().is_empty() {
+        return Err(format!("line {start} is blank"));
+    }
+    if looks_mid_construct(first) {
+        return Err(format!(
+            "line {start} looks mid-construct: `{}`",
+            first.trim()
+        ));
+    }
+    Ok(())
+}
+
+/// One citation, read against the file it names.
+///
+/// `None` covers two different situations on purpose, and both are
+/// documented gaps rather than passes: the citation resolved cleanly, or its
+/// path does not exist under the repository root at all — `src/main.rs`
+/// written inside a citation that means "relative to this example's own
+/// crate", for one, which is a shape this workspace's own `.kb/` already
+/// uses. An unresolved path is not evidence of a stale citation; it is
+/// evidence this scanner was not told which root to read it against, so it
+/// says nothing rather than guessing wrong.
+fn check_citation(root: &Path, citing_file: &str, citation: &Citation) -> Option<String> {
+    let body = fs::read_to_string(root.join(&citation.target)).ok()?;
+    let lines: Vec<&str> = body.lines().collect();
+    let is_rust = Path::new(&citation.target)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("rs"));
+    citation_resolves(&lines, citation.start, citation.end, is_rust)
+        .err()
+        .map(|why| {
+            let range = if citation.start == citation.end {
+                citation.start.to_string()
+            } else {
+                format!("{}-{}", citation.start, citation.end)
+            };
+            format!(
+                "{citing_file}:{} — cites `{}:{range}`, {why}",
+                citation.written_at, citation.target
+            )
+        })
+}
+
+/// Every `.rs` or `.md` file under `root.join(dir)`, sorted, skipping any
+/// subtree whose repository-relative path is (or is under) one of `exclude`.
+fn citation_source_files(
+    root: &Path,
+    dir: &str,
+    exclude: &[&str],
+) -> Result<Vec<std::path::PathBuf>> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.join(dir)];
+    while let Some(next) = stack.pop() {
+        for entry in fs::read_dir(&next).with_context(|| format!("reading {}", next.display()))? {
+            let path = entry
+                .with_context(|| format!("reading an entry of {}", next.display()))?
+                .path();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .display()
+                .to_string()
+                .replace('\\', "/");
+            if exclude
+                .iter()
+                .any(|e| rel == *e || rel.starts_with(&format!("{e}/")))
+            {
+                continue;
+            }
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs" || e == "md") {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// V-6: every `path:START-END` citation under [`CITATION_SCAN_DIRS`] resolves
+/// to a range that exists, is non-blank at its first line, and — when the
+/// target is a `.rs` file — is not [`looks_mid_construct`] there.
+///
+/// # Why this and not a general citation lint
+///
+/// V-6's own routing is explicit that it is not deciding this: "whether the
+/// gate acquires a general citation lint is a decision for the RUNBOOK's pass
+/// on gate scope... and this document does not take it." This check is scoped
+/// to exactly the three directories and the two checks the finding names, and
+/// no wider — see [`parse_citation`], [`citations_in_line`],
+/// [`looks_mid_construct`] and [`check_citation`] for the blind spots that
+/// scoping leaves, each stated where the decision was made rather than left
+/// for a reader to discover by watching the check pass over something wrong.
+///
+/// # Errors
+///
+/// Returns an error if a scanned or cited file cannot be read, or if any
+/// citation's range fails [`citation_resolves`].
+fn citation_ranges_resolve() -> Result<()> {
+    let root = workspace_root()?;
+    let mut files = Vec::new();
+    for dir in CITATION_SCAN_DIRS {
+        files.extend(citation_source_files(&root, dir, &CITATION_SCAN_EXCLUDE)?);
+    }
+    if files.is_empty() {
+        bail!(
+            "{} hold no .rs or .md files between them — V-6's citation lint would scan nothing",
+            CITATION_SCAN_DIRS.join(", ")
+        );
+    }
+
+    let mut problems = Vec::new();
+    let mut checked = 0usize;
+    for path in &files {
+        let rel = path
+            .strip_prefix(&root)
+            .unwrap_or(path)
+            .display()
+            .to_string()
+            .replace('\\', "/");
+        let body = fs::read_to_string(path).with_context(|| format!("reading {rel}"))?;
+        let prose = prose_of(&rel, &body);
+        let mut citations = Vec::new();
+        for (n, line) in prose.lines().enumerate() {
+            citations_in_line(line, n + 1, &mut citations);
+        }
+        for citation in &citations {
+            checked += 1;
+            if let Some(problem) = check_citation(&root, &rel, citation) {
+                problems.push(problem);
+            }
+        }
+    }
+
+    if !problems.is_empty() {
+        for p in &problems {
+            println!("  {p}");
+        }
+        bail!(
+            "{} citation(s) under {} whose cited range does not resolve cleanly (V-6). A citation \
+             is the guard against drift only for as long as it points at what it claims to.",
+            problems.len(),
+            CITATION_SCAN_DIRS.join(", ")
+        );
+    }
+
+    println!(
+        "V-6: {checked} path:line citation(s) across {} file(s) in {} resolve cleanly",
+        files.len(),
+        CITATION_SCAN_DIRS.join(", ")
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -2129,5 +2449,139 @@ State is one of `not started`, `in progress`, `blocked`, `done`.
             rows.iter().all(|r| r.number != "0"),
             "the estimate table was read as status rows: {rows:?}"
         );
+    }
+
+    /// The exact shape V-6 found: a match arm reached from `Self::`, cited as
+    /// though it opened the construct.
+    #[test]
+    fn a_match_arm_is_mid_construct() {
+        let lines = [
+            "enum Enrolment {",
+            "    CourseDefined { capacity: u32 },",
+            "}",
+            "",
+            "fn event_type(e: &Enrolment) {",
+            "    match e {",
+            "        Self::CourseDefined { .. } => Self::EVENT_TYPES[0].clone(),",
+            "    }",
+            "}",
+        ];
+        assert!(citation_resolves(&lines, 7, 7, true).is_err());
+    }
+
+    /// The rule's positive control: an item keyword opening a construct at
+    /// the cited line passes, whatever the keyword.
+    #[test]
+    fn an_item_start_resolves() {
+        let lines = [
+            "enum Enrolment {",
+            "    CourseDefined { capacity: u32 },",
+            "}",
+        ];
+        assert!(citation_resolves(&lines, 1, 3, true).is_ok());
+    }
+
+    /// A blank first line is rejected before mid-construct is even asked.
+    #[test]
+    fn a_blank_first_line_does_not_resolve() {
+        let lines = ["enum Enrolment {", "", "}"];
+        assert!(citation_resolves(&lines, 2, 2, true).is_err());
+    }
+
+    /// A range past the end of the file is out of bounds, not silently
+    /// clamped.
+    #[test]
+    fn a_range_past_the_file_end_does_not_resolve() {
+        let lines = ["enum Enrolment {", "}"];
+        assert!(citation_resolves(&lines, 1, 5, true).is_err());
+        assert!(citation_resolves(&lines, 9, 9, true).is_err());
+    }
+
+    /// The mid-construct check is Rust-only: a non-Rust target is held only
+    /// to "the range exists and the first line is not blank".
+    #[test]
+    fn mid_construct_is_not_checked_outside_rust_targets() {
+        let lines = ["        Self::still not Rust,"];
+        assert!(citation_resolves(&lines, 1, 1, false).is_ok());
+    }
+
+    /// [`parse_citation`]'s positive control, and the shape V-6's own
+    /// fixtures use.
+    #[test]
+    fn a_full_path_range_citation_parses() {
+        let citation =
+            parse_citation("examples/course-subscriptions/src/main.rs:194-207", 3).unwrap();
+        assert_eq!(citation.target, "examples/course-subscriptions/src/main.rs");
+        assert_eq!(citation.start, 194);
+        assert_eq!(citation.end, 207);
+    }
+
+    /// The documented blind spot: no `/` in the span means no anchor to read
+    /// it against, so this is not parsed as a citation at all — not parsed
+    /// as one that then fails to resolve.
+    #[test]
+    fn a_pathless_span_does_not_parse_as_a_citation() {
+        assert!(parse_citation("store.rs:205-215", 1).is_none());
+        assert!(parse_citation(":341-379", 1).is_none());
+    }
+
+    /// A backtick span that is not `path:START` at all — an ordinary code
+    /// identifier — is not mistaken for one.
+    #[test]
+    fn a_non_citation_span_does_not_parse() {
+        assert!(parse_citation("EventType", 1).is_none());
+        assert!(parse_citation("crates/happenstance-core/Cargo.toml", 1).is_none());
+    }
+
+    /// Two citations on one line, the second bare — V-6's fixtures verbatim.
+    /// Only the first parses; the second is the stated no-carry-over gap.
+    #[test]
+    fn only_the_path_bearing_citation_on_a_shared_line_parses() {
+        let line = "A mirror of `examples/course-subscriptions/src/main.rs:194-207` (the \
+                     domain enum) and `:341-379` (the fold).";
+        let mut out = Vec::new();
+        citations_in_line(line, 3, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].start, 194);
+    }
+
+    /// A citation whose target does not resolve under the repository root —
+    /// [`check_citation`]'s second documented gap — is silently out of
+    /// reach rather than a reported problem.
+    #[test]
+    fn an_unresolvable_target_path_is_silently_skipped() {
+        let root = workspace_root().unwrap();
+        let citation = Citation {
+            written_at: 1,
+            target: "src/main.rs".to_owned(),
+            start: 1,
+            end: 1,
+        };
+        assert!(check_citation(&root, "some/fixture.rs", &citation).is_none());
+    }
+
+    /// [`check_citation`] against a real file in this tree: a construct that
+    /// is there and a line number past the end of it that is not.
+    #[test]
+    fn check_citation_reads_a_real_file_and_reports_its_own_line() {
+        let root = workspace_root().unwrap();
+        let good = Citation {
+            written_at: 42,
+            target: "xtask/Cargo.toml".to_owned(),
+            start: 1,
+            end: 1,
+        };
+        // `.toml` is not `.rs`, so only "does the range exist" is asked.
+        assert!(check_citation(&root, "some/fixture.md", &good).is_none());
+
+        let bad = Citation {
+            written_at: 42,
+            target: "xtask/Cargo.toml".to_owned(),
+            start: 999_999,
+            end: 999_999,
+        };
+        let problem = check_citation(&root, "some/fixture.md", &bad).unwrap();
+        assert!(problem.starts_with("some/fixture.md:42"));
+        assert!(problem.contains("out of bounds"));
     }
 }

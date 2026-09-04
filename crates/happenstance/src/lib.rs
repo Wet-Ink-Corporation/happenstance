@@ -55,7 +55,7 @@
 //! }
 //! let store = MemoryEventStore::new();
 //! let seats = Seats { scope: Tags::empty(), taken: 0 };
-//! let retry = Retry::attempts(3.try_into()?);
+//! let retry = Retry::attempts(core::num::NonZeroU32::new(3).unwrap());
 //! let take =
 //!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
 //! let done = commit(&store, seats, retry, take).await?;

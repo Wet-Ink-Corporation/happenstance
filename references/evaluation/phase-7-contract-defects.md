@@ -8,7 +8,7 @@
 - **Lifecycle:** immutable evidence. Superseded rather than edited — a later
   phase that disagrees with an entry writes a superseding document. The one
   permitted in-place change is repointing a `file:line` citation at the text it
-  already named (`README.md:83-85`).
+  already named (`README.md:268-270`).
 
 This is the record BR-01 exists to produce: every defect that **using** the
 frozen `EventStore` / `Query` / `ProjectionStore` contract revealed while the

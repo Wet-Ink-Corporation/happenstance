@@ -370,6 +370,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     }
     check_declarations(&pages, &mut problems);
     check_orientation_ceiling(&pages, &mut problems);
+    check_docs_index_lists_every_page(&root, &pages, &mut problems);
 
     report(&pages, &atoms, problems)
 }
@@ -1228,6 +1229,72 @@ fn check_orientation_ceiling(pages: &[Page], problems: &mut Vec<Problem>) {
                     "{} `orientation` pages at one directory level ({}); RP-10-3 allows one",
                     offenders.len(),
                     offenders.join(", ")
+                ),
+            ));
+        }
+    }
+}
+
+/// The narrative table `docs/README.md` routes readers through, quoted by its
+/// header line so [`table_rows`] can find it among the second, unrelated table
+/// the same page carries.
+const DOCS_INDEX_TABLE_HEADER: &str = "| Page | Read it at |";
+
+/// V-4 — `docs/README.md` carries one row per page under the pinned narrative
+/// tree, or a reader following the index never reaches the page that is missing
+/// one.
+///
+/// # Why derived rather than counted
+///
+/// `pages` already comes from a directory listing ([`governed_pages`]), not
+/// from a number typed into this file, so a **seventh** page added to `docs/`
+/// without a row of its own fails this the same way the two omitted here did —
+/// RS-81-5: the derived fact and the hand-written table are reconciled, and the
+/// failure names which page the table is missing rather than a count that
+/// silently drifted.
+///
+/// # What this does not verify
+///
+/// That the row's *prose* describes the page well, or that the row sits in the
+/// table's `| Page | Read it at |` half rather than the second `| Looking for |
+/// It is at |` table — a link to the page's file name anywhere in the whole
+/// document satisfies this. The reviewer is the instrument for whether a row
+/// reads like an invitation; this is the instrument for whether the row exists
+/// at all. Whole-file rather than table-scoped is a deliberate looseness: the
+/// two tables link disjoint targets in practice, and scoping to one region
+/// would trade a false negative it does not currently have for a parser this
+/// module would then have to maintain.
+fn check_docs_index_lists_every_page(root: &Path, pages: &[Page], problems: &mut Vec<Problem>) {
+    const DOCS_INDEX: &str = "docs/README.md";
+
+    let text = match fs::read_to_string(root.join(DOCS_INDEX)) {
+        Ok(text) => text,
+        Err(err) => {
+            problems.push(Problem::whole(
+                DOCS_INDEX,
+                format!("could not be read: {err}"),
+            ));
+            return;
+        }
+    };
+
+    let mut linked_anywhere: Vec<String> = Vec::new();
+    for line in text.lines() {
+        linked_anywhere.extend(markdown_link_targets(line));
+    }
+
+    for page in pages {
+        let Some(basename) = page.path.rsplit('/').next() else {
+            continue;
+        };
+        if !linked_anywhere.iter().any(|target| target == basename) {
+            problems.push(Problem::whole(
+                DOCS_INDEX,
+                format!(
+                    "the `{DOCS_INDEX_TABLE_HEADER}` table carries no row linking `{basename}`; \
+                     every page under the pinned narrative tree needs a route in from the index, \
+                     and this one ({}) has none (V-4: check_docs_index_lists_every_page)",
+                    page.path
                 ),
             ));
         }
