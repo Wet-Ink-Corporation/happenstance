@@ -32,6 +32,48 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **One conformance rule, and it is breaking in practice: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`read_from_composes_with_limit`**, the ninetieth event-store rule. An
+  adapter that passes today can go red on it, which is what the note at the top
+  of this file means when it says to treat a minor bump of this crate as a break;
+  CF-29 makes that policy rather than advice. `0.2.0` is the cheap moment to take
+  it, because it is the release that creates the adapter population — the same
+  rule landing at `0.2.1` costs every adapter a red build.
+
+  The defect it detects is a forward read that branches on the presence of a
+  cursor and never threads the caller's budget into that branch:
+
+  ```text
+  if let Some(from) = options.from {
+      self.read_resume(from)          // <- limit never reaches here
+  } else {
+      self.read_paged(options.limit)
+  }
+  ```
+
+  That is the order a SQL adapter is written in — the paging query first, the
+  resume cursor threaded through it afterwards — and it survived every rule the
+  suite had. Three `[FROZEN]` clauses name forwards `from` composed with `limit`
+  as the consumer that motivates them: ES-14's budget over the whole ordered
+  result, VT-28's paging loop writing `.limit(budget - fetched)`, and CF-12's
+  cursor over a multi-item query. The suite composed `from` with `to`, with
+  `backwards`, and with `backwards` **and** `limit` — and issued forwards `from`
+  with `limit` at no call site at all. A store with exactly that defect and its
+  backwards branch left correct passed all eighty-nine rules and was
+  indistinguishable from a conformant one.
+
+  What a caller loses without the rule is a page it sized. A projection runner
+  that asks for five hundred events from its checkpoint is handed the whole
+  stream instead, the read model behind it buffers a batch nobody budgeted for,
+  and the loop's own arithmetic is arithmetic about a number the store ignored.
+  Nothing errors, so nothing retries, and the ceiling that the budget existed to
+  hold stops holding. The rule reads through a **two-item** query at a window
+  that straddles both items' matches, so it also rejects the two adapter shapes
+  that get the merged result wrong under a budget — the unparenthesised
+  `WHERE a OR b AND position >= ?`, whose cursor binds to the last item alone,
+  and the store that emits one statement per query item and writes `LIMIT n` onto
+  each of them.
 - **Every published crate now re-exports the crates its own public signatures
   name.** `happenstance-core` re-exports `futures_core` (it already re-exported
   `bytes`); `happenstance-sqlite` re-exports `rusqlite` and `happenstance_core`;
@@ -47,27 +89,6 @@ not the same as what a user needed to be told.
   `error[E0308]` on the error path. It is not a substitute for your own
   dependency line and it forwards no features you did not enable. Each path is
   proved to resolve from outside its crate by a doctest.
-
-### Removed
-
-- **`happenstance-sqlite` no longer re-exports `tokio`.** It did, briefly and
-  unreleased. `tokio::task::JoinError` and `tokio::runtime::TryCurrentError` are
-  variants of this crate's error enums, so `tokio` qualified for the set on the
-  arithmetic above — but this crate takes it at `features = ["rt"]`, so
-  `happenstance_sqlite::tokio` was a **partial** `tokio`, with no `macros`, no
-  `rt-multi-thread` and no `time`. A consumer who reached the type through that
-  path and then wrote `#[tokio::main]` got an `error[E0433]` *further* from its
-  cause than the mismatch the re-export was there to prevent, which makes it a
-  longer route to the type rather than a shorter one.
-
-  **If you match on `JoinError` or `TryCurrentError`, add `tokio = "1"` to your
-  own manifest.** Cargo unifies it with this crate's for any semver-compatible
-  requirement, so type identity survives for every consumer who already had a
-  `tokio` line; a consumer who pins a different *major* gets the
-  two-types-that-print-identically failure, and `cargo tree -d` names it. The
-  omission is fenced by a `compile_fail,E0433` doctest on the old path
-  (`crates/happenstance-sqlite/src/lib.rs:154`), so re-adding the re-export
-  turns a test red rather than passing unnoticed.
 
 - **WF-11's falsifier has been fired at, and the answer is on file.** The clause
   has carried a `[PROVISIONAL]` marker since phase 5 on a falsifier needing two
@@ -345,6 +366,66 @@ not the same as what a user needed to be told.
   unnoticed — the miss the previous milestone's harness scan could not see,
   because it read one directory. `cargo xtask ci` now runs the adapter's
   eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
+
+### Removed
+
+- **`happenstance-sqlite` no longer re-exports `tokio`.** It did, briefly and
+  unreleased. `tokio::task::JoinError` and `tokio::runtime::TryCurrentError` are
+  variants of this crate's error enums, so `tokio` qualified for the set on the
+  arithmetic above — but this crate takes it at `features = ["rt"]`, so
+  `happenstance_sqlite::tokio` was a **partial** `tokio`, with no `macros`, no
+  `rt-multi-thread` and no `time`. A consumer who reached the type through that
+  path and then wrote `#[tokio::main]` got an `error[E0433]` *further* from its
+  cause than the mismatch the re-export was there to prevent, which makes it a
+  longer route to the type rather than a shorter one.
+
+  **If you match on `JoinError` or `TryCurrentError`, add `tokio = "1"` to your
+  own manifest.** Cargo unifies it with this crate's for any semver-compatible
+  requirement, so type identity survives for every consumer who already had a
+  `tokio` line; a consumer who pins a different *major* gets the
+  two-types-that-print-identically failure, and `cargo tree -d` names it. The
+  omission is fenced by a `compile_fail,E0433` doctest on the old path
+  (`crates/happenstance-sqlite/src/lib.rs:154`), so re-adding the re-export
+  turns a test red rather than passing unnoticed.
+
+### Changed
+
+- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` gained a
+  `to` field, and the model can now disagree about an upper bound.** The variant
+  was documented as carrying *"every read option in play"* and carried four of
+  five. `to` was the missing one, so the generator emitted no upper bound,
+  `Model::apply` never called `.to(..)`, and the two `to` branches of
+  `Model::select` were dead code — under a comment stating, correctly, that a
+  model which ignores an option *"would agree with every implementation, which
+  is the one thing a reference model must not do"*.
+
+  It had agreed with three. `ToBoundIgnoredStore` (the options struct matched on
+  the fields the adapter recognises), `ToIsExclusiveStore` and
+  `BackwardsToIsAnUpperBoundStore` were all recorded as passing the model, and
+  all three are rejected now without any of them changing. A fourth store was
+  written for this release and exists only because the model can see it:
+  `UnparenthesisedToPredicateStore`, `WHERE a OR b AND position <= ?` — the
+  precedence bug the suite already registers for the *lower* bound, one bound
+  over. Every rule that exercises `to` issues `Query::all()`, so no rule in the
+  ninety can see it; the wrong outcome is a bounded backfill worker reading past
+  its own window and re-delivering events the tail worker has already processed.
+
+  What breaks: `Op` is reachable as `happenstance_testkit::model::Op` whenever
+  the `proptest` feature is on, and adding a field to a struct-form variant of a
+  `pub enum` with no `#[non_exhaustive]` breaks any downstream `match` written
+  with a struct pattern, and any construction. `Op::Read { query, from,
+  backwards, limit }` becomes `Op::Read { query, from, to, backwards, limit }`,
+  with `to: Anchor::Unset` reproducing the old behaviour. Whether the variant
+  should also carry `#[non_exhaustive]` — so that the *next* field is not a
+  second break — is deliberately not settled here; it belongs with the crate's
+  public surface at first publish, and a brief for it is staged in
+  `.kb/_intake/`.
+
+  The `to` bound is generated weighted towards absent, four reads in five, and
+  that weighting is measured rather than tidy: sampling it the way the other
+  four options are sampled dilutes every combination of them, and the first
+  version of the change lost `LimitPerItemStore` — a defect the model had
+  rejected for three phases. `MODEL_COVERAGE` is what noticed.
 
 ## [0.2.0-alpha.1] — 2026-08-16
 

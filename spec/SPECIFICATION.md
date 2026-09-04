@@ -1763,9 +1763,9 @@ why the name was left here rather than dropped until it could be written.
 builder stores `Some(0)` verbatim (`query.rs:343-347`),
 `zero_limit_means_zero_events` (`query.rs:523-536`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
-(`crates/happenstance-testkit/src/suite.rs:1327`) and in
+(`crates/happenstance-testkit/src/suite.rs:1413`) and in
 `for_each_event_store_rule!`
-(`crates/happenstance-testkit/src/registry.rs:136`).
+(`crates/happenstance-testkit/src/registry.rs:137`).
 
 This is a deliberate divergence from the DCB reference implementation, which
 treats `limit: 0` as unlimited through JavaScript falsiness, and the ADR that
@@ -3185,6 +3185,14 @@ not *n* per query item and not an arbitrary *n*.
   at only one end would let one direction pass while the other failed. CF-12 is
   the obligation to run any read option against a filtering query at all, and
   names `limit` and `backwards` as belonging in the same pass.
+  `read_from_composes_with_limit` is the sixth, added at phase 12: the budget
+  spent on a read that also carries a **forwards** cursor. Until it landed, every
+  rule that paired `limit` with `from` also carried `backwards`, so a store that
+  applied the budget everywhere except its forward resume branch —
+  `ForwardPagingBudgetStore` — passed all eighty-nine and was indistinguishable
+  from a conformant one. The caller that composition serves is the one this
+  clause and VT-28 are both written about: a paging loop resuming from its
+  checkpoint.
 - **Cases:** E2E-12, E2E-13.
 - **Rejects:** an adapter implementing a multi-item query as one statement per
   item with `LIMIT n` on each — the same shape ES-12 rejects, failing here for an
@@ -7793,7 +7801,8 @@ survived, and is the argument for the rule rather than against it.
 
 **CF-12.** At least one rule MUST compose `ReadOptions::from` with a
 **multi-item** query. `[FROZEN]`
-Rule: `read_from_composes_with_multi_item_query`.
+Rule: `read_from_composes_with_multi_item_query`,
+`read_from_composes_with_limit`.
 Cases: E2E-10; scenario S7 in PRESSURE-TEST.md:620-624.
 Rejects: an adapter generating `WHERE a OR b AND position >= ?` without
 parentheses — the textbook operator-precedence bug, which silently returns every
@@ -7808,8 +7817,8 @@ clause requires `from` × multi-item because that is where the generated SQL is
 most likely to be wrong; `backwards` and `limit` against a filtering query
 SHOULD be covered in the same rule.
 
-**Discharged at phase 3 stage 4, and the SHOULD was taken.** All three options are
-exercised against the same two-item query in the one rule, because the measured
+**Discharged at phase 3 stage 4, and the SHOULD was taken.** All three options
+appear against the same two-item query in the one rule, because the measured
 finding is *one* gap — no read option against a filtering query at all — and three
 rules would have suggested three. `UnparenthesisedPredicateStore` is the mutant
 the clause names, and it is a scalpel: with a single item there is nothing for the
@@ -7818,6 +7827,23 @@ suite had. Four other mutants fail the rule as well, which is what a rule
 exercising three options against a filtering query should do — `LimitBeforeFilterStore`,
 `ItemOrderedUnionStore`, `FetchOneExtraStore` and `BackwardsIgnoredStore` each on
 their own axis.
+
+**Amended at phase 12: appearing is not composing.** The paragraph above said
+"all three options are exercised" and was read for two phases as though the
+composition existed. It did not. `read_from_composes_with_multi_item_query` issues
+the three options as **three separate reads** — `from(anchor)`, then
+`backwards()`, then `backwards().limit(2)` — so forwards `from` composed with
+`limit` was issued at no call site in the suite, and neither were the other
+combinations `from` did not happen to be paired with. That is the one composition
+three `[FROZEN]` clauses name as the consumer that motivates them: ES-14's budget,
+VT-28's `.limit(budget - fetched)` at parity, and this clause's cursor. A budget
+loop that resumes carries `from`. `ForwardPagingBudgetStore` — `limit` applied
+only where `from` is absent — passed all eighty-nine rules and was
+indistinguishable from both conformant controls. `read_from_composes_with_limit`
+is the rule that closes it, and it is the second rule this clause claims;
+`UnparenthesisedPredicateStore` and `LimitPerItemStore` fail it too, which is
+what makes it a statement about the *merged* result rather than about either
+item.
 
 **CF-13.** A rule MUST assert the visibility invariant — that once a reader has
 observed position *P*, no event at a position at or below *P* becomes visible
@@ -8262,9 +8288,9 @@ three families with one list each is the arrangement, not the exception.
 
 **The model family landed at stage 5**, and it is the worked example of the
 paragraph above rather than a plan for one. Its enumeration is
-`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:706`, and it
+`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:772`, and it
 lives beside the single rule it names, `ops_agree_with_the_model` at
-`crates/happenstance-testkit/src/model.rs:592`. `event_store_model_conformance!`
+`crates/happenstance-testkit/src/model.rs:658`. `event_store_model_conformance!`
 is built by invoking it exactly as `event_store_conformance!` is built by
 invoking `for_each_event_store_rule!`. Two things it settles, and both were
 open:
@@ -9216,7 +9242,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-9 | FROZEN | `duplicate_items_do_not_duplicate_events` | E2E-32 |
 | CF-10 | FROZEN | `condition_against_an_empty_store_admits_the_append` | E2E-47 |
 | CF-11 | FROZEN | `empty_batch_is_refused_before_the_condition_is_evaluated` | E2E-06 |
-| CF-12 | FROZEN | `read_from_composes_with_multi_item_query` | E2E-10 |
+| CF-12 | FROZEN | `read_from_composes_with_multi_item_query`, `read_from_composes_with_limit` | E2E-10 |
 | CF-13 | FROZEN | `nothing_below_an_observed_position_appears_later` | E2E-01, E2E-02 |
 | CF-14 | DEFERRED | `acknowledged_writes_survive_a_reopen` | E2E-07 |
 | CF-15 | FROZEN | `two_fixture_instances_observe_none_of_each_others_appends` (the suite rule; t… | E2E-08, E2E-09 |

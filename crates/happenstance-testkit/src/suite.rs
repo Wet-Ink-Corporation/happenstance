@@ -1162,6 +1162,92 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    /// Reading forwards **from** a cursor **with** a budget spends the budget.
+    ///
+    /// CF-12's SHOULD, ES-14 and VT-28 all name this one composition as the
+    /// consumer that motivates them — a paging loop that resumes carries `from`,
+    /// and `ReadOptions`' own documentation writes the idiom out as
+    /// `.limit(budget - fetched)` — and until this rule the suite issued it
+    /// nowhere. `from` was composed with `to`, with `backwards`, and with
+    /// `backwards` **and** `limit`; forwards `from` with `limit` appeared at no
+    /// call site among the eighty-nine rules that preceded this one.
+    ///
+    /// It rejects `ForwardPagingBudgetStore`: `limit` applied only where `from`
+    /// is absent, because the resume branch was written after the paging query
+    /// and nobody threaded the budget into it. That is the order every SQL
+    /// adapter in this workspace will be written in, and the backwards branch is
+    /// left correct in it — so `read_backwards_from_with_limit` passes and this
+    /// is the only rule that sees it. The caller it protects is a projection
+    /// runner asking for five hundred events from its checkpoint and being handed
+    /// the whole stream, with no error anywhere.
+    ///
+    /// # Why the query has two items, and why there is no `to` here
+    ///
+    /// Two items because CF-12's finding is about the *generated SQL*, where the
+    /// cursor and the disjunction are built by different hands:
+    /// `UnparenthesisedPredicateStore` binds the bound to the last item alone and
+    /// fails here for that reason, and `LimitPerItemStore` writes the budget onto
+    /// one statement per item and fails here for its own. A single-item query
+    /// would see neither.
+    ///
+    /// No `to`, and that is a decision rather than an omission. `from` cuts the
+    /// front of the read while `to` and `limit` both cut the back, so in read
+    /// order the two commute exactly: every implementation that answers
+    /// `from`+`to`+`limit` wrongly answers either this read or
+    /// `read_from_and_to_bound_a_closed_window` wrongly as well. A second rule
+    /// for the three-way composition would have no wrong implementation of its
+    /// own to name, and CF-1 does not permit a rule whose only mutant would be a
+    /// strawman.
+    ///
+    /// The two items' matches are contiguous blocks rather than interleaved, for
+    /// `limit_applies_across_items_not_per_item`'s reason: interleaving makes
+    /// item order and position order disagree, and `ItemOrderedUnionStore` and
+    /// `SortByEventTypeStore` would then fail this rule for reasons
+    /// `query_item_order_does_not_change_the_result_set` and
+    /// `read_defaults_to_ascending_order` already own. The window the assertion
+    /// names **straddles the boundary between the blocks**, which is what makes
+    /// it a statement about the merged result rather than about either item: a
+    /// store that pages each item separately cannot produce it.
+    ///
+    /// The assertion names three positions the store itself assigned, so a store
+    /// that returns nothing fails it and so does one that returns everything.
+    /// That is the non-vacuity anchor, and it is why there is no separate one.
+    pub async fn read_from_composes_with_limit<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // One distinct tag each, and every tag distinct, for
+        // `limit_applies_across_items_not_per_item`'s three reasons: untagged
+        // events are invisible to `InnerJoinTagStore`, two tags on one event make
+        // `TagJoinFanOutStore` return it twice, and byte-identical events are one
+        // event to `PayloadDedupStore`. The types ascend across the blocks so
+        // that `SortByEventTypeStore`'s sort is the identity here and it fails
+        // the rule that owns it instead.
+        append_ok(&store, &[tagged_event("Left", &[("page", "l1")])]).await;
+        let left_mid = append_ok(&store, &[tagged_event("Left", &[("page", "l2")])]).await;
+        let left_high = append_ok(&store, &[tagged_event("Left", &[("page", "l3")])]).await;
+        let right_low = append_ok(&store, &[tagged_event("Right", &[("page", "r1")])]).await;
+        append_ok(&store, &[tagged_event("Right", &[("page", "r2")])]).await;
+        append_ok(&store, &[tagged_event("Right", &[("page", "r3")])]).await;
+
+        let query = query_of_items([item_of_types(&["Left"]), item_of_types(&["Right"])]);
+
+        let page = read_ok(&store, &query, ReadOptions::new().from(left_mid).limit(3)).await;
+        assert_eq!(
+            positions_of(&page),
+            [left_mid.get(), left_high.get(), right_low.get()],
+            "a forward read composing `from` with `limit` must yield the first \
+             THREE events at or above the cursor, across the whole merged result. \
+             An adapter that branches on `from` for its resume path and never \
+             threads the budget into that branch hands back the entire tail: the \
+             caller asked for a page, got the log, and nothing errored"
+        );
+
+        RuleOutcome::Ran
+    }
+
     // ---------------------------------------------------------------------
     // Read options — the upper bound (ES-16, VT-29)
     // ---------------------------------------------------------------------
@@ -1471,10 +1557,15 @@ pub mod rules {
     /// test. The position **immediately above the head** is unoccupied on *every*
     /// store, whatever it allocates and wherever it starts, because nothing has
     /// been appended since. Reading backwards from it is therefore the portable
-    /// half of ES-9, and it is the half no existing rule reaches:
-    /// `read_from_is_inclusive` and `read_backwards_from_with_limit` are the only
-    /// two rules that pass `from` at all, and both hand it a position the store
-    /// actually assigned.
+    /// half of ES-9, and it is the half no existing rule reaches: **six** rules
+    /// pass `from` — `read_from_is_inclusive`, `read_backwards_from_with_limit`,
+    /// `read_from_composes_with_multi_item_query`,
+    /// `read_from_composes_with_limit`, `read_from_and_to_bound_a_closed_window`
+    /// and this one — and every one of the other five hands it a position the
+    /// store actually assigned. This sentence read *"the only two rules that pass
+    /// `from` at all"* until phase 12's pre-publication review counted them; the
+    /// count is written out here rather than left implicit because it is the
+    /// claim that decayed.
     ///
     /// The interior half runs only where the fixture's own allocator left a hole
     /// — `GappedPositionStore`, and any adapter allocating from a sequence with

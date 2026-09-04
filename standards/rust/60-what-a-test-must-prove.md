@@ -265,9 +265,9 @@ defect; `mutants_fail_exactly_their_declared_rules` then reports the *instrument
 as broken, the registry stops being a map from rules to bugs, and no one can tell
 which store is lying.
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:110 (pub(crate) trait Defect)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:107 (Box<dyn Defect>)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:267 (defect: PhantomData)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:112 (pub(crate) trait Defect)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:109 (Box<dyn Defect>)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:268 (defect: PhantomData)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 

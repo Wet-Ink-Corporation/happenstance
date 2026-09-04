@@ -64,6 +64,7 @@ mod racers;
 #[path = "mutation_coverage/variants.rs"]
 mod variants;
 
+use happenstance_core::{Query, ReadOptions, SequencedEvent};
 use harness::{Origin, RUNTIME_PANICS, SubjectReport, Verdict};
 
 // =====================================================================
@@ -79,6 +80,48 @@ enum Kind {
     /// A store that is legally different from `MemoryEventStore` and MUST pass
     /// everything (CF-5).
     ConformantVariant,
+    /// A store with a named defect that **no rule of the event-store family can
+    /// see**, and which the *model* family therefore has to.
+    ///
+    /// It looks like a hole in [`Kind::Mutant`]'s contract and is the opposite:
+    /// a mutant with an empty `fails` list is rejected outright, because a
+    /// defect nothing catches is a defect nobody knows about. This kind is what
+    /// makes "nothing in this family catches it, and here is what does" a
+    /// *checked* claim.
+    ///
+    /// It carries **three** obligations, and the split between them is the whole
+    /// design:
+    ///
+    /// 1. Every rule of the event-store family must pass or skip for a declared
+    ///    reason — exactly as for a mutant with nothing in `fails`. That is the
+    ///    claim *"no rule sees it"*, measured rather than asserted, by
+    ///    `mutants_fail_exactly_their_declared_rules`.
+    /// 2. It must carry a [`Witness`] in [`MODEL_ONLY_WITNESSES`]: a fixed log
+    ///    and read on which its own `Defect::select` answers differently from
+    ///    [`crate::correct`]. That is the claim *"it is defective at all"*, and
+    ///    it holds in **every feature configuration**, which is what obligation
+    ///    3 cannot do.
+    /// 3. [`MODEL_COVERAGE`] must claim it [`ModelOutcome::Rejected`], and the
+    ///    model must deliver it. That is the claim *"the model is what catches
+    ///    it"*.
+    ///
+    /// Obligation 2 was not there when this kind landed, and its absence was a
+    /// real hole rather than a theoretical one. An adversarial review registered
+    /// [`crate::mutants::HidingPlaceStore`] — a bare `impl Defect` with no
+    /// defect whatever — under this kind, satisfying 1 honestly and 3 with a
+    /// lie, and `cargo test --no-default-features --test mutation_coverage`
+    /// reported nine passes, because obligation 3 is behind
+    /// `#[cfg(feature = "proptest")]` and `cargo hack`'s powerset builds that
+    /// configuration. `Kind::Mutant` is unabusable because its bar is data in
+    /// this same table; a kind that borrows a *family* for its bar can have the
+    /// bar compiled out from under it.
+    ///
+    /// The shape it exists for is a defect that needs a *query* and a *read
+    /// option* together, where the family's rules for that option all issue
+    /// `Query::all()`. The suite's answer to that for `from` was CF-12's rule;
+    /// where no such rule exists, the generative family is what is left, and
+    /// this kind records which of the two is doing the work.
+    ModelOnlyMutant,
 }
 
 /// Why a mutant's declared rule fails.
@@ -218,7 +261,8 @@ struct Declared {
 /// `OFFSET`; `backwards` lost between two structs; an upper bound ignored, read
 /// as exclusive, and never swapped under `backwards`; a budget of zero read as no
 /// budget, a budget written per query item and never re-applied to the union,
-/// `LIMIT n + 1`, and `LIMIT` pushed into the scan ahead of the filter;
+/// `LIMIT n + 1`, `LIMIT` pushed into the scan ahead of the filter, and a budget
+/// spent everywhere except the branch that serves a forward cursor;
 /// `WHERE a OR b AND position >= ?` without parentheses; a paging window anchored on a `max(position)` that is `NULL` on
 /// an empty store; one position bound for a whole batch; `RETURNING` read from
 /// the wrong end and read without checking there is a row; probe-then-insert
@@ -458,6 +502,11 @@ const REGISTRY: &[Declared] = &[
             "limit_applies_across_items_not_per_item",
             "query_union_is_item_concatenation",
             "query_items_share_one_snapshot",
+            // And L1-1's rule for the same reason: its two items match three
+            // events each and nothing matches both, so the budgeted page comes
+            // back empty and this store fails at the arrangement anchor rather
+            // than at the budget.
+            "read_from_composes_with_limit",
         ],
         provenance: "the same joiner bug one level up: the item list assembled with the \
              separator that belongs inside an item.",
@@ -587,6 +636,10 @@ const REGISTRY: &[Declared] = &[
             // The two `to`-only rules leave `from` unset, so it passes those.
             "read_from_and_to_bound_a_closed_window",
             "read_from_a_gap_position",
+            // The budgeted resume too, one composition over: an `OFFSET` of the
+            // cursor's numeric value starts the page at the wrong event, so what
+            // comes back is the wrong three events rather than too many.
+            "read_from_composes_with_limit",
         ],
         provenance: "a position anchor read as an index. `OFFSET` is the parameter already \
              in the paging query, and a `u64` position slots into it without \
@@ -635,6 +688,10 @@ const REGISTRY: &[Declared] = &[
             // but wrong.
             "read_limit_zero_yields_nothing",
             "limit_applies_across_items_not_per_item",
+            // Off by one on the budgeted resume as well. Inflation on the axis
+            // `read_limit_truncates` already owns: L1-1's rule is about a budget
+            // that is never spent, not about one spent a row late.
+            "read_from_composes_with_limit",
         ],
         provenance: "ubiquitous: every cursor-paging implementation fetches `LIMIT n + 1` to \
              answer \"is there more\", and most of them trim. This one forgot, \
@@ -709,6 +766,20 @@ const REGISTRY: &[Declared] = &[
         expect: &[("read_limit_zero_yields_nothing", "must yield nothing")],
     },
     Declared {
+        name: "ForwardPagingBudgetStore",
+        kind: Kind::Mutant,
+        fails: &["read_from_composes_with_limit"],
+        provenance: "a forward read that branches on `from` and never threads `limit` into the \
+             resume branch — the shape that arises when the cursor is added to a paging \
+             query written before it, which is the order every SQL adapter in this \
+             workspace will be written in. The backwards branch is left correct, so \
+             `read_backwards_from_with_limit` passes. The caller it breaks is a projection \
+             resuming from its checkpoint with a budget: it asks for five hundred events \
+             and is handed the whole stream, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "LimitBeforeFilterStore",
         kind: Kind::Mutant,
         fails: &[
@@ -735,6 +806,10 @@ const REGISTRY: &[Declared] = &[
             // there at the `limit` assertion rather than at the precedence one,
             // which is what `UnparenthesisedPredicateStore`'s row protects.
             "read_from_composes_with_multi_item_query",
+            // Not inflation either: L1-1's rule pages a window that STRADDLES
+            // the two items' blocks, which is the one shape a per-item budget
+            // cannot produce. It spends three rows on each item and returns five.
+            "read_from_composes_with_limit",
         ],
         provenance: "an adapter that cannot express a disjunction in one statement emits one \
              per `QueryItem`, and the row budget goes onto each of them because \
@@ -752,7 +827,14 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "UnparenthesisedPredicateStore",
         kind: Kind::Mutant,
-        fails: &["read_from_composes_with_multi_item_query"],
+        fails: &[
+            "read_from_composes_with_multi_item_query",
+            // And L1-1's rule, which is the same predicate with a budget on it:
+            // the cursor binds to the `Right` item alone, the whole `Left` block
+            // survives it, and the first three rows of the page are three events
+            // the caller had already checkpointed.
+            "read_from_composes_with_limit",
+        ],
         provenance: "`WHERE a OR b AND position >= ?` — the textbook operator-precedence bug, \
              reached by string-concatenating a cursor clause onto a disjunction someone else \
              built. It is invisible to a single-item query, which is every read-option rule \
@@ -767,6 +849,26 @@ const REGISTRY: &[Declared] = &[
             "read_from_composes_with_multi_item_query",
             "must bound EVERY item of the query",
         )],
+    },
+    Declared {
+        name: "UnparenthesisedToPredicateStore",
+        kind: Kind::ModelOnlyMutant,
+        // Empty, and that is this row's whole content: the three `to` rules all
+        // issue `Query::all()`, and with no items there is nothing for the `OR`
+        // to bind wrongly across. CF-12 closed this gap for `from` and no clause
+        // has closed it for `to`, so what catches this store is the model
+        // family, which generates multi-item queries and an upper bound to go
+        // with them. `MODEL_COVERAGE` carries the claim, and
+        // `mutant_registry_is_exhaustive` requires it to say `Rejected`.
+        fails: &[],
+        provenance: "`WHERE a OR b AND position <= ?` — `UnparenthesisedPredicateStore` one bound \
+             over, and reached the same way: the window's top appended to a `WHERE` string that \
+             already carries a disjunction someone else built. The caller it breaks is a bounded \
+             backfill worker owning `[1, H]` while a tail worker owns everything above it: the \
+             backfill reads past its own window and re-delivers events the tail worker has \
+             already processed, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
     },
     Declared {
         name: "NullHeadPagingStore",
@@ -2077,6 +2179,68 @@ const REGISTRY: &[Declared] = &[
     },
 ];
 
+/// A deterministic disagreement between a store's own read path and
+/// [`crate::correct`]'s — the bar [`Kind::ModelOnlyMutant`] is held to in
+/// **every** feature configuration.
+///
+/// # Why the kind needed one
+///
+/// [`Kind::Mutant`] is unabusable because its bar is *data in the same table*: a
+/// non-empty `fails` list, checked wherever the registry compiles at all. The
+/// model-only kind was landed with a bar that borrowed another family instead —
+/// `MODEL_COVERAGE` must claim `Rejected` — and a family can be compiled out.
+/// An adversarial review demonstrated it: `HidingPlaceStore`, a store with no
+/// defect whatever, was registered under this kind with an empty `fails` list
+/// and a `MODEL_COVERAGE` row claiming `Rejected`, and
+/// `cargo test --no-default-features --test mutation_coverage` reported nine
+/// passes. `cargo hack`'s feature powerset builds that configuration, so it was
+/// reachable in the real gate.
+///
+/// This table is the repair, and it is deliberately not a second claim. A claim
+/// can be written down falsely; this holds a *scenario* and a **function
+/// pointer to the mutant's own `Defect::select`**, and
+/// `every_model_only_mutant_demonstrates_its_defect` does the comparing. To
+/// satisfy it a store has to actually answer a read differently from the
+/// reference implementation, in a run that needs no generator, no runtime and no
+/// optional dependency.
+///
+/// # Why it is not extended to every mutant
+///
+/// Because for every other kind the rule *is* the witness, and a second one
+/// would be a snapshot of what the rule already asserts —
+/// `mutants_fail_exactly_their_declared_rules` drives each declared failure and
+/// `Declared::expect` pins which assertion fired. The witness exists only where
+/// no rule of this family can see the defect, which is exactly the hole the kind
+/// names.
+/// A `Defect::select`, as a value.
+///
+/// Named for `clippy::type_complexity`, and it earns the name anyway: it is the
+/// signature every mutant's read path has, and writing it once says that the
+/// witness holds *the store's own function* rather than a copy of it.
+type SelectFn =
+    fn(&[SequencedEvent], &Query, ReadOptions) -> Result<Vec<SequencedEvent>, correct::LogError>;
+
+#[derive(Debug)]
+struct Witness {
+    /// The `REGISTRY` row this witness answers for.
+    name: &'static str,
+    /// The mutant's own read path, as a function pointer.
+    ///
+    /// `<T as Defect>::select` rather than a re-implementation, so the thing
+    /// measured is the store itself and a witness cannot drift away from the
+    /// defect it demonstrates.
+    select: SelectFn,
+    /// The log to read, the query, and the options — all fixed.
+    scenario: fn() -> (Vec<SequencedEvent>, Query, ReadOptions),
+}
+
+/// One row per [`Kind::ModelOnlyMutant`] in [`REGISTRY`], and no others.
+const MODEL_ONLY_WITNESSES: &[Witness] = &[Witness {
+    name: "UnparenthesisedToPredicateStore",
+    select: <mutants::UnparenthesisedToPredicateStore as mutants::Defect>::select,
+    scenario: mutants::to_precedence_scenario,
+}];
+
 /// Hands every registered store **type** to `$callback`.
 ///
 /// Mirrors `happenstance_testkit::for_each_event_store_rule!`, and for the same
@@ -2111,6 +2275,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ToIsExclusiveStore>,
             crate::mutants::MutantFixture<crate::mutants::BackwardsToIsAnUpperBoundStore>,
             crate::mutants::MutantFixture<crate::mutants::LimitZeroIsUnlimitedStore>,
+            crate::mutants::MutantFixture<crate::mutants::ForwardPagingBudgetStore>,
 
             crate::mutants::MutantFixture<crate::mutants::SharedBatchPositionStore>,
             crate::mutants::MutantFixture<crate::mutants::ReturnsFirstOfBatchStore>,
@@ -2134,6 +2299,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::LimitPerItemStore>,
             crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
+            crate::mutants::MutantFixture<crate::mutants::UnparenthesisedToPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
             crate::mutants::MutantFixture<crate::mutants::AfterValidatedAgainstHeadStore>,
@@ -2321,18 +2487,34 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// that actually matters — *what is this test blind to* — and it answers it in a
 /// form that goes red when the answer changes.
 ///
-/// # The twenty-one it does not catch are three shapes, not twenty-one
+/// # What it does not catch is a handful of shapes, not a list
 ///
-/// Twenty-three rows below are marked [`ModelOutcome::Agreed`]. Two of those are
-/// the conformant controls and *must* be, which leaves **twenty-one misses** — a
-/// number that has more than doubled since stage 5, when this heading last said
-/// eight and the table it documents said eighteen, and that gained one at phase 8
-/// when `RestampingFixture` arrived. Every one of the twenty-one
-/// carries a defect the model **cannot
-/// express**, and the boundary is sharp enough to state in one line: the model
-/// drives *one handle*, on *one fixture*, through a *strictly sequential* stream
-/// of *non-empty* batches of *typical* values, and it never reopens and never
-/// arms a fixture.
+/// **Count the table rather than this sentence.** Thirty-nine rows below are
+/// marked [`ModelOutcome::Agreed`] at this commit; two of them are the
+/// conformant controls and *must* be, which leaves **thirty-seven misses**. This
+/// heading said *twenty-one* and the paragraph under it said *twenty-three rows*
+/// for several phases while the table itself said forty and forty-two — the
+/// drift the pre-publication review found wherever a number was written beside
+/// the list it describes, and one this file had already warned about in another
+/// place. The shapes below are still the shapes; they no longer enumerate every
+/// name, and the honest instrument is a count of the table.
+///
+/// Every miss carries a defect the model **cannot express**, and the boundary is
+/// sharp enough to state in one line: the model drives *one handle*, on *one
+/// fixture*, through a *strictly sequential* stream of *non-empty* batches of
+/// *typical* values, and it never reopens and never arms a fixture.
+///
+/// **Three names left this list at phase 12**, and they are worth naming because
+/// what moved was the *generator* rather than any store. `ToBoundIgnoredStore`,
+/// `ToIsExclusiveStore` and `BackwardsToIsAnUpperBoundStore` were misses for one
+/// reason: [`Op`]`::Read` carried four of the five read options, `to` was the
+/// missing one, and `Model::select`'s two `to` branches were therefore dead
+/// code. All three are rejected now, and a fourth store —
+/// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
+/// which is what `Kind::ModelOnlyMutant` records. `LimitZeroIsUnlimitedStore` is
+/// the read option still on this list, and it is a *value* boundary rather than
+/// a missing field: `Op::Read` generates `Option<usize>` over `1..4` and never
+/// proposes the zero, which is the exclusion the ten value edges sit behind.
 ///
 /// * `EmptyBatchIsANoOpStore`, `EmptyBatchPanicsStore`,
 ///   `ConditionBeforeEmptinessStore` — the empty batch, which [`Op`] does not
@@ -2405,10 +2587,22 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // edges sit on, one method over.
     ("EmptyHeadIsFirstStore", ModelOutcome::Agreed),
     ("DefaultQueryHeadStore", ModelOutcome::Agreed),
-    ("ToBoundIgnoredStore", ModelOutcome::Agreed),
-    ("ToIsExclusiveStore", ModelOutcome::Agreed),
-    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Agreed),
+    // The upper bound, and all three moved from `Agreed` to `Rejected` at phase
+    // 12 without any of them changing. What changed is the generator: `Op::Read`
+    // now carries a `to`, so `Model::select`'s two `to` branches execute. They
+    // sat under the *head* comment above only because that is where the table
+    // put them, and they were never about `head`.
+    ("ToBoundIgnoredStore", ModelOutcome::Rejected),
+    ("ToIsExclusiveStore", ModelOutcome::Rejected),
+    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Rejected),
+    // `Kind::ModelOnlyMutant`: the one store in this binary that no rule of the
+    // event-store family can see. This row is the whole of what catches it.
+    ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
+    // A *value* boundary rather than a missing field: `Op::Read`'s limit is
+    // `Option<usize>` over `1..4` and never proposes the zero this store
+    // mishandles.
     ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
+    ("ForwardPagingBudgetStore", ModelOutcome::Rejected),
     ("LimitPerItemStore", ModelOutcome::Rejected),
     ("ItemDedupByTypeStore", ModelOutcome::Rejected),
     // Append.
@@ -2769,9 +2963,10 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 /// that `cargo test mutation_coverage::every_rule_has_a_mutant` resolves.
 mod mutation_coverage {
     use super::{
-        Declared, FailureMode, Kind, Origin, RACERS, REGISTRY, RUNTIME_PANICS, RacerOutcome,
-        Verdict, all_concurrency_rules, all_projection_rules, all_rules, declared, racer_names,
-        racer_reports, registered_names, registered_second_handle, reports,
+        Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
+        RUNTIME_PANICS, RacerOutcome, Verdict, all_concurrency_rules, all_projection_rules,
+        all_rules, declared, racer_names, racer_reports, registered_names,
+        registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
     use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
@@ -2904,21 +3099,7 @@ mod mutation_coverage {
                 );
             }
 
-            match entry.kind {
-                Kind::Mutant => assert!(
-                    !entry.fails.is_empty(),
-                    "`{}` is a mutant that fails nothing, which is a conformant \
-                     store filed under the wrong kind",
-                    entry.name
-                ),
-                Kind::ConformantVariant => assert!(
-                    entry.fails.is_empty(),
-                    "`{}` is a conformant variant that declares failures; a \
-                     variant that fails a rule is either a mutant or evidence \
-                     the rule is over-specified (CF-6)",
-                    entry.name
-                ),
-            }
+            assert_kind_agrees_with_the_failure_list(entry);
         }
 
         assert!(
@@ -2929,6 +3110,196 @@ mod mutation_coverage {
              `conformant_variants_pass_everything` asserts over nothing — which \
              is the vacuity of CF-5 reintroduced one level up"
         );
+    }
+
+    /// Each [`Kind`]'s claim about what `fails` may hold — and, for
+    /// [`Kind::ModelOnlyMutant`], about what catches the store instead.
+    ///
+    /// Split out of `mutant_registry_is_exhaustive` rather than inlined,
+    /// because the three arms are one question — *does this row's kind agree
+    /// with the rest of the row* — and the enclosing test is a list of
+    /// unrelated ones.
+    fn assert_kind_agrees_with_the_failure_list(entry: &Declared) {
+        match entry.kind {
+            Kind::Mutant => assert!(
+                !entry.fails.is_empty(),
+                "`{}` is a mutant that fails nothing, which is a conformant \
+                 store filed under the wrong kind",
+                entry.name
+            ),
+            Kind::ModelOnlyMutant => {
+                assert!(
+                    entry.fails.is_empty(),
+                    "`{}` is filed as caught only by the model family and \
+                     declares a rule of the event-store family that it fails, \
+                     so it is an ordinary mutant. Change the kind rather than \
+                     the list",
+                    entry.name
+                );
+                // Obligation two, and it is feature-**independent**, which is
+                // the whole repair. The kind shipped with only the `cfg`-gated
+                // obligation below, and an adversarial review registered
+                // `HidingPlaceStore` — a store with no defect at all — under
+                // this kind, with an empty `fails` list and a `MODEL_COVERAGE`
+                // row claiming `Rejected`, and watched
+                // `--no-default-features` report nine passes. `Kind::Mutant` is
+                // unabusable because its bar is data in this same table;
+                // borrowing a family for a bar means the bar can be compiled
+                // out, and `cargo hack`'s powerset compiles exactly that.
+                //
+                // Presence here is only half of it: a row can be added as
+                // easily as a claim. `every_model_only_mutant_demonstrates_its_defect`
+                // is the other half — it runs the witness and compares the
+                // store's own answer against `crate::correct`'s.
+                assert!(
+                    MODEL_ONLY_WITNESSES
+                        .iter()
+                        .any(|witness| witness.name == entry.name),
+                    "`{}` is filed as caught only by the model family and carries no \
+                     `MODEL_ONLY_WITNESSES` row, so nothing in this build has shown it is \
+                     defective at all. Add a fixed scenario on which its own `Defect::select` \
+                     disagrees with `crate::correct`",
+                    entry.name
+                );
+
+                // Obligation three, and the one that needs the model family
+                // itself: not merely *a* defect, but one this binary's model
+                // actually rejects. It can only be checked where that family is
+                // compiled, which is why obligation two above exists and does
+                // not depend on it.
+                #[cfg(feature = "proptest")]
+                {
+                    let claimed = MODEL_COVERAGE
+                        .iter()
+                        .find(|(row, _)| *row == entry.name)
+                        .map(|(_, outcome)| *outcome);
+                    assert_eq!(
+                        claimed,
+                        Some(ModelOutcome::Rejected),
+                        "`{}` is filed as caught only by the model family, and \
+                         `MODEL_COVERAGE` claims {claimed:?} rather than \
+                         `Rejected` — so nothing in this binary catches it and \
+                         the kind is a place to hide it",
+                        entry.name
+                    );
+                }
+            }
+            Kind::ConformantVariant => assert!(
+                entry.fails.is_empty(),
+                "`{}` is a conformant variant that declares failures; a \
+                 variant that fails a rule is either a mutant or evidence the \
+                 rule is over-specified (CF-6)",
+                entry.name
+            ),
+        }
+    }
+
+    /// Every [`Kind::ModelOnlyMutant`] really is defective, measured rather
+    /// than claimed — in **every** feature configuration.
+    ///
+    /// The kind's other two obligations are both statements *about* a store: its
+    /// `fails` list is empty, and `MODEL_COVERAGE` says the model rejects it.
+    /// The first is true of a correct store as well, and the second is behind
+    /// `proptest`. Between them they left the configuration `cargo hack` builds
+    /// with no bar at all, and an adversarial review walked `HidingPlaceStore`
+    /// straight through it.
+    ///
+    /// This runs the store's own [`crate::mutants::Defect::select`] against a
+    /// fixed log and read, and requires it to answer differently from
+    /// [`crate::correct::select`]. No generator, no runtime, no feature — the
+    /// same shape as the experiment crate's `defect_is_real.rs`, which exists
+    /// for the same reason one family over.
+    ///
+    /// Both directions, because an orphan witness is a scenario nobody runs
+    /// against anything and reads as coverage.
+    #[test]
+    fn every_model_only_mutant_demonstrates_its_defect() {
+        for entry in REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ModelOnlyMutant)
+        {
+            let witness = MODEL_ONLY_WITNESSES
+                .iter()
+                .find(|witness| witness.name == entry.name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{}` is a `ModelOnlyMutant` with no witness; \
+                         `mutant_registry_is_exhaustive` owns this failure",
+                        entry.name
+                    )
+                });
+
+            let (log, query, options) = (witness.scenario)();
+            let observed = (witness.select)(&log, &query, options);
+            let correct = crate::correct::select(&log, &query, options);
+
+            let disagrees = match &observed {
+                Ok(events) => events != &correct,
+                // A read that fails where the correct one succeeds is a
+                // disagreement too, and the sharpest kind.
+                Err(_) => true,
+            };
+            assert!(
+                disagrees,
+                "`{}` is filed as a defect only the model family can see, and its own witness \
+                 does not show a defect at all: reading {query:?} under {options:?} it answered \
+                 exactly what `crate::correct` answers, {correct:?}. Either the witness is the \
+                 wrong scenario or the store has stopped being wrong",
+                entry.name
+            );
+        }
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let owner = declared(witness.name);
+            assert!(
+                owner.is_some_and(|entry| entry.kind == Kind::ModelOnlyMutant),
+                "`{}` has a `MODEL_ONLY_WITNESSES` row and is not a registered \
+                 `ModelOnlyMutant`, so the scenario is never evaluated against anything and \
+                 reads as coverage",
+                witness.name
+            );
+        }
+    }
+
+    /// The positive control on the bar above: a store with **no defect** cannot
+    /// satisfy it.
+    ///
+    /// Without this, `every_model_only_mutant_demonstrates_its_defect` is
+    /// satisfied by a comparison that always reports a disagreement — the same
+    /// vacuity `conformant_variants_pass_everything` exists to rule out one
+    /// table over. [`crate::mutants::HidingPlaceStore`] is the review's own
+    /// refutation, kept in the tree and driven through **every** scenario the
+    /// witness table holds; it agrees with `crate::correct` on all of them, so
+    /// no witness for it could be written.
+    ///
+    /// What this does and does not prove: it does not prove that *no* scenario
+    /// anywhere would separate a defect-free store from the reference
+    /// implementation — nothing could, and the two are the same function. It
+    /// proves the comparison is a real one, over the exact inputs the bar
+    /// accepts today.
+    #[test]
+    fn the_model_only_bar_rejects_a_store_with_no_defect() {
+        assert!(
+            !MODEL_ONLY_WITNESSES.is_empty(),
+            "no witnesses, so this control asserts nothing"
+        );
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let (log, query, options) = (witness.scenario)();
+            let hiding = <crate::mutants::HidingPlaceStore as crate::mutants::Defect>::select(
+                &log, &query, options,
+            )
+            .expect("the correct read path is infallible");
+            assert_eq!(
+                hiding,
+                crate::correct::select(&log, &query, options),
+                "`HidingPlaceStore` overrides no step of `Defect` and must therefore answer \
+                 every read exactly as `crate::correct` does. It did not, on `{}`'s scenario — \
+                 which means the witness comparison is measuring something other than the \
+                 defect, and every row it passes is suspect",
+                witness.name
+            );
+        }
     }
 
     /// CF-3. Both directions: a mutant fails every rule it declares, and every
@@ -2963,7 +3334,12 @@ mod mutation_coverage {
             let Some(entry) = declared(report.name) else {
                 continue; // `mutant_registry_is_exhaustive` owns this failure.
             };
-            if entry.kind != Kind::Mutant {
+            // `Kind::ModelOnlyMutant` runs through this loop too, and with an
+            // empty `fails` list every rule takes the undeclared arm — which is
+            // exactly the claim that kind makes: *no rule of this family sees
+            // it*. Filing it as a mutant caught elsewhere would be worth nothing
+            // if the "elsewhere" were assumed rather than measured here.
+            if entry.kind == Kind::ConformantVariant {
                 continue;
             }
 

@@ -83,6 +83,7 @@ use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
     QueryItem, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
+use happenstance_testkit::fixtures::{item_tagged, query_of_items, tagged_event};
 use happenstance_testkit::{Capability, Fixture};
 
 use crate::correct::{self, Allocate, Log, LogError, LogStore, Snapshot, dense};
@@ -935,6 +936,51 @@ impl Defect for LimitZeroIsUnlimitedStore {
     }
 }
 
+/// The forward resume branch never spends the caller's budget.
+///
+/// `from` arrives for the projection-resume path, which originally passed no
+/// limit, and the branch written to serve it never threads `limit` through:
+///
+/// ```text
+/// if let Some(from) = options.from {
+///     self.read_resume(from)          // <- limit never reaches here
+/// } else {
+///     self.read_paged(options.limit)
+/// }
+/// ```
+///
+/// That is the order every SQL adapter in this workspace will be written in —
+/// the paging query first, the cursor threaded in afterwards — and the
+/// workspace's own runner cannot meet it: `run_projection` sets `from` and no
+/// limit deliberately, one read for the whole run, so nothing in-tree issues the
+/// composition that would notice.
+///
+/// The backwards branch is left correct, and that is what makes this a scalpel
+/// rather than a broken store: the suite *does* compose backwards `from` with
+/// `limit`, in `read_backwards_from_with_limit`, so a store that lost the budget
+/// in both directions would go red for a reason that is not this defect's.
+///
+/// The wrong outcome is a silently over-large page. A projection runner that
+/// asks for five hundred events from its checkpoint is handed the whole stream,
+/// the read-model store behind it buffers a batch nobody sized, and the caller's
+/// own paging arithmetic is arithmetic about a number the store ignored. Nothing
+/// errors.
+pub(crate) struct ForwardPagingBudgetStore;
+
+impl Defect for ForwardPagingBudgetStore {
+    const NAME: &'static str = "ForwardPagingBudgetStore";
+
+    fn truncated(selected: Vec<&SequencedEvent>, options: ReadOptions) -> Vec<&SequencedEvent> {
+        // THE DEFECT: the resume branch returns the whole ordered tail, and the
+        // budget is applied only where `from` is absent. Backwards is left
+        // alone, because the resume path this bug grows in reads forwards.
+        if options.from.is_some() && !options.backwards {
+            return selected;
+        }
+        correct::truncated(selected, options)
+    }
+}
+
 /// `LIMIT` is pushed into the scan and the query's predicate is applied to the
 /// rows that come back.
 ///
@@ -1097,6 +1143,162 @@ impl Defect for UnparenthesisedPredicateStore {
             .cloned()
             .collect())
     }
+}
+
+/// `WHERE a OR b AND position <= ?`, without the parentheses.
+///
+/// [`UnparenthesisedPredicateStore`]'s twin, one bound over. The lower bound is
+/// conjoined with the whole predicate — correctly — and only the **upper** one is
+/// left dangling off the last disjunct, which is what an adapter produces when
+/// the `to` clause is appended to a `WHERE` string that already carries a cursor
+/// and a disjunction someone else built. `AND` binds tighter than `OR`, so every
+/// event matching an earlier item comes back regardless of the window's top.
+///
+/// The wrong outcome is a bounded backfill worker that reads past its own
+/// window. It was given `[1, H]` while a tail worker owns everything above, and
+/// it re-delivers events the tail worker has already processed — the failure
+/// ES-16 exists to forbid, arriving through a query shape ES-16's own rules do
+/// not exercise.
+///
+/// # Why it is `Kind::ModelOnlyMutant`
+///
+/// It fails no rule in the event-store family, and that is the finding rather
+/// than an accident. All three `to` rules — `read_to_is_inclusive`,
+/// `read_from_and_to_bound_a_closed_window` and
+/// `read_to_under_backwards_bounds_the_older_end` — issue `Query::all()`, and
+/// with no items there is nothing for the `OR` to bind wrongly across, so this
+/// store's answer is the correct one. The rule that would see it is `to`
+/// composed with a multi-item query, which does not exist; CF-12 closed that gap
+/// for `from` alone. What catches it instead is the **model** family, which
+/// generates multi-item queries and — since phase 12 — an upper bound to go with
+/// them.
+///
+/// Registering it is therefore the honest way to hold that boundary in place. If
+/// someone writes the missing rule, this row becomes an ordinary
+/// [`Kind::Mutant`] with one entry in `fails` and the meta-tests say so; if the
+/// generator ever stops reaching `to`, `MODEL_COVERAGE` goes red and names this
+/// store. Either way the claim is checked rather than remembered.
+///
+/// That the store is defective *at all* is checked separately and without any
+/// feature, by [`to_precedence_scenario`] below — the witness
+/// `Kind::ModelOnlyMutant` requires. See that function, and
+/// [`HidingPlaceStore`], for why the kind needed one.
+///
+/// It cannot be a one-step defect, for [`UnparenthesisedPredicateStore`]'s
+/// reason: the bound and the predicate have to be built together, `matching` is
+/// handed no options and `ordered` is handed no query, and [`Defect::select`] is
+/// the only seam that sees both.
+pub(crate) struct UnparenthesisedToPredicateStore;
+
+impl Defect for UnparenthesisedToPredicateStore {
+    const NAME: &'static str = "UnparenthesisedToPredicateStore";
+
+    fn select(
+        events: &[SequencedEvent],
+        query: &Query,
+        options: ReadOptions,
+    ) -> Result<Vec<SequencedEvent>, LogError> {
+        let Some(items) = query.items() else {
+            return Ok(correct::select(events, query, options));
+        };
+        let Some((last, rest)) = items.split_last() else {
+            return Ok(correct::select(events, query, options));
+        };
+
+        let mut selected: Vec<&SequencedEvent> = events
+            .iter()
+            .filter(|event| {
+                // The cursor is conjoined with the whole predicate, which is
+                // right, and is what keeps this store distinct from its twin.
+                let resumed = options.from.is_none_or(|from| {
+                    if options.backwards {
+                        event.position <= from
+                    } else {
+                        event.position >= from
+                    }
+                });
+                let bounded = options.to.is_none_or(|to| {
+                    if options.backwards {
+                        event.position >= to
+                    } else {
+                        event.position <= to
+                    }
+                });
+                let matched_early = rest
+                    .iter()
+                    .any(|item| item.matches(event.event_type(), event.tags()));
+                let matched_last = last.matches(event.event_type(), event.tags());
+                // THE DEFECT: the UPPER bound is conjoined with the last
+                // disjunct instead of with the whole predicate.
+                resumed && (matched_early || (matched_last && bounded))
+            })
+            .collect();
+
+        if options.backwards {
+            selected.reverse();
+        }
+        Ok(correct::truncated(selected, options)
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+}
+
+/// The two-event log and the bounded read on which
+/// [`UnparenthesisedToPredicateStore`] disagrees with [`crate::correct`].
+///
+/// The witness `Kind::ModelOnlyMutant` requires, and it lives here rather than in
+/// the registry for the reason the registry's own documentation gives about
+/// distance: the *claim* belongs away from the store, and the *demonstration*
+/// belongs beside it, because whoever writes the defect is the only person who
+/// knows the smallest input that shows it.
+///
+/// Two events, one tagged `side:left` and one `side:right`, and a two-item query
+/// listing `right` **first** so that `left` is the disjunct the dangling bound
+/// attaches to. The read carries `to` at the first event's position. A correct
+/// store returns the first event alone; this one also returns the second,
+/// because the second matches an earlier disjunct and the upper bound never
+/// reaches it. Nothing here needs a generator, a runtime or a feature.
+pub(crate) fn to_precedence_scenario() -> (Vec<SequencedEvent>, Query, ReadOptions) {
+    let events = correct::sequence(
+        &[
+            tagged_event("Ay", &[("side", "left")]),
+            tagged_event("Bee", &[("side", "right")]),
+        ],
+        None,
+        dense,
+    );
+    let bound = events[0].position;
+    let query = query_of_items([
+        item_tagged(&[("side", "right")]),
+        item_tagged(&[("side", "left")]),
+    ]);
+    (events, query, ReadOptions::new().to(bound))
+}
+
+/// A store with **no defect at all**, filed as caught by the model family.
+///
+/// Not a mutant. It is the adversarial refutation of [`Kind::ModelOnlyMutant`],
+/// transcribed from the review that found the hole: a bare `impl Defect`
+/// carrying only `NAME`, so every step is `crate::correct`'s and the store is
+/// byte-for-byte the reference implementation. Filed with an empty `fails` list
+/// and a `MODEL_COVERAGE` row claiming `Rejected`, it satisfies both of the
+/// obligations that kind was written with — and one of them is not compiled
+/// without the `proptest` feature, which is a configuration `cargo hack`'s
+/// feature powerset builds.
+///
+/// It exists so that "the kind cannot be used to hide a store nothing catches"
+/// is a *checked* sentence rather than an argument, and it is **deliberately not
+/// registered**: a row for it would now be rejected by
+/// `every_model_only_mutant_demonstrates_its_defect`, which is the point.
+/// `the_model_only_bar_rejects_a_store_with_no_defect` is where it earns its
+/// place — it drives this store through every scenario the witness table holds
+/// and asserts it agrees with `crate::correct` on all of them, so no witness for
+/// it could be written.
+pub(crate) struct HidingPlaceStore;
+
+impl Defect for HidingPlaceStore {
+    const NAME: &'static str = "HidingPlaceStore";
 }
 
 /// The read window is anchored on `max(position)`, which is `NULL` on an empty
