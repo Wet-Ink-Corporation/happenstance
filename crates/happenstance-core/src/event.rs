@@ -985,4 +985,26 @@ mod tests {
         assert_eq!(event.tags().len(), 1);
         assert_eq!(event.metadata().unwrap().as_ref(), b"trace");
     }
+
+    /// AE-5. `EventParts` is one `into_parts()` call away from `Event`, whose
+    /// hand-written `Debug` redacts the payload for exactly this reason
+    /// (RS-12-5). The derive on `EventParts` has no such redaction, so it
+    /// prints the bytes `Event::fmt` was written to hide.
+    #[test]
+    fn event_parts_debug_is_bounded_not_the_bytes() {
+        let parts = Event::new("SeatMapPublished", &b"authorization: hunter2"[..])
+            .unwrap()
+            .into_parts();
+
+        let rendered = format!("{parts:?}");
+
+        assert!(
+            rendered.contains("<22 bytes>"),
+            "expected a bounded length, got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("hunter2"),
+            "payload bytes leaked into Debug: {rendered}"
+        );
+    }
 }
