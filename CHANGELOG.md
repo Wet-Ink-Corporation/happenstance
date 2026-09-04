@@ -32,7 +32,6 @@ not the same as what a user needed to be told.
 
 ### Added
 
-<<<<<<< HEAD
 - **A conformance rule for the one pair of read options the suite never put on
   the same read — breaking in practice, so pin `happenstance-testkit` exactly
   before taking it.** `happenstance-testkit` gains
@@ -114,7 +113,6 @@ not the same as what a user needed to be told.
 
   CF-12 closed this gap for `from` at phase 3; ES-16 is the clause that closes it
   for `to`, and its rule list names the new rule.
-=======
 - **`happenstance-cloudflare` publishes the two query widths it plans against:
   `CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT` (400),
   `MAX_QUERY_PARAMETERS_PER_STATEMENT` (30,000) and
@@ -150,7 +148,6 @@ not the same as what a user needed to be told.
   same `PARAMETER_BUDGET` the multi-row tag insert has chunked to since the write
   path was written. Additive, and free only until `0.2.0` turns it into a
   promise.
->>>>>>> lane/query-ceilings
 - **A second conformance rule, breaking in practice for the same reason: pin
   `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
   gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
