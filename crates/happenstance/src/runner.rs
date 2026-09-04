@@ -413,6 +413,36 @@ where
 /// assert_eq!(models.get("sold"), Some(2));
 /// # Ok::<(), Box<dyn Error>>(()) }
 /// ```
+/// # Exactly one runner per projection, and the caller owns that
+///
+/// Nothing here enforces it. A [`ProjectionId`] names a checkpoint, not a
+/// lease, and a second runner on the same `(store, ProjectionId)` is
+/// accepted by every store in this workspace — so **exactly one runner per
+/// `(store, ProjectionId)` is the caller's to guarantee**, by whatever
+/// their deployment already uses to elect a singleton.
+///
+/// Only the *backwards* half is guarded. `CheckpointRegression` stops a
+/// stale runner dragging the checkpoint down, which is the rolling-redeploy
+/// case the specification names under PS-22 — but two runners both moving
+/// **forwards** never trip it. They interleave, each applies events the
+/// other has already applied, and the monotonic checkpoint they leave
+/// behind is exactly what a reader would take as evidence that nothing went
+/// wrong. A projection whose `apply` is idempotent survives that; one that
+/// counts, sums or appends does not.
+///
+/// A lease, an ownership token or a fencing token would move the obligation
+/// off the caller and into the port. That is a real design question, it is
+/// owed a measurement rather than a preference, and it belongs with the
+/// projection-store freeze — so what is published now is the obligation,
+/// not a mechanism nobody has run.
+///
+// This section is the page's last rather than sitting beside `# Rebuilding`,
+// where the subject would put it. Three sentences of `SPECIFICATION.md` cite
+// `crates/happenstance/src/runner.rs:401` as the location of this item, and
+// `spec-trace` resolves that to the `run_projection` call inside the fence
+// above, within its twelve-line window. Any prose added *before* that fence
+// pushes the call out of the window and fails the gate. Moving this section
+// up is correct, and it costs the three citations moving with it.
 pub async fn run_projection<S, P, C>(
     events: &S,
     models: &P::Store,
