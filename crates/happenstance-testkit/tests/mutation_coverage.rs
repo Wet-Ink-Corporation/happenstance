@@ -1946,6 +1946,29 @@ const REGISTRY: &[Declared] = &[
             "cause the write of the k-th event to fail",
         )],
     },
+    Declared {
+        name: "NoopReopenFixture",
+        kind: Kind::Mutant,
+        // Empty, and it is not an oversight. `MID_BATCH_FAULT` is closable
+        // because arming it has a port-observable consequence — the append must
+        // answer `Err` — which is what CF-39 is written on. `REOPEN` has none: a
+        // correct `reopen` over a durable medium and an empty one over a `Vec`
+        // produce byte-identical observations through `EventStore`, so any rule
+        // that rejected this fixture would reject `DurableFixture` with it.
+        fails: &[],
+        provenance: "a fixture that declares `REOPEN` supported and overrides `reopen` with an \
+             EMPTY BODY, over a completely correct but entirely volatile store. \
+             `NoopFaultFixture` one capability over, and not a forgotten override — that reaches \
+             the trait's provided body, which panics and names this exact mistake. The author \
+             who writes this one is the author of a real adapter over a pool that \"handles \
+             reconnection\", who reads `reopen`'s documentation as being about handles rather \
+             than about the medium and writes the honest-looking answer. They ship a crate whose \
+             README says it passes `acknowledged_writes_survive_a_reopen`, and ES-35's \
+             durability claim has never been driven across a process boundary. Who finds out is \
+             the first operator to restart the service.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
     // --- Value edges ---------------------------------------------------
     //
     // Ten stores that are correct for every value the rest of this binary
@@ -2313,6 +2336,7 @@ macro_rules! for_each_mutant {
             crate::mutants::NoTransactionFixture,
             crate::mutants::YieldingRowAtATimeFixture,
             crate::mutants::NoopFaultFixture,
+            crate::mutants::NoopReopenFixture,
 
             crate::mutants::MutantFixture<crate::mutants::EmptyPayloadIsNullStore>,
             crate::mutants::MutantFixture<crate::mutants::MetadataConflatingStore>,
@@ -2641,6 +2665,12 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoTransactionStore", ModelOutcome::Agreed),
     ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
     ("NoopFaultFixture", ModelOutcome::Agreed),
+    // Agreed, and it could not be otherwise: the defect is in the *fixture*, and
+    // the model family reads through a store that is correct in every respect the
+    // model can express. It is recorded rather than omitted for the reason this
+    // table exists — a table of only the stores the model catches answers the
+    // wrong question.
+    ("NoopReopenFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),

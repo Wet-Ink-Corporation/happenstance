@@ -3557,6 +3557,75 @@ impl Subject for NoopFaultFixture {
 }
 
 // =====================================================================
+// CF-17 — the fixture whose reopen closes nothing
+// =====================================================================
+
+/// A fixture that declares `REOPEN` supported and overrides `reopen` with an
+/// **empty body**, over a completely correct but entirely volatile store.
+///
+/// [`NoopFaultFixture`]'s sibling one capability over, and the defect is again
+/// not in the store at all: `LogStore` is correct, and what is wrong is a
+/// fixture claiming a capability it does not supply. The cost is the whole of
+/// this suite's durability certification —
+/// `acknowledged_writes_survive_a_reopen`,
+/// `reopened_store_does_not_reissue_an_event_id` and
+/// `recorded_time_survives_a_reopen` all run, assert, and observe a live
+/// in-process `Vec` that no reopen ever went near.
+///
+/// # Why it is plausible
+///
+/// The author who writes this one is the author of a real adapter over a
+/// connection pool that "handles reconnection". They read `reopen`'s
+/// documentation as being about *handles* — which is what it says, because that
+/// is the half every fixture in the workspace can honour — rather than about the
+/// *medium*, and write the honest-looking answer. They then ship a crate whose
+/// README says it passes `acknowledged_writes_survive_a_reopen`, and ES-35's
+/// durability claim has never been driven across a process boundary. Who finds
+/// out is the first operator to restart the service.
+///
+/// An empty body is load-bearing, exactly as it is for [`NoopFaultFixture`]:
+/// `Fixture::reopen`'s provided body panics and its message names this hazard,
+/// so a *forgotten* override aborts loudly. What passes is an override that is
+/// present, honest-looking and empty.
+///
+/// # What no rule can do about it, and where that is recorded
+///
+/// Nothing here fails. `MID_BATCH_FAULT` is closable because arming it has a
+/// port-observable consequence — the append must answer `Err` — and CF-39 is
+/// written on exactly that. `REOPEN` has none: a correct `reopen` over a durable
+/// medium and an empty one over a `Vec` produce byte-identical observations
+/// through `EventStore`, so a rule that rejected this fixture would reject
+/// `DurableFixture` too. What is left is a registry row whose whole content is
+/// that claim, measured — and `REGISTRY` has nowhere to put one today.
+#[derive(Debug)]
+pub(crate) struct NoopReopenFixture(LogStore);
+
+impl Fixture for NoopReopenFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    // THE DEFECT, first half: the claim.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+
+    // THE DEFECT, second half: an override with an empty body. Nothing is
+    // closed, nothing is reopened, and nothing in the trait ties
+    // `REOPEN: Capability::SUPPORTED` to doing either.
+    async fn reopen(&self) {}
+}
+
+impl Subject for NoopReopenFixture {
+    const NAME: &'static str = "NoopReopenFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+// =====================================================================
 // The eight that cannot be one step
 // =====================================================================
 
