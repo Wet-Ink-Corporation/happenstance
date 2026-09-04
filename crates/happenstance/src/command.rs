@@ -551,6 +551,70 @@ mod tests {
         );
     }
 
+    /// No call site converts a literal at run time when const would do.
+    ///
+    /// `Retry::attempts` is `const fn` (above), so nothing that hands it a
+    /// literal needs `.try_into()?` at run time — that spelling converts a
+    /// value the compiler already knows is nonzero, through a path that can
+    /// fail, for a failure that cannot happen. This walks the source of
+    /// every call site this crate owns (its own two doctests, and the two
+    /// worked examples) and fails if any of them still reach for the
+    /// fallible spelling where the const one is available. Needles are built
+    /// with `format!` rather than written as one literal, so this test's own
+    /// source text never contains the pattern it is searching for.
+    #[test]
+    fn call_sites_use_the_const_spelling_of_retry_attempts() {
+        let doctest_literal = format!("Retry::attempts({}.try_into()?)", 3);
+        let example_constant = format!("Retry::attempts({}.try_into()?)", "ATTEMPTS");
+        let test_literal = format!("Retry::attempts({}.try_into()", 7);
+
+        let this_command_rs = include_str!("command.rs");
+        let this_lib_rs = include_str!("lib.rs");
+        let course_subscriptions =
+            include_str!("../../../examples/course-subscriptions/src/main.rs");
+        let transfers_on_sqlite =
+            include_str!("../../../examples/transfers-on-sqlite/src/main.rs");
+
+        let sources: [(&str, &str, &[&str]); 4] = [
+            (
+                "crates/happenstance/src/command.rs",
+                this_command_rs,
+                &[&doctest_literal, &test_literal],
+            ),
+            (
+                "crates/happenstance/src/lib.rs",
+                this_lib_rs,
+                &[&doctest_literal],
+            ),
+            (
+                "examples/course-subscriptions/src/main.rs",
+                course_subscriptions,
+                &[&example_constant],
+            ),
+            (
+                "examples/transfers-on-sqlite/src/main.rs",
+                transfers_on_sqlite,
+                &[&example_constant],
+            ),
+        ];
+
+        let mut offenders = Vec::new();
+        for (path, src, needles) in sources {
+            for needle in needles {
+                if src.contains(needle) {
+                    offenders.push(format!("{path}: still contains {needle:?}"));
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "call site converts a compile-time literal at run time against a \
+             const fn; use the const spelling instead:\n{}",
+            offenders.join("\n")
+        );
+    }
+
     /// A store error, so the chain below ends somewhere concrete.
     #[derive(Debug, PartialEq, Eq)]
     struct Disk;
