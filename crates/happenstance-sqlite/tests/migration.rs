@@ -487,11 +487,14 @@ fn recorded_at_is_returned_as_stored_after_a_reopen() {
     assert_eq!(read_again, stamped);
 }
 
-/// AC-007 — the three pragmas are read back off the live connection, per handle,
-/// for both stores in this crate.
+/// AC-007 — the three pragmas are read back off the live connection, per handle.
 ///
 /// A pragma that was executed is not a pragma that is in effect: SQLite silently
 /// accepts one it does not recognise.
+///
+/// The projection store's half of AC-007 is
+/// [`projection_store_open_configures_its_connection`], split out so that this
+/// one keeps running when `projection-store` is off.
 #[test]
 fn pragmas_are_in_effect_on_every_connection() {
     let db = TempDb::new("pragmas");
@@ -532,11 +535,13 @@ fn pragmas_are_in_effect_on_every_connection() {
         );
     }
 
-    // The projection store's connection is configured through the same one
-    // function, so its handle runs under the same three values read off the
-    // same kind of live connection.
-    let projection_connection = open_configured(db.path()).unwrap();
-    let settings = ConnectionSettings::read_back(&projection_connection).unwrap();
+    // Both stores' connections are configured through the same one function, so
+    // any handle it hands back runs under the same three values read off the
+    // same kind of live connection. `open_configured` is compiled in under
+    // `event-store` as well as under `projection-store`, so this stays here,
+    // where it runs under the crate's default features.
+    let shared_connection = open_configured(db.path()).unwrap();
+    let settings = ConnectionSettings::read_back(&shared_connection).unwrap();
     assert_eq!(settings.journal_mode(), JOURNAL_MODE);
     assert_eq!(settings.synchronous(), SYNCHRONOUS);
     assert_eq!(
@@ -545,17 +550,23 @@ fn pragmas_are_in_effect_on_every_connection() {
         "a projection connection with no busy timeout fails immediately against \
          the event store's BEGIN IMMEDIATE write lock"
     );
+}
 
-    // And that it is genuinely the path `SqliteProjectionStore::open` takes,
-    // observed rather than asserted from the source: on a file nothing else has
-    // ever touched, the journal mode left behind is the one that `open` set
-    // before its own migration ran. WAL is a persistent property of the file,
-    // which is what makes the observation outlive the connection.
-    //
-    // This assertion used to be a `catch_unwind` around a `todo!()`, with a
-    // message telling whoever landed the projection migration to assert on the
-    // return value instead. `projection-store-passes-the-borrowed-suite` landed
-    // it, so this is that assertion.
+/// AC-007, the projection store's half — that `open_configured` is genuinely the
+/// path [`SqliteProjectionStore::open`] takes, observed rather than asserted
+/// from the source.
+///
+/// On a file nothing else has ever touched, the journal mode left behind is the
+/// one that `open` set before its own migration ran. WAL is a persistent
+/// property of the file, which is what makes the observation outlive the
+/// connection.
+///
+/// This assertion used to be a `catch_unwind` around a `todo!()`, with a message
+/// telling whoever landed the projection migration to assert on the return value
+/// instead. `projection-store-passes-the-borrowed-suite` landed it, so this is
+/// that assertion.
+#[test]
+fn projection_store_open_configures_its_connection() {
     let untouched = TempDb::new("projection-open");
     happenstance_sqlite::projection_store::SqliteProjectionStore::open(untouched.path())
         .expect("the projection store's migration has landed, and must apply cleanly");
