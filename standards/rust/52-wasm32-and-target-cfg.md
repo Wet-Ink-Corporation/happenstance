@@ -52,7 +52,7 @@ four green wasm32 steps as "it runs on Workers" ships an adapter that aborts the
 module on its first recorded timestamp, found by a user in a Worker — where
 `println!` writes nowhere, so nothing says why.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:369 (The host build is a convenience rather than evidence)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:405 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
 `xtask/src/main.rs:239 (wasm32 build of the contract crate)` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -156,7 +156,7 @@ message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
 **Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:142 (is denied under)` ·
-`crates/happenstance-cloudflare/src/lib.rs:481 (mod not_send_probe)` ·
+`crates/happenstance-cloudflare/src/lib.rs:517 (mod not_send_probe)` ·
 `xtask/src/main.rs:312 (wasm32 build of the Cloudflare adapter)`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.

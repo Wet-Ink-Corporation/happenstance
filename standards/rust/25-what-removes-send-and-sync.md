@@ -123,7 +123,7 @@ and `Arc` is "the thread-safe one" produces a type that is neither `Send` nor
 no consumer can spawn.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:153 (is not for sharing the store; it is so that a)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1169 (is what makes the whole)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1237 (is what makes the whole)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -246,6 +246,6 @@ frozen.
 
 **Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
 `crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
-`crates/happenstance-cloudflare/src/lib.rs:246 (can only ever *inherit*)` ·
+`crates/happenstance-cloudflare/src/lib.rs:282 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

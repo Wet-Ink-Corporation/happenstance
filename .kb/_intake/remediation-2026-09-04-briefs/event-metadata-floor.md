@@ -134,7 +134,7 @@ pub enum StoreLimit {
 
 **`guaranteed_minimum` is total and returns `usize`, not `Option<usize>`** (`crates/happenstance-core/src/limits.rs:69-76`). That is load-bearing for the options below: **a new variant cannot exist without a number**. Its doc (`:64-68`) says the number is how a caller tells *"this store is stricter than the contract allows" — a conformance bug —* from *"this payload was always going to be too big to replicate"*.
 
-**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:474-495`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:424-448`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
+**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:614-635`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:489-514`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
 
 **And `happenstance-sqlite` has already written down the opposite of the shared-bound answer**, in a `pub const`'s documentation — `crates/happenstance-sqlite/src/event_store.rs:236-239`:
 
@@ -216,7 +216,7 @@ VT-21's floor and every adapter's declared ceiling apply to `data.len() + metada
 A new VT clause saying so, plus an obligation that every adapter document how it sizes its *other* declared ceilings to leave metadata room. No change to `limits.rs`, no new variant, no new rule (or one documentation-shaped rule at most).
 
 - **Costs a caller:** nothing to write, and no way to be told. The event that will never fit still arrives as `AppendError::Store` or as a mislabelled `EventDataLen`, so the E2E-42 disappearance (`spec/E2E-CASES.md:1105-1125` — *"a peer that **quarantines** rather than appends: the quarantined event has no local position, is never forwarded, and disappears permanently"*) stays reachable through the channel VT-25 was written to close.
-- **Costs an adapter author:** a paragraph, and an impossible sizing exercise. You cannot size around an unbounded field. Cloudflare's 1 MiB of slack (`event_store.rs:234-236`) is defeated by 1 MiB of metadata beside a 1 MiB payload, and `check_ceilings` at `crates/happenstance-cloudflare/src/event_store.rs:424-448` passes that batch straight through.
+- **Costs an adapter author:** a paragraph, and an impossible sizing exercise. You cannot size around an unbounded field. Cloudflare's 1 MiB of slack (`event_store.rs:234-236`) is defeated by 1 MiB of metadata beside a 1 MiB payload, and `check_ceilings` at `crates/happenstance-cloudflare/src/event_store.rs:489-514` passes that batch straight through.
 - **Semver:** none. It is a specification and documentation change only.
 - **Forecloses:** nothing structurally — it is the "decide later" option, and every other option remains open after it. What it costs is that VT-25's `[FROZEN]` MUST goes on being unsatisfiable for one field, in writing, with a clause acknowledging it.
 

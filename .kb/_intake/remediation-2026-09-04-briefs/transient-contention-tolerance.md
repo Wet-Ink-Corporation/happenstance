@@ -124,7 +124,7 @@ with four variants and no `Busy`, so `Err(other)` is where a lock timeout, a dis
 failure, a capacity refusal and a caller bug all arrive together.
 
 **The store's own documentation already draws the distinction the testkit cannot
-receive** (`crates/happenstance-sqlite/src/event_store.rs:1014-1016`):
+receive** (`crates/happenstance-sqlite/src/event_store.rs:1082-1084`):
 
 > * the driver failed — including `SQLITE_BUSY` after the configured busy
 >   timeout has genuinely elapsed, which is **contention reported honestly

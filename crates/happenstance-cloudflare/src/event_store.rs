@@ -284,6 +284,71 @@ pub struct CloudflareEventStore {
 // path the fixture's "one instance, one object" invariant does not cover.
 
 impl CloudflareEventStore {
+    /// How many index arms one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite compiles a `UNION` of *n* arms as one compound `SELECT`, and
+    /// `SQLITE_MAX_COMPOUND_SELECT` defaults to **500** terms. A `Query` bounds
+    /// nothing by design — the specification requires every store to evaluate at
+    /// least 128 items and puts no ceiling above that — so a wide query is
+    /// **chunked and merged, never refused**: there is no query-item refusal
+    /// anywhere in this crate and no fourth [`StoreLimit`] variant to report one
+    /// through, because a query-item refusal is not an append outcome.
+    ///
+    /// This is not one of the three ceilings under *The capacity limits this
+    /// store declares* on the crate's front page, and it is deliberately not a
+    /// fourth row of that table: every row there is a value the store **refuses**
+    /// and names a `StoreLimit` to refuse it with, and this is a value the store
+    /// accepts and plans differently. It is published for the reason the sibling
+    /// publishes its own — a test that has to guess the boundary is a test that
+    /// stops crossing it — and because a caller pairing this adapter with
+    /// `happenstance-sqlite` should be able to compare the two numbers before
+    /// deploying rather than after.
+    ///
+    /// It is **one of two** axes, and not the one that binds first on a query of
+    /// wide items: see
+    /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](Self::MAX_QUERY_PARAMETERS_PER_STATEMENT).
+    pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+
+    /// How many bound parameters one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766, and the translation binds
+    /// one parameter per tag and one per type of every item in a chunk. So this
+    /// and [`MAX_QUERY_ARMS_PER_STATEMENT`](Self::MAX_QUERY_ARMS_PER_STATEMENT)
+    /// are **independent** axes rather than two spellings of one width: 400 items
+    /// of a single tag each is 400 arms and 400 parameters, while the same 400
+    /// items at this store's declared `tags_per_event` of 1,024 apiece is still
+    /// 400 arms and **409,600** parameters. It sits below the wall with headroom
+    /// rather than at it, because an adapter that binds one extra parameter per
+    /// row should not be within rounding distance.
+    ///
+    /// Both numbers are the sibling adapter's, and that is deliberate rather than
+    /// borrowed: they are properties of the SQLite underneath a Durable Object's
+    /// storage rather than of either adapter, so two adapters over one engine
+    /// disagreeing about them would be two guesses rather than one measurement.
+    /// The **merge** does diverge, and `query_sql`'s module documentation says
+    /// where and why.
+    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = 30_000;
+
+    /// How many statements one page of `query` will take.
+    ///
+    /// Never zero: a `Query::all` is one chunk, straight to the `event` table.
+    /// This is the seam a caller uses to size a decision model against this
+    /// adapter before deploying it, and the seam a test uses to observe a wide
+    /// query genuinely crossing the boundary — so it is **the same call** both
+    /// paths plan with, counted, never a second `ceil(arms / width)` that would
+    /// go on reporting a boundary the read path had stopped taking.
+    #[must_use]
+    pub fn planned_statement_count(query: &Query) -> usize {
+        query_sql::chunks(
+            query,
+            Self::MAX_QUERY_ARMS_PER_STATEMENT,
+            Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .len()
+    }
+
     /// Wraps a Durable Object's SQL storage.
     ///
     /// Injection, never construction: in production the handle comes off
@@ -458,31 +523,63 @@ impl CloudflareEventStore {
     /// the path a DCB command loop takes every time it loses a race.
     ///
     /// `after: None` is a boundary of zero, because positions start at one.
+    ///
+    /// # Chunk and merge, on this path too
+    ///
+    /// A guard wider than either of SQLite's pushdown limits goes through
+    /// [`query_sql::chunks`](crate::query_sql), the same decomposition the read
+    /// path plans with, and the per-chunk maxima are merged by `max` — which is
+    /// **exact** rather than approximate precisely because the guard is an
+    /// inequality on the highest match, so `max(max(a), max(b))` is
+    /// `max(a ∪ b)`. `Option`'s own ordering does the merging: `None` sorts
+    /// below every `Some`, so a chunk that matched nothing contributes nothing
+    /// and the fold needs no special case for "no match yet".
+    ///
+    /// The alternative was to leave this path on the unchunked translation, and
+    /// it is not a smaller version of the same thing. This runs inside the
+    /// append turn with the caller's decision already taken, so a guard above
+    /// the pushdown limit would fail at `prepare` and arrive as
+    /// `AppendError::Store` wrapping a raw driver string — a refusal at the
+    /// pushdown limit, which is VT-23's named wrong implementation, on the path
+    /// where `crates/happenstance-core/src/limits.rs` gives it no variant to be
+    /// honestly reported through. The conformance suite cannot reach it:
+    /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag each, which is 128
+    /// arms and 128 parameters, comfortably inside both walls.
     fn evaluate(
         &self,
         condition: &AppendCondition,
     ) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
         for guard in condition.guards() {
-            let mut bindings = Vec::new();
-            let matched = query_sql::positions_matching(&guard.query, &mut bindings);
             let boundary = guard.after.map_or(0, position_as_i64);
-            bindings.push(SqlValue::Integer(boundary));
+            let mut highest: Option<SequencePosition> = None;
 
-            let statement =
-                format!("SELECT max(position) AS position FROM ({matched}) WHERE position > ?");
-            let mut cursor = self.sql.exec(&statement, &bindings)?;
-            let Some(row) = cursor.next_row().transpose()? else {
-                continue;
-            };
-            match row.values() {
-                [SqlValue::Null] => {}
-                [value] => return Ok(Some(decode_position(value, "position")?)),
-                values => {
-                    return Err(CloudflareEventStoreError::RowShape {
-                        expected: 1,
-                        actual: values.len(),
-                    });
+            for (matched, mut bindings) in query_sql::chunks(
+                &guard.query,
+                Self::MAX_QUERY_ARMS_PER_STATEMENT,
+                Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            ) {
+                bindings.push(SqlValue::Integer(boundary));
+
+                let statement =
+                    format!("SELECT max(position) AS position FROM ({matched}) WHERE position > ?");
+                let mut cursor = self.sql.exec(&statement, &bindings)?;
+                let Some(row) = cursor.next_row().transpose()? else {
+                    continue;
+                };
+                match row.values() {
+                    [SqlValue::Null] => {}
+                    [value] => highest = highest.max(Some(decode_position(value, "position")?)),
+                    values => {
+                        return Err(CloudflareEventStoreError::RowShape {
+                            expected: 1,
+                            actual: values.len(),
+                        });
+                    }
                 }
+            }
+
+            if highest.is_some() {
+                return Ok(highest);
             }
         }
         Ok(None)
@@ -1213,8 +1310,8 @@ impl Stream for SqlRowStream {
                     }
 
                     let want = remaining.map_or(page_size, |left| left.min(page_size));
-                    let (statement, bindings) = render_read(&query, options, ceiling, cursor, want);
-                    let rows = match drain_page(&sql, &statement, &bindings) {
+                    let plan = render_read(&query, options, ceiling, cursor, want);
+                    let rows = match drain_plan(&sql, &plan, options.backwards, want) {
                         Err(err) => return Poll::Ready(Some(Err(err))),
                         Ok(rows) => rows,
                     };
@@ -1281,6 +1378,92 @@ fn drain_page(
     Ok(rows)
 }
 
+/// Runs every statement of one page's plan and merges them into one page.
+///
+/// # Why the merge truncates after every chunk rather than once at the end
+///
+/// Each statement returns the first `want` rows of its own arms, in the caller's
+/// direction, so the page is the first `want` of their union. Sorting and
+/// truncating incrementally is **exact**, not an approximation: a row already
+/// beyond the `want`-th position of a prefix of the chunks is beyond it in the
+/// full union too, because adding a chunk can only push a discarded row further
+/// out. What it buys is the residency bound — one page plus one chunk, rather
+/// than `chunks x page` — and on a Durable Object that is the difference the
+/// sibling adapter does not have to care about, because a single isolate has a
+/// real memory ceiling and `tests/wf11_memory_ceiling.rs` walks it.
+///
+/// **A one-statement plan is the overwhelmingly common case and takes neither
+/// the sort nor the decode**, so the read this replaced is byte-identical for
+/// every query narrow enough to plan as one statement — which is every query any
+/// conformance rule builds. The consequence worth stating: a row whose
+/// `position` column is not an integer at all ends the read one step earlier on
+/// a multi-statement plan than on a single-statement one, because the merge has
+/// to order by it. It ends the read either way; only the moment moves.
+///
+/// De-duplication is the merge's own, and it is needed: `UNION` removes a
+/// duplicate *within* a statement, and an event matching items that landed in
+/// two different chunks comes back from both.
+fn drain_plan(
+    sql: &SqlStorage,
+    plan: &[(String, Vec<SqlValue>)],
+    backwards: bool,
+    want: usize,
+) -> Result<VecDeque<SqlRow>, CloudflareEventStoreError> {
+    let [(statement, bindings)] = plan else {
+        let mut merged: Vec<(i64, SqlRow)> = Vec::new();
+        for (statement, bindings) in plan {
+            for row in drain_page(sql, statement, bindings)? {
+                merged.push((page_position(&row)?, row));
+            }
+            absorb(&mut merged, backwards, want);
+        }
+        return Ok(merged.into_iter().map(|(_, row)| row).collect());
+    };
+    drain_page(sql, statement, bindings)
+}
+
+/// Orders, de-duplicates and truncates the rows gathered so far.
+///
+/// Split out from [`drain_plan`] so that it can be *executed by a test*. It is
+/// otherwise reachable only through a plan of more than one statement, and
+/// nothing in the gate builds one: the conformance suite's widest query is
+/// `MIN_SUPPORTED_QUERY_ITEMS` items at one tag each, which is 128 arms and 128
+/// parameters, inside both ceilings by two orders of magnitude. A merge no test
+/// runs is dead code behind a green suite, which is the failure this workspace
+/// exists to retire — so the arithmetic lives here, generic over what it is
+/// carrying, and `query_sql`'s host tests drive it over integers.
+///
+/// `sort_by` rather than a negated key: a comparator has no value it cannot
+/// order, where negating the key is a panic in debug on `i64::MIN`. The sort is
+/// stable, so `dedup_by_key` keeps the row from the earliest chunk — they are
+/// the same row, since the two chunks matched the same event through different
+/// items, and "the same row" is what makes the choice free rather than lucky.
+///
+/// De-duplicating **before** truncating is not interchangeable with the other
+/// order: `want` distinct positions is the page the caller asked for, and
+/// truncating first would spend the budget on duplicates and return a short
+/// page that looks like the end of the result set.
+pub(crate) fn absorb<T>(merged: &mut Vec<(i64, T)>, backwards: bool, want: usize) {
+    merged.sort_by(|(a, _), (b, _)| if backwards { b.cmp(a) } else { a.cmp(b) });
+    merged.dedup_by_key(|(position, _)| *position);
+    merged.truncate(want);
+}
+
+/// The `position` column of a read row, as the integer the merge orders by.
+///
+/// Deliberately *not* [`decode_position`]: ordering needs the stored integer and
+/// nothing else, and validating the value here would move where a stored
+/// position out of the contract's range is reported. That belongs to
+/// [`decode_row`], which every row still passes through before it is yielded.
+/// The one thing this must reject is a column that is not an integer, because
+/// there is no order to put such a row in.
+fn page_position(row: &SqlRow) -> Result<i64, CloudflareEventStoreError> {
+    match row.values().first() {
+        Some(SqlValue::Integer(position)) => Ok(*position),
+        _ => Err(CloudflareEventStoreError::ColumnType { column: "position" }),
+    }
+}
+
 /// Renders one page of a read: the caller's query and options, the sample
 /// ceiling, and where the previous page stopped.
 ///
@@ -1303,16 +1486,42 @@ fn drain_page(
 /// `position IN (…)` rather than a join is what makes "no event is yielded
 /// twice across items" true by construction: the query's arms are `UNION`-ed and
 /// `IN` is a membership test, so an event matching three items is one row.
+/// # One page, several statements
+///
+/// The plan is one statement per chunk of
+/// [`query_sql::chunks`](crate::query_sql), and every one of them carries
+/// *every* bound above — the same ceiling, the same `from`, the same `to`, the
+/// same cursor and the same `LIMIT`. That is what makes them mergeable: each
+/// returns the first `limit` matching rows of its own arms in the caller's
+/// direction, and the first `limit` of the union is the first `limit` of the
+/// merge. One ceiling shared across every statement of every page is also how
+/// ES-12 stays discharged when a page becomes several statements.
 fn render_read(
     query: &Query,
     options: ReadOptions,
     ceiling: SequencePosition,
     cursor: Option<SequencePosition>,
     limit: usize,
-) -> (String, Vec<SqlValue>) {
-    let mut bindings = Vec::new();
-    let matched = query_sql::positions_matching(query, &mut bindings);
+) -> Vec<(String, Vec<SqlValue>)> {
+    query_sql::chunks(
+        query,
+        CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+        CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+    )
+    .into_iter()
+    .map(|(matched, bindings)| render_chunk(&matched, bindings, options, ceiling, cursor, limit))
+    .collect()
+}
 
+/// One statement of the plan: the chunk's own subquery, wrapped in the bounds.
+fn render_chunk(
+    matched: &str,
+    mut bindings: Vec<SqlValue>,
+    options: ReadOptions,
+    ceiling: SequencePosition,
+    cursor: Option<SequencePosition>,
+    limit: usize,
+) -> (String, Vec<SqlValue>) {
     let mut sql = format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched})");
 
     sql.push_str(" AND position <= ?");
@@ -2579,13 +2788,13 @@ mod read_path_tests {
                     },
                 };
 
-                let (statement, bindings) = super::render_read(
+                let (statement, bindings) = the_only_statement(super::render_read(
                     &this.query,
                     this.options,
                     ceiling,
                     this.cursor,
                     this.page_size,
-                );
+                ));
                 match super::drain_page(&this.sql, &statement, &bindings) {
                     Err(err) => {
                         this.done = true;
@@ -2601,6 +2810,19 @@ mod read_path_tests {
                 }
             }
         }
+    }
+
+    /// The single statement of a one-chunk plan.
+    ///
+    /// Both controls below are about the *ceiling* and the *cursor*, so each
+    /// drives a narrow query that plans as one statement — and the assertion is
+    /// what keeps that true. A control that quietly answered from the first of
+    /// several statements would differ from the shipped read in two ways at
+    /// once, and the second would be the one it was not written to isolate.
+    fn the_only_statement(plan: Vec<(String, Vec<SqlValue>)>) -> (String, Vec<SqlValue>) {
+        let [statement] = <[_; 1]>::try_from(plan)
+            .expect("these controls drive a query narrow enough to plan as one statement");
+        statement
     }
 
     /// A read that opens one cursor at the first poll and advances it one row
@@ -2627,13 +2849,13 @@ mod read_path_tests {
                 .expect("this control is only ever pointed at a non-empty store");
             Self {
                 sql: sql.clone(),
-                statement: Some(super::render_read(
+                statement: Some(the_only_statement(super::render_read(
                     query,
                     options,
                     ceiling,
                     None,
                     usize::MAX,
-                )),
+                ))),
                 cursor: None,
                 done: false,
             }

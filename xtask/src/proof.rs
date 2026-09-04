@@ -837,6 +837,60 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
         host: CLOUDFLARE_HOST,
         tests: WF11_MEMORY_CEILING_TESTS,
     },
+    WasmUnitTarget {
+        // The query-ceiling target, and the fourth row. It exists because the
+        // adapter's own partition is otherwise asserted only by arithmetic over
+        // the *strings* it builds — how many compound terms, how many bound
+        // parameters — and arithmetic about a string is not evidence that SQLite
+        // would have refused the string or that the merge behind the partition
+        // reassembles the right rows. The wall is reachable in this harness and
+        // was simply never approached; this row approaches it.
+        //
+        // It is **not** a `WASM_TARGETS` row, for that registry's own stated
+        // reason: every row there is held to a `RuleFamily`'s exhaustive
+        // enumeration, and this target runs no conformance rule of either suite.
+        // It could not: `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag
+        // each, which is 128 arms and 128 parameters, inside both of SQLite's
+        // pushdown limits by two orders of magnitude — so no rule the suite
+        // enumerates can cross either wall, which is the whole finding.
+        //
+        // A second target rather than more cases in `durable_object_conformance`,
+        // and forced by the same two things that forced WF-11's: that harness is
+        // held to three lines and defines nothing of its own, and a target whose
+        // first case deliberately drives the driver into refusing a statement
+        // must not share an object with the rules.
+        package: "happenstance-cloudflare",
+        selector: &["--test", "wide_query_ceiling"],
+        source_dir: "crates/happenstance-cloudflare/tests",
+        gate: WASM32_TARGET_GATE,
+        host: CLOUDFLARE_HOST,
+        tests: WIDE_QUERY_CEILING_TESTS,
+    },
+];
+
+/// The query-ceiling target's cases, by the name `--list` prints them.
+///
+/// Hand-written and **unprefixed**, for the reasons
+/// [`WF11_MEMORY_CEILING_TESTS`] gives: there is no enumeration behind these
+/// names, so the row is a citation and a rename should have to be noticed; and
+/// there is no `mod $mod_name` wrapper, because `event_store_conformance!` is
+/// not involved.
+///
+/// **The first name is load-bearing in a way the other six are not.**
+/// `the_unpartitioned_statement_is_refused_by_this_runtime` is the control: it
+/// hands this runtime the statement a translation with no partition would have
+/// built and asserts the driver refuses it. Delete that and the six passing
+/// cases below it degrade from *the wall is real and no longer hit* to *nothing
+/// went wrong*, which is a suite that would stay green if
+/// `SQLITE_MAX_COMPOUND_SELECT` were raised out from under it.
+const WIDE_QUERY_CEILING_TESTS: &[&str] = &[
+    "the_unpartitioned_statement_is_refused_by_this_runtime",
+    "a_read_past_the_compound_select_ceiling_is_served_from_every_chunk",
+    "a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk",
+    "an_append_guard_past_the_compound_select_ceiling_is_not_refused",
+    "an_append_guard_past_the_bound_parameter_ceiling_is_not_refused",
+    "a_wide_guard_answers_from_every_chunk_not_the_first",
+    "a_parameter_wide_guard_answers_from_every_chunk_not_the_first",
 ];
 
 /// The WF-11 probe's two cases, by the name `--list` prints them.

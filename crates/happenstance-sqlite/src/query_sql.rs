@@ -9,6 +9,35 @@
 //! `read` chunked, `evaluate` did not, and a guard wider than the pushdown limit
 //! failed with SQLite's own *"too many terms in compound SELECT"*.
 //!
+//! # Two pushdown limits, and a partition on one is not a partition on the other
+//!
+//! SQLite pushes back in two units and this module has to answer both.
+//! `SQLITE_MAX_COMPOUND_SELECT` bounds the **arms** of a `UNION` at 500 terms;
+//! `SQLITE_MAX_VARIABLE_NUMBER` bounds the **bound parameters** of one statement
+//! at 32,766, and [`item_sql`] pushes one per tag and one per type of every item
+//! in the chunk. Nothing in `happenstance-core`'s `query.rs` bounds tags per
+//! query item, so the two numbers move independently: 400 single-tag items is
+//! 400 arms and 400 parameters, and the same 400 items at `MAX_TAGS_PER_EVENT`
+//! tags apiece is still 400 arms and **51,200 parameters**.
+//!
+//! That second query was planned as one statement, by the adapter's own chosen
+//! arm width, carrying the adapter's own documented maximum tag count — and
+//! `prepare` refused it with *"too many SQL variables"*, wrapped as
+//! `AppendError::Store`, inside `BEGIN IMMEDIATE` on the append path. VT-23
+//! names that implementation in terms: *an adapter that generates one SQL
+//! parameter per item and silently fails past a driver limit*. So [`chunks`]
+//! partitions on **both** axes, and [`Selectivity::read_for`] — whose single
+//! `IN (…)` over the whole query's distinct tags is the site that fails *first*,
+//! because it runs before [`chunks`] on both callers — takes a width of its own
+//! rather than having none.
+//!
+//! The parameter axis was never unknown here. `event_store.rs`'s
+//! `PARAMETER_BUDGET` has carried the arithmetic and the headroom since the
+//! write path was written; it simply had one consumer, the tag insert, where it
+//! should have had three. `tests/wide_tags.rs` is the standing guard, and it
+//! crosses the axis at both callers because only one of them holds the write
+//! lock.
+//!
 //! # Adapter-private, deliberately
 //!
 //! `RUNBOOK.md:4203-4206` writes the work item as *"handle
@@ -70,14 +99,30 @@ pub(crate) struct Selectivity(HashMap<String, i64>);
 impl Selectivity {
     /// Reads the counts for every tag any multi-tag item of `query` names.
     ///
-    /// One statement for the whole query rather than one per item: a 128-item
-    /// query is exactly the shape that makes a per-item lookup expensive, and it
-    /// is the shape VT-23 requires every store to evaluate.
+    /// One statement per `max_parameters` tags rather than one per item: a
+    /// 128-item query is exactly the shape that makes a per-item lookup
+    /// expensive, and it is the shape VT-23 requires every store to evaluate.
+    ///
+    /// **`max_parameters` is the width this lookup had no concept of.** The
+    /// accumulation below runs across *every* multi-tag item of the whole query
+    /// with nothing bounding it, so a query of ordinary two-tag items reaches
+    /// `SQLITE_MAX_VARIABLE_NUMBER` at 16,384 items — no wide item required —
+    /// and it reaches it *before* [`chunks`] does, on both callers. Chunking the
+    /// lookup is exact rather than approximate for the reason a lookup is not a
+    /// filter: the result is a map keyed by tag, so two statements over disjoint
+    /// halves of `wanted` and one over all of it insert the same entries. A tag
+    /// absent from `tag_cardinality` has no entry either way, which
+    /// [`Selectivity::most_selective_first`] already treats as maximally
+    /// selective.
     ///
     /// # Errors
     ///
-    /// Returns the driver's error if the statement fails.
-    pub(crate) fn read_for(connection: &Connection, query: &Query) -> rusqlite::Result<Self> {
+    /// Returns the driver's error if a statement fails.
+    pub(crate) fn read_for(
+        connection: &Connection,
+        query: &Query,
+        max_parameters: usize,
+    ) -> rusqlite::Result<Self> {
         let mut wanted: Vec<String> = Vec::new();
         for item in query.items().unwrap_or_default() {
             let tags = distinct_tags(item);
@@ -94,14 +139,16 @@ impl Selectivity {
         }
 
         let mut counts = HashMap::with_capacity(wanted.len());
-        let sql = format!(
-            "SELECT tag, events FROM tag_cardinality WHERE tag IN ({})",
-            placeholders(wanted.len())
-        );
-        let mut statement = connection.prepare(&sql)?;
-        let mut rows = statement.query(rusqlite::params_from_iter(wanted.iter()))?;
-        while let Some(row) = rows.next()? {
-            counts.insert(row.get::<_, String>(0)?, row.get::<_, i64>(1)?);
+        for batch in wanted.chunks(max_parameters.max(1)) {
+            let sql = format!(
+                "SELECT tag, events FROM tag_cardinality WHERE tag IN ({})",
+                placeholders(batch.len())
+            );
+            let mut statement = connection.prepare(&sql)?;
+            let mut rows = statement.query(rusqlite::params_from_iter(batch.iter()))?;
+            while let Some(row) = rows.next()? {
+                counts.insert(row.get::<_, String>(0)?, row.get::<_, i64>(1)?);
+            }
         }
         Ok(Self(counts))
     }
@@ -117,13 +164,30 @@ impl Selectivity {
     }
 }
 
-/// One `SELECT position …` subquery per chunk of at most `max_arms` items.
+/// One `SELECT position …` subquery per chunk, bounded by **both** of SQLite's
+/// pushdown limits: at most `max_arms` items and at most `max_parameters` bound
+/// parameters.
 ///
 /// **Chunk and merge, never refuse.** A `Query` bounds nothing by design and the
 /// specification requires every store to evaluate at least 128 items, so an
 /// adapter that returned an error at its own pushdown limit would be inventing a
 /// refusal the contract has no way to report. The merge over these cursors is
 /// the caller's; what belongs here is only the decomposition.
+///
+/// **Both axes, because the arm count does not imply the parameter count.**
+/// Partitioning on `max_arms` alone is what let 400 items — the arm width
+/// exactly — carrying `MAX_TAGS_PER_EVENT` tags apiece bind 51,200 of SQLite's
+/// 32,766 parameters in a statement this function reported as a valid plan of
+/// one. See the module doc; `tests/wide_tags.rs` is the standing guard.
+///
+/// **One item is the atom of the partition and is never split.** An item's arm
+/// is an intersection — `tag = ? AND position IN (…) AND position IN (…)` — and
+/// splitting an intersection across statements is not a union merge, so the two
+/// halves could not be recombined by the caller's `UNION` or its `max()`. An
+/// item whose own tags exceed `max_parameters` therefore still gets a chunk to
+/// itself and still fails at `prepare`, which is a refusal this decomposition
+/// cannot remove; it takes 32,766 tags on a single query item to reach, against
+/// a store that accepts 128 on an event.
 ///
 /// This is the **only** entry point, deliberately. It replaced a second,
 /// unchunked spelling that the append-condition path used: two spellings of one
@@ -155,12 +219,12 @@ pub(crate) fn chunks(
     query: &Query,
     selectivity: &Selectivity,
     max_arms: usize,
+    max_parameters: usize,
 ) -> Vec<(String, Vec<Value>)> {
-    let max_arms = max_arms.max(1);
     match query.items() {
         None => vec![("SELECT position FROM event".to_owned(), Vec::new())],
-        Some(items) => items
-            .chunks(max_arms)
+        Some(items) => partition(items, max_arms.max(1), max_parameters.max(1))
+            .into_iter()
             .map(|chunk| {
                 let mut params = Vec::new();
                 let sql = arms_sql(chunk, selectivity, &mut params);
@@ -168,6 +232,60 @@ pub(crate) fn chunks(
             })
             .collect(),
     }
+}
+
+/// `items` cut into runs that satisfy both limits, in order.
+///
+/// Greedy and order-preserving, because a chunk is only ever merged by `UNION`
+/// or by `max()` — neither of which cares which chunk an item landed in — and
+/// because reordering items to pack chunks tighter would make the partition
+/// depend on the query's shape rather than on its prefix, which is exactly the
+/// property that makes `planned_statement_count` computable by a caller.
+///
+/// The `arms > 0` guard is what stops an item too wide for `max_parameters` on
+/// its own from emitting an empty chunk forever. It gets a chunk to itself
+/// instead, which is the honest outcome: see the note on splitting in
+/// [`chunks`].
+fn partition(items: &[QueryItem], max_arms: usize, max_parameters: usize) -> Vec<&[QueryItem]> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut arms = 0;
+    let mut parameters = 0;
+
+    for (index, item) in items.iter().enumerate() {
+        let cost = item_parameters(item);
+        if arms > 0 && (arms == max_arms || parameters + cost > max_parameters) {
+            out.push(&items[start..index]);
+            start = index;
+            arms = 0;
+            parameters = 0;
+        }
+        arms += 1;
+        parameters += cost;
+    }
+
+    out.push(&items[start..]);
+    out
+}
+
+/// Bound parameters one item's arm will cost, counted the way [`item_sql`] spends
+/// them.
+///
+/// One per distinct tag and one per type, in every branch: the tagless branch
+/// binds its types and nothing else, and the tagged branch binds the seed tag,
+/// then the types, then one per remaining tag.
+///
+/// This is a second reading of [`item_sql`], which is the shape that drifts —
+/// add a bound parameter there and this undercounts, and the partition silently
+/// goes back to being wrong past a driver limit. What catches that is
+/// `tests/wide_tags.rs`'s boundary case, which computes the expected chunk count
+/// from the public ceilings and the query it built and compares it against
+/// `planned_statement_count`: an undercount here moves one of those and not the
+/// other. The alternative — returning the count from `item_sql` itself — would
+/// mean building the SQL twice for every plan, once to size it and once to use
+/// it, on the path that runs under the write lock.
+fn item_parameters(item: &QueryItem) -> usize {
+    distinct_tags(item).len() + item.types().len()
 }
 
 /// The `UNION` of one arm per item.

@@ -274,7 +274,38 @@ impl SqliteEventStore {
     /// The number is public so that a test can compute the boundary rather than
     /// guess at it: a merge that never executes is dead code behind a green
     /// suite, which is the failure mode this whole project exists to retire.
+    ///
+    /// It is **one of two** axes, and it is not the one that binds first on a
+    /// query of wide items — see
+    /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](Self::MAX_QUERY_PARAMETERS_PER_STATEMENT).
     pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+
+    /// How many bound parameters one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766, and the translation binds
+    /// one parameter per tag and one per type of every item in a chunk. So this
+    /// and [`MAX_QUERY_ARMS_PER_STATEMENT`](Self::MAX_QUERY_ARMS_PER_STATEMENT)
+    /// are **independent** axes rather than two spellings of one width: 400 items
+    /// of a single tag each is 400 arms and 400 parameters, while the same 400
+    /// items at [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT) tags apiece is
+    /// still 400 arms and 51,200 parameters. Partitioning on arms alone planned
+    /// that second query as one statement and `prepare` refused it with SQLite's
+    /// own *"too many SQL variables"* — on the append path, inside
+    /// `BEGIN IMMEDIATE`, with the caller's decision already made, which is the
+    /// timing VT-24 rejects by name.
+    ///
+    /// The number is the same budget the multi-row tag insert has chunked to
+    /// since the write path was written, and it sits below SQLite's ceiling with
+    /// headroom rather than at it, for the reason given where it is defined: a
+    /// statement that binds one extra parameter per row should not be within
+    /// rounding distance of the wall. A query is not a different kind of
+    /// statement.
+    ///
+    /// Public for the same reason the arm width is public — a test that has to
+    /// guess the boundary is a test that stops crossing it — and it is the
+    /// ceiling `tests/wide_tags.rs` computes its under, at and over cases from.
+    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = PARAMETER_BUDGET;
 
     /// How many prepared statements one page of `query` will take.
     ///
@@ -284,10 +315,22 @@ impl SqliteEventStore {
     /// `query_sql::chunks`, counted — never a second `ceil(arms / width)` that
     /// would go on reporting a boundary `fetch_page` had stopped taking. A
     /// default `Selectivity` orders tags inside an arm, never the partition.
+    ///
+    /// It counts **the real partition**, which is both ceilings and not the arm
+    /// one alone. That changes what the number says for a query of wide items:
+    /// it used to report `1` for a plan of 51,200 bound parameters, a statement
+    /// that cannot be prepared. A caller sizing a query against this seam is
+    /// asking how many statements will run, not how many the arm arithmetic on
+    /// its own would allow.
     #[must_use]
     pub fn planned_statement_count(query: &Query) -> usize {
-        let width = Self::MAX_QUERY_ARMS_PER_STATEMENT;
-        crate::query_sql::chunks(query, &Selectivity::default(), width).len()
+        crate::query_sql::chunks(
+            query,
+            &Selectivity::default(),
+            Self::MAX_QUERY_ARMS_PER_STATEMENT,
+            Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .len()
     }
 
     /// Wraps an already-open connection onto an **already-migrated** database.
@@ -574,6 +617,14 @@ impl SqliteEventStore {
 /// headroom rather than at it, because the arithmetic that matters is done once
 /// in `happenstance-core`'s `limits.rs` and an adapter that binds one extra
 /// parameter per row should not be within rounding distance of the wall.
+///
+/// **Three consumers, not one.** It was written for the multi-row tag insert and
+/// for a while that was its only caller, while the query path — which spends
+/// parameters the same way, one per tag — partitioned on arms alone and reached
+/// the wall at the adapter's own documented chunk width. The other two are
+/// `query_sql::chunks`, through
+/// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT),
+/// and the selectivity lookup that runs before it.
 const PARAMETER_BUDGET: usize = 30_000;
 
 /// Bound parameters one `event_tag` row costs.
@@ -671,6 +722,18 @@ fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEve
 /// is the standing guard; the conformance suite cannot reach it, because
 /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 and the chunk width is 400.
 ///
+/// The same argument runs a second time on the **parameter** axis, and it took
+/// longer to see because a partition on arms looks like a partition. A guard of
+/// 400 items — the arm width exactly, therefore one chunk — carrying
+/// [`MAX_TAGS_PER_EVENT`](SqliteEventStore::MAX_TAGS_PER_EVENT) tags apiece
+/// binds 51,200 of SQLite's 32,766 bound parameters, and the selectivity lookup
+/// on the line below reaches the same wall earlier still, on a query of ordinary
+/// two-tag items, because it accumulates across the whole query rather than
+/// across a chunk. Both are bounded by
+/// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT)
+/// now, and `tests/wide_tags.rs` crosses that axis here as well as on the read
+/// path, because this is the caller that holds the write lock.
+///
 /// `after: None` is a boundary of zero, because positions start at one. Guards
 /// are checked in order and the first violation ends the evaluation.
 fn evaluate(
@@ -678,11 +741,16 @@ fn evaluate(
     condition: &AppendCondition,
 ) -> Result<Option<SequencePosition>, SqliteEventStoreError> {
     for guard in condition.guards() {
-        let selectivity = Selectivity::read_for(connection, &guard.query)?;
+        let selectivity = Selectivity::read_for(
+            connection,
+            &guard.query,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )?;
         let plan = crate::query_sql::chunks(
             &guard.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
         );
 
         // `Option<i64>`'s own ordering is what merges the chunks: `None` sorts
@@ -1356,14 +1424,22 @@ impl ReadCursor {
             });
         }
 
-        let selectivity = Selectivity::read_for(&connection, &self.query)?;
+        let selectivity = Selectivity::read_for(
+            &connection,
+            &self.query,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )?;
 
         // **Chunk and merge, never refuse.** A `Query` bounds nothing by design;
         // SQLite compiles a `UNION` of n arms as one compound `SELECT` and stops
         // at `SQLITE_MAX_COMPOUND_SELECT`, which is 500 by default. An adapter
         // that returned an error at its own pushdown limit would be inventing a
         // refusal the contract has no way to report, so a wide query becomes
-        // `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)` statements merged here.
+        // several statements merged here. The partition is over *both* of
+        // SQLite's pushdown limits, because the second one —
+        // `SQLITE_MAX_VARIABLE_NUMBER`, one bound parameter per tag and per type
+        // — is reached by a query of 400 wide items that the arm count alone
+        // calls a single statement.
         //
         // Every chunk statement is **identical in shape** — same ceiling, same
         // `resume_from`, same `to`, same direction, same page budget — which is
@@ -1372,6 +1448,7 @@ impl ReadCursor {
             &self.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
         );
         let mut merged: Vec<SequencedEvent> = Vec::with_capacity(budget);
 

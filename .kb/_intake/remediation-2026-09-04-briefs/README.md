@@ -112,6 +112,26 @@ directory exists to avoid. Its evidence — a cliff at ~192 cases against a defa
 of 256 — was measured in the tree, both before and after the `to` change, and is
 **not** a regression of that change.
 
+## And one from the query-ceilings lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `query-partition-public-surface.md` | Once the partition is two ceilings, does `MAX_QUERY_ARMS_PER_STATEMENT` stay public, and does `planned_statement_count` count arms or statements? | additive (1A/2A) / breaking (1B, 2C) | `0.2.0` |
+
+Written by the lane implementing `X-1`, in the same session as the change it
+describes, and **without** the author -> two-critic -> revision pass. Same
+discount. It differs from the others in one way worth knowing before reading:
+**one of its two questions was answered by the lane rather than deferred to it.**
+`planned_statement_count` was returning `1` for a plan of 51,200 bound parameters
+that `prepare` refuses, and leaving that in place was not an option the fix could
+carry, so option 2A landed. The brief says so at the top and states the argument
+against it.
+
+That lane also ran ahead of `append-condition-sql-shape.md`, which had asked to be
+sequenced first. Both halves of `X-1` are implemented; the `Selectivity::read_for`
+half is the one that brief's option B would discard, exactly as it predicted, and
+a note recording that sits in its own sequencing section.
+
 ## Three that block other work
 
 - **`fixture-declension-policy.md`** is the keystone for the whole testkit wave: it
