@@ -148,7 +148,7 @@ fn main() {
 
 **Not** — the same shape with an `Rc<str>` in the error, asserted the weak way.
 It compiles, and that is the defect; what catches it is `assert_output_is_send`'s
-`compile_fail,E0277` doctest at `send_shape.rs:75`, not this bound.
+`compile_fail,E0277` doctest, cited in full below, not this bound.
 
 ```rust
 use core::future::Future;

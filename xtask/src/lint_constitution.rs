@@ -110,6 +110,22 @@ const FORBIDDEN_IN_FENCE: &[&str] = &[".unwrap()", ".expect("];
 /// this catches.
 const ANCHOR_SLACK: usize = 10;
 
+/// The file extensions that make a backticked span a citation.
+///
+/// This list is the *whole* test — see [`Span::rfind_path_colon`]. It is also
+/// what keeps ordinary prose out: `Note: something` and `error[E0433]: cannot
+/// find` carry a colon and no extension, so they are not citations.
+///
+/// `.yml` is here on purpose, and it is the entry that was missing: the
+/// constitution cites `.github/workflows/ci.yml` three times, and until this
+/// list grew that entry those three were parsed, discarded and reported as
+/// nothing. A workflow file is exactly where a gate step's real definition
+/// lives, so a citation into one is the kind this corpus most needs held
+/// honest. Anything absent from this list is skipped in silence — the failure
+/// this constant exists to make impossible to reintroduce by accident — so add
+/// the extension rather than leaving a citation unchecked.
+const CITED_EXTENSIONS: &[&str] = &[".rs", ".toml", ".md", ".yml"];
+
 /// Whether to check the router's generated region or rewrite it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
@@ -682,9 +698,6 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
                 continue;
             };
             let (path, tail) = (&span.text[..colon], &span.text[colon + 1..]);
-            if !(has_ext(path, ".rs") || has_ext(path, ".toml") || has_ext(path, ".md")) {
-                continue;
-            }
             let Some(citation) = parse_citation(tail) else {
                 problems.push(format!(
                     "{at} — `{}` looks like a citation and does not parse as \
@@ -762,9 +775,20 @@ struct Span {
 
 impl Span {
     /// The colon separating a path from its line number, if the span has one.
+    ///
+    /// A **known file extension** is what makes a span a citation. The test this
+    /// replaced asked for a slash before the colon, which kept prose out — but
+    /// silently discarded every citation into a repository-root file, because
+    /// `Cargo.toml:160` has no slash to find. That was one predicate here and a
+    /// second, disagreeing one at the call site; there is one now, and
+    /// [`CITED_EXTENSIONS`] is it.
     fn rfind_path_colon(&self) -> Option<usize> {
         let colon = self.text.find(':')?;
-        self.text[..colon].contains(['/', '\\']).then_some(colon)
+        let path = &self.text[..colon];
+        CITED_EXTENSIONS
+            .iter()
+            .any(|ext| has_ext(path, ext))
+            .then_some(colon)
     }
 }
 
@@ -857,6 +881,38 @@ mod tests {
         let citation = parse_citation(&first.text[colon + 1..]).unwrap();
         assert_eq!(citation.line, 160);
         assert_eq!(citation.anchor, "unsafe_code = \"forbid\"");
+    }
+
+    #[test]
+    fn prose_that_carries_a_colon_is_not_a_citation() {
+        // What the discarded slash test was actually for. The corpus quotes
+        // diagnostics and labels inside backticks, and reading one as a path
+        // would turn `check_citations` into a machine for reporting that
+        // `error[E0433]` does not exist — noise that trains a reader to skim
+        // past the reports that are real.
+        for prose in [
+            "error[E0433]: failed to resolve",
+            "Note: the bound is on the definition",
+            "warning: unused import: `core::fmt`",
+            "https://doc.rust-lang.org/nomicon",
+            "Load when: adding a gate step",
+        ] {
+            let spans = spans(&format!("`{prose}`"));
+            assert!(
+                spans[0].rfind_path_colon().is_none(),
+                "`{prose}` was read as a citation"
+            );
+        }
+    }
+
+    #[test]
+    fn a_workflow_citation_is_seen() {
+        // `.github/workflows/ci.yml` is cited three times and, until `.yml`
+        // joined the extension list, checked never — the same silence as the
+        // root-level files above, arriving by a different route.
+        let spans = spans("`.github/workflows/ci.yml:309 (baseline-rev)`");
+        let colon = spans[0].rfind_path_colon().unwrap();
+        assert_eq!(&spans[0].text[..colon], ".github/workflows/ci.yml");
     }
 
     #[test]

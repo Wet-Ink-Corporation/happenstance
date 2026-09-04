@@ -224,6 +224,6 @@ an adapter by the next agent that loads it because a compiled example is exactly
 what agents trust most.
 
 **Evidence.** `xtask/src/constitution.rs:27 (Doctests also do not receive the workspace)` ·
-`Cargo.toml:122 (unwrap_used = "deny")` ·
+`Cargo.toml:180 (unwrap_used = "deny")` ·
 [rust-clippy#1599](https://github.com/rust-lang/rust-clippy/issues/1599)
 *(checked 2026-08-09, rustc 1.97.1)*
