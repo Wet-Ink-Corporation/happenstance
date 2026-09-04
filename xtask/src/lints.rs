@@ -1368,7 +1368,7 @@ fn changelog_scope_crates(changelog: &str) -> Result<Vec<String>> {
 /// functions above), or if the two crate sets disagree — the message names
 /// which crates are on which side, because "missing from the scope line" and
 /// "no longer publishable" are different bugs.
-pub(crate) fn changelog_scope_matches_publishable() -> Result<()> {
+fn changelog_scope_matches_publishable() -> Result<()> {
     let root = workspace_root()?;
     let changelog =
         fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
