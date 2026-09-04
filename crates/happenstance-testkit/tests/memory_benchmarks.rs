@@ -67,6 +67,15 @@ macro_rules! emit_timed_csv {
                     "{}: every pass must account for every attempt it made, got {record:?}",
                     ::core::stringify!($name)
                 );
+                // The other half, and available to a third-party emitter for
+                // the same reason the first is: a row whose contended pass
+                // never ran is a row whose number means something else, and a
+                // CSV is exactly where that is unrecoverable later.
+                assert!(
+                    record.is_complete(),
+                    "{}: every pass the scenario owes must have run, got {record:?}",
+                    ::core::stringify!($name)
+                );
                 println!(
                     "{},{},{}",
                     ::core::stringify!($name),

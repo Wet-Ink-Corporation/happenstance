@@ -546,6 +546,36 @@ not the same as what a user needed to be told.
   them as skips. The incentive inversion is now measured in-tree and goes red if
   it ever stops being true. No conformance rule was added, so no adapter's build
   changes.
+- **`happenstance_testkit::bench::BenchmarkRecord::is_complete`, and the
+  completion half of `report` that was documented and never performed.**
+  `report`'s own line says it *"asserts that the scenario completed and that the
+  record is well-formed"*; only the second half existed, and neither conjunct of
+  `is_well_formed` could be false. `BenchmarkPass::is_well_formed` is an
+  invariant of the private `count`, which increments `attempts` and exactly one
+  of the four outcome counters on every call, and `!passes.is_empty()` held
+  because all three scenarios push a pass unconditionally before any early
+  return.
+
+  What that hid is one early return, two lines below its own pass:
+  `conditional_append_under_contention` returns as soon as the boundary seed
+  fails to land, so the **contended pass — the entire measurement — is absent
+  rather than zero**, and the run reports as fine. An adapter author tracking
+  `BENCH` lines across releases sees the number vanish, not a failure, and the
+  difference between *contention produced no rejections* and *contention never
+  happened* is exactly what the record was built to preserve.
+
+  A record now carries the passes its scenario owes, and the declaration is
+  pinned from both sides so that it cannot be filled in by something with
+  nothing to do with the run: `push` aborts on a label the scenario did not
+  declare, so a scenario cannot narrow the list to what it reaches on its
+  unhappy path, and `report` aborts on an owed label that never arrived, so it
+  cannot pad it either. `tests/memory_benchmarks.rs` drives the early return
+  through a fixture whose first append is armed to violate.
+
+  Additive: `BenchmarkRecord::new` and `push` are private, so no caller could
+  construct a record, and `passes`, `pass`, `scenario`, `summary` and
+  `is_well_formed` all keep their signatures. Still no threshold, at any budget
+  — an incomplete run is not a slow one (CF-34).
 
 ### Removed
 
