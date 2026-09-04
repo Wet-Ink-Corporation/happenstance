@@ -53,7 +53,7 @@ to the window width and fails when the item genuinely moves.
 
 **Explicit** — what `standards/rust/` does: the citation itself carries the anchor,
 `` `path:line (anchor)` ``, checked by `parse_citation`/`check_citations`
-(`xtask/src/lint_constitution.rs:674-722`) with `ANCHOR_SLACK = 10`. An unparseable citation is a
+(`xtask/src/lint_constitution.rs:690-735`) with `ANCHOR_SLACK = 10`. An unparseable citation is a
 hard failure. Its cost is real: every existing site would need editing to carry an anchor before
 the check could be whole. Right when a corpus is being authored; an expensive retrofit onto one
 that already exists.
