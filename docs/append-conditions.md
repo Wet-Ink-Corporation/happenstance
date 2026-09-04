@@ -27,11 +27,13 @@ are already ordered.
 
 ## What the store re-runs
 
-The condition carries the query you read and the position that read reached. A
-matching event above that position is what refuses the append
-([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)) — above, and not
-*at*: the event sitting exactly on the boundary is one you saw and decided
-with, so it cannot invalidate the decision it informed
+The condition carries the query you read and the position that read reached,
+and the store's answer turns on whether anything matching has landed *above*
+that position
+([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)). Above, and not
+on it: the event sitting exactly at the boundary is one your read handed back
+to you, so refusing on account of it would be refusing you over something you
+had already counted
 ([ES-26](../spec/SPECIFICATION.md#es-26--the-ac3-boundary-after-is-exclusive-from-is-inclusive)).
 
 ```rust
@@ -47,11 +49,11 @@ type is re-exported at `crates/happenstance-core/src/lib.rs:173`, so
 
 ## What the condition does not claim
 
-It is a claim about the log the evaluating store holds, and never about the
-world. Where the events a condition's query ranges over are no longer in that
-store there is nothing left to match, so the append is admitted — and admitted
-silently, because a store that has been pruned and a store that is young are
-the same value at every seam the port exposes
+The store answers out of what it is holding, and what it is holding is not the
+world. Where the events your query ranges over have left that store, the re-run
+finds nothing and the append goes in — and it goes in quietly, because nothing
+the port hands back tells a log that has lost history apart from one that never
+had any
 ([ES-40](../spec/SPECIFICATION.md#es-40--a-conditional-append-is-sound-only-over-a-complete-store)).
 
 The refusal above is therefore worth exactly what the completeness of the store
