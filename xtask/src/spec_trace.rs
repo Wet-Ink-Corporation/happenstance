@@ -695,24 +695,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     //    for in the wire test files rather than in a suite that could never
     //    define it. The prefix is what routes it, which is why
     //    `backticked_idents` keeps the whole qualified string.
-    for c in &clauses {
-        if c.schedules_new || !has_suite(&c.id) {
-            continue;
-        }
-        for rule in &c.rules {
-            if !resolvable.contains(rule) {
-                let looked_in = if rule.starts_with("wire::") {
-                    WIRE_TESTS.join(" or ")
-                } else {
-                    SUITE.to_owned()
-                };
-                problems.push(format!(
-                    "{}:{} — {} names rule `{}`, which is not in {} and the clause does not declare it new",
-                    SPEC, c.line, c.id, rule, looked_in
-                ));
-            }
-        }
-    }
+    check_named_rules(&clauses, &resolvable, &mut problems);
 
     // 5. Every named case exists.
     for c in &clauses {
@@ -755,6 +738,35 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &problems,
         stale.as_deref(),
     )
+}
+
+/// Check 4 — every conformance rule a clause names exists.
+///
+/// Extracted from [`run`] unchanged, so that the state it is blind to can be
+/// constructed in a test rather than argued about in a comment.
+fn check_named_rules(
+    clauses: &[Clause],
+    resolvable: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) {
+    for c in clauses {
+        if c.schedules_new || !has_suite(&c.id) {
+            continue;
+        }
+        for rule in &c.rules {
+            if !resolvable.contains(rule) {
+                let looked_in = if rule.starts_with("wire::") {
+                    WIRE_TESTS.join(" or ")
+                } else {
+                    SUITE.to_owned()
+                };
+                problems.push(format!(
+                    "{}:{} — {} names rule `{}`, which is not in {} and the clause does not declare it new",
+                    SPEC, c.line, c.id, rule, looked_in
+                ));
+            }
+        }
+    }
 }
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
@@ -2834,5 +2846,85 @@ mod tests {
              which is exactly how a bare-name citation of `store.rs` goes ambiguous over an \
              experiment nobody's build depended on"
         );
+    }
+
+    // ---- S-5: a prose word may not switch off a clause's rule-name check ----
+
+    /// A slice of the document shaped like a clause declaration, so
+    /// [`check_named_rules`] can be handed a state the real document does not
+    /// contain today.
+    fn one_clause(id: &str, rule_line: &str) -> Vec<Clause> {
+        let document = format!(
+            "#### {id} — a declaration shaped like the document's\n\n\
+             `[FROZEN]`\n\
+             `Rule:` {rule_line}\n\
+             `Rejects:` a store that does the opposite\n"
+        );
+        let clauses = parse_clauses(&document);
+        assert_eq!(
+            clauses.len(),
+            1,
+            "the fixture must parse as exactly one clause"
+        );
+        clauses
+    }
+
+    /// Nothing in the workspace: every name below is unresolvable by
+    /// construction, so the only question a test asks is whether the checker
+    /// looked.
+    fn nothing_resolves() -> BTreeSet<String> {
+        BTreeSet::new()
+    }
+
+    /// The state the gate is blind to, and the reason this group exists: one
+    /// prose word in front of a name nobody wrote, and check 4 abstains.
+    ///
+    /// VT-13 is the live instance — `unit test` in front of
+    /// `position_next_signals_overflow` switches the check off for the three
+    /// names that follow it, two of which are live suite rules.
+    #[test]
+    fn a_clause_whose_prose_says_unit_test_still_has_its_rule_names_checked() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause(
+                "VT-13",
+                "unit test `position_next_signals_overflow`; `a_rule_nobody_ever_wrote`",
+            ),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("a_rule_nobody_ever_wrote")),
+            "a FROZEN clause names a rule that has never existed and the checker said \
+             nothing; got {problems:?}"
+        );
+    }
+
+    /// The same defect through each of the other three live terms. They are
+    /// listed rather than collapsed because each is a separate sentence a clause
+    /// author may write without knowing it disarms anything.
+    #[test]
+    fn no_prose_term_disarms_the_rule_name_check() {
+        for prose in [
+            "`a_rule_nobody_ever_wrote` (new)",
+            "compile test `a_rule_nobody_ever_wrote`",
+            "`append_preserves_event_payload`; new `a_rule_nobody_ever_wrote`",
+        ] {
+            let mut problems = Vec::new();
+            check_named_rules(
+                &one_clause("ES-38", prose),
+                &nothing_resolves(),
+                &mut problems,
+            );
+            assert!(
+                problems
+                    .iter()
+                    .any(|p| p.contains("a_rule_nobody_ever_wrote")),
+                "`{prose}` switched the check off; got {problems:?}"
+            );
+        }
     }
 }
