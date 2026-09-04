@@ -226,8 +226,6 @@ struct Clause {
     /// The text inside a `[PROVISIONAL — …]` or `[DEFERRED — …]` marker.
     falsifier: String,
     rules: Vec<String>,
-    /// Whether the clause declares any of its rules as not yet written.
-    schedules_new: bool,
     /// Whether the clause points at a test that lives outside `suite.rs` — a unit
     /// or compile test in the crate it constrains. The checker cannot validate
     /// those names, so §7.2 must not mark them `†`: that would assert "does not
@@ -681,21 +679,27 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
-    // 4. Every named conformance rule exists, unless the clause schedules new
-    //    ones — in which case the prose cannot tell us which name is which, and
-    //    reporting them all would drown the check that matters.
+    // 4. Every named conformance rule exists, or is declared in
+    //    [`UNRESOLVABLE_RULE_NAMES`] with why nothing can find it.
     //
-    //    Only clauses whose rules would live in a suite that *exists*. `PS` and
-    //    `SY` rules belong to the projection and replication suites, and neither
-    //    crate has been written — checking those names against the event-store
-    //    suite is a category error that reports every one of them as missing,
-    //    which is noise indistinguishable from a real typo.
+    //    Only clauses whose rules would live in a suite that *exists*. `SY`
+    //    rules belong to the replication suite and that crate has not been
+    //    written — checking those names against the event-store suite is a
+    //    category error that reports every one of them as missing, which is
+    //    noise indistinguishable from a real typo.
     //
     //    Resolved against `resolvable`, so a `wire::`-qualified name is looked
     //    for in the wire test files rather than in a suite that could never
     //    define it. The prefix is what routes it, which is why
     //    `backticked_idents` keeps the whole qualified string.
     check_named_rules(&clauses, &resolvable, &mut problems);
+    let unresolvable = reconcile_unresolvable(
+        &UNRESOLVABLE_RULE_NAMES,
+        &clauses,
+        &resolvable,
+        &root,
+        &mut problems,
+    );
 
     // 5. Every named case exists.
     for c in &clauses {
@@ -733,41 +737,455 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &census,
         &known_rules,
         &known_cases,
-        citation_coverage,
+        &Coverage {
+            citations: citation_coverage,
+            unresolvable,
+        },
         &unclaimed_pending,
         &problems,
         stale.as_deref(),
     )
 }
 
-/// Check 4 — every conformance rule a clause names exists.
+/// Check 4 — every conformance rule a clause names exists, or is declared.
 ///
-/// Extracted from [`run`] unchanged, so that the state it is blind to can be
-/// constructed in a test rather than argued about in a comment.
+/// # What changed, and why the old shape could not be repaired in place
+///
+/// This used to abstain on `c.schedules_new`, which is a substring test over the
+/// clause's own `Rule:` **prose** — `(new)`, `` new ` ``, `unit test`,
+/// `compile test`. Twenty-nine clauses carry one of those, nineteen of them
+/// `[FROZEN]`, and for every one of them the check resolved nothing at all: a
+/// clause could name a rule that had never existed and the mandatory step
+/// printed *no problems found*. The sentence explaining that a rule is unwritten
+/// was also the switch that stopped the checker looking, and the state was
+/// unrecoverable through the gate, because the clause was never looked at again.
+///
+/// Widening it by deleting the terms cannot land — 45 names arrive at once, and
+/// four of them are not rule names at all. So the guard moves from the prose to
+/// [`UNRESOLVABLE_RULE_NAMES`], where each of those 45 is written down with the
+/// reason nothing can find it, twenty-six of them against the file that *does*
+/// hold the test. What the clause says about its own rules no longer decides
+/// whether they are checked.
+///
+/// `schedules_new` is gone with it. It had exactly one reader — this check —
+/// which is worth knowing, because its own doc claimed it also fed §7.2. §7.2
+/// reads `rule_elsewhere`, and the compiler is what settled the question.
 fn check_named_rules(
     clauses: &[Clause],
     resolvable: &BTreeSet<String>,
     problems: &mut Vec<String>,
 ) {
     for c in clauses {
-        if c.schedules_new || !has_suite(&c.id) {
+        if !has_suite(&c.id) {
             continue;
         }
         for rule in &c.rules {
-            if !resolvable.contains(rule) {
-                let looked_in = if rule.starts_with("wire::") {
-                    WIRE_TESTS.join(" or ")
-                } else {
-                    SUITE.to_owned()
-                };
-                problems.push(format!(
-                    "{}:{} — {} names rule `{}`, which is not in {} and the clause does not declare it new",
-                    SPEC, c.line, c.id, rule, looked_in
-                ));
+            if resolvable.contains(rule) || declaration_for(&c.id, rule).is_some() {
+                continue;
             }
+            let looked_in = if rule.starts_with("wire::") {
+                WIRE_TESTS.join(" or ")
+            } else {
+                SUITE.to_owned()
+            };
+            problems.push(format!(
+                "{}:{} — {} names rule `{}`, which is not in {}. Write it, or declare it in \
+                 `UNRESOLVABLE_RULE_NAMES` with the reason nothing can find it — the clause's \
+                 own prose no longer decides whether its names are checked.",
+                SPEC, c.line, c.id, rule, looked_in
+            ));
         }
     }
 }
+
+/// The [`UNRESOLVABLE_RULE_NAMES`] entry covering one clause's citation of one
+/// rule, if there is one.
+fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
+    UNRESOLVABLE_RULE_NAMES
+        .iter()
+        .find(|(c, r, _)| *c == clause && *r == rule)
+        .map(|(_, _, why)| why)
+}
+
+/// Check 4's other half — every declaration is still true, and still needed.
+///
+/// Three failures, and they are three different bugs, which is why the messages
+/// name the direction (RS-81-5). A declared name that has *become* resolvable is
+/// a stale entry and the list must shrink. A declared pair whose clause no longer
+/// cites that rule is a stale entry for the other reason. And an
+/// [`Unresolvable::Elsewhere`] path that no longer contains its identifier is the
+/// one this exists for: those twenty-six tests are real, they are the only thing
+/// standing behind twelve `[FROZEN]` clauses, and until this function nothing in
+/// the workspace would have noticed one being deleted — `collect_rules` reads
+/// four suite files and none of these is in them.
+///
+/// Returns the per-kind census, in [`Unresolvable`]'s own order, for the summary
+/// line. Counted rather than written down, per [`UNCLAIMED_PENDING_ADR`]'s
+/// precedent: a comment stating a total is a second thing to update.
+fn reconcile_unresolvable(
+    declared: &[(&str, &str, Unresolvable)],
+    clauses: &[Clause],
+    resolvable: &BTreeSet<String>,
+    root: &Path,
+    problems: &mut Vec<String>,
+) -> [usize; 3] {
+    let mut census = [0usize; 3];
+    for (clause, rule, why) in declared {
+        if resolvable.contains(*rule) {
+            problems.push(format!(
+                "`{rule}` is {} for {clause}, and it now resolves. The declaration is stale: \
+                 delete the `UNRESOLVABLE_RULE_NAMES` entry, so that {clause} is checked \
+                 against the rule rather than against a note about it.",
+                why.claim()
+            ));
+            continue;
+        }
+        if !clauses
+            .iter()
+            .any(|c| c.id == *clause && c.rules.iter().any(|r| r == rule))
+        {
+            problems.push(format!(
+                "{SPEC} — {clause} no longer names `{rule}`, which is {}. The list can only \
+                 shrink; delete the `UNRESOLVABLE_RULE_NAMES` entry.",
+                why.claim()
+            ));
+            continue;
+        }
+        census[why.index()] += 1;
+        let Unresolvable::Elsewhere(path) = why else {
+            continue;
+        };
+        match fs::read_to_string(root.join(path)) {
+            Err(e) => problems.push(format!(
+                "{clause} declares `{rule}` as living in {path}, which cannot be read: {e}",
+            )),
+            Ok(text) if !contains_identifier(&text, rule) => problems.push(format!(
+                "{path} — {clause} declares that `{rule}` lives here and it does not. Either \
+                 the test was deleted, in which case a `[FROZEN]` clause now names nothing, \
+                 or it moved and this entry must follow it.",
+            )),
+            Ok(_) => {}
+        }
+    }
+    census
+}
+
+/// Whether `text` contains `ident` as a whole identifier.
+///
+/// `str::contains` is a substring test and these names nest —
+/// `rejects_invalid_tags` is a prefix of nothing today and that is luck, not
+/// design (RS-81-3). A neighbouring `rejects_invalid_tags_and_types` would
+/// otherwise discharge the obligation of a rule nobody had written.
+fn contains_identifier(text: &str, ident: &str) -> bool {
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(ident).any(|(at, _)| {
+        text[..at].chars().next_back().is_none_or(|c| !is_ident(c))
+            && text[at + ident.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !is_ident(c))
+    })
+}
+
+/// Why a rule name a clause cites resolves against nothing the checker reads.
+///
+/// The three are not interchangeable and collapsing them to one "known missing"
+/// bucket is what the prose guard already did. Only one of the three is a gap in
+/// the suite; one is a test that exists somewhere else and can be checked there;
+/// and one is not a rule name at all.
+#[derive(Clone, Copy)]
+enum Unresolvable {
+    /// The test exists, in a file no resolution source reads — a `#[test]` in the
+    /// crate the clause constrains, or a `compile_fail` harness module.
+    ///
+    /// The path is **not** a note: [`reconcile_unresolvable`] opens it and fails
+    /// if the identifier has gone. That is the whole reason this variant carries
+    /// one rather than a sentence.
+    Elsewhere(&'static str),
+    /// Never a rule name. [`backticked_idents`] harvests every backticked
+    /// snake-case token on a `Rule:` line, and a handful of them are crate names
+    /// (`trait_variant`), rustdoc attributes (`compile_fail`) or gate steps
+    /// (`spec_trace`) that the sentence needed to say.
+    ///
+    /// Declared rather than filtered out by the parser: a filter would be a
+    /// second place to state which tokens are not rules, and it would silently
+    /// swallow a real rule name that happened to match its shape.
+    NotARuleName,
+    /// Nothing has written it. The text names what would.
+    Scheduled(&'static str),
+}
+
+impl Unresolvable {
+    /// This variant's column in [`reconcile_unresolvable`]'s census.
+    fn index(self) -> usize {
+        match self {
+            Self::Elsewhere(_) => 0,
+            Self::NotARuleName => 1,
+            Self::Scheduled(_) => 2,
+        }
+    }
+
+    /// What the entry claims, for a message reporting that it has stopped being
+    /// true. A stale entry is deleted by a person, and the sentence they need is
+    /// the one that justified it.
+    fn claim(self) -> String {
+        match self {
+            Self::Elsewhere(path) => format!("declared to live in {path}"),
+            Self::NotARuleName => "declared not to be a rule name at all".to_owned(),
+            Self::Scheduled(who) => format!("declared unwritten, owed by {who}"),
+        }
+    }
+}
+
+/// Every `(clause, rule)` pair the specification states and no resolution source
+/// can find, with the reason.
+///
+/// # Why this is a table and not a predicate
+///
+/// It replaces a predicate — four prose substrings on the clause's own `Rule:`
+/// line — that switched check 4 off for the whole clause, including the names
+/// that would have resolved. VT-13 is the worst case: two of its four names are
+/// live suite rules, and the words *"unit test"* in front of a third stopped all
+/// four being looked at. A table cannot do that, because it is keyed by the pair
+/// rather than by the sentence.
+///
+/// # It can only shrink
+///
+/// Every entry is reconciled in both directions on every run. A name that starts
+/// resolving fails the gate as a stale entry; a clause that stops citing it fails
+/// the same way; and an [`Unresolvable::Elsewhere`] file that no longer contains
+/// its identifier fails naming the file. So this cannot become a place to park a
+/// typo: the only way to add a line is to have looked.
+///
+/// The count in the type is deliberate and it is the one number written twice.
+/// It is the count `spec-trace` reported when the prose guard was measured, and
+/// a change to it is a change a reviewer should be made to see.
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
+    // ---- VT: value types -------------------------------------------------
+    (
+        "VT-5",
+        "ingest_preserves_origin_identity",
+        Unresolvable::Scheduled(
+            "the replication suite. `happenstance-sync` is a skeleton and \
+             `happenstance-sync-testkit` does not exist",
+        ),
+    ),
+    (
+        "VT-6",
+        "restored_peer_does_not_reissue_identities",
+        Unresolvable::Scheduled("the replication suite, with VT-5"),
+    ),
+    (
+        "VT-9",
+        "convergent_projection_is_interleaving_independent",
+        Unresolvable::Scheduled("the replication suite, with VT-5"),
+    ),
+    (
+        "VT-10",
+        "append_does_not_accept_a_foreign_identity",
+        Unresolvable::Elsewhere("crates/happenstance-testkit/tests/foreign_identity.rs"),
+    ),
+    (
+        "VT-13",
+        "position_next_signals_overflow",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_invalid_event_types",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_invalid_tags",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_c0_del_and_c1_controls",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_all_seven_bidirectional_controls",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "accepts_the_format_characters_scripts_need",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "accepts_neighbours_of_the_closed_list",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-18",
+        "event_new_accepts_a_held_event_type",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/constructor_ergonomics.rs"),
+    ),
+    (
+        "VT-18",
+        "command_handler_composes_validation_errors",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/constructor_ergonomics.rs"),
+    ),
+    (
+        "VT-20",
+        "rejects_invalid_event_types",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-20",
+        "rejects_invalid_tags",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-26",
+        "query_items_is_not_constructible_downstream",
+        // A `compile_fail` doctest module, not a `#[test]`: nothing that scans
+        // for `pub async fn` could ever find it.
+        Unresolvable::Elsewhere("crates/happenstance-testkit/src/lib.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_and_new_agree",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_rejects_a_bidirectional_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_rejects_a_c1_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    ("VT-32", "compile_fail", Unresolvable::NotARuleName),
+    (
+        "VT-33",
+        "a_borrowed_and_an_owned_tag_are_one_value",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-33",
+        "a_map_keyed_by_event_type_is_probed_by_str",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-33",
+        "extend_re_canonicalises",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-33",
+        "owned_into_iterator_yields_canonical_order",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    // ---- WF: the wire format ---------------------------------------------
+    (
+        "WF-12",
+        "read_options_is_not_serialisable",
+        // A `const _` assertion inside a harness module, which is why no
+        // resolution source can ever find it and why the clause's own prose said
+        // so. The file is checked instead.
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/wire.rs"),
+    ),
+    ("WF-12", "spec_trace", Unresolvable::NotARuleName),
+    ("WF-12", "compile_fail", Unresolvable::NotARuleName),
+    // ---- ES: the event store ---------------------------------------------
+    (
+        "ES-2",
+        "send_flavour_stream_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-2",
+        "spawns_from_generic",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    ("ES-2", "trait_variant", Unresolvable::NotARuleName),
+    (
+        "ES-3",
+        "provided_method_future_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-4",
+        "provided_method_future_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-5",
+        "error_bound_is_identical_on_both_flavours",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/store.rs"),
+    ),
+    (
+        "ES-6",
+        "store_error_crosses_a_join_handle",
+        Unresolvable::Scheduled(
+            "nothing, yet: `crates/happenstance-cloudflare/src/send_shape.rs` argues it is \
+             unwritable against today's port, which is a finding rather than a schedule",
+        ),
+    ),
+    (
+        "ES-29",
+        "wire_condition_with_after_is_refused",
+        Unresolvable::Scheduled("the phase that lands the wire condition"),
+    ),
+    (
+        "ES-31",
+        "checkpoint_lag_is_not_a_position_difference",
+        Unresolvable::Scheduled("the phase that lands checkpoint lag"),
+    ),
+    (
+        "ES-38",
+        "positions_are_not_reused_after_removal",
+        Unresolvable::Scheduled("the phase that lands history removal"),
+    ),
+    (
+        "ES-39",
+        "a_store_reports_the_history_it_does_not_hold",
+        Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
+    ),
+    (
+        "ES-40",
+        "condition_over_removed_history_does_not_reject",
+        Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
+    ),
+    // ---- PS: the projection store ----------------------------------------
+    (
+        "PS-25",
+        "changed_query_starts_a_new_checkpoint",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-26",
+        "failure_policy_is_per_projection",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-27",
+        "skip_and_record_is_atomic",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-28",
+        "pump_reports_the_failing_position",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-29",
+        "one_poisoned_projection_does_not_stall_the_others",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-30",
+        "panicking_apply_rolls_back",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+];
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
 /// record as owing a decision. Returns the third group, for the summary.
@@ -982,11 +1400,23 @@ to live in.
 /// The one rule [`RETIRES_PROBE`] disposes of.
 const RETIRES_PROBE_NAME: &str = "a_rule_the_probe_retires";
 
+/// What the run measured about its own reach, as opposed to what it found.
+///
+/// One struct rather than two parameters because [`report`] had reached
+/// clippy's argument ceiling, and the two are the same kind of fact: how much of
+/// the document this run actually resolved.
+struct Coverage {
+    /// `(checked, external, anchored)` citations.
+    citations: (usize, usize, usize),
+    /// [`reconcile_unresolvable`]'s per-kind census.
+    unresolvable: [usize; 3],
+}
+
 fn report(
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
-    citations: (usize, usize, usize),
+    coverage: &Coverage,
     unclaimed_pending: &[String],
     problems: &[String],
     stale: Option<&str>,
@@ -1012,7 +1442,7 @@ fn report(
     // failure this step spent a phase inside was not a wrong check, it was a
     // check whose scope nobody could see. A reader who is told "338 citations"
     // can notice that the document has more.
-    let (checked, external, anchored) = citations;
+    let (checked, external, anchored) = coverage.citations;
     let _ = write!(
         summary,
         ", {checked} citations checked ({anchored} anchored to their subject"
@@ -1022,6 +1452,20 @@ fn report(
     }
     let _ = write!(summary, ")");
     println!("{summary}");
+
+    // Printed on a green run, for the same reason `unclaimed_pending` is: this
+    // is the cost of the check, and a cost that only appears when something is
+    // already broken is a cost nobody prices. The [`Elsewhere`] figure is the
+    // one that is *checked* rather than merely declared, so it says so.
+    //
+    // [`Elsewhere`]: Unresolvable::Elsewhere
+    let [elsewhere, not_a_rule, scheduled] = coverage.unresolvable;
+    println!(
+        "{} rule name(s) a clause cites and the suites cannot resolve, each declared: \
+         {elsewhere} confirmed present in a file the suites do not read, {not_a_rule} not rule \
+         names, {scheduled} unwritten",
+        elsewhere + not_a_rule + scheduled
+    );
 
     // Printed on a green run, on purpose. An open question that only shows up
     // when something else is already broken is an open question nobody reads.
@@ -1391,7 +1835,6 @@ fn parse_clauses(spec: &str) -> Vec<Clause> {
             maturity: maturity_of(&body),
             falsifier: falsifier_of(&body),
             rules: rules.names,
-            schedules_new: rules.schedules_new,
             rule_elsewhere: rules.elsewhere,
             rule_text: field_line(&body, "Rule"),
             cases: cases_of(&body),
@@ -1620,9 +2063,8 @@ fn rules_of(body: &str) -> Rules {
     // and `backticked_idents` drops a path like
     // `mutation_coverage::every_rule_has_a_mutant` because of the colons — so a
     // clause naming one parsed with an empty rule list and §7.2 rendered a cell
-    // that *looked* checked. Marking it `elsewhere` makes both that and
-    // `schedules_new` true, which is exactly right: nothing here looked, and the
-    // table now says so in the clause's own words.
+    // that *looked* checked. Marking it `elsewhere` says the honest thing:
+    // nothing here looked, so §7.2 prints the clause's own words.
     //
     // Two things about this list are not free to change.
     //
@@ -1637,27 +2079,39 @@ fn rules_of(body: &str) -> Rules {
     // means no resolution source can ever find it and WF-12 must stay `elsewhere`
     // permanently. Tidying those two words out of the clause, or out of this list,
     // turns WF-12 into a `†` no test can ever clear.
+    //
+    // What this list no longer decides is whether WF-12's names are *checked*.
+    // That moved to [`UNRESOLVABLE_RULE_NAMES`], which names the file each one
+    // lives in and opens it.
     let elsewhere =
         text.contains("unit test") || text.contains("compile test") || text.contains("meta-test");
-    let schedules_new = text.contains("(new)")
-        || text.contains('†')
-        || text.trim_start().starts_with("new ")
-        || text.contains(" new `")
-        || elsewhere;
     Rules {
         names: backticked_idents(&text),
-        schedules_new,
         elsewhere,
     }
 }
 
 /// What a clause's `Rule:` field says, decomposed.
+///
+/// # The field that used to be here
+///
+/// `schedules_new` — `(new)`, a dagger, a leading `new `, `` new ` ``, or any of
+/// `elsewhere`'s three terms — was read by exactly one caller, check 4, which
+/// abstained entirely when it was true. It is gone, and
+/// [`UNRESOLVABLE_RULE_NAMES`] is what replaced it: a per-`(clause, rule)`
+/// table, so a sentence about one name can no longer switch off the check for
+/// the three beside it.
+///
+/// Deleting it also retired the three terms that fired on nothing at all — the
+/// dagger, `meta-test` and a leading `new ` — which had been read as evidence
+/// that the guard was doing work it was not. `elsewhere` keeps `meta-test`,
+/// because `elsewhere` is a different question with a different consumer: §7.2's
+/// rendering, which must not print `†` ("must be written") against a test that
+/// exists somewhere this file does not read.
 #[derive(Default)]
 struct Rules {
     /// Every rule name the clause mentions.
     names: Vec<String>,
-    /// Whether it declares any of them not yet written.
-    schedules_new: bool,
     /// Whether it points at a test outside `suite.rs`.
     elsewhere: bool,
 }
@@ -2901,6 +3355,235 @@ mod tests {
             "a FROZEN clause names a rule that has never existed and the checker said \
              nothing; got {problems:?}"
         );
+    }
+
+    /// The whole point of the table's grain: VT-13's two live names are checked
+    /// again. Under the prose guard the words "unit test" in front of a third
+    /// name switched all four off, so a rename of either of these two — both
+    /// real rules in `suite.rs` — was invisible.
+    #[test]
+    fn a_guarded_clause_has_its_resolvable_names_checked_too() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause(
+                "VT-13",
+                "unit test `position_next_signals_overflow`; `read_from_is_inclusive`",
+            ),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("read_from_is_inclusive")),
+            "a live suite rule beside a declared one must still be resolved; got {problems:?}"
+        );
+        assert!(
+            !problems
+                .iter()
+                .any(|p| p.contains("position_next_signals_overflow")),
+            "the declared name is accounted for by the table, not reported; got {problems:?}"
+        );
+    }
+
+    // ---- S-5: the declarations are reconciled in three directions ----------
+
+    /// The fabricated table every reconciliation test starts from.
+    fn one_declaration(why: Unresolvable) -> [(&'static str, &'static str, Unresolvable); 1] {
+        [("ES-38", "a_test_that_lives_elsewhere", why)]
+    }
+
+    /// Direction one: the rule got written, and the note about it did not get
+    /// deleted. From then on the clause is checked against the note.
+    #[test]
+    fn a_declaration_that_starts_resolving_is_reported_as_stale() {
+        let mut problems = Vec::new();
+        let resolvable: BTreeSet<String> = ["a_test_that_lives_elsewhere".to_owned()]
+            .into_iter()
+            .collect();
+
+        let census = reconcile_unresolvable(
+            &one_declaration(Unresolvable::Scheduled("the phase that lands removal")),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &resolvable,
+            Path::new("."),
+            &mut problems,
+        );
+
+        assert_eq!(
+            census,
+            [0, 0, 0],
+            "a stale entry is not counted as a live cost"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("now resolves") && p.contains("the phase that lands removal")),
+            "the message must carry the claim the entry was written under; got {problems:?}"
+        );
+    }
+
+    /// Direction two: the clause stopped citing the name. The entry then keeps a
+    /// name alive that nothing in the document asks for.
+    #[test]
+    fn a_declaration_whose_clause_stopped_citing_it_is_reported_as_stale() {
+        let mut problems = Vec::new();
+
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::NotARuleName),
+            &one_clause("ES-38", "`some_other_name_entirely`"),
+            &nothing_resolves(),
+            Path::new("."),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("no longer names") && p.contains("can only shrink")),
+            "got {problems:?}"
+        );
+    }
+
+    /// Direction three, and the one this variant exists for: the test named by
+    /// an `Elsewhere` entry is deleted. Twelve `[FROZEN]` clauses stand on
+    /// twenty-six such tests, `collect_rules` reads none of the files they live
+    /// in, and before this nothing in the workspace would have said a word.
+    #[test]
+    fn an_elsewhere_declaration_whose_file_lost_the_identifier_is_reported() {
+        let root = fabricated_root("elsewhere");
+        let dir = root.join("crates/happenstance-core/src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("event.rs"),
+            "#[test]\nfn a_neighbouring_test() {}\n",
+        )
+        .unwrap();
+
+        let mut problems = Vec::new();
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::Elsewhere(
+                "crates/happenstance-core/src/event.rs",
+            )),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &nothing_resolves(),
+            &root,
+            &mut problems,
+        );
+        fs::remove_dir_all(&root).ok();
+
+        assert!(
+            problems.iter().any(|p| p.contains("declares that")
+                && p.contains("a_test_that_lives_elsewhere")
+                && p.contains("event.rs")),
+            "a deleted unit test behind a FROZEN clause must be named at its file; \
+             got {problems:?}"
+        );
+    }
+
+    /// An `Elsewhere` path that cannot be read at all — a file moved rather than
+    /// emptied — is the other half, and it must not be swallowed as "absent, so
+    /// nothing to check".
+    #[test]
+    fn an_elsewhere_declaration_naming_a_missing_file_is_reported() {
+        let root = fabricated_root("elsewhere-missing");
+
+        let mut problems = Vec::new();
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::Elsewhere(
+                "crates/happenstance-core/src/gone.rs",
+            )),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &nothing_resolves(),
+            &root,
+            &mut problems,
+        );
+        fs::remove_dir_all(&root).ok();
+
+        assert!(
+            problems.iter().any(|p| p.contains("cannot be read")),
+            "got {problems:?}"
+        );
+    }
+
+    /// RS-81-3, applied to this check's own lookup. The names in the table nest
+    /// by accident rather than by design — `rejects_invalid_tags` sits beside
+    /// `rejects_invalid_event_types` — so a substring test would let a
+    /// neighbouring test discharge a deleted one's obligation.
+    #[test]
+    fn an_elsewhere_file_must_contain_the_whole_identifier() {
+        assert!(contains_identifier(
+            "fn rejects_invalid_tags() {}",
+            "rejects_invalid_tags"
+        ));
+        assert!(!contains_identifier(
+            "fn rejects_invalid_tags_and_types() {}",
+            "rejects_invalid_tags"
+        ));
+    }
+
+    /// A pair declared twice would be counted twice in the summary and could
+    /// carry two contradictory reasons. Cheap to state, invisible otherwise.
+    #[test]
+    fn the_table_declares_each_pair_once() {
+        let mut seen: BTreeSet<(&str, &str)> = BTreeSet::new();
+        for (clause, rule, _) in &UNRESOLVABLE_RULE_NAMES {
+            assert!(
+                seen.insert((clause, rule)),
+                "{clause} declares `{rule}` twice"
+            );
+        }
+        assert_eq!(seen.len(), UNRESOLVABLE_RULE_NAMES.len());
+    }
+
+    /// The whole table against the real tree, so that a failure names the entry
+    /// rather than arriving as one line of `spec-trace`'s output. This is the
+    /// test that goes red when someone deletes a unit test a `[FROZEN]` clause
+    /// is standing on.
+    #[test]
+    fn every_declaration_holds_against_the_real_tree() {
+        let root = workspace_root().unwrap();
+        let spec = read(&root, SPEC).unwrap();
+        let clauses = parse_clauses(&spec);
+        let resolvable: BTreeSet<String> = all_rules(&root)
+            .unwrap()
+            .union(&wire_rules(&root).unwrap())
+            .cloned()
+            .collect();
+
+        let mut problems = Vec::new();
+        let census = reconcile_unresolvable(
+            &UNRESOLVABLE_RULE_NAMES,
+            &clauses,
+            &resolvable,
+            &root,
+            &mut problems,
+        );
+
+        assert!(problems.is_empty(), "{problems:#?}");
+        assert_eq!(
+            census.iter().sum::<usize>(),
+            UNRESOLVABLE_RULE_NAMES.len(),
+            "every entry must be live; got {census:?}"
+        );
+    }
+
+    /// The same sweep from the clause side: no clause names a rule that is
+    /// neither resolvable nor declared. This is what the prose guard was hiding.
+    #[test]
+    fn the_real_document_names_no_undeclared_rule() {
+        let root = workspace_root().unwrap();
+        let spec = read(&root, SPEC).unwrap();
+        let resolvable: BTreeSet<String> = all_rules(&root)
+            .unwrap()
+            .union(&wire_rules(&root).unwrap())
+            .cloned()
+            .collect();
+
+        let mut problems = Vec::new();
+        check_named_rules(&parse_clauses(&spec), &resolvable, &mut problems);
+        assert!(problems.is_empty(), "{problems:#?}");
     }
 
     /// The same defect through each of the other three live terms. They are
