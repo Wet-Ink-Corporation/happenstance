@@ -2866,8 +2866,18 @@ enum RacerOutcome {
 struct Racer {
     /// Matches the store's own [`harness::Subject::NAME`].
     name: &'static str,
-    /// The **exact** set of concurrency rules this store fails. Empty iff it is
-    /// the conformant control.
+    /// Whether this row is a defect or the family's conformant control.
+    ///
+    /// [`Declared::kind`]'s twin, and it is a field rather than a reading of
+    /// `fails` for the reason `fails.is_empty()` is *not* the same question. An
+    /// empty `fails` list is also what a disarmed mutant looks like, and this
+    /// family documents its own rendezvous flakiness at length — so emptying a
+    /// flaky row's list is the cheaper repair than fixing a rendezvous, and a
+    /// control derived from emptiness would be manufactured by exactly that
+    /// edit.
+    kind: RacerKind,
+    /// The **exact** set of concurrency rules this store fails. Empty iff this
+    /// row is [`RacerKind::ConformantControl`].
     fails: &'static [&'static str],
     /// CF-4's obligation, one family over: the real adapter shape that makes
     /// this store plausible. Never empty.
@@ -2887,6 +2897,22 @@ struct Racer {
     /// A pin naming a rule the store does not declare is an error: a pin on a
     /// rule that never fails is a claim nothing evaluates.
     expect: &'static [(&'static str, &'static str)],
+}
+
+/// What a [`Racer`] row claims about its store.
+///
+/// [`Kind`]'s counterpart for the concurrency family. The event-store family
+/// and the projection family both carry one and both assert that a conformant
+/// member is registered; this family did not, and its control was held by an
+/// empty list and a paragraph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RacerKind {
+    /// A store with a named defect, which MUST fail exactly the rules it
+    /// declares.
+    Racing,
+    /// A store that is legally different from `MemoryEventStore` and MUST pass
+    /// every rule of this family (CF-5).
+    ConformantControl,
 }
 
 /// Every store the concurrency family is driven against here.
@@ -2921,6 +2947,7 @@ struct Racer {
 ///   CI job timeout is the only thing that notices.
 const RACERS: &[Racer] = &[
     Racer {
+        kind: RacerKind::Racing,
         name: "LockedStore",
         fails: &[],
         provenance: "the conformant control: one mutex held across the whole append, which is \
@@ -2939,6 +2966,7 @@ const RACERS: &[Racer] = &[
     // an instruction that has been written down once already and will read as an
     // unfilled gap to the next person who looks for it.
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
@@ -2966,6 +2994,7 @@ const RACERS: &[Racer] = &[
         ],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalVersionStore",
         fails: &["k_disjoint_boundaries_admit_exactly_k_commits"],
         provenance: "optimistic concurrency control on a single version number: a Durable \
@@ -2981,6 +3010,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingSequenceStore",
         fails: &["positions_are_unique_under_concurrent_appends"],
         provenance: "`SELECT max(position) FROM events` before `BEGIN`, which is the \
@@ -2995,6 +3025,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalHeadStore",
         fails: &["append_returns_the_callers_own_last_position"],
         provenance: "`INSERT …;` then `SELECT max(position) FROM events`, two statements with \
@@ -3007,6 +3038,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RowAtATimeStore",
         fails: &["a_concurrent_reader_never_sees_a_partial_batch"],
         provenance: "`for event in batch { conn.execute(INSERT, …)? }` with the `BEGIN` \
@@ -3113,8 +3145,8 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 mod mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
-        RUNTIME_PANICS, RacerOutcome, Verdict, all_concurrency_rules, all_projection_rules,
-        all_rules, declared, racer_names, racer_reports, registered_names,
+        RUNTIME_PANICS, RacerKind, RacerOutcome, Verdict, all_concurrency_rules,
+        all_projection_rules, all_rules, declared, racer_names, racer_reports, registered_names,
         registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
@@ -4855,5 +4887,22 @@ mod mutation_coverage {
                  decorative"
             );
         }
+
+        // The other direction, and the one this family had only in prose. The
+        // event-store family asserts it over `REGISTRY` and the projection
+        // family over its own table; here the control was an empty `fails` list
+        // and a provenance paragraph, so deleting `LockedStore` outright left
+        // every assertion above holding and the gate green — measured, not
+        // argued.
+        assert!(
+            RACERS
+                .iter()
+                .any(|row| row.kind == RacerKind::ConformantControl),
+            "no conformant control is registered for the concurrency family, so \
+             its five rules have only ever been passed by stores registered as \
+             defective — which is the vacuity of CF-5 reintroduced in the one \
+             family whose rules are macro-emitted and have no `REGISTRY` row to \
+             fall back on"
+        );
     }
 }
