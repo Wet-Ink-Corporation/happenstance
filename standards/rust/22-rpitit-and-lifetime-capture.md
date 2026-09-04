@@ -119,7 +119,7 @@ signal, and hands every native caller a stream it cannot hold across an await �
 in a crate whose conformance suite does not exist yet, so nothing else asks.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:156 (putting the stream at the)` ·
-`crates/happenstance-core/src/memory.rs:614 (send_flavour_stream_is_send_in_generic_code)` ·
+`crates/happenstance-core/src/memory.rs:628 (send_flavour_stream_is_send_in_generic_code)` ·
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:43 (Nesting the stream inside the future)` ·
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:54 (refining_impl_trait)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) *(the `read` case,
@@ -182,7 +182,7 @@ as a signature that got simpler.
 
 **Evidence.** `crates/happenstance-core/tests/frozen_signatures.rs:62 (fn replay<'a, S: EventStore>)` ·
 `crates/happenstance-core/tests/frozen_signatures.rs:222 (error[E0716])` ·
-`crates/happenstance-core/src/memory.rs:672 (Inlining is E0716)` ·
+`crates/happenstance-core/src/memory.rs:686 (Inlining is E0716)` ·
 [SPECIFICATION ES-13](../../spec/SPECIFICATION.md) *(`[FROZEN]`: `read`
 takes `&Query`, and what by-value costs)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·

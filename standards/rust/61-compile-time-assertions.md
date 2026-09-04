@@ -71,9 +71,9 @@ E>` refactor the outermost item is the future, `trait_variant` marks *that*
 `Send`, and this is satisfied by the wrong thing. `spawns_from_generic` is the
 second test, and it takes both.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:614 (fn send_flavour_stream_is_send_in_generic_code)` ·
-`crates/happenstance-core/src/memory.rs:621 (on a concrete store)` ·
-`crates/happenstance-core/src/memory.rs:643 (async fn spawns_from_generic)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:628 (fn send_flavour_stream_is_send_in_generic_code)` ·
+`crates/happenstance-core/src/memory.rs:635 (on a concrete store)` ·
+`crates/happenstance-core/src/memory.rs:657 (async fn spawns_from_generic)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 

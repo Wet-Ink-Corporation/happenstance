@@ -143,7 +143,7 @@ exclusion is found by whoever ports the application to Workers, in a crate whose
 signature they cannot change without a breaking release.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:110 (async fn count_all<S: EventStore>)` ·
-`crates/happenstance-core/src/memory.rs:601 (async fn count<S: EventStore>)` ·
+`crates/happenstance-core/src/memory.rs:615 (async fn count<S: EventStore>)` ·
 `crates/happenstance-ladybug/tests/port_shape.rs:43 (pub(crate) async fn advance<S: ProjectionStore>)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)

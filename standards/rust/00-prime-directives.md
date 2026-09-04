@@ -211,7 +211,7 @@ while every caller of that helper loses the one composition the `Send` flavour
 was invented to buy — holding a read across an await inside `tokio::spawn`.
 
 **Evidence.**
-`crates/happenstance-core/src/memory.rs:614 (send_flavour_stream_is_send_in_generic_code)` ·
+`crates/happenstance-core/src/memory.rs:628 (send_flavour_stream_is_send_in_generic_code)` ·
 `crates/happenstance-core/src/memory.rs:643 (spawns_from_generic)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md#es-2--read-returns-the-stream-at-the-top-level-and-is-not-async) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·

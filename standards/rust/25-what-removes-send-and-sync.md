@@ -81,7 +81,7 @@ diagnostics at once against a store owning a `rusqlite::Connection` directly, on
 per method of the trait, and the fix was a single `Mutex` at the field rather
 than anything in any body.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:657 (across an await, which needs)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:670 (across an await, which needs)` ·
 `crates/happenstance-sqlite/src/event_store.rs:147 (flavour captures)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) ·
@@ -182,8 +182,8 @@ pointing at `tokio::spawn` and naming `S::Error`, a type the runner's author
 never chose and cannot change. The fix is at the bind site; the search starts at
 the adapters.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:679 (held across the *next* await would make)` ·
-`crates/happenstance-core/src/memory.rs:684 (a second await against the same borrow)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:692 (held across the *next* await would make)` ·
+`crates/happenstance-core/src/memory.rs:706 (a second await against the same borrow)` ·
 `crates/happenstance-cloudflare/src/send_shape.rs:7 (on that future's)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) *(these six diagnostics carry no error code)*
