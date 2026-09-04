@@ -53,10 +53,15 @@ impl Borrow<str> for Kind {
     }
 }
 
-let mut registry: HashMap<Kind, &str> = HashMap::new();
-registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
+// rs_12_1_counterexample_must_hold_for_every_seed: `RandomState` is drawn afresh
+// per `HashMap`, so one map is one sample and a counterexample asserted on one
+// sample is a coin toss, not evidence.
+for _ in 0..4096 {
+    let mut registry: HashMap<Kind, &str> = HashMap::new();
+    registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
 
-assert_eq!(registry.get("CourseDefined"), None, "the entry is present and unreachable");
+    assert_eq!(registry.get("CourseDefined"), None, "rs_12_1_counterexample_must_hold_for_every_seed: the entry is present and unreachable");
+}
 
 // `Ord` breaks the same way, and that is the ordering a `BTreeMap` searches by.
 let (a, b) = (Kind { arity: 2, name: "aa".into() }, Kind { arity: 1, name: "zz".into() });
