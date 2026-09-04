@@ -3,10 +3,53 @@
 //! One question, asked in two places: **which positions match this query?** The
 //! read path asks it per replayed event, and `append`'s condition probe asks it
 //! immediately before the insert. So the translation lives in one module and
-//! both callers reach it through one entry point — because two spellings of one
-//! question is how a write path and a read path come to disagree about what
-//! "matches" means, and the disagreement shows up as a conformance failure in a
-//! rule that names neither.
+//! both callers reach it through one entry point, [`chunks`] — because two
+//! spellings of one question is how a write path and a read path come to
+//! disagree about what "matches" means, and the disagreement shows up as a
+//! conformance failure in a rule that names neither.
+//!
+//! # Two pushdown limits, and neither implies the other
+//!
+//! A `Query` bounds nothing by design: VT-23 requires every store to evaluate at
+//! least 128 items and puts no ceiling above that, and nothing in
+//! `happenstance-core`'s `query.rs` bounds tags per query item at all. SQLite
+//! pushes back in two units and both are reachable from the contract's own
+//! floor.
+//!
+//! * `SQLITE_MAX_COMPOUND_SELECT` — **500 terms**. [`arms`] joins one term per
+//!   item, so a decision model of 1,000 boundaries is one statement of 1,000
+//!   terms.
+//! * `SQLITE_MAX_VARIABLE_NUMBER` — **32,766 bound parameters**. [`item_sql`]
+//!   spends one per tag and one per type, so 400 items — inside any plausible
+//!   arm width — carrying this store's own declared `tags_per_event` of 1,024
+//!   apiece bind 409,600.
+//!
+//! Neither number is derivable from the other, so [`chunks`] partitions on
+//! **both**, and a wide query becomes several statements the caller merges
+//! rather than a refusal at the pushdown limit. The refusal is what VT-23 names
+//! as its wrong implementation, and on the append path it would arrive as
+//! `AppendError::Store` carrying a raw driver string, inside the turn, with the
+//! caller's decision already taken.
+//!
+//! **What this crate does not do is keep a second, unchunked spelling beside the
+//! chunked one.** `happenstance-sqlite`'s own `query_sql.rs` records that as
+//! exactly how its write path stayed unchunked while its module doc claimed the
+//! translation was shared. A single-chunk plan is the narrow case of the wide
+//! one, so there is nothing a second spelling could say that this cannot.
+//!
+//! # Where this diverges from the sibling, and why
+//!
+//! The widths are the sibling's, because the storage underneath is the same
+//! SQLite and the two constants are properties of *it* rather than of either
+//! adapter. The **merge** is not. `happenstance-sqlite` collects every chunk's
+//! page and truncates once at the end, which makes the resident row count
+//! `chunks x page`; a Durable Object is a single isolate with a real memory
+//! ceiling — `tests/wf11_memory_ceiling.rs` walks it — so the read path here
+//! sorts and truncates **after every chunk**, bounding residency at one page
+//! plus one chunk however wide the query is. That is exact rather than an
+//! approximation: the smallest *n* positions of a union are still the smallest
+//! *n* after any prefix of it is truncated to *n*, because adding a chunk can
+//! only push a discarded row further out.
 //!
 //! # Adapter-private, deliberately
 //!
@@ -30,24 +73,108 @@ use happenstance_core::{Query, QueryItem};
 
 use crate::sql_storage::SqlValue;
 
-/// A `SELECT position …` statement naming every position `query` matches.
+/// One `SELECT position …` statement per chunk, bounded by **both** of SQLite's
+/// pushdown limits: at most `max_arms` items and at most `max_parameters` bound
+/// parameters.
 ///
-/// The result is a *subquery body*: the caller wraps it in the bound, the
+/// Each statement is a *subquery body*: the caller wraps it in the bound, the
 /// ordering and the budget it needs — `SELECT max(position) FROM (…)` on the
 /// append path, a paged window on the read path — which is what keeps the two
-/// callers' statements the same shape underneath.
+/// callers' statements the same shape underneath, and what makes the per-chunk
+/// results mergeable. Bindings travel with the statement they belong to, in the
+/// order that statement's `?` placeholders occur.
 ///
-/// Bindings are appended to `bindings` in the order the statement's `?`
-/// placeholders occur.
-pub(crate) fn positions_matching(query: &Query, bindings: &mut Vec<SqlValue>) -> String {
+/// **Chunk and merge, never refuse.** The specification requires every store to
+/// evaluate at least 128 items and puts no ceiling above that, so an adapter
+/// that returned an error at its own pushdown limit would be inventing a refusal
+/// the contract has no way to report — and on the append path
+/// `crates/happenstance-core/src/limits.rs` gives that refusal no variant to
+/// travel in. The merge is the caller's; what belongs here is only the
+/// decomposition. It is never empty: a `Query::all` is one chunk.
+///
+/// **One item is the atom of the partition and is never split.** An item's arm
+/// is an intersection — `tag = ? AND position IN (…) AND position IN (…)` — and
+/// the halves of an intersection cannot be recombined by the caller's `UNION` or
+/// its `max()`. An item whose own tags exceed `max_parameters` therefore still
+/// gets a chunk to itself and would still be refused by the driver; reaching
+/// that needs 32,766 tags on a single query item, against a store that accepts
+/// 1,024 on an event.
+pub(crate) fn chunks(
+    query: &Query,
+    max_arms: usize,
+    max_parameters: usize,
+) -> Vec<(String, Vec<SqlValue>)> {
     match query.items() {
         // `Query::all` short-circuits to `event` rather than going through the
         // tag index, and that is the definition rather than an optimisation:
         // `all` matches every event *including an untagged one*, and an untagged
         // event has no row in `event_tag` at all.
-        None => "SELECT position FROM event".to_owned(),
-        Some(items) => arms(items, bindings),
+        None => vec![("SELECT position FROM event".to_owned(), Vec::new())],
+        Some(items) => partition(items, max_arms.max(1), max_parameters.max(1))
+            .into_iter()
+            .map(|chunk| {
+                let mut bindings = Vec::new();
+                let sql = arms(chunk, &mut bindings);
+                (sql, bindings)
+            })
+            .collect(),
     }
+}
+
+/// `items` cut into runs that satisfy both limits, in order.
+///
+/// Greedy and order-preserving. A chunk is only ever merged by `UNION` or by
+/// `max()`, neither of which cares which chunk an item landed in, so packing
+/// tighter by reordering would buy nothing and would make the partition depend
+/// on the query's shape rather than on its prefix — which is the property that
+/// lets a caller compute
+/// [`planned_statement_count`](crate::event_store::CloudflareEventStore::planned_statement_count)
+/// for itself.
+///
+/// The `arms > 0` guard is what stops an item too wide for `max_parameters` on
+/// its own from emitting an empty chunk forever; it gets a chunk to itself
+/// instead, which is the honest outcome. See the note on splitting in
+/// [`chunks`].
+fn partition(items: &[QueryItem], max_arms: usize, max_parameters: usize) -> Vec<&[QueryItem]> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut arms = 0;
+    let mut parameters = 0;
+
+    for (index, item) in items.iter().enumerate() {
+        let cost = item_parameters(item);
+        if arms > 0 && (arms == max_arms || parameters + cost > max_parameters) {
+            out.push(&items[start..index]);
+            start = index;
+            arms = 0;
+            parameters = 0;
+        }
+        arms += 1;
+        parameters += cost;
+    }
+
+    out.push(&items[start..]);
+    out
+}
+
+/// Bound parameters one item's arm will cost, counted the way [`item_sql`]
+/// spends them.
+///
+/// One per distinct tag and one per type, in every branch: the tagless branch
+/// binds its types and nothing else, and the tagged branch binds the seed tag,
+/// then the types, then one per remaining tag.
+///
+/// This is a second reading of [`item_sql`], which is the shape that drifts —
+/// add a bound parameter there and this undercounts, and the partition goes back
+/// to being wrong past a driver limit without saying so. What catches that is
+/// the boundary case in this module's own tests, which computes the expected
+/// chunk count from the declared ceilings and the query it built and compares it
+/// against the partition: an undercount moves one of those and not the other.
+/// The alternative — returning the count from [`item_sql`] itself — would mean
+/// building every statement twice, once to size it and once to use it, on the
+/// path that runs inside the append turn.
+fn item_parameters(item: &QueryItem) -> usize {
+    distinct_tags(item).len() + item.types().len()
 }
 
 /// The `UNION` of one arm per item.
@@ -169,6 +296,7 @@ mod tests {
     use happenstance_core::{Query, QueryItem, Tags};
 
     use super::*;
+    use crate::event_store::CloudflareEventStore;
 
     /// `SQLITE_MAX_COMPOUND_SELECT`, the default this runtime's SQLite is built
     /// with: how many terms one compound `SELECT` may carry.
@@ -179,13 +307,23 @@ mod tests {
 
     /// The plan for `query`, as the shipped translation produces it.
     ///
-    /// One statement today, because nothing partitions. This is the only line
-    /// the change under test moves; every assertion below is stated against the
-    /// plan rather than against the spelling that produced it.
+    /// This helper is the **only** line the partition moved: before it, the
+    /// translation returned one statement and this wrapped it in a one-element
+    /// vector; after it, the translation returns the plan itself. Every
+    /// assertion below is stated against the plan rather than against the
+    /// spelling that produced it, so the two failing cases that named this
+    /// defect assert today exactly what they asserted when they were red.
     fn plan(query: &Query) -> Vec<(String, Vec<SqlValue>)> {
-        let mut bindings = Vec::new();
-        let sql = positions_matching(query, &mut bindings);
-        vec![(sql, bindings)]
+        chunks(
+            query,
+            CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+    }
+
+    /// Arms across the whole plan.
+    fn total_arms(plan: &[(String, Vec<SqlValue>)]) -> usize {
+        plan.iter().map(|(sql, _)| arms_in(sql)).sum()
     }
 
     /// Arms in one statement: a `UNION` of *n* arms is *n* compound terms.
@@ -282,5 +420,116 @@ mod tests {
                  this adapter has nothing to read."
             );
         }
+    }
+
+    /// The plan is a partition, not a sample: every arm survives it.
+    ///
+    /// The half of VT-23's named wrong implementation that is not a refusal is
+    /// silent truncation — *"an adapter that sends only its first chunk"* — and
+    /// it is the one a green suite cannot see, because a store that answers from
+    /// the first chunk answers *something*. A partition's arms sum to the item
+    /// count, in order, with nothing dropped and nothing repeated.
+    #[test]
+    fn the_plan_partitions_the_items_rather_than_sampling_them() {
+        for (items, tags) in [(1, 1), (128, 1), (1_000, 1), (400, 1_024), (37, 900)] {
+            let query = query_of(items, tags);
+            let plan = plan(&query);
+            assert_eq!(
+                total_arms(&plan),
+                items,
+                "a plan over {items} items of {tags} tags carries                  {} arms; a partition drops nothing",
+                total_arms(&plan)
+            );
+        }
+    }
+
+    /// `Query::all` is one chunk, straight to the `event` table.
+    ///
+    /// Never zero statements: a plan of none is a read that returns nothing,
+    /// which is the emptiest possible way to be wrong.
+    #[test]
+    fn a_query_of_everything_is_one_statement() {
+        let plan = plan(&Query::all());
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].0, "SELECT position FROM event");
+        assert!(plan[0].1.is_empty());
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&Query::all()),
+            1
+        );
+    }
+
+    /// The boundary itself: one parameter under the budget, exactly at it, and
+    /// one over.
+    ///
+    /// Off-by-one at a partition boundary is the defect this class of fix
+    /// reintroduces. The arm axis is held slack — every case is
+    /// `MAX_QUERY_ARMS_PER_STATEMENT` items, never more — so what moves the
+    /// answer is the parameter count and nothing else. A ceiling is a promise
+    /// about the statement that *is* issued: at exactly the budget the plan is
+    /// one statement, and one parameter over it is two.
+    #[test]
+    fn the_parameter_partition_splits_one_over_the_budget_and_not_before() {
+        let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+        let budget = CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
+        let flat = budget / arms;
+        let remainder = budget - flat * arms;
+
+        // Item 0 carries the remainder, so the total is exactly the budget and
+        // the under/over cases move item 0 alone.
+        let widths = |delta: isize| -> Vec<usize> {
+            let mut widths = vec![flat; arms];
+            widths[0] = widths[0]
+                .saturating_add(remainder)
+                .saturating_add_signed(delta);
+            widths
+        };
+        let of_widths = |widths: &[usize]| -> Query {
+            Query::from_items(widths.iter().enumerate().map(|(item, width)| {
+                let pairs: Vec<(String, String)> = (0..*width)
+                    .map(|tag| (format!("k{item}"), format!("v{tag}")))
+                    .collect();
+                QueryItem::tagged(
+                    Tags::from_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                        .expect("the fixture's tags are well formed"),
+                )
+                .expect("an item carrying tags is constructible")
+            }))
+            .expect("a non-empty item list is a query")
+        };
+
+        assert_eq!(widths(0).iter().sum::<usize>(), budget);
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&of_widths(&widths(0))),
+            1,
+            "a plan of exactly {budget} parameters is one statement: the budget              is the largest a statement may carry, not the smallest it may not"
+        );
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&of_widths(&widths(-1))),
+            1,
+            "one parameter under the budget is still one statement"
+        );
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&of_widths(&widths(1))),
+            2,
+            "one parameter over the budget is two statements, and exactly two:              a partition that restarted its parameter count without restarting              its chunk would report more"
+        );
+    }
+
+    /// The arm axis still binds where it is the tighter of the two.
+    ///
+    /// The regression this rejects is a partition that replaced one limit with
+    /// the other rather than taking both: at one tag per item, 900 items is 900
+    /// parameters — nowhere near the budget — and must still be three
+    /// statements.
+    #[test]
+    fn the_arm_partition_still_binds_on_narrow_items() {
+        let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+        let items = arms * 2 + 100;
+        assert!(items < CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT);
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&query_of(items, 1)),
+            items.div_ceil(arms)
+        );
     }
 }

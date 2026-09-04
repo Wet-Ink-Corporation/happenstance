@@ -139,7 +139,7 @@ pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStr
 pub use js::{JsHandle, JsThrow, StringifiedThrow};
 pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
 ```
-— `crates/happenstance-cloudflare/src/lib.rs:456-458`
+— `crates/happenstance-cloudflare/src/lib.rs:492-494`
 
 `happenstance-neon` is the same shape — twelve of its own names, at
 `crates/happenstance-neon/src/lib.rs:118-129`, and no `serde_json`.

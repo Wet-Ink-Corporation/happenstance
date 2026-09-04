@@ -32,6 +32,26 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-cloudflare` publishes the two query widths it plans against:
+  `CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT` (400),
+  `MAX_QUERY_PARAMETERS_PER_STATEMENT` (30,000) and
+  `planned_statement_count`.** They are the sibling's numbers, and deliberately
+  so: both are properties of the SQLite underneath a Durable Object's storage
+  rather than of either adapter, so two adapters over one engine disagreeing
+  about them would be two guesses rather than one measurement.
+
+  They are **not** a fourth row of the crate's *capacity limits* table and must
+  not be read as one. Every row there is a value the store **refuses**, naming
+  the `StoreLimit` it refuses with; a query wider than either of these is
+  chunked and merged, never refused. The front page carries them under *The
+  query widths this store does not refuse*, with
+  `planned_statement_count` as the way to ask the question directly.
+
+  Published because VT-23 does *not* ask for them. Unlike VT-21, VT-22 and
+  VT-24 it imposes no documentation obligation, and that silence is how two
+  adapters shipped under one contract at one version came to have materially
+  different query capability with nothing on either page to compare. Additive,
+  and free only until `0.2.0`.
 - **`happenstance-sqlite` publishes its second query ceiling:
   `SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`.** SQLite pushes back in
   two units and the crate declared one of them. `MAX_QUERY_ARMS_PER_STATEMENT`
@@ -519,6 +539,39 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **`happenstance-cloudflare` chunks a wide query instead of planning it as one
+  statement SQLite cannot take.** `positions_matching` was an unbounded
+  `.join(" UNION ")` with no `max_arms`, no chunk and no parameter budget
+  anywhere in the crate: 1,000 query items became 1,000 terms of one compound
+  `SELECT` against `SQLITE_MAX_COMPOUND_SELECT`'s 500, and 400 items carrying
+  this store's own declared `tags_per_event` of 1,024 apiece bound 409,600
+  parameters against `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766. Both walls sit above
+  shapes a conformant caller may build, and on the append path the failure would
+  have arrived inside the turn as `AppendError::Store` carrying a raw driver
+  string, with the caller's decision already taken.
+
+  It is replaced by one entry point, `query_sql::chunks`, partitioning on both
+  limits — and by one entry point only: keeping a second, unchunked spelling
+  beside a chunked one is exactly how the sibling's write path stayed unchunked
+  while its module doc claimed otherwise, and that note is why. Both callers
+  merge: the append-condition guard folds the per-chunk maxima by `max`, which is
+  exact because a guard is an inequality on the highest match; the read path
+  merges pages.
+
+  **The read merge diverges from the sibling deliberately.** It sorts,
+  de-duplicates and truncates after *every* statement rather than after all of
+  them, bounding resident rows at one page plus one chunk instead of
+  `chunks x page`. A Durable Object is a single isolate with a real memory
+  ceiling, and the incremental truncation is exact rather than approximate: a row
+  already beyond the *n*-th position of a prefix of the chunks is beyond it in
+  the full union too.
+
+  One consequence worth stating, because it is observable: a row whose
+  `position` column is not an integer at all now ends the read one step earlier
+  on a multi-statement plan than on a single-statement one, because the merge
+  has to order by it. A one-statement plan — every query any conformance rule
+  builds — takes neither the sort nor that decode, and is byte-identical to the
+  read this replaced.
 - **`happenstance-sqlite` no longer fails past `SQLITE_MAX_VARIABLE_NUMBER` on a
   wide query — on either path, and the append path is the one that held the write
   lock.** `query_sql::chunks` partitioned on item count alone, so a query of 400
