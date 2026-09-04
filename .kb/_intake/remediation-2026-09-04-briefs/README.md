@@ -156,3 +156,19 @@ implies "recoverable". They do not. `C2-04`'s case rests on *adding* a defaulted
 being additive; `§11`'s correction is that *removing* one is breaking, and it applies
 that against its own Option 3. Together they read: **default freely, but only add what
 you are prepared to keep.** The contradiction was overstated and is withdrawn.
+
+## And two from the frozen-clause lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `unswept-rows-and-byte-identity.md` | ES-18 says *byte-identical* and no counter-assigning store can be. Does the second sentence get amended, or does the conformance reading become the clause? | none | phase 12 |
+| `frozen-doc-musts-and-the-adapter-half.md` | ES-23 has two MUSTs on two owners and `FROZEN_DOC_MUSTS` records one. Third disposition, `Excluded`, or a paragraph? | none (`xtask` is `publish = false`) | phase 12 |
+
+Written by the lane implementing `Q-01` and `Q-02`, in the same session as the
+changes they describe, and **without** the author → two-critic → revision pass the
+first section describes. Same discount.
+
+Both are residuals rather than blockers: `Q-01`'s adapter fix and `Q-02`'s
+statement are landed and checked, and each brief is about the *instrument* the
+finding got past rather than about the finding. The second recommends an `xtask`
+change the lane was forbidden to make, so it is routed rather than implemented.

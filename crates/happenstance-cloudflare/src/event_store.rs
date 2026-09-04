@@ -83,17 +83,80 @@
 //! normally — so the rows written before the throw would commit with the rest of
 //! the turn. Nothing rolls them back, because from the runtime's point of view
 //! nothing went wrong. All-or-none is therefore something
-//! [`CloudflareEventStore`]'s write path does explicitly, by discarding the
-//! positions the failed batch was assigned, and
+//! [`CloudflareEventStore`]'s write path does explicitly, and
 //! `a_batch_that_throws_after_its_first_row_leaves_nothing_behind` is what fails
 //! if that is removed or believed rather than done.
 //!
 //! There is still no `BEGIN`/`COMMIT` here, and none is available: a Durable
 //! Object rejects transaction-control statements — `SAVEPOINT` among them —
 //! through `sql.exec()`, and offers a callback form instead, which would put a
-//! second seam in the constructor. The compensating discard is exact rather than
-//! a best effort for the reason above: with nothing awaited mid-batch, no row
-//! outside the batch can be in the range it deletes.
+//! second seam in the constructor.
+//!
+//! **What all-or-none rests on is a single statement, not the discard.** SQLite
+//! backs a failed statement out whole, and the batch's last statement covers the
+//! whole batch: the `UPDATE` that stamps every row with this incarnation's
+//! `origin_store` and its own `origin_position`. A row with no stamp carries no
+//! `EventId`, so it is not an event, and every path that answers a question
+//! about events filters it out. A batch that reaches the stamp lands; one that
+//! does not leaves refuse. The compensating discard sweeps that refuse — exactly
+//! rather than approximately, because with nothing awaited mid-batch no row
+//! outside the batch can be in the range it deletes — and when the discard
+//! itself fails the caller is told, but the clause is met either way.
+//!
+//! **This crate once made the discard load-bearing**, and
+//! [`CloudflareEventStoreError::PartialBatch`] is what it reported when the
+//! `DELETE` threw: an object still holding what its own documentation called
+//! part of a batch that never succeeded. **ES-18 `[FROZEN]`** admits no exception,
+//! no adapter-declared escape, and nothing in the specification or the ADRs
+//! recorded one — so that was a state the reference `!Send` adapter documented,
+//! tested and named, in contradiction of a frozen clause.
+//! `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it` and
+//! `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it` are what
+//! fail against that adapter, and they ask the question through the port rather
+//! than through raw SQL, because "what the store holds" is what the clause is
+//! about.
+//!
+//! # Cancellation
+//!
+//! **What a dropped `append` future does here: nothing, because there is nothing
+//! to drop.** `append` refuses an empty batch, checks the declared ceilings,
+//! reads this object's [`StoreId`], evaluates the condition and writes the
+//! batch — all through
+//! [`SqlStorage::exec`](crate::sql_storage::SqlStorage::exec), which is
+//! **synchronous**. There is no `.await` anywhere in that body, so a future
+//! polled once has already run to completion by the time `poll` returns.
+//! **A dropped `append` future cannot be cancelled by this adapter.**
+//!
+//! This is the statement **ES-23** obliges every adapter to make. The clause is
+//! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
+//! the port refuses to choose between them on a caller's behalf
+//! ([`EventStore::append`]'s own `# Cancellation` section) precisely so that
+//! each adapter has to answer.
+//!
+//! **It does not license the opposite reading either.** A caller MUST NOT treat a
+//! dropped future as evidence about *any* store, this one included: generic code
+//! binds the port rather than this crate, and the next store in the same program
+//! may answer differently. Where an outcome genuinely has to be resolved, ES-24
+//! is the mechanism — a conditional append is at-most-once under verbatim
+//! reissue, so reissuing the identical batch settles it with no identity and no
+//! idempotency key.
+//!
+//! **The absence of a suspension point is load-bearing three times over here**,
+//! which is why it is checked rather than asserted. It is this section's answer;
+//! it is why the object cannot yield to its event loop part way through a batch,
+//! which is what makes the compensating discard's range exact; and it is the
+//! premise `MAX_EVENTS_PER_BATCH`'s derivation is written against. The body says
+//! so of itself in a comment, and a comment is not an instrument —
+//! `tests/cancellation_statement.rs` fails if this section goes missing, and
+//! fails again if `append` acquires an `.await` and the section stops being true.
+//! That second half is what ADR-0012 recorded a heading-check alone could not
+//! have.
+//!
+//! What would *not* change the answer is a caller's runtime evicting the object
+//! mid-turn: the future is not cancelled, the turn is discarded, and what
+//! survives is decided by the Durable Object's own commit rules rather than by
+//! anything the caller dropped.
+//!
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -560,8 +623,18 @@ impl CloudflareEventStore {
             ) {
                 bindings.push(SqlValue::Integer(boundary));
 
-                let statement =
-                    format!("SELECT max(position) AS position FROM ({matched}) WHERE position > ?");
+                // `FROM event WHERE position IN (…)` rather than `FROM (…)`, and
+                // the change of shape is what carries [`STAMPED`] onto this
+                // path. A guard is an inequality on the highest *event*, and
+                // refuse a failed batch left behind is not one — a guard that
+                // counted it would report a conflict at a position holding
+                // nothing, on the path where the caller's decision has already
+                // been taken. `IN` over the primary key is the same lookup the
+                // read plan makes.
+                let statement = format!(
+                    "SELECT max(position) AS position FROM event \
+                     WHERE position IN ({matched}) AND {STAMPED} AND position > ?"
+                );
                 let mut cursor = self.sql.exec(&statement, &bindings)?;
                 let Some(row) = cursor.next_row().transpose()? else {
                     continue;
@@ -604,11 +677,21 @@ impl CloudflareEventStore {
     ///
     /// `SAVEPOINT` is not the fix either: a Durable Object rejects transaction
     /// control through `sql.exec()` outright, which is the same reason there is
-    /// no `BEGIN`/`COMMIT` here. What is left is **explicit compensation** —
-    /// discard the rows this batch assigned — and it is exact rather than
-    /// approximate because nothing is awaited between the first `INSERT` and the
-    /// last statement, so no other writer can have interleaved a row into the
-    /// range being discarded.
+    /// no `BEGIN`/`COMMIT` here. What is left is the one atomicity primitive a
+    /// Durable Object cannot take away — **a single statement is backed out
+    /// whole** — pointed at the one statement that covers the batch: the
+    /// identity `UPDATE`. See [`STAMPED`]. A batch that reaches it lands; a batch
+    /// that does not leaves rows carrying no identity, which are not events.
+    ///
+    /// **The compensating discard is refuse collection, and used not to be.**
+    /// It is still issued, and still exact rather than approximate — nothing is
+    /// awaited between the first `INSERT` and the last statement, so no other
+    /// writer can have interleaved a row into the range being discarded — but
+    /// ES-18 no longer rests on it succeeding. It used to, and
+    /// [`CloudflareEventStoreError::PartialBatch`] is the report of the day it
+    /// did not: a `DELETE` that threw left the object holding what the adapter
+    /// then called part of a batch, which is a state a `[FROZEN]` clause with no
+    /// exception forbids outright.
     ///
     /// The `event` rows go in one at a time, each with `RETURNING position`,
     /// because `AUTOINCREMENT` permits gaps and nothing may assume `+ 1`; SQLite
@@ -722,8 +805,15 @@ impl CloudflareEventStore {
             .ok_or_else(|| SqlError::internal("an append of no events reached write_batch").into())
     }
 
-    /// Discards every row at or above `from`, undoing a batch that failed part
-    /// way through.
+    /// Discards every row at or above `from`, sweeping up a batch that failed
+    /// part way through.
+    ///
+    /// **Refuse collection, not the atomicity mechanism.** The rows this removes
+    /// were never stamped, so they were never events — see [`STAMPED`] — and a
+    /// failure here therefore costs storage and a stretch of the position space
+    /// rather than correctness. It is reported anyway, through
+    /// [`CloudflareEventStoreError::PartialBatch`], because on a metered runtime
+    /// unswept rows are billed.
     ///
     /// **The range is exact, not a guess.** `from` is the position the batch's
     /// first `INSERT … RETURNING` was given, every later row of the batch was
@@ -849,20 +939,34 @@ pub enum CloudflareEventStoreError {
     },
 
     /// An append failed part way through **and** the rows it had already written
-    /// could not be discarded, so this object still holds part of a batch that
-    /// never succeeded.
+    /// could not be discarded, so this object is still carrying them as refuse.
     ///
-    /// Both failures travel because either alone misleads. `cause` says why the
-    /// append stopped; `while_discarding` says why the compensation could not
-    /// clean up after it — and it is the second that changes what the caller
-    /// must do. Every other failure of `append` leaves the log as it found it,
-    /// so a DCB command loop may re-read and retry. This one does not: the log
-    /// now contains events the caller's own failed append put there, and a
-    /// retry would decide against them.
+    /// **The batch did not land, and a retry is safe.** That is the correction
+    /// this variant's documentation used to get wrong, and it was wrong about
+    /// the clause it mattered most for: it said the log now contained events the
+    /// caller's own failed append had put there, which would make this a
+    /// reachable, tested violation of **ES-18 `[FROZEN]`**. It is not, and never
+    /// had to be. A batch becomes events at the single `UPDATE` that stamps
+    /// identity over the whole of it — every row of an event carries
+    /// `origin_position`, and the write path's last statement is what sets it —
+    /// and every failure that reaches here happened before it, so what is left
+    /// behind
+    /// carries no [`EventId`] and no path that answers a question about events
+    /// can see it. `head` does not move, a replay does not yield it, and an
+    /// append guard does not count it.
+    ///
+    /// What the caller loses is storage and a stretch of the position space, not
+    /// correctness — which is why both failures still travel. `cause` says why
+    /// the append stopped and is the one to act on; `while_discarding` says why
+    /// the refuse is still there, which on a metered runtime is billed and on a
+    /// bounded one is a ceiling getting closer. Neither is a reason to reconcile
+    /// the log by hand.
     ///
     /// It is reachable, not defensive — a storage ceiling reached mid-batch
     /// fails the `INSERT` and then fails the `DELETE` that would undo it. See
-    /// `a_batch_whose_discard_also_fails_reports_both_failures`.
+    /// `a_batch_whose_discard_also_fails_reports_both_failures`, and
+    /// `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it`
+    /// for the clause held over the same state.
     #[error(
         "an append failed and its rows from position {from} could not be discarded: {cause} (while discarding: {while_discarding})"
     )]
@@ -1117,6 +1221,51 @@ fn encode_tags(tags: &Tags) -> Vec<u8> {
 const READ_COLUMNS: &str =
     "position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at";
 
+/// The predicate separating an **event** from a row this object merely holds.
+///
+/// # This is where ES-18 is met, and it is not the compensating discard
+///
+/// **ES-18 `[FROZEN]`** — *"Either every event in the batch lands or none does"* —
+/// is a clause about what a store *holds*, and a caller reads that through the
+/// port. This adapter has no transaction to lean on: a Durable Object rejects
+/// transaction control through `sql.exec()`, so a batch is several statements and
+/// a throw at any of them leaves the earlier ones written. What it does have is
+/// SQLite's own statement atomicity — **a single statement is backed out
+/// whole** — and one statement at the end of the batch that covers the whole of
+/// it: the `UPDATE … SET origin_store = ?, origin_position = position` in
+/// [`CloudflareEventStore::write_rows`].
+///
+/// So that `UPDATE` is the commit point. A row this object wrote and did not
+/// stamp carries no [`EventId`], and a row carrying no `EventId` is not an event
+/// — it is refuse the failed batch left behind. Every path that answers a
+/// question *about events* filters on this predicate: [`max_position`] (which is
+/// both `head` and the read ceiling), the read plan's own statements
+/// ([`render_chunk`]), and the append guard ([`CloudflareEventStore::evaluate`]).
+/// `contains_event_id` needs no filter and gets none: it matches on
+/// `origin_store = ? AND origin_position = ?`, and SQL `NULL` equals nothing.
+///
+/// **What changed, and what the wrong implementation was.** This adapter used to
+/// rest all-or-none on the compensating `discard_from`, which meant a `DELETE`
+/// that threw produced
+/// [`CloudflareEventStoreError::PartialBatch`](crate::CloudflareEventStoreError) —
+/// a state the adapter documented, tested and named, and which ES-18 admits no
+/// exception for. `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it`
+/// and `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it` are
+/// what fail against that adapter. The discard is still issued and is still worth
+/// issuing — refuse on a metered runtime is billed — but it is refuse collection
+/// now, not the mechanism, and its failure costs storage rather than correctness.
+///
+/// **What it does not buy.** ES-18's second sentence says *byte-identical*, and
+/// an unswept row is not that. Neither is a swept one: `AUTOINCREMENT` keeps its
+/// high-water mark across the `DELETE` deliberately (see
+/// [`CloudflareEventStore::discard_from`]), because a reused position is two
+/// events wearing one `EventId`. The clause's own conformance rules ask what the
+/// store *holds* — `append_is_atomic_under_a_mid_batch_fault` asserts "all of the
+/// batch or none of it" — and that is the reading this adapter meets. The gap
+/// between the two sentences is stated rather than papered over, and is briefed at
+/// `.kb/_intake/remediation-2026-09-04-briefs/unswept-rows-and-byte-identity.md`.
+const STAMPED: &str = "origin_position IS NOT NULL";
+
 /// How many rows one page of a read asks for.
 ///
 /// The one number the ceiling-and-page mechanism costs, and it is a trade rather
@@ -1345,8 +1494,14 @@ impl Stream for SqlRowStream {
 /// back to unbounded paging: a read that quietly drops its ceiling is the wrong
 /// implementation ES-11 and ES-12 exist to reject, and it would pass every other
 /// assertion this adapter carries.
+///
+/// `origin_position IS NOT NULL` is [`STAMPED`], and it is the reason ES-18 holds
+/// here rather than an optimisation. See that constant.
 fn max_position(sql: &SqlStorage) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
-    let mut cursor = sql.exec("SELECT max(position) AS position FROM event", &[])?;
+    let mut cursor = sql.exec(
+        &format!("SELECT max(position) AS position FROM event WHERE {STAMPED}"),
+        &[],
+    )?;
     let Some(row) = cursor.next_row().transpose()? else {
         return Ok(None);
     };
@@ -1514,6 +1669,12 @@ fn render_read(
 }
 
 /// One statement of the plan: the chunk's own subquery, wrapped in the bounds.
+///
+/// [`STAMPED`] rides with the ceiling rather than replacing it. The ceiling is
+/// already computed by [`max_position`], which filters the same way, so refuse at
+/// the top of the log is out of range — but the *next* batch that succeeds lifts
+/// the ceiling above it, and from then on only this predicate keeps it out of the
+/// replay.
 fn render_chunk(
     matched: &str,
     mut bindings: Vec<SqlValue>,
@@ -1522,7 +1683,8 @@ fn render_chunk(
     cursor: Option<SequencePosition>,
     limit: usize,
 ) -> (String, Vec<SqlValue>) {
-    let mut sql = format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched})");
+    let mut sql =
+        format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched}) AND {STAMPED}");
 
     sql.push_str(" AND position <= ?");
     bindings.push(SqlValue::Integer(position_as_i64(ceiling)));
@@ -2266,6 +2428,11 @@ mod write_path_tests {
     /// Without this test [`CloudflareEventStoreError::PartialBatch`] would be a
     /// variant no execution reaches — a claim about a state, rather than the
     /// report of one.
+    ///
+    /// It asserts what the object is still *carrying*, which is a different
+    /// question from what it *holds*: the surviving row is refuse and not an
+    /// event, and `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it`
+    /// is the one that asks ES-18 over the same fault, through the port.
     #[wasm_bindgen_test]
     async fn a_batch_whose_discard_also_fails_reports_both_failures() {
         let (sql, store) = open();
@@ -2299,6 +2466,99 @@ mod write_path_tests {
                 .to_string()
                 .contains("no space left on device"),
             "and neither is the reason the cleanup could not run: {while_discarding}"
+        );
+    }
+
+    /// **ES-18 `[FROZEN]`**, asked through the port rather than through the shim:
+    /// *"Either every event in the batch lands or none does."* A batch whose
+    /// compensating `DELETE FROM event_tag` also fails must still leave the
+    /// store holding none of it.
+    ///
+    /// The named wrong implementation is the one this adapter was: give up on
+    /// the statement that removes the **events** because the statement that
+    /// removes the *index over* them threw, and report the leftover to the
+    /// caller as a state they must reconcile by hand. `event_tag` is derived
+    /// data; `event` is what makes a batch landed, and abandoning the second
+    /// because the first failed is a partial batch produced by the ordering of
+    /// two `DELETE`s and by nothing else.
+    ///
+    /// `head` and not `stored_positions`: ES-18 is a clause about what a store
+    /// *holds*, and a caller reads that through the port. A raw `SELECT` sees
+    /// rows this adapter may legitimately still be carrying as refuse.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        arm_throws(&sql, "event_tag", "no space left on device", 2);
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed throw refuses the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "a rejected append leaves the head where it found it, so a retry \
+             re-reads the log it decided against"
+        );
+    }
+
+    /// **ES-18 `[FROZEN]`**, at the one failure the ordering above cannot rescue:
+    /// the `DELETE` over `event` itself throws, so the rows the batch wrote are
+    /// still physically there when `append` returns.
+    ///
+    /// The clause is still met, and the reason is the write path's shape rather
+    /// than the compensation's success. A batch becomes events only at the
+    /// single `UPDATE … SET origin_store` that stamps identity over the whole
+    /// range — one statement, which SQLite backs out whole — so a batch that
+    /// failed before it is a batch of rows carrying no identity, and a row
+    /// carrying no identity is not an event. The compensating discard is refuse
+    /// collection, not the mechanism.
+    ///
+    /// The named wrong implementation is the adapter that makes the discard
+    /// load-bearing: it reports `PartialBatch` here and leaves the leftovers
+    /// readable, so `head` advances over a batch the caller was told was
+    /// refused.
+    ///
+    /// The fault is arranged in two halves because it needs two different
+    /// mechanisms: a real SQLite trigger refuses the tag insert, and the shim
+    /// throws on the discard's `DELETE FROM event` — which the trigger cannot
+    /// express, because a `DELETE` does not fire a `BEFORE INSERT`.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            &sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "rows the failed batch could not remove are unstamped, and an \
+             unstamped row is not an event"
         );
     }
 
@@ -2401,10 +2661,15 @@ mod write_path_tests {
         let (sql, store) = open();
         // Written as a literal rather than a binding: binding it would already
         // have widened it through a JS number on the way *in*, and the fact
-        // under test is what happens on the way out.
+        // under test is what happens on the way out. The identity columns are
+        // seeded too, and they are not decoration: `origin_position IS NOT NULL`
+        // is what separates an event from refuse a failed batch left behind, so
+        // an unstamped row is invisible to `head` and this would assert nothing.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -2421,9 +2686,13 @@ mod write_path_tests {
     #[wasm_bindgen_test]
     async fn a_position_below_one_is_reported() {
         let (sql, store) = open();
+        // Stamped, like its two siblings above and below: an unstamped row is
+        // refuse rather than an event and `head` does not look at it.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (0, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (0, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -2456,9 +2725,12 @@ mod write_path_tests {
     #[wasm_bindgen_test]
     async fn a_negative_position_is_reported_not_absolutised() {
         let (sql, store) = open();
+        // Stamped, for the reason its sibling above gives.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (-3, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (-3, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -3777,9 +4049,14 @@ mod read_path_tests {
         let (sql, store) = open();
         // A literal rather than a binding: binding it would widen it through a
         // JS number on the way *in*, and the fact under test is the way out.
+        // Stamped, because the read path filters `origin_position IS NOT NULL`:
+        // an unstamped row is refuse a failed batch left behind rather than an
+        // event, and a replay would skip it instead of reporting it.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -4004,7 +4281,7 @@ mod source_chain_tests {
 
     use super::CloudflareEventStoreError;
 
-    /// G-1. `PartialBatch` is the report of an ES-18 [FROZEN] violation — the
+    /// G-1. `PartialBatch` is the report of an ES-18 `[FROZEN]` violation — the
     /// one failure of this adapter a DCB command loop must not retry — and
     /// today it reaches every error walker as a leaf: neither `cause` nor
     /// `while_discarding` is marked `#[source]`, so `Error::source()` returns

@@ -398,6 +398,10 @@
 //!   is reported as
 //!   [`event_store::CloudflareEventStoreError::StoredPosition`].
 //!
+//! **What a dropped `append` future does** is ES-23's question, and it is
+//! answered in [`event_store`]'s own `# Cancellation` section — beside the
+//! body it is about.
+//!
 //! # Targets
 //!
 //! `wasm32-unknown-unknown` is the target this crate exists for and the only

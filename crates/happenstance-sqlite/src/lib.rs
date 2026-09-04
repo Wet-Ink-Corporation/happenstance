@@ -71,6 +71,10 @@
 //! fixture-constant clause (`cf-40-fixture-limits-ownership`). Neither is a
 //! property of this crate's code, and neither is waiting on it.
 //!
+//! **What a dropped `append` future does** is ES-23's question, and it is
+//! answered in [`event_store`]'s own `# Cancellation` section — beside the
+//! body it is about.
+//!
 //! # Not the Cloudflare adapter
 //!
 //! A Durable Object's SQLite is reached through the Workers `SqlStorage` API,
