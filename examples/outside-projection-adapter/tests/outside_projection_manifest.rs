@@ -128,7 +128,17 @@ fn this_crates_manifest_writes_the_manifest_the_recipe_specifies() {
 fn the_dependency_does_not_turn_conformance_on_by_itself() {
     let manifest = read("Cargo.toml");
 
-    let dependencies = manifest
+    // Comments are stripped before the split, and that is not tidiness: the
+    // `[features]` table's own rationale comment sits *above* the header and
+    // names `#[cfg(feature = "conformance")]`, so a naive split on the header
+    // puts that sentence in the dependency half and this assertion fails on
+    // prose. The first version of this test did exactly that.
+    let uncommented: String = manifest
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let dependencies = uncommented
         .split("[features]")
         .next()
         .expect("split always yields at least one part");

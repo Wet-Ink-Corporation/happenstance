@@ -24,9 +24,41 @@ publish = false
 # strings would have caused at publish time, arriving here first because this
 # manifest is written long-hand on purpose. An outsider adding a pre-release
 # writes the pre-release, so the line is still the line they would write.
+#
+# `unstable-projection` and not `conformance`, and the difference is the whole
+# of what this file models. `unstable-projection` is what the *store* needs —
+# `ProjectionStore`, `Checkpoint`, `Authority`, `CommitError`, `ResetError` and
+# `ProjectionId` are all behind it, and none of them is in the contract crate's
+# default set — so it is unconditional here and an adapter cannot make it
+# optional without making its own port impl optional too. `conformance` is what
+# the *probe* needs, it is nobody's business but a suite runner's, and it is
+# therefore forwarded from a feature of this crate rather than turned on here.
+#
+# The recipe's own fence writes `happenstance-core = "…"` with no features
+# named at all, which does not compile for the reason above; that is the
+# recipe's gap rather than this manifest's licence to deviate, and it is
+# recorded in `tests/outside_projection_manifest.rs`'s limits.
 happenstance-core = { version = "0.2.0-alpha.1", path = "../../crates/happenstance-core", features = [
-  "conformance",
+  "unstable-projection",
 ] }
+
+# The one flag this crate declares, and it is declared because the published
+# recipe says to declare it (`happenstance_core::ProjectionProbe`'s own rustdoc).
+# Forwards to the contract crate; the `impl ProjectionProbe` blocks live in
+# `src/` under `#[cfg(feature = "conformance")]`, because a crate cannot `cfg`
+# on a dependency's feature — which is also why a `[dev-dependencies]` entry
+# would not work: it does not exist for the lib build the impls compile in.
+#
+# It costs the feature powerset one further combination for this member, and
+# that is the trade. The story that built this crate declined it, on the ground
+# that the crate should declare no features of its own; what that reasoning
+# missed is that the feature table *is* part of the surface being falsified.
+# A falsifier that skips the one manifest shape the surface prescribes has
+# falsified everything except the recipe. Off by default, so a consumer of this
+# crate — and there is none, but the shape is the point — does not inherit
+# `unstable-projection`'s conformance half without asking.
+[features]
+conformance = ["happenstance-core/conformance"]
 
 # The whole of the testkit's cost, and it lands here rather than above. The
 # crate documentation states this pair up front: the suite, and `tokio` with
