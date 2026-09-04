@@ -716,6 +716,23 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **`ProjectionProbe`'s published manifest recipe did not compile when
+  followed.** Its `toml` fence wrote `happenstance-core = "…"` with no
+  features, and every item the recipe sends an adapter author to implement or
+  name — `ProjectionStore` first among them, then `Checkpoint`, `Authority`,
+  `CommitError`, `ResetError` and `ProjectionId` — is behind
+  `unstable-projection`, which is not in the default set. An adapter's port impl
+  is unconditional in its own `src/`, so there was no way to work around it from
+  the adapter side. The line now reads
+  `happenstance-core = { version = "…", features = ["unstable-projection"] }`
+  and says in one comment why the feature cannot be forwarded through the
+  adapter's own `[features]` table the way `conformance` deliberately is.
+
+  A `toml` fence is not a doctest — nothing in the gate compiles it — so
+  `crates/happenstance-core/tests/projection_recipe.rs` now holds it, deriving
+  each requirement from `lib.rs`'s own `#[cfg]` rather than restating it, so a
+  feature renamed everywhere except the fence fails too.
+
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded
   `.join(" UNION ")` with no `max_arms`, no chunk and no parameter budget

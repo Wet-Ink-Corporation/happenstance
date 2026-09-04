@@ -542,7 +542,13 @@ pub trait ProjectionStore {
 ///
 /// ```toml
 /// [dependencies]
-/// happenstance-core = "…"
+/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below
+/// # is unconditional in the adapter's `src/`, and every item it names lives
+/// # behind that feature, which is not in the default set. Forwarding it
+/// # through the adapter's own `[features]` the way `conformance` is forwarded
+/// # would leave the port impl unable to compile without a flag no consumer
+/// # would know to pass.
+/// happenstance-core = { version = "…", features = ["unstable-projection"] }
 ///
 /// [features]
 /// # Forwards to the contract crate. The `impl ProjectionProbe` lives in `src/`
