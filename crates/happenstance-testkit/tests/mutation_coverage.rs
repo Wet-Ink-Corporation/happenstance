@@ -3210,6 +3210,89 @@ mod mutation_coverage {
         );
     }
 
+    /// Every surface that promises a printed skip names the flag that prints it.
+    ///
+    /// L1-3. CF-18 requires a rule whose capability is unmet to be emitted as a
+    /// test that **reports** the skip with the fixture's stated reason, and the
+    /// clause's own `Rejects:` turns on that landing *in the adapter's CI log
+    /// where a reviewer and a user of the adapter can both see it*. A rule that
+    /// skips is a test that **passes**, and libtest discards a passing test's
+    /// stdout. `RuleOutcome::report`'s own documentation measured this and says
+    /// so exactly; three reader-facing surfaces said the opposite, and they are
+    /// the only three a stranger reads.
+    ///
+    /// Measured against a fixture already in the tree, before this test was
+    /// written: `cargo test -p happenstance-sqlite --test conformance` prints
+    /// **zero** `SKIP` lines, and the same command with `-- --show-output`
+    /// prints **three**. Exactly one CI in the world passes that flag.
+    ///
+    /// **Rejects: a promise about an adapter author's CI log that is true only
+    /// in this repository.**
+    ///
+    /// # What this does not verify
+    ///
+    /// That the caveat is *correct*, only that it is present near the promise.
+    /// It reads three files by path and would not notice a fourth surface
+    /// making the same claim, and its window is a character count rather than a
+    /// paragraph — a promise and its caveat separated by more than 900
+    /// characters of prose reads as a violation here even when a human would
+    /// call it fine. The mechanism half of the finding — whether CF-18's
+    /// obligation should be discharged by something a stranger's default
+    /// `cargo test` can observe — is a decision this test does not take and
+    /// must not be read as taking.
+    #[test]
+    fn a_promised_skip_line_names_the_flag_it_needs() {
+        /// The reader-facing surfaces, by the path a citation would use.
+        const SURFACES: &[(&str, &str)] = &[
+            (
+                "crates/happenstance-testkit/README.md",
+                include_str!("../README.md"),
+            ),
+            (
+                "crates/happenstance-testkit/src/lib.rs",
+                include_str!("../src/lib.rs"),
+            ),
+            (
+                "crates/happenstance-testkit/src/contract.rs",
+                include_str!("../src/contract.rs"),
+            ),
+        ];
+
+        for (name, text) in SURFACES {
+            let flat: Vec<char> = text
+                .replace("//!", " ")
+                .replace("///", " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .collect();
+            let flat: String = flat.into_iter().collect();
+            let chars: Vec<char> = flat.chars().collect();
+
+            for (index, _) in flat.match_indices("print") {
+                let at = flat[..index].chars().count();
+                let near: String = chars[at.saturating_sub(200)..(at + 200).min(chars.len())]
+                    .iter()
+                    .collect();
+                // Only the sentences that make the promise. "prints" appears in
+                // this crate about plenty that is not a skip line.
+                if !(near.contains("stated reason") || near.contains("skip")) {
+                    continue;
+                }
+                let window: String = chars[at..(at + 900).min(chars.len())].iter().collect();
+                assert!(
+                    window.contains("--show-output"),
+                    "{name} promises a printed skip and does not name \
+                     `--show-output` within the same passage. A skipped rule is \
+                     a test that passes, and libtest discards a passing test's \
+                     stdout, so this sentence is true in this repository and \
+                     nowhere else. The passage: {window:.400}"
+                );
+            }
+        }
+    }
+
     /// The `MODEL_COVERAGE` heading's counted claim, made falsifiable.
     ///
     /// The heading states how many rows are `Agreed` and how many of those are
