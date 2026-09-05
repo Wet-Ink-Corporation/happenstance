@@ -1181,6 +1181,38 @@ pub enum SqliteEventStoreError {
         len: usize,
     },
 
+    /// This handle mints identities under an incarnation the file has retired.
+    ///
+    /// [`remint_identity`](SqliteEventStore::remint_identity)'s documented
+    /// procedure says to run it *"with nothing else holding the database open"*,
+    /// and until this variant existed nothing enforced it. A handle reads the
+    /// incarnation once, at construction, so a handle that outlives a re-mint
+    /// goes on stamping [`EventId`]s under the retired one — which is the
+    /// failure VT-6's own `Rejects:` paragraph calls *"the one failure mode in
+    /// the replication design with no error path and no observable symptom"*.
+    ///
+    /// **The narrow case, and it is deliberately narrow.** VT-6 accepts the
+    /// undetectable ones — a file restored from a backup by another process, a
+    /// copy taken while nothing was running — because SQLite cannot see them.
+    /// This is the one a program *can* see: the split happened inside this
+    /// process, and the persisted identity is readable under the lock the writer
+    /// is already holding.
+    ///
+    /// Both incarnations are carried because one of them is not actionable: the
+    /// answer is *drop this handle and reopen*, and knowing which handle is
+    /// stale is the whole of the diagnosis.
+    #[error(
+        "this handle mints identities under store {handle}, and the database now \
+         carries {persisted}: it was re-minted while this handle was open, so the \
+         handle must be dropped and the store reopened"
+    )]
+    IdentityMoved {
+        /// What this handle read at construction, and would have stamped with.
+        handle: StoreId,
+        /// What the file carries now.
+        persisted: StoreId,
+    },
+
     /// A stored row carries no event identity.
     ///
     /// Unreachable if the write path is correct — `append` stamps the origin
