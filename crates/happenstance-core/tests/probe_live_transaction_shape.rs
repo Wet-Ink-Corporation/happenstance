@@ -353,6 +353,12 @@ const SECTION: &str = "# This signature cannot be met by a batch that is a live 
 /// Not a substitute for reading this file: the three bodies above are the
 /// evidence, and this is only what keeps them attached to the thing they are
 /// evidence about.
+///
+/// Known cost, stated rather than discovered: [`DECLARATION`] is matched as a
+/// string, so renaming the `batch` parameter fails this test for a cosmetic
+/// reason. That is the price of pinning the receiver rather than the method
+/// name, and the receiver is the whole subject. The message says which of the
+/// two came apart, so the fix is a one-line edit here.
 #[test]
 fn the_recorded_constraint_is_pinned_to_the_signature_it_describes() {
     const PORT: &str = include_str!("../src/projection.rs");
@@ -364,4 +370,33 @@ fn the_recorded_constraint_is_pinned_to_the_signature_it_describes() {
          moved, this file moves with it; if the section went, PS-2's owner is \
          back to reading the absence of an adapter as scarcity"
     );
+}
+
+/// The section says "compiler-checked". Deleting the fences makes it prose.
+///
+/// Added because reverting the section leg by leg found this one pinned by
+/// nothing: the heading and the paragraphs survived the removal of both fences
+/// and the whole gate stayed green, leaving a page that *claims* a compiler
+/// checked something no compiler is looking at.
+///
+/// The error codes are named, not just the fences. `compile_fail` on its own
+/// passes when the snippet fails to compile for any reason at all — a typo, a
+/// missing import — which is the wrong implementation this rule forbids, and it
+/// is the exact failure mode `standards/rust/60-what-a-test-must-prove.md`
+/// describes for a test that cannot say what it rejected.
+#[test]
+fn the_two_halves_of_the_obstacle_stay_compiler_checked() {
+    const PORT: &str = include_str!("../src/projection.rs");
+    if !PORT.contains(SECTION) {
+        return; // The test above owns that failure; this one would only echo it.
+    }
+    for fence in ["```compile_fail,E0596", "```compile_fail,E0728"] {
+        assert!(
+            PORT.contains(fence),
+            "the section claims both halves are compiler-checked, and `{fence}` \
+             is gone. E0596 is the mutable borrow a driver needs to issue a \
+             statement; E0728 is the await the statement is. Prose asserting \
+             either is what this file exists to replace"
+        );
+    }
 }
