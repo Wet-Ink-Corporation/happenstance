@@ -695,8 +695,8 @@ pub trait ProjectionProbe: ProjectionStore {
     /// `[FROZEN]` and names a live-transaction adapter as the end of the
     /// batch-shape axis still to be built; whether this signature moves before
     /// that adapter is written belongs to that clause's owner, not to this
-    /// method's documentation. What is recorded is that the far end's absence
-    /// has a cause in this line, and not only in nobody having got to it.
+    /// method's documentation. What is recorded is that that end's absence has
+    /// a cause in this line, and not only in nobody having got to it.
     fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
 }
 

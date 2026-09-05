@@ -1,11 +1,12 @@
 //! Whether the adapter shape PS-2 still needs can implement `probe_read_through`.
 //!
-//! PS-2 is `[FROZEN]` and names the two ends of the batch-shape axis the port
-//! must be proved against. One end is unbuilt, and ADR-0036 says so: *"one
-//! adapter holding a live transaction (rusqlite or `sqlx`)"*. Every store that
-//! has ever declared `READS_THROUGH_BATCH = true` in this workspace answers from
-//! an in-process map or a buffer, and the one adapter that has run the suite
-//! declares `false`.
+//! PS-2 is `[FROZEN]` and its Rule names the two ends of the batch-shape axis
+//! the port must be proved against — *"one adapter holding a live transaction
+//! (rusqlite or `sqlx`) and one that cannot hold anything across an await"*. The
+//! first is unbuilt, and ADR-0036 is the decision that records it as unbuilt.
+//! Every store that has ever declared `READS_THROUGH_BATCH = true` in this
+//! workspace answers from an in-process map or a buffer, and the one adapter
+//! that has run the suite declares `false`.
 //!
 //! This file asks whether that is scarcity or structure, and answers it by
 //! construction. `LiveTransactionStore`'s batch **is** a transaction: statements
@@ -348,7 +349,7 @@ const SECTION: &str = "# This signature cannot be met by a batch that is a live 
 /// hand-desugared `impl Future`, to a `Result` — leaves a page telling adapter
 /// authors about an obstacle that is gone; and a section deleted while the
 /// signature stands puts the workspace back where the audit found it, with the
-/// far end of PS-2's axis unbuilt and nothing saying why.
+/// live-transaction end of PS-2's axis unbuilt and nothing saying why.
 ///
 /// Not a substitute for reading this file: the three bodies above are the
 /// evidence, and this is only what keeps them attached to the thing they are

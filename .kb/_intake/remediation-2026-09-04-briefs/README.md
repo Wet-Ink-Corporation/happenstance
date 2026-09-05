@@ -197,3 +197,27 @@ Both are residuals rather than blockers: `Q-01`'s adapter fix and `Q-02`'s
 statement are landed and checked, and each brief is about the *instrument* the
 finding got past rather than about the finding. The second recommends an `xtask`
 change the lane was forbidden to make, so it is routed rather than implemented.
+
+## And one from the core-ports lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `probe-read-through-and-the-live-transaction-end.md` | `probe_read_through` is synchronous, infallible and takes `&Self::Batch`. Does the signature move before the live-transaction adapter is written, or is PS-2's part 2 judged on a declined capability? | breaking to `ProjectionProbe`, and exempt | phase 6 or phase 10, whichever comes first |
+
+Written by the lane implementing `F1-01`, `F1-02`, `O-4` and `AE-2`, in the same
+session as the evidence it cites, and **without** the author → two-critic →
+revision pass the first section describes. Same discount.
+
+It is the one brief in this directory whose diagnosis is **compiled rather than
+argued**: `crates/happenstance-core/tests/probe_live_transaction_shape.rs` builds
+a store whose batch is a live transaction and runs every body the current
+signature admits, and two `compile_fail` doctests on the port pin the two halves
+of the obstacle at `E0596` and `E0728`. The remediation itself lies outside that
+lane's writable surface — it touches the testkit, `happenstance-sqlite` and an
+example — so the brief is a routed proposal with a named anchor rather than a
+change.
+
+**It corroborates ADR-0036 and does not contradict it.** The ADR reads the
+unbuilt live-transaction end as adapter scarcity; the brief adds that the
+scarcity has a cause in the port's own conformance seam, which nothing in the
+tree recorded when the ADR was written.
