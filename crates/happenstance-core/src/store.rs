@@ -1250,8 +1250,8 @@ help: disambiguate the method for candidate #2
 /// in this block has to be true on both pages.**
 ///
 /// The wrong implementation this rejects is the one that shipped through
-/// `0.2.0-alpha.1`: `This is the `!Send` flavour … implement [`SendEventStore`]
-/// instead`, rendered unchanged on `SendEventStore`, where the first clause is
+/// `0.2.0-alpha.1` — "This is the `!Send` flavour … implement `SendEventStore`
+/// instead" — rendered unchanged on `SendEventStore`, where the first clause is
 /// false and the second is circular. Deixis is what breaks — "this trait", "the
 /// one to use", "instead" all resolve against *the page*, and the page is not
 /// fixed. Naming a flavour does not break, which is why the second test demands
@@ -1376,8 +1376,7 @@ mod derived_flavour_doc {
                 prose.contains(flavour),
                 "the block is rendered on both pages, so it must name {flavour} \
                  rather than leave a reader to infer which trait they are on. \
-                 Prose as read:\n{}",
-                copied_prose().join("\n").to_string()
+                 Prose as read:\n{prose}"
             );
         }
     }
