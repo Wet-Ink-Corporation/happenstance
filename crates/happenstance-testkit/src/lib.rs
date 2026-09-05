@@ -207,12 +207,33 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = { version = "0.2", features = ["conformance"] }
+//! happenstance-core = { version = "0.2.0-alpha.1", features = ["conformance"] }
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "0.2"
+//! happenstance-testkit = "=0.2.0-alpha.1"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
+//!
+//! **Both requirements name the pre-release, and that is not decoration.**
+//! `version = "0.2"` is the line a Rust author writes without thinking, and it
+//! does not resolve: a requirement naming no pre-release never matches a
+//! pre-release version, so while `0.2.0-alpha.1` is the only version on the
+//! registry, `cargo add` answers that no candidate matches. An outsider taking
+//! a pre-release writes the pre-release. When these crates reach a stable
+//! number the requirements become ordinary carets, and
+//! `xtask`'s `recipe_fence_resolves` is what makes this block move with them
+//! rather than going quietly stale here.
+//!
+//! **The `=` on this crate is a recommendation with a reason** (CF-30). Adding
+//! a conformance rule is a semver-*minor* change that can turn a passing
+//! adapter's CI red, so treat it as a breaking change in practice and pin this
+//! crate exactly. An exact pin is normally poor practice in a Rust library
+//! because it propagates — a pinned dependency of a library constrains every
+//! downstream lockfile and manufactures duplicate-version conflicts — and that
+//! is exactly why the recommendation needs stating rather than assuming: Cargo
+//! does not resolve a non-root package's dev-dependencies at all, so this one
+//! propagates to nobody, and what it buys you is choosing *when* you take a new
+//! bar instead of finding out from a red run you cannot attribute.
 //!
 //! `conformance` is one flag on a dependency your adapter already has. It pulls
 //! in no crate and implies no other feature — not `std`, not `memory` — so your

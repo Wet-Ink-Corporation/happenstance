@@ -455,7 +455,7 @@ fn no_declared_ceiling_is_below_its_floor() {
 ///
 /// The macro's general arm hoists the fixture expression behind
 /// `async fn __conformance_fixture() -> impl Fixture` and hands the opaque type
-/// to every rule (`crates/happenstance-testkit/src/lib.rs:494-521`). This is
+/// to every rule (`crates/happenstance-testkit/src/lib.rs:521-542`). This is
 /// that obligation, written out: if `CloudflareFixture::new()` does not satisfy
 /// it, the slice-mate's three-line target does not compile.
 #[test]

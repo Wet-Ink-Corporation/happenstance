@@ -977,6 +977,36 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **The only copy-pasteable manifest `happenstance-testkit`'s rendered page
+  publishes could not resolve against the registry.** Step 1 of *Writing a
+  projection adapter from outside this workspace* asked for
+  `happenstance-core = { version = "0.2", … }` and `happenstance-testkit = "0.2"`
+  while `0.2.0-alpha.1` is the only version either crate has on crates.io. A
+  requirement naming no pre-release never matches a pre-release version, so an
+  adapter author who copied the block was told by `cargo` that no candidate
+  matched — on the first screen of the extension surface. Both requirements now
+  name the pre-release, and the page says why, so that the day a stable `0.2.0`
+  ships and a caret becomes idiomatic again the reason is on the record rather
+  than in a commit message.
+
+  The second half is CF-30's, and CF-30 already conceded it: *"The testkit's
+  documentation should say so; nothing checks that it does."* The
+  recommendation to pin the testkit exactly — and the non-obvious reasoning
+  that makes it right here, that Cargo does not resolve a non-root package's
+  dev-dependencies at all, so the pin propagates to nobody — lived only in
+  `crates/happenstance-testkit/README.md`, which `src/lib.rs` includes under
+  `#![cfg_attr(doctest, …)]`. It compiled and reached no reader of docs.rs. It
+  is now on the module page, where the fence it argues about is, and the fence
+  asks for `"=0.2.0-alpha.1"` rather than a caret it disagrees with.
+
+  `cargo xtask lint-pages` gains **`recipe_fence_resolves`**, which is the thing
+  that was missing rather than the prose. It reads the requirement strings out of
+  the page's own `toml` fences and compares them against the versions the
+  manifests that own them declare — the workspace key for `happenstance-core`,
+  the testkit's independent CF-32 key for itself — so the block moves when the
+  version does. It does not call crates.io, for the reason its neighbours give:
+  a gate step that needs the network fails on a train.
+
 - **Every `Serialize` impl in `happenstance-core` deep-cloned the value it was
   handed; `SequencedEvent` did it twice.** No byte moved and no signature moved —
   the wire mirrors are private, inside `#[cfg(feature = "serde")] mod
