@@ -62,7 +62,7 @@ never heard of — and the `semver` CI job did not warn, because it diffs the pu
 request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:296 (async fn head)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:303 (async fn head)` ·
 `.github/workflows/ci.yml:408 (baseline-rev)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
@@ -119,8 +119,8 @@ permanently locked out of using it — the SQLite author discovers this while
 profiling a projection runner that is doing a full table scan per poll, and the
 only fix is a breaking change to a trait somebody else's crates implement.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:270 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:296 (async fn head)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:277 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:303 (async fn head)` ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) *(the `E0119` row)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
@@ -163,7 +163,7 @@ The day a per-store `ingested_at` or a redaction flag joins the event, every
 ingest path in every peer crate breaks at once — and the author of the addition
 sees a clean workspace build, because nothing in this repository destructures it.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:406 (not public API)` ·
+**Evidence.** `crates/happenstance-core/src/event.rs:416 (not public API)` ·
 `crates/happenstance-core/src/event.rs:435 (non_exhaustive)` ·
 [SPECIFICATION VT-4](../../spec/SPECIFICATION.md) *(the same attribute, on
 `SequencedEvent`, and why `new` is then the whole compatibility surface)*
@@ -258,7 +258,7 @@ that is never compiled is decoration (F1-04, and
 `crates/happenstance-sqlite/src/lib.rs:116 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:158 (compile_fail,E0433)` ·
 `crates/happenstance-cloudflare/src/lib.rs:503 (pub use {happenstance_core, worker})` ·
-`crates/happenstance-core/src/store.rs:171 (impl Stream<Item =)` ·
+`crates/happenstance-core/src/store.rs:178 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 
 ## RS-40-5. Spell an optional capability as an associated `const` whose constructor rejects an empty reason.
@@ -301,8 +301,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1023 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:1016 (Where it does *not* fire)` ·
-`crates/happenstance-testkit/src/fixtures.rs:280 (const REOPEN)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1030 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:1023 (Where it does *not* fire)` ·
+`crates/happenstance-testkit/src/fixtures.rs:282 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*

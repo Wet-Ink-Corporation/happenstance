@@ -88,7 +88,7 @@ accept it, and gets the defaults regardless — `-D warnings` reaches rustc and
 clippy, not cargo's manifest warnings, so every step of the gate stays green.
 The real fix is a workspace edit that changes what all eight crates resolve.
 
-**Evidence.** `Cargo.toml:21 (Cargo forbids a member from)` ·
+**Evidence.** `Cargo.toml:30 (Cargo forbids a member from)` ·
 `crates/happenstance-core/Cargo.toml:35 (default = ["std", "memory"])` ·
 [Cargo Book — inheriting a dependency from a workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-dependencies-table) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -124,7 +124,7 @@ the advisory names a crate three levels down that no manifest in this workspace
 mentions.
 
 **Evidence.** `Cargo.toml:70 (ffi-sqlite-wasm-rs)` ·
-`Cargo.toml:89 (RUSTSEC-2023-0089)` ·
+`Cargo.toml:81 (RUSTSEC-2023-0089)` ·
 `.github/workflows/ci.yml:446 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -230,5 +230,5 @@ against.
 
 **Evidence.** `crates/happenstance-cloudflare/Cargo.toml:39 (was deliberately absent)` ·
 `crates/happenstance-cloudflare/src/lib.rs:518 (exists to run four assertions)` ·
-`crates/happenstance-cloudflare/src/sql_storage.rs:4 (Four properties are load-bearing)` ·
+`crates/happenstance-cloudflare/src/sql_storage.rs:5 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

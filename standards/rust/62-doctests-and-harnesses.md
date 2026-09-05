@@ -179,7 +179,7 @@ trait carrying `Self: Send` — which excludes precisely the adapters the
 two-flavour port exists for, and is discovered only when the Workers adapter
 cannot implement it.
 
-**Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:41 (Every rule passes against this store)` ·
+**Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:40 (Every rule passes against this store)` ·
 `crates/happenstance-testkit/tests/local_conformance.rs:476 (local_tokio_default)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)

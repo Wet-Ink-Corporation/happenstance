@@ -85,8 +85,8 @@ duplicate of a lint that already runs. The suite stays green and the lint stays
 green, and the first adapter whose store does not start at 1 fails a rule nobody
 can account for, in the field rather than in the testkit.
 
-**Evidence.** `xtask/src/lints.rs:627 (GappedPositionStore)` ·
-`xtask/src/lints.rs:693 (fn is_integer_list)` ·
+**Evidence.** `xtask/src/lints.rs:636 (positions from 4,096 in steps of seven)` ·
+`xtask/src/lints.rs:702 (fn is_integer_list)` ·
 [SPECIFICATION CF-6](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-33](../../spec/SPECIFICATION.md)
 
@@ -200,8 +200,8 @@ module used to *promise* that such a failure would be loud; it would not have
 been, because a lint that stops reporting prints its success line and exits 0 —
 the quietest failure available — and the promise told the next reader not to look.
 
-**Evidence.** `xtask/src/lints.rs:116 (fn code_lines)` ·
-`xtask/src/lints.rs:102 (for it. It was demonstrated: one)` · `xtask/src/lints.rs:129 (let unlexable = |line: usize, what: &str| -> anyhow::Error {)` ·
+**Evidence.** `xtask/src/lints.rs:121 (fn code_lines)` ·
+`xtask/src/lints.rs:107 (for it. It was demonstrated: one)` · `xtask/src/lints.rs:134 (let unlexable = |line: usize, what: &str| -> anyhow::Error {)` ·
 [SPECIFICATION CF-33](../../spec/SPECIFICATION.md)
 
 ---
@@ -255,8 +255,8 @@ changelog entry while the step reported it satisfied by the longer rule's entry,
 so an adapter author taking the minor bump had no sentence anywhere telling them
 which defect had just started failing their build.
 
-**Evidence.** `xtask/src/lints.rs:515 (fn names_rule)` ·
-`xtask/src/lints.rs:53 (TESTKIT_SRC)` · `xtask/src/lints.rs:246 (CLOCK_CONSTRUCTS)` ·
+**Evidence.** `xtask/src/lints.rs:520 (fn names_rule)` ·
+`xtask/src/lints.rs:55 (const TESTKIT_SRC)` · `xtask/src/lints.rs:251 (const CLOCK_CONSTRUCTS)` ·
 [SPECIFICATION CF-29](../../spec/SPECIFICATION.md)
 
 ---
@@ -326,9 +326,9 @@ resolves the meta-tests' names, and `cargo test --workspace` is just as happy
 with one fewer target as with one more. The suite's own proof that it
 discriminates would be gone, and the suite would keep certifying adapters.
 
-**Evidence.** `xtask/src/proof.rs:15 (running 0 tests)` ·
+**Evidence.** `xtask/src/proof.rs:24 (so a file truncated to its)` ·
 `xtask/src/package.rs:20 (not hypothetical)` ·
-`xtask/src/spec_trace.rs:451 (hand count against what this run computed)`
+`xtask/src/spec_trace.rs:449 (hand count against what this run computed)`
 
 ---
 
