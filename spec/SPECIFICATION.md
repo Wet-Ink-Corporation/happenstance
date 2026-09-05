@@ -1614,8 +1614,8 @@ and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
 states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
 `MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
 (`crates/happenstance-sqlite/src/event_store.rs:284`, `:291`, `:300`) — enforces
-them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:475`,
-`:482`, `:488`), and mirrors them onto its fixture so
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:558`,
+`:565`, `:571`), and mirrors them onto its fixture so
 `append_reports_exceeded_store_limits` reads them rather than a literal. All
 three clear their floors with room, VT-23's 128-item floor is evaluated by the
 same adapter through chunked statements rather than refused, and each number is

@@ -201,3 +201,55 @@ twice, and neither time was recorded.
   is not on the registry — and belongs with whoever next opens `xtask`'s registry.
 - **The `# Cancellation` half of the same crate.** That is `Q-02`, and it is a
   different clause.
+
+---
+
+## Premise correction — the generalisation is false, refuted by execution
+
+**Added by the wave integrator, 2026-09-04, after adversarial review.** This
+section corrects a stated reason and takes no decision; the recommendation above
+is the author's and stands or falls on its own merits.
+
+The brief argues:
+
+> Byte-identity and position-uniqueness are in direct conflict for any store that
+> assigns positions from a monotone counter, which is every store in this
+> workspace.
+
+**That is false for `happenstance-sqlite`, which is the store the sentence most
+needs to be true of.** SQLite's `AUTOINCREMENT` high-water mark lives in
+`sqlite_sequence`, an ordinary table under ordinary transaction control, and a
+rollback restores it. Executed against the crate's own driver:
+
+```
+test autoincrement_high_water_is_restored_by_a_rollback ... ok
+test result: ok. 1 passed; 0 failed
+```
+
+with the counter observed advanced *inside* the transaction, `seq_after ==
+seq_before` after rollback, and the next committed row landing at the position
+that was next before the rolled-back batch. No `EventId` can collide, because the
+rolled-back positions were never handed to a committed event.
+
+`SqliteEventStore::append_locked` is exactly that shape — `transaction_with_
+behavior(TransactionBehavior::Immediate)` wrapping condition evaluation and the
+whole batch, committed only on success (`crates/happenstance-sqlite/src/event_store.rs:595`,
+`:608`). So the conflict the brief generalises to "every store in this workspace"
+is specific to a store that **cannot** use transaction control and must
+compensate with `DELETE` — the Durable Object, and only it.
+
+**What this does and does not do to the recommendation.** It does not refute the
+conclusion: SQLite makes no literal byte-level promise about page or freelist
+state after a rollback, so *byte-identical* may still be the wrong word in a
+clause, and the amendment may still be owed. What it removes is the argument
+offered for it. A brief proposing an amendment to a **`[FROZEN]`** clause on the
+ground that no store can satisfy it should not rest that ground on a claim about
+"every store in this workspace" that is true of one of them.
+
+The brief's own opening records that it did not get the author → two-critic →
+revision pass the original thirteen had. This is the correction that pass would
+have produced, arriving late. **The premise needs rewriting before this reaches
+`.kb/` or an ADR** — the honest form is narrower and, on the evidence, still
+sufficient: the conflict is real for a store whose atomicity comes from
+compensation rather than from a transaction, and `happenstance-cloudflare` is
+that store.
