@@ -261,7 +261,7 @@ event, and no document in the tree distinguishes them.
 C2-04 flags it (`:1718`) and it is load-bearing for the semver class. ADR-0036's
 exemption names `happenstance-core` and `happenstance`, forwarded as `projection-store`
 on adapters. It does **not** name `happenstance-testkit`, whose projection module is
-unconditional (`crates/happenstance-testkit/src/lib.rs:350-355`: *"Unconditional, unlike
+unconditional (`crates/happenstance-testkit/src/lib.rs:471-476`: *"Unconditional, unlike
 its two nearest templates"*) and which turns `unstable-projection` on for
 `happenstance-core` unconditionally in its own manifest
 (`crates/happenstance-testkit/Cargo.toml:49-55`). On the documents as written,

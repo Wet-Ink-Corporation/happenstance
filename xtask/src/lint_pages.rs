@@ -352,6 +352,15 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     // text a reader repairing a page wants first; the positive pin below is
     // what a *paraphrase* of either has to get past.
     positive_publication_pin()?;
+    // C2-02, and third for a reason of reading order rather than of
+    // precedence: the two above ask whether the page's *prose* is true, this
+    // one asks whether the one block on it a reader will paste into their own
+    // manifest resolves at all.
+    recipe_fence_resolves()?;
+    // C2-01 and C2-05, last of the four and reading the same fence the one
+    // above does: that one asks whether the block resolves, this one asks
+    // whether what the page says the block *costs* is true.
+    feature_cost_is_stated()?;
 
     let root = workspace_root()?;
 
@@ -498,6 +507,72 @@ const PUBLISH_TOKEN: &str = "publish";
 /// The counted token for the README's half — present in `No adapter has run
 /// this suite` and in `happenstance-sqlite has run this suite` alike.
 const SUITE_TOKEN: &str = "run this suite";
+
+/// The workspace manifest, where the version `happenstance-core` inherits is
+/// written once.
+///
+/// Read rather than restated, so this check cannot be satisfied by a number
+/// typed into `xtask`. `Cargo.toml` already calls its own requirement strings
+/// *"the highest-cost line in the file to get wrong"*; the recipe fence is that
+/// same line written for somebody outside the workspace, where getting it wrong
+/// is not covered by a `path` that resolves anyway.
+const WORKSPACE_MANIFEST: &str = "Cargo.toml";
+
+/// `happenstance-core`'s manifest — read only to confirm it still inherits
+/// [`WORKSPACE_MANIFEST`]'s version rather than carrying one of its own.
+///
+/// `happenstance-testkit` deliberately carries its own key (CF-32), so the two
+/// crates the recipe names cannot share one lookup; a contract crate that
+/// quietly grew a second version key would otherwise make this check read the
+/// wrong number and stay green.
+const CORE_MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
+
+/// The section header a requirement must sit under for the exact-pin rule to
+/// apply. CF-30's whole argument is that dev-dependencies do not propagate.
+const DEV_DEPENDENCIES: &str = "[dev-dependencies]";
+
+/// The crate CF-30 recommends pinning exactly, and the one the recipe fence
+/// puts under [`DEV_DEPENDENCIES`].
+const TESTKIT_CRATE: &str = "happenstance-testkit";
+
+/// The contract crate the recipe fence puts under `[dependencies]`.
+const CORE_CRATE: &str = "happenstance-core";
+
+/// The README's own words for CF-30's recommendation.
+///
+/// Quoted from the artefact that already carries it rather than invented here,
+/// exactly as [`FIRST_RELEASE_ANCHOR`] is: `crates/happenstance-testkit/src/lib.rs`
+/// includes that README **only** under `cfg(doctest)`, so the sentence compiles
+/// and never renders. The pin below requires the rendered page to carry the
+/// same phrase — and requires the README to keep saying it, so that a rewording
+/// there fails here naming the pin rather than quietly unhooking the advice.
+const PIN_ADVICE_ANCHOR: &str = "pin this crate exactly";
+
+/// Where the projection adapter's manifest recipe is *owned*.
+///
+/// `ProjectionProbe`'s page carries the fence, `crates/happenstance-core/tests/projection_recipe.rs`
+/// holds it to the features `lib.rs` actually gates, and
+/// `examples/outside-projection-adapter` writes it. The testkit's onboarding page
+/// prints a second copy of the same manifest for a reader who needs it whole, and
+/// this module is what stops the copy being a second opinion.
+const PORT_RECIPE: &str = "crates/happenstance-core/src/projection.rs";
+
+/// The word a claim about a feature's implications is counted by.
+///
+/// A *counted* token in [`publication_pin_problems`]'s sense: the false sentence
+/// C2-01 is named for — *"implies no other feature — not `std`, not `memory`"* —
+/// and the true one both contain it, and only one of them names what the
+/// manifest says is implied.
+const IMPLIES_TOKEN: &str = "implies";
+
+/// The two commands whose disagreement C2-05 is about.
+///
+/// Cargo's resolver deliberately does not unify a dev-dependency's features into
+/// the first and does unify them into the second, so an adapter's `src/` is
+/// compiled against a strictly larger contract crate under one than under the
+/// other. Both are counted, because a page naming only one has not described a
+/// divergence.
+const DIVERGING_COMMANDS: [&str; 2] = ["cargo build", "cargo test"];
 
 /// The facts C2-07b's pin is held against, each read from the artefact that
 /// settles it rather than stored here as a sentence.
@@ -881,6 +956,797 @@ fn positive_publication_pin() -> Result<()> {
          {CHANGELOG} and {ADAPTER_LIB} settled, in those artefacts' own words"
     );
     Ok(())
+}
+
+/// The `toml` fences of a Rust file's **module** documentation, each as its own
+/// list of lines with the `//!` marker and one following space removed.
+///
+/// Module docs only, and that is the subject rather than a convenience: the
+/// recipe an outside adapter author copies is the crate's front page, and a
+/// `///` fence on some item is a different claim by a different author.
+///
+/// It is not a Markdown parser, for the reason `collapsed` states about itself
+/// (RS-81-2, `standards/rust/81-checks-that-cannot-be-types.md:95`): an opening
+/// fence is the exact line ` ```toml `, a closing fence is the exact line
+/// ` ``` `, and a nested fence would be read as a close. A recipe that needs one
+/// is a recipe this check has stopped modelling, and the vacuity guard in
+/// [`recipe_fence_problems`] is what says so out loud.
+fn doc_toml_fences(source: &str) -> Vec<Vec<String>> {
+    let mut fences = Vec::new();
+    let mut body: Vec<String> = Vec::new();
+    let mut inside = false;
+    for line in source.lines() {
+        let Some(doc) = line.trim_start().strip_prefix("//!") else {
+            continue;
+        };
+        let doc = doc.strip_prefix(' ').unwrap_or(doc);
+        let trimmed = doc.trim();
+        if inside {
+            if trimmed == "```" {
+                fences.push(std::mem::take(&mut body));
+                inside = false;
+            } else {
+                body.push(doc.to_owned());
+            }
+        } else if trimmed == "```toml" {
+            inside = true;
+        }
+    }
+    fences
+}
+
+/// One dependency line of a manifest fence, as `(section, crate, requirement)`.
+///
+/// `section` is the most recent `[…]` header, which is what decides whether
+/// CF-30's exact-pin recommendation applies to the line at all.
+#[derive(Debug, PartialEq, Eq)]
+struct DependencyLine {
+    section: String,
+    crate_name: String,
+    requirement: String,
+}
+
+/// The first double-quoted run in `text`, or `None`.
+fn first_quoted(text: &str) -> Option<String> {
+    let open = text.find('"')?;
+    let rest = &text[open + 1..];
+    let close = rest.find('"')?;
+    Some(rest[..close].to_owned())
+}
+
+/// Every `happenstance*` dependency line in a manifest fence.
+///
+/// Both spellings the recipe can use are read — the bare `name = "req"` and the
+/// inline table `name = { version = "req", … }` — and nothing else is. A
+/// requirement expressed as a `[dependencies.happenstance-core]` sub-table is
+/// invisible here; that is a shape the recipe does not use and the vacuity guard
+/// would catch its adoption, because the crate would stop being found at all.
+fn requirements(fence: &[String]) -> Vec<DependencyLine> {
+    let mut section = String::new();
+    let mut found = Vec::new();
+    for line in fence {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            trimmed.clone_into(&mut section);
+            continue;
+        }
+        let Some((name, rest)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        if !name.starts_with("happenstance") {
+            continue;
+        }
+        let rest = rest.trim();
+        let requirement = if rest.starts_with('{') {
+            rest.find("version")
+                .and_then(|at| first_quoted(&rest[at..]))
+        } else {
+            first_quoted(rest)
+        };
+        if let Some(requirement) = requirement {
+            found.push(DependencyLine {
+                section: section.clone(),
+                crate_name: name.to_owned(),
+                requirement,
+            });
+        }
+    }
+    found
+}
+
+/// Why `requirement` cannot resolve to `version`, or `None` when this check
+/// believes it can.
+///
+/// # The subset of Cargo this models, and why it is a subset
+///
+/// Three rules, and they are the three the recipe fence can break:
+///
+/// 1. **A requirement naming no pre-release never matches a pre-release
+///    version.** This is Cargo's own rule and it is the live half of C2-02:
+///    `0.2.0-alpha.1` is the only version on the registry, and `^0.2` excludes
+///    it, so `cargo add` answers that no candidate matches.
+/// 2. **An exact pin must equal the version.** Nothing to interpret.
+/// 3. **A caret requirement's dotted prefix must agree with the version's.**
+///    `^0.3` against `0.2.0` is not a resolvable line even though neither is a
+///    pre-release.
+///
+/// It deliberately does **not** implement `~`, `<`, `>`, `*` or multi-comparator
+/// requirements: a fence using one is reported as unmodelled rather than passed,
+/// because a check that silently approves the syntax it cannot read is the
+/// decorative kind CLAUDE.md names.
+fn requirement_problem(requirement: &str, version: &str) -> Option<String> {
+    let (exact, bare) = match requirement.strip_prefix('=') {
+        Some(rest) => (true, rest.trim()),
+        None => (
+            false,
+            requirement.strip_prefix('^').unwrap_or(requirement).trim(),
+        ),
+    };
+    if bare.is_empty() || !bare.starts_with(|c: char| c.is_ascii_digit()) {
+        return Some(format!(
+            "`{requirement}` is not a requirement this check models — it recognises a bare or \
+             caret requirement and an `=` pin, and reports everything else rather than approving \
+             syntax it cannot read"
+        ));
+    }
+    if exact {
+        return (bare != version).then(|| {
+            format!(
+                "`{requirement}` pins a version this workspace does not publish; the manifest \
+                 says `{version}`"
+            )
+        });
+    }
+    if version.contains('-') && !bare.contains('-') {
+        return Some(format!(
+            "`{requirement}` names no pre-release, and Cargo never matches such a requirement \
+             against the pre-release `{version}` — a reader who copies this line is told no \
+             candidate exists"
+        ));
+    }
+    if version.contains('-') && bare != version {
+        return Some(format!(
+            "`{requirement}` names a different pre-release than the `{version}` this workspace \
+             publishes"
+        ));
+    }
+    let req_numbers: Vec<&str> = bare.split('-').next().unwrap_or(bare).split('.').collect();
+    let ver_numbers: Vec<&str> = version
+        .split('-')
+        .next()
+        .unwrap_or(version)
+        .split('.')
+        .collect();
+    let agrees = req_numbers.len() <= ver_numbers.len()
+        && req_numbers
+            .iter()
+            .zip(&ver_numbers)
+            .all(|(req, ver)| req == ver);
+    (!agrees).then(|| {
+        format!(
+            "`{requirement}` does not resolve to `{version}`, the version this workspace \
+                 publishes"
+        )
+    })
+}
+
+/// The versions the recipe fence is held against, each read from the manifest
+/// that owns it.
+#[derive(Debug)]
+struct RecipeFacts {
+    /// `happenstance-core`'s version, inherited from [`WORKSPACE_MANIFEST`].
+    core: Option<String>,
+    /// `happenstance-testkit`'s own version key (CF-32).
+    testkit: Option<String>,
+    /// Whether [`TESTKIT_README`](crate::lints::TESTKIT_README) still gives
+    /// CF-30's recommendation in the words [`PIN_ADVICE_ANCHOR`] quotes.
+    readme_keeps_pin_advice: bool,
+}
+
+/// C2-02: everything wrong with the one copy-pasteable manifest the testkit's
+/// rendered page publishes.
+///
+/// # Why a check and not a careful edit
+///
+/// The fence's requirement strings are the only lines in this repository that
+/// are *about* the registry and are checked by nothing: `Cargo.toml`'s own
+/// requirements resolve through `path` whether or not their version strings are
+/// right, and `examples/outside-projection-adapter/Cargo.toml` says in its own
+/// comments that it is written long-hand for exactly that reason. Both of those
+/// manifests already carry the warning in prose. The rendered page carried the
+/// mistake.
+///
+/// # What this does not verify
+///
+/// * **The registry.** Whether `crates.io` serves `0.2.0-alpha.1` today is not
+///   asked, for the reason [`publication_pin_problems`] gives: a gate step that
+///   needs the network fails on a train. The published version is read from the
+///   manifests, which is the artefact that decides what gets published.
+/// * **That the fence is a manifest that builds.** Feature names, the `tokio`
+///   line, and whether the two crates are in the right sections are not read
+///   here. `examples/outside-projection-adapter` is the instrument for that, and
+///   its own `tests/outside_projection_manifest.rs` says which half it covers.
+/// * **Any fence outside `//!`.** See [`doc_toml_fences`].
+/// * **That the rendered page's pin advice is *correct*.** It requires the
+///   phrase, in the README's words, on both surfaces. A paragraph carrying the
+///   phrase and then arguing against it passes, exactly as
+///   [`publication_pin_problems`]'s counted tokens do.
+fn recipe_fence_problems(facts: &RecipeFacts, lib: &str, fences: &[Vec<String>]) -> Vec<String> {
+    use crate::lints::{TESTKIT_LIB, TESTKIT_README};
+
+    let mut problems = Vec::new();
+    let found: Vec<DependencyLine> = fences
+        .iter()
+        .flat_map(|fence| requirements(fence))
+        .collect();
+
+    if !found.iter().any(|r| r.crate_name == CORE_CRATE)
+        || !found.iter().any(|r| r.crate_name == TESTKIT_CRATE)
+    {
+        problems.push(format!(
+            "{TESTKIT_LIB} — no `toml` fence in the module documentation names both \
+             {CORE_CRATE} and {TESTKIT_CRATE}. This check reads the recipe an outside author \
+             copies; a recipe it cannot find is a recipe it is not checking, which is the state \
+             C2-02 shipped in (C2-02)."
+        ));
+        return problems;
+    }
+
+    for requirement in &found {
+        let version = match requirement.crate_name.as_str() {
+            CORE_CRATE => facts.core.as_deref(),
+            TESTKIT_CRATE => facts.testkit.as_deref(),
+            _ => None,
+        };
+        let Some(version) = version else {
+            problems.push(format!(
+                "{} — carries no `version` key this check can read, so the fence's `{}` \
+                 requirement is being compared against nothing (C2-02).",
+                if requirement.crate_name == TESTKIT_CRATE {
+                    TESTKIT_MANIFEST
+                } else {
+                    WORKSPACE_MANIFEST
+                },
+                requirement.crate_name
+            ));
+            continue;
+        };
+        if let Some(problem) = requirement_problem(&requirement.requirement, version) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — the recipe fence's `{}` requirement does not work: {problem} \
+                 (C2-02).",
+                requirement.crate_name
+            ));
+        }
+        if requirement.crate_name == TESTKIT_CRATE
+            && requirement.section == DEV_DEPENDENCIES
+            && !requirement.requirement.starts_with('=')
+        {
+            problems.push(format!(
+                "{TESTKIT_LIB} — the recipe fence asks for `{}` under {DEV_DEPENDENCIES}, which \
+                 takes the next rule set automatically. {TESTKIT_README} recommends the opposite \
+                 in the words {PIN_ADVICE_ANCHOR:?}, and CF-30's argument is that a \
+                 dev-dependency does not propagate, so the pin costs nobody anything (C2-02).",
+                requirement.requirement
+            ));
+        }
+    }
+
+    if !facts.readme_keeps_pin_advice {
+        problems.push(format!(
+            "{TESTKIT_README} — no longer says {PIN_ADVICE_ANCHOR:?}; this pin quotes words the \
+             README does not use, so it has become `xtask`'s preference rather than the crate's \
+             recommendation (C2-02)."
+        ));
+    } else if !doc_paragraphs(lib)
+        .iter()
+        .any(|p| p.contains(PIN_ADVICE_ANCHOR))
+    {
+        problems.push(format!(
+            "{TESTKIT_LIB} — the rendered page never says {PIN_ADVICE_ANCHOR:?}. \
+             {TESTKIT_README} does, and that README reaches a reader only under \
+             `cfg(doctest)`, so the recommendation CF-30 keeps for its non-obvious reasoning \
+             compiles and is read by nobody (C2-02)."
+        ));
+    }
+
+    problems
+}
+
+/// C2-02: the recipe fence on `happenstance-testkit`'s rendered page resolves
+/// against the versions this workspace publishes, and the page carries CF-30's
+/// pin recommendation rather than leaving it in a `cfg(doctest)` README.
+///
+/// Called from [`run`] beside the two publication checks, and for the same
+/// reason their doc comments give about `xtask/src/affected.rs`'s
+/// `exported_lints`.
+///
+/// # Errors
+///
+/// Returns an error if any of the four artefacts cannot be read, or if
+/// [`recipe_fence_problems`] finds a problem.
+fn recipe_fence_resolves() -> Result<()> {
+    use crate::lints::{TESTKIT_LIB, TESTKIT_README};
+
+    let root = workspace_root()?;
+    let read =
+        |rel: &str| fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"));
+
+    let lib = read(TESTKIT_LIB)?;
+    let readme = read(TESTKIT_README)?;
+    let workspace = read(WORKSPACE_MANIFEST)?;
+    let core_manifest = read(CORE_MANIFEST)?;
+    let testkit_manifest = read(TESTKIT_MANIFEST)?;
+
+    let facts = RecipeFacts {
+        core: core_manifest
+            .contains("version.workspace = true")
+            .then(|| section_version(&workspace, "[workspace.package]"))
+            .flatten(),
+        testkit: section_version(&testkit_manifest, "[package]"),
+        readme_keeps_pin_advice: collapsed(&readme).contains(PIN_ADVICE_ANCHOR),
+    };
+
+    let problems = recipe_fence_problems(&facts, &lib, &doc_toml_fences(&lib));
+    if !problems.is_empty() {
+        for problem in &problems {
+            println!("  {problem}");
+        }
+        bail!(
+            "{} problem(s) with the recipe an adapter author copies — `recipe_fence_resolves` \
+             (C2-02): the only copy-pasteable manifest {TESTKIT_LIB} publishes has to resolve \
+             against the versions this workspace ships, and the page has to carry the pin \
+             advice that {TESTKIT_README} keeps under `cfg(doctest)`.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "C2-02: {TESTKIT_LIB}'s recipe fence resolves against {WORKSPACE_MANIFEST} and \
+         {TESTKIT_MANIFEST}, and carries {TESTKIT_README}'s pin advice"
+    );
+    Ok(())
+}
+
+/// The `toml` fences of a Rust file's **item** documentation (`///`), each as
+/// its own list of lines.
+///
+/// The port's recipe is on `ProjectionProbe`'s own page rather than on the
+/// contract crate's front matter, so [`doc_toml_fences`]'s `//!` scan cannot see
+/// it. Same lexer, same stated limits.
+fn item_toml_fences(source: &str) -> Vec<Vec<String>> {
+    let mut fences = Vec::new();
+    let mut body: Vec<String> = Vec::new();
+    let mut inside = false;
+    for line in source.lines() {
+        let Some(doc) = line.trim_start().strip_prefix("///") else {
+            continue;
+        };
+        let doc = doc.strip_prefix(' ').unwrap_or(doc);
+        let trimmed = doc.trim();
+        if inside {
+            if trimmed == "```" {
+                fences.push(std::mem::take(&mut body));
+                inside = false;
+            } else {
+                body.push(doc.to_owned());
+            }
+        } else if trimmed == "```toml" {
+            inside = true;
+        }
+    }
+    fences
+}
+
+/// The quoted strings of a manifest line's `features = [ … ]` list.
+///
+/// Returns an empty list for a line with no `features` key, which is the same
+/// answer as a line with an empty one — the two are indistinguishable to a
+/// consumer and this check has no reason to tell them apart.
+fn feature_list(line: &str) -> Vec<String> {
+    let Some(at) = line.find("features") else {
+        return Vec::new();
+    };
+    let rest = &line[at..];
+    let Some(open) = rest.find('[') else {
+        return Vec::new();
+    };
+    let close = rest[open..].find(']').map_or(rest.len(), |c| open + c);
+    let mut features = Vec::new();
+    let mut cursor = &rest[open..close];
+    while let Some(value) = first_quoted(cursor) {
+        let at = cursor.find(&value).unwrap_or(0) + value.len() + 1;
+        cursor = &cursor[at.min(cursor.len())..];
+        features.push(value);
+    }
+    features
+}
+
+/// The manifest a projection adapter is told to write, read out of one `toml`
+/// fence.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Recipe {
+    /// The features the `[dependencies]` line enables on `happenstance-core`.
+    dependency_features: Vec<String>,
+    /// The `[features]` entries that forward to `happenstance-core`, verbatim.
+    forwarded: Vec<String>,
+}
+
+/// Reads a fence into a [`Recipe`].
+///
+/// A "forwarding" entry is any `[features]` line whose value list names a
+/// `happenstance-core/…` feature. That is what makes the port's recipe and the
+/// testkit's copy comparable without either file naming the other's contents.
+fn recipe_of(fence: &[String]) -> Recipe {
+    let mut recipe = Recipe::default();
+    let mut section = String::new();
+    for line in fence {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            trimmed.clone_into(&mut section);
+            continue;
+        }
+        if section == "[dependencies]" && trimmed.starts_with(&format!("{CORE_CRATE} =")) {
+            recipe.dependency_features = feature_list(trimmed);
+        }
+        if section == "[features]" && trimmed.contains(&format!("{CORE_CRATE}/")) {
+            recipe.forwarded.push(trimmed.to_owned());
+        }
+    }
+    recipe
+}
+
+/// The features a forwarding entry hands through to `happenstance-core`.
+fn forwarded_features(entries: &[String]) -> Vec<String> {
+    entries
+        .iter()
+        .flat_map(|entry| feature_list(&format!("features = {entry}")))
+        .filter_map(|value| {
+            value
+                .strip_prefix(&format!("{CORE_CRATE}/"))
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+/// The facts C2-01 and C2-05 are held against, each read from the manifest or
+/// the page that owns it.
+#[derive(Debug)]
+struct FeatureCostFacts {
+    /// What `conformance = [ … ]` implies, from [`CORE_MANIFEST`].
+    conformance_implies: Vec<String>,
+    /// The manifest [`PORT_RECIPE`] prescribes.
+    port_recipe: Recipe,
+    /// The features [`TESTKIT_MANIFEST`] turns on for `happenstance-core`.
+    testkit_core_features: Vec<String>,
+}
+
+/// C2-01 and C2-05: what the onboarding page tells an outside author their
+/// manifest costs, held to the manifests.
+///
+/// # The two directions, and why one check
+///
+/// They are the same sentence read forwards and backwards. Outward, the page
+/// told an author that `conformance` *"implies no other feature"* while
+/// `crates/happenstance-core/Cargo.toml` says `conformance = ["unstable-projection"]`
+/// — the surface PS-3 holds exempt from semver, turned on in a `[dependencies]`
+/// table where Cargo's global, additive feature unification hands it to every
+/// application downstream. Inward, the page said nothing at all about the four
+/// features its own dev-dependency turns on, which unify into `cargo test` and
+/// not into `cargo build`, so an adapter's `src/` compiles against a larger
+/// contract crate than its consumers will get.
+///
+/// # What this does not verify
+///
+/// * **That the page's account is *correct*.** It counts a token and requires
+///   the manifests' own names beside it, exactly as
+///   [`publication_pin_problems`] does. A paragraph naming `unstable-projection`
+///   and then arguing it is harmless passes.
+/// * **That the fence compiles.** `crates/happenstance-core/tests/projection_recipe.rs`
+///   holds [`PORT_RECIPE`] to the features `lib.rs` gates its items behind, and
+///   `examples/outside-projection-adapter` compiles a manifest of that shape.
+///   This function only asks whether the testkit's *copy* still says what the
+///   original says.
+/// * **The resolver.** Whether Cargo unifies a dev-dependency's features the way
+///   the page now describes is a fact about Cargo. `cargo hack check --workspace
+///   --no-dev-deps` in `.github/workflows/ci.yml` is what would catch an in-tree
+///   crate relying on it; a stranger's crate is HS-S0097's scratch project and
+///   is not reachable from here.
+fn feature_cost_problems(
+    facts: &FeatureCostFacts,
+    lib: &str,
+    fences: &[Vec<String>],
+) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let mut problems = Vec::new();
+
+    if facts.conformance_implies.is_empty() {
+        problems.push(format!(
+            "{CORE_MANIFEST} — `conformance` implies nothing any more, so C2-01's premise is \
+             gone and this pin is what must move: the page is free to say the feature implies \
+             no other (C2-01)."
+        ));
+    }
+    if facts.port_recipe == Recipe::default() {
+        problems.push(format!(
+            "{PORT_RECIPE} — carries no `toml` fence naming {CORE_CRATE} that this check can \
+             read. It is where the projection adapter's manifest is decided; a copy on \
+             {TESTKIT_LIB} held against nothing is the state C2-01 shipped in (C2-01)."
+        ));
+    }
+    if !problems.is_empty() {
+        return problems;
+    }
+
+    let paragraphs = doc_paragraphs(lib);
+    problems.extend(implication_problems(
+        &facts.conformance_implies,
+        &paragraphs,
+    ));
+
+    // The fence is a copy of the port's recipe, not a second opinion.
+    let copy = fences
+        .iter()
+        .map(|fence| recipe_of(fence))
+        .find(|recipe| !recipe.dependency_features.is_empty() || !recipe.forwarded.is_empty());
+    match copy {
+        None => problems.push(format!(
+            "{TESTKIT_LIB} — its recipe fence names no {CORE_CRATE} features and forwards \
+             nothing, so there is nothing to compare against {PORT_RECIPE}'s fence (C2-01)."
+        )),
+        Some(copy) => {
+            problems.extend(recipe_copy_problems(&facts.port_recipe, &copy));
+            problems.extend(dev_dependency_cost_problems(
+                &facts.testkit_core_features,
+                &copy,
+                &paragraphs,
+            ));
+        }
+    }
+
+    problems
+}
+
+/// C2-01, outward: every paragraph that speaks about what `conformance` implies
+/// names what the manifest says it implies.
+///
+/// A *positive* pin in [`publication_pin_problems`]'s sense. The shipped
+/// sentence — *"It pulls in no crate and implies no other feature — not `std`,
+/// not `memory`"* — carries [`IMPLIES_TOKEN`] and names neither
+/// `unstable-projection` nor anything else the manifest lists, so it fails
+/// without this function holding a list of forbidden phrasings.
+fn implication_problems(implied_by_manifest: &[String], paragraphs: &[String]) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let claims: Vec<&String> = paragraphs
+        .iter()
+        .filter(|p| p.contains(IMPLIES_TOKEN) && p.contains(CORE_FEATURE_CONFORMANCE))
+        .collect();
+    if claims.is_empty() {
+        return vec![format!(
+            "{TESTKIT_LIB} — no paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies. Step 1 \
+             is the first screen an outside author reads and that feature is the one flag it \
+             tells them to write; saying nothing is how the false sentence got there (C2-01)."
+        )];
+    }
+
+    let mut problems = Vec::new();
+    for claim in claims {
+        for implied in implied_by_manifest {
+            if !claim.contains(implied) {
+                problems.push(format!(
+                    "{TESTKIT_LIB} — a paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies \
+                     without naming `{implied}`, which {CORE_MANIFEST} says it does: {claim:?}. \
+                     That feature is the port PS-3 holds exempt from semver, and Cargo's \
+                     feature unification is global and additive (C2-01)."
+                ));
+            }
+        }
+    }
+    problems
+}
+
+/// C2-01, second half: the testkit's copy of the manifest prescribes the same
+/// thing the port's own page does.
+///
+/// Two directions, and the second is the one that shipped: a feature the port
+/// *forwards* through the adapter's `[features]` table must not be turned on in
+/// the copy's `[dependencies]`, because that is the difference between the
+/// adapter's consumer choosing and the adapter choosing for them.
+fn recipe_copy_problems(port: &Recipe, copy: &Recipe) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let mut problems = Vec::new();
+    for feature in &port.dependency_features {
+        if !copy.dependency_features.contains(feature) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe's `{CORE_CRATE}` dependency line does not enable \
+                 `{feature}`, which {PORT_RECIPE} prescribes unconditionally because an \
+                 adapter's `impl ProjectionStore` is unconditional (C2-01)."
+            ));
+        }
+    }
+    for forwarded in forwarded_features(&port.forwarded) {
+        if copy.dependency_features.contains(&forwarded) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe turns `{forwarded}` on inside `[dependencies]`, \
+                 where {PORT_RECIPE} forwards it from a feature of the adapter's own crate. \
+                 Cargo unifies features globally and additively, so the copy hands every \
+                 application downstream of that adapter a surface none of them asked for \
+                 (C2-01)."
+            ));
+        }
+        if !copy
+            .forwarded
+            .iter()
+            .any(|entry| entry.contains(&format!("{CORE_CRATE}/{forwarded}")))
+        {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe never forwards `{forwarded}` through a `[features]` \
+                 entry, which is the line {PORT_RECIPE} prescribes and \
+                 `examples/outside-projection-adapter` writes (C2-01)."
+            ));
+        }
+    }
+    problems
+}
+
+/// C2-05, inward: the page names the features its own dev-dependency adds to
+/// `happenstance-core`, beside both commands that disagree about them.
+///
+/// The set is a difference rather than a list — what the testkit turns on, minus
+/// what the recipe already told the author to turn on — so a feature added to or
+/// removed from `crates/happenstance-testkit/Cargo.toml` moves this bar without
+/// anyone editing this file.
+fn dev_dependency_cost_problems(
+    testkit_core_features: &[String],
+    copy: &Recipe,
+    paragraphs: &[String],
+) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let extra: Vec<&String> = testkit_core_features
+        .iter()
+        .filter(|feature| !copy.dependency_features.contains(feature))
+        .collect();
+    if extra.is_empty() {
+        return Vec::new();
+    }
+    let stated = paragraphs.iter().any(|p| {
+        DIVERGING_COMMANDS.iter().all(|command| p.contains(command))
+            && extra.iter().all(|feature| p.contains(feature.as_str()))
+    });
+    if stated {
+        return Vec::new();
+    }
+    let named = extra
+        .iter()
+        .map(|f| f.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    vec![format!(
+        "{TESTKIT_LIB} — no paragraph names {named} beside both `{}` and `{}`. \
+         {TESTKIT_MANIFEST} turns those on for {CORE_CRATE}, and Cargo unifies a \
+         dev-dependency's features into the second command and not the first — so an adapter's \
+         `src/` compiles against a larger contract crate than its consumers get, and the page \
+         an outside author reads is silent about it (C2-05).",
+        DIVERGING_COMMANDS[0], DIVERGING_COMMANDS[1]
+    )]
+}
+
+/// C2-01 and C2-05: the onboarding page's account of an adapter's feature graph
+/// agrees with the manifests, and states what the dev-dependency costs.
+///
+/// Called from [`run`] beside the other testkit-page pins, and for the same
+/// reason their doc comments give about `xtask/src/affected.rs`'s
+/// `exported_lints`.
+///
+/// # Errors
+///
+/// Returns an error if any of the four artefacts cannot be read, or if
+/// [`feature_cost_problems`] finds a problem.
+fn feature_cost_is_stated() -> Result<()> {
+    use crate::lints::TESTKIT_LIB;
+
+    let root = workspace_root()?;
+    let read =
+        |rel: &str| fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"));
+
+    let lib = read(TESTKIT_LIB)?;
+    let core_manifest = read(CORE_MANIFEST)?;
+    let testkit_manifest = read(TESTKIT_MANIFEST)?;
+    let port = read(PORT_RECIPE)?;
+
+    let facts = FeatureCostFacts {
+        conformance_implies: manifest_feature(&core_manifest, CORE_FEATURE_CONFORMANCE),
+        port_recipe: item_toml_fences(&port)
+            .iter()
+            .map(|fence| recipe_of(fence))
+            .find(|recipe| !recipe.dependency_features.is_empty())
+            .unwrap_or_default(),
+        testkit_core_features: testkit_manifest
+            .lines()
+            .skip_while(|line| !line.trim_start().starts_with(&format!("{CORE_CRATE} =")))
+            .take_while(|line| !line.trim().starts_with(']'))
+            .flat_map(delimited_strings)
+            .collect(),
+    };
+
+    let problems = feature_cost_problems(&facts, &lib, &doc_toml_fences(&lib));
+    if !problems.is_empty() {
+        for problem in &problems {
+            println!("  {problem}");
+        }
+        bail!(
+            "{} problem(s) with what {TESTKIT_LIB} tells an outside author their manifest \
+             costs — `feature_cost_is_stated` (C2-01, C2-05): the page's account of the \
+             adapter's feature graph has to agree with {CORE_MANIFEST} and {PORT_RECIPE}, and \
+             has to state what the dev-dependency adds.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "C2-01/C2-05: {TESTKIT_LIB}'s feature-graph account agrees with {CORE_MANIFEST} and \
+         {PORT_RECIPE}, and names what {TESTKIT_MANIFEST} adds under `cargo test`"
+    );
+    Ok(())
+}
+
+/// The feature name whose implications C2-01 is about.
+const CORE_FEATURE_CONFORMANCE: &str = "conformance";
+
+/// Every double-quoted string on one line.
+fn delimited_strings(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(open) = rest.find('"') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('"') else { break };
+        out.push(after[..close].to_owned());
+        rest = &after[close + 1..];
+    }
+    out
+}
+
+/// The values of a manifest's `name = [ … ]` feature entry, at the start of a
+/// line so a comment mentioning the feature is not read as its definition.
+fn manifest_feature(manifest: &str, name: &str) -> Vec<String> {
+    manifest
+        .lines()
+        .find(|line| line.trim_start().starts_with(&format!("{name} = [")))
+        .map(delimited_strings)
+        .unwrap_or_default()
+}
+
+/// The first `version = "…"` line at the start of a line after `header`, and
+/// before the next `[…]` header.
+///
+/// Anchored on the section rather than on the first match in the file, because
+/// `Cargo.toml` carries `version` keys inside `[workspace.dependencies]` inline
+/// tables too — those are requirements, and reading one as *the* version is the
+/// failure mode this whole check exists to catch, one level in.
+fn section_version(manifest: &str, header: &str) -> Option<String> {
+    let mut inside = false;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            inside = trimmed == header;
+            continue;
+        }
+        if inside && let Some(rest) = trimmed.strip_prefix("version") {
+            let rest = rest.trim_start();
+            if rest.starts_with('=') {
+                return first_quoted(rest);
+            }
+        }
+    }
+    None
 }
 
 /// Prints the run's outcome, and is the only place that decides how.
@@ -4188,6 +5054,371 @@ mod tests {
                 .any(|p| p.contains("Move the pin, not the page")),
             "an adapter that stopped mounting the suite makes the README's \
              positive claim the false one: {problems:?}"
+        );
+    }
+
+    /// The facts as this workspace's manifests state them today.
+    fn alpha_facts() -> RecipeFacts {
+        RecipeFacts {
+            core: Some("0.2.0-alpha.1".to_owned()),
+            testkit: Some("0.2.0-alpha.1".to_owned()),
+            readme_keeps_pin_advice: true,
+        }
+    }
+
+    /// The fence exactly as `crates/happenstance-testkit/src/lib.rs` shipped it
+    /// at the pre-publication review, `//!` markers and all.
+    const SHIPPED_RECIPE: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2\", features = [\"conformance\"] }\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"0.2\"\n\
+//! tokio = { version = \"1\", features = [\"macros\", \"rt\"] }\n\
+//! ```\n";
+
+    /// The same fence with both requirement strings repaired.
+    const RESOLVING_RECIPE: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"conformance\"] }\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
+//! tokio = { version = \"1\", features = [\"macros\", \"rt\"] }\n\
+//! ```\n";
+
+    /// The pin advice, rendered on the page rather than left in the README.
+    const RENDERED_PIN_ADVICE: &str = "\
+//! Adding a rule is a semver-minor change, so pin this crate exactly.\n";
+
+    #[test]
+    fn a_toml_fence_is_read_out_of_module_docs_and_item_docs_are_not() {
+        let source = format!(
+            "{SHIPPED_RECIPE}\n/// ```toml\n/// happenstance-core = \"9.9\"\n/// ```\nstruct S;\n"
+        );
+        let fences = doc_toml_fences(&source);
+        assert_eq!(fences.len(), 1, "the `///` fence is a different claim");
+        assert_eq!(
+            requirements(&fences[0]),
+            vec![
+                DependencyLine {
+                    section: "[dependencies]".to_owned(),
+                    crate_name: CORE_CRATE.to_owned(),
+                    requirement: "0.2".to_owned(),
+                },
+                DependencyLine {
+                    section: DEV_DEPENDENCIES.to_owned(),
+                    crate_name: TESTKIT_CRATE.to_owned(),
+                    requirement: "0.2".to_owned(),
+                },
+            ],
+            "both manifest spellings are read, and the section travels with the line \
+             because CF-30's recommendation only applies under one of them"
+        );
+    }
+
+    /// The heart of C2-02: `^0.2` cannot resolve to `0.2.0-alpha.1`.
+    #[test]
+    fn a_requirement_without_a_pre_release_never_matches_one() {
+        let problem = requirement_problem("0.2", "0.2.0-alpha.1")
+            .expect("`^0.2` excludes every pre-release, which is Cargo's rule and not a taste");
+        assert!(problem.contains("no candidate exists"), "{problem}");
+
+        assert_eq!(
+            requirement_problem("0.2.0-alpha.1", "0.2.0-alpha.1"),
+            None,
+            "an outsider adding a pre-release writes the pre-release"
+        );
+        assert_eq!(
+            requirement_problem("=0.2.0-alpha.1", "0.2.0-alpha.1"),
+            None,
+            "and CF-30 asks them to pin it"
+        );
+        assert!(
+            requirement_problem("=0.2.0", "0.2.0-alpha.1").is_some(),
+            "an exact pin at a version that is not published is the same defect \
+             wearing a comparator"
+        );
+        assert!(
+            requirement_problem("0.3", "0.2.0").is_some(),
+            "the numeric prefix is checked too, so this check does not go blind the \
+             day the pre-release becomes a stable number"
+        );
+        assert_eq!(
+            requirement_problem("0.2", "0.2.0"),
+            None,
+            "and a caret that does resolve is left alone — the day `0.2.0` ships, \
+             `\"0.2\"` becomes the idiomatic line and this check must not forbid it"
+        );
+        assert!(
+            requirement_problem("~0.2", "0.2.0")
+                .expect("a comparator this check does not model")
+                .contains("this check models"),
+            "reporting unmodelled syntax rather than approving it is the difference \
+             between a check and a decoration"
+        );
+    }
+
+    #[test]
+    fn the_recipe_check_rejects_the_shipped_fence_on_both_halves() {
+        let problems = recipe_fence_problems(
+            &alpha_facts(),
+            SHIPPED_RECIPE,
+            &doc_toml_fences(SHIPPED_RECIPE),
+        );
+        assert!(
+            problems.iter().any(|p| p.contains(CORE_CRATE)),
+            "the contract crate's `\"0.2\"` is the line `cargo add` refuses: {problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("takes the next rule set automatically")),
+            "the testkit's caret is the half that survives `0.2.0` shipping: {problems:?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("read by nobody")),
+            "and the advice that would fix it renders nowhere: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn the_recipe_check_passes_the_corrected_page() {
+        let page = format!("{RESOLVING_RECIPE}{RENDERED_PIN_ADVICE}");
+        assert_eq!(
+            recipe_fence_problems(&alpha_facts(), &page, &doc_toml_fences(&page)),
+            Vec::<String>::new()
+        );
+    }
+
+    /// When an artefact under the pin moves, the failure names *it* (RS-81-5).
+    #[test]
+    fn the_recipe_check_names_which_artefact_moved() {
+        let page = format!("{RESOLVING_RECIPE}{RENDERED_PIN_ADVICE}");
+
+        let unquoted_readme = RecipeFacts {
+            readme_keeps_pin_advice: false,
+            ..alpha_facts()
+        };
+        let problems = recipe_fence_problems(&unquoted_readme, &page, &doc_toml_fences(&page));
+        assert!(
+            problems.iter().any(|p| p.contains("xtask`'s preference")),
+            "a README that stops recommending the pin makes this pin the stale \
+             artefact, not the page: {problems:?}"
+        );
+
+        let no_fence = recipe_fence_problems(&alpha_facts(), RENDERED_PIN_ADVICE, &[]);
+        assert!(
+            no_fence
+                .iter()
+                .any(|p| p.contains("a recipe it is not checking")),
+            "a page with no recipe passes every per-line rule below, which is why \
+             the vacuity guard is the first thing this function does: {no_fence:?}"
+        );
+    }
+
+    /// The port's own fence, as `crates/happenstance-core/src/projection.rs`
+    /// carries it — comments included, because they are what a naive section
+    /// split reads as dependency lines.
+    const PORT_FENCE: &str = "\
+/// ```toml\n\
+/// [dependencies]\n\
+/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below\n\
+/// # is unconditional in the adapter's `src/`.\n\
+/// happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+///\n\
+/// [features]\n\
+/// # Forwards to the contract crate.\n\
+/// conformance = [\"happenstance-core/conformance\"]\n\
+///\n\
+/// [dev-dependencies]\n\
+/// happenstance-testkit = \"…\"\n\
+/// ```\n";
+
+    fn port_recipe() -> Recipe {
+        recipe_of(&item_toml_fences(PORT_FENCE)[0])
+    }
+
+    fn feature_cost_facts() -> FeatureCostFacts {
+        FeatureCostFacts {
+            conformance_implies: vec!["unstable-projection".to_owned()],
+            port_recipe: port_recipe(),
+            testkit_core_features: ["std", "memory", "conformance", "unstable-projection"]
+                .map(str::to_owned)
+                .to_vec(),
+        }
+    }
+
+    /// The testkit's step 1 as it shipped at the pre-publication review.
+    const SHIPPED_STEP_ONE: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"conformance\"] }\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
+//! ```\n\
+//!\n\
+//! `conformance` is one flag on a dependency your adapter already has. It pulls\n\
+//! in no crate and implies no other feature — not `std`, not `memory` — so your\n\
+//! *normal* dependency graph does not grow at all.\n";
+
+    #[test]
+    fn a_fence_is_read_into_the_manifest_it_prescribes() {
+        assert_eq!(
+            port_recipe(),
+            Recipe {
+                dependency_features: vec!["unstable-projection".to_owned()],
+                forwarded: vec![r#"conformance = ["happenstance-core/conformance"]"#.to_owned()],
+            },
+            "the comment lines above each key are prose and must not be read as \
+             dependency lines — the first version of the sibling check in \
+             `examples/outside-projection-adapter` failed on exactly that"
+        );
+        assert_eq!(
+            forwarded_features(&port_recipe().forwarded),
+            vec!["conformance".to_owned()],
+            "what the `[features]` entry hands through is what the copy must not \
+             turn on in `[dependencies]`"
+        );
+    }
+
+    #[test]
+    fn the_feature_cost_check_rejects_the_shipped_page_in_both_directions() {
+        let problems = feature_cost_problems(
+            &feature_cost_facts(),
+            SHIPPED_STEP_ONE,
+            &doc_toml_fences(SHIPPED_STEP_ONE),
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("without naming `unstable-projection`")),
+            "outward: the page denied an implication its own contract crate's \
+             manifest declares: {problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("turns `conformance` on inside `[dependencies]`")),
+            "outward: and told the author to write the manifest the port's own \
+             recipe forwards instead: {problems:?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("(C2-05)")),
+            "inward: and said nothing about the features its own dev-dependency \
+             adds: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn the_feature_cost_check_passes_a_page_that_states_both() {
+        const CORRECTED: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"unstable-projection\"] }\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies `unstable-projection`, because the probe is defined\n\
+//! inside the module that feature gates.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance` on. `cargo build` does not unify a dev-dependency's features\n\
+//! and `cargo test` does.\n";
+
+        assert_eq!(
+            feature_cost_problems(
+                &feature_cost_facts(),
+                CORRECTED,
+                &doc_toml_fences(CORRECTED)
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// When the manifests move under the pin, the failure names *them*
+    /// (RS-81-5), and the blind spot is executed rather than promised
+    /// (RS-81-1).
+    #[test]
+    fn the_feature_cost_check_names_which_artefact_moved() {
+        // The documented blind spot, used at the foot of this test: a paragraph
+        // that names the implied feature and then argues it away passes,
+        // exactly as the publication pin's counted tokens do.
+        const DENIED: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies `unstable-projection`, which costs you nothing at all\n\
+//! and you may ignore it.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance`. `cargo build` and `cargo test` differ.\n";
+
+        let unimplying = FeatureCostFacts {
+            conformance_implies: Vec::new(),
+            ..feature_cost_facts()
+        };
+        let problems = feature_cost_problems(
+            &unimplying,
+            SHIPPED_STEP_ONE,
+            &doc_toml_fences(SHIPPED_STEP_ONE),
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("C2-01's premise is")),
+            "a `conformance` that implies nothing makes the page's old sentence \
+             true and this pin the stale artefact: {problems:?}"
+        );
+
+        let no_port = FeatureCostFacts {
+            port_recipe: Recipe::default(),
+            ..feature_cost_facts()
+        };
+        assert!(
+            feature_cost_problems(&no_port, SHIPPED_STEP_ONE, &[])
+                .iter()
+                .any(|p| p.contains(PORT_RECIPE)),
+            "and a port page with no fence leaves the copy held against nothing"
+        );
+
+        assert_eq!(
+            feature_cost_problems(&feature_cost_facts(), DENIED, &doc_toml_fences(DENIED)),
+            Vec::<String>::new(),
+            "the check counts a token and requires the manifest's own names \
+             beside it; whether the sentence is *right* is a reader's, and that \
+             limit is on `feature_cost_problems` rather than left to be found"
+        );
+    }
+
+    #[test]
+    fn a_version_key_is_read_from_its_own_section() {
+        const MANIFEST: &str = "\
+[workspace.package]\n\
+version = \"0.2.0-alpha.1\"\n\
+\n\
+[workspace.dependencies]\n\
+happenstance-core = { version = \"0.2.0-alpha.1\", path = \"crates/happenstance-core\" }\n";
+        assert_eq!(
+            section_version(MANIFEST, "[workspace.package]"),
+            Some("0.2.0-alpha.1".to_owned())
+        );
+        assert_eq!(
+            section_version(MANIFEST, "[package]"),
+            None,
+            "a section that is not there answers nothing rather than the next \
+             `version` key it happens to find"
         );
     }
 }

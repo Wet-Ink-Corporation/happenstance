@@ -793,7 +793,7 @@ macro_rules! __emit_model_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::model::rules::$name(__conformance_fixture)
+                $crate::__private::model_rules::$name(__conformance_fixture)
                     .await
                     .report(::core::stringify!($name));
             }
@@ -810,7 +810,7 @@ macro_rules! __emit_model_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::model::rules::$name(__conformance_fixture))
+                $crate::__private::block_on($crate::__private::model_rules::$name(__conformance_fixture))
                     .report(::core::stringify!($name));
             }
         )*

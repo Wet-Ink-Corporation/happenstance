@@ -285,3 +285,25 @@ change.
 unbuilt live-transaction end as adapter scarcity; the brief adds that the
 scarcity has a cause in the port's own conformance seam, which nothing in the
 tree recorded when the ADR was written.
+
+## And one from the adapter-onboarding lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `emitter-surface-stability.md` | CF-23 requires an adapter author to write a name the crate declares is not public API. Does `happenstance-testkit` support the twelve emitters, or say they may change? | none to say it; **breaking later** for the arm that declares them unstable | `0.2.0` for that arm; never expires for the other |
+
+Written by the lane implementing `C2-02`, `C2-01`/`C2-05`, `M-3`/`M-5` and
+`C2-03`, in the same session as the changes they describe, and **without** the
+author → two-critic → revision pass the first section describes. Same discount.
+
+Two things to know before reading it. **The cheap half is landed rather than
+proposed**: the front page now names all twelve emitters, says they carry
+`#[doc(hidden)]`, and says what the attribute costs in both directions — they do
+not render on docs.rs, and it is the marker `cargo-semver-checks` uses to exclude
+an item, so the one instrument that would report a rename as breaking is the one
+the attribute switches off. What is left is a sentence in §6.6, which is
+specification authorship and not this lane's. And **it recommends the arm the
+audit called dated, against a genuinely close objection** stated in its own
+terms: CF-23 makes naming an emitter mandatory, and the `!Send` Workers
+population cannot use the default arm at all, so for them the emitter is the only
+door rather than a convenience they opted into.

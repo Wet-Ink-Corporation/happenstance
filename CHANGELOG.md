@@ -634,6 +634,66 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **The crate's front page now names every emitter it ships, says they are
+  `#[doc(hidden)]`, and says what that costs.** CF-23 `[FROZEN]` makes the
+  per-test wrapper an adapter-supplied parameter; the `__emit_*` macros are the
+  only concrete instances of that parameter anyone has, and
+  `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is the
+  in-tree proof that the cross-crate reach is load-bearing. The page's table
+  carried three rows — the event-store family's — while twelve emitters existed
+  across four families, and the paragraph above it said *"Three emitters ship"*.
+  An author writing a model, benchmark or concurrency harness on anything but
+  the default runtime had no rendered name to write, and `#[doc(hidden)]` meant
+  searching the API for one returned nothing.
+
+  The table is now the count, in the shape the concurrency module page already
+  uses, and the page discloses the attribute in both directions: these names do
+  not appear on docs.rs, and `#[doc(hidden)]` is the marker `cargo-semver-checks`
+  uses to exclude an item — so the one instrument in this repository that would
+  report a rename of `__emit_wasm` as breaking is the instrument the attribute
+  switches off. Whether the names are a *promise* is stated as open rather than
+  answered: §6.6 governs rule addition, rule meaning-change and the version key
+  and says nothing about the emitters. The argument for both arms is in
+  `.kb/_intake/remediation-2026-09-04-briefs/emitter-surface-stability.md`.
+
+  `crates/happenstance-testkit/tests/emitter_surface.rs` is the instrument, and
+  it is a generalisation rather than an invention: the same bijection existed for
+  one family's module page in `tests/memory_concurrency_conformance.rs`, written
+  after that page said *"one"* while two shipped, and it read
+  `src/concurrency.rs` and nothing else.
+
+- **Every item path an exported `happenstance-testkit` macro expands to now goes
+  through `__private`, and a check keeps it that way.** The onboarding page
+  states the discipline as an absolute — the expansion *"never assumes what you
+  have in scope"* — and the entry two releases below cites that sentence to
+  classify a documentation change as not a MINOR event. It was two-thirds true.
+  Twenty-two paths in four of the five suite macros reached past the module:
+  `$crate::concurrency::ConcurrentFixture`, `$crate::bench::BenchmarkParams`,
+  `$crate::block_on`, and each family's `rules` module.
+
+  What that cost was not a caller writing a wrong path but a caller writing
+  **none**. `happenstance_testkit::event_store_concurrency_conformance!(F::new());`
+  is one line, and it compiled only while `$crate::concurrency::ConcurrentFixture`
+  resolved — so moving `ConcurrentFixture` to the crate root, demoting
+  `pub mod concurrency` to private with selective re-exports, or relocating
+  `BenchmarkParams` was a **major** break of this crate that broke one-line
+  callers, and `cargo-semver-checks` could not see it: it reads item paths, not
+  macro bodies. Widening `__private` is additive and is what makes those
+  relocations cheap again.
+
+  The same rule was broken in the other direction one file over, and is fixed
+  with it: `require_read_through!` named `ProjectionProbe` bare, so it resolved
+  against `projection.rs`'s own imports rather than against the expansion site.
+  It is not exported, so it was latent — but that module's own header argues
+  these three helper macros get copied per family, and the copy is where a bare
+  path becomes an `error[E0405]` inside a macro the author did not write.
+
+  `crates/happenstance-testkit/tests/macro_expansion_paths.rs` is the instrument.
+  Macro names stay exempt and the exemption is mechanical rather than a
+  judgement: `macro_rules!` lives in a flat crate-root textual namespace, so
+  `$crate::__private::__emit_tokio` does not exist and cannot be made to. What
+  those emitter names promise is a separate, open question.
+
 - **`ProjectionProbe::probe_read_through`'s page now records the adapter shape
   it cannot serve.** Documentation only, on an item behind `conformance`, which
   makes no semver promise; the signature is untouched and is not this entry's to
@@ -976,6 +1036,75 @@ not the same as what a user needed to be told.
   rejected for three phases. `MODEL_COVERAGE` is what noticed.
 
 ### Fixed
+
+- **The onboarding page's account of an adapter's feature graph was wrong
+  outward and silent inward.** Outward, step 1 of *Writing a projection adapter
+  from outside this workspace* told the reader that `conformance` *"implies no
+  other feature — not `std`, not `memory`"*, while
+  `crates/happenstance-core/Cargo.toml` says `conformance =
+  ["unstable-projection"]` — and told them to write it inside `[dependencies]`,
+  where `happenstance_core::ProjectionProbe`'s own recipe forwards it from a
+  feature of the adapter's own crate. That is not a nicety: `unstable-projection`
+  is the surface PS-3 holds exempt from semver, and Cargo's feature unification
+  is global and additive, so the manifest the page prescribed handed it to every
+  application downstream of that adapter. It was also the exact manifest
+  `examples/outside-projection-adapter`'s own `tests/` was written to reject —
+  *"the wrong implementation this rejects is the one that shipped"* — printed
+  from the crate a stranger reads first.
+
+  Inward, the page said nothing about the features its own dev-dependency turns
+  on. Cargo does not unify a dev-dependency's features into `cargo build` and
+  does unify them into `cargo test`, so an adapter's `src/` compiles against a
+  larger `happenstance-core` whenever the suite is in the graph. The page now
+  says so, says which command to run instead, and says who it bites: only an
+  author who wrote `default-features = false` — the `no_std` or `wasm32`
+  population CF-20 exists for — because otherwise `std` and `memory` are already
+  theirs. That qualification is measured rather than reasoned. Adding a
+  `MemoryEventStore` import to `examples/outside-projection-adapter`'s `src/`
+  with `default-features = false` on its dependency gives
+  `error[E0432]: unresolved import happenstance_core::MemoryEventStore` under
+  `cargo build -p outside-projection-adapter` and a green
+  `cargo test -p outside-projection-adapter --no-run`; without that flag both are
+  green, and the first draft of this entry did not know it.
+
+  `cargo xtask lint-pages` gains **`feature_cost_is_stated`**, and it derives
+  every requirement rather than restating one. What `conformance` implies is read
+  from the contract crate's manifest; the manifest the testkit's copy must
+  prescribe is read from the port's own fence, the same fence
+  `crates/happenstance-core/tests/projection_recipe.rs` holds to the gates
+  `lib.rs` carries; and the dev-dependency's extra features are a set difference.
+  The instrument for the outward half existed one crate over and had never been
+  pointed at the copy.
+
+- **The only copy-pasteable manifest `happenstance-testkit`'s rendered page
+  publishes could not resolve against the registry.** Step 1 of *Writing a
+  projection adapter from outside this workspace* asked for
+  `happenstance-core = { version = "0.2", … }` and `happenstance-testkit = "0.2"`
+  while `0.2.0-alpha.1` is the only version either crate has on crates.io. A
+  requirement naming no pre-release never matches a pre-release version, so an
+  adapter author who copied the block was told by `cargo` that no candidate
+  matched — on the first screen of the extension surface. Both requirements now
+  name the pre-release, and the page says why, so that the day a stable `0.2.0`
+  ships and a caret becomes idiomatic again the reason is on the record rather
+  than in a commit message.
+
+  The second half is CF-30's, and CF-30 already conceded it: *"The testkit's
+  documentation should say so; nothing checks that it does."* The
+  recommendation to pin the testkit exactly — and the non-obvious reasoning
+  that makes it right here, that Cargo does not resolve a non-root package's
+  dev-dependencies at all, so the pin propagates to nobody — lived only in
+  `crates/happenstance-testkit/README.md`, which `src/lib.rs` includes under
+  `#![cfg_attr(doctest, …)]`. It compiled and reached no reader of docs.rs. It
+  is now on the module page, where the fence it argues about is, and the fence
+  asks for `"=0.2.0-alpha.1"` rather than a caret it disagrees with.
+
+  `cargo xtask lint-pages` gains **`recipe_fence_resolves`**, which is the thing
+  that was missing rather than the prose. It reads the requirement strings out of
+  the page's own `toml` fences and compares them against the versions the
+  manifests that own them declare — the workspace key for `happenstance-core`,
+  the testkit's independent CF-32 key for itself — so the block moves when the
+  version does. It does not call crates.io, for the reason its neighbours give:
+  a gate step that needs the network fails on a train.
 
 - **Every `Serialize` impl in `happenstance-core` deep-cloned the value it was
   handed; `SequencedEvent` did it twice.** No byte moved and no signature moved —

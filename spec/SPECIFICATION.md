@@ -8354,7 +8354,7 @@ and `conformance_test!` no longer exists anywhere in the workspace:
 `for_each_event_store_rule!`, in
 `crates/happenstance-testkit/src/registry.rs`, has been the single enumeration
 ever since, `event_store_conformance!`
-(`crates/happenstance-testkit/src/lib.rs:238`) is built by invoking it, and
+(`crates/happenstance-testkit/src/lib.rs:613`) is built by invoking it, and
 `no_orphan_rules` is what now makes the two agree. What the clause forbids from
 here is a second hand-maintained list of the *same* family — reintroducing the
 pair that drifts, under whatever name — which is the arrangement the paragraph

@@ -65,14 +65,29 @@
 //! `#[tokio::test]` is a default, not a requirement. The per-test wrapper is a
 //! parameter — an *emitter* macro — because the testkit is in no position to
 //! know which runtime an adapter is tested on, and a `cfg` ladder in here would
-//! mean every new runtime needs a testkit release. Three emitters ship, and all
-//! three are demonstrated in this crate's `tests/`:
+//! mean every new runtime needs a testkit release. The emitters that ship are
+//! the rows of this table, and the rows are the count: a written-out number is
+//! falsified by an edit that never touches it, and this paragraph said *three*
+//! through the nine that landed after it.
 //!
-//! | Emitter | Wrapper | Adapter needs |
-//! |---|---|---|
-//! | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
-//! | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
-//! | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | Family | Emitter | Wrapper | Adapter needs |
+//! |---|---|---|---|
+//! | event store | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | event store | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | event store | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | projection | `__emit_projection_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | projection | `__emit_projection_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | projection | `__emit_projection_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | model | `__emit_model_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | model | `__emit_model_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | concurrency | `__emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt`, `rt-multi-thread` |
+//! | concurrency | `__emit_concurrency_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | benchmark | `__emit_benchmark_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | benchmark | `__emit_benchmark_blocking` | `#[test]` + [`block_on`] | nothing |
+//!
+//! `__emit_rule_names` is the odd one and is listed because it is reachable by
+//! the same route: it wraps no test at all, expanding a rule enumeration to a
+//! `[&str; N]` for a meta-test to read.
 //!
 //! ```
 //! # macro_rules! ignore { ($($t:tt)*) => {} }
@@ -88,6 +103,27 @@
 //! A runtime none of those cover needs no change here: write a `macro_rules!`
 //! that accepts a comma-separated list of identifiers and hand it to
 //! [`for_each_event_store_rule!`] yourself.
+//!
+//! **Every name in that table carries `#[doc(hidden)]`, and you should know what
+//! that costs you before you write one.** The attribute is not a judgement about
+//! whether you may use them — CF-23 requires you to name one, and this crate's
+//! own `happenstance-cloudflare` target does — it is the only tool the language
+//! offers for *"exported because it has to be"*: `macro_rules!` lives in a flat
+//! crate-root textual namespace, so a private helper is unreachable from your
+//! expansion site and there is nothing to hide behind. What it does cost is
+//! visibility in both directions. You will not find these on docs.rs, which is
+//! why they are written out here rather than linked. And `#[doc(hidden)]` is the
+//! marker `cargo-semver-checks` uses to exclude an item, so the one instrument
+//! in this repository that would report a rename of `__emit_wasm` as breaking is
+//! the instrument the attribute switches off.
+//!
+//! Whether these names are a *promise* is an open question rather than a
+//! settled one, and the honest answer is that the crate has not decided: §6.6's
+//! compatibility policy governs rule addition, rule meaning-change and the
+//! version key, and says nothing about the emitters. Until it does, the
+//! recommendation in step 1 of *Writing a projection adapter* is the one that
+//! covers you — pin this crate exactly, and a rename arrives when you choose to
+//! take it rather than on a minor bump you did not read.
 //!
 //! # Where the rule set lives
 //!
@@ -207,17 +243,85 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = { version = "0.2", features = ["conformance"] }
+//! happenstance-core = { version = "0.2.0-alpha.1", features = ["unstable-projection"] }
+//!
+//! [features]
+//! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "0.2"
+//! happenstance-testkit = "=0.2.0-alpha.1"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
-//! `conformance` is one flag on a dependency your adapter already has. It pulls
-//! in no crate and implies no other feature — not `std`, not `memory` — so your
-//! *normal* dependency graph does not grow at all. This crate is a
-//! dev-dependency and stays one.
+//! **Both requirements name the pre-release, and that is not decoration.**
+//! `version = "0.2"` is the line a Rust author writes without thinking, and it
+//! does not resolve: a requirement naming no pre-release never matches a
+//! pre-release version, so while `0.2.0-alpha.1` is the only version on the
+//! registry, `cargo add` answers that no candidate matches. An outsider taking
+//! a pre-release writes the pre-release. When these crates reach a stable
+//! number the requirements become ordinary carets, and
+//! `xtask`'s `recipe_fence_resolves` is what makes this block move with them
+//! rather than going quietly stale here.
+//!
+//! **The `=` on this crate is a recommendation with a reason** (CF-30). Adding
+//! a conformance rule is a semver-*minor* change that can turn a passing
+//! adapter's CI red, so treat it as a breaking change in practice and pin this
+//! crate exactly. An exact pin is normally poor practice in a Rust library
+//! because it propagates — a pinned dependency of a library constrains every
+//! downstream lockfile and manufactures duplicate-version conflicts — and that
+//! is exactly why the recommendation needs stating rather than assuming: Cargo
+//! does not resolve a non-root package's dev-dependencies at all, so this one
+//! propagates to nobody, and what it buys you is choosing *when* you take a new
+//! bar instead of finding out from a red run you cannot attribute.
+//!
+//! **The `[dependencies]` and `[features]` halves of that block belong to the
+//! port rather than to this crate**, and they are a copy of the fence on
+//! `happenstance_core::ProjectionProbe`'s own page rather than a second opinion:
+//! `xtask`'s `feature_cost_is_stated` fails if the two drift. A reader of step 1
+//! needs one manifest and not two half-manifests on two pages, which is why the
+//! copy is here at all.
+//!
+//! `unstable-projection` is unconditional because your `impl ProjectionStore` is:
+//! every port type it names lives behind that feature, and an adapter cannot make
+//! its own port impl optional. `conformance` is forwarded from a feature of *your*
+//! crate instead, because the `impl ProjectionProbe` lives in `src/` under
+//! `#[cfg(feature = "conformance")]` and a crate cannot `cfg` on a dependency's
+//! feature.
+//!
+//! **An earlier version of this page said `conformance` "implies no other
+//! feature — not `std`, not `memory`", and told you to turn it on in
+//! `[dependencies]`.** The first half was two-thirds right and the missing third
+//! is the expensive one. `conformance` costs no crate and no graph edge, and it
+//! implies exactly one thing — `unstable-projection`, because `ProjectionProbe`
+//! is defined *inside* the module that feature gates. That is the port PS-3 holds
+//! **exempt from semver** until two adapters at opposite ends of the batch-shape
+//! axis have cleared its suite, and Cargo's feature unification is global and
+//! additive: a feature turned on anywhere in a graph is on for everybody in it.
+//! Turning it on in `[dependencies]` therefore hands that surface to every
+//! application downstream of your adapter, none of which asked for it.
+//! Forwarding it costs you one line and gives the choice back to whoever builds
+//! your adapter. `examples/outside-projection-adapter` in this repository writes
+//! exactly this manifest, and its own `tests/` fails if it stops.
+//!
+//! **What the dev-dependency costs you is a bigger `happenstance-core` under
+//! `cargo test` than under `cargo build`, and it is not your build that finds
+//! out.** This crate depends on `happenstance-core` with `std`, `memory` and
+//! `conformance` on. Cargo's resolver deliberately does not unify a
+//! dev-dependency's features into `cargo build` and does unify them into
+//! `cargo test`, so your `src/` compiles against a larger contract crate
+//! whenever the suite is in the graph.
+//!
+//! **It bites the population CF-20 exists for and nobody else**, which is why it
+//! is easy to ship: the gap is only a gap if you wrote `default-features =
+//! false`, because otherwise `std` and `memory` are already yours. If you did —
+//! the `no_std` or `wasm32` author — then naming a `memory`-gated item in a
+//! helper, `MemoryEventStore`, say, is green under `cargo test` and
+//! `error[E0432]: unresolved import happenstance_core::MemoryEventStore` under
+//! `cargo build`. Measured in this repository against
+//! `examples/outside-projection-adapter`, not reasoned from the manual. Build
+//! your library the way a consumer will — `cargo build -p your-adapter`, no
+//! `--all-targets` — before you tag a release. This crate is a dev-dependency
+//! and stays one.
 //!
 //! **2. Implement `ProjectionStore` for your store, in `src/`.**
 //!
@@ -255,6 +359,15 @@
 //! the trait and whatever you renamed the dependency to. You never name that
 //! module yourself, and it is the one part of this page that is invisible until
 //! it is missing.
+//!
+//! **Every item path in every exported expansion goes through it**, and that
+//! sentence used to be an aspiration rather than a fact: four of the five suite
+//! macros reached past the module for `concurrency::ConcurrentFixture`,
+//! `bench::BenchmarkParams`, `block_on` and each family's `rules`, which froze
+//! those module paths for callers who had named nothing at all.
+//! `tests/macro_expansion_paths.rs` is what makes it a fact — the only exception
+//! is a *macro* name, because `macro_rules!` lives in a flat crate-root textual
+//! namespace and is not reachable through a module in the first place.
 //!
 //! A green run then means what the rule table below says and no more; a red one
 //! names the rule that broke. `examples/outside-projection-adapter/` in this
@@ -634,7 +747,44 @@ macro_rules! projection_store_conformance {
 
 /// Re-exports the macro expansions need to name, so an adapter is not required
 /// to have this crate in scope under that exact name.
+///
+/// **The complete inventory, not two thirds of one.** It carried `Fixture` and
+/// `ProjectionFixture` while four fixture-shaped types existed, and the four
+/// suite macros outside those two reached around it —
+/// `$crate::concurrency::ConcurrentFixture`, `$crate::bench::BenchmarkParams`,
+/// `$crate::block_on` and each family's `rules` module. Twenty-two paths in all,
+/// every one of them a module layout frozen by a caller who wrote one line and
+/// named nothing. `tests/macro_expansion_paths.rs` is what keeps the inventory
+/// complete; widening it is additive and is what makes those relocations cheap
+/// later rather than a major break of this crate.
+///
+/// Emitter and enumeration *macros* are deliberately absent, and the absence is
+/// mechanical rather than a judgement: `macro_rules!` lives in a flat crate-root
+/// textual namespace, so `$crate::__private::__emit_tokio` does not exist and
+/// cannot be made to. What those names promise is C2-03's open question.
+///
+/// Each `cfg` here is copied from the module it re-exports rather than written
+/// fresh: `concurrency` is absent on `wasm32-unknown-unknown`, `bench` is behind
+/// a feature *and* that target gate, and `model` is behind an optional
+/// dependency that does not build for wasm32. A re-export without the matching
+/// gate is an `error[E0432]` in exactly the configuration the two-flavour design
+/// exists for.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::contract::{Fixture, ProjectionFixture};
+    pub use crate::registry::block_on;
+    // The probe is `happenstance-core`'s, not this crate's, and it is here for
+    // the same reason as everything else: `require_read_through!` named it bare,
+    // so it resolved against `projection.rs`'s own `use` rather than against the
+    // crate the expansion lands in.
+    pub use crate::suite::rules;
+    pub use happenstance_core::ProjectionProbe;
+
+    #[cfg(all(feature = "bench", not(target_arch = "wasm32")))]
+    pub use crate::bench::{BenchmarkParams, scenarios as benchmark_scenarios};
+    #[cfg(not(target_arch = "wasm32"))]
+    pub use crate::concurrency::{ConcurrentFixture, rules as concurrency_rules};
+    #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
+    pub use crate::model::rules as model_rules;
+    pub use crate::projection::rules as projection_rules;
 }

@@ -236,7 +236,7 @@ macro_rules! __emit_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::rules::$name(__conformance_fixture)
+                $crate::__private::rules::$name(__conformance_fixture)
                     .await
                     .report(::core::stringify!($name));
             }
@@ -256,7 +256,7 @@ macro_rules! __emit_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::rules::$name(__conformance_fixture))
+                $crate::__private::block_on($crate::__private::rules::$name(__conformance_fixture))
                     .report(::core::stringify!($name));
             }
         )*
@@ -284,7 +284,7 @@ macro_rules! __emit_wasm {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
             async fn $name() {
-                let __outcome = $crate::rules::$name(__conformance_fixture).await;
+                let __outcome = $crate::__private::rules::$name(__conformance_fixture).await;
                 if let Some(__line) = __outcome.skip_line(::core::stringify!($name)) {
                     ::wasm_bindgen_test::console_log!("{}", __line);
                 }
@@ -378,7 +378,7 @@ fn declared_rules() -> Vec<&'static str> {
 ///
 /// Rust has no reflection, so there is no way to ask the compiler for "the
 /// public items of `rules`" at run time. One direction is free: every emitter
-/// expands to `$crate::rules::$name`, so a name in the enumeration with no rule
+/// expands to `$crate::__private::rules::$name`, so a name in the enumeration with no rule
 /// behind it is `error[E0425]` in any harness. The *orphan* direction — a rule
 /// with no registration — is checked here by parsing the module's own source,
 /// which `include_str!` bakes into the binary, so the test needs neither a
