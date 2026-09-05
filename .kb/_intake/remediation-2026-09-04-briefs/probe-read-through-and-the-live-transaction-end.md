@@ -23,7 +23,7 @@ two adapters at opposite ends of the batch-shape axis. Its **Rule** names them
 > `sqlx`) and one that cannot hold anything across an await
 
 ADR-0036, accepted 2026-09-02, evaluated that bar and found part 2 unmet
-(`.kb/decisions/0036-the-projection-port-ships-gated.md`:76-88), attributing the
+(`.kb/decisions/0036-the-projection-port-ships-gated.md`:77-88), attributing the
 gap to what has been built:
 
 > SQLite's `Batch` is an *owned* write set under `kb-decision-0017`, statements
