@@ -1,112 +1,158 @@
 # Pre-publication remediation — handover
 
-**Branch:** `remediation/pre-publication` · **119 commits** over `main` ·
-109 files, +21740 / −490
+**Branch:** `remediation/pre-publication` · **236 commits** over `main` ·
+192 files, +38,044 / −1,057
 **Source:** `references/evaluation/review-pre-publication-2026-09-03.md` — 96 finding
 IDs across 84 entries, pinned to `56ef6c5`
-**Last verified at `fce95e2`:** `cargo xtask ci` **exit 0**, all 35 steps run and
-none skipped — including the four probe-gated ones, at 214 and 186 feature
-configurations, `cargo deny`, and the nightly `--cfg docsrs` build. 116
-conformance rules, event-store family 91→93. `cargo hack` restored all 13
-manifests (`git status` clean).
+**Last verified:** `cargo xtask ci` **exit 0** — 35 steps, **zero skips**,
+`all checks passed`, including the four probe-gated steps at **215** and **186**
+feature configurations, `cargo deny`, and the nightly `--cfg docsrs` build.
+`cargo hack` restored all 13 manifests. 116 conformance rules, event-store
+family 93.
 
-> **Read the exit code, not the notification.** Two "completions" in the second
-> wave were false: a background wrapper reported its own exit rather than the
-> gate's, and a liveness monitor using Git Bash `pgrep` declared a running gate
-> dead because `pgrep` there cannot see native Windows processes. Both looked
-> exactly like a result. Append `echo "EXIT $?"` to the log and read the log.
+> **Read the exit code, not the notification.** Three "completions" in this
+> effort were false: a background wrapper reported its own exit rather than the
+> gate's; a liveness monitor using Git Bash `pgrep` declared a running gate dead,
+> because `pgrep` there cannot see native Windows processes; and a `head -50` on
+> a 117-line report produced conclusions from 12 entries. Append `echo "EXIT $?"`
+> to the log, read the log, and never pipe a long run through `head`/`tail` and
+> then judge it.
 
 ---
 
-## Wave two — what closed, and what it cost to learn
+## Scoreboard
 
-The five findings the second wave was asked for — **X-3, L1-1, L2-01, L1-2,
-L3-01** — are closed. Five more closed because they fell out of those:
-the **cloudflare position fence**, the **`tokio` re-export removal** (ratified),
-the **`lint-constitution` blind spot**, the **two `to` composition rules**, and
-**X-1 + X-2**.
+| | Count | |
+|---|---:|---|
+| **Closed** — code landed, full gate green | **65** | 20 in wave one; 45 in waves two and three |
+| **Briefed** — decision authored, awaiting ratification | **48 briefs** | `.kb/_intake/remediation-2026-09-04-briefs/`; every brief written after the first thirteen states in its own text that it did **not** get the author → two-critic → revision pass |
+| **Ratified this session** | **4** | fixture declension (Option A) · `tokio` leaves the driver re-export set · `SECURITY.md` out-of-band channel (Option B) · **`ANCHOR_SLACK` Option C** · **repository publication (Option A)** |
+| **Genuinely blocked** | **1** | `F2-5` — its instrument is the phase-10 adapter that does not exist |
+| **Found by us, not in the audit** | **~12** | almost all instrument defects; see below |
 
-**Six of eight lanes were sent back at least once, and the returns were the
-work.** Nothing below was found by a gate.
+**The untouched list is empty.** Every one of the audit's 45 remaining findings
+is landed or briefed.
 
-- **Two new mutant kinds looked sound and were not.** `Kind::ModelOnlyMutant`'s
-  second obligation sat behind `#[cfg(feature = "proptest")]`, so a store with no
-  defect at all passed green under `--no-default-features` — the configuration
-  `cargo hack` compiles. Repaired with a witness holding `<T as Defect>::select`.
-  `Kind::StatedOnlyDefect` was then satisfiable by **two string literals**, its
-  row holding plain `fn` pointers with no tie to the subject; the prescribed
-  repair was falsified too, and it was **withdrawn** rather than patched —
-  `Fixture` is not dyn-compatible under RPITIT, so the tie the soundness needed
-  is not available in the language.
-- **A named counterexample was wrong and the conclusion survived anyway.**
-  Review proposed a store applying the row budget before the upper bound. It is
-  not a defect: 4,864 evaluations, zero disagreements — in read order the bound
-  and the budget are both prefix operations and two prefixes compose to the
-  shorter prefix either way. The second rule is still owed, for a different
-  reason: **commuting is about order; the real defect drops the budget because a
-  bound is present, which is applicability.**
-- **This remediation blinded a gate check and then asserted it did not exist.**
-  `cargo xtask lints` is green at `c0c250e` and red by mid-wave: the
-  citation-blindspot lane — whose whole subject was citation drift — added
-  sixteen lines above a span `.kb/playbooks/` cites and left the cited line
-  blank. `citation_ranges_resolve` runs **before** `stated_rule_counts` in the
-  same step, so the rule-count census went dark behind it, which is how
-  "Ninety rules" survived against a family of 91. Both repaired.
+## What the work turned out to be
 
-## The scoped gate — four more commands, all learned by going red
+The audit's framing was *findings in the code*. What this effort kept finding was
+**findings in the instruments** — checks whose green was about themselves rather
+than their subject. The pattern held from the first lane to the last:
 
-The handover's minimum was fmt, clippy, the package's tests, and
-`cargo test -p happenstance --lib`. Add:
+- `lint-constitution` skipped **every** citation into a root-level file, because
+  its path test required a slash. Seventeen stale behind it, one span **+58**.
+- `cargo xtask lints` was **blinded by this remediation itself** — a lane broke a
+  citation into the file it was editing — and because that step's first check
+  hides its second, the rule-count census went dark behind it.
+- **Two new mutant kinds** looked sound and were not: one passed a defect-free
+  store under `--no-default-features`, one was satisfiable by two string literals
+  and was **withdrawn** rather than patched, because `Fixture` is not
+  dyn-compatible under RPITIT and the tie its soundness needed does not exist.
+- **Two of three `STAMPED` filters** carrying a `[FROZEN]` clause were pinned by
+  no test; the whole gate stayed green with either deleted, while a caller got a
+  poisoned replay and a spurious `ConditionViolated`.
+- **Four prose words** switched off a check for **nineteen** `[FROZEN]` clauses.
+  **CF-36** had thirteen clauses in breach and no check at all.
+- The typed layer's guard passed a crate root re-exporting the projection surface
+  **with no gate whatsoever**; four other green checks required the glob *by name*.
+- `spec/E2E-CASES.md`'s citations are checked by nothing; `.kb/`'s are checked for
+  existence and never for anchor.
+
+## The two behaviours that produced most of it
+
+**Adversarial refutation.** Six of nine lanes were sent back at least once, and
+**no gate found any of it**. One refutation overturned a counterexample the
+orchestrator had relayed as fact (4,864 evaluations, zero disagreements). Another
+refuted a brief's premise by execution — SQLite's `AUTOINCREMENT` high-water mark
+is restored by a rollback — stopping a `[FROZEN]` clause being amended on a false
+ground.
+
+**Agents refusing the convenient move.** One reverted a correct, measured
+optimisation rather than shape a published crate's module layout around a
+checker's line arithmetic. Another confessed it had sized prose *to a line
+budget* so a citation would stay inside tolerance — green and wrong for a commit,
+and nobody would have caught it. That pair is why `ANCHOR_SLACK` was closed.
+
+## The scoped gate — the full set, each command learned by going red
 
 ```
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test -p <the package>            # and -p happenstance --lib if its docs moved
 cargo test -p happenstance-testkit --no-default-features --test mutation_coverage
 cargo test -p xtask
+cargo xtask spec-trace · lint-constitution · lints · lint-changelog
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
 ```
 
 - `--no-default-features` because a mutant kind was found unsound in exactly that
   configuration and nowhere else.
 - `cargo test -p xtask` because editing `spec/SPECIFICATION.md` fires
-  `lint_narrative`'s documentation-obligation census — CF-17's new sentence was
-  CF-39's verbatim, and the pin classified it neither way.
+  `lint_narrative`'s documentation-obligation census.
 - **`cargo doc` with `RUSTDOCFLAGS`, and the variable is the whole point.**
-  rustdoc does not read `RUSTFLAGS`, so this workspace's ambient `-D warnings`
-  denies every rustc lint and **no** rustdoc one. Three rustdoc errors failed the
-  full gate that no scoped gate could see. The gate's own step carries a comment
-  recording that before that line existed it printed "generated 3 warnings" and
-  exited 0 for as long as it ran.
+  rustdoc does not read `RUSTFLAGS`, so the ambient `-D warnings` denies every
+  rustc lint and **no** rustdoc one. It caught real errors in five separate lanes
+  that every other command was blind to.
 
-**And a fifth, about running it:** `run_in_background` is **not** detachment if a
-timeout still applies. A 600 s cap killed a `cargo xtask ci` mid-run; the tree
-survived only because the kill landed in a compile rather than inside
-`cargo hack --no-dev-deps`'s manifest rewrite. Launch it under its own process
-(`Start-Process`), write the exit code to a sentinel file, and watch the file.
+**And about running it:** `run_in_background` is **not** detachment if a timeout
+still applies. A 600 s cap killed a `cargo xtask ci` mid-run; the tree survived
+only because the kill landed in a compile rather than inside `cargo hack
+--no-dev-deps`'s manifest rewrite. Launch it under its own process, write the exit
+code to a sentinel file, and watch the file.
 
-## Citation drift — now measured, and the rule needs a second clause
+## Citation drift — closed, and what it taught
 
-**Repoint by anchor, and audit the files your diff MOVED — not only the files you
-edited by hand.** That distinction alone cost five stale citations in one lane,
-one of which was *exactly right before the lane and wrong after it*. Three
-further forms turned up:
+`ANCHOR_SLACK` is **gone** from `lint-constitution`: the cited line must carry its
+anchor, and on a miss the checker names the correct line, or lists every candidate
+and **refuses to choose**, or says the anchor is nowhere and asks for a human. The
+corpus went from 235 exact of 323 to **323 of 323**; sixteen anchors were
+sharpened, the worst matching seventy lines in one file.
 
-- **Different ends of one span move by different amounts.** `674-722` became
-  `690-735`: +16 and +13. The uniform shift puts the end inside another function.
-- **A repair script that is not idempotent.** A second run re-shifted eleven
-  citations because the content check passed on coincidentally identical lines
-  (`    }`, a blank line, a bare `///`). Restore from git and run exactly once.
-- **Green while pointing at the wrong occurrence.** Three citations named a
-  closing brace, an `allow = [`, and the line above a field. Each was inside
-  `ANCHOR_SLACK` and each was silently wrong.
+`spec_trace` **keeps its 12**, and the difference is now documented at both sites
+with its reason: the two checkers do not have the same *kind* of anchor. An atom
+quotes its anchor beside the line number, so exactness is satisfiable by
+construction; `spec_trace` derives its anchor from an identifier while the
+citation's **range** points at the evidence, and repointing onto the identifier
+would move the citation off the prose it is evidence for.
 
-**Coverage, counted:** only `standards/`'s ~330 citations are anchor-checked.
+Four rules earned the hard way, all of which cost this effort something:
+
+1. **Repoint by anchor, and audit the files your diff MOVED**, not only the ones
+   you edited by hand. That distinction alone cost five stale citations in one
+   lane, one of which was exactly right before it and wrong after.
+2. **Verify both ends of a range independently.** Offsets within one change have
+   run +16/+13, +30/+66 and +75.
+3. **Repointing is an INTEGRATION task, never a per-lane one.** Two lanes
+   repointed the same citation, both correctly against their own base, and **both
+   were wrong after the merge**.
+4. **A repair script that is not idempotent is a trap.** One re-shifted eleven
+   citations on a second run because its content check passed on coincidentally
+   identical lines. Restore from git and run exactly once.
+
+**Coverage, counted:** only `standards/`'s 323 citations are anchor-checked.
 `references/` (~2,700), `.bklg/` (~25,700), `.kb/_intake` (~1,200) and
-`spec/E2E-CASES.md` (~88) have **no citation checker at all**; `.kb/` proper is
-checked for existence and non-blankness, never for anchor. `spec/E2E-CASES.md:1043`
-was displaced by **this remediation's own** L1-1 lane, traced with `git log -S`.
+`spec/E2E-CASES.md` (~88) have **no citation checker at all**; `.kb/` proper gets
+existence-and-non-blankness with no anchor. 57 citations in the brief set drifted
+during this effort, in a directory nothing scans — and those briefs are what a
+decider reads to ratify.
+
+## Open judgements — yours, not mine
+
+- **48 briefs await ratification.** They are the largest remaining block, and the
+  fastest lever: `L1-2` and `L3-01` closed within hours of Option A being ratified.
+- **`.redkiln/telemetry/` and publication.** The repository is approved for
+  publishing and the pre-publication sweep is clean — no credential pattern in
+  tracked files or in 236 commits of history, no sensitive filename ever tracked,
+  no leaked local paths, the owner's email in no tracked file. Telemetry is the one
+  tree whose content is data about a person rather than argument about software;
+  severing it costs three citations, the cheapest in the exposure table.
+- **`SECURITY.md` owes one edit at the moment of publication.** Its paragraph
+  about the link not resolving becomes false then. Deliberately not pre-applied.
 
 ---
 
 ## Scoreboard
+
 
 
 | | Count | |

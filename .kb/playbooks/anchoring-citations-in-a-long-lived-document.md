@@ -60,7 +60,7 @@ that already exists.
 
 **Derived** — what `spec_trace` does: the specification's citation idiom already places a
 backticked identifier beside the citation, so the anchor is derived from the surrounding prose at
-no per-site cost (`fn subject_before`, `xtask/src/spec_trace.rs:2970-3016`). Coverage went from
+no per-site cost (`fn subject_before`, `xtask/src/spec_trace.rs:2997-3043`). Coverage went from
 84 parsed to 358 checked with no edits to the 358 sites. Neither spelling is universally right;
 explicit buys certainty at authoring cost, derived buys free coverage with a lower ceiling.
 

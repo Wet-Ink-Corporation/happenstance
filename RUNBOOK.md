@@ -167,6 +167,38 @@ turned out to be one DCB already provides.
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
 place.
 
+### The pre-publication remediation, and what it did to phase 12
+
+Not a phase, and deliberately not given a row above: it is a review of everything
+phases 0–9 built, and it gates phase 12 rather than sitting beside it.
+
+`references/evaluation/review-pre-publication-2026-09-03.md` raised **96 finding
+IDs across 84 entries** against `56ef6c5`. On branch `remediation/pre-publication`,
+**65 are closed with the full gate green** and **48 briefs await ratification** in
+`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is genuinely
+blocked: its instrument is the phase-10 adapter that does not exist. Five decisions
+were ratified by the owner during the work, including publishing the repository and
+closing `ANCHOR_SLACK`.
+
+**What it changes about phase 12's exit criteria, which are stated below at
+`Phase 12 — Publish 0.2.0`.** Those criteria audit every `[PROVISIONAL]` and
+`[DEFERRED]` clause on a published surface and ask nothing about whether a
+`[FROZEN]` one is *met by the adapter being published*. This remediation found
+four cases where it was not — `Q-01`, `X-3`, `Q-02` and `F2-5` — with the disproof
+already in the tree in every case, written by the adapter's own author. Whoever
+takes phase 12 should read that as a gap in the criteria rather than as four
+findings that happen to be closed now.
+
+The other thing it changes is what "the gate is green" is worth. Several checks
+this runbook relies on were found to be reporting about themselves rather than
+their subject; they are repaired, and `REMEDIATION-HANDOVER.md` lists them. The
+scoped-gate command set has grown by four commands, each added because something
+went red downstream of a gate that could not see it.
+
+**`REMEDIATION-HANDOVER.md` is the entry point.** It carries the scoreboard, the
+method, the briefs awaiting ratification, and the operational traps — including
+the three false "completions" that were read as results before being caught.
+
 ### The critical path
 
 Drawn as an edge list rather than as box art, because the previous drawing routed
