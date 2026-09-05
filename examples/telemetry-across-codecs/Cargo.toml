@@ -1,0 +1,47 @@
+[package]
+name = "telemetry-across-codecs"
+description = "A log that outlived its encoding and its schema: JSON and postcard payloads, and a v1 event shape, folded by one model."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# Long-hand for the two happenstance crates, for the reason
+# `transfers-on-sqlite` gives: this package models a consuming application's
+# manifest, and here the feature list is half the subject.
+[dependencies]
+# **Both codecs, and that is the whole manifest-level claim.** A build carrying
+# only `json` decodes a postcard payload with `CodecError::UnknownTag` — the
+# framing region names the encoding an event was written with, and resolution
+# happens against the codecs the *build* has. So a deployment that has started
+# writing postcard must keep `json` for as long as its log holds a JSON payload,
+# which is forever unless the log is rewritten.
+#
+# `json` is also what `commit` needs: the ungated entry point is `commit_with`,
+# and `commit` is that function with `Json` already chosen.
+#
+# `default-features = false` drops `memory`, and `unstable-projection` is absent:
+# nothing here derives a read model.
+happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+  "postcard",
+] }
+# Default features only — the event store. The adapter stores payloads as
+# opaque bytes and the framing region as opaque metadata, so it has no opinion
+# about either encoding and needs no feature for one.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite" }
+# The two domain enums' encoding, and the refusal type. `thiserror` and not
+# `anyhow` for `Refusal`, because `CommandError`'s domain parameter is bound
+# `core::error::Error`, which `anyhow::Error` does not implement.
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+# `rt` and not just `macros`: the adapter's read stream defers its work into
+# `spawn_blocking`, so this application needs a runtime with a blocking pool
+# under it.
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

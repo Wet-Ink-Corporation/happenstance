@@ -315,6 +315,73 @@ const COMPILE_FAIL_PAIR: &[&str] = &[
     "ui::the_negative_control_compiles",
 ];
 
+/// The four operations `rebuilding-read-models` performs on its views.
+///
+/// `the_binary_operates_every_view` is the sequence — two views skewed against
+/// each other, a third backfilled beside the one it replaces and then promoted,
+/// a reset and two rebuilds — and it is listed because the program is the only
+/// place any of it happens. Nothing else in the tree resets a projection or
+/// rebuilds one, so a compile proves that the code exists and nothing else.
+///
+/// `the_poisoned_view_stops_and_the_others_advance` is the half that a
+/// successful run cannot demonstrate on its own. A projection written against a
+/// field the log does not carry must fail to *decode*, name its position, and
+/// commit nothing — and the other three must then keep running against the same
+/// store. A build that quietly started tolerating the decode failure, or that
+/// stalled every view behind it, would still pass the first test.
+const REBUILDING_VIEWS_TESTS: &[&str] = &[
+    "runs::the_binary_operates_every_view",
+    "runs::the_poisoned_view_stops_and_the_others_advance",
+];
+
+/// The two halves of `handles-and-quotas`: the boundaries, and the retry.
+///
+/// `the_binary_takes_every_decision` checks that three *different* scopes are
+/// derived from one event set and that each refusal carries values rather than a
+/// category. `a_replayed_delivery_appends_nothing` is the one the project had no
+/// evidence for until this example existed — command-retry idempotency — and it
+/// is separate because a run can take every decision correctly and still write
+/// the replay twice.
+const NO_AGGREGATE_TESTS: &[&str] = &[
+    "runs::the_binary_takes_every_decision",
+    "runs::a_replayed_delivery_appends_nothing",
+];
+
+/// The two migrations `telemetry-across-codecs` puts in one log.
+///
+/// `the_binary_writes_two_encodings_and_reads_both` holds the *encoding* claim:
+/// JSON and postcard payloads in one store, resolved through ADR-0021's framing
+/// region by a fold that names one codec. `the_old_shape_arrives_upcast` holds
+/// the *schema* one, which the tag cannot help with — a v1 reading in whole
+/// degrees deserialises perfectly into a number a thousand times too small, so
+/// only `DomainEvent::decode`'s event-type parameter distinguishes them.
+///
+/// Two names because the two failures are independent: dropping the framing
+/// region breaks the first and not the second, and deleting the old event type
+/// from `EVENT_TYPES` breaks the second and not the first.
+const CODEC_MIGRATION_TESTS: &[&str] = &[
+    "runs::the_binary_writes_two_encodings_and_reads_both",
+    "runs::the_old_shape_arrives_upcast",
+];
+
+/// The two claims `tickets-over-http` makes that need two processes.
+///
+/// `two_processes_share_one_file` is the lifecycle claim: writes are
+/// acknowledged while the view's process has never run, and the API answers
+/// `202` with its own checkpoint rather than serving rows that would be missing
+/// the caller's own write. `nothing_is_oversold_under_contention` is the
+/// arithmetic — fourteen clients over fourteen sockets, and five seats out of
+/// five.
+///
+/// Neither test asserts an attempt count or a poll count, and the target says
+/// so at length. This row exists because running the thing is the only way to
+/// check any of it: the properties are about processes and sockets, and a
+/// compile has nothing to say about either.
+const TWO_PROCESS_TESTS: &[&str] = &[
+    "runs::two_processes_share_one_file",
+    "runs::nothing_is_oversold_under_contention",
+];
+
 /// Every proof artefact the gate holds to its own names.
 pub(crate) const ARTEFACTS: &[Artefact] = &[
     Artefact {
@@ -369,6 +436,30 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "transfers-on-sqlite",
         target: "contention",
         tests: TYPED_LAYER_CONTENTION_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "rebuilding-read-models",
+        target: "runs",
+        tests: REBUILDING_VIEWS_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "handles-and-quotas",
+        target: "runs",
+        tests: NO_AGGREGATE_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "telemetry-across-codecs",
+        target: "runs",
+        tests: CODEC_MIGRATION_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "tickets-over-http",
+        target: "two_processes",
+        tests: TWO_PROCESS_TESTS,
         registry: None,
     },
 ];

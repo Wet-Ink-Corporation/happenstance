@@ -1,0 +1,77 @@
+[package]
+name = "tickets-over-http"
+description = "Two processes over one database file: an HTTP API taking contended writes, and a separate runner maintaining the read model it serves."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+# A library **and** a binary, which no other example in this workspace is. The
+# reason is the subject: an API process and a projection runner have to agree
+# about a domain, and the only way to be certain they do is for there to be one
+# copy of it. The other examples' tests restate their domains with `include_str!`
+# assertions precisely because a `src/main.rs` has nothing importable in it.
+#
+# **One binary with three roles, and not three binaries.** The demo starts the
+# other two as child processes, and `cargo run` builds only the binary it is
+# about to run — so a package of three would need `cargo build` first, or would
+# fail at the first spawn with a missing file. Selecting the role from `argv`
+# and spawning `current_exe()` removes that failure mode entirely, and it is
+# what a great many real services do anyway: one image, several roles.
+[lib]
+name = "tickets_over_http"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tickets-over-http"
+path = "src/main.rs"
+
+[dependencies]
+# `unstable-projection` because the runner is one, and the name is the promise:
+# the port beneath `Projection` and `run_projection` is not frozen.
+#
+# `default-features = false` drops `memory`: two processes cannot share a
+# `Vec` behind an `RwLock`, which is the whole reason this example exists.
+happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+  "unstable-projection",
+] }
+# Both roles, and here they are in *different processes* against one file. The
+# two schemas carry their versions in separate meta tables (`store_meta`,
+# `projection_meta`) rather than in `PRAGMA user_version`, which is what makes
+# sharing one file safe rather than lucky — and WAL plus a finite busy timeout
+# is what absorbs two writers arriving at once.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
+  "projection-store",
+] }
+# A direct dependency and a real coupling: `SqliteBatch::push` takes
+# `rusqlite::types::Value` and the adapter re-exports neither the type nor the
+# crate. The API process also reads the read-model table through a connection of
+# its own, because that table is the application's and not the adapter's.
+rusqlite.workspace = true
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+# The widest tokio feature set in this workspace, and every one of them is used
+# rather than inherited: `net` and `io-util` for the socket and the hand-written
+# protocol, `rt-multi-thread` so contended requests are served in parallel
+# instead of interleaved (cooperative concurrency would still produce retries,
+# but it would make the demonstration depend on where the await points fell),
+# `time` for the runner's poll interval and the demo's timeouts, `sync` for the
+# barrier that makes the race deterministic, and `macros` and `rt` as always.
+#
+# It costs nothing: `mio`, `socket2` and `bytes` are already resolved in
+# `Cargo.lock` by other members, so this adds no node to the graph.
+tokio = { version = "1", features = [
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "net",
+  "io-util",
+  "time",
+  "sync",
+] }
+
+[lints]
+workspace = true

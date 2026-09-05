@@ -26,6 +26,26 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **Four demonstration applications, each on a real SQLite file.** Between them
+  the existing three examples left the library's most compelling behaviour
+  undemonstrated: nothing rebuilt a read model, nothing drew a consistency
+  boundary that was not an entity, nothing ran in two processes, and nothing
+  exercised ADR-0021's codec tag. `examples/rebuilding-read-models` operates
+  four views — two skewed against each other, a blue/green backfill and its
+  promotion, a reset and a rebuild at two chunk sizes, and one poisoned by a
+  field the log does not carry, which stalls only itself.
+  `examples/handles-and-quotas` composes three scopes with no aggregate behind
+  any of them — a unique name over an unbounded set, a per-owner quota, and an
+  idempotent delivery — into one append condition, and is the first place this
+  project has written down command-retry idempotency.
+  `examples/telemetry-across-codecs` puts JSON and postcard payloads and two
+  event shapes in one log and reads them with one fold naming one codec.
+  `examples/tickets-over-http` runs an HTTP API and a projection runner as
+  separate processes over one file, races fourteen clients across fourteen
+  sockets without overselling a five-seat show, and answers `202` until the
+  view has reached the position the caller wrote at. All four are registered in
+  `xtask/src/proof.rs`, so the gate runs them rather than compiling them.
+
 - **WF-11's falsifier has been fired at, and the answer is on file.** The clause
   has carried a `[PROVISIONAL]` marker since phase 5 on a falsifier needing two
   things in one place — a memory ceiling that is real, and a payload large enough

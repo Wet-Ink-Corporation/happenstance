@@ -1,0 +1,47 @@
+[package]
+name = "handles-and-quotas"
+description = "Consistency boundaries with no aggregate to put them in: a unique name, a per-owner quota, and an idempotent retry, in one append condition."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# Long-hand for the two happenstance crates, for the reason
+# `transfers-on-sqlite` gives: this package models a consuming application's
+# manifest, and part of what it demonstrates is what such an application does
+# *not* have to ask for.
+[dependencies]
+# `unstable-projection` is deliberately absent. This example takes decisions and
+# never derives a read model, and the shortest way to say that a projection is
+# not needed to use this library is a manifest that does not name one.
+#
+# `default-features = false` drops `memory` as well: every boundary below is
+# read from a file, and an application that has chosen a durable store has no
+# use for `MemoryEventStore` in its binary.
+happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+] }
+# Default features only, which is the event store and nothing else. There is no
+# `projection-store` here and no `rusqlite` below: an application that only ever
+# reads a boundary and appends to it never touches the projection port, never
+# opens a second connection, and never names the driver. That absence is a
+# claim this manifest is making, and it is checked by the fact that the crate
+# compiles.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite" }
+# The domain enum's encoding, and the refusal type. `thiserror` and not
+# `anyhow` for `Refusal`, because `CommandError`'s domain parameter is bound
+# `core::error::Error`, which `anyhow::Error` does not implement — and because
+# one refusal variant below is matched on by value rather than printed, which a
+# type-erased error would make impossible.
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+# `rt` and not just `macros`: the adapter's read stream defers its work into
+# `spawn_blocking`, so this application needs a runtime with a blocking pool
+# under it.
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true
