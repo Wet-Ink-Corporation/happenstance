@@ -120,7 +120,7 @@ impl ProjectionStore for LiveTransactionStore {
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
         let checkpoints = self.server.checkpoints.lock().map_err(|_| LiveError)?;
-        Ok(checkpoints.get(id).cloned().unwrap_or(Checkpoint::NeverRun))
+        Ok(checkpoints.get(id).copied().unwrap_or(Checkpoint::NeverRun))
     }
 
     async fn commit(
@@ -243,10 +243,12 @@ async fn the_transaction_reads_its_own_uncommitted_writes() {
 /// declaration is false.
 #[tokio::test(flavor = "current_thread")]
 async fn declining_the_capability_is_the_only_body_that_compiles_and_it_lies() {
-    assert!(
-        !<LiveTransactionStore as ProjectionProbe>::READS_THROUGH_BATCH,
-        "the shipped signature admits no other honest declaration for this store"
-    );
+    const {
+        assert!(
+            !<LiveTransactionStore as ProjectionProbe>::READS_THROUGH_BATCH,
+            "the shipped signature admits no other honest declaration for this store"
+        );
+    }
 
     // The declaration is false, and the falseness is measurable rather than
     // rhetorical: the same batch, read through its own async path, answers.
