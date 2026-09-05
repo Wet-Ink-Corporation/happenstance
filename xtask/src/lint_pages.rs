@@ -357,6 +357,10 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     // one asks whether the one block on it a reader will paste into their own
     // manifest resolves at all.
     recipe_fence_resolves()?;
+    // C2-01 and C2-05, last of the four and reading the same fence the one
+    // above does: that one asks whether the block resolves, this one asks
+    // whether what the page says the block *costs* is true.
+    feature_cost_is_stated()?;
 
     let root = workspace_root()?;
 
@@ -543,6 +547,32 @@ const CORE_CRATE: &str = "happenstance-core";
 /// same phrase — and requires the README to keep saying it, so that a rewording
 /// there fails here naming the pin rather than quietly unhooking the advice.
 const PIN_ADVICE_ANCHOR: &str = "pin this crate exactly";
+
+/// Where the projection adapter's manifest recipe is *owned*.
+///
+/// `ProjectionProbe`'s page carries the fence, `crates/happenstance-core/tests/projection_recipe.rs`
+/// holds it to the features `lib.rs` actually gates, and
+/// `examples/outside-projection-adapter` writes it. The testkit's onboarding page
+/// prints a second copy of the same manifest for a reader who needs it whole, and
+/// this module is what stops the copy being a second opinion.
+const PORT_RECIPE: &str = "crates/happenstance-core/src/projection.rs";
+
+/// The word a claim about a feature's implications is counted by.
+///
+/// A *counted* token in [`publication_pin_problems`]'s sense: the false sentence
+/// C2-01 is named for — *"implies no other feature — not `std`, not `memory`"* —
+/// and the true one both contain it, and only one of them names what the
+/// manifest says is implied.
+const IMPLIES_TOKEN: &str = "implies";
+
+/// The two commands whose disagreement C2-05 is about.
+///
+/// Cargo's resolver deliberately does not unify a dev-dependency's features into
+/// the first and does unify them into the second, so an adapter's `src/` is
+/// compiled against a strictly larger contract crate under one than under the
+/// other. Both are counted, because a page naming only one has not described a
+/// divergence.
+const DIVERGING_COMMANDS: [&str; 2] = ["cargo build", "cargo test"];
 
 /// The facts C2-07b's pin is held against, each read from the artefact that
 /// settles it rather than stored here as a sentence.
@@ -1277,6 +1307,421 @@ fn recipe_fence_resolves() -> Result<()> {
          {TESTKIT_MANIFEST}, and carries {TESTKIT_README}'s pin advice"
     );
     Ok(())
+}
+
+/// The `toml` fences of a Rust file's **item** documentation (`///`), each as
+/// its own list of lines.
+///
+/// The port's recipe is on `ProjectionProbe`'s own page rather than on the
+/// contract crate's front matter, so [`doc_toml_fences`]'s `//!` scan cannot see
+/// it. Same lexer, same stated limits.
+fn item_toml_fences(source: &str) -> Vec<Vec<String>> {
+    let mut fences = Vec::new();
+    let mut body: Vec<String> = Vec::new();
+    let mut inside = false;
+    for line in source.lines() {
+        let Some(doc) = line.trim_start().strip_prefix("///") else {
+            continue;
+        };
+        let doc = doc.strip_prefix(' ').unwrap_or(doc);
+        let trimmed = doc.trim();
+        if inside {
+            if trimmed == "```" {
+                fences.push(std::mem::take(&mut body));
+                inside = false;
+            } else {
+                body.push(doc.to_owned());
+            }
+        } else if trimmed == "```toml" {
+            inside = true;
+        }
+    }
+    fences
+}
+
+/// The quoted strings of a manifest line's `features = [ … ]` list.
+///
+/// Returns an empty list for a line with no `features` key, which is the same
+/// answer as a line with an empty one — the two are indistinguishable to a
+/// consumer and this check has no reason to tell them apart.
+fn feature_list(line: &str) -> Vec<String> {
+    let Some(at) = line.find("features") else {
+        return Vec::new();
+    };
+    let rest = &line[at..];
+    let Some(open) = rest.find('[') else {
+        return Vec::new();
+    };
+    let close = rest[open..].find(']').map_or(rest.len(), |c| open + c);
+    let mut features = Vec::new();
+    let mut cursor = &rest[open..close];
+    while let Some(value) = first_quoted(cursor) {
+        let at = cursor.find(&value).unwrap_or(0) + value.len() + 1;
+        cursor = &cursor[at.min(cursor.len())..];
+        features.push(value);
+    }
+    features
+}
+
+/// The manifest a projection adapter is told to write, read out of one `toml`
+/// fence.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Recipe {
+    /// The features the `[dependencies]` line enables on `happenstance-core`.
+    dependency_features: Vec<String>,
+    /// The `[features]` entries that forward to `happenstance-core`, verbatim.
+    forwarded: Vec<String>,
+}
+
+/// Reads a fence into a [`Recipe`].
+///
+/// A "forwarding" entry is any `[features]` line whose value list names a
+/// `happenstance-core/…` feature. That is what makes the port's recipe and the
+/// testkit's copy comparable without either file naming the other's contents.
+fn recipe_of(fence: &[String]) -> Recipe {
+    let mut recipe = Recipe::default();
+    let mut section = String::new();
+    for line in fence {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            trimmed.clone_into(&mut section);
+            continue;
+        }
+        if section == "[dependencies]" && trimmed.starts_with(&format!("{CORE_CRATE} =")) {
+            recipe.dependency_features = feature_list(trimmed);
+        }
+        if section == "[features]" && trimmed.contains(&format!("{CORE_CRATE}/")) {
+            recipe.forwarded.push(trimmed.to_owned());
+        }
+    }
+    recipe
+}
+
+/// The features a forwarding entry hands through to `happenstance-core`.
+fn forwarded_features(entries: &[String]) -> Vec<String> {
+    entries
+        .iter()
+        .flat_map(|entry| feature_list(&format!("features = {entry}")))
+        .filter_map(|value| {
+            value
+                .strip_prefix(&format!("{CORE_CRATE}/"))
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+/// The facts C2-01 and C2-05 are held against, each read from the manifest or
+/// the page that owns it.
+#[derive(Debug)]
+struct FeatureCostFacts {
+    /// What `conformance = [ … ]` implies, from [`CORE_MANIFEST`].
+    conformance_implies: Vec<String>,
+    /// The manifest [`PORT_RECIPE`] prescribes.
+    port_recipe: Recipe,
+    /// The features [`TESTKIT_MANIFEST`] turns on for `happenstance-core`.
+    testkit_core_features: Vec<String>,
+}
+
+/// C2-01 and C2-05: what the onboarding page tells an outside author their
+/// manifest costs, held to the manifests.
+///
+/// # The two directions, and why one check
+///
+/// They are the same sentence read forwards and backwards. Outward, the page
+/// told an author that `conformance` *"implies no other feature"* while
+/// `crates/happenstance-core/Cargo.toml` says `conformance = ["unstable-projection"]`
+/// — the surface PS-3 holds exempt from semver, turned on in a `[dependencies]`
+/// table where Cargo's global, additive feature unification hands it to every
+/// application downstream. Inward, the page said nothing at all about the four
+/// features its own dev-dependency turns on, which unify into `cargo test` and
+/// not into `cargo build`, so an adapter's `src/` compiles against a larger
+/// contract crate than its consumers will get.
+///
+/// # What this does not verify
+///
+/// * **That the page's account is *correct*.** It counts a token and requires
+///   the manifests' own names beside it, exactly as
+///   [`publication_pin_problems`] does. A paragraph naming `unstable-projection`
+///   and then arguing it is harmless passes.
+/// * **That the fence compiles.** `crates/happenstance-core/tests/projection_recipe.rs`
+///   holds [`PORT_RECIPE`] to the features `lib.rs` gates its items behind, and
+///   `examples/outside-projection-adapter` compiles a manifest of that shape.
+///   This function only asks whether the testkit's *copy* still says what the
+///   original says.
+/// * **The resolver.** Whether Cargo unifies a dev-dependency's features the way
+///   the page now describes is a fact about Cargo. `cargo hack check --workspace
+///   --no-dev-deps` in `.github/workflows/ci.yml` is what would catch an in-tree
+///   crate relying on it; a stranger's crate is HS-S0097's scratch project and
+///   is not reachable from here.
+fn feature_cost_problems(
+    facts: &FeatureCostFacts,
+    lib: &str,
+    fences: &[Vec<String>],
+) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let mut problems = Vec::new();
+
+    if facts.conformance_implies.is_empty() {
+        problems.push(format!(
+            "{CORE_MANIFEST} — `conformance` implies nothing any more, so C2-01's premise is \
+             gone and this pin is what must move: the page is free to say the feature implies \
+             no other (C2-01)."
+        ));
+    }
+    if facts.port_recipe == Recipe::default() {
+        problems.push(format!(
+            "{PORT_RECIPE} — carries no `toml` fence naming {CORE_CRATE} that this check can \
+             read. It is where the projection adapter's manifest is decided; a copy on \
+             {TESTKIT_LIB} held against nothing is the state C2-01 shipped in (C2-01)."
+        ));
+    }
+    if !problems.is_empty() {
+        return problems;
+    }
+
+    let paragraphs = doc_paragraphs(lib);
+    problems.extend(implication_problems(
+        &facts.conformance_implies,
+        &paragraphs,
+    ));
+
+    // The fence is a copy of the port's recipe, not a second opinion.
+    let copy = fences
+        .iter()
+        .map(|fence| recipe_of(fence))
+        .find(|recipe| !recipe.dependency_features.is_empty() || !recipe.forwarded.is_empty());
+    match copy {
+        None => problems.push(format!(
+            "{TESTKIT_LIB} — its recipe fence names no {CORE_CRATE} features and forwards \
+             nothing, so there is nothing to compare against {PORT_RECIPE}'s fence (C2-01)."
+        )),
+        Some(copy) => {
+            problems.extend(recipe_copy_problems(&facts.port_recipe, &copy));
+            problems.extend(dev_dependency_cost_problems(
+                &facts.testkit_core_features,
+                &copy,
+                &paragraphs,
+            ));
+        }
+    }
+
+    problems
+}
+
+/// C2-01, outward: every paragraph that speaks about what `conformance` implies
+/// names what the manifest says it implies.
+///
+/// A *positive* pin in [`publication_pin_problems`]'s sense. The shipped
+/// sentence — *"It pulls in no crate and implies no other feature — not `std`,
+/// not `memory`"* — carries [`IMPLIES_TOKEN`] and names neither
+/// `unstable-projection` nor anything else the manifest lists, so it fails
+/// without this function holding a list of forbidden phrasings.
+fn implication_problems(implied_by_manifest: &[String], paragraphs: &[String]) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let claims: Vec<&String> = paragraphs
+        .iter()
+        .filter(|p| p.contains(IMPLIES_TOKEN) && p.contains(CORE_FEATURE_CONFORMANCE))
+        .collect();
+    if claims.is_empty() {
+        return vec![format!(
+            "{TESTKIT_LIB} — no paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies. Step 1 \
+             is the first screen an outside author reads and that feature is the one flag it \
+             tells them to write; saying nothing is how the false sentence got there (C2-01)."
+        )];
+    }
+
+    let mut problems = Vec::new();
+    for claim in claims {
+        for implied in implied_by_manifest {
+            if !claim.contains(implied) {
+                problems.push(format!(
+                    "{TESTKIT_LIB} — a paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies \
+                     without naming `{implied}`, which {CORE_MANIFEST} says it does: {claim:?}. \
+                     That feature is the port PS-3 holds exempt from semver, and Cargo's \
+                     feature unification is global and additive (C2-01)."
+                ));
+            }
+        }
+    }
+    problems
+}
+
+/// C2-01, second half: the testkit's copy of the manifest prescribes the same
+/// thing the port's own page does.
+///
+/// Two directions, and the second is the one that shipped: a feature the port
+/// *forwards* through the adapter's `[features]` table must not be turned on in
+/// the copy's `[dependencies]`, because that is the difference between the
+/// adapter's consumer choosing and the adapter choosing for them.
+fn recipe_copy_problems(port: &Recipe, copy: &Recipe) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let mut problems = Vec::new();
+    for feature in &port.dependency_features {
+        if !copy.dependency_features.contains(feature) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe's `{CORE_CRATE}` dependency line does not enable \
+                 `{feature}`, which {PORT_RECIPE} prescribes unconditionally because an \
+                 adapter's `impl ProjectionStore` is unconditional (C2-01)."
+            ));
+        }
+    }
+    for forwarded in forwarded_features(&port.forwarded) {
+        if copy.dependency_features.contains(&forwarded) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe turns `{forwarded}` on inside `[dependencies]`, \
+                 where {PORT_RECIPE} forwards it from a feature of the adapter's own crate. \
+                 Cargo unifies features globally and additively, so the copy hands every \
+                 application downstream of that adapter a surface none of them asked for \
+                 (C2-01)."
+            ));
+        }
+        if !copy
+            .forwarded
+            .iter()
+            .any(|entry| entry.contains(&format!("{CORE_CRATE}/{forwarded}")))
+        {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe never forwards `{forwarded}` through a `[features]` \
+                 entry, which is the line {PORT_RECIPE} prescribes and \
+                 `examples/outside-projection-adapter` writes (C2-01)."
+            ));
+        }
+    }
+    problems
+}
+
+/// C2-05, inward: the page names the features its own dev-dependency adds to
+/// `happenstance-core`, beside both commands that disagree about them.
+///
+/// The set is a difference rather than a list — what the testkit turns on, minus
+/// what the recipe already told the author to turn on — so a feature added to or
+/// removed from `crates/happenstance-testkit/Cargo.toml` moves this bar without
+/// anyone editing this file.
+fn dev_dependency_cost_problems(
+    testkit_core_features: &[String],
+    copy: &Recipe,
+    paragraphs: &[String],
+) -> Vec<String> {
+    use crate::lints::TESTKIT_LIB;
+
+    let extra: Vec<&String> = testkit_core_features
+        .iter()
+        .filter(|feature| !copy.dependency_features.contains(feature))
+        .collect();
+    if extra.is_empty() {
+        return Vec::new();
+    }
+    let stated = paragraphs.iter().any(|p| {
+        DIVERGING_COMMANDS.iter().all(|command| p.contains(command))
+            && extra.iter().all(|feature| p.contains(feature.as_str()))
+    });
+    if stated {
+        return Vec::new();
+    }
+    let named = extra
+        .iter()
+        .map(|f| f.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    vec![format!(
+        "{TESTKIT_LIB} — no paragraph names {named} beside both `{}` and `{}`. \
+         {TESTKIT_MANIFEST} turns those on for {CORE_CRATE}, and Cargo unifies a \
+         dev-dependency's features into the second command and not the first — so an adapter's \
+         `src/` compiles against a larger contract crate than its consumers get, and the page \
+         an outside author reads is silent about it (C2-05).",
+        DIVERGING_COMMANDS[0], DIVERGING_COMMANDS[1]
+    )]
+}
+
+/// C2-01 and C2-05: the onboarding page's account of an adapter's feature graph
+/// agrees with the manifests, and states what the dev-dependency costs.
+///
+/// Called from [`run`] beside the other testkit-page pins, and for the same
+/// reason their doc comments give about `xtask/src/affected.rs`'s
+/// `exported_lints`.
+///
+/// # Errors
+///
+/// Returns an error if any of the four artefacts cannot be read, or if
+/// [`feature_cost_problems`] finds a problem.
+fn feature_cost_is_stated() -> Result<()> {
+    use crate::lints::TESTKIT_LIB;
+
+    let root = workspace_root()?;
+    let read =
+        |rel: &str| fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"));
+
+    let lib = read(TESTKIT_LIB)?;
+    let core_manifest = read(CORE_MANIFEST)?;
+    let testkit_manifest = read(TESTKIT_MANIFEST)?;
+    let port = read(PORT_RECIPE)?;
+
+    let facts = FeatureCostFacts {
+        conformance_implies: manifest_feature(&core_manifest, CORE_FEATURE_CONFORMANCE),
+        port_recipe: item_toml_fences(&port)
+            .iter()
+            .map(|fence| recipe_of(fence))
+            .find(|recipe| !recipe.dependency_features.is_empty())
+            .unwrap_or_default(),
+        testkit_core_features: testkit_manifest
+            .lines()
+            .skip_while(|line| !line.trim_start().starts_with(&format!("{CORE_CRATE} =")))
+            .take_while(|line| !line.trim().starts_with(']'))
+            .flat_map(delimited_strings)
+            .collect(),
+    };
+
+    let problems = feature_cost_problems(&facts, &lib, &doc_toml_fences(&lib));
+    if !problems.is_empty() {
+        for problem in &problems {
+            println!("  {problem}");
+        }
+        bail!(
+            "{} problem(s) with what {TESTKIT_LIB} tells an outside author their manifest \
+             costs — `feature_cost_is_stated` (C2-01, C2-05): the page's account of the \
+             adapter's feature graph has to agree with {CORE_MANIFEST} and {PORT_RECIPE}, and \
+             has to state what the dev-dependency adds.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "C2-01/C2-05: {TESTKIT_LIB}'s feature-graph account agrees with {CORE_MANIFEST} and \
+         {PORT_RECIPE}, and names what {TESTKIT_MANIFEST} adds under `cargo test`"
+    );
+    Ok(())
+}
+
+/// The feature name whose implications C2-01 is about.
+const CORE_FEATURE_CONFORMANCE: &str = "conformance";
+
+/// Every double-quoted string on one line.
+fn delimited_strings(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(open) = rest.find('"') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('"') else { break };
+        out.push(after[..close].to_owned());
+        rest = &after[close + 1..];
+    }
+    out
+}
+
+/// The values of a manifest's `name = [ … ]` feature entry, at the start of a
+/// line so a comment mentioning the feature is not read as its definition.
+fn manifest_feature(manifest: &str, name: &str) -> Vec<String> {
+    manifest
+        .lines()
+        .find(|line| line.trim_start().starts_with(&format!("{name} = [")))
+        .map(delimited_strings)
+        .unwrap_or_default()
 }
 
 /// The first `version = "…"` line at the start of a line after `header`, and
@@ -4771,6 +5216,189 @@ mod tests {
                 .any(|p| p.contains("a recipe it is not checking")),
             "a page with no recipe passes every per-line rule below, which is why \
              the vacuity guard is the first thing this function does: {no_fence:?}"
+        );
+    }
+
+    /// The port's own fence, as `crates/happenstance-core/src/projection.rs`
+    /// carries it — comments included, because they are what a naive section
+    /// split reads as dependency lines.
+    const PORT_FENCE: &str = "\
+/// ```toml\n\
+/// [dependencies]\n\
+/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below\n\
+/// # is unconditional in the adapter's `src/`.\n\
+/// happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+///\n\
+/// [features]\n\
+/// # Forwards to the contract crate.\n\
+/// conformance = [\"happenstance-core/conformance\"]\n\
+///\n\
+/// [dev-dependencies]\n\
+/// happenstance-testkit = \"…\"\n\
+/// ```\n";
+
+    fn port_recipe() -> Recipe {
+        recipe_of(&item_toml_fences(PORT_FENCE)[0])
+    }
+
+    fn feature_cost_facts() -> FeatureCostFacts {
+        FeatureCostFacts {
+            conformance_implies: vec!["unstable-projection".to_owned()],
+            port_recipe: port_recipe(),
+            testkit_core_features: ["std", "memory", "conformance", "unstable-projection"]
+                .map(str::to_owned)
+                .to_vec(),
+        }
+    }
+
+    /// The testkit's step 1 as it shipped at the pre-publication review.
+    const SHIPPED_STEP_ONE: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"conformance\"] }\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
+//! ```\n\
+//!\n\
+//! `conformance` is one flag on a dependency your adapter already has. It pulls\n\
+//! in no crate and implies no other feature — not `std`, not `memory` — so your\n\
+//! *normal* dependency graph does not grow at all.\n";
+
+    #[test]
+    fn a_fence_is_read_into_the_manifest_it_prescribes() {
+        assert_eq!(
+            port_recipe(),
+            Recipe {
+                dependency_features: vec!["unstable-projection".to_owned()],
+                forwarded: vec![r#"conformance = ["happenstance-core/conformance"]"#.to_owned()],
+            },
+            "the comment lines above each key are prose and must not be read as \
+             dependency lines — the first version of the sibling check in \
+             `examples/outside-projection-adapter` failed on exactly that"
+        );
+        assert_eq!(
+            forwarded_features(&port_recipe().forwarded),
+            vec!["conformance".to_owned()],
+            "what the `[features]` entry hands through is what the copy must not \
+             turn on in `[dependencies]`"
+        );
+    }
+
+    #[test]
+    fn the_feature_cost_check_rejects_the_shipped_page_in_both_directions() {
+        let problems = feature_cost_problems(
+            &feature_cost_facts(),
+            SHIPPED_STEP_ONE,
+            &doc_toml_fences(SHIPPED_STEP_ONE),
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("without naming `unstable-projection`")),
+            "outward: the page denied an implication its own contract crate's \
+             manifest declares: {problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("turns `conformance` on inside `[dependencies]`")),
+            "outward: and told the author to write the manifest the port's own \
+             recipe forwards instead: {problems:?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("(C2-05)")),
+            "inward: and said nothing about the features its own dev-dependency \
+             adds: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn the_feature_cost_check_passes_a_page_that_states_both() {
+        const CORRECTED: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"unstable-projection\"] }\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//!\n\
+//! [dev-dependencies]\n\
+//! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies `unstable-projection`, because the probe is defined\n\
+//! inside the module that feature gates.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance` on. `cargo build` does not unify a dev-dependency's features\n\
+//! and `cargo test` does.\n";
+
+        assert_eq!(
+            feature_cost_problems(
+                &feature_cost_facts(),
+                CORRECTED,
+                &doc_toml_fences(CORRECTED)
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    /// When the manifests move under the pin, the failure names *them*
+    /// (RS-81-5), and the blind spot is executed rather than promised
+    /// (RS-81-1).
+    #[test]
+    fn the_feature_cost_check_names_which_artefact_moved() {
+        // The documented blind spot, used at the foot of this test: a paragraph
+        // that names the implied feature and then argues it away passes,
+        // exactly as the publication pin's counted tokens do.
+        const DENIED: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies `unstable-projection`, which costs you nothing at all\n\
+//! and you may ignore it.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance`. `cargo build` and `cargo test` differ.\n";
+
+        let unimplying = FeatureCostFacts {
+            conformance_implies: Vec::new(),
+            ..feature_cost_facts()
+        };
+        let problems = feature_cost_problems(
+            &unimplying,
+            SHIPPED_STEP_ONE,
+            &doc_toml_fences(SHIPPED_STEP_ONE),
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("C2-01's premise is")),
+            "a `conformance` that implies nothing makes the page's old sentence \
+             true and this pin the stale artefact: {problems:?}"
+        );
+
+        let no_port = FeatureCostFacts {
+            port_recipe: Recipe::default(),
+            ..feature_cost_facts()
+        };
+        assert!(
+            feature_cost_problems(&no_port, SHIPPED_STEP_ONE, &[])
+                .iter()
+                .any(|p| p.contains(PORT_RECIPE)),
+            "and a port page with no fence leaves the copy held against nothing"
+        );
+
+        assert_eq!(
+            feature_cost_problems(&feature_cost_facts(), DENIED, &doc_toml_fences(DENIED)),
+            Vec::<String>::new(),
+            "the check counts a token and requires the manifest's own names \
+             beside it; whether the sentence is *right* is a reader's, and that \
+             limit is on `feature_cost_problems` rather than left to be found"
         );
     }
 
