@@ -377,3 +377,221 @@ pub(crate) fn placeholders(n: usize) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    //! The measurement that cannot be taken from outside this crate.
+    //!
+    //! [`Selectivity::read_for`] is `pub(crate)` by ADR-0022 §10's decision, and
+    //! the one public seam beside it —
+    //! [`SqliteEventStore::planned_statement_count`](crate::event_store::SqliteEventStore::planned_statement_count)
+    //! — passes `Selectivity::default()` and never calls it. No target in
+    //! `tests/` can reach the function, so the measurement lives where the
+    //! function does. This is the crate's only `#[cfg(test)]` module and it is
+    //! here for that reason rather than by preference.
+    //!
+    //! **Why a clock is allowed here and forbidden in the suite.** CF-33
+    //! `[FROZEN]` binds `crates/happenstance-testkit/src` — the conformance
+    //! rules — and its `Rejects:` paragraph names what makes a timed assertion
+    //! bad: it *"makes the suite's verdict a property of the hardware"*.
+    //! Nothing below asserts a duration. The one timed assertion is a **ratio
+    //! between two implementations measured back to back in one process**, on
+    //! the same input and in the same build profile — the shipped accumulation
+    //! against a verbatim copy of the one it replaced. That is a property of the
+    //! two algorithms and not of the machine, which is exactly the objection
+    //! CF-33 raises. CF-34 still holds: this is not a performance bar, and no
+    //! number here is a budget.
+
+    #![allow(clippy::unwrap_used)]
+
+    use std::time::Instant;
+
+    use happenstance_core::Tags;
+
+    use super::*;
+
+    /// VT-23's floor. It is what makes the shape below a conformance floor
+    /// rather than a corner: every store must evaluate at least this many query
+    /// items, and nothing anywhere bounds tags per item.
+    const ITEMS: usize = 128;
+
+    /// `SqliteEventStore::MAX_TAGS_PER_EVENT`, restated rather than imported so
+    /// this module does not acquire the event store's feature gate.
+    const TAGS_PER_ITEM: usize = 128;
+
+    /// How much faster than the implementation it replaced the shipped
+    /// accumulation must be, at the floor above.
+    ///
+    /// `experiments/shipped-append-condition-sql/results/selectivity.md` §1
+    /// measured the separation at **40.1x** — 257,690 µs against 6,424 µs,
+    /// medians of 25 rounds, with the two outputs asserted byte-identical before
+    /// either was timed. The threshold here is **5**, and the eightfold gap
+    /// between the two numbers is the slack: this fires when the quadratic comes
+    /// back, not when the machine is busy.
+    const MINIMUM_SPEEDUP: u32 = 5;
+
+    /// A query at VT-23's floor whose every item is multi-tag and whose tags are
+    /// distinct across items.
+    ///
+    /// Multi-tag because `read_for` skips single-tag items entirely, and
+    /// distinct across items because that is what makes the accumulation grow:
+    /// 128 x 128 is 16,384 tags presented to the planning path, every one of
+    /// them a `wanted.contains` miss over everything accumulated so far.
+    fn floor_query() -> Query {
+        let items = (0..ITEMS).map(|item| {
+            let pairs: Vec<(String, String)> = (0..TAGS_PER_ITEM)
+                .map(|tag| (format!("k{item:03}"), format!("v{tag:03}")))
+                .collect();
+            let tags = Tags::from_pairs(
+                pairs
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_str())),
+            )
+            .unwrap();
+            QueryItem::new(Vec::<String>::new(), tags).unwrap()
+        });
+        Query::from_items(items).unwrap()
+    }
+
+    /// A connection carrying migration 1's `tag_cardinality` and nothing else.
+    ///
+    /// Empty on purpose: the lookup's cost is in assembling what to ask for, not
+    /// in the answer, and an empty table is the case
+    /// [`Selectivity::most_selective_first`] already treats as maximally
+    /// selective.
+    fn planning_connection() -> Connection {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE tag_cardinality (tag TEXT PRIMARY KEY, events INTEGER NOT NULL) \
+                 WITHOUT ROWID;",
+            )
+            .unwrap();
+        connection
+    }
+
+    /// [`Selectivity::read_for`] as it stood at `bd11598`, kept verbatim so the
+    /// claim about it is checked rather than asserted.
+    ///
+    /// The only edits are its name and its receiver. Everything else — the
+    /// `Vec<String>` accumulator, the `contains` guard, the per-item
+    /// `distinct_tags`, the chunked lookup and the map it builds — is the
+    /// shipped code of that commit, which is what makes the comparison below a
+    /// comparison of two implementations rather than of an implementation
+    /// against a straw man.
+    fn read_for_quadratic(
+        connection: &Connection,
+        query: &Query,
+        max_parameters: usize,
+    ) -> rusqlite::Result<Selectivity> {
+        fn distinct_tags_quadratic(item: &QueryItem) -> Vec<String> {
+            let mut out: Vec<String> = Vec::with_capacity(item.tags().len());
+            for tag in item.tags() {
+                let value = tag.as_str().to_owned();
+                if !out.contains(&value) {
+                    out.push(value);
+                }
+            }
+            out
+        }
+
+        let mut wanted: Vec<String> = Vec::new();
+        for item in query.items().unwrap_or_default() {
+            let tags = distinct_tags_quadratic(item);
+            if tags.len() > 1 {
+                for tag in tags {
+                    if !wanted.contains(&tag) {
+                        wanted.push(tag);
+                    }
+                }
+            }
+        }
+        if wanted.is_empty() {
+            return Ok(Selectivity::default());
+        }
+
+        let mut counts = HashMap::with_capacity(wanted.len());
+        for batch in wanted.chunks(max_parameters.max(1)) {
+            let sql = format!(
+                "SELECT tag, events FROM tag_cardinality WHERE tag IN ({})",
+                placeholders(batch.len())
+            );
+            let mut statement = connection.prepare(&sql)?;
+            let mut rows = statement.query(rusqlite::params_from_iter(batch.iter()))?;
+            while let Some(row) = rows.next()? {
+                counts.insert(row.get::<_, String>(0)?, row.get::<_, i64>(1)?);
+            }
+        }
+        Ok(Selectivity(counts))
+    }
+
+    /// The shipped selectivity lookup agrees with the one it replaced, and is
+    /// not quadratic in the query's distinct tags.
+    ///
+    /// Two assertions, and the first is the one that makes the second worth
+    /// making: the outputs are compared **before** either is timed, so a faster
+    /// function that answers a different question fails here rather than passing
+    /// as an optimisation.
+    ///
+    /// The wrong implementation this rejects is the one that shipped: a
+    /// `Vec<String>` accumulated with `if !wanted.contains(&tag)`, which at
+    /// VT-23's own floor performs about 134 million string comparisons before a
+    /// single statement is prepared — once per read page, and once per append
+    /// guard **inside `BEGIN IMMEDIATE`**, with every other writer waiting.
+    #[test]
+    fn the_selectivity_lookup_agrees_with_the_quadratic_and_is_faster_than_it() {
+        let connection = planning_connection();
+        let query = floor_query();
+
+        let expected = read_for_quadratic(
+            &connection,
+            &query,
+            crate::event_store::SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .unwrap();
+        let actual = Selectivity::read_for(
+            &connection,
+            &query,
+            crate::event_store::SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .unwrap();
+        assert_eq!(
+            actual.0, expected.0,
+            "the shipped lookup answers a different question from the one it replaced"
+        );
+
+        // One sample for the slow arm, because at seconds it is stable and three
+        // of them is a minute; the best of three for the fast arm, because at
+        // milliseconds a single sample is mostly scheduler.
+        let started = Instant::now();
+        read_for_quadratic(
+            &connection,
+            &query,
+            crate::event_store::SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .unwrap();
+        let quadratic = started.elapsed();
+
+        let shipped = (0..3)
+            .map(|_| {
+                let started = Instant::now();
+                Selectivity::read_for(
+                    &connection,
+                    &query,
+                    crate::event_store::SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+                )
+                .unwrap();
+                started.elapsed()
+            })
+            .min()
+            .unwrap();
+
+        assert!(
+            quadratic >= shipped * MINIMUM_SPEEDUP,
+            "at VT-23's floor ({ITEMS} items x {TAGS_PER_ITEM} tags) the shipped selectivity \
+             lookup took {shipped:?} against the quadratic's {quadratic:?}, which is under the \
+             {MINIMUM_SPEEDUP}x this asserts; the accumulation is quadratic in the query's \
+             distinct tags again"
+        );
+    }
+}
