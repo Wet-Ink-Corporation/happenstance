@@ -933,15 +933,8 @@ mod derived_flavour_doc {
     fn the_block_names_both_flavours_in_link_form() {
         let prose = copied_prose().join("\n");
         for flavour in FLAVOURS {
-            let named = if flavour == FLAVOURS[0] {
-                // `[`ProjectionStore`]` is a substring of `[`SendProjectionStore`]`,
-                // so the bare flavour counts only where `Send` does not precede it.
-                prose.matches(flavour).count() > prose.matches(FLAVOURS[1]).count()
-            } else {
-                prose.contains(flavour)
-            };
             assert!(
-                named,
+                prose.contains(flavour),
                 "the block is rendered on both pages, so it must name {flavour} \
                  rather than leave a reader to infer which trait they are on. \
                  Prose as read:\n{prose}"
