@@ -1197,6 +1197,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rebuilding-read-models"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "happenstance",
+ "happenstance-sqlite",
+ "rusqlite",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

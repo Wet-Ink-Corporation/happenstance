@@ -1,0 +1,60 @@
+[package]
+name = "rebuilding-read-models"
+description = "Operating derived state: four views over one log, rebuilt, reset, and kept running when one of them breaks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# Long-hand for the two happenstance crates, for the reason
+# `transfers-on-sqlite` gives: this package models *a consuming application's*
+# manifest, and part of what it demonstrates is what the projection half costs
+# to ask for. The two `path` keys are the only lines an application would not
+# write.
+[dependencies]
+# `unstable-projection` is not optional here in the way it is elsewhere — it is
+# the entire subject. `Projection`, `run_projection`, `Progressed` and
+# `ProjectionError` all live behind it, and the name is the promise: the port
+# beneath them is not frozen, so this example's imports make no semver claim.
+#
+# `default-features = false` drops `memory`: an application that has chosen a
+# durable store has no use for `MemoryEventStore` in its binary, and every view
+# below is rebuilt from a file rather than from a `Vec`.
+happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+  "unstable-projection",
+] }
+# Both roles, against one file. `projection-store` left this crate's default
+# set at PS-3's verdict, so it is named here rather than inherited — and this
+# is the example where a reader is most likely to be looking for what it costs.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
+  "projection-store",
+] }
+# A direct dependency and a real coupling, recorded rather than smoothed over:
+# `SqliteBatch::push` takes `rusqlite::types::Value` and the adapter re-exports
+# neither the type nor the crate, so an application writing a projection must
+# name `rusqlite` itself. This example also owns five read-model tables, and
+# the same connection is what creates, resets and reads them — the projection
+# store migrates the *checkpoint* schema and stops there.
+#
+# `workspace = true` and not long-hand, for the reason `transfers-on-sqlite`
+# measured: spelled out as an application would type it, rusqlite resolves its
+# default features and adds five packages to `Cargo.lock` that no other member
+# needs.
+rusqlite.workspace = true
+# The domain enums' encoding, and the refusal type. `thiserror` and not
+# `anyhow` for `Refusal`, because `CommandError`'s domain parameter is bound
+# `core::error::Error`, which `anyhow::Error` does not implement.
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+# `rt` and not just `macros`: the adapter's read stream defers its work into
+# `spawn_blocking`, so this application needs a runtime with a blocking pool
+# under it. `current_thread` has one — the flavour chooses the driver, not
+# whether blocking tasks exist.
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true
