@@ -207,7 +207,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = { version = "0.2.0-alpha.1", features = ["conformance"] }
+//! happenstance-core = { version = "0.2.0-alpha.1", features = ["unstable-projection"] }
+//!
+//! [features]
+//! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
 //! happenstance-testkit = "=0.2.0-alpha.1"
@@ -235,10 +238,47 @@
 //! propagates to nobody, and what it buys you is choosing *when* you take a new
 //! bar instead of finding out from a red run you cannot attribute.
 //!
-//! `conformance` is one flag on a dependency your adapter already has. It pulls
-//! in no crate and implies no other feature — not `std`, not `memory` — so your
-//! *normal* dependency graph does not grow at all. This crate is a
-//! dev-dependency and stays one.
+//! **The `[dependencies]` and `[features]` halves of that block belong to the
+//! port rather than to this crate**, and they are a copy of the fence on
+//! `happenstance_core::ProjectionProbe`'s own page rather than a second opinion:
+//! `xtask`'s `feature_cost_is_stated` fails if the two drift. A reader of step 1
+//! needs one manifest and not two half-manifests on two pages, which is why the
+//! copy is here at all.
+//!
+//! `unstable-projection` is unconditional because your `impl ProjectionStore` is:
+//! every port type it names lives behind that feature, and an adapter cannot make
+//! its own port impl optional. `conformance` is forwarded from a feature of *your*
+//! crate instead, because the `impl ProjectionProbe` lives in `src/` under
+//! `#[cfg(feature = "conformance")]` and a crate cannot `cfg` on a dependency's
+//! feature.
+//!
+//! **An earlier version of this page said `conformance` "implies no other
+//! feature — not `std`, not `memory`", and told you to turn it on in
+//! `[dependencies]`.** The first half was two-thirds right and the missing third
+//! is the expensive one. `conformance` costs no crate and no graph edge, and it
+//! implies exactly one thing — `unstable-projection`, because `ProjectionProbe`
+//! is defined *inside* the module that feature gates. That is the port PS-3 holds
+//! **exempt from semver** until two adapters at opposite ends of the batch-shape
+//! axis have cleared its suite, and Cargo's feature unification is global and
+//! additive: a feature turned on anywhere in a graph is on for everybody in it.
+//! Turning it on in `[dependencies]` therefore hands that surface to every
+//! application downstream of your adapter, none of which asked for it.
+//! Forwarding it costs you one line and gives the choice back to whoever builds
+//! your adapter. `examples/outside-projection-adapter` in this repository writes
+//! exactly this manifest, and its own `tests/` fails if it stops.
+//!
+//! **What the dev-dependency costs you is a bigger `happenstance-core` under
+//! `cargo test` than under `cargo build`, and it is not your build that finds
+//! out.** This crate depends on `happenstance-core` with `std`, `memory` and
+//! `conformance` on. Cargo's resolver deliberately does not unify a
+//! dev-dependency's features into `cargo build` and does unify them into
+//! `cargo test`, so your `src/` compiles against a strictly larger contract crate
+//! whenever the suite is in the graph. Name a `memory`- or `std`-gated item in a
+//! helper — `MemoryEventStore`, say — and both of your own commands stay green
+//! while the `error[E0432]` waits for whoever adds your adapter to an
+//! application. Build your library the way they will, `cargo build -p
+//! your-adapter` with no `--all-targets`, before you tag a release. This crate is
+//! a dev-dependency and stays one.
 //!
 //! **2. Implement `ProjectionStore` for your store, in `src/`.**
 //!

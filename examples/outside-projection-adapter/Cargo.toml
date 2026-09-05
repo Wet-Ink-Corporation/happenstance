@@ -34,10 +34,12 @@ publish = false
 # the *probe* needs, it is nobody's business but a suite runner's, and it is
 # therefore forwarded from a feature of this crate rather than turned on here.
 #
-# The recipe's own fence writes `happenstance-core = "…"` with no features
-# named at all, which does not compile for the reason above; that is the
-# recipe's gap rather than this manifest's licence to deviate, and it is
-# recorded in `tests/outside_projection_manifest.rs`'s limits.
+# This line used to deviate from the recipe, which wrote `happenstance-core =
+# "…"` with no features named at all and therefore did not compile. It agrees
+# with it now: `48d4cd5` repaired the fence and
+# `crates/happenstance-core/tests/projection_recipe.rs` derives the requirement
+# from the gates `lib.rs` carries, so the two go red together rather than one of
+# them being a documented departure.
 happenstance-core = { version = "0.2.0-alpha.1", path = "../../crates/happenstance-core", features = [
   "unstable-projection",
 ] }

@@ -977,6 +977,38 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **The onboarding page's account of an adapter's feature graph was wrong
+  outward and silent inward.** Outward, step 1 of *Writing a projection adapter
+  from outside this workspace* told the reader that `conformance` *"implies no
+  other feature — not `std`, not `memory`"*, while
+  `crates/happenstance-core/Cargo.toml` says `conformance =
+  ["unstable-projection"]` — and told them to write it inside `[dependencies]`,
+  where `happenstance_core::ProjectionProbe`'s own recipe forwards it from a
+  feature of the adapter's own crate. That is not a nicety: `unstable-projection`
+  is the surface PS-3 holds exempt from semver, and Cargo's feature unification
+  is global and additive, so the manifest the page prescribed handed it to every
+  application downstream of that adapter. It was also the exact manifest
+  `examples/outside-projection-adapter`'s own `tests/` was written to reject —
+  *"the wrong implementation this rejects is the one that shipped"* — printed
+  from the crate a stranger reads first.
+
+  Inward, the page said nothing about the features its own dev-dependency turns
+  on. Cargo does not unify a dev-dependency's features into `cargo build` and
+  does unify them into `cargo test`, so an adapter's `src/` compiles against a
+  strictly larger `happenstance-core` whenever the suite is in the graph: name a
+  `memory`-gated item in a helper and both of the author's commands stay green
+  while the `error[E0432]` waits for their first consumer. The page now says so,
+  and says which command to run instead.
+
+  `cargo xtask lint-pages` gains **`feature_cost_is_stated`**, and it derives
+  every requirement rather than restating one. What `conformance` implies is read
+  from the contract crate's manifest; the manifest the testkit's copy must
+  prescribe is read from the port's own fence, the same fence
+  `crates/happenstance-core/tests/projection_recipe.rs` holds to the gates
+  `lib.rs` carries; and the dev-dependency's extra features are a set difference.
+  The instrument for the outward half existed one crate over and had never been
+  pointed at the copy.
+
 - **The only copy-pasteable manifest `happenstance-testkit`'s rendered page
   publishes could not resolve against the registry.** Step 1 of *Writing a
   projection adapter from outside this workspace* asked for

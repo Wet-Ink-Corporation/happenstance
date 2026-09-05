@@ -26,14 +26,16 @@
 //!
 //! # What it does not check, stated because a green here is read as coverage
 //!
-//! * **The `[dependencies]` half of the recipe.** The recipe's fence writes
-//!   `happenstance-core = "…"` with no features named, and an adapter that
-//!   copies that line does not compile: `ProjectionStore`, `Checkpoint`,
-//!   `Authority`, `CommitError`, `ResetError` and `ProjectionId` are all behind
-//!   `unstable-projection`, which is not in that crate's default set. The
-//!   recipe is short there, and the repair belongs to the port's own rustdoc
-//!   rather than to a test in an example. Asserting the recipe's dependency
-//!   line here would pin a line that is wrong.
+//! * **The `[dependencies]` half of the recipe.** This bullet used to say the
+//!   recipe's fence wrote `happenstance-core = "…"` with no features named, so
+//!   that asserting its dependency line here *"would pin a line that is
+//!   wrong"*. That stopped being true at `48d4cd5`: the fence now writes
+//!   `features = ["unstable-projection"]`, and
+//!   `crates/happenstance-core/tests/projection_recipe.rs` holds it there
+//!   against the gates `lib.rs` actually carries. The half this target still
+//!   does not check is the same one for a different reason — the requirement is
+//!   the port's own to state and its instrument lives beside the port, not in
+//!   an example.
 //! * **That the manifest is the manifest a stranger writes.** It carries a
 //!   `path` this crate needs and a stranger does not, and the version
 //!   requirement moves with the workspace. Both are documented departures in
