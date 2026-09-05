@@ -11,6 +11,7 @@ across runs.
 | [`unselective-pair.md`](unselective-pair.md) | **the adversarial corpus** — no tag selective |
 | [`read-path.md`](read-path.md) | **the read path**, and the three candidate repairs for I-3's outer wrapper |
 | [`all-query-wrapper.md`](all-query-wrapper.md) | the one of those three that shipped, and the mechanism it was wrong about |
+| [`windowed-arms.md`](windowed-arms.md) | **the fourth candidate**, which wins both corpora and removes the choice |
 | `raw/*.txt` | command output, tee'd verbatim by `run.sh` |
 
 The tables are written **by hand** from `raw/`, because a table nobody read is a
@@ -50,6 +51,6 @@ separated by copying one of them.
 
 [`../README.md#what-this-does-not-show`](../README.md#what-this-does-not-show),
 in full. The one that bites hardest: **no repair of I-3's outer
-`position IN (<matched>)` wrapper is built.** `read-path.md` measures three
+`position IN (<matched>)` wrapper is built for a tagged query.** `read-path.md` measures three
 candidates and shows the choice between them is cardinality-conditional — 1,089x
 one way, 2.3x the other — with two selectivity points and nothing between them.

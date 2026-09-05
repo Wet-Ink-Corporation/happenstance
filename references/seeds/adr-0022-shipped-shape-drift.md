@@ -84,8 +84,8 @@ Four questions, in the order they depend on each other.
    the adapter changes its query plan on data it samples, which is a decision and
    not an optimisation.
 
-   **There may be a fourth candidate that makes the rule unnecessary, and it is
-   not measured in-crate.** Every candidate in `read-path.md` argues about which
+   **There is a fourth candidate, and it makes the rule unnecessary rather than
+   easier.** Every candidate in `read-path.md` argues about which
    side of the join to drive from. None of them asks why the wrapper's own
    `resume_from`, ceiling and page budget stop at the subquery boundary — the
    adapter *builds* that subquery, so it could push the read's window into each
@@ -107,21 +107,44 @@ Four questions, in the order they depend on each other.
    required rather than stylistic — SQLite rejects a bare `LIMIT` on a compound
    arm.
 
-   If it holds, the matched set is at most `512 x arms` whatever the corpus, so
-   the `IN` shape stops being bad on a broad query and the crossover the
-   conditional rule exists to navigate **does not arise**. A sketch on synthetic
-   data (Python's sqlite 3.50.4, 200,000 rows, 3 iterations, no interleaving,
-   identical pages asserted) put it ahead in all four cells — 2.8x and 12.3x on a
-   selective corpus, 223x and 228x on an unselective one, with the plan gaining
-   `SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)`.
+   The matched set is then at most `budget x arms` whatever the corpus, so the
+   `IN` shape stops being bad on a broad query and the crossover the conditional
+   rule exists to navigate **does not arise**. The plan gains
+   `SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)`: the
+   window becomes a seek into the interior of one contiguous `(tag, position)`
+   range instead of a walk from its start.
 
-   **That is a sketch and not a measurement**: not the crate's SQLite, not the
-   adapter, not this repository's paired harness, and no backwards-direction or
-   VT-23-width case. It is recorded here because it would change what the
-   decision is *about* — from picking a threshold to not needing one — and
-   because it costs `chunks` a wider signature (the read's window and direction,
-   which only the read path has), which is an interface change and therefore
-   this pass's to weigh.
+   **Measured, on this crate's harness rather than sketched.**
+   `results/windowed-arms.md`: 500,000 events, two corpora, three replay depths
+   and one backwards cell, the returned page compared column-by-column every
+   round before any time was recorded. It wins every cell — **4.7x–8.8x** over
+   what ships on a selective corpus, **1,129x–1,732x** on an unselective one,
+   and **10.2x–12.4x** over `wrapper-exists`, the candidate the crossover was
+   about, while staying ahead of it on the unselective corpus too.
+
+   **So question 4 changes shape.** It was *"what threshold decides between two
+   plans?"*. It is now *"is there a reason to keep either of them?"* A rule that
+   navigates a crossover needs a cardinality estimate, a threshold fitted to the
+   points someone happened to measure, and an adapter whose query plan depends on
+   data it sampled. A shape that wins both ends needs none of those.
+
+   It does **not** remove the read path's dependence on `tag_cardinality`: the
+   windowed arm still seeds on the most selective tag, so question 3 stands
+   unchanged. What it removes is a *second*, new dependence that (2) would have
+   introduced — sampling to pick a plan, on top of sampling to order a chain.
+
+   What it does cost is real, and is this pass's to weigh: `query_sql::chunks`
+   would take the read's window and direction. Only the read path has one — the
+   guard takes `max(position)` over the whole matched set and has no window at
+   all — so the two callers of the one module they deliberately share would stop
+   passing the same shape of argument. That is a decision about `query_sql`'s
+   seam, which is exactly the kind of thing ADR-0022 §10 reasoned about when it
+   refused to mint `Query::index_arms()`.
+
+   Still unmeasured, and named here rather than left to be discovered: **no
+   multi-item query**. Every cell is a union of one arm, while the soundness
+   argument is about a union of many, and VT-23's 128-item floor puts
+   `budget x arms` at 65,536 positions rather than 512.
 
 ## What must remain true
 
@@ -144,6 +167,7 @@ Four questions, in the order they depend on each other.
 | `.../results/guard-cost.md` | six shapes x four scenarios x three log sizes |
 | `.../results/read-path.md` | I-3's wrapper, three candidates, the crossover, and the proposed approach |
 | `.../results/all-query-wrapper.md` | the part of that approach which shipped, and the mechanism it corrected |
+| `.../results/windowed-arms.md` | the fourth candidate, measured: one shape that wins both ends of the axis |
 | `.../results/seed-ordering.md` | the ordering policy's sign flip, both shapes |
 | `.../results/unselective-pair.md` | the adversarial corpus, and the early-exit hypothesis it produced |
 | `experiments/shipped-append-condition-sql/` | the closed record of the shape that shipped until 2026-09-05 |

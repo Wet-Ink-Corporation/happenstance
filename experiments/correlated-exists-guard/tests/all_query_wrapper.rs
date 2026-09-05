@@ -146,7 +146,10 @@ fn the_tautological_wrapper_is_what_it_costs() {
 
     let ceiling = i64::try_from(SIZE).unwrap_or(i64::MAX);
     let shapes = [
-        ("wrapper-in", page_sql("position IN (SELECT position FROM event)")),
+        (
+            "wrapper-in",
+            page_sql("position IN (SELECT position FROM event)"),
+        ),
         ("wrapper-omitted", page_sql("1")),
     ];
 

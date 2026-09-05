@@ -97,7 +97,16 @@ cargo test --release --test all_query_wrapper -- --nocapture --test-threads=1 2>
   | tee results/raw/all-query-wrapper.txt
 
 echo
-echo "==> 10. the selectivity lookup's own cost, at VT-23's item floor"
+echo "==> 10. the fourth candidate read-path.md did not have: the read's window"
+echo "        pushed INTO each arm rather than applied outside it. Both corpora,"
+echo "        three depths and one backwards cell, with the returned page as the"
+echo "        control — soundness is prior to speed, and an arm ordered the wrong"
+echo "        way returns a page that is short rather than obviously wrong."
+cargo test --release --test windowed_arms -- --nocapture --test-threads=1 2>&1 \
+  | tee results/raw/windowed-arms.txt
+
+echo
+echo "==> 11. the selectivity lookup's own cost, at VT-23's item floor"
 cargo test --release --test selectivity_cost -- --nocapture --test-threads=1 2>&1 \
   | tee results/raw/selectivity-cost.txt
 

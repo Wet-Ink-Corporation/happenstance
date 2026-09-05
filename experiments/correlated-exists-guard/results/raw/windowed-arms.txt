@@ -1,0 +1,128 @@
+
+running 1 test
+test the_window_belongs_inside_the_arm ... CONDITIONS	corpus=selective	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000
+PLAN	corpus=selective	cell=first-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=first-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=selective	cell=first-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=selective	cell=first-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=first-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=selective	cell=first-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=selective	cell=first-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=first-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=selective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=26788
+PAGE	corpus=selective	cell=first-page	shape=wrapper-exists	rows=512	us_median=61234
+PAGE	corpus=selective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=5665
+PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=42206
+PAGE	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=68473
+PAGE	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=5530
+PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=selective	cell=late-replay-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=selective	cell=late-replay-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=63656
+PAGE	corpus=selective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=74103
+PAGE	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=7264
+PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=33892
+PAGE	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=77501
+PAGE	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=6570
+CONDITIONS	corpus=unselective	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000
+PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=first-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=unselective	cell=first-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=unselective	cell=first-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=first-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=unselective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=1178687
+PAGE	corpus=unselective	cell=first-page	shape=wrapper-exists	rows=512	us_median=1294
+PAGE	corpus=unselective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=920
+PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=1264879
+PAGE	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=1278
+PAGE	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=906
+PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=1250408
+PAGE	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=751
+PAGE	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=722
+PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
+PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=20 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	id=6 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	id=12 parent=0 CORRELATED SCALAR SUBQUERY 1
+PLAN	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	id=16 parent=12 SEARCH c1 USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	id=27 parent=0 SEARCH c0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
+PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PAGE	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=1208409
+PAGE	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=1246
+PAGE	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=1070
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.68s
+

@@ -126,12 +126,14 @@ Three parts, in increasing order of what they cost to decide:
 3. **Nothing for the middle until (2)'s threshold is measured.** A rule fitted to
    two points is a rule fitted to two points.
 
-Since this page was written, a fourth candidate has been sketched that may make
-(2) unnecessary rather than easier: pushing the read's window and page budget
-**into each arm** instead of applying them outside the wrapper, which bounds the
-matched set at `512 x arms` whatever the corpus. It is not measured by this
-crate's harness and is recorded in
-`references/seeds/adr-0022-shipped-shape-drift.md` rather than claimed here.
+**Since this page was written, (2) has become the wrong question.** A fourth
+candidate pushes the read's window and page budget **into each arm** instead of
+applying them outside the wrapper, which bounds the matched set at
+`budget x arms` whatever the corpus. It was then measured on this crate's
+harness, and it wins **both** corpora, all three depths and the backwards cell —
+so the crossover this section is about does not arise, and no threshold is
+needed to navigate it. See [`windowed-arms.md`](windowed-arms.md); §4 above is
+kept as written because it is the reasoning that produced the question.
 
 **(1) shipped; (2) and (3) did not.** (2) is a decision about when the adapter
 changes its query plan on data it samples, which is ADR-0022's territory and not

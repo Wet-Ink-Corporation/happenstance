@@ -421,6 +421,144 @@ fn exists_sql(
     sql
 }
 
+/// The read's own window, as an arm can carry it.
+///
+/// `fetch_page` applies all four of these *outside* the membership test —
+/// `AND position >= ? AND position <= ? ORDER BY position … LIMIT ?` — where
+/// none of them can reach the arm that builds the matched set. This is the same
+/// four, in a form an arm can carry.
+#[derive(Clone, Copy, Debug)]
+pub struct Window {
+    /// `resume_from`, inclusive. The lower bound in position order whichever
+    /// direction the read runs.
+    pub lo: i64,
+    /// The ceiling, composed with `to`. The upper bound in position order.
+    pub hi: i64,
+    /// `min(remaining, PAGE_SIZE)` — the page budget, not `ReadOptions::limit`.
+    pub budget: i64,
+    /// Whether the read runs backwards, which decides the arm's `ORDER BY` and
+    /// therefore *which* `budget` positions the arm keeps.
+    pub backwards: bool,
+}
+
+/// The `UNION` of one **windowed** arm per item.
+///
+/// # What this is testing
+///
+/// Every candidate in `results/read-path.md` argues about which side of the
+/// join to drive from, and takes the crossover between them as given. None of
+/// them asks why the read's window stops at the subquery boundary — the adapter
+/// *builds* that subquery, so it could push the window in instead of applying
+/// it outside.
+///
+/// The soundness argument is one `fetch_page` already relies on: **the merged
+/// top *b* of a union is a subset of the union of the per-arm top *b***, which
+/// is exactly why it already bounds each *chunk* by the page budget and merges.
+/// Bounding each *arm* is the same claim one level down. An event in the page
+/// is in some arm, and its rank within that arm is no worse than its rank in
+/// the union, so no arm can drop a row the page needed.
+///
+/// If it holds, the matched set is at most `budget x arms` **whatever the
+/// corpus**, and the `IN` wrapper stops being bad on a broad query — which
+/// would mean the crossover the conditional rule exists to navigate does not
+/// arise, rather than being easier to navigate.
+///
+/// # The inner `SELECT` is required, not stylistic
+///
+/// SQLite rejects a bare `LIMIT` on a compound arm — *"LIMIT clause should come
+/// after UNION not before"* — so each arm is wrapped in a subquery that carries
+/// its own `ORDER BY` and `LIMIT`.
+#[must_use]
+pub fn windowed_arms_sql(
+    items: &[QueryItem],
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    if items.is_empty() {
+        return "SELECT position FROM event WHERE 0".to_owned();
+    }
+    items
+        .iter()
+        .map(|item| windowed_item_sql(item, selectivity, window, params))
+        .collect::<Vec<_>>()
+        .join(" UNION ")
+}
+
+/// One windowed arm.
+///
+/// The parameter order is the textual order of the `?`s and nothing else: seed
+/// tag, types, `lo`, `hi`, chained tags, budget. Getting that wrong binds a tag
+/// string to a position comparison, which is not an error — it is zero rows.
+/// This crate has already made that mistake once, on `Wrapper::CorrelatedExists`.
+fn windowed_item_sql(
+    item: &QueryItem,
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    let tags = selectivity.most_selective_first(distinct_tags(item));
+    let types = item.types();
+    let direction = if window.backwards { "DESC" } else { "ASC" };
+
+    // An item with no tags scans `event` rather than the tag index, and takes
+    // the window there. Not exercised by this crate's corpora, and spelled
+    // anyway: an arm shape that carried the window on some arms and not others
+    // would return the wrong page, not a slower one.
+    if tags.is_empty() {
+        let mut inner = String::from("SELECT position FROM event WHERE 1");
+        if !types.is_empty() {
+            for event_type in types {
+                params.push(Value::Text(event_type.as_str().to_owned()));
+            }
+            inner.push_str(&format!(
+                " AND event_type IN ({})",
+                placeholders(types.len())
+            ));
+        }
+        params.push(Value::Integer(window.lo));
+        params.push(Value::Integer(window.hi));
+        params.push(Value::Integer(window.budget));
+        inner.push_str(&format!(
+            " AND position >= ? AND position <= ? ORDER BY position {direction} LIMIT ?"
+        ));
+        return format!("SELECT position FROM ({inner})");
+    }
+
+    let mut inner =
+        String::from("SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ?");
+    params.push(Value::Text(tags[0].clone()));
+    if !types.is_empty() {
+        for event_type in types {
+            params.push(Value::Text(event_type.as_str().to_owned()));
+        }
+        inner.push_str(&format!(
+            " AND seed.event_type IN ({})",
+            placeholders(types.len())
+        ));
+    }
+
+    // The window on the **seed**, which is what turns
+    // `SEARCH seed USING PRIMARY KEY (tag=?)` into
+    // `(tag=? AND position>? AND position<?)` — a seek into the interior of one
+    // contiguous `(tag, position)` range rather than a walk from its start.
+    params.push(Value::Integer(window.lo));
+    params.push(Value::Integer(window.hi));
+    inner.push_str(" AND seed.position >= ? AND seed.position <= ?");
+
+    for (index, tag) in tags[1..].iter().enumerate() {
+        params.push(Value::Text(tag.clone()));
+        inner.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM event_tag AS m{index} WHERE m{index}.tag = ? \
+             AND m{index}.position = seed.position)"
+        ));
+    }
+
+    params.push(Value::Integer(window.budget));
+    inner.push_str(&format!(" ORDER BY seed.position {direction} LIMIT ?"));
+    format!("SELECT position FROM ({inner})")
+}
+
 /// The shipped intersection chain, optionally carrying the boundary in its seed.
 ///
 /// `bound` is `None` for the shape that ships. When it is `Some`, the seed arm
@@ -681,10 +819,33 @@ impl Wrapper {
 /// builds all three statements.
 #[must_use]
 pub fn page_sql_with(wrapper: Wrapper, matched: &str, columns: &str) -> String {
+    page_sql_directed(wrapper, matched, columns, false)
+}
+
+/// [`page_sql_with`], with the read's direction.
+///
+/// `backwards` flips only the outer `ORDER BY`. It is a separate entry point
+/// rather than a fourth argument on the old one because every table in this
+/// crate before it read forwards, and a silent direction parameter would let a
+/// shape be re-timed in the other direction without its table saying so.
+///
+/// A caller pairing this with [`windowed_arms_sql`] must pass the **same**
+/// direction to both. An arm ordered `ASC` under a page ordered `DESC` keeps
+/// the wrong `budget` positions — the oldest rather than the newest — and
+/// returns a page that is *short* rather than obviously wrong, which is why
+/// the control in `tests/windowed_arms.rs` compares whole pages and not counts.
+#[must_use]
+pub fn page_sql_directed(
+    wrapper: Wrapper,
+    matched: &str,
+    columns: &str,
+    backwards: bool,
+) -> String {
+    let direction = if backwards { "DESC" } else { "ASC" };
     match wrapper {
         Wrapper::InSubquery => format!(
             "SELECT {columns} FROM event WHERE position IN ({matched}) \
-             AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?"
+             AND position >= ? AND position <= ? ORDER BY position {direction} LIMIT ?"
         ),
         // The projection has to be qualified here and only here: the join puts
         // two `position` columns in scope, and a bare one is
@@ -695,7 +856,7 @@ pub fn page_sql_with(wrapper: Wrapper, matched: &str, columns: &str) -> String {
             "SELECT {} FROM event JOIN ({matched}) AS m \
              ON m.position = event.position \
              WHERE event.position >= ? AND event.position <= ? \
-             ORDER BY event.position ASC LIMIT ?",
+             ORDER BY event.position {direction} LIMIT ?",
             qualified(columns, "event")
         ),
         // `EXISTS` **first**, and that is about parameter order rather than
@@ -708,7 +869,7 @@ pub fn page_sql_with(wrapper: Wrapper, matched: &str, columns: &str) -> String {
         // returned-page control in `tests/read_path.rs` is what caught it.
         Wrapper::CorrelatedExists => format!(
             "SELECT {columns} FROM event WHERE EXISTS ({matched}) \
-             AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?"
+             AND position >= ? AND position <= ? ORDER BY position {direction} LIMIT ?"
         ),
     }
 }
