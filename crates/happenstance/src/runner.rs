@@ -413,6 +413,97 @@ where
 /// assert_eq!(models.get("sold"), Some(2));
 /// # Ok::<(), Box<dyn Error>>(()) }
 /// ```
+/// # Choosing `chunk`
+///
+/// One number, trading two things against each other in both directions.
+/// Neither direction is a correctness question: every value produces the
+/// same read model, and none of them can produce a wrong one.
+///
+/// **Small.** One `begin`/`commit` pair per `chunk` events, so a chunk of
+/// 1 is one write set, one commit and one durable checkpoint move per
+/// event. That is the most frequent progress anything outside this call
+/// can see, and the highest per-event cost — the port's pair is a
+/// transaction on every adapter that has one.
+///
+/// **Large.** Fewer commits, and a write set holding every application
+/// since the last one. `SqliteProjectionStore`'s batch is an owned
+/// statement list, so a chunk of a million is a million statements held in
+/// memory before anything is durable — and the bounded-window claim above
+/// stays true throughout, because the window is bounded by the number you
+/// passed. Large costs more on a restart too: a chunk that fails is
+/// discarded whole, so everything since the last commit is re-read and
+/// re-applied.
+///
+/// There is no default and no named type, and that is a gap rather than a
+/// position. [`Retry`](crate::Retry) — the same kind of caller-supplied
+/// bound one module over — carries both, and the argument it makes for
+/// having *no* default is about a worst case a caller must see, which does
+/// not transfer unexamined to a knob that changes no outcome. What settles
+/// it is a measurement — wall time, peak resident memory and commit count
+/// against a real adapter across the range — which belongs in
+/// `experiments/`, out of the gate, and which nobody has run. Until then
+/// the `64` above is the doctest's number and not advice.
+///
+/// # What can be seen while it runs
+///
+/// Nothing this call offers. There is no callback, no channel and no
+/// `tracing` instrumentation anywhere in this workspace, and
+/// [`Progressed`] is returned once, at the end. Watched from the outside, a
+/// rebuild over a large log is indistinguishable from a hang for its whole
+/// duration — including the rebuild this page recommends below.
+///
+/// What *is* observable is durable, and it is one thing: the checkpoint
+/// moves once per chunk, and a second handle on the same store reads it
+/// through [`ProjectionStore::checkpoint`]. An operator who wants
+/// "850,000 of 1,000,000 applied" polls that and compares it against the
+/// log themselves.
+///
+/// An observed entry point beside this one would be additive, and free —
+/// these items are behind `unstable-projection` and make no semver promise
+/// — so it is absent rather than foreclosed. It is a question about the
+/// port's surface and belongs with the projection-store freeze.
+///
+/// # Exactly one runner per projection, and the caller owns that
+///
+/// Nothing here enforces it. A [`ProjectionId`] names a checkpoint, not a
+/// lease, and a second runner on the same `(store, ProjectionId)` is
+/// accepted by every store in this workspace — so **exactly one runner per
+/// `(store, ProjectionId)` is the caller's to guarantee**, by whatever
+/// their deployment already uses to elect a singleton.
+///
+/// Only the *backwards* half is guarded. `CheckpointRegression` stops a
+/// stale runner dragging the checkpoint down, which is the rolling-redeploy
+/// case the specification names under PS-22 — but two runners both moving
+/// **forwards** never trip it. They interleave, each applies events the
+/// other has already applied, and the monotonic checkpoint they leave
+/// behind is exactly what a reader would take as evidence that nothing went
+/// wrong. A projection whose `apply` is idempotent survives that; one that
+/// counts, sums or appends does not.
+///
+/// A lease, an ownership token or a fencing token would move the obligation
+/// off the caller and into the port. That is a real design question, it is
+/// owed a measurement rather than a preference, and it belongs with the
+/// projection-store freeze — so what is published now is the obligation,
+/// not a mechanism nobody has run.
+///
+// The three sections above sit *after* the fence rather than beside the subject
+// each belongs to, because three sentences of `SPECIFICATION.md` cite
+// `crates/happenstance/src/runner.rs:401` as the location of this item and that
+// line number is only right while the fence stays where it is: prose added
+// above it pushes the `run_projection` call down and leaves the three citations
+// pointing at whatever now occupies 401.
+//
+// **The gate does not catch that, and this comment used to say it did.**
+// `spec-trace` counts a citation and only *anchors* it where it can derive a
+// subject from the prose beside it — 80 of 401, and these three are not among
+// them. Measured rather than assumed: moving `# Choosing `chunk`` above the
+// fence puts the call 39 lines from the cited line, and `spec-trace` reports the
+// same "80 anchored" and exits 0. What actually holds the line is
+// `crates/happenstance/tests/projection_runner_page.rs`, which asserts the two
+// sections this lane added stay below the fence and says why.
+//
+// Moving a section up is still *allowed*; it costs the three citations moving
+// with it, and nothing but a reader will tell you.
 pub async fn run_projection<S, P, C>(
     events: &S,
     models: &P::Store,

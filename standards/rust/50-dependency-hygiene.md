@@ -41,8 +41,8 @@ majors of it, discovered — if ever — in `cargo deny` output nobody reads.
 `wildcards = "deny"` is the same lint family set to the other level, and it is
 `deny` precisely because a `*` requirement cannot be assessed at all.
 
-**Evidence.** `Cargo.toml:32 (zero new crates)` ·
-`Cargo.toml:36 (a warning nobody reads)` ·
+**Evidence.** `Cargo.toml:47 (zero new crates)` ·
+`Cargo.toml:51 (a warning nobody reads)` ·
 `deny.toml:23 (multiple-versions)` ·
 [cargo-deny bans](https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -88,7 +88,7 @@ accept it, and gets the defaults regardless — `-D warnings` reaches rustc and
 clippy, not cargo's manifest warnings, so every step of the gate stays green.
 The real fix is a workspace edit that changes what all eight crates resolve.
 
-**Evidence.** `Cargo.toml:21 (Cargo forbids a member from)` ·
+**Evidence.** `Cargo.toml:30 (Cargo forbids a member from)` ·
 `crates/happenstance-core/Cargo.toml:35 (default = ["std", "memory"])` ·
 [Cargo Book — inheriting a dependency from a workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-dependencies-table) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -123,9 +123,9 @@ behind it, so the person who sees red is whoever opens CI on a Tuesday — and
 the advisory names a crate three levels down that no manifest in this workspace
 mentions.
 
-**Evidence.** `Cargo.toml:45 (ffi-sqlite-wasm-rs)` ·
-`Cargo.toml:89 (RUSTSEC-2023-0089)` ·
-`.github/workflows/ci.yml:339 (cargo deny check advisories)` ·
+**Evidence.** `Cargo.toml:70 (ffi-sqlite-wasm-rs)` ·
+`Cargo.toml:81 (RUSTSEC-2023-0089)` ·
+`.github/workflows/ci.yml:463 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-4. A licence rejection is a dependency choice, and the offender is rarely the crate you expect.
@@ -160,9 +160,9 @@ not better: it passes on Windows, where it resolves to `schannel`, and says
 nothing about the Linux graph, which reaches `openssl-sys` instead. A green
 local gate on one OS is then the whole of the evidence.
 
-**Evidence.** `Cargo.toml:59 (CDLA-Permissive-2.0)` ·
-`Cargo.toml:62 (is the Mozilla CA root)` ·
-`deny.toml:10 (version = 2)` · `deny.toml:2 (all-features = true)` ·
+**Evidence.** `Cargo.toml:97 (CDLA-Permissive-2.0)` ·
+`Cargo.toml:100 (is the Mozilla CA root)` ·
+`deny.toml:9 (version = 2)` · `deny.toml:2 (all-features = true)` ·
 [cargo-deny licenses](https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-5. Do not add a dependency to run four assertions — model the shape with a stand-in and cite the real call site.
@@ -229,6 +229,6 @@ reasoning for the state you are leaving is what a reviewer checks the change
 against.
 
 **Evidence.** `crates/happenstance-cloudflare/Cargo.toml:39 (was deliberately absent)` ·
-`crates/happenstance-cloudflare/src/lib.rs:473 (exists to run four assertions)` ·
-`crates/happenstance-cloudflare/src/sql_storage.rs:4 (Four properties are load-bearing)` ·
+`crates/happenstance-cloudflare/src/lib.rs:518 (exists to run four assertions)` ·
+`crates/happenstance-cloudflare/src/sql_storage.rs:5 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

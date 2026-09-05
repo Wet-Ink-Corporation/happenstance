@@ -18,7 +18,9 @@
 //!   positives. A long and vacuous `**Rejects.**` passes here. The instrument for
 //!   that is an adversarial reader, not a byte count.
 //! * **It does not check that a citation's *claim* is true**, only that the
-//!   cited file has that line and that the anchor text is near it.
+//!   cited file has that line and that the line carries the anchor text. Not
+//!   *near* it: [`anchor_problem`] replaced a ten-line window that let a third
+//!   of the corpus be green while pointing somewhere else.
 //! * **It does not run the examples.** A fence tagged `rust` is asserted to
 //!   exist; whether it compiles is the doctest step's answer, and the two are
 //!   separate gate steps on purpose.
@@ -102,13 +104,21 @@ const MAX_ATOM_BYTES: usize = 16_384;
 /// about.
 const FORBIDDEN_IN_FENCE: &[&str] = &[".unwrap()", ".expect("];
 
-/// How far from its stated line an anchor may sit before the citation is stale.
+/// The file extensions that make a backticked span a citation.
 ///
-/// Not zero: a citation that has to be re-numbered for every edit above it is a
-/// citation people stop maintaining. Ten lines is enough to survive ordinary
-/// editing and far too little to survive a function moving, which is the drift
-/// this catches.
-const ANCHOR_SLACK: usize = 10;
+/// This list is the *whole* test — see [`Span::rfind_path_colon`]. It is also
+/// what keeps ordinary prose out: `Note: something` and `error[E0433]: cannot
+/// find` carry a colon and no extension, so they are not citations.
+///
+/// `.yml` is here on purpose, and it is the entry that was missing: the
+/// constitution cites `.github/workflows/ci.yml` three times, and until this
+/// list grew that entry those three were parsed, discarded and reported as
+/// nothing. A workflow file is exactly where a gate step's real definition
+/// lives, so a citation into one is the kind this corpus most needs held
+/// honest. Anything absent from this list is skipped in silence — the failure
+/// this constant exists to make impossible to reintroduce by accident — so add
+/// the extension rather than leaving a citation unchecked.
+const CITED_EXTENSIONS: &[&str] = &[".rs", ".toml", ".md", ".yml"];
 
 /// Whether to check the router's generated region or rewrite it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -682,9 +692,6 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
                 continue;
             };
             let (path, tail) = (&span.text[..colon], &span.text[colon + 1..]);
-            if !(has_ext(path, ".rs") || has_ext(path, ".toml") || has_ext(path, ".md")) {
-                continue;
-            }
             let Some(citation) = parse_citation(tail) else {
                 problems.push(format!(
                     "{at} — `{}` looks like a citation and does not parse as \
@@ -707,17 +714,8 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
                 ));
                 continue;
             }
-            let low = citation.line.saturating_sub(ANCHOR_SLACK + 1);
-            let high = (citation.line + ANCHOR_SLACK).min(lines.len());
-            if !lines[low..high]
-                .iter()
-                .any(|l| l.contains(&citation.anchor))
-            {
-                problems.push(format!(
-                    "{at} — `{path}:{}` no longer has `{}` within {ANCHOR_SLACK} lines; \
-                     the citation points at the wrong place",
-                    citation.line, citation.anchor
-                ));
+            if let Some(problem) = anchor_problem(path, &lines, &citation) {
+                problems.push(format!("{at} — {problem}"));
             }
         }
 
@@ -754,6 +752,87 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
     }
 }
 
+/// What is wrong with a citation whose stated line does not carry its anchor,
+/// and where the anchor actually is.
+///
+/// **Exact, with no window at all.** A `const ANCHOR_SLACK: usize = 10` stood
+/// here, and its rationale was a prediction about a distribution — *ordinary
+/// editing* stays inside ten lines, *a function moving* does not — that nobody
+/// had ever measured. Measured on 2026-09-04 over the whole corpus: 88 of 323
+/// anchored citations were green only on the tolerance, the offsets did not
+/// decay with distance (a lobe of 22 at +7, ten at +9, two at exactly +10, one
+/// inserted line from red), and three citations had already drifted onto the
+/// *wrong* line while staying green — a closing brace cited for an attribute,
+/// an `[advisories]` table cited for a licences rule, and the line above a
+/// field. A green read as coverage and not coverage is worse than no check,
+/// because it retires the reader's own vigilance, and
+/// `standards/rust/README.md:118` promises every reader of the corpus exactly
+/// the check this now performs.
+///
+/// The tolerance existed to spare a maintainer a renumbering, and that cost was
+/// real. It is paid here instead: on a miss the whole file is searched and the
+/// message **names the line the citation should carry**, so the repair is one
+/// keystroke rather than a `grep`.
+///
+/// Where the anchor is not unique the message lists every candidate and
+/// **refuses to choose**. That refusal is the point, not a limitation: a
+/// checker that guesses at an ambiguous anchor has reintroduced, with more
+/// confidence, the defect it exists to catch — which is what the window was
+/// doing every time it silently accepted the *nearest* occurrence.
+///
+/// # Why `spec_trace` still has a window, and this does not
+///
+/// [`crate::spec_trace`] keeps `const ANCHOR_SLACK: usize = 12` over
+/// `SPECIFICATION.md`. The two numbers differed silently for as long as both
+/// existed; they differ *stated* now, and this is one half of the statement —
+/// `spec_trace.rs:378 (Why this window survives)` is the other.
+///
+/// The difference is not a disagreement about strictness. **Here the anchor is
+/// written and there it is derived.** An atom quotes its anchor beside the line
+/// number, so "the cited line contains it" is exactly the claim the citation
+/// makes. `spec_trace` has no quoted text: it takes the identifier the
+/// specification's prose reached for and looks for it near a range that points
+/// at the evidence — usually a doc comment, with the signature carrying the
+/// identifier just outside it. Closing that window reddens 21 of its 80 anchored
+/// citations, 20 of them inside `[FROZEN]` clause commentary, and the repair
+/// would move each citation off the prose it is evidence for. Measured
+/// 2026-09-04; the numbers and the worked cases are at that site.
+///
+/// # The wrong implementation
+///
+/// Returning the nearest occurrence when there are several. It is one line of
+/// code and it is the whole `[advisories]`-cited-for-`[licenses]` failure,
+/// automated.
+fn anchor_problem(path: &str, lines: &[&str], citation: &Citation) -> Option<String> {
+    if lines[citation.line - 1].contains(&citation.anchor) {
+        return None;
+    }
+    let found: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains(&citation.anchor))
+        .map(|(index, _)| (index + 1).to_string())
+        .collect();
+    let head = format!(
+        "`{path}:{}` does not carry `{}`",
+        citation.line, citation.anchor
+    );
+    Some(match found.as_slice() {
+        [] => format!(
+            "{head}, and the anchor is nowhere in the file. No renumbering finds \
+             a line that is not there: read for the surviving statement of the \
+             same claim, cite that, and say in the change that you chose it"
+        ),
+        [only] => format!("{head}; it is on line {only}"),
+        candidates => format!(
+            "{head}; the anchor is on lines {}. Choose one by reading — this \
+             check will not choose for you, because an anchor that matches many \
+             lines is a badly chosen anchor and sharpening it is the repair",
+            candidates.join(", ")
+        ),
+    })
+}
+
 /// A backtick-delimited span, with the position it started at.
 struct Span {
     /// The span's contents, without its delimiters.
@@ -762,9 +841,20 @@ struct Span {
 
 impl Span {
     /// The colon separating a path from its line number, if the span has one.
+    ///
+    /// A **known file extension** is what makes a span a citation. The test this
+    /// replaced asked for a slash before the colon, which kept prose out — but
+    /// silently discarded every citation into a repository-root file, because
+    /// `Cargo.toml:160` has no slash to find. That was one predicate here and a
+    /// second, disagreeing one at the call site; there is one now, and
+    /// [`CITED_EXTENSIONS`] is it.
     fn rfind_path_colon(&self) -> Option<usize> {
         let colon = self.text.find(':')?;
-        self.text[..colon].contains(['/', '\\']).then_some(colon)
+        let path = &self.text[..colon];
+        CITED_EXTENSIONS
+            .iter()
+            .any(|ext| has_ext(path, ext))
+            .then_some(colon)
     }
 }
 
@@ -841,6 +931,57 @@ mod tests {
     }
 
     #[test]
+    fn a_citation_into_a_root_level_file_is_seen() {
+        // The real defect this parser exists to catch: `Cargo.toml`, `deny.toml`
+        // and `clippy.toml` sit at the repository root, so their citations carry
+        // no slash. A path test that demands one drops them before the extension
+        // filter downstream ever runs — not reported unparseable, not reported
+        // external, just gone — and the workspace lint table's citations rot while
+        // the checker prints "27 atoms, all consistent".
+        let spans = spans("`Cargo.toml:160 (unsafe_code = \"forbid\")`");
+        let first = spans.first().unwrap();
+        let colon = first
+            .rfind_path_colon()
+            .expect("a root-level file is still a path");
+        assert_eq!(&first.text[..colon], "Cargo.toml");
+        let citation = parse_citation(&first.text[colon + 1..]).unwrap();
+        assert_eq!(citation.line, 160);
+        assert_eq!(citation.anchor, "unsafe_code = \"forbid\"");
+    }
+
+    #[test]
+    fn prose_that_carries_a_colon_is_not_a_citation() {
+        // What the discarded slash test was actually for. The corpus quotes
+        // diagnostics and labels inside backticks, and reading one as a path
+        // would turn `check_citations` into a machine for reporting that
+        // `error[E0433]` does not exist — noise that trains a reader to skim
+        // past the reports that are real.
+        for prose in [
+            "error[E0433]: failed to resolve",
+            "Note: the bound is on the definition",
+            "warning: unused import: `core::fmt`",
+            "https://doc.rust-lang.org/nomicon",
+            "Load when: adding a gate step",
+        ] {
+            let spans = spans(&format!("`{prose}`"));
+            assert!(
+                spans[0].rfind_path_colon().is_none(),
+                "`{prose}` was read as a citation"
+            );
+        }
+    }
+
+    #[test]
+    fn a_workflow_citation_is_seen() {
+        // `.github/workflows/ci.yml` is cited three times and, until `.yml`
+        // joined the extension list, checked never — the same silence as the
+        // root-level files above, arriving by a different route.
+        let spans = spans("`.github/workflows/ci.yml:309 (baseline-rev)`");
+        let colon = spans[0].rfind_path_colon().unwrap();
+        assert_eq!(&spans[0].text[..colon], ".github/workflows/ci.yml");
+    }
+
+    #[test]
     fn a_well_formed_citation_parses() {
         let citation = parse_citation("642 (fn spawns_from_generic)").unwrap();
         assert_eq!(citation.line, 642);
@@ -874,5 +1015,119 @@ mod tests {
         assert_eq!(found[0].id, "RS-21-1");
         assert!(found[0].body.contains("body a"));
         assert!(!found[0].body.contains("body b"));
+    }
+
+    /// A fabricated workspace root under `std::env::temp_dir()`, never the
+    /// workspace's own trees and never `tempfile` — mirroring
+    /// `spec_trace::tests::fabricated_root`, which this module cannot reuse
+    /// because it is a private helper of a sibling module. The nanosecond stamp
+    /// keeps two parallel tests from sharing a directory.
+    fn fabricated_root(label: &str) -> std::path::PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("hs-lint-constitution-{label}-{stamp}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// An [`Atom`] carrying nothing but the text [`check_citations`] reads.
+    fn atom_of(text: &str) -> Atom {
+        Atom {
+            file: "99-fixture.md".to_owned(),
+            band: "99".to_owned(),
+            module: "band_99".to_owned(),
+            text: text.to_owned(),
+            load_when: String::new(),
+            rules: Vec::new(),
+            fences: Vec::new(),
+        }
+    }
+
+    /// Runs C8 over one fabricated atom against one fabricated target file.
+    fn citations_of(label: &str, target: &str, body: &str, atom_text: &str) -> Vec<String> {
+        let root = fabricated_root(label);
+        let path = root.join(target);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, body).unwrap();
+        let mut problems = Vec::new();
+        check_citations(&root, &atom_of(atom_text), &mut problems);
+        problems
+    }
+
+    #[test]
+    fn a_citation_one_line_off_is_reported_and_told_where_to_go() {
+        // The defect the window hid. `fn subject` is on line 3 and the citation
+        // says 2, which is the smallest possible drift and the one an insertion
+        // above a cited line produces every time. Under a tolerance of ten this
+        // is green, and a reader who takes the step's "all consistent" for what
+        // `standards/rust/README.md` says it means is misled: that page promises
+        // the cited line *contains* its anchor, and a windowed check cannot
+        // deliver it.
+        let problems = citations_of(
+            "one-line-off",
+            "src/subject.rs",
+            "// a\n// b\nfn subject() {}\n",
+            "**Evidence.** `src/subject.rs:2 (fn subject)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("src/subject.rs:2"),
+            "the report must name the citation: {}",
+            problems[0]
+        );
+        assert!(
+            problems[0].contains("line 3"),
+            "the report must name the line the anchor is actually on: {}",
+            problems[0]
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_anchor_is_listed_and_not_chosen_for_you() {
+        // The failure mode a repair message reintroduces if it guesses. Three
+        // lines carry `impl Defect for` and nothing in the file says which one
+        // the atom meant; a checker that picks the nearest is doing what the
+        // slack did, one layer up and with more confidence. `mutants.rs` really
+        // has seventy of these.
+        let problems = citations_of(
+            "ambiguous",
+            "src/mutants.rs",
+            "// a\n// b\nimpl Defect for A {}\n// d\n// e\nimpl Defect for B {}\n\
+             // g\n// h\nimpl Defect for C {}\n// j\n",
+            "**Evidence.** `src/mutants.rs:5 (impl Defect for)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("lines 3, 6, 9"),
+            "the report must list every candidate: {}",
+            problems[0]
+        );
+        assert!(
+            problems[0].contains("choose"),
+            "the report must leave the choice to a reader: {}",
+            problems[0]
+        );
+    }
+
+    #[test]
+    fn an_anchor_deleted_from_the_file_asks_for_a_human() {
+        // `52-wasm32-and-target-cfg.md`'s citation into `ci.yml`, whose anchor
+        // text was removed outright at `8ea7bb7`. No renumbering can find a line
+        // that is not there, and a message that says only "no longer has" sends
+        // the reader looking for one.
+        let problems = citations_of(
+            "deleted",
+            ".github/workflows/ci.yml",
+            "name: ci\njobs:\n  gate:\n",
+            "**Evidence.** `.github/workflows/ci.yml:2 (baseline-rev)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("nowhere in the file"),
+            "the report must say the anchor is gone, not merely misplaced: {}",
+            problems[0]
+        );
     }
 }

@@ -81,8 +81,8 @@ diagnostics at once against a store owning a `rusqlite::Connection` directly, on
 per method of the trait, and the fix was a single `Mutex` at the field rather
 than anything in any body.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:657 (across an await, which needs)` ·
-`crates/happenstance-sqlite/src/event_store.rs:147 (flavour captures)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:670 (across an await, which needs)` ·
+`crates/happenstance-sqlite/src/event_store.rs:219 (flavour captures)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -122,8 +122,8 @@ and `Arc` is "the thread-safe one" produces a type that is neither `Send` nor
 `EventStore` instead. That compiles, passes the whole suite, and ships an adapter
 no consumer can spawn.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:153 (is not for sharing the store; it is so that a)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1116 (is what makes the whole)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:225 (is not for sharing the store; it is so that a)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1451 (is what makes the whole)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -182,8 +182,8 @@ pointing at `tokio::spawn` and naming `S::Error`, a type the runner's author
 never chose and cannot change. The fix is at the bind site; the search starts at
 the adapters.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:679 (held across the *next* await would make)` ·
-`crates/happenstance-core/src/memory.rs:684 (a second await against the same borrow)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:692 (held across the *next* await would make)` ·
+`crates/happenstance-core/src/memory.rs:706 (a second await against the same borrow)` ·
 `crates/happenstance-cloudflare/src/send_shape.rs:7 (on that future's)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md) *(these six diagnostics carry no error code)*
@@ -244,8 +244,8 @@ witness that is `Send` on the one target the two-flavour design exists for, and
 learns it on the day Workers enables threads — after the bound it was cited for is
 frozen.
 
-**Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/js.rs:23 (unsafe impl Send for JsValue)` ·
 `crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
-`crates/happenstance-cloudflare/src/lib.rs:246 (can only ever *inherit*)` ·
+`crates/happenstance-cloudflare/src/lib.rs:282 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

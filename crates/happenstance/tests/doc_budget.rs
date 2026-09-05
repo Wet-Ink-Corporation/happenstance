@@ -252,14 +252,21 @@ fn every_emitted_path_is_crate_qualified() {
     }
 }
 
+/// Nothing of ours shadows a name the contract crate publishes.
+///
+/// This test opened with `contains("pub use happenstance_core::*;")` — the
+/// glob, spelled as a requirement. That was the wrong half of the intention
+/// written down. What the facade owes a reader is that the contract's *paths
+/// still resolve here*; the glob was one way to deliver that, and it also
+/// mounted every item the contract gates on a feature of **its** own, the
+/// unfrozen projection port included. Requiring the mechanism rather than the
+/// promise is what made the leak look like policy. The promise moved to
+/// `tests/contract_surface.rs`, which holds it name by name and gate by gate and
+/// forbids the glob; what stays here is the shadowing half, which is this
+/// file's own subject — the rendered page.
 #[test]
-fn the_glob_reexport_survives_and_nothing_shadows_it() {
+fn nothing_shadows_a_contract_name() {
     let root = read("lib.rs");
-
-    assert!(
-        root.contains("pub use happenstance_core::*;"),
-        "the contract crate's glob re-export must survive"
-    );
 
     // No item of ours may take a contract name. A second `Query` on the page
     // is two entries with one name, and a silent breaking change to a facade

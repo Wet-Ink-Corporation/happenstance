@@ -2,11 +2,19 @@
 
 ## Reporting a vulnerability
 
-**Use GitHub's private vulnerability reporting:** open the
+**Email <security@wet-ink.net>.** That is the channel that works today, and it
+reaches the maintainers privately.
+
+**If you would rather use GitHub's private vulnerability reporting**, open the
 [Security tab](https://github.com/Wet-Ink-Corporation/happenstance/security/advisories)
-and choose *Report a vulnerability*. That opens a private thread with the
-maintainers, and it is the only channel that gets you a fix before the problem is
-public.
+and choose *Report a vulnerability*. It is the better mechanism where it is
+available: it keeps the report, the fix and the advisory in one thread.
+
+**That link does not resolve for everyone, and if it 404s for you, nothing is
+wrong with your report — use the address above.** The repository is not public
+yet. This is stated rather than left for you to discover, because the alternative
+is a reporter following a broken link, reading the next paragraph, and concluding
+there is nowhere to go.
 
 **Please do not open a public issue for a vulnerability**, and please do not send
 a proof of concept to a public discussion. Everything else in this project is
@@ -15,7 +23,7 @@ every decision — and this is the one exception.
 
 Expect an acknowledgement within a few days. This is a small project and there is
 no on-call rota; if you have had no reply within a week, assume the notification
-was missed rather than ignored, and say so on the same thread.
+was missed rather than ignored, and say so — on the same thread, or by email.
 
 ## What is in scope
 
@@ -24,12 +32,20 @@ The crates this repository publishes, at their published versions:
 - `happenstance`
 - `happenstance-core`
 - `happenstance-testkit`
-- `happenstance-sqlite`
 
-`happenstance-cloudflare` is finished and packaged but deliberately not in the
-`0.2.0` release, so the only thing under its name on crates.io is a `0.0.0`
-placeholder with no functionality. Report against the source in this repository
-if you find something there; it joins the list above when it ships.
+**Two crates are packaged but not yet on the registry**, and the distinction
+matters when you are deciding what to report against. For both, the only thing
+under the name on crates.io today is a `0.0.0` placeholder with no
+functionality and no dependencies — it never linked a driver and has never put
+anything in front of a consumer. **Report against the source rather than
+against that placeholder**, and each joins the list above when it ships. While
+the repository is private, describe what you found and mail it to the address
+above; you will not be asked for a link you cannot reach.
+
+- `happenstance-sqlite` **is** in the `0.2.0` release and simply has not shipped
+  yet.
+- `happenstance-cloudflare` is finished and packaged but deliberately **not** in
+  the `0.2.0` release.
 
 Things worth reporting, because they are what this library is *for*:
 

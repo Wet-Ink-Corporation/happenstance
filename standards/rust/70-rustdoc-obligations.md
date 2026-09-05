@@ -82,10 +82,10 @@ implement against. The adapter author reading the published documentation is the
 first to notice, and by then the version is on crates.io, where a yank does not
 remove it.
 
-**Evidence.** `Cargo.toml:100 (Members opt in with)` · `Cargo.toml:103 (missing_docs)` ·
-`Cargo.toml:116 (missing_errors_doc)` ·
+**Evidence.** `Cargo.toml:158 (Members opt in with)` · `Cargo.toml:161 (missing_docs)` ·
+`Cargo.toml:174 (missing_errors_doc)` ·
 `crates/happenstance-core/Cargo.toml:104 (workspace = true)` ·
-`crates/happenstance-core/src/store.rs:251 (AppendError::NoEvents)` ·
+`crates/happenstance-core/src/store.rs:258 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
 ---
@@ -155,11 +155,11 @@ consumer — is a hard error. `MemoryProjectionStore`'s page linking
 configuration so that the rule is checked where the consumer stands.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
-`crates/happenstance-core/src/store.rs:99 (It is not linked because)` ·
+`crates/happenstance-core/src/store.rs:106 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
-`xtask/src/main.rs:809 (no default features)` ·
-`xtask/src/main.rs:838 (documentation (default features))` ·
-`Cargo.toml:134 (broken_intra_doc_links)`
+`xtask/src/main.rs:831 (no default features)` ·
+`xtask/src/main.rs:860 (documentation (default features))` ·
+`Cargo.toml:192 (broken_intra_doc_links)`
 
 ---
 
@@ -248,7 +248,7 @@ rendering is permanent for that number, and the author learns about it from the
 docs.rs build log rather than from anything they ran.
 
 **Evidence.** `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
-`xtask/src/main.rs:63 (nightly rustdoc build with)` ·
+`xtask/src/main.rs:66 (nightly rustdoc build with)` ·
 [rustc removed features](https://raw.githubusercontent.com/rust-lang/rust/master/compiler/rustc_feature/src/removed.rs) *(checked 2026-08-09, rustc 1.97.1)* ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -321,7 +321,7 @@ trait would have met ES-30. Without it the trade is re-argued by whoever
 remembers it, and in the meantime a blanket body no adapter can override has
 displaced SQLite's `SELECT max(position)` fast path.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:270 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:281 (where Self: Sync)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:277 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:288 (where Self: Sync)` ·
 [SPECIFICATION ES-30](../../spec/SPECIFICATION.md) ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)

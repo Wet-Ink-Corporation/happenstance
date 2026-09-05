@@ -6,7 +6,8 @@
 //! Every rule in [`rules`](crate::rules) is a worked example: these events, this
 //! query, that result. Twenty-seven of them were measured letting four plausible
 //! wrong adapters through, and the reason is combinatorial rather than
-//! editorial — `query × from × backwards × limit × condition × position policy`
+//! editorial — `query × from × to × backwards × limit × condition × position
+//! policy`
 //! is a space no hand-written example set covers, and the interactions are
 //! exactly where an adapter's generated SQL goes wrong. This module generates
 //! that space instead of enumerating it.
@@ -95,7 +96,7 @@ use happenstance_core::{
     AppendCondition, AppendError, Event, EventStore, Query, ReadOptions, SequencePosition,
     SequencedEvent, collect,
 };
-use proptest::prelude::{Strategy, prop, prop_oneof};
+use proptest::prelude::{Just, Strategy, prop, prop_oneof};
 
 use crate::Fixture;
 use crate::fixtures::strategies::{any_event, any_query};
@@ -165,11 +166,28 @@ pub enum Op {
         anchor: Anchor,
     },
     /// Read, with every read option in play.
+    ///
+    /// **All five, since phase 12.** The doc line above said "every read option"
+    /// while the variant carried four of them, and the missing one was `to` —
+    /// which made the two `to` branches of `Model::select` dead code under a
+    /// comment explaining why a model that ignores an option is worthless. A
+    /// wrong store this file could not disagree with, `WHERE a OR b AND position
+    /// <= ?`, is registered as `UnparenthesisedToPredicateStore` and is what
+    /// closing this bought.
     Read {
         /// What to match.
         query: Query,
         /// The inclusive `from` bound.
         from: Anchor,
+        /// The inclusive `to` bound — the *stopping* end, which is the higher
+        /// position reading forwards and the lower one reading backwards.
+        ///
+        /// Generated independently of `from`, and the pairs where the two cross
+        /// are kept rather than filtered out. A window whose ends are the wrong
+        /// way round is an empty read, both here and in a conformant store, and
+        /// an adapter that answers it with anything else is exactly the kind of
+        /// thing this family exists to find.
+        to: Anchor,
         /// Whether to read newest-first.
         backwards: bool,
         /// A truncation, if any. Never zero — `ReadOptions::limit(0)` is
@@ -187,6 +205,33 @@ fn any_anchor() -> impl Strategy<Value = Anchor> {
         Anchor::Head,
         Anchor::BeyondHead,
     ])
+}
+
+/// Generates the `to` bound, weighted towards absent.
+///
+/// [`any_anchor`] with a thumb on the scale, and the thumb is **measured rather
+/// than aesthetic**. `to` is a fifth independently sampled read option, and
+/// sampling it the way the other four are sampled dilutes every combination of
+/// them: the first version of this generator did exactly that, and the model
+/// stopped catching `LimitPerItemStore` — whose defect needs `limit` set on a
+/// multi-item query, and which the model had rejected for three phases.
+/// `MODEL_COVERAGE` is what noticed, which is the whole reason that table lists
+/// every store rather than only the ones the model catches.
+///
+/// So four reads in five carry no upper bound, which is what the four-option
+/// generator produced, and the fifth reaches the branches nothing else reaches.
+/// The four bounded anchors are the same four `any_anchor` offers minus
+/// [`Anchor::Unset`], which the weighted arm above supplies.
+fn any_to_anchor() -> impl Strategy<Value = Anchor> {
+    prop_oneof![
+        4 => Just(Anchor::Unset),
+        1 => prop::sample::select(vec![
+            Anchor::First,
+            Anchor::Middle,
+            Anchor::Head,
+            Anchor::BeyondHead,
+        ]),
+    ]
 }
 
 /// Generates a batch of one to three events.
@@ -210,8 +255,10 @@ fn any_op() -> impl Strategy<Value = Op> {
         // Reads are weighted highest because they are where the option
         // interactions live, and because they are the only op that cannot
         // change the state the later ops are checked against.
-        4 => (any_query(), any_anchor(), prop::bool::ANY, prop::option::of(1usize..4))
-            .prop_map(|(query, from, backwards, limit)| Op::Read { query, from, backwards, limit }),
+        4 => (any_query(), any_anchor(), any_to_anchor(), prop::bool::ANY, prop::option::of(1usize..4))
+            .prop_map(|(query, from, to, backwards, limit)| {
+                Op::Read { query, from, to, backwards, limit }
+            }),
     ]
 }
 
@@ -294,6 +341,15 @@ impl Model {
         // model that ignores an option cannot disagree with a store that
         // mishandles it — it would agree with every implementation, which is the
         // one thing a reference model must not do.
+        //
+        // That sentence was an *aspiration* until phase 12. These two `to`
+        // branches were written here and were dead: `Op::Read` carried no `to`
+        // field, `any_op` generated none, and `apply` never called `.to(..)`, so
+        // `options.to` was `None` on every read this function ever saw. The
+        // three registered `to` mutants sat in `MODEL_COVERAGE` as `Agreed` and
+        // said so. Adding one field and one generator arm is what made the
+        // comment true, and `UnparenthesisedToPredicateStore` is the store that
+        // now has nowhere else to be caught.
         let mut selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
@@ -464,12 +520,16 @@ impl Model {
             Op::Read {
                 query,
                 from,
+                to,
                 backwards,
                 limit,
             } => {
                 let mut options = ReadOptions::new();
                 if let Some(from) = self.resolve(*from) {
                     options = options.from(from);
+                }
+                if let Some(to) = self.resolve(*to) {
+                    options = options.to(to);
                 }
                 if *backwards {
                     options = options.backwards();
@@ -733,7 +793,7 @@ macro_rules! __emit_model_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::model::rules::$name(__conformance_fixture)
+                $crate::__private::model_rules::$name(__conformance_fixture)
                     .await
                     .report(::core::stringify!($name));
             }
@@ -750,7 +810,7 @@ macro_rules! __emit_model_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::model::rules::$name(__conformance_fixture))
+                $crate::__private::block_on($crate::__private::model_rules::$name(__conformance_fixture))
                     .report(::core::stringify!($name));
             }
         )*

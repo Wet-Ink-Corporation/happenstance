@@ -71,9 +71,9 @@ E>` refactor the outermost item is the future, `trait_variant` marks *that*
 `Send`, and this is satisfied by the wrong thing. `spawns_from_generic` is the
 second test, and it takes both.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:614 (fn send_flavour_stream_is_send_in_generic_code)` ·
-`crates/happenstance-core/src/memory.rs:621 (on a concrete store)` ·
-`crates/happenstance-core/src/memory.rs:643 (async fn spawns_from_generic)` ·
+**Evidence.** `crates/happenstance-core/src/memory.rs:628 (fn send_flavour_stream_is_send_in_generic_code)` ·
+`crates/happenstance-core/src/memory.rs:635 (on a concrete store)` ·
+`crates/happenstance-core/src/memory.rs:657 (async fn spawns_from_generic)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 
@@ -161,9 +161,9 @@ was the instrument for it: it would have reported "still owned" the day the
 binding became `Transaction<'a, Postgres>`, and the finding would have been the
 compile error in some downstream runner months later.
 
-**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:159 (proved nothing)` ·
-`crates/happenstance-postgres/src/projection_store.rs:164 (universally-quantified lifetime)` ·
-`crates/happenstance-postgres/src/projection_store.rs:180 (fn the_batch_does_not_borrow_the_store)` ·
+**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:161 (proved nothing)` ·
+`crates/happenstance-postgres/src/projection_store.rs:166 (universally-quantified lifetime)` ·
+`crates/happenstance-postgres/src/projection_store.rs:182 (fn the_batch_does_not_borrow_the_store)` ·
 [SPECIFICATION PS-5](../../spec/SPECIFICATION.md)
 
 ---
@@ -238,9 +238,9 @@ that its error type cannot cross a thread, and the claim is discovered to be
 untested when someone adds a `Send` bound to `EventStore::Error` and nothing
 fails.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:484 (struct Probe)` ·
-`crates/happenstance-cloudflare/src/lib.rs:540 (fn the_probe_is_not_vacuous)` ·
-`crates/happenstance-cloudflare/src/lib.rs:495 (is the entire mechanism)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:529 (struct Probe)` ·
+`crates/happenstance-cloudflare/src/lib.rs:585 (fn the_probe_is_not_vacuous)` ·
+`crates/happenstance-cloudflare/src/lib.rs:540 (is the entire mechanism)` ·
 `crates/happenstance-testkit/tests/local_conformance.rs:426 (is the entire mechanism)` ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md)
 

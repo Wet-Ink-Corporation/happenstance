@@ -153,11 +153,11 @@ turned out to be one DCB already provides.
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
 | 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
 | 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | **done** | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
-| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
-| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
+| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | done | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
+| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | done | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
-| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
-| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
+| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
+| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
 | 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
@@ -166,6 +166,41 @@ turned out to be one DCB already provides.
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
 place.
+
+### The pre-publication remediation, and what it did to phase 12
+
+Not a phase, and deliberately not given a row above: it is a review of everything
+phases 0–9 built, and it gates phase 12 rather than sitting beside it.
+
+`references/evaluation/review-pre-publication-2026-09-03.md` raised **96 finding
+IDs across 84 entries** against `56ef6c5`. On branch `remediation/pre-publication`,
+**65 are closed with the full gate green** and **48 briefs await ratification** in
+`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is
+genuinely blocked, and narrower than the audit filed it: half of it was refuted
+during the work — the rule's second assertion **does** execute, twice per run —
+and what survives is that it has never been answered by a store with a real
+medium under it, which is the phase-10 adapter that does not exist. Five decisions
+were ratified by the owner during the work, including publishing the repository and
+closing `ANCHOR_SLACK`.
+
+**What it changes about phase 12's exit criteria, which are stated below at
+`Phase 12 — Publish 0.2.0`.** Those criteria audit every `[PROVISIONAL]` and
+`[DEFERRED]` clause on a published surface and ask nothing about whether a
+`[FROZEN]` one is *met by the adapter being published*. This remediation found
+four cases where it was not — `Q-01`, `X-3`, `Q-02` and `F2-5` — with the disproof
+already in the tree in every case, written by the adapter's own author. Whoever
+takes phase 12 should read that as a gap in the criteria rather than as four
+findings that happen to be closed now.
+
+The other thing it changes is what "the gate is green" is worth. Several checks
+this runbook relies on were found to be reporting about themselves rather than
+their subject; they are repaired, and `REMEDIATION-HANDOVER.md` lists them. The
+scoped-gate command set has grown by four commands, each added because something
+went red downstream of a gate that could not see it.
+
+**`REMEDIATION-HANDOVER.md` is the entry point.** It carries the scoreboard, the
+method, the briefs awaiting ratification, and the operational traps — including
+the three false "completions" that were read as results before being caught.
 
 ### The critical path
 
@@ -2868,9 +2903,9 @@ limits). Discharges ES-8 – ES-40, VT-1 – VT-31.
       produce four boundaries and one condition cannot carry them today, which is
       what blocks E2E-04 and E2E-05.
 - [ ] `happenstance_core::prelude` exporting `EventStore` (not `SendEventStore`),
-      so the default import path cannot produce E0034; `pub use futures_core;`
-      beside `pub use bytes;`, since `Stream` appears in `read`'s signature and
-      every adapter is forced to name it.
+      so the default import path cannot produce E0034. This item's second half —
+      `pub use futures_core;` beside `pub use bytes;` — **landed** (`lib.rs:193`),
+      and each adapter re-exports its driver with it. The prelude is what is left.
 - [ ] `ConditionViolated`'s `Display` interpolates the `conflicting_position` the
       store already populates, and names the remedy.
 

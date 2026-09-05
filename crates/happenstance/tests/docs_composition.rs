@@ -190,14 +190,14 @@ fn landing_page_names_only_the_persistent_four() {
     }
 }
 
+/// Nothing here takes a name the contract crate already publishes.
+///
+/// The opening assertion was `contains("pub use happenstance_core::*;")` — the
+/// fourth green check in this crate to require the glob by name, and the fourth
+/// reason the leak read as policy. Whether the contract's surface arrives, and
+/// under which gate, is `tests/contract_surface.rs`'s subject now.
 #[test]
 fn no_item_shadows_a_core_name() {
-    let root = read("lib.rs");
-    assert!(
-        root.contains("pub use happenstance_core::*;"),
-        "the contract crate's glob re-export must survive"
-    );
-
     for shadowed in ["Query", "EventStore", "Tags", "Event", "AppendError"] {
         for declaration in [
             "pub trait ",

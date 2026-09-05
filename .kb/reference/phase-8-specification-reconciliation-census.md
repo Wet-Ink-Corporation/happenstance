@@ -74,7 +74,7 @@ impl cited at a span that now holds `const MIGRATION_1`, a `head` impl cited
 at a span that now holds `SCHEMA_VERSION`, and four clauses citing one span as
 "the tag side table" when that span is the `event` table and the side table
 sits six lines later. None was reported, because `subject_before`
-(`xtask/src/spec_trace.rs:2158`) declines to derive a subject unless the
+(`xtask/src/spec_trace.rs:2997-3043`) declines to derive a subject unless the
 nearest code span is a lowercase identifier of four-plus characters on the
 citation's own line or the one above — every one of the six sits beside a type
 name, a quoted phrase, or another citation. Of 401 citations checked this

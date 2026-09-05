@@ -226,8 +226,6 @@ struct Clause {
     /// The text inside a `[PROVISIONAL — …]` or `[DEFERRED — …]` marker.
     falsifier: String,
     rules: Vec<String>,
-    /// Whether the clause declares any of its rules as not yet written.
-    schedules_new: bool,
     /// Whether the clause points at a test that lives outside `suite.rs` — a unit
     /// or compile test in the crate it constrains. The checker cannot validate
     /// those names, so §7.2 must not mark them `†`: that would assert "does not
@@ -377,19 +375,46 @@ fn check_citations(
 
 /// How far from the cited line the subject may sit before the citation is wrong.
 ///
-/// Twelve, where `standards/rust`'s own citation lint uses ten
-/// (`lint_constitution.rs:111`) — wider because a derived anchor has further to
-/// travel than a written one. There the anchor is quoted beside the line and
-/// names the exact text; here it is the identifier the prose happened to use,
-/// which may sit a few lines from the item's `fn` line.
+/// # Why this window survives when `standards/rust`'s did not
 ///
-/// The reason for a window at all is the same in both: an anchor is a claim
-/// about *what* is at a location, and a doc comment growing above an item must
-/// not red the gate. That is the property that makes the check survivable — a
-/// content hash fails on every ordinary edit, and its refresh command becomes a
-/// reflex nobody reads.
+/// That corpus's citation lint carried a `const ANCHOR_SLACK: usize = 10` and
+/// now has **no window at all** — `lint_constitution.rs:804 (fn
+/// anchor_problem)`. Two instruments carried two tolerances for what looked like
+/// one job, and the difference was written down nowhere. This section is half
+/// the repair and `anchor_problem`'s own documentation is the other half. They
+/// differ deliberately, for this reason:
 ///
-/// (This comment claimed the two constants were equal until it was checked. A
+/// **There the anchor is written; here it is derived.** An atom's citation
+/// carries its anchor as quoted text beside the line number — `(fn
+/// spawns_from_generic)` — so *the cited line contains that text* is exactly
+/// what the citation asserts, and an exact match is satisfiable by construction.
+/// This check has no such text. It takes the identifier the specification's
+/// prose happened to reach for and looks for it near a range the author chose to
+/// point at the *evidence*: usually the doc-comment bullets that state the
+/// requirement, with the item's signature a few lines outside them.
+///
+/// # Measured on 2026-09-04, rather than assumed
+///
+/// Closing this window to zero reddens **21 of the 80 anchored citations** in
+/// [`SPEC`], and **20 of those 21 sit inside `[FROZEN]` clause commentary**.
+/// They are also not stale. `store.rs:261-265 (append)` cites the error-ordering
+/// bullets that are the evidence for the clause, and `async fn append(` is three
+/// lines past the range's end. `query.rs:113-116 (matches)` cites the body of
+/// `pub fn matches`, whose signature is one line *above* the range. Repointing
+/// either onto its identifier moves the citation off the prose it is evidence
+/// for and onto a signature that states nothing — a worse citation, bought to
+/// make two numbers match.
+///
+/// So the reason for a window here is the reason the corpus's window could not
+/// justify itself: an anchor is a claim about *what* is at a location, and where
+/// the anchor is a word the prose reached for rather than a quotation, the claim
+/// is about a neighbourhood and not a line. Twelve is that neighbourhood, and it
+/// stays until this corpus is measured on its own terms. The open question is
+/// recorded in
+/// `.kb/_intake/remediation-2026-09-04-briefs/citation-anchor-slack.md`.
+///
+/// (This comment claimed the two constants were equal until it was checked, and
+/// then cited `lint_constitution.rs:111` for a constant that no longer exists. A
 /// citation-drift defect inside the citation-drift check is worth leaving a note
 /// about rather than quietly correcting.)
 const ANCHOR_SLACK: usize = 12;
@@ -681,38 +706,27 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         }
     }
 
-    // 4. Every named conformance rule exists, unless the clause schedules new
-    //    ones — in which case the prose cannot tell us which name is which, and
-    //    reporting them all would drown the check that matters.
+    // 4. Every named conformance rule exists, or is declared in
+    //    [`UNRESOLVABLE_RULE_NAMES`] with why nothing can find it.
     //
-    //    Only clauses whose rules would live in a suite that *exists*. `PS` and
-    //    `SY` rules belong to the projection and replication suites, and neither
-    //    crate has been written — checking those names against the event-store
-    //    suite is a category error that reports every one of them as missing,
-    //    which is noise indistinguishable from a real typo.
+    //    Only clauses whose rules would live in a suite that *exists*. `SY`
+    //    rules belong to the replication suite and that crate has not been
+    //    written — checking those names against the event-store suite is a
+    //    category error that reports every one of them as missing, which is
+    //    noise indistinguishable from a real typo.
     //
     //    Resolved against `resolvable`, so a `wire::`-qualified name is looked
     //    for in the wire test files rather than in a suite that could never
     //    define it. The prefix is what routes it, which is why
     //    `backticked_idents` keeps the whole qualified string.
-    for c in &clauses {
-        if c.schedules_new || !has_suite(&c.id) {
-            continue;
-        }
-        for rule in &c.rules {
-            if !resolvable.contains(rule) {
-                let looked_in = if rule.starts_with("wire::") {
-                    WIRE_TESTS.join(" or ")
-                } else {
-                    SUITE.to_owned()
-                };
-                problems.push(format!(
-                    "{}:{} — {} names rule `{}`, which is not in {} and the clause does not declare it new",
-                    SPEC, c.line, c.id, rule, looked_in
-                ));
-            }
-        }
-    }
+    check_named_rules(&clauses, &resolvable, &mut problems);
+    let unresolvable = reconcile_unresolvable(
+        &UNRESOLVABLE_RULE_NAMES,
+        &clauses,
+        &resolvable,
+        &root,
+        &mut problems,
+    );
 
     // 5. Every named case exists.
     for c in &clauses {
@@ -725,6 +739,20 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
             }
         }
     }
+
+    // 10. Every case is claimed by a clause — CF-38's fourth stated condition,
+    //     which nothing has ever performed. The checker reads `E2E-CASES.md` in
+    //     one direction only, so a `Cases:` line that drops a single-claim case
+    //     orphans it silently. §7.6 names the four cases that can happen to and
+    //     then leaves them unguarded.
+    let orphaned = check_case_ownership(&clauses, &known_cases, &mut problems);
+
+    // 11. CF-36 — a clause backed only by integration- or scenario-level cases
+    //     names no conformance rule. The level markers are in `E2E-CASES.md`
+    //     and nothing has ever read them.
+    let levels = collect_case_levels(&cases_doc);
+    check_case_levels(&clauses, &levels, &mut problems);
+    let cf36 = reconcile_cf36(&clauses, &levels, &mut problems);
 
     // 6. Every conformance rule is claimed by a clause, or disposed of by one,
     //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
@@ -750,11 +778,710 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         &census,
         &known_rules,
         &known_cases,
-        citation_coverage,
+        &Coverage {
+            citations: citation_coverage,
+            unresolvable,
+            cf36,
+            orphaned,
+        },
         &unclaimed_pending,
         &problems,
         stale.as_deref(),
     )
+}
+
+/// Check 4 — every conformance rule a clause names exists, or is declared.
+///
+/// # What changed, and why the old shape could not be repaired in place
+///
+/// This used to abstain on `c.schedules_new`, which is a substring test over the
+/// clause's own `Rule:` **prose** — `(new)`, `` new ` ``, `unit test`,
+/// `compile test`. Twenty-nine clauses carry one of those, nineteen of them
+/// `[FROZEN]`, and for every one of them the check resolved nothing at all: a
+/// clause could name a rule that had never existed and the mandatory step
+/// printed *no problems found*. The sentence explaining that a rule is unwritten
+/// was also the switch that stopped the checker looking, and the state was
+/// unrecoverable through the gate, because the clause was never looked at again.
+///
+/// Widening it by deleting the terms cannot land — 45 names arrive at once, and
+/// four of them are not rule names at all. So the guard moves from the prose to
+/// [`UNRESOLVABLE_RULE_NAMES`], where each of those 45 is written down with the
+/// reason nothing can find it, twenty-six of them against the file that *does*
+/// hold the test. What the clause says about its own rules no longer decides
+/// whether they are checked.
+///
+/// `schedules_new` is gone with it. It had exactly one reader — this check —
+/// which is worth knowing, because its own doc claimed it also fed §7.2. §7.2
+/// reads `rule_elsewhere`, and the compiler is what settled the question.
+fn check_named_rules(
+    clauses: &[Clause],
+    resolvable: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) {
+    for c in clauses {
+        if !has_suite(&c.id) {
+            continue;
+        }
+        for rule in &c.rules {
+            if resolvable.contains(rule) || declaration_for(&c.id, rule).is_some() {
+                continue;
+            }
+            let looked_in = if rule.starts_with("wire::") {
+                WIRE_TESTS.join(" or ")
+            } else {
+                SUITE.to_owned()
+            };
+            problems.push(format!(
+                "{}:{} — {} names rule `{}`, which is not in {}. Write it, or declare it in \
+                 `UNRESOLVABLE_RULE_NAMES` with the reason nothing can find it — the clause's \
+                 own prose no longer decides whether its names are checked.",
+                SPEC, c.line, c.id, rule, looked_in
+            ));
+        }
+    }
+}
+
+/// The [`UNRESOLVABLE_RULE_NAMES`] entry covering one clause's citation of one
+/// rule, if there is one.
+fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
+    UNRESOLVABLE_RULE_NAMES
+        .iter()
+        .find(|(c, r, _)| *c == clause && *r == rule)
+        .map(|(_, _, why)| why)
+}
+
+/// Check 4's other half — every declaration is still true, and still needed.
+///
+/// Three failures, and they are three different bugs, which is why the messages
+/// name the direction (RS-81-5). A declared name that has *become* resolvable is
+/// a stale entry and the list must shrink. A declared pair whose clause no longer
+/// cites that rule is a stale entry for the other reason. And an
+/// [`Unresolvable::Elsewhere`] path that no longer contains its identifier is the
+/// one this exists for: those twenty-six tests are real, they are the only thing
+/// standing behind twelve `[FROZEN]` clauses, and until this function nothing in
+/// the workspace would have noticed one being deleted — `collect_rules` reads
+/// four suite files and none of these is in them.
+///
+/// Returns the per-kind census, in [`Unresolvable`]'s own order, for the summary
+/// line. Counted rather than written down, per [`UNCLAIMED_PENDING_ADR`]'s
+/// precedent: a comment stating a total is a second thing to update.
+fn reconcile_unresolvable(
+    declared: &[(&str, &str, Unresolvable)],
+    clauses: &[Clause],
+    resolvable: &BTreeSet<String>,
+    root: &Path,
+    problems: &mut Vec<String>,
+) -> [usize; 3] {
+    let mut census = [0usize; 3];
+    for (clause, rule, why) in declared {
+        if resolvable.contains(*rule) {
+            problems.push(format!(
+                "`{rule}` is {} for {clause}, and it now resolves. The declaration is stale: \
+                 delete the `UNRESOLVABLE_RULE_NAMES` entry, so that {clause} is checked \
+                 against the rule rather than against a note about it.",
+                why.claim()
+            ));
+            continue;
+        }
+        if !clauses
+            .iter()
+            .any(|c| c.id == *clause && c.rules.iter().any(|r| r == rule))
+        {
+            problems.push(format!(
+                "{SPEC} — {clause} no longer names `{rule}`, which is {}. The list can only \
+                 shrink; delete the `UNRESOLVABLE_RULE_NAMES` entry.",
+                why.claim()
+            ));
+            continue;
+        }
+        census[why.index()] += 1;
+        let Unresolvable::Elsewhere(path) = why else {
+            continue;
+        };
+        match fs::read_to_string(root.join(path)) {
+            Err(e) => problems.push(format!(
+                "{clause} declares `{rule}` as living in {path}, which cannot be read: {e}",
+            )),
+            Ok(text) if !contains_identifier(&text, rule) => problems.push(format!(
+                "{path} — {clause} declares that `{rule}` lives here and it does not. Either \
+                 the test was deleted, in which case a `[FROZEN]` clause now names nothing, \
+                 or it moved and this entry must follow it.",
+            )),
+            Ok(_) => {}
+        }
+    }
+    census
+}
+
+/// Whether `text` contains `ident` as a whole identifier.
+///
+/// `str::contains` is a substring test and these names nest —
+/// `rejects_invalid_tags` is a prefix of nothing today and that is luck, not
+/// design (RS-81-3). A neighbouring `rejects_invalid_tags_and_types` would
+/// otherwise discharge the obligation of a rule nobody had written.
+fn contains_identifier(text: &str, ident: &str) -> bool {
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(ident).any(|(at, _)| {
+        text[..at].chars().next_back().is_none_or(|c| !is_ident(c))
+            && text[at + ident.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !is_ident(c))
+    })
+}
+
+/// Why a rule name a clause cites resolves against nothing the checker reads.
+///
+/// The three are not interchangeable and collapsing them to one "known missing"
+/// bucket is what the prose guard already did. Only one of the three is a gap in
+/// the suite; one is a test that exists somewhere else and can be checked there;
+/// and one is not a rule name at all.
+#[derive(Clone, Copy)]
+enum Unresolvable {
+    /// The test exists, in a file no resolution source reads — a `#[test]` in the
+    /// crate the clause constrains, or a `compile_fail` harness module.
+    ///
+    /// The path is **not** a note: [`reconcile_unresolvable`] opens it and fails
+    /// if the identifier has gone. That is the whole reason this variant carries
+    /// one rather than a sentence.
+    Elsewhere(&'static str),
+    /// Never a rule name. [`backticked_idents`] harvests every backticked
+    /// snake-case token on a `Rule:` line, and a handful of them are crate names
+    /// (`trait_variant`), rustdoc attributes (`compile_fail`) or gate steps
+    /// (`spec_trace`) that the sentence needed to say.
+    ///
+    /// Declared rather than filtered out by the parser: a filter would be a
+    /// second place to state which tokens are not rules, and it would silently
+    /// swallow a real rule name that happened to match its shape.
+    NotARuleName,
+    /// Nothing has written it. The text names what would.
+    Scheduled(&'static str),
+}
+
+impl Unresolvable {
+    /// This variant's column in [`reconcile_unresolvable`]'s census.
+    fn index(self) -> usize {
+        match self {
+            Self::Elsewhere(_) => 0,
+            Self::NotARuleName => 1,
+            Self::Scheduled(_) => 2,
+        }
+    }
+
+    /// What the entry claims, for a message reporting that it has stopped being
+    /// true. A stale entry is deleted by a person, and the sentence they need is
+    /// the one that justified it.
+    fn claim(self) -> String {
+        match self {
+            Self::Elsewhere(path) => format!("declared to live in {path}"),
+            Self::NotARuleName => "declared not to be a rule name at all".to_owned(),
+            Self::Scheduled(who) => format!("declared unwritten, owed by {who}"),
+        }
+    }
+}
+
+/// Every `(clause, rule)` pair the specification states and no resolution source
+/// can find, with the reason.
+///
+/// # Why this is a table and not a predicate
+///
+/// It replaces a predicate — four prose substrings on the clause's own `Rule:`
+/// line — that switched check 4 off for the whole clause, including the names
+/// that would have resolved. VT-13 is the worst case: two of its four names are
+/// live suite rules, and the words *"unit test"* in front of a third stopped all
+/// four being looked at. A table cannot do that, because it is keyed by the pair
+/// rather than by the sentence.
+///
+/// # It can only shrink
+///
+/// Every entry is reconciled in both directions on every run. A name that starts
+/// resolving fails the gate as a stale entry; a clause that stops citing it fails
+/// the same way; and an [`Unresolvable::Elsewhere`] file that no longer contains
+/// its identifier fails naming the file. So this cannot become a place to park a
+/// typo: the only way to add a line is to have looked.
+///
+/// The count in the type is deliberate and it is the one number written twice.
+/// It is the count `spec-trace` reported when the prose guard was measured, and
+/// a change to it is a change a reviewer should be made to see.
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
+    // ---- VT: value types -------------------------------------------------
+    (
+        "VT-5",
+        "ingest_preserves_origin_identity",
+        Unresolvable::Scheduled(
+            "the replication suite. `happenstance-sync` is a skeleton and \
+             `happenstance-sync-testkit` does not exist",
+        ),
+    ),
+    (
+        "VT-6",
+        "restored_peer_does_not_reissue_identities",
+        Unresolvable::Scheduled("the replication suite, with VT-5"),
+    ),
+    (
+        "VT-9",
+        "convergent_projection_is_interleaving_independent",
+        Unresolvable::Scheduled("the replication suite, with VT-5"),
+    ),
+    (
+        "VT-10",
+        "append_does_not_accept_a_foreign_identity",
+        Unresolvable::Elsewhere("crates/happenstance-testkit/tests/foreign_identity.rs"),
+    ),
+    (
+        "VT-13",
+        "position_next_signals_overflow",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_invalid_event_types",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_invalid_tags",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_c0_del_and_c1_controls",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "rejects_all_seven_bidirectional_controls",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "accepts_the_format_characters_scripts_need",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-14",
+        "accepts_neighbours_of_the_closed_list",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
+    ),
+    (
+        "VT-18",
+        "event_new_accepts_a_held_event_type",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/constructor_ergonomics.rs"),
+    ),
+    (
+        "VT-18",
+        "command_handler_composes_validation_errors",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/constructor_ergonomics.rs"),
+    ),
+    (
+        "VT-20",
+        "rejects_invalid_event_types",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-20",
+        "rejects_invalid_tags",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-26",
+        "query_items_is_not_constructible_downstream",
+        // A `compile_fail` doctest module, not a `#[test]`: nothing that scans
+        // for `pub async fn` could ever find it.
+        Unresolvable::Elsewhere("crates/happenstance-testkit/src/lib.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_and_new_agree",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_rejects_a_bidirectional_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-32",
+        "from_static_rejects_a_c1_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    ("VT-32", "compile_fail", Unresolvable::NotARuleName),
+    (
+        "VT-33",
+        "a_borrowed_and_an_owned_tag_are_one_value",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-33",
+        "a_map_keyed_by_event_type_is_probed_by_str",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/event.rs"),
+    ),
+    (
+        "VT-33",
+        "extend_re_canonicalises",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    (
+        "VT-33",
+        "owned_into_iterator_yields_canonical_order",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
+    ),
+    // ---- WF: the wire format ---------------------------------------------
+    (
+        "WF-12",
+        "read_options_is_not_serialisable",
+        // A `const _` assertion inside a harness module, which is why no
+        // resolution source can ever find it and why the clause's own prose said
+        // so. The file is checked instead.
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/wire.rs"),
+    ),
+    ("WF-12", "spec_trace", Unresolvable::NotARuleName),
+    ("WF-12", "compile_fail", Unresolvable::NotARuleName),
+    // ---- ES: the event store ---------------------------------------------
+    (
+        "ES-2",
+        "send_flavour_stream_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-2",
+        "spawns_from_generic",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    ("ES-2", "trait_variant", Unresolvable::NotARuleName),
+    (
+        "ES-3",
+        "provided_method_future_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-4",
+        "provided_method_future_is_send_in_generic_code",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/memory.rs"),
+    ),
+    (
+        "ES-5",
+        "error_bound_is_identical_on_both_flavours",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/store.rs"),
+    ),
+    (
+        "ES-6",
+        "store_error_crosses_a_join_handle",
+        Unresolvable::Scheduled(
+            "nothing, yet: `crates/happenstance-cloudflare/src/send_shape.rs` argues it is \
+             unwritable against today's port, which is a finding rather than a schedule",
+        ),
+    ),
+    (
+        "ES-29",
+        "wire_condition_with_after_is_refused",
+        Unresolvable::Scheduled("the phase that lands the wire condition"),
+    ),
+    (
+        "ES-31",
+        "checkpoint_lag_is_not_a_position_difference",
+        Unresolvable::Scheduled("the phase that lands checkpoint lag"),
+    ),
+    (
+        "ES-38",
+        "positions_are_not_reused_after_removal",
+        Unresolvable::Scheduled("the phase that lands history removal"),
+    ),
+    (
+        "ES-39",
+        "a_store_reports_the_history_it_does_not_hold",
+        Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
+    ),
+    (
+        "ES-40",
+        "condition_over_removed_history_does_not_reject",
+        Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
+    ),
+    // ---- PS: the projection store ----------------------------------------
+    (
+        "PS-25",
+        "changed_query_starts_a_new_checkpoint",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-26",
+        "failure_policy_is_per_projection",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-27",
+        "skip_and_record_is_atomic",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-28",
+        "pump_reports_the_failing_position",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-29",
+        "one_poisoned_projection_does_not_stall_the_others",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+    (
+        "PS-30",
+        "panicking_apply_rolls_back",
+        Unresolvable::Scheduled("the projection runner's own rules"),
+    ),
+];
+
+/// Check 10 — every E2E case is claimed by at least one clause.
+///
+/// CF-38's fourth stated condition, and the direction this file had never run.
+/// Check 5 resolves a clause's `Cases:` line against [`collect_cases`]; nothing
+/// asked the question the other way, so a `Cases:` line that drops a case
+/// orphaned it in silence.
+///
+/// # Which reading of "a case naming no clause" this is
+///
+/// The clause's words admit two, and they differ by 54 cases. Read as *a case
+/// body that names a clause identifier in its own text*, 54 of the 58 fail
+/// today, because `E2E-CASES.md` predates this specification and carries no
+/// `Clauses:` field of any kind. Read as *a case no clause claims*, zero fail.
+/// This is the second reading, and it is not a convenience: it is the one §7.6
+/// states, computes and reports on, and the one whose stated hazard —
+/// "Single-claim cases are the ones a later edit can orphan without anyone
+/// noticing" — is a live risk rather than a documentation debt. Which reading
+/// CF-37 and CF-38 are owed is a reading of two `[FROZEN]` clauses and belongs
+/// with them; `.kb/_intake/remediation-2026-09-04-briefs/` carries the argument.
+fn check_case_ownership(
+    clauses: &[Clause],
+    known_cases: &BTreeSet<String>,
+    problems: &mut Vec<String>,
+) -> usize {
+    let before = problems.len();
+    let claimed: BTreeSet<&str> = clauses
+        .iter()
+        .flat_map(|c| c.cases.iter().map(String::as_str))
+        .collect();
+    for case in known_cases {
+        if !claimed.contains(case.as_str()) {
+            problems.push(format!(
+                "{CASES} — {case} is claimed by no clause's `Cases:` line. A case no clause \
+                 reaches is a corner of the specification nothing arrives at; claim it, or \
+                 delete it.",
+            ));
+        }
+    }
+    problems.len() - before
+}
+
+/// Every case's `Level:` marker, by case id.
+///
+/// The marker is `- **Level:** contract` under the case's own `### E2E-nn`
+/// heading, and this is the first thing in the workspace to read one: `grep -c
+/// "Level" xtask/src/spec_trace.rs` returned 0 at `9b06836`, against 58 markers
+/// in the document CF-36 says this file cross-references.
+fn collect_case_levels(cases_doc: &str) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in cases_doc.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("### E2E-") {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            current = (!digits.is_empty()).then(|| format!("E2E-{digits}"));
+            continue;
+        }
+        // The marker is a bullet, and only the *first* one under a heading
+        // counts: a case body may quote the word later.
+        // The bullet marker only — `trim_start_matches(['-', '*', ' '])` would
+        // eat the `**` of the bold run as well, which is how this silently
+        // found no marker at all on its first run.
+        let bullet = t
+            .strip_prefix("- ")
+            .or_else(|| t.strip_prefix("* "))
+            .unwrap_or(t)
+            .trim_start();
+        let Some(rest) = bullet.strip_prefix("**Level:**") else {
+            continue;
+        };
+        if let Some(case) = current.as_ref() {
+            // The **first word**, because eight of the fifty-eight markers read
+            // `contract (sync)` and the qualifier is not part of the level. This
+            // was found by trying to refute the check rather than by reading the
+            // document: demoting one of those eight to `integration (sync)` gave
+            // a level string matching neither term in [`NOT_CONTRACT_LEVEL`], so
+            // a real breach was read as contract-level and passed. A comparison
+            // against a whole line is a comparison against whatever punctuation
+            // the line happens to carry.
+            let word = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            out.entry(case.clone()).or_insert(word);
+        }
+    }
+    out
+}
+
+/// Levels that do not satisfy CF-36 on their own.
+///
+/// A rule backed only by these needs two adapters, a domain vocabulary or a
+/// running deployment, so an adapter author cannot run it against their own
+/// crate — which is the one thing the suite is for.
+const NOT_CONTRACT_LEVEL: [&str; 2] = ["integration", "scenario"];
+
+/// Every level word the document is allowed to use.
+///
+/// A closed list, and an unknown word is a failure rather than a silent pass
+/// into the contract-level branch (RS-81-2). The alternative — treat anything
+/// that is not [`NOT_CONTRACT_LEVEL`] as contract-level — is how a typo'd
+/// `intergration` satisfies CF-36 for a clause that breaches it.
+const KNOWN_LEVELS: [&str; 3] = ["contract", "integration", "scenario"];
+
+/// Check 11 — CF-36: a clause backed only by integration- or scenario-level
+/// cases names no conformance rule.
+///
+/// Two failures. A case with no `Level:` marker at all is one, because CF-36's
+/// own `Rule:` line cites the marker's definition (`E2E-CASES.md:19-28`) and a
+/// missing marker makes the cross-reference vacuous for that case rather than
+/// wrong. And a clause that violates CF-36 and is not in
+/// [`CF36_UNDISCHARGED`] is the other.
+fn check_case_levels(
+    clauses: &[Clause],
+    levels: &BTreeMap<String, String>,
+    problems: &mut Vec<String>,
+) {
+    for c in clauses {
+        if c.rules.is_empty() || c.cases.is_empty() {
+            continue;
+        }
+        let mut contract_level = false;
+        for case in &c.cases {
+            match levels.get(case) {
+                None => problems.push(format!(
+                    "{CASES} — {case} carries no `Level:` marker, so CF-36's cross-reference \
+                     cannot be run for {}. Every case declares one.",
+                    c.id
+                )),
+                Some(level) if !KNOWN_LEVELS.contains(&level.as_str()) => problems.push(format!(
+                    "{CASES} — {case} declares level `{level}`, which is not one of \
+                     {KNOWN_LEVELS:?}. CF-36 turns on this word, so an unrecognised one is a \
+                     failure rather than a clause that happens to pass."
+                )),
+                Some(level) => {
+                    contract_level |= !NOT_CONTRACT_LEVEL.contains(&level.as_str());
+                }
+            }
+        }
+        if contract_level || CF36_UNDISCHARGED.iter().any(|(id, _)| *id == c.id) {
+            continue;
+        }
+        problems.push(format!(
+            "{}:{} — {} names {} conformance rule(s) and every case it cites is \
+             integration- or scenario-level. CF-36 forbids that: such a rule cannot be run \
+             by an adapter author against their own crate. Give the clause a contract-level \
+             case, move the rule to the e2e crate, or record it in `CF36_UNDISCHARGED`.",
+            SPEC,
+            c.line,
+            c.id,
+            c.rules.len()
+        ));
+    }
+}
+
+/// The clauses that violate CF-36 today, and why each is recorded rather than
+/// repaired here.
+///
+/// # This list is a finding, not an exemption
+///
+/// CF-36 is `[FROZEN]` and has never been checked — its own accepted open
+/// question, `kb-open-question-cf-36-unperformed-cross-reference-001`, says so
+/// and dates the gap to 2026-08-17. Running the check for the first time found
+/// thirteen clauses in breach. None of them can be repaired from `xtask/`: the
+/// repair is either a contract-level case, a moved rule name, or a superseding
+/// clause, and all three are edits to `spec/SPECIFICATION.md`.
+///
+/// So the choice was between leaving CF-36 unimplemented for another phase and
+/// landing it with the thirteen written down. Written down, they are counted on
+/// every green run and a fourteenth fails the gate; unimplemented, the
+/// fourteenth is as invisible as these thirteen were. The entries are what
+/// `spec-trace` measured on its first run, at the commit that added the check.
+///
+/// Nine of the thirteen are one fact: the `SY` family names rules for
+/// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
+/// and which does not exist. That is not thirteen independent oversights.
+const CF36_UNDISCHARGED: [(&str, &str); 13] = [
+    (
+        "VT-21",
+        "names `store_accepts_the_guaranteed_minimum_payload` and \
+         `append_reports_exceeded_store_limits` — both live rules in `suite.rs` — against \
+         E2E-42 alone, which is transitive convergence across a peer mesh. The rules are \
+         single-store and the case is not; the mismatch is in the `Cases:` line rather than \
+         in the rules",
+    ),
+    (
+        "WF-9",
+        "the same shape as VT-21, and it shares one of the two rule names with it",
+    ),
+    (
+        "PS-29",
+        "names `one_poisoned_projection_does_not_stall_the_others` against E2E-28, which is \
+         the integration-level case of the same name. The rule is unwritten \
+         (`UNRESOLVABLE_RULE_NAMES`), so whether it can be single-store is open until the \
+         projection runner lands",
+    ),
+    ("PS-30", "the same shape as PS-29, against the same case"),
+    (
+        "SY-2",
+        "the replication family. Its rules would live in `happenstance-sync-testkit`, which \
+         CF-36's own `Rejects` paragraph names as their home and which does not exist \
+         (`crates/happenstance-sync/src/lib.rs:23-24`)",
+    ),
+    ("SY-4", "the replication family, as SY-2"),
+    ("SY-5", "the replication family, as SY-2"),
+    ("SY-7", "the replication family, as SY-2"),
+    ("SY-9", "the replication family, as SY-2"),
+    ("SY-10", "the replication family, as SY-2"),
+    ("SY-24", "the replication family, as SY-2"),
+    ("SY-25", "the replication family, as SY-2"),
+    ("SY-34", "the replication family, as SY-2"),
+];
+
+/// Check 11's other direction — a recorded CF-36 breach that is no longer one.
+///
+/// [`CF36_UNDISCHARGED`] can only shrink, for the same reason
+/// [`UNRESOLVABLE_RULE_NAMES`] can: an entry that outlives its breach turns a
+/// record of a defect into an exemption nobody re-reads. Returns the entries
+/// still in force, for the summary.
+fn reconcile_cf36(
+    clauses: &[Clause],
+    levels: &BTreeMap<String, String>,
+    problems: &mut Vec<String>,
+) -> Vec<&'static str> {
+    let mut live = Vec::new();
+    for (id, why) in &CF36_UNDISCHARGED {
+        let Some(c) = clauses.iter().find(|c| c.id == *id) else {
+            problems.push(format!(
+                "`CF36_UNDISCHARGED` records {id}, which {SPEC} no longer declares. Delete \
+                 the entry: it was recorded because it {why}",
+            ));
+            continue;
+        };
+        let breached = !c.rules.is_empty()
+            && !c.cases.is_empty()
+            && c.cases.iter().all(|case| {
+                levels
+                    .get(case)
+                    .is_some_and(|l| NOT_CONTRACT_LEVEL.contains(&l.as_str()))
+            });
+        if breached {
+            live.push(*id);
+        } else {
+            problems.push(format!(
+                "{id} no longer breaches CF-36, and `CF36_UNDISCHARGED` still records it. \
+                 The list can only shrink; delete the entry, which was recorded because it \
+                 {why}",
+            ));
+        }
+    }
+    live
 }
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
@@ -970,11 +1697,29 @@ to live in.
 /// The one rule [`RETIRES_PROBE`] disposes of.
 const RETIRES_PROBE_NAME: &str = "a_rule_the_probe_retires";
 
+/// What the run measured about its own reach, as opposed to what it found.
+///
+/// One struct rather than two parameters because [`report`] had reached
+/// clippy's argument ceiling, and the two are the same kind of fact: how much of
+/// the document this run actually resolved.
+struct Coverage {
+    /// `(checked, external, anchored)` citations.
+    citations: (usize, usize, usize),
+    /// [`reconcile_unresolvable`]'s per-kind census.
+    unresolvable: [usize; 3],
+    /// The clauses [`reconcile_cf36`] found still in breach of CF-36.
+    cf36: Vec<&'static str>,
+    /// How many cases check 10 found claimed by no clause. Printed even when it
+    /// is zero, because a check whose green says nothing is a check a reader
+    /// cannot tell from an absent one — which is the defect this one repairs.
+    orphaned: usize,
+}
+
 fn report(
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
-    citations: (usize, usize, usize),
+    coverage: &Coverage,
     unclaimed_pending: &[String],
     problems: &[String],
     stale: Option<&str>,
@@ -992,15 +1737,16 @@ fn report(
     let _ = write!(summary, "{}), ", parts.join(", "));
     let _ = write!(
         summary,
-        "{} conformance rules, {} e2e cases",
+        "{} conformance rules, {} e2e cases ({} claimed by no clause)",
         rules.len(),
-        cases.len()
+        cases.len(),
+        coverage.orphaned
     );
     // The coverage number is in the summary rather than in a comment because the
     // failure this step spent a phase inside was not a wrong check, it was a
     // check whose scope nobody could see. A reader who is told "338 citations"
     // can notice that the document has more.
-    let (checked, external, anchored) = citations;
+    let (checked, external, anchored) = coverage.citations;
     let _ = write!(
         summary,
         ", {checked} citations checked ({anchored} anchored to their subject"
@@ -1010,6 +1756,28 @@ fn report(
     }
     let _ = write!(summary, ")");
     println!("{summary}");
+
+    // Printed on a green run, for the same reason `unclaimed_pending` is: this
+    // is the cost of the check, and a cost that only appears when something is
+    // already broken is a cost nobody prices. The [`Elsewhere`] figure is the
+    // one that is *checked* rather than merely declared, so it says so.
+    //
+    // [`Elsewhere`]: Unresolvable::Elsewhere
+    let [elsewhere, not_a_rule, scheduled] = coverage.unresolvable;
+    println!(
+        "{} rule name(s) a clause cites and the suites cannot resolve, each declared: \
+         {elsewhere} confirmed present in a file the suites do not read, {not_a_rule} not rule \
+         names, {scheduled} unwritten",
+        elsewhere + not_a_rule + scheduled
+    );
+
+    if !coverage.cf36.is_empty() {
+        println!(
+            "{} clause(s) name a conformance rule and cite no contract-level case (CF-36), each recorded in `CF36_UNDISCHARGED`: {}",
+            coverage.cf36.len(),
+            coverage.cf36.join(", ")
+        );
+    }
 
     // Printed on a green run, on purpose. An open question that only shows up
     // when something else is already broken is an open question nobody reads.
@@ -1379,7 +2147,6 @@ fn parse_clauses(spec: &str) -> Vec<Clause> {
             maturity: maturity_of(&body),
             falsifier: falsifier_of(&body),
             rules: rules.names,
-            schedules_new: rules.schedules_new,
             rule_elsewhere: rules.elsewhere,
             rule_text: field_line(&body, "Rule"),
             cases: cases_of(&body),
@@ -1608,9 +2375,8 @@ fn rules_of(body: &str) -> Rules {
     // and `backticked_idents` drops a path like
     // `mutation_coverage::every_rule_has_a_mutant` because of the colons — so a
     // clause naming one parsed with an empty rule list and §7.2 rendered a cell
-    // that *looked* checked. Marking it `elsewhere` makes both that and
-    // `schedules_new` true, which is exactly right: nothing here looked, and the
-    // table now says so in the clause's own words.
+    // that *looked* checked. Marking it `elsewhere` says the honest thing:
+    // nothing here looked, so §7.2 prints the clause's own words.
     //
     // Two things about this list are not free to change.
     //
@@ -1625,27 +2391,39 @@ fn rules_of(body: &str) -> Rules {
     // means no resolution source can ever find it and WF-12 must stay `elsewhere`
     // permanently. Tidying those two words out of the clause, or out of this list,
     // turns WF-12 into a `†` no test can ever clear.
+    //
+    // What this list no longer decides is whether WF-12's names are *checked*.
+    // That moved to [`UNRESOLVABLE_RULE_NAMES`], which names the file each one
+    // lives in and opens it.
     let elsewhere =
         text.contains("unit test") || text.contains("compile test") || text.contains("meta-test");
-    let schedules_new = text.contains("(new)")
-        || text.contains('†')
-        || text.trim_start().starts_with("new ")
-        || text.contains(" new `")
-        || elsewhere;
     Rules {
         names: backticked_idents(&text),
-        schedules_new,
         elsewhere,
     }
 }
 
 /// What a clause's `Rule:` field says, decomposed.
+///
+/// # The field that used to be here
+///
+/// `schedules_new` — `(new)`, a dagger, a leading `new `, `` new ` ``, or any of
+/// `elsewhere`'s three terms — was read by exactly one caller, check 4, which
+/// abstained entirely when it was true. It is gone, and
+/// [`UNRESOLVABLE_RULE_NAMES`] is what replaced it: a per-`(clause, rule)`
+/// table, so a sentence about one name can no longer switch off the check for
+/// the three beside it.
+///
+/// Deleting it also retired the three terms that fired on nothing at all — the
+/// dagger, `meta-test` and a leading `new ` — which had been read as evidence
+/// that the guard was doing work it was not. `elsewhere` keeps `meta-test`,
+/// because `elsewhere` is a different question with a different consumer: §7.2's
+/// rendering, which must not print `†` ("must be written") against a test that
+/// exists somewhere this file does not read.
 #[derive(Default)]
 struct Rules {
     /// Every rule name the clause mentions.
     names: Vec<String>,
-    /// Whether it declares any of them not yet written.
-    schedules_new: bool,
     /// Whether it points at a test outside `suite.rs`.
     elsewhere: bool,
 }
@@ -2055,7 +2833,7 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
 /// Per the drift allowlist that came before it (`3712c9b`), the count is
 /// computed and printed rather than written here, so this comment cannot come to
 /// disagree with the array beneath it.
-const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
+const UNCLAIMED_PENDING_ADR: [(&str, &str); 3] = [
     (
         "k_disjoint_boundaries_admit_exactly_k_commits",
         "the central DCB independence proposition — that commands sharing no \
@@ -2071,7 +2849,7 @@ const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
         "the model family's single rule enforces no single clause's sentence. \
          It replays a generated sequence of appends, conditional appends and \
          reads against a model and compares every answer, so what it checks is \
-         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-18 and ES-25 \
+         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-16, ES-18 and \n         ES-25 \
          over inputs no clause enumerates — which is the whole reason the \
          family exists, since the named rules are worked examples and this is \
          not. §6.4 names it, but only as CF-22's illustration of a per-family \
@@ -2083,6 +2861,24 @@ const UNCLAIMED_PENDING_ADR: [(&str, &str); 2] = [
          over the examples the suite enumerates — or deciding that check 6's \
          bar is per-clause and a cross-clause rule is disposed of some other \
          way",
+    ),
+    (
+        "arming_a_read_fault_makes_the_stream_yield_an_error",
+        "`EventStore::read` yields `Result<SequencedEvent, Self::Error>` per \
+         item, and **no clause requires a rule to induce a read fault** — the \
+         absence is the finding, not an attribution error. ES-2 governs the \
+         signature and says nothing about the coverage of its `Err` arm; every \
+         clause that could claim this rule would have to acquire a sentence it \
+         does not have, which is an edit to the specification rather than a \
+         reading of it. The rule was landed by the lane remediating L3-01, \
+         which is explicitly not the specification owner: §7.4 is where a rule \
+         no clause names is disposed of, and CF-24's discipline is that a rule \
+         with no clause is as much a problem as a clause with no rule. Owed: an \
+         ADR, either minting the clause — a store MUST surface a failure part \
+         way through a read as an `Err` item and MUST NOT report it as the end \
+         of the stream — or widening ES-2 to say what its error arm obliges. \
+         The argument is in \
+         `.kb/_intake/remediation-2026-09-04-briefs/read-fault-clause-and-capability.md`",
     ),
 ];
 
@@ -2125,7 +2921,7 @@ const EXTERNAL_CITATIONS: [&str; 1] = [
 /// backstop for this table being wrong: if a citation mapped here to `core`
 /// really meant `sync`, the anchor it names will not be found in the file this
 /// sends it to.
-const BARE_NAME_MAP: [(&str, &str); 7] = [
+const BARE_NAME_MAP: [(&str, &str); 8] = [
     ("memory.rs", "crates/happenstance-core/src/memory.rs"),
     ("error.rs", "crates/happenstance-core/src/error.rs"),
     ("identity.rs", "crates/happenstance-core/src/identity.rs"),
@@ -2159,6 +2955,17 @@ const BARE_NAME_MAP: [(&str, &str); 7] = [
     // did not exist when the sentences were written cannot be what they meant,
     // and the anchor check is the backstop if any of them is.
     ("append.rs", "crates/happenstance-core/src/append.rs"),
+    // Not a collision — `workspace_index` no longer indexes anything under
+    // `experiments/` at all (RV-3), so a name that used to resolve there
+    // uniquely now resolves to nothing. §1.6's port table cites this bare at
+    // `live_handle.rs:174`, and the fix for the ambiguity that skip exists to
+    // prevent must not silently withdraw a citation the specification already
+    // makes; the anchor check is still the backstop if this ever points at the
+    // wrong `LiveHandleProjectionStore` line.
+    (
+        "live_handle.rs",
+        "experiments/live-handle-projection-batch/live_handle.rs",
+    ),
 ];
 
 /// What a citation's file name resolved to.
@@ -2284,6 +3091,19 @@ fn subject_before(spans: &[(usize, String)], i: usize) -> Option<String> {
 /// from inside a worktree, because a worktree cannot see its siblings. A check
 /// whose verdict depends on which directory it is invoked from is reporting the
 /// invocation, not the specification.
+///
+/// `experiments/` is skipped too, matching `affected::is_inert` (RV-3): it is
+/// outside the workspace by construction — its own `Cargo.toml` opens with a
+/// bare `[workspace]` table — so nothing here compiles it, and it should carry
+/// no more weight for a bare-name citation than it does for the affected-package
+/// gate. Before this skip existed, adding an experiment whose source shared a
+/// basename with anything else in the tree — a plain `store.rs` or `lib.rs`, the
+/// obvious name to reach for — turned every bare citation of the collision into
+/// [`Target::Ambiguous`], reddening `spec-trace` over a change that touched no
+/// package at all. A citation that spells the path in full, such as
+/// `experiments/wire-format/src/lib.rs:NNN`, is unaffected: [`citations`] routes
+/// anything containing `/` straight to [`Target::Path`] and never consults this
+/// index, so nothing here withdraws a citation the specification already makes.
 fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
     fn walk(dir: &Path, root: &Path, out: &mut BTreeMap<String, Vec<String>>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -2293,7 +3113,11 @@ fn workspace_index(root: &Path) -> BTreeMap<String, Vec<String>> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
             if path.is_dir() {
-                if name == "target" || name == ".git" || name == ".claude" || name == "node_modules"
+                if name == "target"
+                    || name == ".git"
+                    || name == ".claude"
+                    || name == "node_modules"
+                    || (dir == root && name == "experiments")
                 {
                     continue;
                 }
@@ -2721,5 +3545,658 @@ mod tests {
             RULE_FILES.contains(&"crates/happenstance-testkit/src/projection.rs"),
             "check 6 sweeps only {RULE_FILES:?}"
         );
+    }
+
+    // ======================================================================
+    // RV-3: this walk and `affected::is_inert` disagree about `experiments/`
+    // ======================================================================
+
+    /// A fabricated workspace root under `std::env::temp_dir()`, never the
+    /// workspace's own trees and never `tempfile` — mirroring
+    /// `lint_pages::tests::fabricated_root`, which this module cannot reuse
+    /// because it is a private helper of a sibling module. The nanosecond stamp
+    /// keeps two parallel tests from sharing a directory.
+    fn fabricated_root(label: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("hs-spec-trace-{label}-{stamp}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// `affected::is_inert` says a file under `experiments/` reaches no
+    /// package — the same footing as `spec/` and `references/` — but this
+    /// module's own [`workspace_index`] walk skips only `target`, `.git`,
+    /// `.claude` and `node_modules`, and `experiments/` is on neither list.
+    /// So a file under `experiments/` is indexed by basename exactly like a
+    /// crate's own source, and a second file elsewhere in the tree sharing
+    /// that basename makes every bare-name citation of it
+    /// [`Target::Ambiguous`] — reddening `spec-trace` over a change
+    /// `affected` would report as touching no package at all (RV-3).
+    ///
+    /// Fixed by teaching this walk the same `experiments/` skip
+    /// `affected::is_inert` already states, which is why the two checks are
+    /// asked the identical question about the identical path here rather than
+    /// one of them being reconstructed from prose: a fix to one side alone,
+    /// with the other read out of a comment, cannot go stale in a way this
+    /// test would catch.
+    #[test]
+    fn experiments_are_inert_to_affected_but_indexed_by_this_walk() {
+        let root = fabricated_root("rv3");
+
+        let crate_dir = root.join("crates/happenstance-sqlite/src");
+        let experiment_dir = root.join("experiments/some-experiment/src");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::create_dir_all(&experiment_dir).unwrap();
+        fs::write(crate_dir.join("store.rs"), "// crate\n").unwrap();
+        fs::write(experiment_dir.join("store.rs"), "// experiment\n").unwrap();
+
+        let experiment_path = "experiments/some-experiment/src/store.rs";
+        assert!(
+            crate::affected::is_inert(experiment_path),
+            "`affected.rs`'s own INERT list must still cover experiments/ — the fix under \
+             test is to this walk, not to that one"
+        );
+
+        let index = workspace_index(&root);
+        fs::remove_dir_all(&root).ok();
+
+        let hits = index.get("store.rs").cloned().unwrap_or_default();
+        assert_eq!(
+            hits.len(),
+            1,
+            "affected.rs treats experiments/ as reaching no package, so this walk must not \
+             index a file under it either — got {hits:?}. As written today it indexes both, \
+             which is exactly how a bare-name citation of `store.rs` goes ambiguous over an \
+             experiment nobody's build depended on"
+        );
+    }
+
+    // ---- Q-03/Q-04: the checks five FROZEN clauses name and nobody wrote ----
+
+    /// CF-38's fourth condition. §7.6 names the hazard about itself — *"Single-
+    /// claim cases are the ones a later edit can orphan without anyone
+    /// noticing"* — and then leaves it unguarded: E2E-14 is claimed by SY-6
+    /// alone, and dropping it from that one `Cases:` line reports nothing.
+    #[test]
+    fn a_case_no_clause_claims_is_reported() {
+        let mut problems = Vec::new();
+        let known: BTreeSet<String> = ["E2E-13", "E2E-14"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+
+        check_case_ownership(
+            &one_clause_with("SY-6", "`wire_condition_with_after_is_refused`", "E2E-13"),
+            &known,
+            &mut problems,
+        );
+
+        assert!(
+            problems.iter().any(|p| p.contains("E2E-14")),
+            "a case the whole document has stopped claiming must be named; got {problems:?}"
+        );
+        assert!(
+            !problems.iter().any(|p| p.contains("E2E-13")),
+            "a claimed case is not an orphan; got {problems:?}"
+        );
+    }
+
+    /// CF-36's own instrument. The marker is in the document 58 times and this
+    /// file has never read one.
+    #[test]
+    fn every_case_level_marker_is_collected() {
+        let doc = "### E2E-01 — a case\n\n- **Level:** contract\n\n\
+                   ### E2E-02 — another\n\n- **Level:** integration\n";
+        let levels = collect_case_levels(doc);
+
+        assert_eq!(levels.get("E2E-01").map(String::as_str), Some("contract"));
+        assert_eq!(
+            levels.get("E2E-02").map(String::as_str),
+            Some("integration")
+        );
+    }
+
+    /// CF-36 itself: a clause whose only cases are integration-level may not
+    /// name a conformance rule, because such a rule cannot be run by an adapter
+    /// author against their own crate — which is the one thing the suite is for.
+    #[test]
+    fn a_clause_backed_only_by_integration_cases_may_not_name_a_rule() {
+        let levels: BTreeMap<String, String> = [
+            ("E2E-28".to_owned(), "integration".to_owned()),
+            ("E2E-01".to_owned(), "contract".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-40", "`a_rule_of_its_own`", "E2E-28"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("PS-40")),
+            "got {problems:?}"
+        );
+
+        let mut allowed = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-41", "`a_rule_of_its_own`", "E2E-28, E2E-01"),
+            &levels,
+            &mut allowed,
+        );
+        assert!(
+            allowed.is_empty(),
+            "one contract-level case is enough to satisfy CF-36; got {allowed:?}"
+        );
+    }
+
+    /// A case whose `Level:` marker is missing entirely. CF-36's cross-reference
+    /// is vacuous for such a case rather than satisfied by it, so the marker's
+    /// absence must be the failure — not a silent pass.
+    #[test]
+    fn a_case_with_no_level_marker_is_reported() {
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("PS-40", "`a_rule_of_its_own`", "E2E-99"),
+            &BTreeMap::new(),
+            &mut problems,
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("E2E-99") && p.contains("no `Level:` marker")),
+            "got {problems:?}"
+        );
+    }
+
+    /// The bug this parser shipped with for one run, kept as a test because the
+    /// failure mode is the quiet one: `trim_start_matches(['-', '*', ' '])` eats
+    /// the `**` of the bold run as well, every marker goes unread, and every
+    /// clause is then reported as citing an unmarked case — 461 problems that
+    /// say nothing about the document.
+    #[test]
+    fn the_level_parser_survives_the_bold_run() {
+        let levels = collect_case_levels("### E2E-07 — a case\n\n- **Level:** contract\n");
+        assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
+    }
+
+    /// Eight of the fifty-eight markers carry a qualifier — `contract (sync)` —
+    /// and the level is the first word. Comparing the whole line against
+    /// `"integration"` reads `integration (sync)` as contract-level, which is a
+    /// breach passing. Found by refutation, not by reading.
+    #[test]
+    fn a_qualified_level_marker_reads_as_its_first_word() {
+        let levels = collect_case_levels(
+            "### E2E-41 — a case
+
+- **Level:** contract (sync)
+
+             ### E2E-42 — another
+
+- **Level:** integration (sync)
+",
+        );
+        assert_eq!(levels.get("E2E-41").map(String::as_str), Some("contract"));
+        assert_eq!(
+            levels.get("E2E-42").map(String::as_str),
+            Some("integration")
+        );
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("SY-19", "`a_rule_of_its_own`", "E2E-42"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("SY-19")),
+            "a qualified integration marker must still breach CF-36; got {problems:?}"
+        );
+    }
+
+    /// A level word the document is not allowed to use fails, rather than
+    /// falling through to the contract-level branch and satisfying CF-36 by
+    /// accident (RS-81-2).
+    #[test]
+    fn an_unrecognised_level_word_is_a_failure() {
+        let levels: BTreeMap<String, String> = [("E2E-42".to_owned(), "intergration".to_owned())]
+            .into_iter()
+            .collect();
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with("SY-19", "`a_rule_of_its_own`", "E2E-42"),
+            &levels,
+            &mut problems,
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("intergration")),
+            "got {problems:?}"
+        );
+    }
+
+    /// Only the first marker under a heading counts, so a case body that quotes
+    /// the word later cannot change the case's level.
+    #[test]
+    fn a_later_mention_does_not_overwrite_a_cases_level() {
+        let levels = collect_case_levels(
+            "### E2E-07 — a case\n\n- **Level:** contract\n\n\
+             Prose that says more.\n\n- **Level:** integration\n",
+        );
+        assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
+    }
+
+    /// `CF36_UNDISCHARGED` records defects, so it can only shrink. A clause that
+    /// stops breaching CF-36 — because it gained a contract-level case, or
+    /// dropped the rule — must take its entry with it.
+    #[test]
+    fn a_cf36_record_that_outlives_its_breach_is_reported() {
+        let levels: BTreeMap<String, String> = [("E2E-01".to_owned(), "contract".to_owned())]
+            .into_iter()
+            .collect();
+
+        let mut problems = Vec::new();
+        let live = reconcile_cf36(
+            &one_clause_with(
+                "SY-2",
+                "`compensation_is_atomic_with_the_losing_event`",
+                "E2E-01",
+            ),
+            &levels,
+            &mut problems,
+        );
+
+        assert!(live.is_empty());
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("SY-2") && p.contains("can only shrink")),
+            "got {problems:?}"
+        );
+    }
+
+    /// A recorded clause the document has stopped declaring is the other stale
+    /// direction, and it must not be mistaken for a discharged breach.
+    #[test]
+    fn a_cf36_record_naming_no_clause_at_all_is_reported() {
+        let mut problems = Vec::new();
+        reconcile_cf36(&[], &BTreeMap::new(), &mut problems);
+        assert!(
+            problems.iter().any(|p| p.contains("no longer declares")),
+            "got {problems:?}"
+        );
+    }
+
+    /// The whole of check 10 against the real documents. §7.6 states the result
+    /// this asserts — *"None. All 58 cases are claimed by at least one clause."*
+    /// — and until this check that sentence was a hand computation nothing
+    /// reproduced.
+    #[test]
+    fn the_real_documents_orphan_no_case() {
+        let root = workspace_root().unwrap();
+        let clauses = parse_clauses(&read(&root, SPEC).unwrap());
+        let cases = collect_cases(&read(&root, CASES).unwrap());
+        assert_eq!(cases.len(), 58, "§7.6's count of the document");
+
+        let mut problems = Vec::new();
+        check_case_ownership(&clauses, &cases, &mut problems);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// Check 11 against the real documents, both directions. Every case carries
+    /// a level, and the thirteen breaches are exactly the recorded ones.
+    #[test]
+    fn the_real_documents_breach_cf36_exactly_where_recorded() {
+        let root = workspace_root().unwrap();
+        let clauses = parse_clauses(&read(&root, SPEC).unwrap());
+        let cases_doc = read(&root, CASES).unwrap();
+        let levels = collect_case_levels(&cases_doc);
+        assert_eq!(
+            levels.len(),
+            collect_cases(&cases_doc).len(),
+            "every case declares a Level marker"
+        );
+
+        let mut problems = Vec::new();
+        let live = reconcile_cf36(&clauses, &levels, &mut problems);
+        check_case_levels(&clauses, &levels, &mut problems);
+
+        assert!(problems.is_empty(), "{problems:#?}");
+        assert_eq!(
+            live.len(),
+            CF36_UNDISCHARGED.len(),
+            "every recorded breach is still one; got {live:?}"
+        );
+    }
+
+    // ---- S-5: a prose word may not switch off a clause's rule-name check ----
+
+    /// A slice of the document shaped like a clause declaration, so
+    /// [`check_named_rules`] can be handed a state the real document does not
+    /// contain today.
+    fn one_clause(id: &str, rule_line: &str) -> Vec<Clause> {
+        let document = format!(
+            "#### {id} — a declaration shaped like the document's\n\n\
+             `[FROZEN]`\n\
+             `Rule:` {rule_line}\n\
+             `Rejects:` a store that does the opposite\n"
+        );
+        let clauses = parse_clauses(&document);
+        assert_eq!(
+            clauses.len(),
+            1,
+            "the fixture must parse as exactly one clause"
+        );
+        clauses
+    }
+
+    /// A clause fixture carrying a `Cases:` line as well as a `Rule:` one.
+    fn one_clause_with(id: &str, rule_line: &str, cases: &str) -> Vec<Clause> {
+        let document = format!(
+            "#### {id} — a declaration shaped like the document's\n\n\
+             `[FROZEN]`\n\
+             `Rule:` {rule_line}\n\
+             `Cases:` {cases}\n\
+             `Rejects:` a store that does the opposite\n"
+        );
+        let clauses = parse_clauses(&document);
+        assert_eq!(
+            clauses.len(),
+            1,
+            "the fixture must parse as exactly one clause"
+        );
+        clauses
+    }
+
+    /// Nothing in the workspace: every name below is unresolvable by
+    /// construction, so the only question a test asks is whether the checker
+    /// looked.
+    fn nothing_resolves() -> BTreeSet<String> {
+        BTreeSet::new()
+    }
+
+    /// The state the gate is blind to, and the reason this group exists: one
+    /// prose word in front of a name nobody wrote, and check 4 abstains.
+    ///
+    /// VT-13 is the live instance — `unit test` in front of
+    /// `position_next_signals_overflow` switches the check off for the three
+    /// names that follow it, two of which are live suite rules.
+    #[test]
+    fn a_clause_whose_prose_says_unit_test_still_has_its_rule_names_checked() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause(
+                "VT-13",
+                "unit test `position_next_signals_overflow`; `a_rule_nobody_ever_wrote`",
+            ),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("a_rule_nobody_ever_wrote")),
+            "a FROZEN clause names a rule that has never existed and the checker said \
+             nothing; got {problems:?}"
+        );
+    }
+
+    /// The whole point of the table's grain: VT-13's two live names are checked
+    /// again. Under the prose guard the words "unit test" in front of a third
+    /// name switched all four off, so a rename of either of these two — both
+    /// real rules in `suite.rs` — was invisible.
+    #[test]
+    fn a_guarded_clause_has_its_resolvable_names_checked_too() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause(
+                "VT-13",
+                "unit test `position_next_signals_overflow`; `read_from_is_inclusive`",
+            ),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("read_from_is_inclusive")),
+            "a live suite rule beside a declared one must still be resolved; got {problems:?}"
+        );
+        assert!(
+            !problems
+                .iter()
+                .any(|p| p.contains("position_next_signals_overflow")),
+            "the declared name is accounted for by the table, not reported; got {problems:?}"
+        );
+    }
+
+    // ---- S-5: the declarations are reconciled in three directions ----------
+
+    /// The fabricated table every reconciliation test starts from.
+    fn one_declaration(why: Unresolvable) -> [(&'static str, &'static str, Unresolvable); 1] {
+        [("ES-38", "a_test_that_lives_elsewhere", why)]
+    }
+
+    /// Direction one: the rule got written, and the note about it did not get
+    /// deleted. From then on the clause is checked against the note.
+    #[test]
+    fn a_declaration_that_starts_resolving_is_reported_as_stale() {
+        let mut problems = Vec::new();
+        let resolvable: BTreeSet<String> = ["a_test_that_lives_elsewhere".to_owned()]
+            .into_iter()
+            .collect();
+
+        let census = reconcile_unresolvable(
+            &one_declaration(Unresolvable::Scheduled("the phase that lands removal")),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &resolvable,
+            Path::new("."),
+            &mut problems,
+        );
+
+        assert_eq!(
+            census,
+            [0, 0, 0],
+            "a stale entry is not counted as a live cost"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("now resolves") && p.contains("the phase that lands removal")),
+            "the message must carry the claim the entry was written under; got {problems:?}"
+        );
+    }
+
+    /// Direction two: the clause stopped citing the name. The entry then keeps a
+    /// name alive that nothing in the document asks for.
+    #[test]
+    fn a_declaration_whose_clause_stopped_citing_it_is_reported_as_stale() {
+        let mut problems = Vec::new();
+
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::NotARuleName),
+            &one_clause("ES-38", "`some_other_name_entirely`"),
+            &nothing_resolves(),
+            Path::new("."),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("no longer names") && p.contains("can only shrink")),
+            "got {problems:?}"
+        );
+    }
+
+    /// Direction three, and the one this variant exists for: the test named by
+    /// an `Elsewhere` entry is deleted. Twelve `[FROZEN]` clauses stand on
+    /// twenty-six such tests, `collect_rules` reads none of the files they live
+    /// in, and before this nothing in the workspace would have said a word.
+    #[test]
+    fn an_elsewhere_declaration_whose_file_lost_the_identifier_is_reported() {
+        let root = fabricated_root("elsewhere");
+        let dir = root.join("crates/happenstance-core/src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("event.rs"),
+            "#[test]\nfn a_neighbouring_test() {}\n",
+        )
+        .unwrap();
+
+        let mut problems = Vec::new();
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::Elsewhere(
+                "crates/happenstance-core/src/event.rs",
+            )),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &nothing_resolves(),
+            &root,
+            &mut problems,
+        );
+        fs::remove_dir_all(&root).ok();
+
+        assert!(
+            problems.iter().any(|p| p.contains("declares that")
+                && p.contains("a_test_that_lives_elsewhere")
+                && p.contains("event.rs")),
+            "a deleted unit test behind a FROZEN clause must be named at its file; \
+             got {problems:?}"
+        );
+    }
+
+    /// An `Elsewhere` path that cannot be read at all — a file moved rather than
+    /// emptied — is the other half, and it must not be swallowed as "absent, so
+    /// nothing to check".
+    #[test]
+    fn an_elsewhere_declaration_naming_a_missing_file_is_reported() {
+        let root = fabricated_root("elsewhere-missing");
+
+        let mut problems = Vec::new();
+        reconcile_unresolvable(
+            &one_declaration(Unresolvable::Elsewhere(
+                "crates/happenstance-core/src/gone.rs",
+            )),
+            &one_clause("ES-38", "`a_test_that_lives_elsewhere`"),
+            &nothing_resolves(),
+            &root,
+            &mut problems,
+        );
+        fs::remove_dir_all(&root).ok();
+
+        assert!(
+            problems.iter().any(|p| p.contains("cannot be read")),
+            "got {problems:?}"
+        );
+    }
+
+    /// RS-81-3, applied to this check's own lookup. The names in the table nest
+    /// by accident rather than by design — `rejects_invalid_tags` sits beside
+    /// `rejects_invalid_event_types` — so a substring test would let a
+    /// neighbouring test discharge a deleted one's obligation.
+    #[test]
+    fn an_elsewhere_file_must_contain_the_whole_identifier() {
+        assert!(contains_identifier(
+            "fn rejects_invalid_tags() {}",
+            "rejects_invalid_tags"
+        ));
+        assert!(!contains_identifier(
+            "fn rejects_invalid_tags_and_types() {}",
+            "rejects_invalid_tags"
+        ));
+    }
+
+    /// A pair declared twice would be counted twice in the summary and could
+    /// carry two contradictory reasons. Cheap to state, invisible otherwise.
+    #[test]
+    fn the_table_declares_each_pair_once() {
+        let mut seen: BTreeSet<(&str, &str)> = BTreeSet::new();
+        for (clause, rule, _) in &UNRESOLVABLE_RULE_NAMES {
+            assert!(
+                seen.insert((clause, rule)),
+                "{clause} declares `{rule}` twice"
+            );
+        }
+        assert_eq!(seen.len(), UNRESOLVABLE_RULE_NAMES.len());
+    }
+
+    /// The whole table against the real tree, so that a failure names the entry
+    /// rather than arriving as one line of `spec-trace`'s output. This is the
+    /// test that goes red when someone deletes a unit test a `[FROZEN]` clause
+    /// is standing on.
+    #[test]
+    fn every_declaration_holds_against_the_real_tree() {
+        let root = workspace_root().unwrap();
+        let spec = read(&root, SPEC).unwrap();
+        let clauses = parse_clauses(&spec);
+        let resolvable: BTreeSet<String> = all_rules(&root)
+            .unwrap()
+            .union(&wire_rules(&root).unwrap())
+            .cloned()
+            .collect();
+
+        let mut problems = Vec::new();
+        let census = reconcile_unresolvable(
+            &UNRESOLVABLE_RULE_NAMES,
+            &clauses,
+            &resolvable,
+            &root,
+            &mut problems,
+        );
+
+        assert!(problems.is_empty(), "{problems:#?}");
+        assert_eq!(
+            census.iter().sum::<usize>(),
+            UNRESOLVABLE_RULE_NAMES.len(),
+            "every entry must be live; got {census:?}"
+        );
+    }
+
+    /// The same sweep from the clause side: no clause names a rule that is
+    /// neither resolvable nor declared. This is what the prose guard was hiding.
+    #[test]
+    fn the_real_document_names_no_undeclared_rule() {
+        let root = workspace_root().unwrap();
+        let spec = read(&root, SPEC).unwrap();
+        let resolvable: BTreeSet<String> = all_rules(&root)
+            .unwrap()
+            .union(&wire_rules(&root).unwrap())
+            .cloned()
+            .collect();
+
+        let mut problems = Vec::new();
+        check_named_rules(&parse_clauses(&spec), &resolvable, &mut problems);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// The same defect through each of the other three live terms. They are
+    /// listed rather than collapsed because each is a separate sentence a clause
+    /// author may write without knowing it disarms anything.
+    #[test]
+    fn no_prose_term_disarms_the_rule_name_check() {
+        for prose in [
+            "`a_rule_nobody_ever_wrote` (new)",
+            "compile test `a_rule_nobody_ever_wrote`",
+            "`append_preserves_event_payload`; new `a_rule_nobody_ever_wrote`",
+        ] {
+            let mut problems = Vec::new();
+            check_named_rules(
+                &one_clause("ES-38", prose),
+                &nothing_resolves(),
+                &mut problems,
+            );
+            assert!(
+                problems
+                    .iter()
+                    .any(|p| p.contains("a_rule_nobody_ever_wrote")),
+                "`{prose}` switched the check off; got {problems:?}"
+            );
+        }
     }
 }

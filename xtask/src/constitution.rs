@@ -28,12 +28,13 @@
 //! does not lint doctests at all, so `unwrap_used = "deny"` and the `pedantic`
 //! group are unenforced inside every example here.
 //!
-//! `RUSTDOCFLAGS=-D warnings` recovers rustc's *default-on* lints inside a
-//! doctest — a probe confirmed `non_snake_case` fails the build under it — but
-//! not the workspace's `[lints]` table and not clippy, which is where
-//! `unwrap_used` lives. So the recovery is partial, and `lint-constitution`
-//! greps the fences for the two spellings that matter rather than pretending
-//! otherwise.
+//! `RUSTDOCFLAGS=-D warnings` reaches nothing lexically inside a fence — not
+//! the workspace's `[lints]` table, not clippy (which never lints doctests at
+//! all), and not even rustc's own default-on lints: measured against this
+//! corpus, a `non_snake_case` violation compiled and ran at exit 0 with the
+//! variable set (RS-01-4; `experiments/gate-vacuity/results/`
+//! `constitution-fence.md`). `lint-constitution` greps the fences for the two
+//! spellings that matter rather than trusting a lint that never arrives.
 
 // Each module exists only while rustdoc is collecting doctests, so a normal
 // build carries neither the module nor the included prose.

@@ -518,8 +518,6 @@ where
     S: ThreadSafeEventStore + Send + Sync + 'static,
 {
     tokio::spawn(async move {
-        // Bound to a local rather than inlined: edition 2024 RPITIT captures
-        // every in-scope lifetime, and an inlined temporary is E0716.
         let chunk = core::num::NonZeroUsize::new(64).expect("64 is not zero");
 
         // `map_or` rather than `?`: the whole `ProjectionError<S::Error, _>` is
@@ -567,4 +565,34 @@ async fn run_projection_spawns_from_generic() {
 
     assert_eq!(counted, 2, "one applied event plus a non-empty head");
     assert_eq!(models.get("enrolments"), Some(1));
+}
+
+/// F1-05: the comment hoisting `chunk` inside [`spawns_the_projection_runner`]
+/// invokes RS-22-3 (`impl Trait` capturing a *borrowed* parameter's lifetime),
+/// but `run_projection` is a free `pub async fn` and `chunk: NonZeroUsize` is a
+/// `Copy` scalar taken by value — no RPITIT, no borrow, nothing to capture.
+///
+/// `_accepts_inline_chunk` is the check the entry names as decisive: inlining
+/// the expression at the call site compiles, so no lifetime forces the hoist.
+/// The `include_str!` assertion is what actually fails until the false RS-22-3
+/// citation is gone from the comment above `spawns_the_projection_runner`'s
+/// `chunk` binding.
+#[test]
+fn chunk_argument_inlines_without_hoisting() {
+    fn _accepts_inline_chunk() {
+        fn takes(_: core::num::NonZeroUsize) {}
+        takes(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+    }
+
+    // Built from two literals rather than one: `include_str!` below reads this
+    // very file, and a single contiguous literal here would match itself.
+    let needle = format!("{}{}", "edition 2024 RPITIT ", "captures");
+    let source = include_str!("flavours.rs");
+    assert!(
+        !source.contains(&needle),
+        "flavours.rs still cites RS-22-3 (RPITIT lifetime capture) to justify \
+         hoisting `chunk` — a free fn's by-value `NonZeroUsize` argument — but \
+         RS-22-3 governs `impl Trait` returns capturing a *borrowed* parameter's \
+         lifetime, not this construct (F1-05)"
+    );
 }

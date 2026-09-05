@@ -94,7 +94,7 @@ review, fails only once the adapter crate is compiled, and the diagnostic says
 the contract crate instead of for the attribute that is doing exactly its job.
 
 **Evidence.** `crates/happenstance-core/src/query.rs:156 (so that no downstream crate can build one directly)` ·
-`crates/happenstance-core/src/query.rs:194 (pub fn items)` ·
+`crates/happenstance-core/src/query.rs:204 (pub fn items)` ·
 [SPECIFICATION VT-26](../../spec/SPECIFICATION.md)
 
 ## RS-13-3. Reach for `#[non_exhaustive]` with public fields when a value must be readable but not fabricable.
@@ -181,8 +181,8 @@ changed. Each fix is mechanical and none is the author's, which is exactly the
 pressure that gets the new part bolted on as a side-channel `Option` instead of
 landing where it belongs.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:406 (the *number* of an event's)` ·
-`crates/happenstance-core/src/event.rs:423 (so a later part is additive)` ·
+**Evidence.** `crates/happenstance-core/src/event.rs:415 (the *number* of an event's)` ·
+`crates/happenstance-core/src/event.rs:432 (so a later part is additive)` ·
 [SPECIFICATION VT-4](../../spec/SPECIFICATION.md)
 
 ## RS-13-5. Do not put `#[non_exhaustive]` on an enum designed not to grow.
@@ -228,7 +228,7 @@ and the day a `Failed` variant lands those emitters build unchanged and report
 nothing for it — the failure is swallowed by the arm the attribute forced them to
 write, and the adapter's CI is green on a suite that found a defect.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:882 (Deliberately exhaustive)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1119 (Deliberately exhaustive)` ·
 `crates/happenstance-core/src/limits.rs:53 (non_exhaustive)` ·
 [SPECIFICATION VT-25](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) ·

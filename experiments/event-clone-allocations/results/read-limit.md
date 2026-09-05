@@ -16,6 +16,22 @@ measurement this experiment exists to refuse.
 combinations against a mixed store, that `before` returns what the **real**
 `MemoryEventStore::read` returns and that `after` returns what `before` returns.
 
+> **`tests/measure_read.rs` is red as of 2026-09-04, and the reason is that the
+> fix landed.** Three of its assertions tie the *real* store to the **before**
+> arm — `real_limited.heap_ops().abs_diff(before.heap_ops()) < 64` is the
+> sharpest — and `MemoryEventStore::read` now costs 6 heap ops at `limit=1`
+> against the before arm's 40,013 on a 10,000-event store. It is the **after**
+> arm the real store now matches. The rows above are therefore a record of the
+> decision, not a live comparison, and `run.sh` exits non-zero at this step.
+>
+> Not repaired here, and deliberately: this file is H2's, the change that
+> falsified it is not this lane's, and rewriting an assertion to agree with a
+> store whose behaviour someone else moved today is exactly how a measurement
+> stops being one. It is recorded so that the next person to run `run.sh` reads
+> this before reading an exit code. Arms 3 and 4 — which is what AE-2 is about,
+> and what `clone-cost.md` reports — ran green in the same invocation and print
+> `all encode-cost assertions hold`.
+
 ## The sweep
 
 | store | tags/event | arm | heap ops | bytes requested | median wall clock (min..max of 5) |

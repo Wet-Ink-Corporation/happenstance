@@ -297,3 +297,106 @@ fn a_shipped_codec_is_not_a_dev_only_dependency() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The published pages describe the manifest they are published beside
+// ---------------------------------------------------------------------------
+
+/// The contract crate's manifest, read from here because the claim under test is
+/// about the *relationship* between the two and cannot be checked from one.
+const CONTRACT_MANIFEST: &str = include_str!("../../happenstance-core/Cargo.toml");
+
+/// This crate's crates.io front page.
+const README: &str = include_str!("../README.md");
+
+/// Every feature name a manifest declares, `default` excluded.
+///
+/// `default` is excluded because it is not a switch a consumer turns on; it is
+/// the set they turn *off*, and it is compared separately below.
+fn feature_names(manifest: &str) -> Vec<String> {
+    section(manifest, "[features]")
+        .into_iter()
+        .filter_map(|line| {
+            let name = line.split('=').next()?.trim().to_owned();
+            (name != "default").then_some(name)
+        })
+        .collect()
+}
+
+/// The features one manifest declares and the other does not.
+fn only_in(this: &str, other: &str) -> Vec<String> {
+    let theirs = feature_names(other);
+    feature_names(this)
+        .into_iter()
+        .filter(|name| !theirs.contains(name))
+        .collect()
+}
+
+/// The two published pages may not claim a parity the two manifests deny.
+///
+/// The wrong implementation this rejects shipped on the crates.io front page:
+///
+/// > Every feature this crate has is forwarded from `happenstance-core`, so the
+/// > two cannot disagree about what `default-features = false` means.
+///
+/// It is false in exactly the way it declares impossible. `json`, `postcard` and
+/// `cbor` exist only here, `conformance` only there, and `json` is in this
+/// crate's defaults, so `default-features = false` drops a codec, a type and a
+/// third-party dependency here and drops nothing of the kind there. The reader
+/// the sentence is written for is the one it costs: an integrator auditing a
+/// minimal dependency graph, told there is nothing crate-specific to look at,
+/// who finds `serde_json`, `postcard` and `ciborium` at `cargo tree -e features`.
+/// `ciborium` is the sharp case, because the manifest records that its licence
+/// subtree was read against the allowlist and could have refused.
+///
+/// The divergence itself is correct and is not what this rejects — ADR-0006 gave
+/// encoding to the typed layer, so the codecs belong here. Two things are asked
+/// of the pages instead: that they do not assert an impossibility, and that they
+/// name what is local, so a fourth codec cannot be added in silence.
+///
+/// The impossibility clause is conditional on the divergence, not absolute. If
+/// the two feature tables are ever made identical the sentence becomes true and
+/// this test permits it again.
+#[test]
+fn the_published_pages_do_not_claim_a_parity_the_manifests_deny() {
+    let local = only_in(MANIFEST, CONTRACT_MANIFEST);
+    let contract_only = only_in(CONTRACT_MANIFEST, MANIFEST);
+    let defaults_differ = feature_or_panic("default")
+        != section(CONTRACT_MANIFEST, "[features]")
+            .into_iter()
+            .find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key.trim() == "default").then(|| value.trim().to_owned())
+            })
+            .expect("the contract crate declares a `default` feature");
+
+    assert!(
+        !local.is_empty(),
+        "this test is about a divergence, and there is none to describe: the \
+         codecs have left this crate"
+    );
+
+    // 1. Neither page asserts the impossibility.
+    for (page, text) in [("README.md", README), ("Cargo.toml", MANIFEST)] {
+        for claim in ["cannot disagree", "exactly the switches"] {
+            assert!(
+                !text.contains(claim),
+                "`{page}` says {claim:?} while {local:?} exist only here, \
+                 {contract_only:?} only in `happenstance-core`, and the two \
+                 `default` sets {}. A sentence declaring a disagreement \
+                 impossible, printed beside the disagreement, is worse than no \
+                 sentence",
+                if defaults_differ { "differ" } else { "agree" }
+            );
+        }
+    }
+
+    // 2. The README names what is local, so the next codec cannot be silent.
+    for name in &local {
+        assert!(
+            README.contains(name.as_str()),
+            "`{name}` is a feature this crate has and `happenstance-core` does \
+             not, and the front page never mentions it"
+        );
+    }
+}

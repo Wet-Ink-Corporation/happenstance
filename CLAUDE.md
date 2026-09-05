@@ -125,9 +125,19 @@ artifact is yours to write freely.
 Six templates under `.redkiln/templates/` are deliberately customised — `spec.md`,
 `_design.md`, `_intake-brief.md`, `discover.md` and the two gate checklists — so
 `redkiln doctor` reports six `template-drift` advisories forever. That is expected,
-and the `backlog` CI job asserts the set is **exactly** those six: a seventh is a
+and the `backlog` CI job asserted the set was **exactly** those six: a seventh is a
 template someone changed without deciding to, and a missing one is a customisation
 reverted by `adopt --templates`.
+
+**That job is disabled as of 2026-09-04** — this repository has moved off the
+redkiln version it pins, so the pinned CLI reports drift against a process the
+repository no longer runs. It is `if: false` rather than deleted, so it shows as
+*skipped* rather than vanishing: the job's own argument is that a check which
+quietly stops running is worth less than none, because the green tick keeps
+arriving. **While it is off, nothing enforces `.kb` frontmatter validation, the
+immutability of accepted decision atoms, hand-edited item frontmatter, or the
+six-template assertion above** — all four merge green. The restore path and the
+full cost are written at the job in `.github/workflows/ci.yml`.
 
 **Never run `redkiln adopt --templates`.** `redkiln upgrade` recommends it, and it
 is wrong here: it would overwrite all six customisations with the bundled defaults,

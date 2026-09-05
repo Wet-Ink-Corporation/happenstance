@@ -5,6 +5,8 @@
 #![doc = include_str!("overview.md")]
 #![allow(clippy::print_stdout)]
 
+use core::num::NonZeroU32;
+
 use anyhow::{Result, bail};
 use happenstance::bytes::Bytes;
 use happenstance::{
@@ -19,8 +21,9 @@ use serde::{Deserialize, Serialize};
 /// loop whose only exit is success is a hang with better manners. This run is
 /// uncontended — one process, one writer — so every commit reports a single
 /// attempt and the bound is never spent: a visible bound on an unexercised
-/// path.
-const ATTEMPTS: u32 = 3;
+/// path. Built at compile time: `attempts` is `const fn`, so there is no
+/// fallible conversion to spell at the call site.
+const ATTEMPTS: NonZeroU32 = NonZeroU32::new(3).unwrap();
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -401,7 +404,7 @@ async fn define_course(store: &MemoryEventStore, course: &str, capacity: u32) ->
     commit(
         store,
         boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
+        Retry::attempts(ATTEMPTS),
         |defined: &CourseDefinition| {
             if defined.defined {
                 return Err(Refusal::AlreadyDefined {
@@ -435,7 +438,7 @@ async fn subscribe(store: &MemoryEventStore, course: &str, student: &str) -> Res
     commit(
         store,
         boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
+        Retry::attempts(ATTEMPTS),
         |(seats, seat): &(Seats, StudentSeat)| {
             let Some(capacity) = seats.capacity else {
                 return Err(Refusal::NotDefined {
@@ -475,7 +478,7 @@ async fn unsubscribe(store: &MemoryEventStore, course: &str, student: &str) -> R
     commit(
         store,
         boundary,
-        Retry::attempts(ATTEMPTS.try_into()?),
+        Retry::attempts(ATTEMPTS),
         |seat: &StudentSeat| {
             if !seat.subscribed {
                 return Err(Refusal::NotSubscribed {

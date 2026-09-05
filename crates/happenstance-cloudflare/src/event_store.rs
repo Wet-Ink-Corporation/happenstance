@@ -83,17 +83,80 @@
 //! normally — so the rows written before the throw would commit with the rest of
 //! the turn. Nothing rolls them back, because from the runtime's point of view
 //! nothing went wrong. All-or-none is therefore something
-//! [`CloudflareEventStore`]'s write path does explicitly, by discarding the
-//! positions the failed batch was assigned, and
+//! [`CloudflareEventStore`]'s write path does explicitly, and
 //! `a_batch_that_throws_after_its_first_row_leaves_nothing_behind` is what fails
 //! if that is removed or believed rather than done.
 //!
 //! There is still no `BEGIN`/`COMMIT` here, and none is available: a Durable
 //! Object rejects transaction-control statements — `SAVEPOINT` among them —
 //! through `sql.exec()`, and offers a callback form instead, which would put a
-//! second seam in the constructor. The compensating discard is exact rather than
-//! a best effort for the reason above: with nothing awaited mid-batch, no row
-//! outside the batch can be in the range it deletes.
+//! second seam in the constructor.
+//!
+//! **What all-or-none rests on is a single statement, not the discard.** SQLite
+//! backs a failed statement out whole, and the batch's last statement covers the
+//! whole batch: the `UPDATE` that stamps every row with this incarnation's
+//! `origin_store` and its own `origin_position`. A row with no stamp carries no
+//! `EventId`, so it is not an event, and every path that answers a question
+//! about events filters it out. A batch that reaches the stamp lands; one that
+//! does not leaves refuse. The compensating discard sweeps that refuse — exactly
+//! rather than approximately, because with nothing awaited mid-batch no row
+//! outside the batch can be in the range it deletes — and when the discard
+//! itself fails the caller is told, but the clause is met either way.
+//!
+//! **This crate once made the discard load-bearing**, and
+//! [`CloudflareEventStoreError::PartialBatch`] is what it reported when the
+//! `DELETE` threw: an object still holding what its own documentation called
+//! part of a batch that never succeeded. **ES-18 `[FROZEN]`** admits no exception,
+//! no adapter-declared escape, and nothing in the specification or the ADRs
+//! recorded one — so that was a state the reference `!Send` adapter documented,
+//! tested and named, in contradiction of a frozen clause.
+//! `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it` and
+//! `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it` are what
+//! fail against that adapter, and they ask the question through the port rather
+//! than through raw SQL, because "what the store holds" is what the clause is
+//! about.
+//!
+//! # Cancellation
+//!
+//! **What a dropped `append` future does here: nothing, because there is nothing
+//! to drop.** `append` refuses an empty batch, checks the declared ceilings,
+//! reads this object's [`StoreId`], evaluates the condition and writes the
+//! batch — all through
+//! [`SqlStorage::exec`](crate::sql_storage::SqlStorage::exec), which is
+//! **synchronous**. There is no `.await` anywhere in that body, so a future
+//! polled once has already run to completion by the time `poll` returns.
+//! **A dropped `append` future cannot be cancelled by this adapter.**
+//!
+//! This is the statement **ES-23** obliges every adapter to make. The clause is
+//! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
+//! the port refuses to choose between them on a caller's behalf
+//! ([`EventStore::append`]'s own `# Cancellation` section) precisely so that
+//! each adapter has to answer.
+//!
+//! **It does not license the opposite reading either.** A caller MUST NOT treat a
+//! dropped future as evidence about *any* store, this one included: generic code
+//! binds the port rather than this crate, and the next store in the same program
+//! may answer differently. Where an outcome genuinely has to be resolved, ES-24
+//! is the mechanism — a conditional append is at-most-once under verbatim
+//! reissue, so reissuing the identical batch settles it with no identity and no
+//! idempotency key.
+//!
+//! **The absence of a suspension point is load-bearing three times over here**,
+//! which is why it is checked rather than asserted. It is this section's answer;
+//! it is why the object cannot yield to its event loop part way through a batch,
+//! which is what makes the compensating discard's range exact; and it is the
+//! premise `MAX_EVENTS_PER_BATCH`'s derivation is written against. The body says
+//! so of itself in a comment, and a comment is not an instrument —
+//! `tests/cancellation_statement.rs` fails if this section goes missing, and
+//! fails again if `append` acquires an `.await` and the section stops being true.
+//! That second half is what ADR-0012 recorded a heading-check alone could not
+//! have.
+//!
+//! What would *not* change the answer is a caller's runtime evicting the object
+//! mid-turn: the future is not cancelled, the turn is discarded, and what
+//! survives is decided by the Durable Object's own commit rules rather than by
+//! anything the caller dropped.
+//!
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -284,6 +347,71 @@ pub struct CloudflareEventStore {
 // path the fixture's "one instance, one object" invariant does not cover.
 
 impl CloudflareEventStore {
+    /// How many index arms one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite compiles a `UNION` of *n* arms as one compound `SELECT`, and
+    /// `SQLITE_MAX_COMPOUND_SELECT` defaults to **500** terms. A `Query` bounds
+    /// nothing by design — the specification requires every store to evaluate at
+    /// least 128 items and puts no ceiling above that — so a wide query is
+    /// **chunked and merged, never refused**: there is no query-item refusal
+    /// anywhere in this crate and no fourth [`StoreLimit`] variant to report one
+    /// through, because a query-item refusal is not an append outcome.
+    ///
+    /// This is not one of the three ceilings under *The capacity limits this
+    /// store declares* on the crate's front page, and it is deliberately not a
+    /// fourth row of that table: every row there is a value the store **refuses**
+    /// and names a `StoreLimit` to refuse it with, and this is a value the store
+    /// accepts and plans differently. It is published for the reason the sibling
+    /// publishes its own — a test that has to guess the boundary is a test that
+    /// stops crossing it — and because a caller pairing this adapter with
+    /// `happenstance-sqlite` should be able to compare the two numbers before
+    /// deploying rather than after.
+    ///
+    /// It is **one of two** axes, and not the one that binds first on a query of
+    /// wide items: see
+    /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](Self::MAX_QUERY_PARAMETERS_PER_STATEMENT).
+    pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+
+    /// How many bound parameters one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766, and the translation binds
+    /// one parameter per tag and one per type of every item in a chunk. So this
+    /// and [`MAX_QUERY_ARMS_PER_STATEMENT`](Self::MAX_QUERY_ARMS_PER_STATEMENT)
+    /// are **independent** axes rather than two spellings of one width: 400 items
+    /// of a single tag each is 400 arms and 400 parameters, while the same 400
+    /// items at this store's declared `tags_per_event` of 1,024 apiece is still
+    /// 400 arms and **409,600** parameters. It sits below the wall with headroom
+    /// rather than at it, because an adapter that binds one extra parameter per
+    /// row should not be within rounding distance.
+    ///
+    /// Both numbers are the sibling adapter's, and that is deliberate rather than
+    /// borrowed: they are properties of the SQLite underneath a Durable Object's
+    /// storage rather than of either adapter, so two adapters over one engine
+    /// disagreeing about them would be two guesses rather than one measurement.
+    /// The **merge** does diverge, and `query_sql`'s module documentation says
+    /// where and why.
+    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = 30_000;
+
+    /// How many statements one page of `query` will take.
+    ///
+    /// Never zero: a `Query::all` is one chunk, straight to the `event` table.
+    /// This is the seam a caller uses to size a decision model against this
+    /// adapter before deploying it, and the seam a test uses to observe a wide
+    /// query genuinely crossing the boundary — so it is **the same call** both
+    /// paths plan with, counted, never a second `ceil(arms / width)` that would
+    /// go on reporting a boundary the read path had stopped taking.
+    #[must_use]
+    pub fn planned_statement_count(query: &Query) -> usize {
+        query_sql::chunks(
+            query,
+            Self::MAX_QUERY_ARMS_PER_STATEMENT,
+            Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .len()
+    }
+
     /// Wraps a Durable Object's SQL storage.
     ///
     /// Injection, never construction: in production the handle comes off
@@ -458,31 +586,73 @@ impl CloudflareEventStore {
     /// the path a DCB command loop takes every time it loses a race.
     ///
     /// `after: None` is a boundary of zero, because positions start at one.
+    ///
+    /// # Chunk and merge, on this path too
+    ///
+    /// A guard wider than either of SQLite's pushdown limits goes through
+    /// [`query_sql::chunks`](crate::query_sql), the same decomposition the read
+    /// path plans with, and the per-chunk maxima are merged by `max` — which is
+    /// **exact** rather than approximate precisely because the guard is an
+    /// inequality on the highest match, so `max(max(a), max(b))` is
+    /// `max(a ∪ b)`. `Option`'s own ordering does the merging: `None` sorts
+    /// below every `Some`, so a chunk that matched nothing contributes nothing
+    /// and the fold needs no special case for "no match yet".
+    ///
+    /// The alternative was to leave this path on the unchunked translation, and
+    /// it is not a smaller version of the same thing. This runs inside the
+    /// append turn with the caller's decision already taken, so a guard above
+    /// the pushdown limit would fail at `prepare` and arrive as
+    /// `AppendError::Store` wrapping a raw driver string — a refusal at the
+    /// pushdown limit, which is VT-23's named wrong implementation, on the path
+    /// where `crates/happenstance-core/src/limits.rs` gives it no variant to be
+    /// honestly reported through. The conformance suite cannot reach it:
+    /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag each, which is 128
+    /// arms and 128 parameters, comfortably inside both walls.
     fn evaluate(
         &self,
         condition: &AppendCondition,
     ) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
         for guard in condition.guards() {
-            let mut bindings = Vec::new();
-            let matched = query_sql::positions_matching(&guard.query, &mut bindings);
             let boundary = guard.after.map_or(0, position_as_i64);
-            bindings.push(SqlValue::Integer(boundary));
+            let mut highest: Option<SequencePosition> = None;
 
-            let statement =
-                format!("SELECT max(position) AS position FROM ({matched}) WHERE position > ?");
-            let mut cursor = self.sql.exec(&statement, &bindings)?;
-            let Some(row) = cursor.next_row().transpose()? else {
-                continue;
-            };
-            match row.values() {
-                [SqlValue::Null] => {}
-                [value] => return Ok(Some(decode_position(value, "position")?)),
-                values => {
-                    return Err(CloudflareEventStoreError::RowShape {
-                        expected: 1,
-                        actual: values.len(),
-                    });
+            for (matched, mut bindings) in query_sql::chunks(
+                &guard.query,
+                Self::MAX_QUERY_ARMS_PER_STATEMENT,
+                Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            ) {
+                bindings.push(SqlValue::Integer(boundary));
+
+                // `FROM event WHERE position IN (…)` rather than `FROM (…)`, and
+                // the change of shape is what carries [`STAMPED`] onto this
+                // path. A guard is an inequality on the highest *event*, and
+                // refuse a failed batch left behind is not one — a guard that
+                // counted it would report a conflict at a position holding
+                // nothing, on the path where the caller's decision has already
+                // been taken. `IN` over the primary key is the same lookup the
+                // read plan makes.
+                let statement = format!(
+                    "SELECT max(position) AS position FROM event \
+                     WHERE position IN ({matched}) AND {STAMPED} AND position > ?"
+                );
+                let mut cursor = self.sql.exec(&statement, &bindings)?;
+                let Some(row) = cursor.next_row().transpose()? else {
+                    continue;
+                };
+                match row.values() {
+                    [SqlValue::Null] => {}
+                    [value] => highest = highest.max(Some(decode_position(value, "position")?)),
+                    values => {
+                        return Err(CloudflareEventStoreError::RowShape {
+                            expected: 1,
+                            actual: values.len(),
+                        });
+                    }
                 }
+            }
+
+            if highest.is_some() {
+                return Ok(highest);
             }
         }
         Ok(None)
@@ -507,11 +677,21 @@ impl CloudflareEventStore {
     ///
     /// `SAVEPOINT` is not the fix either: a Durable Object rejects transaction
     /// control through `sql.exec()` outright, which is the same reason there is
-    /// no `BEGIN`/`COMMIT` here. What is left is **explicit compensation** —
-    /// discard the rows this batch assigned — and it is exact rather than
-    /// approximate because nothing is awaited between the first `INSERT` and the
-    /// last statement, so no other writer can have interleaved a row into the
-    /// range being discarded.
+    /// no `BEGIN`/`COMMIT` here. What is left is the one atomicity primitive a
+    /// Durable Object cannot take away — **a single statement is backed out
+    /// whole** — pointed at the one statement that covers the batch: the
+    /// identity `UPDATE`. See [`STAMPED`]. A batch that reaches it lands; a batch
+    /// that does not leaves rows carrying no identity, which are not events.
+    ///
+    /// **The compensating discard is refuse collection, and used not to be.**
+    /// It is still issued, and still exact rather than approximate — nothing is
+    /// awaited between the first `INSERT` and the last statement, so no other
+    /// writer can have interleaved a row into the range being discarded — but
+    /// ES-18 no longer rests on it succeeding. It used to, and
+    /// [`CloudflareEventStoreError::PartialBatch`] is the report of the day it
+    /// did not: a `DELETE` that threw left the object holding what the adapter
+    /// then called part of a batch, which is a state a `[FROZEN]` clause with no
+    /// exception forbids outright.
     ///
     /// The `event` rows go in one at a time, each with `RETURNING position`,
     /// because `AUTOINCREMENT` permits gaps and nothing may assume `+ 1`; SQLite
@@ -625,8 +805,15 @@ impl CloudflareEventStore {
             .ok_or_else(|| SqlError::internal("an append of no events reached write_batch").into())
     }
 
-    /// Discards every row at or above `from`, undoing a batch that failed part
-    /// way through.
+    /// Discards every row at or above `from`, sweeping up a batch that failed
+    /// part way through.
+    ///
+    /// **Refuse collection, not the atomicity mechanism.** The rows this removes
+    /// were never stamped, so they were never events — see [`STAMPED`] — and a
+    /// failure here therefore costs storage and a stretch of the position space
+    /// rather than correctness. It is reported anyway, through
+    /// [`CloudflareEventStoreError::PartialBatch`], because on a metered runtime
+    /// unswept rows are billed.
     ///
     /// **The range is exact, not a guess.** `from` is the position the batch's
     /// first `INSERT … RETURNING` was given, every later row of the batch was
@@ -752,20 +939,34 @@ pub enum CloudflareEventStoreError {
     },
 
     /// An append failed part way through **and** the rows it had already written
-    /// could not be discarded, so this object still holds part of a batch that
-    /// never succeeded.
+    /// could not be discarded, so this object is still carrying them as refuse.
     ///
-    /// Both failures travel because either alone misleads. `cause` says why the
-    /// append stopped; `while_discarding` says why the compensation could not
-    /// clean up after it — and it is the second that changes what the caller
-    /// must do. Every other failure of `append` leaves the log as it found it,
-    /// so a DCB command loop may re-read and retry. This one does not: the log
-    /// now contains events the caller's own failed append put there, and a
-    /// retry would decide against them.
+    /// **The batch did not land, and a retry is safe.** That is the correction
+    /// this variant's documentation used to get wrong, and it was wrong about
+    /// the clause it mattered most for: it said the log now contained events the
+    /// caller's own failed append had put there, which would make this a
+    /// reachable, tested violation of **ES-18 `[FROZEN]`**. It is not, and never
+    /// had to be. A batch becomes events at the single `UPDATE` that stamps
+    /// identity over the whole of it — every row of an event carries
+    /// `origin_position`, and the write path's last statement is what sets it —
+    /// and every failure that reaches here happened before it, so what is left
+    /// behind
+    /// carries no [`EventId`] and no path that answers a question about events
+    /// can see it. `head` does not move, a replay does not yield it, and an
+    /// append guard does not count it.
+    ///
+    /// What the caller loses is storage and a stretch of the position space, not
+    /// correctness — which is why both failures still travel. `cause` says why
+    /// the append stopped and is the one to act on; `while_discarding` says why
+    /// the refuse is still there, which on a metered runtime is billed and on a
+    /// bounded one is a ceiling getting closer. Neither is a reason to reconcile
+    /// the log by hand.
     ///
     /// It is reachable, not defensive — a storage ceiling reached mid-batch
     /// fails the `INSERT` and then fails the `DELETE` that would undo it. See
-    /// `a_batch_whose_discard_also_fails_reports_both_failures`.
+    /// `a_batch_whose_discard_also_fails_reports_both_failures`, and
+    /// `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it`
+    /// for the clause held over the same state.
     #[error(
         "an append failed and its rows from position {from} could not be discarded: {cause} (while discarding: {while_discarding})"
     )]
@@ -773,9 +974,17 @@ pub enum CloudflareEventStoreError {
         /// The first position this batch was given; every row at or above it was
         /// this batch's, and is what the discard was aimed at.
         from: SequencePosition,
-        /// Why the append stopped.
+        /// Why the append stopped — the primary, actionable failure, and the
+        /// one `Error::source()` chains to.
+        #[source]
         cause: Box<CloudflareEventStoreError>,
         /// Why the rows it had written could not be discarded.
+        ///
+        /// Carried beside `cause` rather than replacing it, the way
+        /// `happenstance::runner::Error::Read`'s `rollback` sits beside its own
+        /// `source` (`crates/happenstance/src/runner.rs:174-191`): thiserror
+        /// permits one `#[source]` per variant, `cause` is what a caller must
+        /// act on, and this field stays out of the chain rather than hiding it.
         while_discarding: Box<CloudflareEventStoreError>,
     },
 }
@@ -941,15 +1150,41 @@ fn position_as_i64(position: SequencePosition) -> i64 {
 ///   `Number.MAX_SAFE_INTEGER` becomes on the way out of Workers SQL, because
 ///   the value is widened through a JS number. Reporting it is the difference
 ///   between a declared store limit and a silently wrong position.
+///
+/// # `u64::try_from` rather than `i64::unsigned_abs`
+///
+/// The two agree on every value the match guard admits, so this is a spelling
+/// and not a behaviour — and it is the honest spelling of the two.
+/// `unsigned_abs` maps `-3` onto `3`, and it reads as correct whether or not
+/// anything in front of it excludes a negative, which is exactly how it survives
+/// a reading: the guard is what makes it a no-op, and the guard is one edit
+/// away. `try_from` cannot express that mistake. It *fails* on a negative, so it
+/// stays right if the guard is ever narrowed, widened or moved.
+///
+/// That makes the arm's `ok_or` doubly unreachable rather than newly reachable,
+/// and it is kept for the reason it was there before: `SequencePosition::new` is
+/// the only thing that decides what a position is, and this is the total
+/// spelling of asking it. What made the line safe to touch at all is the fence
+/// beneath it — see
+/// `write_path_tests::a_negative_position_is_reported_not_absolutised` and its
+/// two read-path siblings.
+///
+/// One consequence of the swap is worth stating rather than leaving to be
+/// discovered. Those three criteria were shown red against `unsigned_abs` under
+/// a guard weakened to `*raw != 0`; with `try_from` here the same weakening
+/// leaves them green, because the decoder is then correct without the guard.
+/// That is the defence this buys, and it moves what the criteria fence: they now
+/// reject a narrowing spelling returning to this line — which is the actual trap
+/// — rather than a guard edit on its own.
 fn decode_position(
     value: &SqlValue,
     column: &'static str,
 ) -> Result<SequencePosition, CloudflareEventStoreError> {
     match value {
-        SqlValue::Integer(raw) if *raw >= 1 && *raw <= MAX_SAFE_POSITION => {
-            SequencePosition::new(raw.unsigned_abs())
-                .ok_or(CloudflareEventStoreError::StoredPosition { raw: *raw })
-        }
+        SqlValue::Integer(raw) if *raw >= 1 && *raw <= MAX_SAFE_POSITION => u64::try_from(*raw)
+            .ok()
+            .and_then(SequencePosition::new)
+            .ok_or(CloudflareEventStoreError::StoredPosition { raw: *raw }),
         SqlValue::Integer(raw) => Err(CloudflareEventStoreError::StoredPosition { raw: *raw }),
         SqlValue::Real(raw) => Err(CloudflareEventStoreError::StoredPosition {
             raw: truncate_millis(*raw),
@@ -985,6 +1220,51 @@ fn encode_tags(tags: &Tags) -> Vec<u8> {
 /// reported as [`CloudflareEventStoreError::RowShape`] rather than mis-decoded.
 const READ_COLUMNS: &str =
     "position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at";
+
+/// The predicate separating an **event** from a row this object merely holds.
+///
+/// # This is where ES-18 is met, and it is not the compensating discard
+///
+/// **ES-18 `[FROZEN]`** — *"Either every event in the batch lands or none does"* —
+/// is a clause about what a store *holds*, and a caller reads that through the
+/// port. This adapter has no transaction to lean on: a Durable Object rejects
+/// transaction control through `sql.exec()`, so a batch is several statements and
+/// a throw at any of them leaves the earlier ones written. What it does have is
+/// SQLite's own statement atomicity — **a single statement is backed out
+/// whole** — and one statement at the end of the batch that covers the whole of
+/// it: the `UPDATE … SET origin_store = ?, origin_position = position` in
+/// [`CloudflareEventStore::write_rows`].
+///
+/// So that `UPDATE` is the commit point. A row this object wrote and did not
+/// stamp carries no [`EventId`], and a row carrying no `EventId` is not an event
+/// — it is refuse the failed batch left behind. Every path that answers a
+/// question *about events* filters on this predicate: [`max_position`] (which is
+/// both `head` and the read ceiling), the read plan's own statements
+/// ([`render_chunk`]), and the append guard ([`CloudflareEventStore::evaluate`]).
+/// `contains_event_id` needs no filter and gets none: it matches on
+/// `origin_store = ? AND origin_position = ?`, and SQL `NULL` equals nothing.
+///
+/// **What changed, and what the wrong implementation was.** This adapter used to
+/// rest all-or-none on the compensating `discard_from`, which meant a `DELETE`
+/// that threw produced
+/// [`CloudflareEventStoreError::PartialBatch`](crate::CloudflareEventStoreError) —
+/// a state the adapter documented, tested and named, and which ES-18 admits no
+/// exception for. `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it`
+/// and `a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it` are
+/// what fail against that adapter. The discard is still issued and is still worth
+/// issuing — refuse on a metered runtime is billed — but it is refuse collection
+/// now, not the mechanism, and its failure costs storage rather than correctness.
+///
+/// **What it does not buy.** ES-18's second sentence says *byte-identical*, and
+/// an unswept row is not that. Neither is a swept one: `AUTOINCREMENT` keeps its
+/// high-water mark across the `DELETE` deliberately (see
+/// [`CloudflareEventStore::discard_from`]), because a reused position is two
+/// events wearing one `EventId`. The clause's own conformance rules ask what the
+/// store *holds* — `append_is_atomic_under_a_mid_batch_fault` asserts "all of the
+/// batch or none of it" — and that is the reading this adapter meets. The gap
+/// between the two sentences is stated rather than papered over, and is briefed at
+/// `.kb/_intake/remediation-2026-09-04-briefs/unswept-rows-and-byte-identity.md`.
+const STAMPED: &str = "origin_position IS NOT NULL";
 
 /// How many rows one page of a read asks for.
 ///
@@ -1179,8 +1459,8 @@ impl Stream for SqlRowStream {
                     }
 
                     let want = remaining.map_or(page_size, |left| left.min(page_size));
-                    let (statement, bindings) = render_read(&query, options, ceiling, cursor, want);
-                    let rows = match drain_page(&sql, &statement, &bindings) {
+                    let plan = render_read(&query, options, ceiling, cursor, want);
+                    let rows = match drain_plan(&sql, &plan, options.backwards, want) {
                         Err(err) => return Poll::Ready(Some(Err(err))),
                         Ok(rows) => rows,
                     };
@@ -1214,8 +1494,14 @@ impl Stream for SqlRowStream {
 /// back to unbounded paging: a read that quietly drops its ceiling is the wrong
 /// implementation ES-11 and ES-12 exist to reject, and it would pass every other
 /// assertion this adapter carries.
+///
+/// `origin_position IS NOT NULL` is [`STAMPED`], and it is the reason ES-18 holds
+/// here rather than an optimisation. See that constant.
 fn max_position(sql: &SqlStorage) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
-    let mut cursor = sql.exec("SELECT max(position) AS position FROM event", &[])?;
+    let mut cursor = sql.exec(
+        &format!("SELECT max(position) AS position FROM event WHERE {STAMPED}"),
+        &[],
+    )?;
     let Some(row) = cursor.next_row().transpose()? else {
         return Ok(None);
     };
@@ -1247,6 +1533,92 @@ fn drain_page(
     Ok(rows)
 }
 
+/// Runs every statement of one page's plan and merges them into one page.
+///
+/// # Why the merge truncates after every chunk rather than once at the end
+///
+/// Each statement returns the first `want` rows of its own arms, in the caller's
+/// direction, so the page is the first `want` of their union. Sorting and
+/// truncating incrementally is **exact**, not an approximation: a row already
+/// beyond the `want`-th position of a prefix of the chunks is beyond it in the
+/// full union too, because adding a chunk can only push a discarded row further
+/// out. What it buys is the residency bound — one page plus one chunk, rather
+/// than `chunks x page` — and on a Durable Object that is the difference the
+/// sibling adapter does not have to care about, because a single isolate has a
+/// real memory ceiling and `tests/wf11_memory_ceiling.rs` walks it.
+///
+/// **A one-statement plan is the overwhelmingly common case and takes neither
+/// the sort nor the decode**, so the read this replaced is byte-identical for
+/// every query narrow enough to plan as one statement — which is every query any
+/// conformance rule builds. The consequence worth stating: a row whose
+/// `position` column is not an integer at all ends the read one step earlier on
+/// a multi-statement plan than on a single-statement one, because the merge has
+/// to order by it. It ends the read either way; only the moment moves.
+///
+/// De-duplication is the merge's own, and it is needed: `UNION` removes a
+/// duplicate *within* a statement, and an event matching items that landed in
+/// two different chunks comes back from both.
+fn drain_plan(
+    sql: &SqlStorage,
+    plan: &[(String, Vec<SqlValue>)],
+    backwards: bool,
+    want: usize,
+) -> Result<VecDeque<SqlRow>, CloudflareEventStoreError> {
+    let [(statement, bindings)] = plan else {
+        let mut merged: Vec<(i64, SqlRow)> = Vec::new();
+        for (statement, bindings) in plan {
+            for row in drain_page(sql, statement, bindings)? {
+                merged.push((page_position(&row)?, row));
+            }
+            absorb(&mut merged, backwards, want);
+        }
+        return Ok(merged.into_iter().map(|(_, row)| row).collect());
+    };
+    drain_page(sql, statement, bindings)
+}
+
+/// Orders, de-duplicates and truncates the rows gathered so far.
+///
+/// Split out from [`drain_plan`] so that it can be *executed by a test*. It is
+/// otherwise reachable only through a plan of more than one statement, and
+/// nothing in the gate builds one: the conformance suite's widest query is
+/// `MIN_SUPPORTED_QUERY_ITEMS` items at one tag each, which is 128 arms and 128
+/// parameters, inside both ceilings by two orders of magnitude. A merge no test
+/// runs is dead code behind a green suite, which is the failure this workspace
+/// exists to retire — so the arithmetic lives here, generic over what it is
+/// carrying, and `query_sql`'s host tests drive it over integers.
+///
+/// `sort_by` rather than a negated key: a comparator has no value it cannot
+/// order, where negating the key is a panic in debug on `i64::MIN`. The sort is
+/// stable, so `dedup_by_key` keeps the row from the earliest chunk — they are
+/// the same row, since the two chunks matched the same event through different
+/// items, and "the same row" is what makes the choice free rather than lucky.
+///
+/// De-duplicating **before** truncating is not interchangeable with the other
+/// order: `want` distinct positions is the page the caller asked for, and
+/// truncating first would spend the budget on duplicates and return a short
+/// page that looks like the end of the result set.
+pub(crate) fn absorb<T>(merged: &mut Vec<(i64, T)>, backwards: bool, want: usize) {
+    merged.sort_by(|(a, _), (b, _)| if backwards { b.cmp(a) } else { a.cmp(b) });
+    merged.dedup_by_key(|(position, _)| *position);
+    merged.truncate(want);
+}
+
+/// The `position` column of a read row, as the integer the merge orders by.
+///
+/// Deliberately *not* [`decode_position`]: ordering needs the stored integer and
+/// nothing else, and validating the value here would move where a stored
+/// position out of the contract's range is reported. That belongs to
+/// [`decode_row`], which every row still passes through before it is yielded.
+/// The one thing this must reject is a column that is not an integer, because
+/// there is no order to put such a row in.
+fn page_position(row: &SqlRow) -> Result<i64, CloudflareEventStoreError> {
+    match row.values().first() {
+        Some(SqlValue::Integer(position)) => Ok(*position),
+        _ => Err(CloudflareEventStoreError::ColumnType { column: "position" }),
+    }
+}
+
 /// Renders one page of a read: the caller's query and options, the sample
 /// ceiling, and where the previous page stopped.
 ///
@@ -1269,17 +1641,50 @@ fn drain_page(
 /// `position IN (…)` rather than a join is what makes "no event is yielded
 /// twice across items" true by construction: the query's arms are `UNION`-ed and
 /// `IN` is a membership test, so an event matching three items is one row.
+/// # One page, several statements
+///
+/// The plan is one statement per chunk of
+/// [`query_sql::chunks`](crate::query_sql), and every one of them carries
+/// *every* bound above — the same ceiling, the same `from`, the same `to`, the
+/// same cursor and the same `LIMIT`. That is what makes them mergeable: each
+/// returns the first `limit` matching rows of its own arms in the caller's
+/// direction, and the first `limit` of the union is the first `limit` of the
+/// merge. One ceiling shared across every statement of every page is also how
+/// ES-12 stays discharged when a page becomes several statements.
 fn render_read(
     query: &Query,
     options: ReadOptions,
     ceiling: SequencePosition,
     cursor: Option<SequencePosition>,
     limit: usize,
-) -> (String, Vec<SqlValue>) {
-    let mut bindings = Vec::new();
-    let matched = query_sql::positions_matching(query, &mut bindings);
+) -> Vec<(String, Vec<SqlValue>)> {
+    query_sql::chunks(
+        query,
+        CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+        CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+    )
+    .into_iter()
+    .map(|(matched, bindings)| render_chunk(&matched, bindings, options, ceiling, cursor, limit))
+    .collect()
+}
 
-    let mut sql = format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched})");
+/// One statement of the plan: the chunk's own subquery, wrapped in the bounds.
+///
+/// [`STAMPED`] rides with the ceiling rather than replacing it. The ceiling is
+/// already computed by [`max_position`], which filters the same way, so refuse at
+/// the top of the log is out of range — but the *next* batch that succeeds lifts
+/// the ceiling above it, and from then on only this predicate keeps it out of the
+/// replay.
+fn render_chunk(
+    matched: &str,
+    mut bindings: Vec<SqlValue>,
+    options: ReadOptions,
+    ceiling: SequencePosition,
+    cursor: Option<SequencePosition>,
+    limit: usize,
+) -> (String, Vec<SqlValue>) {
+    let mut sql =
+        format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched}) AND {STAMPED}");
 
     sql.push_str(" AND position <= ?");
     bindings.push(SqlValue::Integer(position_as_i64(ceiling)));
@@ -1457,6 +1862,78 @@ mod write_path_tests {
             }
         }
         out
+    }
+
+    /// Every position the store holds that carries **no identity stamp**.
+    ///
+    /// The refuse a failed batch leaves behind, read through raw SQL because no
+    /// public surface of this adapter will admit it exists — which is exactly
+    /// the property under test. It is here so that a case which *arranges*
+    /// refuse can assert it actually got some: an arrangement that quietly
+    /// stopped working would otherwise leave the assertion below it true and
+    /// empty.
+    fn unstamped_positions(sql: &SqlStorage) -> Vec<i64> {
+        let mut cursor = sql
+            .exec(
+                "SELECT position FROM event WHERE origin_position IS NULL ORDER BY position",
+                &[],
+            )
+            .expect("the select runs");
+        let mut out = Vec::new();
+        while let Some(row) = cursor.next_row() {
+            let row = row.expect("the row decodes");
+            match row.values() {
+                [SqlValue::Integer(position)] => out.push(*position),
+                other => panic!("unexpected position row: {other:?}"),
+            }
+        }
+        out
+    }
+
+    /// Leaves one unstamped row in `event` and nothing else, then clears the way.
+    ///
+    /// The one arrangement that reaches this state, and it needs two mechanisms
+    /// because no single one covers both statements: a real SQLite trigger
+    /// refuses the tag insert, and the shim throws on the compensating `DELETE
+    /// FROM event`, which a `BEFORE INSERT` trigger cannot express. Both are
+    /// spent by the time this returns — the trigger is dropped and
+    /// [`arm_throw`] arms exactly one throw — so what follows runs against a
+    /// working store that happens to be holding refuse.
+    ///
+    /// Spelled once here and once in `read_path_tests`, which needs the same
+    /// state to reach a different filter. The duplication is two modules, not
+    /// two arrangements.
+    async fn leave_unstamped_refuse_behind(sql: &SqlStorage, store: &CloudflareEventStore) {
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("Reserved", &["seat:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        sql.exec("DROP TRIGGER refuse_tag_rows", &[])
+            .expect("the refusal lifts, so what follows runs against a working store");
+
+        assert_eq!(
+            unstamped_positions(sql).len(),
+            1,
+            "the arrangement must leave exactly one unstamped row behind, or every \
+             assertion downstream of it is true and empty"
+        );
     }
 
     /// Every `(tag, position)` row the store holds, in order.
@@ -2023,6 +2500,11 @@ mod write_path_tests {
     /// Without this test [`CloudflareEventStoreError::PartialBatch`] would be a
     /// variant no execution reaches — a claim about a state, rather than the
     /// report of one.
+    ///
+    /// It asserts what the object is still *carrying*, which is a different
+    /// question from what it *holds*: the surviving row is refuse and not an
+    /// event, and `a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it`
+    /// is the one that asks ES-18 over the same fault, through the port.
     #[wasm_bindgen_test]
     async fn a_batch_whose_discard_also_fails_reports_both_failures() {
         let (sql, store) = open();
@@ -2056,6 +2538,152 @@ mod write_path_tests {
                 .to_string()
                 .contains("no space left on device"),
             "and neither is the reason the cleanup could not run: {while_discarding}"
+        );
+    }
+
+    /// **ES-18 `[FROZEN]`**, asked through the port rather than through the shim:
+    /// *"Either every event in the batch lands or none does."* A batch whose
+    /// compensating `DELETE FROM event_tag` also fails must still leave the
+    /// store holding none of it.
+    ///
+    /// The named wrong implementation is the one this adapter was: give up on
+    /// the statement that removes the **events** because the statement that
+    /// removes the *index over* them threw, and report the leftover to the
+    /// caller as a state they must reconcile by hand. `event_tag` is derived
+    /// data; `event` is what makes a batch landed, and abandoning the second
+    /// because the first failed is a partial batch produced by the ordering of
+    /// two `DELETE`s and by nothing else.
+    ///
+    /// `head` and not `stored_positions`: ES-18 is a clause about what a store
+    /// *holds*, and a caller reads that through the port. A raw `SELECT` sees
+    /// rows this adapter may legitimately still be carrying as refuse.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        arm_throws(&sql, "event_tag", "no space left on device", 2);
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed throw refuses the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "a rejected append leaves the head where it found it, so a retry \
+             re-reads the log it decided against"
+        );
+    }
+
+    /// **ES-18 `[FROZEN]`**, at the one failure the ordering above cannot rescue:
+    /// the `DELETE` over `event` itself throws, so the rows the batch wrote are
+    /// still physically there when `append` returns.
+    ///
+    /// The clause is still met, and the reason is the write path's shape rather
+    /// than the compensation's success. A batch becomes events only at the
+    /// single `UPDATE … SET origin_store` that stamps identity over the whole
+    /// range — one statement, which SQLite backs out whole — so a batch that
+    /// failed before it is a batch of rows carrying no identity, and a row
+    /// carrying no identity is not an event. The compensating discard is refuse
+    /// collection, not the mechanism.
+    ///
+    /// The named wrong implementation is the adapter that makes the discard
+    /// load-bearing: it reports `PartialBatch` here and leaves the leftovers
+    /// readable, so `head` advances over a batch the caller was told was
+    /// refused.
+    ///
+    /// The fault is arranged in two halves because it needs two different
+    /// mechanisms: a real SQLite trigger refuses the tag insert, and the shim
+    /// throws on the discard's `DELETE FROM event` — which the trigger cannot
+    /// express, because a `DELETE` does not fire a `BEFORE INSERT`.
+    #[wasm_bindgen_test]
+    async fn a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it() {
+        let (sql, store) = open();
+        let before = store.head().await.expect("head reads on an empty store");
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            &sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("First", &["a:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            before,
+            "rows the failed batch could not remove are unstamped, and an \
+             unstamped row is not an event"
+        );
+    }
+
+    /// **ES-18 `[FROZEN]`** at the second of the stamp's three sites — the one
+    /// `head` cannot reach.
+    ///
+    /// The two cases above assert through `head`, which is [`max_position`],
+    /// which applies [`STAMPED`] once. [`CloudflareEventStore::evaluate`]
+    /// applies it a second time, and nothing reached that filter: with it
+    /// deleted the whole `wasm32` unit target passed, 86 of 86, and so did the
+    /// conformance suite's 93 rules. A leg of a `[FROZEN]` clause that no test
+    /// rejects is this repository's own named failure mode, and the fix it
+    /// belongs to is the place it is least expected.
+    ///
+    /// `evaluate` answers *what is the highest event matching this guard*,
+    /// inside the append turn, with the caller's decision already taken. The
+    /// story is the ordinary one: a caller's append is refused by a storage
+    /// fault and they retry the same decision. The retry has to be judged
+    /// against the events the store holds, not against the rows the failure left
+    /// behind.
+    ///
+    /// **The named wrong implementation**: a store that refuses a caller's retry
+    /// because its own failed write is in the way. They are told they lost a
+    /// race — `ConditionViolated { conflicting_position: Some(…) }` at a
+    /// position holding nothing — and retrying never clears it, because refuse
+    /// does not go away. Measured, with `evaluate`'s filter removed and every
+    /// other line of this file unchanged, this case reports exactly that.
+    #[wasm_bindgen_test]
+    async fn an_append_guard_does_not_count_a_row_a_failed_batch_left_behind() {
+        let (sql, store) = open();
+        leave_unstamped_refuse_behind(&sql, &store).await;
+
+        // The retry, guarded the way a DCB command loop guards it: the same
+        // query the decision was taken over, and no `after` — so any match at
+        // all is a conflict.
+        let landed = store
+            .append(
+                &[tagged("Reserved", &["seat:1"])],
+                Some(&condition_on("Reserved")),
+            )
+            .await
+            .expect("the retry is judged against events, and the store holds none");
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            Some(landed),
+            "the retry is the only event the store holds"
+        );
+        assert_eq!(
+            stored_positions(&sql).len(),
+            2,
+            "and the refuse is still physically there — the point is that nothing \
+             counts it, not that something swept it"
         );
     }
 
@@ -2158,10 +2786,15 @@ mod write_path_tests {
         let (sql, store) = open();
         // Written as a literal rather than a binding: binding it would already
         // have widened it through a JS number on the way *in*, and the fact
-        // under test is what happens on the way out.
+        // under test is what happens on the way out. The identity columns are
+        // seeded too, and they are not decoration: `origin_position IS NOT NULL`
+        // is what separates an event from refuse a failed batch left behind, so
+        // an unstamped row is invisible to `head` and this would assert nothing.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -2178,9 +2811,13 @@ mod write_path_tests {
     #[wasm_bindgen_test]
     async fn a_position_below_one_is_reported() {
         let (sql, store) = open();
+        // Stamped, like its two siblings above and below: an unstamped row is
+        // refuse rather than an event and `head` does not look at it.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (0, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (0, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -2192,8 +2829,46 @@ mod write_path_tests {
         );
     }
 
+    /// AC-010. The half of "below one" that the **match guard alone** is
+    /// holding: a negative stored position is reported, never reported at its
+    /// positive twin.
+    ///
+    /// `a_position_below_one_is_reported` seeds `0`, and `0` is the one value
+    /// below one that `SequencePosition::new` refuses on its own — so that case
+    /// stays green against a decoder carrying no range guard at all. A negative
+    /// does not. `i64::unsigned_abs` maps `-3` onto `3`, so a decoder that
+    /// reaches for it behind a weakened guard hands back a position the store
+    /// never assigned rather than an error: a second event at an occupied
+    /// [`SequencePosition`] (VT-11) and, through `origin_position`, a second
+    /// event wearing an occupied `EventId` (VT-8), both `[FROZEN]`.
+    ///
+    /// That is the named wrong implementation, and it is not hypothetical:
+    /// `*raw != 0` reads as an equivalent spelling of *"reject the value that
+    /// is not a position"*, and `happenstance-sqlite` reaches `unsigned_abs`
+    /// with no guard in front of it at all. Nothing here rests on the guard
+    /// being the only thing that is right.
+    #[wasm_bindgen_test]
+    async fn a_negative_position_is_reported_not_absolutised() {
+        let (sql, store) = open();
+        // Stamped, for the reason its sibling above gives.
+        sql.exec(
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (-3, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
+            &[],
+        )
+        .expect("the seeded row lands");
+
+        let head = store.head().await;
+        assert!(
+            matches!(head, Err(CloudflareEventStoreError::StoredPosition { .. })),
+            "a negative position must be reported, never handed back as its twin: {head:?}"
+        );
+    }
+
     /// A guard on the shared decoder itself: a position at the ceiling is
-    /// accepted, so the two rejections above are not a decoder that refuses
+    /// accepted, so the three rejections above are not a decoder that refuses
     /// everything.
     #[wasm_bindgen_test]
     fn the_ceiling_itself_is_a_usable_position() {
@@ -2229,7 +2904,7 @@ mod read_path_tests {
     use worker::wasm_bindgen::JsValue;
 
     use super::{CloudflareEventStore, CloudflareEventStoreError, PAGE_SIZE};
-    use crate::host::{durable_object, statements};
+    use crate::host::{arm_throw, durable_object, statements};
     use crate::js::JsHandle;
     use crate::sql_storage::{SqlCursor, SqlRow, SqlStorage, SqlValue};
 
@@ -2331,6 +3006,52 @@ mod read_path_tests {
         out
     }
 
+    /// Leaves one unstamped row in `event` and nothing else, then clears the way.
+    ///
+    /// The twin of `write_path_tests::leave_unstamped_refuse_behind`, spelled
+    /// again here because these are two modules rather than two arrangements —
+    /// a real SQLite trigger refuses the tag insert, and the shim throws on the
+    /// compensating `DELETE FROM event`, which a `BEFORE INSERT` trigger cannot
+    /// express. Both faults are spent by the time this returns.
+    async fn leave_unstamped_refuse_behind(sql: &SqlStorage, store: &CloudflareEventStore) {
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        store
+            .append(&[tagged("Reserved", &["seat:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+
+        sql.exec("DROP TRIGGER refuse_tag_rows", &[])
+            .expect("the refusal lifts, so what follows runs against a working store");
+
+        let mut cursor = sql
+            .exec(
+                "SELECT count(*) FROM event WHERE origin_position IS NULL",
+                &[],
+            )
+            .expect("the select runs");
+        let row = cursor
+            .next_row()
+            .expect("count returns a row")
+            .expect("the row decodes");
+        assert_eq!(
+            row.values(),
+            [SqlValue::Integer(1)],
+            "the arrangement must leave exactly one unstamped row behind, or every \
+             assertion downstream of it is true and empty"
+        );
+    }
+
     /// Appends `types` one at a time, returning the position each landed at.
     async fn append_each(store: &CloudflareEventStore, types: &[&str]) -> Vec<SequencePosition> {
         let mut out = Vec::new();
@@ -2376,6 +3097,20 @@ mod read_path_tests {
         items
             .iter()
             .filter_map(|item| item.as_ref().ok().map(|event| event.position))
+            .collect()
+    }
+
+    /// The identities of the items that decoded, ignoring any error item.
+    ///
+    /// The [`ok_positions_of`] argument one column across. `position` and
+    /// `EventId` are two facts a corrupt row can forge independently — a row
+    /// can sit at a position the store really assigned it and still carry a
+    /// narrowed `origin_position` — so the negative controls for the two
+    /// decode sites need one of these each.
+    fn ok_ids_of(items: &[Item]) -> Vec<EventId> {
+        items
+            .iter()
+            .filter_map(|item| item.as_ref().ok().map(|event| event.id))
             .collect()
     }
 
@@ -2496,13 +3231,13 @@ mod read_path_tests {
                     },
                 };
 
-                let (statement, bindings) = super::render_read(
+                let (statement, bindings) = the_only_statement(super::render_read(
                     &this.query,
                     this.options,
                     ceiling,
                     this.cursor,
                     this.page_size,
-                );
+                ));
                 match super::drain_page(&this.sql, &statement, &bindings) {
                     Err(err) => {
                         this.done = true;
@@ -2518,6 +3253,19 @@ mod read_path_tests {
                 }
             }
         }
+    }
+
+    /// The single statement of a one-chunk plan.
+    ///
+    /// Both controls below are about the *ceiling* and the *cursor*, so each
+    /// drives a narrow query that plans as one statement — and the assertion is
+    /// what keeps that true. A control that quietly answered from the first of
+    /// several statements would differ from the shipped read in two ways at
+    /// once, and the second would be the one it was not written to isolate.
+    fn the_only_statement(plan: Vec<(String, Vec<SqlValue>)>) -> (String, Vec<SqlValue>) {
+        let [statement] = <[_; 1]>::try_from(plan)
+            .expect("these controls drive a query narrow enough to plan as one statement");
+        statement
     }
 
     /// A read that opens one cursor at the first poll and advances it one row
@@ -2544,13 +3292,13 @@ mod read_path_tests {
                 .expect("this control is only ever pointed at a non-empty store");
             Self {
                 sql: sql.clone(),
-                statement: Some(super::render_read(
+                statement: Some(the_only_statement(super::render_read(
                     query,
                     options,
                     ceiling,
                     None,
                     usize::MAX,
-                )),
+                ))),
                 cursor: None,
                 done: false,
             }
@@ -2628,6 +3376,56 @@ mod read_path_tests {
             "a replay yields exactly the positions the store assigned, in order"
         );
         assert_eq!(event_types(&replayed), ["One", "Two", "Three", "Four"]);
+    }
+
+    /// **ES-18 `[FROZEN]`** at the third of the stamp's three sites, and the
+    /// only one on the read path.
+    ///
+    /// [`max_position`] keeps refuse out of the **ceiling**; it does nothing
+    /// about refuse that now sits *below* one. The next batch that succeeds
+    /// lifts the ceiling over it, and from that moment the only thing keeping it
+    /// out of a replay is [`render_chunk`]'s own [`STAMPED`] predicate. Nothing
+    /// reached that predicate: with it deleted the whole `wasm32` unit target
+    /// passed, 86 of 86, and so did the conformance suite's 93 rules — because
+    /// the two cases that made the stamp load-bearing both assert through
+    /// `head`, which is one filter of three.
+    ///
+    /// **The named wrong implementation**: a poisoned replay. A caller's append
+    /// is refused by a storage fault, a later one succeeds, and every read from
+    /// then on carries an error item for a row that is not an event —
+    /// `UnstampedEvent { position: … }`, measured, with `render_chunk`'s filter
+    /// removed and every other line of this file unchanged. A projection runner
+    /// meeting it stops at the fault and cannot pass it, because rereading
+    /// produces it again.
+    ///
+    /// The query is `Query::all()` deliberately. The refuse row's tag insert was
+    /// the statement that was refused, so it carries no tag rows and a tagged
+    /// query would miss it for the wrong reason.
+    #[wasm_bindgen_test]
+    async fn a_replay_across_a_refused_append_yields_only_what_landed() {
+        let (sql, store) = open();
+        leave_unstamped_refuse_behind(&sql, &store).await;
+
+        let landed = store
+            .append(&[event("Landed")], None)
+            .await
+            .expect("the append lands, and lifts the ceiling over the refuse");
+
+        let replayed = drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        let failures: Vec<String> = replayed
+            .iter()
+            .filter_map(|item| item.as_ref().err().map(|err| format!("{err:?}")))
+            .collect();
+        assert!(
+            failures.is_empty(),
+            "a replay after a refused append must not fail: {failures:?}"
+        );
+        assert_eq!(
+            positions_of(&replayed),
+            [landed],
+            "a replay yields the events, and a row carrying no identity is not one"
+        );
     }
 
     /// AC-001. Everything a replayed event carries survives the round trip:
@@ -3472,9 +4270,14 @@ mod read_path_tests {
         let (sql, store) = open();
         // A literal rather than a binding: binding it would widen it through a
         // JS number on the way *in*, and the fact under test is the way out.
+        // Stamped, because the read path filters `origin_position IS NOT NULL`:
+        // an unstamped row is refuse a failed batch left behind rather than an
+        // event, and a replay would skip it instead of reporting it.
         sql.exec(
-            "INSERT INTO event (position, event_type, data, tags, recorded_at) \
-             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0)",
+            "INSERT INTO event \
+             (position, event_type, data, tags, recorded_at, origin_store, origin_position) \
+             VALUES (9007199254740993, 'Unreachable', x'00', x'1f', 0, \
+                     x'000102030405060708090a0b0c0d0e0f', 1)",
             &[],
         )
         .expect("the seeded row lands");
@@ -3485,6 +4288,120 @@ mod read_path_tests {
                 .iter()
                 .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
             "the caller receives the error rather than a narrowed position: {items:?}"
+        );
+    }
+
+    /// AC-007. A negative stored position is reported, never absolutised onto a
+    /// position the store has already handed out.
+    ///
+    /// The sharp form of the criterion
+    /// `write_path_tests::a_negative_position_is_reported_not_absolutised`
+    /// states about `head`. One honest row is appended, and one corrupt row is
+    /// seeded whose position is the honest one **negated** and whose origin pair
+    /// is this incarnation at that same negated value — so a decoder narrowing
+    /// through `i64::unsigned_abs` does not merely fail to reject the row, it
+    /// *forges* the honest event's coordinate and its identity together. That is
+    /// the VT-11 and VT-8 hazard itself, and asserting `Err` alone would not
+    /// reach it: an unstamped corrupt row is reported by a decoder that has
+    /// already narrowed the position.
+    ///
+    /// Read **backwards**, and that is load-bearing rather than incidental.
+    /// Forwards, the negative row sorts first, ends the replay on the error
+    /// item, and the honest event is never yielded — so the collision under test
+    /// could not be observed. Backwards, the honest event is yielded first and
+    /// the corrupt row is reached second, which is what lets both assertions
+    /// below discriminate.
+    #[wasm_bindgen_test]
+    async fn a_negative_position_is_never_absolutised_onto_an_occupied_one() {
+        let (sql, store) = open();
+        let honest = store
+            .append(&[event("Honest")], None)
+            .await
+            .expect("the append lands");
+        let incarnation = store.store_id().expect("the incarnation is readable");
+        // Derived from the position the store actually assigned, never written
+        // as a literal: the specification permits gaps, so the twin of an
+        // honest position is only nameable through that position.
+        let twin = -super::position_as_i64(honest);
+
+        sql.exec(
+            "INSERT INTO event \
+             (position, event_type, data, tags, origin_store, origin_position, recorded_at) \
+             VALUES (?, 'Corrupt', x'00', x'1f', ?, ?, 0)",
+            &[
+                SqlValue::Integer(twin),
+                SqlValue::Blob(incarnation.to_bytes().to_vec()),
+                SqlValue::Integer(twin),
+            ],
+        )
+        .expect("the seeded row lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new().backwards())).await;
+
+        assert_eq!(
+            ok_positions_of(&items),
+            [honest],
+            "the store assigned one position and exactly one event may be yielded at it: {items:?}"
+        );
+        assert_eq!(
+            ok_ids_of(&items),
+            [EventId::new(incarnation, honest)],
+            "and exactly one event may wear the identity that position minted: {items:?}"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
+            "the corrupt row is reported rather than silently dropped: {items:?}"
+        );
+    }
+
+    /// AC-007. The same criterion at [`decode_row`](super::decode_row)'s
+    /// **other** decode site.
+    ///
+    /// `decode_row` decodes two positions, and the second one is not covered by
+    /// the criterion above: an `origin_position` narrowed through
+    /// `i64::unsigned_abs` forges an `EventId` rather than a coordinate, and no
+    /// assertion about `position` can see it. So the corrupt row here sits at a
+    /// position the store really did assign it, and carries this incarnation
+    /// paired with the honest event's position *negated*. A narrowing decoder
+    /// yields two events at two positions wearing one `EventId`, which is
+    /// exactly what VT-8 `[FROZEN]` forbids — and every position assertion in
+    /// this module stays green while it does.
+    #[wasm_bindgen_test]
+    async fn a_negative_origin_position_never_forges_an_occupied_identity() {
+        let (sql, store) = open();
+        let honest = store
+            .append(&[event("Honest")], None)
+            .await
+            .expect("the append lands");
+        let incarnation = store.store_id().expect("the incarnation is readable");
+
+        // No `position` column: the store assigns this row an honest one of its
+        // own, so the only thing wrong with it is the origin pair.
+        sql.exec(
+            "INSERT INTO event \
+             (event_type, data, tags, origin_store, origin_position, recorded_at) \
+             VALUES ('Corrupt', x'00', x'1f', ?, ?, 0)",
+            &[
+                SqlValue::Blob(incarnation.to_bytes().to_vec()),
+                SqlValue::Integer(-super::position_as_i64(honest)),
+            ],
+        )
+        .expect("the seeded row lands");
+
+        let items = drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        assert_eq!(
+            ok_ids_of(&items),
+            [EventId::new(incarnation, honest)],
+            "one appended event is one identity, whatever a corrupt origin column holds: {items:?}"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| matches!(item, Err(CloudflareEventStoreError::StoredPosition { .. }))),
+            "the corrupt origin position is reported rather than narrowed: {items:?}"
         );
     }
 
@@ -3565,5 +4482,65 @@ mod read_path_tests {
         let decoded = super::decode_row(&row(well_formed_row())).expect("the control row decodes");
         assert_eq!(decoded.event_type().as_str(), "SeatMapPublished");
         assert!(decoded.event.tags().is_empty());
+    }
+}
+
+/// The host half, reachable by a plain `cargo test -p happenstance-cloudflare`
+/// with no wasm toolchain installed at all — the pattern `lib.rs`'s
+/// `#[cfg(all(test, not(target_arch = "wasm32")))] mod tests` already uses.
+/// `write_path_tests` and `read_path_tests` above are both
+/// `#[cfg(all(test, target_arch = "wasm32"))]`, because they drive a real
+/// Durable Object through `crate::host`; this module needs none of that
+/// machinery, since it constructs `PartialBatch` directly rather than forcing
+/// a live throw, so it runs on every target rather than only under
+/// `wasm-bindgen-test`.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod source_chain_tests {
+    use core::error::Error;
+
+    use happenstance_core::SequencePosition;
+
+    use super::CloudflareEventStoreError;
+
+    /// G-1. `PartialBatch` is the report of an ES-18 `[FROZEN]` violation — the
+    /// one failure of this adapter a DCB command loop must not retry — and
+    /// today it reaches every error walker as a leaf: neither `cause` nor
+    /// `while_discarding` is marked `#[source]`, so `Error::source()` returns
+    /// `None` even though the typed cause is sitting right there in the
+    /// variant. RS-30-2 requires the foreign cause to survive as a `#[source]`
+    /// so a `dyn Error` walker — `anyhow`'s `.chain()`, `tracing-error`,
+    /// Sentry-style reporters, a hand-written `while let Some(next) =
+    /// e.source()` loop — no longer stops dead at this variant.
+    ///
+    /// The downcast target is `Box<CloudflareEventStoreError>`, not
+    /// `CloudflareEventStoreError` bare: `std::error::Error` has a blanket
+    /// `impl<T: Error> Error for Box<T>` (needed for `Box<dyn Error>`), and
+    /// thiserror's `#[source]` codegen calls `.as_dyn_error()` on the field by
+    /// method syntax, which finds that impl on `Box<CloudflareEventStoreError>`
+    /// itself before autoderef ever reaches the `CloudflareEventStoreError`
+    /// inside — confirmed empirically against a two-line reproduction using
+    /// the same thiserror 2.0.19. `cause` cannot be unboxed (the enum is
+    /// self-referential; `PartialBatch` is itself a `CloudflareEventStoreError`
+    /// variant, so the field needs indirection to have a finite size), so this
+    /// is the concrete type `#[source]` actually produces here — a caller one
+    /// `downcast_ref::<Box<CloudflareEventStoreError>>()` plus a deref away
+    /// from the original variant, and no longer a dead end.
+    #[test]
+    fn partial_batch_source_chain_reaches_the_original_cause() {
+        let err = CloudflareEventStoreError::PartialBatch {
+            from: SequencePosition::new(1).expect("one is a position"),
+            cause: Box::new(CloudflareEventStoreError::CorruptTags),
+            while_discarding: Box::new(CloudflareEventStoreError::CorruptTags),
+        };
+
+        let source =
+            Error::source(&err).and_then(|s| s.downcast_ref::<Box<CloudflareEventStoreError>>());
+        assert!(
+            matches!(
+                source.map(|b| &**b),
+                Some(CloudflareEventStoreError::CorruptTags)
+            ),
+            "PartialBatch must chain to its cause via #[source], not just print it: {err}"
+        );
     }
 }

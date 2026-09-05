@@ -44,8 +44,15 @@ async fn count_everything() -> Result<(), Box<dyn std::error::Error>> {
 ## Guarantees
 
 - `#![forbid(unsafe_code)]`, workspace-wide.
-- Every feature this crate has is forwarded from `happenstance-core`, so the two
-  cannot disagree about what `default-features = false` means.
+- Every switch `happenstance-core` has is re-declared here and forwards to it
+  unchanged in meaning — `std`, `serde`, `memory`, `unstable-projection`. Three
+  are this crate's own and forward nothing: the `json`, `postcard` and `cbor`
+  codecs, one optional dependency each (`serde_json`, `postcard`, `ciborium`).
+  Encoding is what the typed layer is for, so that is where they belong. It does
+  mean `default-features = false` is not the same act on both crates: `json` is
+  in these defaults, so it drops a codec and a type here and nothing of the kind
+  there. If you are auditing a minimal graph, those three are what to look at —
+  and `conformance` is the one switch that exists only in the contract crate.
 - MSRV 1.97.1, checked in CI. Raised from 1.85 at phase 2 by a *dependency's*
   build script rather than by this crate's own code —
   [ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0029-msrv-raised-to-1-97-1.md)

@@ -656,6 +656,7 @@ fn declines<S: Subject>() -> Vec<(&'static str, &'static str)> {
         declined("SECOND_HANDLE", S::SECOND_HANDLE),
         declined("REOPEN", S::REOPEN),
         declined("MID_BATCH_FAULT", S::MID_BATCH_FAULT),
+        declined("READ_FAULT", S::READ_FAULT),
     ]
     .into_iter()
     .flatten()
