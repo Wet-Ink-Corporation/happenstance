@@ -1629,6 +1629,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3a6bfce3d99adfa72d24750a61f782f3036a81e7f86d8841ee1326deaebd171"
 
 [[package]]
+name = "telemetry-across-codecs"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "happenstance",
+ "happenstance-sqlite",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
