@@ -18,7 +18,11 @@ use happenstance_core::{
     StoreId, Tag, Tags,
 };
 
-const TAG_COUNTS: [usize; 5] = [0, 1, 8, 32, 64];
+/// 64 is VT-22's floor (`MIN_SUPPORTED_TAGS_PER_EVENT`); 128 is
+/// `SqliteEventStore::MAX_TAGS_PER_EVENT`, the only documented adapter ceiling in
+/// the tree. Both are quoted because the encode delta is linear in the count, so
+/// one number is half an answer.
+const TAG_COUNTS: [usize; 6] = [0, 1, 8, 32, 64, 128];
 
 fn sequenced(event: Event) -> SequencedEvent {
     let position = SequencePosition::new(42).expect("42 is non-zero");
@@ -257,6 +261,15 @@ fn encode_cost() {
             // regime, none in the static one) and every tag (one each, none in
             // the static one). The boxed slice itself is cloned in both, so it
             // cancels.
+            //
+            // **A prototype makes both of these zero and is not landed.** The
+            // borrowing-mirror change was written, measured and proved
+            // byte-identical at `2f11eb7` on `lane/core-ports`; it is reverted
+            // there because it renumbers `event.rs` by 66 lines and `query.rs`
+            // by 30, which breaks four `spec/SPECIFICATION.md` citations that
+            // lane was not permitted to repoint. `results/clone-cost.md` carries
+            // both columns. When it lands, these two become `0` and the formulas
+            // below have no term left to write.
             assert_eq!(
                 event_delta,
                 if count == 0 { 1 } else { count as i64 + 1 },

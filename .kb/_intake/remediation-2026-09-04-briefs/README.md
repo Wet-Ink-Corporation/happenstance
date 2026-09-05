@@ -262,3 +262,33 @@ exactly the failure the tolerance creates, and which nobody should copy.
 `cf-18-observable-skip-reporting.md` carries the measurement that made the finding
 concrete — zero `SKIP` lines from a default run against a real adapter, three with
 `--show-output` — and is the one of the three with a real deadline.
+## And one from the core-ports lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `probe-read-through-and-the-live-transaction-end.md` | `probe_read_through` is synchronous, infallible and takes `&Self::Batch`. Does the signature move before the live-transaction adapter is written, or is PS-2's part 2 judged on a declined capability? | breaking to `ProjectionProbe`, and exempt | phase 6 or phase 10, whichever comes first |
+| `serialize-borrows-what-it-writes.md` | The borrowing-mirror fix is written, measured and byte-identical. Does it land, and who repoints the four `SPECIFICATION.md` citations it moves? | **none** | `happenstance-sync` |
+
+Written by the lane implementing `F1-01`, `F1-02`, `O-4` and `AE-2`, in the same
+session as the evidence it cites, and **without** the author → two-critic →
+revision pass the first section describes. Same discount.
+
+The second is the only brief in this directory whose *remediation* is written and
+measured rather than proposed: the change exists at `2f11eb7` on that branch and
+is reverted in the commit after it, because it renumbers three test functions
+`spec/SPECIFICATION.md` cites by line and the lane could not repoint them. Its
+handoff is a cherry-pick plus four one-line edits.
+
+The first is the one brief in this directory whose diagnosis is **compiled rather
+than argued**: `crates/happenstance-core/tests/probe_live_transaction_shape.rs` builds
+a store whose batch is a live transaction and runs every body the current
+signature admits, and two `compile_fail` doctests on the port pin the two halves
+of the obstacle at `E0596` and `E0728`. The remediation itself lies outside that
+lane's writable surface — it touches the testkit, `happenstance-sqlite` and an
+example — so the brief is a routed proposal with a named anchor rather than a
+change.
+
+**It corroborates ADR-0036 and does not contradict it.** The ADR reads the
+unbuilt live-transaction end as adapter scarcity; the brief adds that the
+scarcity has a cause in the port's own conformance seam, which nothing in the
+tree recorded when the ADR was written.

@@ -634,6 +634,35 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`ProjectionProbe::probe_read_through`'s page now records the adapter shape
+  it cannot serve.** Documentation only, on an item behind `conformance`, which
+  makes no semver promise; the signature is untouched and is not this entry's to
+  move.
+
+  The method is synchronous, infallible, and takes `&Self::Batch`. Every store
+  that has ever declared `READS_THROUGH_BATCH = true` in this workspace answers
+  from an in-process map or a buffer; the one adapter that has run the projection
+  suite declares `false`. That looked like scarcity. It is structural: a batch
+  that *is* an open transaction needs `&mut` to issue a statement — `sqlx`'s
+  `Executor for &mut Transaction` — and `.await` because the statement is I/O,
+  and the declaration supplies neither. Two `compile_fail` doctests pin the
+  halves separately, at `E0596` and `E0728`.
+
+  `crates/happenstance-core/tests/probe_live_transaction_shape.rs` runs the three
+  bodies that remain against a store whose batch is a transaction: declining the
+  capability states something false about the store and takes the read-through
+  rule as a reported skip; answering from committed state returns `None` for a
+  row the transaction can see; blocking on the future panics with *"Cannot start
+  a runtime from within a runtime"*, because the suite always calls the probe
+  from inside one.
+
+  This matters to `spec/SPECIFICATION.md` §4's PS-2, which is `[FROZEN]` and
+  names a live-transaction adapter as the unbuilt end of the batch-shape axis,
+  and to ADR-0036, which reads that end's absence as nobody having got to it.
+  Both stand; what is added is a cause. The section and the declaration are
+  pinned to each other by a test, so a signature that moves takes the page with
+  it.
+
 - **`DomainEvent::tags` now says what its totality costs, and carries the
   example that pays it.** Documentation only; the signature is untouched.
 
@@ -947,6 +976,49 @@ not the same as what a user needed to be told.
   rejected for three phases. `MODEL_COVERAGE` is what noticed.
 
 ### Fixed
+
+- **`happenstance`'s crates.io front page claimed a feature parity three codec
+  keys contradict.** Under `## Guarantees` it read *"Every feature this crate has
+  is forwarded from `happenstance-core`, so the two cannot disagree about what
+  `default-features = false` means"*, and `Cargo.toml` said the same thing a
+  second time. `json`, `postcard` and `cbor` exist only here, each turning on a
+  third-party dependency; `conformance` exists only in the contract crate; and
+  `json` is in these defaults, so `default-features = false` drops a codec and a
+  type here and nothing of the kind there.
+
+  The sentence was false in exactly the way it declared impossible, and it costs
+  the reader it was written for: an integrator auditing a minimal dependency
+  graph, told there is nothing crate-specific to look at, who finds `serde_json`,
+  `postcard` and `ciborium` at `cargo tree -e features`. `ciborium` is the sharp
+  case, because the manifest records that its licence subtree was read against
+  the workspace allowlist and could have refused.
+
+  The divergence is correct and stays — ADR-0006 gave encoding to the typed
+  layer, so the codecs belong here. Both pages now name what is local instead of
+  denying that anything is, and `manifest_contract.rs` derives the set from both
+  manifests, so a fourth codec cannot be added in silence. The impossibility
+  clause is permitted again if the two feature tables are ever made identical.
+
+- **`SendEventStore`'s and `SendProjectionStore`'s docs.rs pages told the reader
+  to implement a different trait.** `trait_variant` rebuilds the derived trait
+  with `..tr.clone()`, so `EventStore`'s and `ProjectionStore`'s trait-level doc
+  blocks are rendered verbatim on the `Send` flavours as well. Three sentences
+  written for the bare flavour therefore appeared, unchanged, on the page for the
+  other one: *"This is the `!Send` flavour"*, *"implement `SendEventStore`
+  instead"* — circular where it landed — and *"Bound on this trait, not
+  `SendEventStore`"*, which is the inverse of ES-1's `[FROZEN]` binding rule on
+  the very page an adapter author is routed to.
+
+  The copying is not the bug and is not suppressed: the derived traits have no
+  doc comment of their own, so `missing_docs` under `-D warnings` is the standing
+  guard that the copying still happens, and hand-writing two blocks would give
+  that up. What changed is the register. Both blocks now name each flavour
+  instead of pointing at one, so a sentence is true on whichever page carries it.
+
+  Two tests per derivation hold it: one rejects deixis — "this trait", "the one
+  to use", "instead" — in any paragraph that draws the flavour distinction, and
+  one requires both flavours to be named in link form, so the fix cannot
+  degenerate into saying nothing.
 
 - **`ProjectionProbe`'s published manifest recipe did not compile when
   followed.** Its `toml` fence wrote `happenstance-core = "…"` with no
