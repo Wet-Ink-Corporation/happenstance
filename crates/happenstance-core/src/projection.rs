@@ -631,6 +631,72 @@ pub trait ProjectionProbe: ProjectionStore {
     ///
     /// Only called when [`READS_THROUGH_BATCH`](Self::READS_THROUGH_BATCH) is
     /// `true`; may be `unimplemented!()` otherwise.
+    ///
+    /// # This signature cannot be met by a batch that is a live transaction
+    ///
+    /// Stated here because the freeze decision reads this page and would
+    /// otherwise read it as scarcity. Synchronous, infallible and `&Self::Batch`
+    /// is answerable by a store that holds its pending writes in a map or a
+    /// buffer — which is every implementation in this workspace — and is not
+    /// answerable at all by one whose batch *is* an open transaction, because a
+    /// driver borrows the connection mutably to issue a statement and the
+    /// statement is I/O.
+    ///
+    /// Both halves are compiler-checked below rather than asserted. The mutable
+    /// borrow first:
+    ///
+    /// ```compile_fail,E0596
+    /// /// `sqlx`'s `Executor for &mut Transaction`, and `rusqlite`'s `&mut
+    /// /// Transaction`, in the smallest shape that carries the obligation.
+    /// struct Transaction;
+    /// impl Transaction {
+    ///     fn select(&mut self, key: &str) -> Option<u64> {
+    ///         let _ = key;
+    ///         None
+    ///     }
+    /// }
+    ///
+    /// // error[E0596]: cannot borrow `*batch` as mutable, as it is behind a
+    /// // `&` reference — which is the receiver `probe_read_through` supplies.
+    /// fn probe_read_through(batch: &Transaction, key: &str) -> Option<u64> {
+    ///     batch.select(key)
+    /// }
+    /// ```
+    ///
+    /// and then the await, with the borrow already conceded:
+    ///
+    /// ```compile_fail,E0728
+    /// struct Transaction;
+    /// impl Transaction {
+    ///     async fn select(&mut self, key: &str) -> Option<u64> {
+    ///         let _ = key;
+    ///         None
+    ///     }
+    /// }
+    ///
+    /// // error[E0728]: `await` is only allowed inside `async` functions and
+    /// // blocks — and this method is not one.
+    /// fn probe_read_through(batch: &mut Transaction, key: &str) -> Option<u64> {
+    ///     batch.select(key).await
+    /// }
+    /// ```
+    ///
+    /// The three bodies that remain are each wrong in a different way, and
+    /// `tests/probe_live_transaction_shape.rs` runs all three against a store
+    /// whose batch is a transaction: declaring `READS_THROUGH_BATCH = false`
+    /// states something false about the store and takes the read-through rule as
+    /// a reported skip; answering from committed state returns `None` for a row
+    /// the transaction can see, which is what this method's own first sentence
+    /// forbids; and blocking on the future panics with *"Cannot start a runtime
+    /// from within a runtime"*, because the suite always calls the probe from
+    /// inside one.
+    ///
+    /// **Nothing is decided here.** `spec/SPECIFICATION.md` §4's PS-2 is
+    /// `[FROZEN]` and names a live-transaction adapter as the end of the
+    /// batch-shape axis still to be built; whether this signature moves before
+    /// that adapter is written belongs to that clause's owner, not to this
+    /// method's documentation. What is recorded is that the far end's absence
+    /// has a cause in this line, and not only in nobody having got to it.
     fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
 }
 

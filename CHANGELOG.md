@@ -604,6 +604,35 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`ProjectionProbe::probe_read_through`'s page now records the adapter shape
+  it cannot serve.** Documentation only, on an item behind `conformance`, which
+  makes no semver promise; the signature is untouched and is not this entry's to
+  move.
+
+  The method is synchronous, infallible, and takes `&Self::Batch`. Every store
+  that has ever declared `READS_THROUGH_BATCH = true` in this workspace answers
+  from an in-process map or a buffer; the one adapter that has run the projection
+  suite declares `false`. That looked like scarcity. It is structural: a batch
+  that *is* an open transaction needs `&mut` to issue a statement — `sqlx`'s
+  `Executor for &mut Transaction` — and `.await` because the statement is I/O,
+  and the declaration supplies neither. Two `compile_fail` doctests pin the
+  halves separately, at `E0596` and `E0728`.
+
+  `crates/happenstance-core/tests/probe_live_transaction_shape.rs` runs the three
+  bodies that remain against a store whose batch is a transaction: declining the
+  capability states something false about the store and takes the read-through
+  rule as a reported skip; answering from committed state returns `None` for a
+  row the transaction can see; blocking on the future panics with *"Cannot start
+  a runtime from within a runtime"*, because the suite always calls the probe
+  from inside one.
+
+  This matters to `spec/SPECIFICATION.md` §4's PS-2, which is `[FROZEN]` and
+  names a live-transaction adapter as the unbuilt end of the batch-shape axis,
+  and to ADR-0036, which reads that end's absence as nobody having got to it.
+  Both stand; what is added is a cause. The section and the declaration are
+  pinned to each other by a test, so a signature that moves takes the page with
+  it.
+
 - **`DomainEvent::tags` now says what its totality costs, and carries the
   example that pays it.** Documentation only; the signature is untouched.
 
