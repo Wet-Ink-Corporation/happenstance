@@ -57,7 +57,25 @@ tokio = { workspace = true, features = ["rt"] }
 # conformance command" flatly until a test target that reached
 # `projection_store` under default features turned the claim into an
 # `error[E0433]`; the word that was missing is the one added above.
-happenstance-testkit = { workspace = true, features = ["proptest"] }
+#
+# Deliberately **not** `{ workspace = true }`, and this is U-2 rather than an
+# oversight — the same reasoning `crates/happenstance/Cargo.toml` already
+# carries, arriving one crate late because this one joined the release set after
+# that diagnosis was written. `[workspace.dependencies]` carries a version
+# requirement on the testkit, and a dev-dependency carrying a version has to
+# resolve from the registry at publish time, which would make
+# `happenstance-testkit` publish *before* `happenstance-sqlite` — a coupling
+# CF-32's independent version number exists to avoid, and one that bites on the
+# next testkit-only minor bump rather than on some hypothetical. Cargo strips a
+# versionless dev-dependency from the published manifest entirely, so the
+# path-only spelling is what keeps the two crates' release order free. It is a
+# path within this workspace, so no third-party version escapes the single
+# source of truth in the root manifest.
+#
+# `tests/front_page.rs` asserts it, because a comment is not a control: the
+# spelling that reintroduces the coupling is one word shorter than this one and
+# looks tidier.
+happenstance-testkit = { path = "../happenstance-testkit", features = ["proptest"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]

@@ -570,6 +570,25 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`happenstance-sqlite` no longer has to wait for `happenstance-testkit` to
+  publish first.** Its dev-dependency on the testkit inherited
+  `[workspace.dependencies]`' `version = "0.2.0-alpha.1"`, and a dev-dependency
+  carrying a version has to resolve from the registry at publish time. The
+  testkit versions independently by design — that is CF-32 `[FROZEN]`, and this
+  file's own header says to treat a minor bump there as breaking — so the next
+  testkit-only bump would have blocked the next `happenstance-sqlite` release
+  for a dependency no consumer of it ever sees.
+
+  It now uses the path-only spelling `crates/happenstance/Cargo.toml` has used,
+  with an eleven-line explanation, since NF-006. The published manifest carries
+  no `happenstance-testkit` dev-dependency at all, which is what cargo does with
+  a versionless one. Nothing changes for a consumer.
+
+  The root `[workspace.dependencies]` line still carries the version, and it is
+  load-bearing for nothing — every reference to the testkit in this workspace is
+  a dev-dependency. Moving it instead would fix this once for every future
+  adapter; `happenstance-cloudflare` carries the same spelling today. That
+  choice is briefed, not taken.
 - **BREAKING (`happenstance-sqlite`, `projection-store` feature):
   `SqliteBatch::push` takes `&'static str`, and the free-form spelling moved to
   `SqliteBatch::push_raw_sql`.** The batch is the only place in the workspace a

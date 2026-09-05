@@ -137,6 +137,7 @@ a note recording that sits in its own sequencing section.
 | Brief | Question | Semver | Free until |
 |---|---|---|---|
 | `projection-batch-sql-seam.md` | Is `&'static str` the projection batch's final SQL seam, or does the parameterised path get a minted statement type? | **breaking** (landed) / breaking again for the type | soft — the flag already disclaims semver |
+| `testkit-dev-dependency-version-requirement.md` | Does `[workspace.dependencies]` keep its `version` key on the testkit, now that every consumer of it is a dev-dependency? | none | before the first testkit-only bump after `0.2.0` |
 
 Written by the lane implementing `X-4`, `U-2`, `I-5`, `R-1+J-5` and `R-3`, in the
 same session as the changes they describe, and **without** the author -> two-critic
