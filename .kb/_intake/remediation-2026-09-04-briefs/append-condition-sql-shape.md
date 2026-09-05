@@ -36,7 +36,7 @@ Off the trace callback on a real store, `results/raw/emitted-sql.txt:9`:
 SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
 ```
 
-The builder, `crates/happenstance-sqlite/src/query_sql.rs:340-354`:
+The builder, `crates/happenstance-sqlite/src/query_sql.rs:371-385`:
 
 ```rust
     let mut sql = String::from("SELECT position FROM event_tag WHERE tag = ?");
@@ -76,11 +76,11 @@ No aggregate anywhere, and no `position > ?`.
             && highest > boundary
 ```
 
-The boundary is compared in Rust, after the statement has returned. `chunks` takes no boundary parameter on either caller (`query_sql.rs:218-223`). This is **correct** — ES-26 fixes the semantics, not where they are evaluated — and it is what makes `query_sql.rs:77`'s "keeps the boundary pushable" a claim about a mechanism the shipped strategy never exercises.
+The boundary is compared in Rust, after the statement has returned. `chunks` takes no boundary parameter on either caller (`query_sql.rs:242-247`). This is **correct** — ES-26 fixes the semantics, not where they are evaluated — and it is what makes `query_sql.rs:77`'s "keeps the boundary pushable" a claim about a mechanism the shipped strategy never exercises.
 
 ### The ordering, and its two crate-private pieces
 
-`crates/happenstance-sqlite/src/query_sql.rs:161-164`:
+`crates/happenstance-sqlite/src/query_sql.rs:185-188`:
 
 ```rust
     fn most_selective_first(&self, mut tags: Vec<String>) -> Vec<String> {
@@ -89,7 +89,7 @@ The boundary is compared in Rust, after the statement has returned. `chunks` tak
     }
 ```
 
-`Selectivity` is `pub(crate)` (`:97`), `most_selective_first` is private (`:161`), and `query_sql` itself is a private module (`lib.rs:89`). **`:162`'s `unwrap_or(0)`** means a tag with no `tag_cardinality` row sorts as maximally selective and lands in the seed arm — which is the *cheap* side under the shipped ordering and, under any inverted policy, becomes the expensive side. The experiment never exercised it (both its tags are present), and its own `inverted()` doc (`experiments/shipped-append-condition-sql/src/chain.rs:212-217`) claims an absent tag "still sorts first" where the arithmetic it describes — present counts negated to negative, absent mapped to `0`, sorted ascending — puts it last. Worth checking before any option that keeps a sort.
+`Selectivity` is `pub(crate)` (`:97`), `most_selective_first` is private (`:185`), and `query_sql` itself is a private module (`lib.rs:89`). **`:186`'s `unwrap_or(0)`** means a tag with no `tag_cardinality` row sorts as maximally selective and lands in the seed arm — which is the *cheap* side under the shipped ordering and, under any inverted policy, becomes the expensive side. The experiment never exercised it (both its tags are present), and its own `inverted()` doc (`experiments/shipped-append-condition-sql/src/chain.rs:212-217`) claims an absent tag "still sorts first" where the arithmetic it describes — present counts negated to negative, absent mapped to `0`, sorted ascending — puts it last. Worth checking before any option that keeps a sort.
 
 The table behind the sort is maintained on every write, inside the transaction (`event_store.rs:866-876`):
 
@@ -178,7 +178,7 @@ Repair the four sites to say what was measured on what, and leave the emitted SQ
 Replace the chain with `GROUP BY position HAVING COUNT(DISTINCT tag) = n` — the form §8 measured — retaining the `tags.len() == 1` seek. This is `grouped-adr0022`, already built and conformance-cleared.
 
 - **Costs a caller:** nothing on the single-tag path (4–16 µs, unchanged). On the multi-tag path it is 1.54x–1.86x cheaper warm and 11.8x cheaper cold than today. It is **not** cheap: 362 ms at 10^6 events with the write lock held.
-- **Costs an adapter author:** ~~it changes one string in a private module~~ — **that claim is removed, because the code refutes it in two places.** `chunks` is not one string with one caller: it is reached from the guard path inside `BEGIN IMMEDIATE` (`event_store.rs:699`, with `Selectivity::read_for` at `:647`) *and* from the read path (`:1313`, `read_for` at `:1301`), so B moves both. And shipped `item_sql` (`query_sql.rs:316-354`) has **no `tags.len() == 1` branch at all** — the single-tag case is the chain's degenerate form, the seed arm with an empty `tags[1..]`. `grouped_sql` has to spell that branch explicitly (`chain.rs:441-443`), so B *adds* a branch rather than retaining one. `evaluate`'s Rust-side boundary comparison is untouched, so no correctness surface moves. `Selectivity`, `most_selective_first` and `tag_cardinality` lose their only consumer — `grouped_sql` takes no selectivity argument at all (`chain.rs:314,412-414`), because `tag IN (?,?)` is order-independent. That is a deletion, not a repair, and it takes the per-tag upsert out of the write transaction.
+- **Costs an adapter author:** ~~it changes one string in a private module~~ — **that claim is removed, because the code refutes it in two places.** `chunks` is not one string with one caller: it is reached from the guard path inside `BEGIN IMMEDIATE` (`event_store.rs:699`, with `Selectivity::read_for` at `:647`) *and* from the read path (`:1313`, `read_for` at `:1301`), so B moves both. And shipped `item_sql` (`query_sql.rs:347-385`) has **no `tags.len() == 1` branch at all** — the single-tag case is the chain's degenerate form, the seed arm with an empty `tags[1..]`. `grouped_sql` has to spell that branch explicitly (`chain.rs:441-443`), so B *adds* a branch rather than retaining one. `evaluate`'s Rust-side boundary comparison is untouched, so no correctness surface moves. `Selectivity`, `most_selective_first` and `tag_cardinality` lose their only consumer — `grouped_sql` takes no selectivity argument at all (`chain.rs:314,412-414`), because `tag IN (?,?)` is order-independent. That is a deletion, not a repair, and it takes the per-tag upsert out of the write transaction.
 - **Semver:** none as API. **The schema half is not free forever** — dropping `tag_cardinality` from `MIGRATION_1` (`event_store.rs:221`) is a `SCHEMA_VERSION = 1` edit today and a migration 2 after `0.2.0`.
 - **Forecloses:** predicate pushdown, by construction and by §8's own words — *"A `GROUP BY` is an optimisation barrier"*. The shape with the largest measured headroom (option D) becomes unreachable without reversing this.
 
@@ -189,7 +189,7 @@ Put the *least* selective tag in the seed arm.
 - **Costs a caller:** 38–44x on the two-tag case, in the good direction — 11,839 µs against 511,054 at 500,000 events. That is by far the largest single-change win on the table.
 - **Costs an adapter author:** it keeps `tag_cardinality` and its write-path upsert, and inverts a documented requirement without a policy to replace it with.
 - **Semver:** none.
-- **Forecloses:** little, but **the evidence does not support it as a general policy and the experiment says so in terms** (`README.md:245-248`): with three or more tags the plan has more than one materialisation to choose between and the single-term arithmetic no longer holds. This is a two-tag answer to an n-tag policy. It also puts `query_sql.rs:162`'s `unwrap_or(0)` on the wrong side, un-analysed.
+- **Forecloses:** little, but **the evidence does not support it as a general policy and the experiment says so in terms** (`README.md:245-248`): with three or more tags the plan has more than one materialisation to choose between and the single-term arithmetic no longer holds. This is a two-tag answer to an n-tag policy. It also puts `query_sql.rs:186`'s `unwrap_or(0)` on the wrong side, un-analysed.
 
 ### D — `chain-bounded-all-arms`: bind the boundary into every arm
 
@@ -213,7 +213,7 @@ The chain with `position > ?` on the seed *and* inside each chained membership s
 
 The B case rested on three legs and two of them were wrong.
 
-- *"It changes one string in a private module and touches no correctness surface"* — half false. `chunks` is reached from the guard path under `BEGIN IMMEDIATE` (`event_store.rs:699`) and from the read path (`:1313`), and B **adds** a `tags.len() == 1` branch that shipped `item_sql` does not have (`query_sql.rs:316-354` against `chain.rs:441-443`).
+- *"It changes one string in a private module and touches no correctness surface"* — half false. `chunks` is reached from the guard path under `BEGIN IMMEDIATE` (`event_store.rs:699`) and from the read path (`:1313`), and B **adds** a `tags.len() == 1` branch that shipped `item_sql` does not have (`query_sql.rs:347-385` against `chain.rs:441-443`).
 - *"11.8x cheaper cold"* — true against the chain, and only against the chain. In the same dump D is cold at 236,988 µs against B's cold 335,498 and B's warm 296,556 (`query-plans.txt:37-45,46-54`). Cold cost was B's strongest argument and it belongs to D.
 - The premise that made D expensive is falsified outright: `evaluate`'s `highest > boundary` does **not** change meaning under a bounded shape (`probe_store.rs:300-303`, `:332`), and the tagless / `Query::all` carry is ~8 lines already written (`chain.rs:258-262,341-357`). All four shapes cleared 89 conformance rules each, 356 passed, 0 failed.
 
@@ -241,7 +241,7 @@ What is left is the asymmetry this brief's own cost-of-delay section identified 
 
 **Half of X-1 is shape-invariant and need not wait. The other half is entirely contingent on this record, and X-1 should not be implemented before it lands.**
 
-- **The `chunks` half does not wait.** `planned_statement_count` is `crate::query_sql::chunks(query, &Selectivity::default(), width).len()` (`event_store.rs:326-334`) — it counts the *partition*, not the arm SQL, and it makes the read path's own call by construction rather than agreeing with it by arithmetic. The partition arithmetic is identical under both shapes: one bound parameter per tag and one per type, whether the arm is a chain (`query_sql.rs:341,350`) or an aggregate (`chain.rs:430-431`). `MAX_QUERY_ARMS_PER_STATEMENT = 400` is likewise shape-invariant — its rationale is `SQLITE_MAX_COMPOUND_SELECT`'s 500 terms (`event_store.rs:266-267`), and a grouped arm is still one term of the compound. So the framing "X-1 partitions against a chain that is then abandoned, and `0.2.0` publishes a public description of an abandoned plan" **does not hold for this seam**: it describes the partition, and the partition survives the shape change.
+- **The `chunks` half does not wait.** `planned_statement_count` is `crate::query_sql::chunks(query, &Selectivity::default(), width).len()` (`event_store.rs:326-334`) — it counts the *partition*, not the arm SQL, and it makes the read path's own call by construction rather than agreeing with it by arithmetic. The partition arithmetic is identical under both shapes: one bound parameter per tag and one per type, whether the arm is a chain (`query_sql.rs:372,350`) or an aggregate (`chain.rs:430-431`). `MAX_QUERY_ARMS_PER_STATEMENT = 400` is likewise shape-invariant — its rationale is `SQLITE_MAX_COMPOUND_SELECT`'s 500 terms (`event_store.rs:266-267`), and a grouped arm is still one term of the compound. So the framing "X-1 partitions against a chain that is then abandoned, and `0.2.0` publishes a public description of an abandoned plan" **does not hold for this seam**: it describes the partition, and the partition survives the shape change.
 - **The `Selectivity::read_for` half is contingent, and it is the half that fails first.** X-1's remediation is to *"give `Selectivity::read_for` a chunk width it currently has no concept of"* — and under option B there is no `read_for` to chunk. `grouped_sql` takes no `Selectivity` argument at all (`chain.rs:314,412-414`); the whole struct, its unchunked `WHERE tag IN (…)` lookup, and its two call sites (`event_store.rs:698` inside `BEGIN IMMEDIATE`, and `:1301` on the read path) are deleted rather than repaired. That is the site X-1 measured failing at **300 items × 128 tags = 38,400 parameters**, before `chunks` fails at 400 × 128 = 51,600 — the earlier of its two failures, and the one with the write lock held.
 
 > **[Overtaken by events — 2026-09-04, the `X-1` lane.]** X-1 landed before this record, against its instruction above. Both halves are implemented: `chunks` now partitions on bound parameters as well as arms, and `Selectivity::read_for` takes a width. The quoted body of `planned_statement_count` is therefore no longer verbatim — it passes both ceilings now — though the sentence it supports is unchanged, because the partition is still what the seam counts. Under option B the `read_for` half is discarded with `read_for` itself, exactly as this section predicts; the `chunks` half survives any option. The note is here rather than in the body because this brief is another author's and had a two-critic pass this correction did not.

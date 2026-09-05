@@ -570,6 +570,33 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`happenstance-sqlite` plans a wide query about 33x faster, and the saving is
+  taken with the write lock held.** Translating a query into SQL accumulated the
+  query's distinct tags into a `Vec<String>` guarded by
+  `if !wanted.contains(&tag)`, which is quadratic in that count — and the shape
+  that reaches the quadratic is not a corner but **VT-23's own floor**: every
+  store must evaluate at least 128 query items, and nothing bounds tags per
+  item. At 128 items carrying this adapter's 128 tags apiece that is about 134
+  million string comparisons before a single statement is prepared.
+
+  It ran twice per operation: once per 512-row read page, so it multiplied by
+  the page count of a replay; and once per append guard **inside `BEGIN
+  IMMEDIATE`**, where a quarter-second of pure-Rust planning is a quarter-second
+  every other writer waits. The accumulator is a `BTreeSet<&str>` now — sorted
+  rather than hashed so the plan stays reproducible run to run, and borrowed
+  rather than owned so the per-tag `String` goes too. Measured at 1.68 s against
+  50 ms in a debug build; `experiments/shipped-append-condition-sql` measured
+  40.1x in release, with the outputs asserted byte-identical before either was
+  timed.
+
+  A second, smaller dedup went with it: the per-item one was **dead work**, not
+  merely quadratic. VT-16 `[FROZEN]` makes `Tags` canonical — sorted and
+  deduplicated at construction — so the guard could never remove anything. Both
+  callers of it are `O(1)` now, and a test holds the premise, because it is a
+  premise about a type in another crate.
+
+  No public surface moves: both functions are crate-private, and the outputs are
+  identical by assertion rather than by argument.
 - **`happenstance-sqlite` no longer has to wait for `happenstance-testkit` to
   publish first.** Its dev-dependency on the testkit inherited
   `[workspace.dependencies]`' `version = "0.2.0-alpha.1"`, and a dev-dependency

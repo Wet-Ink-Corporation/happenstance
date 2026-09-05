@@ -82,7 +82,7 @@
 //! which is exactly wrong for a tag set where one value matches a third of the
 //! log and another matches one percent.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use happenstance_core::{Query, QueryItem};
 use rusqlite::Connection;
@@ -115,6 +115,31 @@ impl Selectivity {
     /// [`Selectivity::most_selective_first`] already treats as maximally
     /// selective.
     ///
+    /// # Why the accumulator is a set
+    ///
+    /// It was a `Vec<String>` guarded by `if !wanted.contains(&tag)`, which is
+    /// quadratic in the query's *distinct* tags — and the shape that reaches
+    /// that quadratic is not a corner but VT-23's own floor. At 128 items
+    /// carrying [`MAX_TAGS_PER_EVENT`](crate::event_store::SqliteEventStore::MAX_TAGS_PER_EVENT)
+    /// tags apiece, 16,384 tags are presented here and the guard performs about
+    /// 134 million string comparisons before a single statement is prepared —
+    /// once per read page, and once per append guard **inside `BEGIN
+    /// IMMEDIATE`**, which is a quarter of a second every other writer waits.
+    /// `experiments/shipped-append-condition-sql/results/selectivity.md` §1
+    /// measured it: 257,690 µs against a set's 6,424 µs, **40.1x**, outputs
+    /// asserted byte-identical before either was timed.
+    ///
+    /// [`BTreeSet`] rather than [`HashSet`](std::collections::HashSet), and the
+    /// reason is the chunking two lines down: a hash set's iteration order is
+    /// unspecified, so the partition of `wanted` into statements would differ
+    /// between runs of one binary. The *result* would not — a lookup keyed by
+    /// tag is insensitive to which statement found each row, which is the
+    /// property the paragraph above rests on — but a plan that is not
+    /// reproducible is one nobody can bisect. `&str` rather than `String`
+    /// because every tag here is borrowed from `query`, which outlives this
+    /// call: the old accumulator allocated one `String` per tag on top of being
+    /// quadratic.
+    ///
     /// # Errors
     ///
     /// Returns the driver's error if a statement fails.
@@ -123,14 +148,12 @@ impl Selectivity {
         query: &Query,
         max_parameters: usize,
     ) -> rusqlite::Result<Self> {
-        let mut wanted: Vec<String> = Vec::new();
+        let mut wanted: BTreeSet<&str> = BTreeSet::new();
         for item in query.items().unwrap_or_default() {
-            let tags = distinct_tags(item);
+            let tags = item.tags();
             if tags.len() > 1 {
                 for tag in tags {
-                    if !wanted.contains(&tag) {
-                        wanted.push(tag);
-                    }
+                    wanted.insert(tag.as_str());
                 }
             }
         }
@@ -138,6 +161,7 @@ impl Selectivity {
             return Ok(Self::default());
         }
 
+        let wanted: Vec<&str> = wanted.into_iter().collect();
         let mut counts = HashMap::with_capacity(wanted.len());
         for batch in wanted.chunks(max_parameters.max(1)) {
             let sql = format!(
@@ -275,6 +299,13 @@ fn partition(items: &[QueryItem], max_arms: usize, max_parameters: usize) -> Vec
 /// binds its types and nothing else, and the tagged branch binds the seed tag,
 /// then the types, then one per remaining tag.
 ///
+/// `item.tags().len()` **is** the distinct count, and reads it in `O(1)` rather
+/// than deduplicating to find out: VT-16 `[FROZEN]` makes `Tags` canonical. See
+/// [`owned_tags`], which is where that premise is stated and checked. This
+/// function is called once per item by [`partition`], so the dedup it used to do
+/// was the per-item quadratic paid a second time on the planning path — a third
+/// time counting [`item_sql`]'s own call.
+///
 /// This is a second reading of [`item_sql`], which is the shape that drifts —
 /// add a bound parameter there and this undercounts, and the partition silently
 /// goes back to being wrong past a driver limit. What catches that is
@@ -285,7 +316,7 @@ fn partition(items: &[QueryItem], max_arms: usize, max_parameters: usize) -> Vec
 /// mean building the SQL twice for every plan, once to size it and once to use
 /// it, on the path that runs under the write lock.
 fn item_parameters(item: &QueryItem) -> usize {
-    distinct_tags(item).len() + item.types().len()
+    item.tags().len() + item.types().len()
 }
 
 /// The `UNION` of one arm per item.
@@ -314,7 +345,7 @@ pub(crate) fn arms_sql(
 /// AND, with **superset** matching: an event matches when it carries *at least*
 /// the item's tags.
 fn item_sql(item: &QueryItem, selectivity: &Selectivity, params: &mut Vec<Value>) -> String {
-    let tags = selectivity.most_selective_first(distinct_tags(item));
+    let tags = selectivity.most_selective_first(owned_tags(item));
     let types = item.types();
 
     if tags.is_empty() {
@@ -354,16 +385,26 @@ fn item_sql(item: &QueryItem, selectivity: &Selectivity, params: &mut Vec<Value>
     sql
 }
 
-/// The item's tags, deduplicated.
-fn distinct_tags(item: &QueryItem) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(item.tags().len());
-    for tag in item.tags() {
-        let value = tag.as_str().to_owned();
-        if !out.contains(&value) {
-            out.push(value);
-        }
-    }
-    out
+/// The item's tags, owned, so that [`Selectivity::most_selective_first`] can
+/// sort them.
+///
+/// **It does not deduplicate, and that is a fact about the input rather than an
+/// omission.** VT-16 `[FROZEN]` makes `Tags` canonical — sorted and
+/// deduplicated at construction, `happenstance_core::Tags` doing the work in
+/// `FromIterator` — so the `if !out.contains(&value)` guard this replaced could
+/// never remove anything. It was quadratic *and* dead: measured at 4.6–5.0 ms
+/// per plan at the ceilings, against a `Tags` that had already paid for the
+/// property. `a_query_items_tags_are_already_canonical` is the standing check on
+/// that premise, because it is a premise about a type in another crate.
+///
+/// The owning is not dead, and it is why this is not simply `item.tags()`:
+/// `most_selective_first` sorts, `item_sql` binds each value as an owned
+/// [`Value::Text`], and the seed tag is cloned out of the sorted order.
+fn owned_tags(item: &QueryItem) -> Vec<String> {
+    item.tags()
+        .iter()
+        .map(|tag| tag.as_str().to_owned())
+        .collect()
 }
 
 /// `?,?,?` for `n` bound parameters.
@@ -593,5 +634,52 @@ mod tests {
              {MINIMUM_SPEEDUP}x this asserts; the accumulation is quadratic in the query's \
              distinct tags again"
         );
+    }
+
+    /// The per-item deduplication was dead work, not merely quadratic.
+    ///
+    /// VT-16 `[FROZEN]` makes [`Tags`] canonical — sorted and deduplicated at
+    /// construction — so the `if !out.contains(&value)` guard that
+    /// `distinct_tags` carried could never remove anything. That is the premise
+    /// [`owned_tags`] rests on, and it is a premise about a type in another
+    /// crate, so it is checked here rather than assumed: if `Tags` ever stops
+    /// being canonical, this fails before the SQL does.
+    ///
+    /// The inputs are the three shapes that would defeat a weaker guarantee: the
+    /// same pair twice, one key with two values, and two keys whose
+    /// concatenations collide on a prefix.
+    #[test]
+    fn a_query_items_tags_are_already_canonical() {
+        fn distinct_tags_quadratic(item: &QueryItem) -> Vec<String> {
+            let mut out: Vec<String> = Vec::with_capacity(item.tags().len());
+            for tag in item.tags() {
+                let value = tag.as_str().to_owned();
+                if !out.contains(&value) {
+                    out.push(value);
+                }
+            }
+            out
+        }
+
+        for pairs in [
+            vec![("course", "c1"), ("course", "c1")],
+            vec![("course", "c1"), ("course", "c10")],
+            vec![("course", "c1"), ("student", "s1"), ("course", "c1")],
+            vec![("a", "b"), ("a", "bc"), ("ab", "c")],
+        ] {
+            let tags = Tags::from_pairs(pairs.iter().copied()).unwrap();
+            let item = QueryItem::new(Vec::<String>::new(), tags).unwrap();
+
+            assert_eq!(
+                owned_tags(&item),
+                distinct_tags_quadratic(&item),
+                "the dedup removed something, so it was not dead work: {pairs:?}"
+            );
+            assert_eq!(
+                item_parameters(&item),
+                distinct_tags_quadratic(&item).len() + item.types().len(),
+                "the parameter count parted company with what `item_sql` will bind: {pairs:?}"
+            );
+        }
     }
 }
