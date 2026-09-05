@@ -85,11 +85,18 @@ use crate::query::{Query, ReadOptions};
 
 /// A DCB-compliant event store.
 ///
-/// This is the `!Send` flavour and the one to use in generic bounds; see the
-/// [module documentation](self) for why. Adapters that can be `Send` should
-/// implement [`SendEventStore`] instead and get this for free.
+/// Two traits, one set of doc attributes. `trait_variant` derives
+/// [`SendEventStore`] from [`EventStore`] and copies this block onto it, so
+/// every sentence here is written to hold on whichever of the two pages you
+/// opened. [`EventStore`] states no `Send` requirement and is what generic code
+/// binds; [`SendEventStore`] adds it and hands back [`EventStore`] free. The
+/// [module documentation](self) has the reason the split exists.
 ///
 /// # Implementing this trait
+///
+/// Implement [`SendEventStore`] where the store can be shared across threads,
+/// which is every native adapter; implement [`EventStore`] only where `Send`
+/// cannot be had at all, as on `wasm32`.
 ///
 /// The specification's requirements are obligations on the implementer, and
 /// [`happenstance-testkit`](https://docs.rs/happenstance-testkit) checks every one of
@@ -101,7 +108,7 @@ use crate::query::{Query, ReadOptions};
 ///
 /// # Writing generic code over a store
 ///
-/// Bound on this trait, not [`SendEventStore`], unless you need to cross a
+/// Bound on [`EventStore`], not [`SendEventStore`], unless you need to cross a
 /// thread boundary:
 ///
 /// ```

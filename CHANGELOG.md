@@ -737,6 +737,27 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **`SendEventStore`'s and `SendProjectionStore`'s docs.rs pages told the reader
+  to implement a different trait.** `trait_variant` rebuilds the derived trait
+  with `..tr.clone()`, so `EventStore`'s and `ProjectionStore`'s trait-level doc
+  blocks are rendered verbatim on the `Send` flavours as well. Three sentences
+  written for the bare flavour therefore appeared, unchanged, on the page for the
+  other one: *"This is the `!Send` flavour"*, *"implement `SendEventStore`
+  instead"* — circular where it landed — and *"Bound on this trait, not
+  `SendEventStore`"*, which is the inverse of ES-1's `[FROZEN]` binding rule on
+  the very page an adapter author is routed to.
+
+  The copying is not the bug and is not suppressed: the derived traits have no
+  doc comment of their own, so `missing_docs` under `-D warnings` is the standing
+  guard that the copying still happens, and hand-writing two blocks would give
+  that up. What changed is the register. Both blocks now name each flavour
+  instead of pointing at one, so a sentence is true on whichever page carries it.
+
+  Two tests per derivation hold it: one rejects deixis — "this trait", "the one
+  to use", "instead" — in any paragraph that draws the flavour distinction, and
+  one requires both flavours to be named in link form, so the fix cannot
+  degenerate into saying nothing.
+
 - **`ProjectionProbe`'s published manifest recipe did not compile when
   followed.** Its `toml` fence wrote `happenstance-core = "…"` with no
   features, and every item the recipe sends an adapter author to implement or

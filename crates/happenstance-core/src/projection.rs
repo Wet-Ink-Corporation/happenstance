@@ -297,9 +297,13 @@ pub enum ResetError<E> {
 /// shape exists to enforce, for why the batch is owned, and for its provisional
 /// status.
 ///
-/// As with [`EventStore`](crate::EventStore), this is the `!Send` flavour and
-/// the one to use in bounds; adapters that can be `Send` should implement
-/// [`SendProjectionStore`] and get this for free.
+/// Two traits, one set of doc attributes. `trait_variant` derives
+/// [`SendProjectionStore`] from [`ProjectionStore`] and copies this block onto
+/// it, so every sentence here is written to hold on whichever of the two pages
+/// you opened. [`ProjectionStore`] states no `Send` requirement and is what
+/// generic code binds; [`SendProjectionStore`] adds it and hands back
+/// [`ProjectionStore`] free. The same split as
+/// [`EventStore`](crate::EventStore), for the same reason.
 ///
 /// # Implementing it
 ///
