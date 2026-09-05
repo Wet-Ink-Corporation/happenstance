@@ -90,6 +90,35 @@ every handle is dropped:
 cargo run -p transfers-on-sqlite
 ```
 
+Four more, each on a real SQLite file and each showing something the two above
+cannot. Read them in any order; none depends on another.
+
+```console
+cargo run -p rebuilding-read-models    # four views: skew, backfill, reset, rebuild
+cargo run -p handles-and-quotas        # three boundaries, and no aggregate behind any
+cargo run -p telemetry-across-codecs   # one log, two encodings, two event shapes
+cargo run -p tickets-over-http         # two processes, one file, fourteen sockets
+```
+
+`rebuilding-read-models` is what an operator does to derived state: two views at
+two checkpoints, a third backfilled beside the one it replaces and then promoted,
+a reset and a rebuild at two chunk sizes, and a fourth poisoned by a field the log
+does not carry — which stalls itself and nothing else.
+
+`handles-and-quotas` is the case DCB exists for. A unique handle over a set nobody
+can enumerate, a per-owner quota over a set nobody knows until it is read, and an
+idempotent delivery, composed into one append condition. It prints the query it
+derived, because the boundary is a value.
+
+`telemetry-across-codecs` is a log that outlived both its encoding and its schema.
+JSON payloads and postcard payloads, and readings in whole degrees beside readings
+in thousandths, folded by one model that names one codec and branches on neither.
+
+`tickets-over-http` is the shape people deploy: an HTTP API and a projection
+runner in separate processes over one file. Fourteen clients race for a five-seat
+show and five seats are sold; `GET /seats?at=N` answers `202` with its own
+checkpoint until the runner has caught up, and `200` after.
+
 ## Status
 
 | Crate | Role | Status |

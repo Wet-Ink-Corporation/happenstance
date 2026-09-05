@@ -46,6 +46,22 @@ examples/outside-projection-adapter/
                                  🔬 the falsifier. a projection adapter written from the
                                  rendered documentation alone, in a crate where the orphan
                                  rule and the non-dev graph behave as they do for a stranger.
+examples/rebuilding-read-models/ operating derived state. four views over one log at two
+                                 checkpoints; a blue/green backfill and its promotion; reset,
+                                 and a rebuild at two chunk sizes; and a view poisoned by a
+                                 field the log does not carry, which stalls only itself.
+examples/handles-and-quotas/     the boundary with no aggregate. a unique name over an
+                                 unbounded set, a per-owner quota, and an idempotent
+                                 delivery — three scopes, one append condition. the only
+                                 place command-retry idempotency is written down.
+examples/telemetry-across-codecs/
+                                 the log that outlived its encoding and its schema. JSON and
+                                 postcard payloads read by one fold, and a v1 event shape
+                                 upcast in `decode`. the only use of its event-type argument.
+examples/tickets-over-http/      two processes over one file. an HTTP API and a projection
+                                 runner, contended over real sockets, with read-your-writes
+                                 answered by 202 until the view catches up. one image, three
+                                 roles, and the only lib target under examples/.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.
