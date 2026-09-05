@@ -971,7 +971,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// module takes its own detector with it, and only a list written down
 /// elsewhere notices.
 ///
-/// The four groups, and what each is the last guard on:
+/// The five groups, and what each is the last guard on:
 ///
 /// * the `!Send` twins, including the positive control, which are the only
 ///   assertions that run on a target where `wasm-bindgen`'s
@@ -979,9 +979,28 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// * the three write-path all-or-none guards, which reject the shape the adapter
 ///   itself had — N inserts, a throw converted to `Err(…)`, and a turn that
 ///   commits the rows written before it;
+/// * the four cases that hold the identity stamp's three application sites, one
+///   site at a time — see below;
 /// * the read path's ceiling detectors and their three committed negative
 ///   controls, which are the whole of ADR-0011 as this adapter implements it;
 /// * the ES-6 reconstruction, which is project AC-005's artefact.
+///
+/// # Why the stamp needs four names rather than two
+///
+/// `STAMPED` (`origin_position IS NOT NULL`) is applied at three sites in
+/// `crates/happenstance-cloudflare/src/event_store.rs` — `evaluate`,
+/// `max_position` and `render_chunk` — and ES-18 needs all three. The two cases
+/// that shipped with the stamp both assert through `head`, which is
+/// `max_position` and nothing else, so `evaluate`'s filter and `render_chunk`'s
+/// could each be deleted with the entire gate green, this array included.
+///
+/// The two added since fail when *their own* site's filter is removed and only
+/// then, verified per site: `evaluate` removed fails the guard case alone,
+/// `render_chunk` removed fails the replay case alone, and `max_position`
+/// removed fails the original two alone. All four are named here because the
+/// shape this array exists to catch is the one that put two of them out of reach
+/// to begin with — a case that stops being compiled takes its own detector with
+/// it, and `--list` is the only thing that notices.
 const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "wasm_tests::the_probe_is_not_vacuous",
     "wasm_tests::the_js_boundary_types_are_not_send",
@@ -990,6 +1009,10 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind",
     "event_store::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind",
     "event_store::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures",
+    "event_store::write_path_tests::a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it",
+    "event_store::write_path_tests::a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it",
+    "event_store::write_path_tests::an_append_guard_does_not_count_a_row_a_failed_batch_left_behind",
+    "event_store::read_path_tests::a_replay_across_a_refused_append_yields_only_what_landed",
     "event_store::read_path_tests::read_is_stable_under_an_interleaved_append",
     "event_store::read_path_tests::a_ceilingless_paging_read_is_rejected",
     "event_store::read_path_tests::a_cursor_held_across_a_poll_is_rejected",
