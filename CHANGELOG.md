@@ -752,6 +752,149 @@ not the same as what a user needed to be told.
   whether this type should be public at all. Its two in-crate roles are the
   recorded ES-6 alternative and the positive control the `!Send` probes need,
   and neither needs a consumer.
+- **An append through a `happenstance-sqlite` handle the file has outgrown is
+  refused, and there is a new error variant to say so:
+  `SqliteEventStoreError::IdentityMoved`.** `remint_identity`'s documented
+  procedure says to run it *"with nothing else holding the database open"*, and
+  nothing enforced it. A handle reads the database's incarnation once, at
+  construction, so a handle that outlives a re-mint — a surviving handle from
+  before an in-place restore, or a health check that reopened the store early —
+  went on minting `EventId`s under the incarnation that was retired. Nothing
+  errored locally; the collision surfaced only when a replication peer saw the
+  same `(StoreId, SequencePosition)` twice, and by then its dedup had dropped
+  real facts.
+
+  VT-6 permits mint-once *only if* an adapter can detect that its state was
+  restored or cloned, **or** the deployment is documented to invoke the
+  re-mint — and this adapter takes the second branch, so the procedure is the
+  half of the permission it rests on. The check reads the file's own incarnation
+  inside the append transaction, under the lock the writer already holds, and
+  compares it with the handle's. It is one indexed lookup on a four-row
+  `WITHOUT ROWID` table.
+
+  A second stale-handle bug goes with it, one field over: an append now also
+  refuses with `UnsupportedSchemaVersion` if a newer build migrated the file
+  while this handle was open.
+
+  Guarding inside `remint_identity` was rejected rather than skipped: a
+  process-wide open-path registry needs a canonical path key that symlinks,
+  hardlinks, `file:` URIs, UNC paths and two paths to one inode all defeat, and
+  it would see nothing at all when the re-mint is another process. The check
+  where the write is covers both.
+- **A `happenstance-sqlite` read page is bounded in bytes as well as in rows,
+  and it stops holding the connection across the whole page.** `PAGE_SIZE = 512`
+  was the only knob over both, and it is a **row count**, which bounds neither.
+
+  **Residency.** A row is not a bounded quantity: each one owns its `data`, up
+  to `MAX_EVENT_DATA_LEN`, and its `metadata`, which this store does not bound
+  at all. So a page bounded only in rows was bounded, in bytes, by SQLite's
+  near-gigabyte blob limit rather than by anything this crate stated. One page
+  of 512 events at the data ceiling peaked at **537,036,800 live bytes — 512.2
+  MiB** — in one buffer before a single row reached the caller. An operator
+  rebuilding a projection over large events, on a container capped below that,
+  had the process killed with no diagnostic pointing at a read.
+
+  `SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT` is the new budget: **8 MiB**,
+  eight maximal payloads, public so a caller can compute the bound and a test
+  can compute the boundary. It is checked *after* each row is taken, so a page
+  always makes progress — `metadata` is unbounded, so one row can exceed the
+  whole budget by itself. A wide query is several statements merged, so the
+  stated ceiling on one page is this number times `planned_statement_count`.
+
+  **Lock hold.** `PAGE_SIZE`'s own doc said *"one `spawn_blocking` hop"* and the
+  code took the connection mutex once and held it across the selectivity lookup,
+  every statement of the plan, and the merge. Every `append` sharing the handle
+  waited behind all of it: 640.7 ms held against 1.7 ms waited, a **371x**
+  asymmetry, with the sharing appender's p50 untouched at 0.148 ms and its p99
+  at 799.041 ms. Nothing in the median warned anyone. The connection is now
+  taken once per statement, which is sound *because of* ADR-0011's ceiling and
+  not in spite of it: every statement carries `position <= H`, so what commits
+  between two of them is invisible to all of them.
+
+  **What this does not do is pick a different number.** `PAGE_SIZE` is
+  unchanged, and its doc no longer says *"a placeholder until it is measured"* —
+  it has been measured, and the measurement refused to settle it: the aggregate
+  lock hold over a replay scales as `1/PAGE` (2,929.2 s at 64 against 99.1 s at
+  2,048) while residency scales linearly with it, so the two consequences are
+  not co-optimisable by any value of one row count. Whether a read page should
+  be budgeted in rows, in bytes, or by the caller is a decision that adds public
+  surface, and a brief is staged in `.kb/_intake/`.
+- **`happenstance-sqlite` plans a wide query about 33x faster, and the saving is
+  taken with the write lock held.** Translating a query into SQL accumulated the
+  query's distinct tags into a `Vec<String>` guarded by
+  `if !wanted.contains(&tag)`, which is quadratic in that count — and the shape
+  that reaches the quadratic is not a corner but **VT-23's own floor**: every
+  store must evaluate at least 128 query items, and nothing bounds tags per
+  item. At 128 items carrying this adapter's 128 tags apiece that is about 134
+  million string comparisons before a single statement is prepared.
+
+  It ran twice per operation: once per 512-row read page, so it multiplied by
+  the page count of a replay; and once per append guard **inside `BEGIN
+  IMMEDIATE`**, where a quarter-second of pure-Rust planning is a quarter-second
+  every other writer waits. The accumulator is a `BTreeSet<&str>` now — sorted
+  rather than hashed so the plan stays reproducible run to run, and borrowed
+  rather than owned so the per-tag `String` goes too. Measured at 1.68 s against
+  50 ms in a debug build; `experiments/shipped-append-condition-sql` measured
+  40.1x in release, with the outputs asserted byte-identical before either was
+  timed.
+
+  A second, smaller dedup went with it: the per-item one was **dead work**, not
+  merely quadratic. VT-16 `[FROZEN]` makes `Tags` canonical — sorted and
+  deduplicated at construction — so the guard could never remove anything. Both
+  callers of it are `O(1)` now, and a test holds the premise, because it is a
+  premise about a type in another crate.
+
+  No public surface moves: both functions are crate-private, and the outputs are
+  identical by assertion rather than by argument.
+- **`happenstance-sqlite` no longer has to wait for `happenstance-testkit` to
+  publish first.** Its dev-dependency on the testkit inherited
+  `[workspace.dependencies]`' `version = "0.2.0-alpha.1"`, and a dev-dependency
+  carrying a version has to resolve from the registry at publish time. The
+  testkit versions independently by design — that is CF-32 `[FROZEN]`, and this
+  file's own header says to treat a minor bump there as breaking — so the next
+  testkit-only bump would have blocked the next `happenstance-sqlite` release
+  for a dependency no consumer of it ever sees.
+
+  It now uses the path-only spelling `crates/happenstance/Cargo.toml` has used,
+  with an eleven-line explanation, since NF-006. The published manifest carries
+  no `happenstance-testkit` dev-dependency at all, which is what cargo does with
+  a versionless one. Nothing changes for a consumer.
+
+  The root `[workspace.dependencies]` line still carries the version, and it is
+  load-bearing for nothing — every reference to the testkit in this workspace is
+  a dev-dependency. Moving it instead would fix this once for every future
+  adapter; `happenstance-cloudflare` carries the same spelling today. That
+  choice is briefed, not taken.
+- **BREAKING (`happenstance-sqlite`, `projection-store` feature):
+  `SqliteBatch::push` takes `&'static str`, and the free-form spelling moved to
+  `SqliteBatch::push_raw_sql`.** The batch is the only place in the workspace a
+  consumer is handed a SQL-text seam, and the values flowing through it are
+  exactly the bytes this library guarantees it does not inspect — ADR-0003 makes
+  payloads opaque `Bytes`. So a statement `format!`-ed around an account name
+  decoded out of an event payload compiled, read like the type-level doc
+  invited, and was a SQL injection whose source was the event log. It commits
+  inside the same `BEGIN IMMEDIATE` that advances the checkpoint, so a
+  successful one is recorded as *progress*: nothing replays those events and
+  nothing re-derives the corrupted rows.
+
+  A paragraph would have been a control nothing enforces —
+  `standards/rust/70-rustdoc-obligations.md`, RS-70-5: *"Nothing in the gate
+  reads prose."* `&'static str` is the narrowest type that admits every
+  statement written in source and refuses every statement assembled at run time,
+  and a `compile_fail,E0308` doctest on `push` is what holds it. Every caller in
+  this workspace — the crate's own two probe writers and
+  `examples/transfers-on-sqlite` — already passed a literal and is untouched.
+
+  `push_raw_sql` is the escape hatch, for the one case the narrower type cannot
+  express: a statement whose *shape* is computed, of which an `IN (…)` list
+  sized at run time is the honest example. It is separately named so that
+  reaching for it is a decision.
+
+  What this does **not** settle is the seam's final shape. ADR-0017 answered
+  what the batch owns; whether the parameterised path should be a statement type
+  minted by a macro rather than a bare `&'static str` belongs with whoever
+  freezes `ProjectionStore` under PS-2, because a signature narrowed twice is
+  worse than one narrowed once. A brief is staged in `.kb/_intake/`.
 - **`SqliteEventStore::planned_statement_count` counts the real partition, so
   the number it returns for a query of wide items has changed.** The signature is
   untouched and the count is unchanged for every query whose items are narrow —

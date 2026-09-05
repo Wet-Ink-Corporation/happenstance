@@ -148,7 +148,7 @@ decorative — name a plausible wrong implementation it rejects") is satisfied b
 
 **Nothing about this reaches an adapter author.** An adapter receives the
 assembled value and reads it through the accessor:
-`crates/happenstance-sqlite/src/event_store.rs:732-777` is `for guard in
+`crates/happenstance-sqlite/src/event_store.rs:875-920` is `for guard in
 condition.guards() { … }`. Call order is spent before the port is entered, so no
 conformance rule can see this and none should be minted for it.
 
@@ -174,7 +174,7 @@ partly stale.**
 
 - A third fact bearing on the falsifier's first limb: the one adapter that *is*
   built deliberately does **not** push a multi-guard condition into a single
-  statement. `crates/happenstance-sqlite/src/event_store.rs:734` — "**One `SELECT
+  statement. `crates/happenstance-sqlite/src/event_store.rs:877` — "**One `SELECT
   max(position)` per guard statement**, which is ADR-0022's decision and the one
   that measured fastest on the *rejection* path". That is a measured preference
   for statement-per-guard, not a failure to achieve pushdown, so it neither fires
@@ -479,7 +479,7 @@ real and the mechanism that was supposed to enforce it does not bind here.
    no number for this. `.kb/decisions/` runs to 0036 on disk.
 6. **Whether the pin should ever become a conformance rule.** It should not — an
    adapter only ever sees the assembled condition
-   (`crates/happenstance-sqlite/src/event_store.rs:732-777`) — but nothing written
+   (`crates/happenstance-sqlite/src/event_store.rs:875-920`) — but nothing written
    down says so, and the next person to read AE-3 may reach for `suite.rs`.
 7. **Whether `happenstance-sync`'s ingest policy will want to re-blanket an
    assembled condition.** That is the use case Option 4 forecloses, and the crate

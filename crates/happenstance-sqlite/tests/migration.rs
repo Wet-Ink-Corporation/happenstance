@@ -54,11 +54,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 
-use happenstance_core::StoreId;
+use happenstance_core::{AppendError, Event, SendEventStore, StoreId};
 use happenstance_sqlite::connection::{
     BUSY_TIMEOUT_MS, ConnectionSettings, JOURNAL_MODE, SYNCHRONOUS, open_configured,
 };
-use happenstance_sqlite::event_store::{SCHEMA_VERSION, SqliteEventStore};
+use happenstance_sqlite::event_store::{SCHEMA_VERSION, SqliteEventStore, SqliteEventStoreError};
 use rusqlite::Connection;
 
 /// A temporary database path that deletes itself, and its WAL sidecars, on drop.
@@ -107,6 +107,18 @@ impl Drop for TempDb {
 /// that a wrong `open` cannot both write the file and describe it.
 fn raw(path: &Path) -> Connection {
     Connection::open(path).unwrap()
+}
+
+/// The smallest valid event, for the identity assertions below.
+fn event(event_type: &str) -> Event {
+    Event::new(event_type, &b"{}"[..]).unwrap()
+}
+
+/// How many rows the `event` table holds, read through a raw connection.
+fn rows(path: &Path) -> i64 {
+    raw(path)
+        .query_row("SELECT count(*) FROM event", [], |row| row.get(0))
+        .unwrap()
 }
 
 /// The names SQLite reports for the objects this crate created, with its own
@@ -464,6 +476,67 @@ fn remint_replaces_the_persisted_identity() {
         )
         .unwrap();
     assert_eq!(identity_rows, 1, "a re-mint replaces, it does not append");
+}
+
+/// R-3 — an append through a handle the file has outgrown is refused, not
+/// stamped under the incarnation that was retired.
+///
+/// VT-6 permits mint-once **only if** an adapter can detect that its state was
+/// restored or cloned, **or** the deployment is documented to invoke the
+/// re-mint. This adapter takes the second branch, so `remint_identity`'s
+/// documented procedure is the half of the permission it rests on — and that
+/// procedure says *"Run it with nothing else holding the database open"*, a
+/// precondition nothing enforced. A live handle keeps the `store_id` it read at
+/// construction, so after a re-mint it goes on minting `EventId`s under the
+/// retired incarnation; the collision surfaces only when a replication peer sees
+/// the same `(StoreId, SequencePosition)` twice, and by then its dedup has
+/// dropped real facts.
+///
+/// The cross-process and restore-from-backup cases are genuinely undetectable
+/// from inside SQLite, and VT-6's `Rejects:` paragraph accepts that risk in
+/// terms. This is the strictly narrower **in-process** one: no external actor is
+/// involved, and the split is visible to the program that caused it — under a
+/// lock the writer is already holding.
+#[tokio::test]
+async fn an_append_through_a_handle_the_file_has_outgrown_is_refused() {
+    let db = TempDb::new("outgrown-handle");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    let retired = store.store_id();
+
+    store.append(&[event("Before")], None).await.unwrap();
+    let before = rows(db.path());
+
+    let minted = SqliteEventStore::remint_identity(db.path()).unwrap();
+    assert_ne!(
+        retired, minted,
+        "the re-mint must move the persisted identity"
+    );
+
+    let refused = store
+        .append(&[event("After")], None)
+        .await
+        .expect_err("the stale handle must not stamp an event under the retired incarnation");
+    assert!(
+        matches!(
+            refused,
+            AppendError::Store(SqliteEventStoreError::IdentityMoved { handle, persisted })
+                if handle == retired && persisted == minted
+        ),
+        "the refusal must name both incarnations, so an operator can tell which \
+         handle to drop; got {refused:?}"
+    );
+    assert_eq!(
+        rows(db.path()),
+        before,
+        "a refused append leaves the file as it was"
+    );
+
+    // The file is not poisoned: a handle opened after the re-mint appends under
+    // the new incarnation, which is the whole point of the procedure.
+    let fresh = SqliteEventStore::open(db.path()).unwrap();
+    assert_eq!(fresh.store_id(), minted);
+    fresh.append(&[event("After")], None).await.unwrap();
+    assert_eq!(rows(db.path()), before + 1);
 }
 
 /// AC-006 — `recorded_at` is returned as stored, and neither `open` nor

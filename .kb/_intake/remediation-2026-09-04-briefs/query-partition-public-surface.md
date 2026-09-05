@@ -19,19 +19,19 @@ The lane took the second decision under duress, because the honest fix required 
 
 Two `pub const`s on `SqliteEventStore`, and one `pub fn` reading both.
 
-`crates/happenstance-sqlite/src/event_store.rs:281`:
+`crates/happenstance-sqlite/src/event_store.rs:314`:
 
 ```rust
     pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
 ```
 
-`crates/happenstance-sqlite/src/event_store.rs:308` — **new**:
+`crates/happenstance-sqlite/src/event_store.rs:379` — **new**:
 
 ```rust
     pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = PARAMETER_BUDGET;
 ```
 
-`crates/happenstance-sqlite/src/event_store.rs:326-334` — **changed in what it counts, not in its signature**:
+`crates/happenstance-sqlite/src/event_store.rs:397-405` — **changed in what it counts, not in its signature**:
 
 ```rust
     pub fn planned_statement_count(query: &Query) -> usize {
@@ -45,7 +45,7 @@ Two `pub const`s on `SqliteEventStore`, and one `pub fn` reading both.
     }
 ```
 
-The partition is greedy and order-preserving over both limits (`crates/happenstance-sqlite/src/query_sql.rs:249-269`), and the per-item cost is one bound parameter per distinct tag and one per type (`:287-289`, a second reading of `item_sql` at `:316`).
+The partition is greedy and order-preserving over both limits (`crates/happenstance-sqlite/src/query_sql.rs:273-293`), and the per-item cost is one bound parameter per distinct tag and one per type (`:318-320`, a second reading of `item_sql` at `:347`).
 
 ### The two axes are genuinely independent, which is the whole reason there are two numbers
 
@@ -66,7 +66,7 @@ So the premise inside `X-1`'s first question — *"once it is no longer the part
 - **Costs a caller:** two numbers to read instead of one, and a caller who wants "will my query fit in one statement" must do arithmetic over both. Nothing forces them to: `planned_statement_count` answers that question directly.
 - **Costs an adapter author:** nothing. Neither constant is on any port.
 - **Semver:** additive today, frozen at `0.2.0`. Two numbers frozen instead of one.
-- **What it buys:** a test can compute the boundary rather than guess at it, which is the reason the arm width was made public in the first place (`event_store.rs:274-276`) and the reason this repository distrusts a merge nothing crosses. `tests/wide_tags.rs` computes its under/at/over cases from `MAX_QUERY_PARAMETERS_PER_STATEMENT` and its narrow-item case from `MAX_QUERY_ARMS_PER_STATEMENT`; with either private, one of those tests goes back to a literal.
+- **What it buys:** a test can compute the boundary rather than guess at it, which is the reason the arm width was made public in the first place (`event_store.rs:307-309`) and the reason this repository distrusts a merge nothing crosses. `tests/wide_tags.rs` computes its under/at/over cases from `MAX_QUERY_PARAMETERS_PER_STATEMENT` and its narrow-item case from `MAX_QUERY_ARMS_PER_STATEMENT`; with either private, one of those tests goes back to a literal.
 
 ### Option 1B — both private, `planned_statement_count` the only public seam
 
@@ -102,7 +102,7 @@ The number is the count of statements that will actually be prepared and run.
 
 - **Costs a caller:** any caller pinning the old number for a wide-tag query sees it change. That caller was pinning a plan the driver refuses; there is no such caller in the workspace, and no such caller anywhere, because the crate is unpublished.
 - **Semver:** none as a signature. A behavioural change to a public function, free today.
-- **Against it:** the function's own doc used to say it is *"the same call the read path makes"* — and it still is. Under 2A that sentence stays true, which is the property the doc was written to protect (`event_store.rs:310-317`): a second `ceil(arms / width)` beside it would agree by arithmetic rather than by construction, and would go on reporting a boundary the read path had stopped taking.
+- **Against it:** the function's own doc used to say it is *"the same call the read path makes"* — and it still is. Under 2A that sentence stays true, which is the property the doc was written to protect (`event_store.rs:381-388`): a second `ceil(arms / width)` beside it would agree by arithmetic rather than by construction, and would go on reporting a boundary the read path had stopped taking.
 
 ### Option 2B — keep it meaning "arms", add a second function
 
@@ -153,7 +153,7 @@ There is no earlier deadline. Nothing in the gate depends on either answer, and 
 - **The testkit's VT-23 rule.** `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` (`crates/happenstance-testkit/src/suite.rs:3899-3903`) builds 128 items carrying **one tag each** — 128 parameters — while its own assertion message speaks of *"an adapter that sends only its first chunk of bound parameters"*. The rule names the unit it is not measuring in. Widening it to cross the tag axis is a testkit change, which per CF-29 is a minor every adapter takes involuntarily, so it is the same release-timing question as the fixture wave; it was deliberately out of the `X-1` lane's writable surface and is not proposed here.
 - **Whether the two shipping adapters must agree on a declared query ceiling.** `X-2` landed in the same lane and made them agree *in fact* — `happenstance-cloudflare` now publishes the same 400 and 30,000, on the argument that both are properties of the SQLite underneath a Durable Object's storage rather than of either adapter. Whether they are **required** to agree, or whether VT-23's deliberate silence on documentation stands, is not settled by two adapters happening to pick the same numbers, and it belongs with VT-23's own `[PROVISIONAL]` marker and its falsifier. If question 1 below is answered `1B` — both constants private — it must be answered the same way in both crates or the pairing this workspace recommends becomes undiscoverable again in one of them.
 - **Whether `happenstance-cloudflare`'s widths should be *lower* than the sibling's.** The Durable Object's isolate memory ceiling is real, and `tests/wf11_memory_ceiling.rs`'s latest run reports verdict **(c) NOT CONSTRUCTIBLE HERE**: the runner granted all 2,047 pages it asked for — past the platform's own documented 128 MiB per-isolate limit — and refused nothing. So no measurement locates the wall for SQL *text* either, and picking a smaller number for this runtime would be inventing one. What the lane did instead was bound the *merge*, which is free and needs no number: residency is one page plus one chunk rather than `chunks x page`. Revisit when a `workerd`-class runner exists, which is `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`'s territory.
-- **The per-item parameter cost's coupling to the arm shape.** `item_parameters` (`crates/happenstance-sqlite/src/query_sql.rs:287-289`) is a second reading of `item_sql`, and it is correct only for the intersection-chain arm that ships today. If `append-condition-sql-shape.md` chooses an aggregate arm, whoever lands it owns re-deriving that function — the count is *"one per tag and one per type"* under both shapes measured so far, but that is a fact about two shapes, not a theorem.
+- **The per-item parameter cost's coupling to the arm shape.** `item_parameters` (`crates/happenstance-sqlite/src/query_sql.rs:318-320`) is a second reading of `item_sql`, and it is correct only for the intersection-chain arm that ships today. If `append-condition-sql-shape.md` chooses an aggregate arm, whoever lands it owns re-deriving that function — the count is *"one per tag and one per type"* under both shapes measured so far, but that is a fact about two shapes, not a theorem.
 - **`Selectivity::read_for`'s existence.** `append-condition-sql-shape.md`'s option B deletes it, and with it the chunk width the `X-1` lane gave it. That brief asked for `X-1` to be sequenced after it and `X-1` ran first; the note recording that is in its §"Sequencing".
 - **The quadratic in `read_for`'s accumulation.** Audit entry `I-5` owns it, the lane left `wanted.contains` exactly as it found it, and chunking the statement does not make the accumulation cheaper. The two changes touch the same function and will conflict if they land in either order without a merge.
 

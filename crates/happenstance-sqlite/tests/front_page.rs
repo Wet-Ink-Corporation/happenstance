@@ -501,6 +501,124 @@ fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
     );
 }
 
+/// The `happenstance-testkit` dependency lines this manifest declares, with
+/// their line numbers.
+///
+/// Read from the **keys**, never from the file's prose: this manifest's comments
+/// name `happenstance-testkit` five times while explaining how it is spelled, so
+/// a whole-file `contains` answers a different question. Both TOML spellings of
+/// one key are matched — `happenstance-testkit = { … }` and the dotted
+/// `happenstance-testkit.workspace = true` — because they mean the same thing
+/// and only one of them is written here today.
+fn testkit_dependency_lines(manifest: &str) -> Vec<(usize, &str)> {
+    manifest
+        .lines()
+        .enumerate()
+        .map(|(index, line)| (index + 1, line.trim()))
+        .filter(|(_, line)| {
+            line.strip_prefix("happenstance-testkit")
+                .is_some_and(|rest| rest.starts_with(" =") || rest.starts_with('.'))
+        })
+        .collect()
+}
+
+/// What is wrong with how this manifest spells its testkit dev-dependency, if
+/// anything.
+///
+/// **A dev-dependency that carries a version requirement has to resolve from the
+/// registry at publish time.** `happenstance-testkit` versions independently by
+/// design — CF-32 `[FROZEN]` requires it to, so that adding a conformance rule
+/// can be a minor bump — so a version requirement here means the next
+/// `happenstance-sqlite` release cannot be published until the new testkit
+/// version is live, for a dependency that never reaches a consumer of this
+/// crate. Cargo strips a versionless dev-dependency from the published manifest
+/// entirely, which is why the path-only spelling is the one that keeps the two
+/// crates' release order free.
+///
+/// `{ workspace = true }` is the spelling that fails, and it fails invisibly:
+/// `[workspace.dependencies]` carries `version = "0.2.0-alpha.1"` on this crate,
+/// so inheriting it inherits the coupling. `crates/happenstance/Cargo.toml`
+/// spells the identical dependency `{ path = "../happenstance-testkit" }` and
+/// explains why at length; this crate joined the release set after that
+/// diagnosis was written and did not inherit it.
+///
+/// What this cannot see: whether `[workspace.dependencies]`' own `version` key
+/// is still there. That line is load-bearing for nothing in the workspace, and
+/// moving it would fix this once for every future adapter — a choice this test
+/// deliberately does not make, because it is a check on *this* manifest.
+fn publish_order_problems(manifest: &str) -> Vec<String> {
+    let lines = testkit_dependency_lines(manifest);
+
+    let [(number, line)] = lines.as_slice() else {
+        return vec![format!(
+            "expected exactly one `happenstance-testkit` dependency line in Cargo.toml, \
+             found {}",
+            lines.len()
+        )];
+    };
+
+    let mut problems = Vec::new();
+    if line.contains("workspace") {
+        problems.push(format!(
+            "Cargo.toml:{number} inherits the testkit dependency from \
+             `[workspace.dependencies]`, which carries a version requirement: {line:?}"
+        ));
+    }
+    if line.contains("version") {
+        problems.push(format!(
+            "Cargo.toml:{number} states a version requirement on a dev-dependency: {line:?}"
+        ));
+    }
+    if !line.contains("path") {
+        problems.push(format!(
+            "Cargo.toml:{number} does not reach the testkit by path, so cargo cannot strip \
+             it from the published manifest: {line:?}"
+        ));
+    }
+    problems
+}
+
+/// The testkit dev-dependency does not constrain this crate's release order.
+///
+/// See [`publish_order_problems`] for the mechanism and for what it cannot see.
+#[test]
+fn the_testkit_dev_dependency_carries_no_version_requirement() {
+    let problems = publish_order_problems(MANIFEST);
+    assert!(
+        problems.is_empty(),
+        "this crate cannot be published until happenstance-testkit is, for a dependency no \
+         consumer of it ever sees:\n- {}",
+        problems.join("\n- ")
+    );
+}
+
+/// The check above rejects the three spellings that reintroduce the coupling,
+/// and accepts the one the sibling crate already uses.
+///
+/// RS-81-5: a lint that is only ever run against a passing input is a lint whose
+/// failure path has never executed. The first case is this manifest's own line
+/// verbatim as it stood before the fix.
+#[test]
+fn the_publish_order_check_rejects_every_spelling_that_carries_a_version() {
+    for wrong in [
+        "[dev-dependencies]\nhappenstance-testkit = { workspace = true, features = [\"proptest\"] }\n",
+        "[dev-dependencies]\nhappenstance-testkit.workspace = true\n",
+        "[dev-dependencies]\nhappenstance-testkit = { version = \"0.2.0-alpha.1\", path = \"../happenstance-testkit\" }\n",
+    ] {
+        assert!(
+            !publish_order_problems(wrong).is_empty(),
+            "the coupling was spelled {wrong:?} and the check stayed green"
+        );
+    }
+
+    let right = "[dev-dependencies]\n\
+                 happenstance-testkit = { path = \"../happenstance-testkit\", features = [\"proptest\"] }\n";
+    assert!(
+        publish_order_problems(right).is_empty(),
+        "the path-only spelling `crates/happenstance/Cargo.toml` already uses was rejected"
+    );
+}
+
 /// Removing the markers does not remove what sat behind them.
 ///
 /// Three passages on the crate root carry *compiled results* rather than status,
