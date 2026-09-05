@@ -438,7 +438,6 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         tests: TYPED_LAYER_CONTENTION_TESTS,
         registry: None,
     },
-
     Artefact {
         package: "rebuilding-read-models",
         target: "runs",
