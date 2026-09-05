@@ -123,7 +123,7 @@ and `Arc` is "the thread-safe one" produces a type that is neither `Send` nor
 no consumer can spawn.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:225 (is not for sharing the store; it is so that a)` ·
-`crates/happenstance-sqlite/src/event_store.rs:1371 (is what makes the whole)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1451 (is what makes the whole)` ·
 [ES-3](../../spec/SPECIFICATION.md) ·
 [std::marker::Send](https://doc.rust-lang.org/std/marker/trait.Send.html) *(checked 2026-08-09, rustc 1.97.1)*
 

@@ -184,7 +184,7 @@ Error, both enums:
     Worker(#[from] JoinError),
     NoRuntime(#[from] TryCurrentError),
 ```
-— `crates/happenstance-sqlite/src/event_store.rs:1023, 942, 950`; repeated verbatim in
+— `crates/happenstance-sqlite/src/event_store.rs:1071, 942, 950`; repeated verbatim in
 `SqliteProjectionStoreError` at `crates/happenstance-sqlite/src/projection_store.rs:532, 544, 548`.
 Imports at `crates/happenstance-sqlite/src/event_store.rs:128-131`.
 
@@ -223,8 +223,8 @@ writing `rusqlite`; the coupling bites when they first try to *inspect* an error
 supply their own connection.
 
 **`happenstance-sqlite` — `tokio`, only in the error enums.** `JoinError` and
-`TryCurrentError` are public (`event_store.rs:1037, 950`). `JoinHandle` appears only
-in the **private** `enum ReadState` at `event_store.rs:1302-1307`, so it is not on
+`TryCurrentError` are public (`event_store.rs:1085, 950`). `JoinHandle` appears only
+in the **private** `enum ReadState` at `event_store.rs:1382-1387`, so it is not on
 the public surface. `tokio` is a non-optional dependency at
 `crates/happenstance-sqlite/Cargo.toml:37`, taken at `features = ["rt"]`.
 
@@ -476,7 +476,7 @@ consumer writes the `#[durable_object]` class the README's own example takes a
 - **Semver class:** **breaking**, and only additive-shaped *before* publication —
   after `happenstance-sqlite` ships, removing `rusqlite::Error` from a public variant
   is a major bump. Note the `#[non_exhaustive]` at
-  `crates/happenstance-sqlite/src/event_store.rs:1019` protects *addition* of variants,
+  `crates/happenstance-sqlite/src/event_store.rs:1067` protects *addition* of variants,
   not *change* of a variant's payload.
 - **Forecloses:** the connection-injection story, and any future in which the adapter
   wants to hand the driver's own richer error back to a caller.
@@ -627,7 +627,7 @@ in *What this does not settle*.
 should be decided on its own evidence rather than carried by the policy. `tokio` is
 `1.x` (`Cargo.toml:129`), its major has not moved in years, and the only types it puts
 on `happenstance-sqlite`'s public surface are two error-enum payloads
-(`event_store.rs:1037, 950`) — `JoinHandle` is private (`:1212`). Worse, the
+(`event_store.rs:1085, 950`) — `JoinHandle` is private (`:1212`). Worse, the
 re-export would be **feature-thin**: `happenstance-sqlite` takes tokio at
 `features = ["rt"]` (`crates/happenstance-sqlite/Cargo.toml:37`), so a consumer who
 reaches tokio *only* through the re-export gets a partial tokio and a confusing
@@ -732,7 +732,7 @@ statement about the *population of consumers*, not about the API.
 half with a real deadline. Removing `rusqlite::Error` from a public variant, or
 `rusqlite::types::Value` from `SqliteBatch::push`, is a major bump once
 `happenstance-sqlite` is on the registry. `#[non_exhaustive]`
-(`crates/happenstance-sqlite/src/event_store.rs:1019`) does not help — it protects the
+(`crates/happenstance-sqlite/src/event_store.rs:1067`) does not help — it protects the
 addition of variants, not the change of a payload.
 
 ~~**For the lockstep sentence: free while the five versions still agree.** They agree

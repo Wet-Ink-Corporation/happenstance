@@ -42,16 +42,17 @@ uniform, and two ranges move by different amounts at their two ends, so applying
 offset would leave outliers wrong and green.
 
 Base for every "from" below is `bd11598` (`remediation/pre-publication`); the "to" is
-`lane/sqlite-ceilings` at the R-3 commit.
+`lane/sqlite-ceilings` at its tip, and it was recomputed after the last commit that moved
+a line rather than carried forward from an earlier one.
 
 | in `spec/SPECIFICATION.md` | from | to | anchor at the range's start |
 |---|---|---|---|
 | `:392` | `projection_store.rs:529-679` | `:609-759` | `impl SendProjectionStore for SqliteProjectionStore {` |
 | `:1616` | `event_store.rs:284` | `:317` | `pub const MAX_EVENT_DATA_LEN: usize = 1_048_576;` |
-| `:2600` | `event_store.rs:998` | `:1093` | `.map_err(\|_\| SqliteEventStoreError::MalformedIdentity { len: raw…` |
-| `:2691` | `event_store.rs:1011-1104` | `:1106-1199` | `pub enum SqliteEventStoreError {` |
-| `:2999` | `event_store.rs:1337` | `:1432` | `Unsampled,` |
-| `:4072` | `event_store.rs:1106` | `:1201` | `impl SendEventStore for SqliteEventStore {` |
+| `:2600` | `event_store.rs:998` | `:1141` | `.map_err(\|_\| SqliteEventStoreError::MalformedIdentity { len: raw…` |
+| `:2691` | `event_store.rs:1011-1104` | `:1154-1279` | `pub enum SqliteEventStoreError {` |
+| `:2999` | `event_store.rs:1337` | `:1512` | `Unsampled,` |
+| `:4072` | `event_store.rs:1106` | `:1281` | `impl SendEventStore for SqliteEventStore {` |
 | `:4715` | `projection_store.rs:529` | `:609` | `impl SendProjectionStore for SqliteProjectionStore {` |
 | `:4740` | `projection_store.rs:534-542` | `:614-622` | `// The `E0195` transcript this line used to carry is now discharged…` |
 | `:5315` | `projection_store.rs:552` | `:632` | `fn begin(&self) -> Self::Batch {` — **this is the one the gate fails on** |
@@ -72,9 +73,27 @@ done and does not redo it:
 - **`standards/rust/`** — 20 citations across atoms `22`, `23`, `24`, `25`, `30` and `90`,
   repointed in place. `cargo xtask lint-constitution` verifies them and reports *"27
   atoms, all consistent"*.
-- **`.kb/_intake/remediation-2026-09-04-briefs/`** — 33 citations across nine briefs,
+- **`.kb/_intake/remediation-2026-09-04-briefs/`** — 63 citations across ten briefs,
   repointed in place. Nothing in the gate scans this directory, so these were the lane's
   own responsibility and are stated here rather than assumed.
+
+  **With one limitation worth naming, because it looks like a defect this lane
+  introduced and is not.** Anchor repointing preserves whatever a citation *pointed at*;
+  it cannot fix one that was already aimed wrongly. Several citations in these briefs were
+  already stale at `bd11598`, from `X-1`'s roughly +38/+41 drift in `event_store.rs` and
+  earlier — `sqlite-blocking-seam.md:217` cites `append`'s signature at a line that has
+  been inside `SqliteEventStoreError::MalformedIdentity` since before this lane existed,
+  and `:708` cites `PAGE_SIZE` at `:141`, which was already `:180` at `bd11598`. They were
+  moved faithfully and **not** re-aimed: re-aiming another lane's evidence is a guess at
+  its intent, which is the thing the anchor rule exists to forbid. Whoever owns those
+  briefs owns those rows.
+
+  One consequence **is** this lane's, and is a quotation rather than a line number:
+  `sqlite-blocking-seam.md:708` quotes `PAGE_SIZE`'s doc calling it *"a placeholder until
+  it is measured"*, and `R-1+J-5` deleted that sentence — the measurement came back. The
+  brief's open question (*whether `PAGE_SIZE = 512` stays*) is unchanged and is now
+  answered at greater length in `read-page-budget-rows-bytes-or-caller.md`; the quotation
+  beside it is simply no longer in the tree.
 - **`docs/`, `examples/`, `RUNBOOK.md`, `CONTRIBUTING.md`, `README.md`** — searched;
   none of them cites these three files by line.
 

@@ -570,6 +570,35 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **An append through a `happenstance-sqlite` handle the file has outgrown is
+  refused, and there is a new error variant to say so:
+  `SqliteEventStoreError::IdentityMoved`.** `remint_identity`'s documented
+  procedure says to run it *"with nothing else holding the database open"*, and
+  nothing enforced it. A handle reads the database's incarnation once, at
+  construction, so a handle that outlives a re-mint — a surviving handle from
+  before an in-place restore, or a health check that reopened the store early —
+  went on minting `EventId`s under the incarnation that was retired. Nothing
+  errored locally; the collision surfaced only when a replication peer saw the
+  same `(StoreId, SequencePosition)` twice, and by then its dedup had dropped
+  real facts.
+
+  VT-6 permits mint-once *only if* an adapter can detect that its state was
+  restored or cloned, **or** the deployment is documented to invoke the
+  re-mint — and this adapter takes the second branch, so the procedure is the
+  half of the permission it rests on. The check reads the file's own incarnation
+  inside the append transaction, under the lock the writer already holds, and
+  compares it with the handle's. It is one indexed lookup on a four-row
+  `WITHOUT ROWID` table.
+
+  A second stale-handle bug goes with it, one field over: an append now also
+  refuses with `UnsupportedSchemaVersion` if a newer build migrated the file
+  while this handle was open.
+
+  Guarding inside `remint_identity` was rejected rather than skipped: a
+  process-wide open-path registry needs a canonical path key that symlinks,
+  hardlinks, `file:` URIs, UNC paths and two paths to one inode all defeat, and
+  it would see nothing at all when the re-mint is another process. The check
+  where the write is covers both.
 - **A `happenstance-sqlite` read page is bounded in bytes as well as in rows,
   and it stops holding the connection across the whole page.** `PAGE_SIZE = 512`
   was the only knob over both, and it is a **row count**, which bounds neither.

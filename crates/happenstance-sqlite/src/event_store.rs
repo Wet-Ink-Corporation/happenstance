@@ -650,11 +650,48 @@ impl SqliteEventStore {
 
     /// Everything that happens inside the one `BEGIN IMMEDIATE`.
     ///
-    /// In order: every guard probed against the state the store already held —
-    /// which is free, because no row of this batch exists yet — then the rows
-    /// inserted, then the identity stamped, then commit. A guard violation drops
-    /// the transaction without committing, which is what "a rejected append
-    /// leaves the file byte-identical" means.
+    /// In order: the file's own incarnation checked against this handle's, then
+    /// every guard probed against the state the store already held — which is
+    /// free, because no row of this batch exists yet — then the rows inserted,
+    /// then the identity stamped, then commit. A guard violation drops the
+    /// transaction without committing, which is what "a rejected append leaves
+    /// the file byte-identical" means, and the identity check answers the same
+    /// way.
+    ///
+    /// # Why the incarnation is re-read here and not trusted from construction
+    ///
+    /// [`remint_identity`](Self::remint_identity) documents *"run it with
+    /// nothing else holding the database open"*, and VT-6 rests half of its
+    /// mint-once permission on that documented procedure. A precondition nobody
+    /// can check is a precondition somebody will violate: a handle from before a
+    /// restore, or a health check that reopened the store early, keeps the
+    /// `store_id` it read at construction and goes on stamping [`EventId`]s
+    /// under an incarnation the file has retired.
+    ///
+    /// **This is one indexed read on a four-row `WITHOUT ROWID` table, under a
+    /// lock the writer already holds**, which is why it is affordable on the
+    /// path where everything else waits. Guarding inside `remint_identity`
+    /// instead cannot work and was not attempted: a process-wide open-path
+    /// registry needs a canonical path key that symlinks, hardlinks, `file:`
+    /// URIs, UNC paths and two paths to one inode all defeat, and it would still
+    /// see nothing at all when the re-mint is another process. Here, the
+    /// persisted identity is simply a row, and it is as true for a restore from
+    /// backup as for the in-process case R-3 was narrowest about.
+    ///
+    /// What it does **not** buy: an event already written under the retired
+    /// incarnation keeps it, which is correct — it was written by the
+    /// incarnation being retired, and `remint_identity` says so.
+    ///
+    /// It goes through [`read_identity`] rather than a bespoke `SELECT`, which
+    /// costs one extra row read — the schema version, which that function checks
+    /// first — and buys the property this crate keeps insisting on elsewhere:
+    /// **one spelling of what identity a file carries**, so `open`, `new`,
+    /// `migrate`, `remint_identity` and this cannot disagree. The extra check
+    /// has a second effect worth naming rather than discovering: an append now
+    /// also refuses with
+    /// [`UnsupportedSchemaVersion`](SqliteEventStoreError::UnsupportedSchemaVersion)
+    /// if a newer build migrated the file while this handle was open, which is
+    /// the same class of stale-handle bug one field over.
     fn append_locked(
         connection: &mut Connection,
         store_id: StoreId,
@@ -665,6 +702,17 @@ impl SqliteEventStore {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(store_error)?;
+
+        // First, and before the guards: a condition evaluated against a file
+        // this handle no longer speaks for answers a question nobody asked.
+        let persisted = read_identity(&transaction).map_err(AppendError::Store)?;
+        if persisted != store_id {
+            drop(transaction);
+            return Err(AppendError::Store(SqliteEventStoreError::IdentityMoved {
+                handle: store_id,
+                persisted,
+            }));
+        }
 
         if let Some(condition) = condition
             && let Some(conflict) = evaluate(&transaction, condition).map_err(store_error)?

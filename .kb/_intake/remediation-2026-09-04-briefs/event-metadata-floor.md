@@ -134,7 +134,7 @@ pub enum StoreLimit {
 
 **`guaranteed_minimum` is total and returns `usize`, not `Option<usize>`** (`crates/happenstance-core/src/limits.rs:69-76`). That is load-bearing for the options below: **a new variant cannot exist without a number**. Its doc (`:64-68`) says the number is how a caller tells *"this store is stricter than the contract allows" — a conformance bug —* from *"this payload was always going to be too big to replicate"*.
 
-**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:685-706`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:489-514`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
+**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:733-754`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:489-514`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
 
 **And `happenstance-sqlite` has already written down the opposite of the shared-bound answer**, in a `pub const`'s documentation — `crates/happenstance-sqlite/src/event_store.rs:269-272`:
 

@@ -140,6 +140,7 @@ a note recording that sits in its own sequencing section.
 | `testkit-dev-dependency-version-requirement.md` | Does `[workspace.dependencies]` keep its `version` key on the testkit, now that every consumer of it is a dev-dependency? | none | before the first testkit-only bump after `0.2.0` |
 | `timed-assertions-outside-the-testkit.md` | May an adapter's own test target assert on a clock, when CF-33 forbids it to a conformance rule and CF-34 puts performance in a separate harness? | none | not blocking; it is precedent either way |
 | `read-page-budget-rows-bytes-or-caller.md` | Is a read page budgeted in rows, in bytes, or by the caller? | additive (landed) / breaking for a caller-stated knob | `0.2.0` |
+| `vt-6-documented-procedure-and-the-in-process-check.md` | Does an adapter taking VT-6's documented-procedure branch owe an in-process incarnation check as part of the permission? | additive (landed) | not blocking; VT-6's next review |
 | `sqlite-lane-spec-citation-repoints.md` | **Not a decision — a handoff.** Ten `spec/SPECIFICATION.md` citations this lane's diff moved and was not permitted to edit; one of them fails `spec-trace`. | none | it fails the gate today |
 
 Written by the lane implementing `X-4`, `U-2`, `I-5`, `R-1+J-5` and `R-3`, in the
