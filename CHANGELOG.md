@@ -580,6 +580,36 @@ not the same as what a user needed to be told.
   them as skips. The incentive inversion is now measured in-tree and goes red if
   it ever stops being true. No conformance rule was added, so no adapter's build
   changes.
+- **`happenstance_testkit::bench::BenchmarkRecord::is_complete`, and the
+  completion half of `report` that was documented and never performed.**
+  `report`'s own line says it *"asserts that the scenario completed and that the
+  record is well-formed"*; only the second half existed, and neither conjunct of
+  `is_well_formed` could be false. `BenchmarkPass::is_well_formed` is an
+  invariant of the private `count`, which increments `attempts` and exactly one
+  of the four outcome counters on every call, and `!passes.is_empty()` held
+  because all three scenarios push a pass unconditionally before any early
+  return.
+
+  What that hid is one early return, two lines below its own pass:
+  `conditional_append_under_contention` returns as soon as the boundary seed
+  fails to land, so the **contended pass — the entire measurement — is absent
+  rather than zero**, and the run reports as fine. An adapter author tracking
+  `BENCH` lines across releases sees the number vanish, not a failure, and the
+  difference between *contention produced no rejections* and *contention never
+  happened* is exactly what the record was built to preserve.
+
+  A record now carries the passes its scenario owes, and the declaration is
+  pinned from both sides so that it cannot be filled in by something with
+  nothing to do with the run: `push` aborts on a label the scenario did not
+  declare, so a scenario cannot narrow the list to what it reaches on its
+  unhappy path, and `report` aborts on an owed label that never arrived, so it
+  cannot pad it either. `tests/memory_benchmarks.rs` drives the early return
+  through a fixture whose first append is armed to violate.
+
+  Additive: `BenchmarkRecord::new` and `push` are private, so no caller could
+  construct a record, and `passes`, `pass`, `scenario`, `summary` and
+  `is_well_formed` all keep their signatures. Still no threshold, at any budget
+  — an incomplete run is not a slow one (CF-34).
 
 ### Removed
 
@@ -791,6 +821,131 @@ not the same as what a user needed to be told.
   `crates/happenstance-core/tests/projection_recipe.rs` now holds it, deriving
   each requirement from `lib.rs`'s own `#[cfg]` rather than restating it, so a
   feature renamed everywhere except the fence fails too.
+- **The two non-vacuity reports in `happenstance-testkit`'s mutation-coverage
+  binary each stated a property their table did not have, and both are now
+  counted rather than asserted in prose.** No conformance rule was added and no
+  adapter's build changes; what changes is whether the numbers an evaluator
+  reads mean anything.
+
+  `MODEL_COVERAGE`'s heading said thirty-nine `Agreed` rows and thirty-seven
+  misses while the table held forty and thirty-eight. The same sentence had
+  been stale by nineteen for several phases, was corrected earlier in the same
+  wave, and drifted again by one inside the day when a mutant landed — because
+  the meta-test walks the table row by row and asserts nothing about the
+  sentence over it. `the_model_coverage_heading_counts_the_table` now asserts
+  both numbers, deriving the count of conformant controls it subtracts from
+  `REGISTRY` rather than writing it a second time.
+
+  The caution over `REGISTRY` closed by telling a reviewer that no rule is
+  covered by the shotgun mutant alone — the sentence a reviewer uses to stop
+  checking, and false as written: `untagged_events_match_query_all` appears in
+  exactly one `fails` list in the whole event-store registry, and it is
+  `InnerJoinTagStore`'s. The paragraph now says what holds, and
+  `the_shotgun_mutants_sole_coverage_is_pinned` requires an `expect` pin
+  wherever that mutant is a rule's only evidence, so the day the rule acquires
+  a second assertion the pin fails rather than its only registered evidence
+  quietly becoming an anchor failure. The mutant is derived from the table as
+  the broadest `fails` list and then checked against the store the paragraph
+  names, so the two cannot come to be about different stores.
+- **The concurrency family's conformant control is registered rather than
+  conventional.** CF-5 is `[FROZEN]` and the event-store and projection
+  families each assert that a conformant member is registered; the concurrency
+  family identified its control by an empty `fails` list and a provenance
+  paragraph. Deleting `LockedStore` outright — its row, its `for_each_racer!`
+  entry, and the store and fixture in `racers.rs` — left all fifteen meta-tests
+  green, which is CF-5's vacuity reintroduced in the one family whose rules are
+  macro-emitted and have no `REGISTRY` row to fall back on.
+
+  `Racer` now carries `kind`, `Declared::kind`'s twin, and the meta-test
+  asserts both that a control is registered and that `kind` and an empty
+  `fails` list agree in both directions. The field is deliberately not
+  `fails.is_empty()`: an empty list is also what a disarmed mutant looks like,
+  and this family documents its own rendezvous flakiness at length, so a
+  control derived from emptiness would be manufactured by exactly the edit it
+  exists to catch. Relabelling a real racer as the control is rejected by the
+  run rather than by a cross-check — the store still commits sixty-four
+  contenders where one may.
+- **`happenstance-testkit`'s concurrency page no longer tells a runtime-free
+  adapter it must bring `tokio`.** The module opened with *"One emitter ships
+  rather than three"* while `__emit_concurrency_blocking` shipped 979 lines
+  below it, giving the opposite reason for existing, and while this crate's own
+  `tests/memory_concurrency_conformance.rs` exercised both.
+
+  That paragraph is not a stale comment. It is the cost statement an adapter
+  author reads before deciding whether to invoke the family: told the only
+  wrapper is `#[tokio::test(flavor = "multi_thread")]`, an adapter with no
+  runtime concludes that racing costs it `tokio` with `rt-multi-thread`. It
+  does not — the blocking emitter needs nothing and races exactly as hard,
+  because the parallelism is in `std::thread::scope` rather than in the
+  runtime. The population that paid is the one the two-flavour design exists
+  for, and they would have found out by reading a file they were never expected
+  to open.
+
+  The count is gone as a *claim*: the page carries a two-row table in the crate
+  root's shape, whose rows are the count, and
+  `the_concurrency_page_lists_every_emitter_it_ships` holds those rows to the
+  `macro_rules!` definitions in the same file and refuses a spelled count
+  returning to the page. A third emitter added without a row turns it red,
+  which a written-out number cannot do — a number is falsified by an edit that
+  never touches it, which is exactly how this one came to say "one". The two
+  emitter names are also plain code font now rather than an intra-doc link to a
+  `#[doc(hidden)]` item, matching the crate root's spelling of the same class of
+  name.
+- **Two conformance assertions printed a diagnosis they could not have, naming
+  a `[FROZEN]` clause other than the one their reachable failure evidences.**
+  Message text and one private helper's return type; no public signature moves,
+  no rule is added or removed. One of the two rules is **tightened**, which is
+  breaking in practice for a store that returns nothing from every read — pin
+  `happenstance-testkit` exactly before taking it.
+
+  `query_matching_nothing_yields_empty` printed *"a query with no matches must
+  not error"*, and it could not fire on a store that errored: `read_ok` owns
+  that half one layer down and panics first. The only way to reach it is a
+  store that returned **events** — the widening case, which is exactly what its
+  one registered mutant models. An author who interned event types, had their
+  unknown-type clause dropped rather than refused, and met this rule was sent
+  to check an error path that had never run. The message now names the widening
+  and prints `positions_of(&found)`, and the rule gained the non-vacuity anchor
+  its neighbours carry: a query for the type just appended must select it,
+  because without that a store returning nothing from every read passed. That
+  anchor is what `InnerJoinTagStore` now fails, and its `REGISTRY` row says so.
+
+  `a_concurrent_reader_never_sees_a_partial_batch` folded a failed read into
+  the same list it filled with part-written batch names and reported the whole
+  list under ES-18. An adapter whose read transiently fails under contention —
+  `SQLITE_BUSY` past the handler's ceiling, a pool with no reader slot, a 503
+  from a one-shot HTTP backend — was told by name, with the clause id attached,
+  that its `append` writes rows outside a transaction. `incomplete_batches` now
+  returns a named pair and the rule asserts twice, in the shape
+  `k_disjoint_boundaries_admit_exactly_k_commits` uses 260 lines above and for
+  its stated reason: a single message describing two defects identifies
+  neither. The read-failure assertion comes first, because a run whose reads
+  failed says nothing about atomicity either way, and it reports **distinct**
+  errors — a store that cannot be read at all yielded one line per polling pass
+  and buried the count under nearly three thousand identical copies.
+- **Three reader-facing surfaces promised a skip line that a stranger's default
+  `cargo test` never shows.** `happenstance-testkit`'s crates.io front page, its
+  docs.rs module page and `Capability::declined`'s own rustdoc each said the
+  fixture's stated reason is printed. A skipped rule is a test that **passes**,
+  and libtest discards a passing test's stdout — which `RuleOutcome::report`'s
+  documentation had measured and stated exactly, twenty lines from the
+  mechanism. Three surfaces asserted the opposite of what a fourth measured, and
+  the three that were wrong are the only three a stranger reads.
+
+  Measured against a fixture already in the tree: `cargo test -p
+  happenstance-sqlite --test conformance` prints **zero** `SKIP` lines, and the
+  same command with `-- --show-output` prints **three**. The named victim is not
+  the adapter author — it is the person who chose that adapter on the strength
+  of a README saying it passes the conformance suite, and who finds out when an
+  acknowledged write is not there after a restart.
+
+  All three now name `--show-output` beside the promise, and
+  `a_promised_skip_line_names_the_flag_it_needs` requires the caveat wherever a
+  surface puts printing next to *stated reason*. **This corrects the sentences
+  and settles nothing else.** Whether CF-18's reporting obligation should be
+  discharged by a mechanism a stranger's default run can observe, or whether the
+  clause is narrowed to what libtest permits, is `[FROZEN]` and an ADR's — the
+  argument is staged in `.kb/_intake/remediation-2026-09-04-briefs/`.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded

@@ -348,20 +348,49 @@ impl BenchmarkPass {
 #[must_use]
 pub struct BenchmarkRecord {
     scenario: &'static str,
+    owed: &'static [&'static str],
     passes: Vec<BenchmarkPass>,
 }
 
 impl BenchmarkRecord {
-    /// An empty record for `scenario`.
-    const fn new(scenario: &'static str) -> Self {
+    /// An empty record for `scenario`, naming the passes that scenario owes.
+    ///
+    /// `owed` is not a free-standing declaration, and it is worth saying why
+    /// rather than trusting it: a claim that can be satisfied without doing the
+    /// work it names is not an obligation. This one is pinned from **both**
+    /// sides. [`push`](Self::push) panics on a label that is not owed, so a
+    /// scenario cannot under-declare — every label its ordinary path produces
+    /// is forced into this list by the first run. [`report`](Self::report)
+    /// panics on an owed label that never arrived, so it cannot over-declare
+    /// either. What is left is exactly the set of passes the scenario produces
+    /// when nothing went wrong, which is what *completed* has to mean here.
+    const fn new(scenario: &'static str, owed: &'static [&'static str]) -> Self {
         Self {
             scenario,
+            owed,
             passes: Vec::new(),
         }
     }
 
     /// Adds a completed pass.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pass` carries a label the scenario did not declare in
+    /// [`new`](Self::new). That is a defect in the harness rather than a
+    /// verdict on the adapter, and it is the half of the tie that stops `owed`
+    /// from being narrowed to whatever a scenario happens to reach on its
+    /// unhappy path.
     fn push(&mut self, pass: BenchmarkPass) {
+        assert!(
+            self.owed.contains(&pass.label),
+            "{}: pushed a `{}` pass the scenario does not declare. Its owed \
+             labels are {:?}, and a pass outside them is a record that no \
+             longer says what completion means for this scenario.",
+            self.scenario,
+            pass.label,
+            self.owed
+        );
         self.passes.push(pass);
     }
 
@@ -385,12 +414,42 @@ impl BenchmarkRecord {
 
     /// Whether every pass accounts for every attempt it made.
     ///
-    /// This is the whole of what the shipped emitters assert. It is a
-    /// well-formedness check on the *record*, never a judgement on a number,
-    /// which is what keeps a benchmark from failing a merge.
+    /// One of the two things the shipped emitters assert, and the weaker one.
+    /// It is a well-formedness check on the *record* — never a judgement on a
+    /// number, which is what keeps a benchmark from failing a merge — and it
+    /// says nothing at all about which passes ran, because every counter in a
+    /// record built by an aborted scenario adds up just as well as one in a
+    /// complete run. [`is_complete`](Self::is_complete) is the other half, and
+    /// [`report`](Self::report) asserts both.
     #[must_use]
     pub fn is_well_formed(&self) -> bool {
         !self.passes.is_empty() && self.passes.iter().all(BenchmarkPass::is_well_formed)
+    }
+
+    /// Whether every pass this scenario owes actually ran.
+    ///
+    /// The distinction this preserves is the one the module documentation says
+    /// the record exists for: *contention produced no rejections* and
+    /// *contention never happened* are different measurements, and only the
+    /// first is a measurement. A scenario that returned early leaves the pass
+    /// that carried its whole point **absent** rather than zero, and an
+    /// absence is exactly what a `BENCH` line compared across two releases
+    /// cannot recover afterwards.
+    ///
+    /// Still not a judgement on a number: an incomplete run is not a slow one,
+    /// and no threshold exists here at any budget (CF-34).
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.missing_passes().is_empty()
+    }
+
+    /// Which owed passes never arrived, in the order the scenario declared them.
+    fn missing_passes(&self) -> Vec<&'static str> {
+        self.owed
+            .iter()
+            .copied()
+            .filter(|label| self.pass(label).is_none())
+            .collect()
     }
 
     /// Every counter, on one line.
@@ -425,15 +484,30 @@ impl BenchmarkRecord {
     /// One line. It asserts that the scenario completed and that the record is
     /// well-formed — and nothing about how long anything took, at any budget.
     ///
+    /// Both halves are checked here, and they are two assertions rather than
+    /// one because they fail for unrelated reasons and a reader has to be able
+    /// to tell them apart: a malformed record is a counter that was not
+    /// incremented, an incomplete one is a pass that never ran.
+    ///
     /// # Panics
     ///
-    /// Panics if a pass does not account for every attempt it made, which is a
-    /// defect in the harness rather than a verdict on the adapter.
+    /// Panics if a pass does not account for every attempt it made, and
+    /// separately if a pass the scenario owes is absent. Either is a defect in
+    /// the harness or a store that fell over before the measurement began —
+    /// never a verdict on how fast anything was.
     pub fn report(self, scenario: &str) {
         assert!(
             self.is_well_formed(),
             "{scenario}: every pass must report at least one attempt and account \
              for each of them as committed, rejected, refused or failed. Got {self:?}"
+        );
+        let missing = self.missing_passes();
+        assert!(
+            missing.is_empty(),
+            "{scenario}: did not complete — the {missing:?} pass(es) it owes are \
+             absent rather than zero, so the run measured something other than \
+             what this scenario names. This is not a threshold and not a \
+             timing: a pass that never ran is not a slow pass. Got {self:?}"
         );
         println!("BENCH {scenario}: {}", self.summary());
     }
@@ -553,7 +627,10 @@ pub mod scenarios {
             pass.count(outcome, landed);
         }
 
-        let mut record = BenchmarkRecord::new("append_throughput");
+        // One pass, and the declaration is what makes "it ran" checkable: a
+        // scenario that produced no `append` pass did not measure an append,
+        // however well-formed the record it returned.
+        let mut record = BenchmarkRecord::new("append_throughput", &["append"]);
         record.push(pass);
         record
     }
@@ -576,7 +653,11 @@ pub mod scenarios {
         params: BenchmarkParams,
     ) -> BenchmarkRecord {
         let fixture = open().await;
-        let mut record = BenchmarkRecord::new("conditional_append_under_contention");
+        // Both passes are owed. The `contend` one is the entire measurement,
+        // and the early return below is exactly the path that used to drop it
+        // silently.
+        let mut record =
+            BenchmarkRecord::new("conditional_append_under_contention", &["seed", "contend"]);
 
         let opener = fixture.connect().await;
         let boundary_event = [tagged_event("BenchmarkBoundary", &[("bench", "contend")])];
@@ -641,7 +722,13 @@ pub mod scenarios {
     ) -> BenchmarkRecord {
         let fixture = open().await;
         let store = fixture.connect().await;
-        let mut record = BenchmarkRecord::new("replay_with_and_without_a_tag_filter");
+        // The pair is the measurement, so both replays are owed alongside the
+        // seed: a filtered replay with nothing to compare it against says
+        // nothing about what the adapter's index costs.
+        let mut record = BenchmarkRecord::new(
+            "replay_with_and_without_a_tag_filter",
+            &["seed", "replay-all", "replay-tagged"],
+        );
 
         let chunk_size = F::MAX_EVENTS_PER_BATCH
             .map_or(SEED_CHUNK, |ceiling| ceiling.min(SEED_CHUNK))
@@ -922,14 +1009,20 @@ mod tests {
     /// most likely to have.
     #[test]
     fn an_empty_record_is_not_well_formed() {
-        let record = BenchmarkRecord::new("append_throughput");
+        let record = BenchmarkRecord::new("append_throughput", &["append"]);
         assert!(!record.is_well_formed());
     }
 
     /// The summary is one line whatever the pass count.
     #[test]
     fn a_summary_is_one_line() {
-        let mut record = BenchmarkRecord::new("replay_with_and_without_a_tag_filter");
+        // The pair is the measurement, so both replays are owed alongside the
+        // seed: a filtered replay with nothing to compare it against says
+        // nothing about what the adapter's index costs.
+        let mut record = BenchmarkRecord::new(
+            "replay_with_and_without_a_tag_filter",
+            &["seed", "replay-all", "replay-tagged"],
+        );
         let mut first = BenchmarkPass::new("replay-all");
         first.count(Outcome::Committed, 12);
         let mut second = BenchmarkPass::new("replay-tagged");
@@ -967,6 +1060,40 @@ mod tests {
             happenstance_core::AppendError<core::convert::Infallible>,
         > = Err(happenstance_core::AppendError::NoEvents);
         assert_eq!(Outcome::of_append(&empty), Outcome::Failed);
+    }
+
+    /// A record missing a pass its scenario owes is not complete, however well
+    /// its counters add up.
+    ///
+    /// This is the pair the shipped emitters check, and the reason they are two
+    /// assertions: the record below is well-formed and did not happen.
+    #[test]
+    fn an_incomplete_record_is_well_formed_all_the_same() {
+        let mut record =
+            BenchmarkRecord::new("conditional_append_under_contention", &["seed", "contend"]);
+        let mut seed = BenchmarkPass::new("seed");
+        seed.count(Outcome::Rejected, 0);
+        record.push(seed);
+
+        assert!(record.is_well_formed());
+        assert!(!record.is_complete());
+        assert_eq!(record.missing_passes(), vec!["contend"]);
+    }
+
+    /// A scenario cannot narrow its own obligation to whatever it happens to
+    /// reach: pushing an undeclared label aborts.
+    ///
+    /// This is the half of the tie that makes the declaration mean something.
+    /// Without it a scenario could declare only the passes it always produces
+    /// — `["seed"]` here — and `is_complete` would be as vacuous as the check
+    /// it replaced.
+    #[test]
+    #[should_panic(expected = "does not declare")]
+    fn a_pass_the_scenario_did_not_declare_is_refused() {
+        let mut record = BenchmarkRecord::new("conditional_append_under_contention", &["seed"]);
+        let mut contended = BenchmarkPass::new("contend");
+        contended.count(Outcome::Committed, 1);
+        record.push(contended);
     }
 
     /// EC-003: every degenerate parameter is refused by name.

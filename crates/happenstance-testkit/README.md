@@ -52,6 +52,16 @@ your stated reason; it is never silently dropped from the binary, because a rule
 that is absent is indistinguishable in CI output from a rule that passed.
 `fixtures::MemoryFixture` is the worked example to read first.
 
+**Run the suite with `-- --show-output` if you want to see those lines.** A
+skipped rule is a test that *passes*, and libtest discards a passing test's
+stdout, so a default `cargo test` shows you `N passed` and no `SKIP` line —
+however many capabilities your fixture declined and however good your reasons
+were. This is a real limit rather than a nicety: `cargo test -p
+happenstance-sqlite --test conformance` prints zero `SKIP` lines and the same
+command with `-- --show-output` prints three. A fixture that declines the
+optional capabilities is legal and honest, and a green run over it is not
+evidence that every rule ran.
+
 ### The model-based suite
 
 ```rust,ignore

@@ -318,9 +318,24 @@ struct Declared {
 /// `two_fixture_instances_observe_none_of_each_others_appends` fails at "the
 /// append must actually have landed", `read_from_is_inclusive` and
 /// `query_items_are_or` at their `all.len()` guards. Those rows evidence the
-/// anchor, not the headline property, and they are inflation rather than vacuity
-/// — no rule in the table is covered by that mutant alone. The `expect` field is
-/// what makes the distinction visible where it has been written down.
+/// anchor, not the headline property, and they are inflation rather than
+/// vacuity.
+///
+/// This paragraph used to close by saying that no rule in the table is covered
+/// by that mutant alone. That was false, and it was the one sentence a reviewer
+/// uses to stop checking: `untagged_events_match_query_all` appears in exactly
+/// one `fails` list in the whole event-store registry, and it is this one. The
+/// intent survives where the sentence did not — for that rule
+/// `InnerJoinTagStore` is the headline mutant rather than an inflation row,
+/// because the rule body carries a single assertion and so has no anchor to
+/// fail at. That is a property of the rule today rather than of the registry,
+/// which is why it is now pinned rather than restated: the `expect` field names
+/// the assertion, and `the_shotgun_mutants_sole_coverage_is_pinned` requires a
+/// pin wherever this mutant is a rule's only evidence. The day that rule
+/// acquires a second assertion the pin fails, rather than the discount quietly
+/// becoming wrong while the paragraph tells the auditor not to look. Elsewhere
+/// the `expect` field is what makes the distinction visible where it has been
+/// written down.
 ///
 /// *Not covered, and each of these is a real axis rather than an oversight:*
 ///
@@ -426,6 +441,12 @@ const REGISTRY: &[Declared] = &[
             "query_item_types_are_or",
             "query_items_are_or",
             "untagged_events_match_query_all",
+            // Since the rule gained its non-vacuity anchor: this store drops
+            // every untagged event from every read, so the anchor — a query for
+            // the type just appended must select it — is what it fails. Another
+            // inflation row, and the reason the anchor was owed: without it a
+            // store that returns nothing at all passed the rule.
+            "query_matching_nothing_yields_empty",
             "duplicate_items_do_not_duplicate_events",
             "query_item_order_does_not_change_the_result_set",
             "read_from_is_inclusive",
@@ -452,7 +473,16 @@ const REGISTRY: &[Declared] = &[
              writes first, and it is invisible until an untagged event is \
              written.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The one rule in the whole event-store registry this store is the
+        // *only* evidence for, so it is the one row here that may not be read
+        // as anchor inflation. Pinned to the head relation itself: the rule
+        // carries a single assertion today, and this is what makes a second
+        // one visible rather than silently converting the mutant's only
+        // registered evidence into an anchor failure.
+        expect: &[(
+            "untagged_events_match_query_all",
+            "must still be matched by Query::all()",
+        )],
     },
     Declared {
         name: "TypesAreAndStore",
@@ -555,7 +585,15 @@ const REGISTRY: &[Declared] = &[
              both `read` and the condition probe, which is why it shows up on \
              both.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The widening is the whole defect, and the rule that catches it is the
+        // only place an author meets it. `read_ok` already owns the error half
+        // one layer down, so the assertion in
+        // `query_matching_nothing_yields_empty` can only ever fire on a store
+        // that returned *events* — this pin is what holds its message to that.
+        expect: &[(
+            "query_matching_nothing_yields_empty",
+            "must yield no events",
+        )],
     },
     Declared {
         name: "TagJoinFanOutStore",
@@ -2596,15 +2634,23 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///
 /// # What it does not catch is a handful of shapes, not a list
 ///
-/// **Count the table rather than this sentence.** Thirty-nine rows below are
-/// marked [`ModelOutcome::Agreed`] at this commit; two of them are the
-/// conformant controls and *must* be, which leaves **thirty-seven misses**. This
-/// heading said *twenty-one* and the paragraph under it said *twenty-three rows*
-/// for several phases while the table itself said forty and forty-two — the
-/// drift the pre-publication review found wherever a number was written beside
-/// the list it describes, and one this file had already warned about in another
-/// place. The shapes below are still the shapes; they no longer enumerate every
-/// name, and the honest instrument is a count of the table.
+/// **Count the table rather than this sentence** — and something now does.
+/// Forty rows below are marked [`ModelOutcome::Agreed`] at this commit; two of
+/// them are the conformant controls and *must* be, which leaves **thirty-eight
+/// misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// against the table, and the count of controls it subtracts is derived from
+/// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
+/// time.
+///
+/// That check is here because the sentence has now drifted twice, at two
+/// scales. This heading said *twenty-one* and the paragraph under it said
+/// *twenty-three rows* for several phases while the table itself said forty and
+/// forty-two — the drift the pre-publication review found wherever a number was
+/// written beside the list it describes. It was corrected to thirty-nine and
+/// thirty-seven, and was stale again by one inside the day, because a mutant
+/// landed and nothing counted. **A corrected number is not a fix for a number
+/// nothing counts.** The shapes below are still the shapes; they no longer
+/// enumerate every name, and the honest instrument is the assertion.
 ///
 /// Every miss carries a defect the model **cannot express**, and the boundary is
 /// sharp enough to state in one line: the model drives *one handle*, on *one
@@ -2834,8 +2880,18 @@ enum RacerOutcome {
 struct Racer {
     /// Matches the store's own [`harness::Subject::NAME`].
     name: &'static str,
-    /// The **exact** set of concurrency rules this store fails. Empty iff it is
-    /// the conformant control.
+    /// Whether this row is a defect or the family's conformant control.
+    ///
+    /// [`Declared::kind`]'s twin, and it is a field rather than a reading of
+    /// `fails` for the reason `fails.is_empty()` is *not* the same question. An
+    /// empty `fails` list is also what a disarmed mutant looks like, and this
+    /// family documents its own rendezvous flakiness at length — so emptying a
+    /// flaky row's list is the cheaper repair than fixing a rendezvous, and a
+    /// control derived from emptiness would be manufactured by exactly that
+    /// edit.
+    kind: RacerKind,
+    /// The **exact** set of concurrency rules this store fails. Empty iff this
+    /// row is [`RacerKind::ConformantControl`].
     fails: &'static [&'static str],
     /// CF-4's obligation, one family over: the real adapter shape that makes
     /// this store plausible. Never empty.
@@ -2855,6 +2911,22 @@ struct Racer {
     /// A pin naming a rule the store does not declare is an error: a pin on a
     /// rule that never fails is a claim nothing evaluates.
     expect: &'static [(&'static str, &'static str)],
+}
+
+/// What a [`Racer`] row claims about its store.
+///
+/// [`Kind`]'s counterpart for the concurrency family. The event-store family
+/// and the projection family both carry one and both assert that a conformant
+/// member is registered; this family did not, and its control was held by an
+/// empty list and a paragraph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RacerKind {
+    /// A store with a named defect, which MUST fail exactly the rules it
+    /// declares.
+    Racing,
+    /// A store that is legally different from `MemoryEventStore` and MUST pass
+    /// every rule of this family (CF-5).
+    ConformantControl,
 }
 
 /// Every store the concurrency family is driven against here.
@@ -2889,6 +2961,7 @@ struct Racer {
 ///   CI job timeout is the only thing that notices.
 const RACERS: &[Racer] = &[
     Racer {
+        kind: RacerKind::ConformantControl,
         name: "LockedStore",
         fails: &[],
         provenance: "the conformant control: one mutex held across the whole append, which is \
@@ -2907,6 +2980,7 @@ const RACERS: &[Racer] = &[
     // an instruction that has been written down once already and will read as an
     // unfilled gap to the next person who looks for it.
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
@@ -2934,6 +3008,7 @@ const RACERS: &[Racer] = &[
         ],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalVersionStore",
         fails: &["k_disjoint_boundaries_admit_exactly_k_commits"],
         provenance: "optimistic concurrency control on a single version number: a Durable \
@@ -2949,6 +3024,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingSequenceStore",
         fails: &["positions_are_unique_under_concurrent_appends"],
         provenance: "`SELECT max(position) FROM events` before `BEGIN`, which is the \
@@ -2963,6 +3039,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalHeadStore",
         fails: &["append_returns_the_callers_own_last_position"],
         provenance: "`INSERT …;` then `SELECT max(position) FROM events`, two statements with \
@@ -2975,6 +3052,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RowAtATimeStore",
         fails: &["a_concurrent_reader_never_sees_a_partial_batch"],
         provenance: "`for event in batch { conn.execute(INSERT, …)? }` with the `BEGIN` \
@@ -3081,8 +3159,8 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 mod mutation_coverage {
     use super::{
         Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
-        RUNTIME_PANICS, RacerOutcome, Verdict, all_concurrency_rules, all_projection_rules,
-        all_rules, declared, racer_names, racer_reports, registered_names,
+        RUNTIME_PANICS, RacerKind, RacerOutcome, Verdict, all_concurrency_rules,
+        all_projection_rules, all_rules, declared, racer_names, racer_reports, registered_names,
         registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
@@ -3129,6 +3207,297 @@ mod mutation_coverage {
              so they certify nothing. Write the wrong implementation into \
              `tests/mutation_coverage/mutants.rs` and declare it in `REGISTRY` \
              (ADR-0010 §1): {decorative:?}"
+        );
+    }
+
+    /// Every surface that promises a printed skip names the flag that prints it.
+    ///
+    /// L1-3. CF-18 requires a rule whose capability is unmet to be emitted as a
+    /// test that **reports** the skip with the fixture's stated reason, and the
+    /// clause's own `Rejects:` turns on that landing *in the adapter's CI log
+    /// where a reviewer and a user of the adapter can both see it*. A rule that
+    /// skips is a test that **passes**, and libtest discards a passing test's
+    /// stdout. `RuleOutcome::report`'s own documentation measured this and says
+    /// so exactly; three reader-facing surfaces said the opposite, and they are
+    /// the only three a stranger reads.
+    ///
+    /// Measured against a fixture already in the tree, before this test was
+    /// written: `cargo test -p happenstance-sqlite --test conformance` prints
+    /// **zero** `SKIP` lines, and the same command with `-- --show-output`
+    /// prints **three**. Exactly one CI in the world passes that flag.
+    ///
+    /// **Rejects: a promise about an adapter author's CI log that is true only
+    /// in this repository.**
+    ///
+    /// # What this does not verify
+    ///
+    /// That the caveat is *correct*, only that it is present near the promise.
+    /// It reads three files by path and would not notice a fourth surface
+    /// making the same claim. Its trigger is the narrow one — printing within
+    /// 120 characters of the words *stated reason* — so a promise phrased
+    /// without them escapes, and the wider trigger this started with fired on
+    /// `RuleOutcome`'s own prose about `#[must_use]`, which is a false positive
+    /// rather than a find. Its window is a character count rather than a
+    /// paragraph, so a promise and its caveat separated by more than 900
+    /// characters read as a violation here even where a human would not.
+    ///
+    /// The mechanism half of the finding — whether CF-18's obligation should be
+    /// discharged by something a stranger's default `cargo test` can observe,
+    /// or whether the clause is narrowed to what libtest permits — is a
+    /// decision this test does not take and must not be read as taking. CF-18
+    /// is `[FROZEN]`; the decision is an ADR's, and the argument is staged in
+    /// `.kb/_intake/remediation-2026-09-04-briefs/`.
+    #[test]
+    fn a_promised_skip_line_names_the_flag_it_needs() {
+        /// The reader-facing surfaces, by the path a citation would use.
+        const SURFACES: &[(&str, &str)] = &[
+            (
+                "crates/happenstance-testkit/README.md",
+                include_str!("../README.md"),
+            ),
+            (
+                "crates/happenstance-testkit/src/lib.rs",
+                include_str!("../src/lib.rs"),
+            ),
+            (
+                "crates/happenstance-testkit/src/contract.rs",
+                include_str!("../src/contract.rs"),
+            ),
+        ];
+
+        for (name, text) in SURFACES {
+            let flat: Vec<char> = text
+                .replace("//!", " ")
+                .replace("///", " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .collect();
+            let flat: String = flat.into_iter().collect();
+            let chars: Vec<char> = flat.chars().collect();
+
+            for (index, _) in flat.match_indices("print") {
+                let at = flat[..index].chars().count();
+                let near: String = chars[at.saturating_sub(120)..(at + 120).min(chars.len())]
+                    .iter()
+                    .collect();
+                // Only the sentences that make the promise. "print" appears in
+                // this crate about plenty that is not a skip line, and the
+                // trigger is deliberately the narrow one: a sentence that puts
+                // *the fixture's stated reason* next to printing it.
+                if !near.contains("stated reason") {
+                    continue;
+                }
+                let window: String = chars[at..(at + 900).min(chars.len())].iter().collect();
+                assert!(
+                    window.contains("--show-output"),
+                    "{name} promises a printed skip and does not name \
+                     `--show-output` within the same passage. A skipped rule is \
+                     a test that passes, and libtest discards a passing test's \
+                     stdout, so this sentence is true in this repository and \
+                     nowhere else. The passage: {window:.400}"
+                );
+            }
+        }
+    }
+
+    /// The `MODEL_COVERAGE` heading's counted claim, made falsifiable.
+    ///
+    /// The heading states how many rows are `Agreed` and how many of those are
+    /// misses. Nothing checked either number: the meta-test below walks the
+    /// table row by row and asserts that each row's claimed outcome equals the
+    /// observed one, which is a statement about the *rows* and says nothing
+    /// about the sentence over them. So the sentence drifted — by nineteen, for
+    /// several phases, and again by one within a day of being corrected.
+    ///
+    /// **Rejects: a counted claim over a machine-readable table with nothing
+    /// counting the table.**
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_model_coverage_heading_counts_the_table() {
+        let agreed = MODEL_COVERAGE
+            .iter()
+            .filter(|(_, outcome)| *outcome == ModelOutcome::Agreed)
+            .count();
+
+        // Derived from `REGISTRY` rather than written here: the rows that
+        // *must* be `Agreed` are exactly the conformant variants, and a second
+        // list of their names is a second thing to keep in step.
+        let controls = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ConformantVariant)
+            .count();
+
+        assert_eq!(
+            agreed, 40,
+            "`MODEL_COVERAGE`'s heading says forty rows are `Agreed` and the \
+             table holds {agreed}. The heading is prose and this is what \
+             makes it a claim, so correct the two together"
+        );
+        assert_eq!(
+            agreed - controls,
+            38,
+            "`MODEL_COVERAGE`'s heading says thirty-eight misses and the table \
+             holds {}. Every one of them is a defect the model cannot \
+             express, and the heading's shape bullets are what say why",
+            agreed - controls
+        );
+
+        // And the sentence itself, read out of this file. The two assertions
+        // above pin the *table*; without this one the heading and the numbers
+        // asserted here could still disagree, which is the shape the finding
+        // was about — a claim beside a list, with nothing joining them. There
+        // is no type that says "this doc comment states this count", so the
+        // check reads the source (RS-81-1).
+        //
+        // # What this does not verify
+        //
+        // Only the two sentences it names, and only their numerals spelled as
+        // words. A heading rewritten in different words fails loudly here
+        // rather than passing silently, which is the right way round; what it
+        // cannot see is whether the shape bullets beneath still describe the
+        // misses they claim to. That is what `MODEL_ONLY_WITNESSES` and the
+        // per-row assertions in `the_model_rule_rejects_exactly_what_it_claims`
+        // are for.
+        // Normalised first: a doc comment is wrapped, so the sentence being
+        // looked for is split across `///` lines and no substring search over
+        // the raw file can find it.
+        let source: String = include_str!("mutation_coverage.rs")
+            .replace("///", " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = spelled(agreed);
+        let misses = spelled(agreed - controls);
+
+        let counted = format!("{}{} rows below are", rows[..1].to_uppercase(), &rows[1..]);
+        assert!(
+            source.contains(&counted),
+            "the `MODEL_COVERAGE` heading must say {counted:?}, and it does not. \
+             The table holds {agreed} `Agreed` rows; correct the sentence."
+        );
+        assert!(
+            source.contains(&format!("**{misses} misses**")),
+            "the `MODEL_COVERAGE` heading must say \"**{misses} misses**\", and \
+             it does not. The table holds {agreed} `Agreed` rows of which \
+             {controls} are conformant controls."
+        );
+    }
+
+    /// A count spelled the way this file's prose spells it, for 0..=99.
+    ///
+    /// Written out rather than pulled in: the numbers a coverage heading states
+    /// are the one thing a reader compares across releases, and a dependency
+    /// added so that a test can say "thirty-eight" would be a dependency in the
+    /// conformance crate's own test binary for the sake of one string.
+    #[cfg(feature = "proptest")]
+    fn spelled(n: usize) -> String {
+        const UNITS: [&str; 20] = [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ];
+        const TENS: [&str; 10] = [
+            "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        ];
+
+        assert!(
+            n < 100,
+            "this file's prose spells no number above ninety-nine"
+        );
+        if n < 20 {
+            return UNITS[n].to_owned();
+        }
+        let (tens, unit) = (n / 10, n % 10);
+        if unit == 0 {
+            TENS[tens].to_owned()
+        } else {
+            format!("{}-{}", TENS[tens], UNITS[unit])
+        }
+    }
+
+    /// The `REGISTRY` caution's discount, made falsifiable.
+    ///
+    /// The paragraph over the table tells a reviewer that the shotgun mutant's
+    /// long `fails` list is *inflation rather than vacuity* — many of its rows
+    /// evidence a rule's setup anchor rather than the property the rule is
+    /// named for — and closes with the reassurance that no rule is covered by
+    /// that mutant alone. That closing clause is what makes the discount safe
+    /// to apply, and it is the one part of the paragraph nothing evaluates.
+    ///
+    /// Where the shotgun mutant *is* a rule's only evidence, the discount has
+    /// to stop, and what stops it is an `expect` pin naming the assertion the
+    /// mutant is supposed to trip. Without one, the day that rule acquires a
+    /// second assertion its only registered evidence may be an anchor failure,
+    /// CF-1's obligation is discharged in name only — and the paragraph told
+    /// the auditor not to look.
+    ///
+    /// **Rejects: a reassurance aimed at exactly the audit it makes
+    /// unnecessary.**
+    #[test]
+    fn the_shotgun_mutants_sole_coverage_is_pinned() {
+        // Derived, then checked against the paragraph. The store whose rows a
+        // reader is told to discount is the one that trips the most rules, so
+        // the test follows the table; the equality below is what keeps the
+        // paragraph and the table talking about the same store.
+        let mut by_breadth: Vec<&Declared> = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::Mutant)
+            .collect();
+        by_breadth.sort_by_key(|entry| core::cmp::Reverse(entry.fails.len()));
+        let shotgun = by_breadth[0];
+        assert!(
+            shotgun.fails.len() > by_breadth[1].fails.len(),
+            "two mutants tie for the broadest `fails` list, so the caution over              `REGISTRY` no longer names a single store"
+        );
+        assert_eq!(
+            shotgun.name, "InnerJoinTagStore",
+            "the caution over `REGISTRY` names `InnerJoinTagStore` as the \
+             mutant whose rows may be read as anchor inflation, and the \
+             broadest mutant is now `{}` — so the paragraph is about a \
+             different store than the table is",
+            shotgun.name
+        );
+
+        let unpinned: Vec<&str> = all_rules()
+            .into_iter()
+            .filter(|rule| {
+                let evidence: Vec<&str> = REGISTRY
+                    .iter()
+                    .filter(|entry| entry.kind == Kind::Mutant && entry.fails.contains(rule))
+                    .map(|entry| entry.name)
+                    .collect();
+                evidence == [shotgun.name]
+            })
+            .filter(|rule| !shotgun.expect.iter().any(|(pinned, _)| pinned == rule))
+            .collect();
+
+        assert!(
+            unpinned.is_empty(),
+            "`{}` is the only evidence for {unpinned:?}, and its row pins no \
+             assertion there. The caution over `REGISTRY` says its rows may \
+             be discounted as anchor inflation; that discount is only safe \
+             where the mutant is not the sole evidence, so a rule it alone \
+             covers owes an `expect` pin naming the assertion it trips",
+            shotgun.name
         );
     }
 
@@ -4488,32 +4857,18 @@ mod mutation_coverage {
         );
     }
 
-    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    /// The static half of `the_concurrency_rules_reject_exactly_what_they_claim`:
+    /// what the table says, before any store is driven.
     ///
-    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
-    /// cannot have one: every store it drives fails *no* event-store rule, and
-    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
-    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
-    /// makes it a check rather than a list.
-    ///
-    /// # Why this one matters more than it looks
-    ///
-    /// A racing rule is the easiest kind to write in a form that cannot fail:
-    /// start some threads, assert something true of the *final* state, and the
-    /// test is green whatever happened in between. Every rule in this family was
-    /// written against a store that breaks it, and this test is what keeps that
-    /// true — including through the refactor that quietly turns a rendezvous
-    /// into a race and a rejection into a coin toss. A store that used to be
-    /// rejected and now passes shows up here, by name.
-    #[test]
-    fn the_concurrency_rules_reject_exactly_what_they_claim() {
-        let rules = all_concurrency_rules();
-        let names = racer_names();
-
+    /// Split out because the test crossed `clippy::too_many_lines`, and split
+    /// *here* rather than anywhere else because this is the seam: everything
+    /// above reads `RACERS` and `for_each_racer!`, everything below reads the
+    /// answers a running store gave.
+    fn racer_table_agrees_with_the_enumeration(rules: &[&str], names: &[&str]) {
         // The two lists that drift, held together exactly as
         // `mutant_registry_is_exhaustive` holds `for_each_mutant!` and
         // `REGISTRY`.
-        for name in &names {
+        for name in names {
             let Some(row) = RACERS.iter().find(|row| row.name == *name) else {
                 panic!(
                     "`{name}` is enumerated in `for_each_racer!` but has no \
@@ -4541,6 +4896,22 @@ mod mutation_coverage {
                      is a claim nothing evaluates"
                 );
             }
+
+            // The two halves of the kind, in both directions. A control that
+            // declares a failure is not a control, and a racing store that
+            // declares none is a defect nothing catches — which is the state
+            // `mutant_registry_is_exhaustive` rejects one family over, and the
+            // state an author reaches by emptying a flaky row's list rather
+            // than repairing its rendezvous.
+            assert_eq!(
+                row.fails.is_empty(),
+                row.kind == RacerKind::ConformantControl,
+                "`{name}` is registered as {:?} with {} declared failure(s). A \
+                 conformant control declares none, and a racing store that \
+                 declares none has had its defect disarmed rather than fixed",
+                row.kind,
+                row.fails.len()
+            );
         }
         for row in RACERS {
             assert!(
@@ -4550,7 +4921,31 @@ mod mutation_coverage {
                 row.name
             );
         }
+    }
 
+    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    ///
+    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
+    /// cannot have one: every store it drives fails *no* event-store rule, and
+    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
+    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
+    /// makes it a check rather than a list.
+    ///
+    /// # Why this one matters more than it looks
+    ///
+    /// A racing rule is the easiest kind to write in a form that cannot fail:
+    /// start some threads, assert something true of the *final* state, and the
+    /// test is green whatever happened in between. Every rule in this family was
+    /// written against a store that breaks it, and this test is what keeps that
+    /// true — including through the refactor that quietly turns a rendezvous
+    /// into a race and a rejection into a coin toss. A store that used to be
+    /// rejected and now passes shows up here, by name.
+    #[test]
+    fn the_concurrency_rules_reject_exactly_what_they_claim() {
+        let rules = all_concurrency_rules();
+        let names = racer_names();
+
+        racer_table_agrees_with_the_enumeration(&rules, &names);
         // Both directions, per (store, rule).
         for (store, rule, outcome, description) in racer_reports() {
             let Some(row) = RACERS.iter().find(|row| row.name == store) else {
@@ -4624,5 +5019,22 @@ mod mutation_coverage {
                  decorative"
             );
         }
+
+        // The other direction, and the one this family had only in prose. The
+        // event-store family asserts it over `REGISTRY` and the projection
+        // family over its own table; here the control was an empty `fails` list
+        // and a provenance paragraph, so deleting `LockedStore` outright left
+        // every assertion above holding and the gate green — measured, not
+        // argued.
+        assert!(
+            RACERS
+                .iter()
+                .any(|row| row.kind == RacerKind::ConformantControl),
+            "no conformant control is registered for the concurrency family, so \
+             its five rules have only ever been passed by stores registered as \
+             defective — which is the vacuity of CF-5 reintroduced in the one \
+             family whose rules are macro-emitted and have no `REGISTRY` row to \
+             fall back on"
+        );
     }
 }

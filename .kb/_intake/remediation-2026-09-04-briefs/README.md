@@ -222,3 +222,26 @@ of a crate that has none yet.
 `N-1` produced no brief. It was a manifest comment contradicting `deny.toml` at
 the same commit; `cargo deny check bans` reports `bans ok` and the comment said
 red, so the tool settled it and there was nothing to decide.
+## And three from the suite-self-reports lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `benchmark-completion-and-the-merge-red-promise.md` | Does a benchmark that did not complete fail the build, and who declares what a scenario owes? | none | not blocking |
+| `sole-evidence-pins-and-moved-file-citations.md` | Does every singly-covered rule owe an `expect` pin, and who repoints four citations into files this lane moved? | none | the citations are owed **now** |
+| `cf-18-observable-skip-reporting.md` | Is CF-18's reporting obligation discharged by something a stranger's default `cargo test` can observe, or is the clause narrowed to what libtest permits? | **breaking in practice** | `0.2.0` for the mechanism half |
+
+Written by the lane implementing `L2-03`, `L3-02`, `L3-03`, `L3-04`, `L1-3`,
+`L1-4`, `L2-04` and `M-2`, in the same session as the changes they describe, and
+**without** the author → two-critic → revision pass. Same discount.
+
+Two of the three carry something that is not a decision and needs reading anyway.
+`sole-evidence-pins-and-moved-file-citations.md` names four citations into files
+the lane moved — two of which `cargo xtask spec-trace` now rejects, so **that gate
+step is red on `lane/suite-self-reports` and cannot be made green inside it**,
+because the citing file belongs to another lane this wave. It also records that
+one of the lane's paragraphs was written to a *line budget* to keep another file's
+citation inside `spec-trace`'s twelve-line tolerance, which worked, which is
+exactly the failure the tolerance creates, and which nobody should copy.
+`cf-18-observable-skip-reporting.md` carries the measurement that made the finding
+concrete — zero `SKIP` lines from a default run against a real adapter, three with
+`--show-output` — and is the one of the three with a real deadline.
