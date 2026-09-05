@@ -1864,6 +1864,78 @@ mod write_path_tests {
         out
     }
 
+    /// Every position the store holds that carries **no identity stamp**.
+    ///
+    /// The refuse a failed batch leaves behind, read through raw SQL because no
+    /// public surface of this adapter will admit it exists — which is exactly
+    /// the property under test. It is here so that a case which *arranges*
+    /// refuse can assert it actually got some: an arrangement that quietly
+    /// stopped working would otherwise leave the assertion below it true and
+    /// empty.
+    fn unstamped_positions(sql: &SqlStorage) -> Vec<i64> {
+        let mut cursor = sql
+            .exec(
+                "SELECT position FROM event WHERE origin_position IS NULL ORDER BY position",
+                &[],
+            )
+            .expect("the select runs");
+        let mut out = Vec::new();
+        while let Some(row) = cursor.next_row() {
+            let row = row.expect("the row decodes");
+            match row.values() {
+                [SqlValue::Integer(position)] => out.push(*position),
+                other => panic!("unexpected position row: {other:?}"),
+            }
+        }
+        out
+    }
+
+    /// Leaves one unstamped row in `event` and nothing else, then clears the way.
+    ///
+    /// The one arrangement that reaches this state, and it needs two mechanisms
+    /// because no single one covers both statements: a real SQLite trigger
+    /// refuses the tag insert, and the shim throws on the compensating `DELETE
+    /// FROM event`, which a `BEFORE INSERT` trigger cannot express. Both are
+    /// spent by the time this returns — the trigger is dropped and
+    /// [`arm_throw`] arms exactly one throw — so what follows runs against a
+    /// working store that happens to be holding refuse.
+    ///
+    /// Spelled once here and once in `read_path_tests`, which needs the same
+    /// state to reach a different filter. The duplication is two modules, not
+    /// two arrangements.
+    async fn leave_unstamped_refuse_behind(sql: &SqlStorage, store: &CloudflareEventStore) {
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        let failure = store
+            .append(&[tagged("Reserved", &["seat:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+        assert!(
+            matches!(failure, AppendError::Store(_)),
+            "a storage fault is a transport failure, not a conflict: {failure:?}"
+        );
+
+        sql.exec("DROP TRIGGER refuse_tag_rows", &[])
+            .expect("the refusal lifts, so what follows runs against a working store");
+
+        assert_eq!(
+            unstamped_positions(sql).len(),
+            1,
+            "the arrangement must leave exactly one unstamped row behind, or every \
+             assertion downstream of it is true and empty"
+        );
+    }
+
     /// Every `(tag, position)` row the store holds, in order.
     ///
     /// Read separately from [`stored_positions`] because a batch discarded
@@ -2562,6 +2634,59 @@ mod write_path_tests {
         );
     }
 
+    /// **ES-18 `[FROZEN]`** at the second of the stamp's three sites — the one
+    /// `head` cannot reach.
+    ///
+    /// The two cases above assert through `head`, which is [`max_position`],
+    /// which applies [`STAMPED`] once. [`CloudflareEventStore::evaluate`]
+    /// applies it a second time, and nothing reached that filter: with it
+    /// deleted the whole `wasm32` unit target passed, 86 of 86, and so did the
+    /// conformance suite's 93 rules. A leg of a `[FROZEN]` clause that no test
+    /// rejects is this repository's own named failure mode, and the fix it
+    /// belongs to is the place it is least expected.
+    ///
+    /// `evaluate` answers *what is the highest event matching this guard*,
+    /// inside the append turn, with the caller's decision already taken. The
+    /// story is the ordinary one: a caller's append is refused by a storage
+    /// fault and they retry the same decision. The retry has to be judged
+    /// against the events the store holds, not against the rows the failure left
+    /// behind.
+    ///
+    /// **The named wrong implementation**: a store that refuses a caller's retry
+    /// because its own failed write is in the way. They are told they lost a
+    /// race — `ConditionViolated { conflicting_position: Some(…) }` at a
+    /// position holding nothing — and retrying never clears it, because refuse
+    /// does not go away. Measured, with `evaluate`'s filter removed and every
+    /// other line of this file unchanged, this case reports exactly that.
+    #[wasm_bindgen_test]
+    async fn an_append_guard_does_not_count_a_row_a_failed_batch_left_behind() {
+        let (sql, store) = open();
+        leave_unstamped_refuse_behind(&sql, &store).await;
+
+        // The retry, guarded the way a DCB command loop guards it: the same
+        // query the decision was taken over, and no `after` — so any match at
+        // all is a conflict.
+        let landed = store
+            .append(
+                &[tagged("Reserved", &["seat:1"])],
+                Some(&condition_on("Reserved")),
+            )
+            .await
+            .expect("the retry is judged against events, and the store holds none");
+
+        assert_eq!(
+            store.head().await.expect("head reads"),
+            Some(landed),
+            "the retry is the only event the store holds"
+        );
+        assert_eq!(
+            stored_positions(&sql).len(),
+            2,
+            "and the refuse is still physically there — the point is that nothing \
+             counts it, not that something swept it"
+        );
+    }
+
     /// AC-008. An empty store has no head.
     #[wasm_bindgen_test]
     async fn head_of_an_empty_store_is_none() {
@@ -2779,7 +2904,7 @@ mod read_path_tests {
     use worker::wasm_bindgen::JsValue;
 
     use super::{CloudflareEventStore, CloudflareEventStoreError, PAGE_SIZE};
-    use crate::host::{durable_object, statements};
+    use crate::host::{arm_throw, durable_object, statements};
     use crate::js::JsHandle;
     use crate::sql_storage::{SqlCursor, SqlRow, SqlStorage, SqlValue};
 
@@ -2879,6 +3004,52 @@ mod read_path_tests {
             out.push(event.position);
         }
         out
+    }
+
+    /// Leaves one unstamped row in `event` and nothing else, then clears the way.
+    ///
+    /// The twin of `write_path_tests::leave_unstamped_refuse_behind`, spelled
+    /// again here because these are two modules rather than two arrangements —
+    /// a real SQLite trigger refuses the tag insert, and the shim throws on the
+    /// compensating `DELETE FROM event`, which a `BEFORE INSERT` trigger cannot
+    /// express. Both faults are spent by the time this returns.
+    async fn leave_unstamped_refuse_behind(sql: &SqlStorage, store: &CloudflareEventStore) {
+        sql.exec(
+            "CREATE TRIGGER refuse_tag_rows BEFORE INSERT ON event_tag \
+             BEGIN SELECT RAISE(ABORT, 'no space left on device'); END",
+            &[],
+        )
+        .expect("the refusal applies");
+        arm_throw(
+            sql,
+            "DELETE FROM event WHERE position",
+            "no space left on device",
+        );
+
+        store
+            .append(&[tagged("Reserved", &["seat:1"])], None)
+            .await
+            .expect_err("the armed refusals stop the write");
+
+        sql.exec("DROP TRIGGER refuse_tag_rows", &[])
+            .expect("the refusal lifts, so what follows runs against a working store");
+
+        let mut cursor = sql
+            .exec(
+                "SELECT count(*) FROM event WHERE origin_position IS NULL",
+                &[],
+            )
+            .expect("the select runs");
+        let row = cursor
+            .next_row()
+            .expect("count returns a row")
+            .expect("the row decodes");
+        assert_eq!(
+            row.values(),
+            [SqlValue::Integer(1)],
+            "the arrangement must leave exactly one unstamped row behind, or every \
+             assertion downstream of it is true and empty"
+        );
     }
 
     /// Appends `types` one at a time, returning the position each landed at.
@@ -3205,6 +3376,56 @@ mod read_path_tests {
             "a replay yields exactly the positions the store assigned, in order"
         );
         assert_eq!(event_types(&replayed), ["One", "Two", "Three", "Four"]);
+    }
+
+    /// **ES-18 `[FROZEN]`** at the third of the stamp's three sites, and the
+    /// only one on the read path.
+    ///
+    /// [`max_position`] keeps refuse out of the **ceiling**; it does nothing
+    /// about refuse that now sits *below* one. The next batch that succeeds
+    /// lifts the ceiling over it, and from that moment the only thing keeping it
+    /// out of a replay is [`render_chunk`]'s own [`STAMPED`] predicate. Nothing
+    /// reached that predicate: with it deleted the whole `wasm32` unit target
+    /// passed, 86 of 86, and so did the conformance suite's 93 rules — because
+    /// the two cases that made the stamp load-bearing both assert through
+    /// `head`, which is one filter of three.
+    ///
+    /// **The named wrong implementation**: a poisoned replay. A caller's append
+    /// is refused by a storage fault, a later one succeeds, and every read from
+    /// then on carries an error item for a row that is not an event —
+    /// `UnstampedEvent { position: … }`, measured, with `render_chunk`'s filter
+    /// removed and every other line of this file unchanged. A projection runner
+    /// meeting it stops at the fault and cannot pass it, because rereading
+    /// produces it again.
+    ///
+    /// The query is `Query::all()` deliberately. The refuse row's tag insert was
+    /// the statement that was refused, so it carries no tag rows and a tagged
+    /// query would miss it for the wrong reason.
+    #[wasm_bindgen_test]
+    async fn a_replay_across_a_refused_append_yields_only_what_landed() {
+        let (sql, store) = open();
+        leave_unstamped_refuse_behind(&sql, &store).await;
+
+        let landed = store
+            .append(&[event("Landed")], None)
+            .await
+            .expect("the append lands, and lifts the ceiling over the refuse");
+
+        let replayed = drain(store.read(&Query::all(), ReadOptions::new())).await;
+
+        let failures: Vec<String> = replayed
+            .iter()
+            .filter_map(|item| item.as_ref().err().map(|err| format!("{err:?}")))
+            .collect();
+        assert!(
+            failures.is_empty(),
+            "a replay after a refused append must not fail: {failures:?}"
+        );
+        assert_eq!(
+            positions_of(&replayed),
+            [landed],
+            "a replay yields the events, and a row carrying no identity is not one"
+        );
     }
 
     /// AC-001. Everything a replayed event carries survives the round trip:
