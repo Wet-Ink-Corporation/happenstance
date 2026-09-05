@@ -375,19 +375,46 @@ fn check_citations(
 
 /// How far from the cited line the subject may sit before the citation is wrong.
 ///
-/// Twelve, where `standards/rust`'s own citation lint uses ten
-/// (`lint_constitution.rs:111`) — wider because a derived anchor has further to
-/// travel than a written one. There the anchor is quoted beside the line and
-/// names the exact text; here it is the identifier the prose happened to use,
-/// which may sit a few lines from the item's `fn` line.
+/// # Why this window survives when `standards/rust`'s did not
 ///
-/// The reason for a window at all is the same in both: an anchor is a claim
-/// about *what* is at a location, and a doc comment growing above an item must
-/// not red the gate. That is the property that makes the check survivable — a
-/// content hash fails on every ordinary edit, and its refresh command becomes a
-/// reflex nobody reads.
+/// That corpus's citation lint carried a `const ANCHOR_SLACK: usize = 10` and
+/// now has **no window at all** — `lint_constitution.rs:804 (fn
+/// anchor_problem)`. Two instruments carried two tolerances for what looked like
+/// one job, and the difference was written down nowhere. This section is half
+/// the repair and `anchor_problem`'s own documentation is the other half. They
+/// differ deliberately, for this reason:
 ///
-/// (This comment claimed the two constants were equal until it was checked. A
+/// **There the anchor is written; here it is derived.** An atom's citation
+/// carries its anchor as quoted text beside the line number — `(fn
+/// spawns_from_generic)` — so *the cited line contains that text* is exactly
+/// what the citation asserts, and an exact match is satisfiable by construction.
+/// This check has no such text. It takes the identifier the specification's
+/// prose happened to reach for and looks for it near a range the author chose to
+/// point at the *evidence*: usually the doc-comment bullets that state the
+/// requirement, with the item's signature a few lines outside them.
+///
+/// # Measured on 2026-09-04, rather than assumed
+///
+/// Closing this window to zero reddens **21 of the 80 anchored citations** in
+/// [`SPEC`], and **20 of those 21 sit inside `[FROZEN]` clause commentary**.
+/// They are also not stale. `store.rs:261-265 (append)` cites the error-ordering
+/// bullets that are the evidence for the clause, and `async fn append(` is three
+/// lines past the range's end. `query.rs:113-116 (matches)` cites the body of
+/// `pub fn matches`, whose signature is one line *above* the range. Repointing
+/// either onto its identifier moves the citation off the prose it is evidence
+/// for and onto a signature that states nothing — a worse citation, bought to
+/// make two numbers match.
+///
+/// So the reason for a window here is the reason the corpus's window could not
+/// justify itself: an anchor is a claim about *what* is at a location, and where
+/// the anchor is a word the prose reached for rather than a quotation, the claim
+/// is about a neighbourhood and not a line. Twelve is that neighbourhood, and it
+/// stays until this corpus is measured on its own terms. The open question is
+/// recorded in
+/// `.kb/_intake/remediation-2026-09-04-briefs/citation-anchor-slack.md`.
+///
+/// (This comment claimed the two constants were equal until it was checked, and
+/// then cited `lint_constitution.rs:111` for a constant that no longer exists. A
 /// citation-drift defect inside the citation-drift check is worth leaving a note
 /// about rather than quietly correcting.)
 const ANCHOR_SLACK: usize = 12;

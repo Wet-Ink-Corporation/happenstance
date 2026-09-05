@@ -18,7 +18,9 @@
 //!   positives. A long and vacuous `**Rejects.**` passes here. The instrument for
 //!   that is an adversarial reader, not a byte count.
 //! * **It does not check that a citation's *claim* is true**, only that the
-//!   cited file has that line and that the anchor text is near it.
+//!   cited file has that line and that the line carries the anchor text. Not
+//!   *near* it: [`anchor_problem`] replaced a ten-line window that let a third
+//!   of the corpus be green while pointing somewhere else.
 //! * **It does not run the examples.** A fence tagged `rust` is asserted to
 //!   exist; whether it compiles is the doctest step's answer, and the two are
 //!   separate gate steps on purpose.
@@ -101,14 +103,6 @@ const MAX_ATOM_BYTES: usize = 16_384;
 /// legitimately unwraps under a scoped allow, which is the thing those atoms are
 /// about.
 const FORBIDDEN_IN_FENCE: &[&str] = &[".unwrap()", ".expect("];
-
-/// How far from its stated line an anchor may sit before the citation is stale.
-///
-/// Not zero: a citation that has to be re-numbered for every edit above it is a
-/// citation people stop maintaining. Ten lines is enough to survive ordinary
-/// editing and far too little to survive a function moving, which is the drift
-/// this catches.
-const ANCHOR_SLACK: usize = 10;
 
 /// The file extensions that make a backticked span a citation.
 ///
@@ -720,17 +714,8 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
                 ));
                 continue;
             }
-            let low = citation.line.saturating_sub(ANCHOR_SLACK + 1);
-            let high = (citation.line + ANCHOR_SLACK).min(lines.len());
-            if !lines[low..high]
-                .iter()
-                .any(|l| l.contains(&citation.anchor))
-            {
-                problems.push(format!(
-                    "{at} — `{path}:{}` no longer has `{}` within {ANCHOR_SLACK} lines; \
-                     the citation points at the wrong place",
-                    citation.line, citation.anchor
-                ));
+            if let Some(problem) = anchor_problem(path, &lines, &citation) {
+                problems.push(format!("{at} — {problem}"));
             }
         }
 
@@ -765,6 +750,87 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
             ));
         }
     }
+}
+
+/// What is wrong with a citation whose stated line does not carry its anchor,
+/// and where the anchor actually is.
+///
+/// **Exact, with no window at all.** A `const ANCHOR_SLACK: usize = 10` stood
+/// here, and its rationale was a prediction about a distribution — *ordinary
+/// editing* stays inside ten lines, *a function moving* does not — that nobody
+/// had ever measured. Measured on 2026-09-04 over the whole corpus: 88 of 323
+/// anchored citations were green only on the tolerance, the offsets did not
+/// decay with distance (a lobe of 22 at +7, ten at +9, two at exactly +10, one
+/// inserted line from red), and three citations had already drifted onto the
+/// *wrong* line while staying green — a closing brace cited for an attribute,
+/// an `[advisories]` table cited for a licences rule, and the line above a
+/// field. A green read as coverage and not coverage is worse than no check,
+/// because it retires the reader's own vigilance, and
+/// `standards/rust/README.md:118` promises every reader of the corpus exactly
+/// the check this now performs.
+///
+/// The tolerance existed to spare a maintainer a renumbering, and that cost was
+/// real. It is paid here instead: on a miss the whole file is searched and the
+/// message **names the line the citation should carry**, so the repair is one
+/// keystroke rather than a `grep`.
+///
+/// Where the anchor is not unique the message lists every candidate and
+/// **refuses to choose**. That refusal is the point, not a limitation: a
+/// checker that guesses at an ambiguous anchor has reintroduced, with more
+/// confidence, the defect it exists to catch — which is what the window was
+/// doing every time it silently accepted the *nearest* occurrence.
+///
+/// # Why `spec_trace` still has a window, and this does not
+///
+/// [`crate::spec_trace`] keeps `const ANCHOR_SLACK: usize = 12` over
+/// `SPECIFICATION.md`. The two numbers differed silently for as long as both
+/// existed; they differ *stated* now, and this is one half of the statement —
+/// `spec_trace.rs:378 (Why this window survives)` is the other.
+///
+/// The difference is not a disagreement about strictness. **Here the anchor is
+/// written and there it is derived.** An atom quotes its anchor beside the line
+/// number, so "the cited line contains it" is exactly the claim the citation
+/// makes. `spec_trace` has no quoted text: it takes the identifier the
+/// specification's prose reached for and looks for it near a range that points
+/// at the evidence — usually a doc comment, with the signature carrying the
+/// identifier just outside it. Closing that window reddens 21 of its 80 anchored
+/// citations, 20 of them inside `[FROZEN]` clause commentary, and the repair
+/// would move each citation off the prose it is evidence for. Measured
+/// 2026-09-04; the numbers and the worked cases are at that site.
+///
+/// # The wrong implementation
+///
+/// Returning the nearest occurrence when there are several. It is one line of
+/// code and it is the whole `[advisories]`-cited-for-`[licenses]` failure,
+/// automated.
+fn anchor_problem(path: &str, lines: &[&str], citation: &Citation) -> Option<String> {
+    if lines[citation.line - 1].contains(&citation.anchor) {
+        return None;
+    }
+    let found: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains(&citation.anchor))
+        .map(|(index, _)| (index + 1).to_string())
+        .collect();
+    let head = format!(
+        "`{path}:{}` does not carry `{}`",
+        citation.line, citation.anchor
+    );
+    Some(match found.as_slice() {
+        [] => format!(
+            "{head}, and the anchor is nowhere in the file. No renumbering finds \
+             a line that is not there: read for the surviving statement of the \
+             same claim, cite that, and say in the change that you chose it"
+        ),
+        [only] => format!("{head}; it is on line {only}"),
+        candidates => format!(
+            "{head}; the anchor is on lines {}. Choose one by reading — this \
+             check will not choose for you, because an anchor that matches many \
+             lines is a badly chosen anchor and sharpening it is the repair",
+            candidates.join(", ")
+        ),
+    })
 }
 
 /// A backtick-delimited span, with the position it started at.
