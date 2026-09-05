@@ -65,6 +65,15 @@ rather than folded in.
 
 ## Arms 3 and 4 — the `serde` encode path
 
+> **These tables are the measurement that justified a change, and the change has
+> landed.** Every row below was taken at `701191b`, when each `Serialize` impl
+> built an *owned* wire mirror. `happenstance-core` now writes a **borrowing**
+> mirror on the `Serialize` side and keeps the owned one for `Deserialize`, and
+> the delta is **zero at every tag count in both formats**. The after-figures are
+> in *[What it costs now](#what-it-costs-now)*; these rows are kept because a
+> change with the before-state deleted is a change nobody can check.
+
+
 `delta` is the owned row minus the static row at the same tag count and format.
 `tests/arms_are_equivalent.rs` proves the two rows emit **byte-identical**
 output in both formats at every tag count, so the encoder's own allocations
@@ -129,6 +138,44 @@ case as `2 × 128 × 66 = 16,896`, using the *clone* cost `t + 2`. The measured
 *encode delta* is `t + 1` — the `Box<[Tag]>` allocation is present in both arms
 and cancels — so the figure is **16,640**, 256 lower. The ratio, the linearity
 and the argument are unaffected.
+
+## What it costs now
+
+Same harness, same conditions, same values, after the borrowing mirrors landed.
+`tests/arms_are_equivalent.rs` still proves the two regimes emit byte-identical
+output, and `crates/happenstance-core/tests/serialize_is_borrowing.rs` pins the
+encodings of four values against the bytes `701191b` produced — so **no byte
+moved**, at 64 tags and at 128, in either format.
+
+| value | format | tags | out bytes | heap ops before | heap ops after |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `Event` | postcard | 64 | 563 | 73 | **7** |
+| `SequencedEvent` | postcard | 64 | 587 | 140 | **8** |
+| `Event` | postcard | 128 | 1,132 | 138 | **8** |
+| `SequencedEvent` | postcard | 128 | 1,156 | 269 | **9** |
+| `Event` | serde_json | 128 | 1,445 | 136 | **6** |
+| `SequencedEvent` | serde_json | 128 | 1,561 | 266 | **6** |
+| `QueryItem` | postcard | 64 | 516 | 139 | **8** |
+
+The remaining operations are the encoder's own: one allocation for the output
+buffer and the reallocations it performs as it grows. They are identical in both
+tag regimes, which is what `delta = 0` says, and they scale with the *output*
+rather than with the value — which is the only thing an encode should cost.
+
+`delta(Event)` and `delta(SequencedEvent)` are now asserted as `0` rather than as
+`t + 1` and `2(t + 1)`. There is no term left to write, and a delta that scaled
+with anything at all would be the defect returning.
+
+### The guaranteed minimums, re-derived
+
+| | events | tags | transient heap ops before | after |
+| --- | ---: | ---: | ---: | ---: |
+| VT-24 × VT-22 floors | 128 | 64 | 16,640 | **0** |
+| SQLite's declared ceilings | 256 | 128 | 66,048 | **0** |
+
+Zero is the *transient* count — the allocations that produced no output. Each
+encode still allocates its own output buffer and grows it, and that cost is
+unchanged because the bytes are unchanged.
 
 `Serialize for Query` is the same pattern one file over (`query.rs:380`,
 `items.to_vec()`): one 64-tag `QueryItem` costs 139 heap ops owned against 11

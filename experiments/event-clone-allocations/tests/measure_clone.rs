@@ -257,23 +257,31 @@ fn encode_cost() {
                 }
             );
 
-            // The mirror clones `event_type` (one allocation in the owned
-            // regime, none in the static one) and every tag (one each, none in
-            // the static one). The boxed slice itself is cloned in both, so it
-            // cancels.
+            // **Zero, and the history is the point.** Until 2026-09-04 this
+            // read `t + 1` for `Event` and `2(t + 1)` for `SequencedEvent`: the
+            // mirror cloned `event_type` and every tag, and `SequencedEvent`
+            // cloned the whole `Event` into `SequencedEventWire` whose derive
+            // then called `Serialize for Event` and cloned all four fields
+            // again. The table in `results/clone-cost.md` keeps those rows.
+            //
+            // `happenstance-core` now writes a **borrowing** mirror on the
+            // `Serialize` side and keeps the owned one for `Deserialize`, which
+            // is serde's own idiom for the asymmetry. Nothing is copied to be
+            // written, so the two regimes cost the same and the delta is zero at
+            // every tag count in both formats.
+            //
+            // Written as `0` rather than as a formula because there is no longer
+            // a term to write: a delta that scaled with anything at all would be
+            // the defect coming back.
             assert_eq!(
                 event_delta,
-                if count == 0 { 1 } else { count as i64 + 1 },
+                0,
                 "Event encode delta at {count} tags in {}",
                 format.label()
             );
-            // Twice, because `Serialize for SequencedEvent` clones the whole
-            // `Event` into `SequencedEventWire` and the derived impl for that
-            // mirror then calls `Serialize for Event`, which builds `EventWire`
-            // and clones all four fields again.
             assert_eq!(
                 sequenced_delta,
-                2 * event_delta,
+                0,
                 "SequencedEvent encode delta at {count} tags in {}",
                 format.label()
             );

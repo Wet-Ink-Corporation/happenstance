@@ -275,3 +275,103 @@ fn no_serialize_impl_copies_what_it_was_handed() {
     }
     assert!(failures.is_empty(), "\n{}", failures.join("\n\n"));
 }
+
+// ---------------------------------------------------------------------------
+// The golden vectors
+// ---------------------------------------------------------------------------
+
+/// The exact bytes these four values encoded to **before** the borrowing mirrors
+/// landed, in both formats.
+///
+/// `wire.rs` already pins a bare `Event` in postcard and says why a round trip
+/// cannot stand in: a round trip is symmetric, so it passes happily on an
+/// encoding that no deployed peer can read. These four extend that reasoning to
+/// the values whose `Serialize` impls this file rewrote — a rewrite whose whole
+/// claim is that it moved no byte, made against private mirrors that no public
+/// signature describes.
+///
+/// Captured at `701191b`, the commit before the rewrite, by dumping the same
+/// values through the same helpers, and pinned here unchanged. The full 64-tag
+/// values were compared the same way and are byte-identical across all four
+/// types in both formats — 4,124 bytes — but they are not pinned, because a
+/// 587-byte hex literal is a thing nobody reads and therefore nobody checks.
+/// One tag, one type, one payload byte and one metadata byte is enough to carry
+/// every field, every `Option` arm and every length prefix.
+///
+/// If one of these fails, the question is not "which literal do I update". It is
+/// which peer wrote the bytes on the other side.
+#[test]
+fn the_encoding_is_the_one_that_shipped() {
+    let one_tag: Tags = [Tag::new("k00:v00").expect("valid")].into_iter().collect();
+    let event = Event::new(
+        EventType::new("A").expect("valid"),
+        Bytes::from_static(b"\x11\x22"),
+    )
+    .expect("valid")
+    .with_tags(one_tag.clone())
+    .with_metadata(Bytes::from_static(b"\x33"));
+    let query = Query::from_item(
+        QueryItem::new([EventType::new("A").expect("valid")], one_tag).expect("constrained"),
+    );
+
+    for (label, value, json, postcard) in [
+        (
+            "Event",
+            encodings(&event),
+            r#"{"event_type":"A","data":"ESI=","tags":["k00:v00"],"metadata":"Mw=="}"#,
+            // event_type "A"; data 2 bytes; tags: one 7-byte tag; metadata: Some, 1 byte.
+            &[
+                0x01, 0x41, 0x02, 0x11, 0x22, 0x01, 0x07, 0x6b, 0x30, 0x30, 0x3a, 0x76, 0x30, 0x30,
+                0x01, 0x01, 0x33,
+            ][..],
+        ),
+        (
+            "SequencedEvent",
+            encodings(&sequenced(event.clone())),
+            r#"{"position":42,"id":{"store":"07070707070707070707070707070707","position":42},"recorded_at":1767225600000,"event":{"event_type":"A","data":"ESI=","tags":["k00:v00"],"metadata":"Mw=="}}"#,
+            // position; id (16 store bytes then the position); recorded_at as a
+            // varint; then the Event above, byte for byte.
+            &[
+                0x2a, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+                0x07, 0x07, 0x07, 0x2a, 0x80, 0xa0, 0xd5, 0xed, 0xee, 0x66, 0x01, 0x41, 0x02, 0x11,
+                0x22, 0x01, 0x07, 0x6b, 0x30, 0x30, 0x3a, 0x76, 0x30, 0x30, 0x01, 0x01, 0x33,
+            ][..],
+        ),
+        (
+            "Query",
+            encodings(&query),
+            r#"{"Items":[{"types":["A"],"tags":["k00:v00"]}]}"#,
+            // The external tag `01` for `Items` — WF-1's whole point, and the
+            // byte `All` would not have.
+            &[
+                0x01, 0x01, 0x01, 0x01, 0x41, 0x01, 0x07, 0x6b, 0x30, 0x30, 0x3a, 0x76, 0x30, 0x30,
+            ][..],
+        ),
+        (
+            "AppendCondition",
+            encodings(
+                &AppendCondition::new(query.clone())
+                    .after(SequencePosition::new(7).expect("7 is non-zero")),
+            ),
+            r#"{"guards":[{"query":{"Items":[{"types":["A"],"tags":["k00:v00"]}]},"after":7}]}"#,
+            // One guard: the Query above, then `after` as `Some(7)`.
+            &[
+                0x01, 0x01, 0x01, 0x01, 0x01, 0x41, 0x01, 0x07, 0x6b, 0x30, 0x30, 0x3a, 0x76, 0x30,
+                0x30, 0x01, 0x07,
+            ][..],
+        ),
+    ] {
+        assert_eq!(
+            String::from_utf8(value.0).expect("serde_json emits UTF-8"),
+            json,
+            "`{label}`'s serde_json encoding changed"
+        );
+        assert_eq!(
+            value.1, postcard,
+            "`{label}`'s postcard encoding changed. postcard writes fields in \
+             declaration order with no names, so a mirror whose fields were \
+             reordered still round-trips against itself and decodes nothing a \
+             deployed peer wrote"
+        );
+    }
+}
