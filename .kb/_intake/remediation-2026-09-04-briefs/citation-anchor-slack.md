@@ -235,3 +235,91 @@ for what `README.md:118` says it means, the eventual correction gets more expens
   tolerance measured above — *a check that passes on a coincidence* — which is
   the third form this effort has met it in, and the third argument for the exact
   option. The account is in `query-partition-public-surface.md`.
+
+---
+
+## Ratified — Option C, landed in two commits — 2026-09-04
+
+**Status: this brief is settled for `standards/rust/`, and deliberately not for
+`spec/SPECIFICATION.md`.** The repository owner ratified **Option C**, with the
+staging the Recommendation asked for.
+
+### What landed
+
+**Commit 1 — the repointing, alone, with no `xtask` change.** Re-measured at this
+lane's base (`53abda9`, later than the brief's `cc9f21a`, so the population had
+moved): **323 anchored citations, 235 exact, 88 green only on the slack, 0
+missing.** The distribution still had the shape the brief found — it does not
+decay with distance, with a lobe of 22 at +7, ten at +9, and two at exactly +10.
+All 88 are repointed, by anchor and never by offset: **323 exact, 0 on-slack**
+afterwards. Seventy had an anchor unique in its target file and were mechanical;
+eighteen did not and were chosen by reading, the choices recorded in the commit
+message. **Sixteen anchors were sharpened**, which is the durable half of the
+repair the brief's *"what this does not settle"* asked about: `impl Defect for`
+occurred 70 times in `mutants.rs` and is now `impl Defect for InnerJoinTagStore`.
+Two anchors resist sharpening (`match never {}` is the identical text twice in
+`error.rs`) and are pinned by the exact line alone.
+
+**Commits 2 and 3 — the window closed, Red then Green.** `ANCHOR_SLACK` is gone
+from `lint_constitution.rs`. On a miss the whole file is searched and the message
+**names the line the citation should carry**; where the anchor is not unique it
+lists every candidate and **refuses to choose**, saying that sharpening the anchor
+is the repair. Where the anchor is nowhere in the file it says so and asks for a
+human, which is the case the brief left open and which had already occurred once
+in this effort (`ci.yml` at `8ea7bb7`).
+
+The standing cost the brief predicted arrived immediately and was worth it:
+deleting the seven-line `ANCHOR_SLACK` doc comment shifted `lint_constitution.rs`
+by −8 and reddened two citations into it; editing the two checkers' doc comments
+reddened a third. Each report named the line, and each repair was one keystroke —
+which is the whole of Option C's answer to the maintenance objection, demonstrated
+on the commit that introduced it.
+
+**`standards/rust/README.md:118-119` needs no edit.** It already says the step
+checks that citations *"resolve to a line that still contains their anchor"*. That
+sentence was false and is now true; the brief was right to defer it until the
+option was chosen.
+
+### What was deliberately left: `spec_trace.rs` keeps twelve
+
+Measured the same way, by running the real checker at each tolerance. Closing that
+window to zero reddens **21 of `SPECIFICATION.md`'s 80 anchored citations, and 20
+of the 21 sit inside `[FROZEN]` clause commentary.**
+
+The count alone would have been enough to leave it. The reading is what settles
+it: **the two checkers do not have the same anchor.** An atom's citation carries
+its anchor as quoted text beside the line number, so *the cited line contains that
+text* is exactly the claim being made and an exact match is satisfiable by
+construction. `spec_trace` has no such text — it derives the anchor from the
+identifier the specification's prose happened to reach for, and the citation's
+range points at the *evidence*, which is usually the doc-comment bullets with the
+signature just outside them. `store.rs:261-265 (append)` cites the error-ordering
+bullets that are the evidence for the clause; `async fn append(` is three lines
+past the range. `query.rs:113-116 (matches)` cites the body of `pub fn matches`,
+whose signature is one line *above*. Repointing either onto its identifier moves
+the citation off the prose it is evidence for and onto a signature that states
+nothing — a worse citation, bought to make two numbers match.
+
+**The two constants no longer differ silently.** `spec_trace.rs`'s
+`ANCHOR_SLACK` doc carries the argument, the measurement and the two worked cases;
+`anchor_problem`'s doc in `lint_constitution.rs` carries the reciprocal, and each
+cites the other. The old comment there cited `lint_constitution.rs:111` for a
+constant that no longer exists, and that is noted at the site rather than quietly
+corrected — the brief's own second open question, arriving inside the fix for its
+first.
+
+### What this still does not settle
+
+- **Whether `spec-trace`'s window is right at twelve.** Unchanged from the brief.
+  It is now *stated* rather than silent, and the measurement above is on the
+  record, but the number has still never been derived from anything.
+- **Whether an anchor must be unique in its target file.** Sixteen were sharpened
+  here and no rule requires the next one to be. The checker now says so when it
+  meets one, which is a nudge and not a rule.
+- **`--repoint`.** Not built. Option C ships the *message* — the line number a
+  human types — not a rewriter, so the idempotence hazard the query-ceilings lane
+  added to this brief is sidestepped rather than answered. A shipped `--repoint`
+  would still owe that answer.
+
+*This record was written by the lane that executed the decision. It did not get
+the two-critic pass the original thirteen briefs had.*

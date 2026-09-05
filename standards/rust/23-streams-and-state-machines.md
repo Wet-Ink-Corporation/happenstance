@@ -122,7 +122,7 @@ a legitimately short one, so the consumer rebuilds a decision model from half a
 log and appends against it.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1901 (std::mem::replace(&mut this.state)` ·
-`crates/happenstance-postgres/src/read_stream.rs:209 (Taking the state by value)` ·
+`crates/happenstance-postgres/src/read_stream.rs:206 (Taking the state by value)` ·
 [ES-11](../../spec/SPECIFICATION.md) *(no visible event may be omitted)*
 
 ## RS-23-3. Hold the owner and re-borrow it per step; store nothing that borrows a connection.
@@ -246,7 +246,7 @@ which removes it from every consumer that spawns.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:54 (unnameable)` ·
 `crates/happenstance-postgres/src/read_stream.rs:358 (read_stream_is_send)` ·
-`crates/happenstance-cloudflare/src/send_shape.rs:35 (a coroutine's auto traits are inferred)` ·
+`crates/happenstance-cloudflare/src/send_shape.rs:34 (a coroutine's auto traits are inferred)` ·
 [ES-2](../../spec/SPECIFICATION.md)
 
 ## RS-23-5. There is no async `Drop`; compensation must be done before the future can be dropped.
@@ -324,6 +324,6 @@ rows already written stay written and no `Result` exists for anyone to read.
 and only for an adapter that has run the suite.
 
 **Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1895 (YieldingRowAtATimeStore)` ·
-`crates/happenstance-postgres/src/read_stream.rs:149 (Dropping the cursor drops the transaction)` ·
+`crates/happenstance-postgres/src/read_stream.rs:148 (Dropping the cursor drops the transaction)` ·
 [ES-22](../../spec/SPECIFICATION.md) ·
 [E0053](https://doc.rust-lang.org/error_codes/E0053.html) *(checked 2026-08-09, rustc 1.97.1)*

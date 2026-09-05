@@ -157,7 +157,7 @@ high, so the first operator to see the dashboard pages someone about a
 replication stall that is not happening, and the runbook entry they write says to
 ignore the gauge.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:217 (an opaque ordering key)` ·
+**Evidence.** `crates/happenstance-core/src/event.rs:216 (an opaque ordering key)` ·
 `crates/happenstance-core/src/event.rs:263 (is a threshold rather than a)` ·
 [SPECIFICATION VT-11](../../spec/SPECIFICATION.md)
 

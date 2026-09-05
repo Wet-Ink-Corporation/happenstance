@@ -305,6 +305,6 @@ in the CI log of every adapter that runs the suite — retained for as long as t
 CI provider keeps logs, in a repository whose whole design premise is that the
 contract layer never looks inside a payload.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:440 (Payloads are frequently large and rarely UTF-8)` ·
-`crates/happenstance-core/src/event.rs:443 (struct ByteLen)` ·
+**Evidence.** `crates/happenstance-core/src/event.rs:447 (Payloads are frequently large and rarely UTF-8)` ·
+`crates/happenstance-core/src/event.rs:450 (struct ByteLen)` ·
 `Cargo.toml:162 (missing_debug_implementations)`

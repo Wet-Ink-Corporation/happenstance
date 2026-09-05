@@ -159,7 +159,7 @@ denylist all six meta-tests stayed green — leaving the entire durability axis
 vacuous and reported as covered.
 
 **Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:160 (fn is_a_rule_body)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:222 (A denylist can never be the primary check)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/harness.rs:230 (A denylist can never be the primary check)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/harness.rs:308 (LAST_ORIGIN.with_borrow_mut)` ·
 [SPECIFICATION CF-2](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
@@ -265,9 +265,9 @@ defect; `mutants_fail_exactly_their_declared_rules` then reports the *instrument
 as broken, the registry stops being a map from rules to bugs, and no one can tell
 which store is lying.
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:112 (pub(crate) trait Defect)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:109 (Box<dyn Defect>)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:268 (defect: PhantomData)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:111 (pub(crate) trait Defect)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:108 (Box<dyn Defect>)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:267 (defect: PhantomData<D>)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
@@ -374,7 +374,7 @@ that drops rows for a tag it holds. The author reads a passing proptest as
 coverage of the merge-scan; the defect is found by whoever reads the projection's
 output, and the failing input was in the sample all along.
 
-**Evidence.** `crates/happenstance-testkit/tests/properties.rs:56 (must not share a subroutine)` ·
+**Evidence.** `crates/happenstance-testkit/tests/properties.rs:55 (must not share a subroutine)` ·
 `crates/happenstance-testkit/tests/properties.rs:62 (Which level is independently written)` ·
 `crates/happenstance-testkit/src/fixtures.rs:575 (pub fn any_tag)` ·
 `crates/happenstance-testkit/src/fixtures.rs:526 (pub use proptest)` ·

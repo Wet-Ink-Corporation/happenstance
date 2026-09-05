@@ -64,7 +64,7 @@ crate's documentation, and they find out when their own invalid constant reaches
 run time rather than `cargo check`.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:103 (silently ignores an error-code annotation)` ·
-`xtask/src/lint_constitution.rs:539 (silently ignores an unmatched error code)` ·
+`xtask/src/lint_constitution.rs:533 (silently ignores an unmatched error code)` ·
 [SPECIFICATION PS-36](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION WF-12](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION VT-32](../../spec/SPECIFICATION.md) ·
@@ -179,7 +179,7 @@ trait carrying `Self: Send` — which excludes precisely the adapters the
 two-flavour port exists for, and is discovered only when the Workers adapter
 cannot implement it.
 
-**Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:41 (Every rule passes against this store)` ·
+**Evidence.** `crates/happenstance-testkit/tests/local_conformance.rs:40 (Every rule passes against this store)` ·
 `crates/happenstance-testkit/tests/local_conformance.rs:476 (local_tokio_default)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
@@ -222,7 +222,7 @@ author copies out of the macro's documentation.
 
 **Evidence.** `crates/happenstance-testkit/src/lib.rs:583 (macro_rules! ignore)` ·
 `crates/happenstance-testkit/src/lib.rs:605 (Migrating from)` ·
-`xtask/src/lint_constitution.rs:656 (ignore: <reason>)` ·
+`xtask/src/lint_constitution.rs:650 (ignore: <reason>)` ·
 [SPECIFICATION CF-15](../../spec/SPECIFICATION.md)
 
 ---

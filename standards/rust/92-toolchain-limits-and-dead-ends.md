@@ -73,7 +73,7 @@ reinstalling rustup against a panic that names only `compare_impl_item` and a
 type. The local paste turns that into one line of `E0477` naming the lifetime,
 and it is the difference between a five-minute diagnosis and a lost afternoon.
 
-**Evidence.** `references/adapter-shapes.md:325 (rustc crashes **while diagnosing a region error**)` ·
+**Evidence.** `references/adapter-shapes.md:324 (rustc crashes **while diagnosing a region error**)` ·
 `crates/happenstance-testkit/src/contract.rs:108 (owned associated type and not a GAT)` ·
 `crates/happenstance-testkit/src/contract.rs:121 (refcount instead of borrowing a lifetime)`
 
@@ -133,7 +133,7 @@ nothing in the tree that names it. ES-1 freezes the scheme besides, so the
 collapse was never a refactor waiting on a toolchain — it is a new ADR.
 
 **Evidence.** `references/evaluation/research-rust-api-guidelines.md:47 (Do not design around it)` ·
-`crates/happenstance-core/src/store.rs:141 (trait_variant::make)` ·
+`crates/happenstance-core/src/store.rs:148 (trait_variant::make)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
 [rust-lang/rust#109417](https://github.com/rust-lang/rust/issues/109417), which
