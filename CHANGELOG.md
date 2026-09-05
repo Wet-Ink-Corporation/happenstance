@@ -570,6 +570,44 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-cloudflare`): `StringifiedThrow::message` is no
+  longer a public field. It is read through `StringifiedThrow::message()`, and
+  the type can no longer be built by a caller at all.** Free today and only
+  today: the crate holds a `0.0.0` placeholder on the registry, so no released
+  version carries either shape, and the `0.2.0` release it is deferred past is
+  where both become permanent.
+
+  It was the one error type in the five publishable crates a caller could mint
+  *and* mutate, and it carries the classifier `is_constraint_violation()`, which
+  is a substring test over that same field. So the classification was a function
+  of caller-controlled state, and one value could give three answers with no
+  boundary crossed:
+
+  ```text
+  let mut throw = StringifiedThrow { message: "connection reset by peer".into() };
+  throw.is_constraint_violation();   // false
+  throw.message = "UNIQUE constraint failed: event.position".into();
+  throw.is_constraint_violation();   // true
+  ```
+
+  What that costs is not the classifier: it is a DCB command loop reading a
+  transport fault as a lost append condition, retrying a decision the store
+  never refused, and succeeding — a successful conditional write that nothing
+  ever justified, which is the failure mode DCB exists to make impossible.
+  `JsThrow` beside it has had a private field since it was written; this is the
+  same decision at the same boundary.
+
+  `#[non_exhaustive]` was considered and is deliberately **not** what landed. It
+  blocks the struct literal and forces `..` in a pattern, and does nothing to an
+  assignment on a value a caller already holds — so it would have closed the
+  semver half and left the classifier hazard exactly where it was. Two
+  `compile_fail` doctests, each with a compiling twin that differs by one
+  expression, now hold both halves.
+
+  What is **not** settled here, and is staged as a brief in `.kb/_intake/`:
+  whether this type should be public at all. Its two in-crate roles are the
+  recorded ES-6 alternative and the positive control the `!Send` probes need,
+  and neither needs a consumer.
 - **`SqliteEventStore::planned_statement_count` counts the real partition, so
   the number it returns for a query of wide items has changed.** The signature is
   untouched and the count is unchanged for every query whose items are narrow —

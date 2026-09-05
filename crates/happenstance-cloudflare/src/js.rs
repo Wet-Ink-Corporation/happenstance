@@ -280,6 +280,14 @@ const CONSTRAINT_CODE_KEY: &str = "code";
 /// `Guard`, with the message here in place of the position there. [`JsThrow`]'s
 /// field has been private since it was written; this one is too.
 ///
+/// `#[non_exhaustive]` is deliberately **not** applied on top. With the field
+/// private the struct expression is already unbuildable downstream and no
+/// downstream pattern can be exhaustive, so a second field — the numeric SQLite
+/// code the crate root records Workers as not surfacing — is additive either
+/// way. The attribute would restate a seal the field already holds, and RS-13-5
+/// is the standing argument against decorating a type with one that buys
+/// nothing. [`JsThrow`] carries none, for the same reason.
+///
 /// ```compile_fail
 /// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
 ///
@@ -315,10 +323,25 @@ const CONSTRAINT_CODE_KEY: &str = "code";
 #[error("JavaScript threw: {message}")]
 pub struct StringifiedThrow {
     /// `String(value)` applied at the boundary.
-    pub message: String,
+    ///
+    /// Private, and read through [`message`](Self::message). The two doctests
+    /// on the type say what that buys; the sibling seven lines of
+    /// [`JsThrow`] is the same decision taken at the same boundary.
+    message: String,
 }
 
 impl StringifiedThrow {
+    /// The stringified value, as `String(value)` produced it.
+    ///
+    /// The read half of the seal. A caller normalising errors, logging one or
+    /// matching on its text has everything they had when the field was `pub`;
+    /// what they no longer have is a way to make this crate's classifier say
+    /// something the boundary did not.
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
     /// Stringifies a thrown value at the boundary.
     #[must_use]
     pub fn new(thrown: &JsHandle) -> Self {
