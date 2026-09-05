@@ -634,6 +634,34 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **The crate's front page now names every emitter it ships, says they are
+  `#[doc(hidden)]`, and says what that costs.** CF-23 `[FROZEN]` makes the
+  per-test wrapper an adapter-supplied parameter; the `__emit_*` macros are the
+  only concrete instances of that parameter anyone has, and
+  `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is the
+  in-tree proof that the cross-crate reach is load-bearing. The page's table
+  carried three rows — the event-store family's — while twelve emitters existed
+  across four families, and the paragraph above it said *"Three emitters ship"*.
+  An author writing a model, benchmark or concurrency harness on anything but
+  the default runtime had no rendered name to write, and `#[doc(hidden)]` meant
+  searching the API for one returned nothing.
+
+  The table is now the count, in the shape the concurrency module page already
+  uses, and the page discloses the attribute in both directions: these names do
+  not appear on docs.rs, and `#[doc(hidden)]` is the marker `cargo-semver-checks`
+  uses to exclude an item — so the one instrument in this repository that would
+  report a rename of `__emit_wasm` as breaking is the instrument the attribute
+  switches off. Whether the names are a *promise* is stated as open rather than
+  answered: §6.6 governs rule addition, rule meaning-change and the version key
+  and says nothing about the emitters. The argument for both arms is in
+  `.kb/_intake/remediation-2026-09-04-briefs/emitter-surface-stability.md`.
+
+  `crates/happenstance-testkit/tests/emitter_surface.rs` is the instrument, and
+  it is a generalisation rather than an invention: the same bijection existed for
+  one family's module page in `tests/memory_concurrency_conformance.rs`, written
+  after that page said *"one"* while two shipped, and it read
+  `src/concurrency.rs` and nothing else.
+
 - **Every item path an exported `happenstance-testkit` macro expands to now goes
   through `__private`, and a check keeps it that way.** The onboarding page
   states the discipline as an absolute — the expansion *"never assumes what you

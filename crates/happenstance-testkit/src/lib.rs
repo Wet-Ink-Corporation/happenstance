@@ -65,14 +65,29 @@
 //! `#[tokio::test]` is a default, not a requirement. The per-test wrapper is a
 //! parameter — an *emitter* macro — because the testkit is in no position to
 //! know which runtime an adapter is tested on, and a `cfg` ladder in here would
-//! mean every new runtime needs a testkit release. Three emitters ship, and all
-//! three are demonstrated in this crate's `tests/`:
+//! mean every new runtime needs a testkit release. The emitters that ship are
+//! the rows of this table, and the rows are the count: a written-out number is
+//! falsified by an edit that never touches it, and this paragraph said *three*
+//! through the nine that landed after it.
 //!
-//! | Emitter | Wrapper | Adapter needs |
-//! |---|---|---|
-//! | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
-//! | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
-//! | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | Family | Emitter | Wrapper | Adapter needs |
+//! |---|---|---|---|
+//! | event store | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | event store | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | event store | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | projection | `__emit_projection_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | projection | `__emit_projection_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | projection | `__emit_projection_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | model | `__emit_model_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | model | `__emit_model_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | concurrency | `__emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt`, `rt-multi-thread` |
+//! | concurrency | `__emit_concurrency_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | benchmark | `__emit_benchmark_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | benchmark | `__emit_benchmark_blocking` | `#[test]` + [`block_on`] | nothing |
+//!
+//! `__emit_rule_names` is the odd one and is listed because it is reachable by
+//! the same route: it wraps no test at all, expanding a rule enumeration to a
+//! `[&str; N]` for a meta-test to read.
 //!
 //! ```
 //! # macro_rules! ignore { ($($t:tt)*) => {} }
@@ -88,6 +103,27 @@
 //! A runtime none of those cover needs no change here: write a `macro_rules!`
 //! that accepts a comma-separated list of identifiers and hand it to
 //! [`for_each_event_store_rule!`] yourself.
+//!
+//! **Every name in that table carries `#[doc(hidden)]`, and you should know what
+//! that costs you before you write one.** The attribute is not a judgement about
+//! whether you may use them — CF-23 requires you to name one, and this crate's
+//! own `happenstance-cloudflare` target does — it is the only tool the language
+//! offers for *"exported because it has to be"*: `macro_rules!` lives in a flat
+//! crate-root textual namespace, so a private helper is unreachable from your
+//! expansion site and there is nothing to hide behind. What it does cost is
+//! visibility in both directions. You will not find these on docs.rs, which is
+//! why they are written out here rather than linked. And `#[doc(hidden)]` is the
+//! marker `cargo-semver-checks` uses to exclude an item, so the one instrument
+//! in this repository that would report a rename of `__emit_wasm` as breaking is
+//! the instrument the attribute switches off.
+//!
+//! Whether these names are a *promise* is an open question rather than a
+//! settled one, and the honest answer is that the crate has not decided: §6.6's
+//! compatibility policy governs rule addition, rule meaning-change and the
+//! version key, and says nothing about the emitters. Until it does, the
+//! recommendation in step 1 of *Writing a projection adapter* is the one that
+//! covers you — pin this crate exactly, and a rename arrives when you choose to
+//! take it rather than on a minor bump you did not read.
 //!
 //! # Where the rule set lives
 //!
