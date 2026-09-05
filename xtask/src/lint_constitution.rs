@@ -950,4 +950,118 @@ mod tests {
         assert!(found[0].body.contains("body a"));
         assert!(!found[0].body.contains("body b"));
     }
+
+    /// A fabricated workspace root under `std::env::temp_dir()`, never the
+    /// workspace's own trees and never `tempfile` — mirroring
+    /// `spec_trace::tests::fabricated_root`, which this module cannot reuse
+    /// because it is a private helper of a sibling module. The nanosecond stamp
+    /// keeps two parallel tests from sharing a directory.
+    fn fabricated_root(label: &str) -> std::path::PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("hs-lint-constitution-{label}-{stamp}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// An [`Atom`] carrying nothing but the text [`check_citations`] reads.
+    fn atom_of(text: &str) -> Atom {
+        Atom {
+            file: "99-fixture.md".to_owned(),
+            band: "99".to_owned(),
+            module: "band_99".to_owned(),
+            text: text.to_owned(),
+            load_when: String::new(),
+            rules: Vec::new(),
+            fences: Vec::new(),
+        }
+    }
+
+    /// Runs C8 over one fabricated atom against one fabricated target file.
+    fn citations_of(label: &str, target: &str, body: &str, atom_text: &str) -> Vec<String> {
+        let root = fabricated_root(label);
+        let path = root.join(target);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, body).unwrap();
+        let mut problems = Vec::new();
+        check_citations(&root, &atom_of(atom_text), &mut problems);
+        problems
+    }
+
+    #[test]
+    fn a_citation_one_line_off_is_reported_and_told_where_to_go() {
+        // The defect the window hid. `fn subject` is on line 3 and the citation
+        // says 2, which is the smallest possible drift and the one an insertion
+        // above a cited line produces every time. Under a tolerance of ten this
+        // is green, and a reader who takes the step's "all consistent" for what
+        // `standards/rust/README.md` says it means is misled: that page promises
+        // the cited line *contains* its anchor, and a windowed check cannot
+        // deliver it.
+        let problems = citations_of(
+            "one-line-off",
+            "src/subject.rs",
+            "// a\n// b\nfn subject() {}\n",
+            "**Evidence.** `src/subject.rs:2 (fn subject)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("src/subject.rs:2"),
+            "the report must name the citation: {}",
+            problems[0]
+        );
+        assert!(
+            problems[0].contains("line 3"),
+            "the report must name the line the anchor is actually on: {}",
+            problems[0]
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_anchor_is_listed_and_not_chosen_for_you() {
+        // The failure mode a repair message reintroduces if it guesses. Three
+        // lines carry `impl Defect for` and nothing in the file says which one
+        // the atom meant; a checker that picks the nearest is doing what the
+        // slack did, one layer up and with more confidence. `mutants.rs` really
+        // has seventy of these.
+        let problems = citations_of(
+            "ambiguous",
+            "src/mutants.rs",
+            "// a\n// b\nimpl Defect for A {}\n// d\n// e\nimpl Defect for B {}\n\
+             // g\n// h\nimpl Defect for C {}\n// j\n",
+            "**Evidence.** `src/mutants.rs:5 (impl Defect for)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("lines 3, 6, 9"),
+            "the report must list every candidate: {}",
+            problems[0]
+        );
+        assert!(
+            problems[0].contains("choose"),
+            "the report must leave the choice to a reader: {}",
+            problems[0]
+        );
+    }
+
+    #[test]
+    fn an_anchor_deleted_from_the_file_asks_for_a_human() {
+        // `52-wasm32-and-target-cfg.md`'s citation into `ci.yml`, whose anchor
+        // text was removed outright at `8ea7bb7`. No renumbering can find a line
+        // that is not there, and a message that says only "no longer has" sends
+        // the reader looking for one.
+        let problems = citations_of(
+            "deleted",
+            ".github/workflows/ci.yml",
+            "name: ci\njobs:\n  gate:\n",
+            "**Evidence.** `.github/workflows/ci.yml:2 (baseline-rev)`\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("nowhere in the file"),
+            "the report must say the anchor is gone, not merely misplaced: {}",
+            problems[0]
+        );
+    }
 }
