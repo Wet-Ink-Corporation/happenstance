@@ -92,8 +92,17 @@
 //!   Multi-tag items must be probed most-selective-tag-first and SQLite cannot
 //!   supply per-value cardinality: `ANALYZE` stores an *average*, which is
 //!   exactly wrong for a tag set where one value matches a third of the log and
-//!   another matches one percent. Measured, a two-tag boundary costs roughly
-//!   200x a single-tag one (ADR-0022 §8).
+//!   another matches one percent.
+//!
+//!   That requirement is only true because the intersection chain is
+//!   **correlated** — `query_sql.rs`'s module documentation is the long form,
+//!   and it is a private module, so this is a path rather than a link. On the
+//!   uncorrelated shape this crate emitted until then, obeying it cost 37x–42x
+//!   rather than earning anything, because the chained arm was materialised and
+//!   the seed's selectivity could not reach it. A future edit that returns the
+//!   chain to `position IN (…)` must delete this bullet in the same change, or
+//!   the crate will be requiring the slower ordering in its own public
+//!   documentation. Measured in `experiments/correlated-exists-guard/`.
 //!
 //! And three that predate them:
 //!
@@ -287,7 +296,7 @@ impl SqliteEventStore {
     #[must_use]
     pub fn planned_statement_count(query: &Query) -> usize {
         let width = Self::MAX_QUERY_ARMS_PER_STATEMENT;
-        crate::query_sql::chunks(query, &Selectivity::default(), width).len()
+        crate::query_sql::chunks(query, &Selectivity::default(), width, None).len()
     }
 
     /// Wraps an already-open connection onto an **already-migrated** database.
@@ -645,10 +654,15 @@ fn evaluate(
 ) -> rusqlite::Result<Option<SequencePosition>> {
     for guard in condition.guards() {
         let selectivity = Selectivity::read_for(connection, &guard.query)?;
+        // The boundary reaches SQLite rather than only Rust. See
+        // `query_sql::chunks`: the comparison below stays, and the bound makes
+        // it trivially true rather than load-bearing.
+        let boundary = guard.after.map_or(0, as_i64);
         let plan = crate::query_sql::chunks(
             &guard.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            Some(boundary),
         );
 
         // `Option<i64>`'s own ordering is what merges the chunks: `None` sorts
@@ -664,7 +678,6 @@ fn evaluate(
             highest = highest.max(chunk);
         }
 
-        let boundary = guard.after.map_or(0, as_i64);
         if let Some(highest) = highest
             && highest > boundary
         {
@@ -1310,17 +1323,48 @@ impl ReadCursor {
         // Every chunk statement is **identical in shape** — same ceiling, same
         // `resume_from`, same `to`, same direction, same page budget — which is
         // what makes merging them sound rather than approximate.
+        // `None`: a read carries no append-condition boundary. Its own
+        // `resume_from` / `to` / ceiling bounds go on the wrapper below, which
+        // is a different question — see `query_sql::chunks`. It is bound to a
+        // name rather than written twice because `matches_every_event` answers
+        // for *these* arguments: the two calls disagreeing would emit a
+        // membership test the plan no longer justifies.
+        let bound = None;
         let plan = crate::query_sql::chunks(
             &self.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            bound,
         );
+
+        // Finding I-3. When the chunk matches every event, `position IN (…)`
+        // below is a tautology over the whole table — and the cost of it is not
+        // the one the shape suggests. SQLite drives the scan *from* that
+        // subquery (`USING ROWID SEARCH … FOR IN-OPERATOR`), and `resume_from`
+        // cannot be pushed into a search driven by an `IN` list the way it can
+        // into a rowid range scan, so every page below re-walks the prefix of
+        // the log it is meant to have skipped. `1` is a constant the planner
+        // folds away, which leaves the bounds to drive the scan and makes the
+        // page cost flat in replay depth instead of growing with it — 56,310 µs
+        // against 182 µs, 90% of the way through 500,000 events. The dual
+        // spelling is `arms_sql`'s `WHERE 0`, for the arm that can match
+        // nothing.
+        //
+        // This is the *unconditional* half of the wrapper question — true by
+        // construction, needing no estimate. The tagged half is a crossover and
+        // is deliberately not decided here; see `query_sql::matches_every_event`.
+        let unrestricted = crate::query_sql::matches_every_event(&self.query, bound);
+
         let mut merged: Vec<SequencedEvent> = Vec::with_capacity(budget);
 
         for (matched, arm_params) in plan {
             let mut params = arm_params;
             let columns = crate::row::COLUMNS;
-            let mut sql = format!("SELECT {columns} FROM event WHERE position IN ({matched})");
+            let mut sql = if unrestricted {
+                format!("SELECT {columns} FROM event WHERE 1")
+            } else {
+                format!("SELECT {columns} FROM event WHERE position IN ({matched})")
+            };
 
             // `resume_from` is inclusive in both directions; which side of the
             // position order it sits on is what `backwards` decides. Under

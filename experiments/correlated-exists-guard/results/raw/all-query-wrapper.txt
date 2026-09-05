@@ -1,0 +1,22 @@
+
+running 1 test
+test the_tautological_wrapper_is_what_it_costs ... CONDITIONS	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000
+PLAN	page=first-page	shape=wrapper-in	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	page=first-page	shape=wrapper-in	id=7 parent=0 USING ROWID SEARCH ON TABLE event FOR IN-OPERATOR
+PLAN	page=first-page	shape=wrapper-omitted	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PAGE	page=first-page	shape=wrapper-in	rows=512	us_median=122
+PAGE	page=first-page	shape=wrapper-omitted	rows=512	us_median=100
+PLAN	page=mid-replay-page	shape=wrapper-in	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	page=mid-replay-page	shape=wrapper-in	id=7 parent=0 USING ROWID SEARCH ON TABLE event FOR IN-OPERATOR
+PLAN	page=mid-replay-page	shape=wrapper-omitted	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PAGE	page=mid-replay-page	shape=wrapper-in	rows=512	us_median=22955
+PAGE	page=mid-replay-page	shape=wrapper-omitted	rows=512	us_median=147
+PLAN	page=late-replay-page	shape=wrapper-in	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	page=late-replay-page	shape=wrapper-in	id=7 parent=0 USING ROWID SEARCH ON TABLE event FOR IN-OPERATOR
+PLAN	page=late-replay-page	shape=wrapper-omitted	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+PAGE	page=late-replay-page	shape=wrapper-in	rows=512	us_median=56310
+PAGE	page=late-replay-page	shape=wrapper-omitted	rows=512	us_median=182
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.45s
+
