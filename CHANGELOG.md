@@ -723,6 +723,38 @@ not the same as what a user needed to be told.
   emitter names are also plain code font now rather than an intra-doc link to a
   `#[doc(hidden)]` item, matching the crate root's spelling of the same class of
   name.
+- **Two conformance assertions printed a diagnosis they could not have, naming
+  a `[FROZEN]` clause other than the one their reachable failure evidences.**
+  Message text and one private helper's return type; no public signature moves,
+  no rule is added or removed. One of the two rules is **tightened**, which is
+  breaking in practice for a store that returns nothing from every read — pin
+  `happenstance-testkit` exactly before taking it.
+
+  `query_matching_nothing_yields_empty` printed *"a query with no matches must
+  not error"*, and it could not fire on a store that errored: `read_ok` owns
+  that half one layer down and panics first. The only way to reach it is a
+  store that returned **events** — the widening case, which is exactly what its
+  one registered mutant models. An author who interned event types, had their
+  unknown-type clause dropped rather than refused, and met this rule was sent
+  to check an error path that had never run. The message now names the widening
+  and prints `positions_of(&found)`, and the rule gained the non-vacuity anchor
+  its neighbours carry: a query for the type just appended must select it,
+  because without that a store returning nothing from every read passed. That
+  anchor is what `InnerJoinTagStore` now fails, and its `REGISTRY` row says so.
+
+  `a_concurrent_reader_never_sees_a_partial_batch` folded a failed read into
+  the same list it filled with part-written batch names and reported the whole
+  list under ES-18. An adapter whose read transiently fails under contention —
+  `SQLITE_BUSY` past the handler's ceiling, a pool with no reader slot, a 503
+  from a one-shot HTTP backend — was told by name, with the clause id attached,
+  that its `append` writes rows outside a transaction. `incomplete_batches` now
+  returns a named pair and the rule asserts twice, in the shape
+  `k_disjoint_boundaries_admit_exactly_k_commits` uses 260 lines above and for
+  its stated reason: a single message describing two defects identifies
+  neither. The read-failure assertion comes first, because a run whose reads
+  failed says nothing about atomicity either way, and it reports **distinct**
+  errors — a store that cannot be read at all yielded one line per polling pass
+  and buried the count under nearly three thousand identical copies.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded

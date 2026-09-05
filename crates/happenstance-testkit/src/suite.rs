@@ -832,7 +832,20 @@ pub mod rules {
     ) -> RuleOutcome {
         let fixture = open().await;
         let store = fixture.connect().await;
-        append_ok(&store, &[event("A")]).await;
+        let landed = append_ok(&store, &[event("A")]).await;
+
+        // The anchor, in the idiom this file uses thirty lines above: without
+        // it a store that returns nothing from *every* read passes this rule
+        // for the wrong reason, and `InnerJoinTagStore` — which drops untagged
+        // events from every query — is exactly that store.
+        let present = read_ok(&store, &query_of_types(&["A"]), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&present),
+            [landed.get()],
+            "a query for the type that was just appended must select it — \
+             otherwise the emptiness asserted below holds because this store \
+             returns nothing at all"
+        );
 
         let found = read_ok(
             &store,
@@ -840,7 +853,16 @@ pub mod rules {
             ReadOptions::new(),
         )
         .await;
-        assert!(found.is_empty(), "a query with no matches must not error");
+        assert!(
+            found.is_empty(),
+            "a query naming a type no event carries must yield no events. \
+             `read_ok` has already failed a read that errored, so reaching this \
+             line means the store answered and the answer was too wide — an \
+             unknown type whose clause is *dropped* rather than refused returns \
+             everything, which is what interning does when its lookup misses. \
+             Got {:?}",
+            positions_of(&found)
+        );
 
         RuleOutcome::Ran
     }

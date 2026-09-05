@@ -441,6 +441,12 @@ const REGISTRY: &[Declared] = &[
             "query_item_types_are_or",
             "query_items_are_or",
             "untagged_events_match_query_all",
+            // Since the rule gained its non-vacuity anchor: this store drops
+            // every untagged event from every read, so the anchor — a query for
+            // the type just appended must select it — is what it fails. Another
+            // inflation row, and the reason the anchor was owed: without it a
+            // store that returns nothing at all passed the rule.
+            "query_matching_nothing_yields_empty",
             "duplicate_items_do_not_duplicate_events",
             "query_item_order_does_not_change_the_result_set",
             "read_from_is_inclusive",

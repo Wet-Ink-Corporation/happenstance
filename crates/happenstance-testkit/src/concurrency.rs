@@ -808,7 +808,7 @@ pub mod rules {
             panic!("connect_many returned nothing for {WRITERS} writers and a reader");
         };
 
-        let (committed, partial) =
+        let (committed, sightings) =
             observe_while_writing(stores, reading, &batches, &types, ROUNDS, BATCH);
         let failures: Vec<&Attempt> = committed
             .iter()
@@ -820,13 +820,35 @@ pub mod rules {
              {failures:?}"
         );
 
+        // The read-failure half, and it comes first because a run whose reads
+        // failed says nothing about atomicity either way. Reported by its own
+        // name: an adapter told that its `append` writes rows outside a
+        // transaction goes looking for a missing `BEGIN` in code that has one,
+        // and the defect is in its read path under contention.
+        //
+        // Distinct messages rather than every occurrence: the reader polls in a
+        // tight loop, so a store that cannot be read at all yields one line per
+        // pass and thousands of identical copies bury the count.
+        let mut distinct = sightings.unreadable.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
         assert!(
-            partial.is_empty(),
-            "a reader observed {} batch(es) part-written: {partial:?}. Either \
-             every event of a batch is visible or none is (ES-18), and a reader \
-             that can see half of one can build a decision model from a command \
-             that never completed",
-            partial.len()
+            sightings.unreadable.is_empty(),
+            "the store could not be read while an append was in flight, on {} \
+             of the reader's passes. That is a defect in the read path under \
+             contention rather than a partial batch, and this run says nothing \
+             about atomicity either way. Distinct errors: {distinct:?}",
+            sightings.unreadable.len()
+        );
+
+        assert!(
+            sightings.partial.is_empty(),
+            "a reader observed {} batch(es) part-written: {:?}. Either every \
+             event of a batch is visible or none is (ES-18), and a reader that \
+             can see half of one can build a decision model from a command that \
+             never completed",
+            sightings.partial.len(),
+            sightings.partial
         );
 
         // The post-hoc half. This one is deterministic.
@@ -869,7 +891,7 @@ pub mod rules {
         types: &[String],
         rounds: usize,
         batch: usize,
-    ) -> (Vec<Attempt>, Vec<String>) {
+    ) -> (Vec<Attempt>, Sightings) {
         let done = AtomicBool::new(false);
 
         // One read on *this* thread before any writer is spawned, and it is
@@ -893,9 +915,10 @@ pub mod rules {
         // The result is dropped rather than asserted on. Nothing has been
         // appended yet, so there is no batch it could have seen part of, and a
         // store whose reads fail outright is reported by the reader thread —
-        // which calls the same function and folds the failure into `partial`.
-        // Asserting here would put a second, differently-worded failure in front
-        // of that one.
+        // which calls the same function and folds the failure into
+        // `Sightings::unreadable`, where the rule names it as the read failure
+        // it is. Asserting here would put a second, differently-worded failure
+        // in front of that one.
         drop(incomplete_batches(&reading, types, batch));
 
         std::thread::scope(|scope| {
@@ -908,15 +931,15 @@ pub mod rules {
             let flag = &done;
             let names = types;
             let reader = scope.spawn(move || {
-                let mut partial: Vec<String> = Vec::new();
+                let mut partial = Sightings::default();
                 // Bounded by the writers rather than by a count or a clock: the
                 // flag is set once every writer has joined, and the final pass
                 // below runs after it, so the loop cannot spin forever and
                 // cannot exit before the writers have started.
                 while !flag.load(Ordering::Acquire) {
-                    partial.extend(incomplete_batches(&reading, names, batch));
+                    partial.absorb(incomplete_batches(&reading, names, batch));
                 }
-                partial.extend(incomplete_batches(&reading, names, batch));
+                partial.absorb(incomplete_batches(&reading, names, batch));
                 partial
             });
 
@@ -978,32 +1001,68 @@ pub mod rules {
         })
     }
 
-    /// The names of every batch the store is currently showing incompletely.
+    /// What one pass of the reader saw, with the two defects kept apart.
     ///
-    /// Runs on the reader's thread, so it must return something `Send`: the
-    /// batch names, not the events, and certainly not a `Result` carrying
-    /// `S::Error`. A read that fails is reported as a sighting of its own, which
-    /// is the honest answer — a reader that cannot read while a writer is
-    /// working is a defect this rule is entitled to name.
-    fn incomplete_batches<S: EventStore>(store: &S, types: &[String], batch: usize) -> Vec<String> {
+    /// Two fields rather than one `Vec<String>`, in the shape
+    /// `k_disjoint_boundaries_admit_exactly_k_commits` uses 260 lines above and
+    /// for its stated reason: a single message describing two defects is a
+    /// message that identifies neither. A batch seen half-written is ES-18. A
+    /// read that fails outright is a defect this rule is entitled to name — the
+    /// helper's own documentation was always right about that — but it is a
+    /// *different* one, and folding it into the atomicity list told an adapter
+    /// whose read had gone `SQLITE_BUSY` that its `append` was writing rows
+    /// outside a transaction.
+    ///
+    /// Both fields are `Vec<String>` because this crosses a thread boundary and
+    /// must be `Send`: batch names and rendered errors, never a `Result`
+    /// carrying `S::Error`, which has no `Send` bound (ES-6 is deferred).
+    #[derive(Debug, Default)]
+    struct Sightings {
+        /// Batches the store was showing incompletely. ES-18's failure.
+        partial: Vec<String>,
+        /// Reads that failed outright, rendered. Not ES-18's failure.
+        unreadable: Vec<String>,
+    }
+
+    impl Sightings {
+        /// Folds one pass into the running total.
+        fn absorb(&mut self, pass: Self) {
+            self.partial.extend(pass.partial);
+            self.unreadable.extend(pass.unreadable);
+        }
+    }
+
+    /// One pass: which batches the store is currently showing incompletely, and
+    /// whether it could be read at all.
+    ///
+    /// Runs on the reader's thread, so everything it returns is `Send`.
+    fn incomplete_batches<S: EventStore>(store: &S, types: &[String], batch: usize) -> Sightings {
         let seen: Vec<SequencedEvent> = match crate::block_on(happenstance_core::collect(
             store.read(&Query::all(), ReadOptions::new()),
         )) {
             Ok(events) => events,
-            Err(err) => return std::vec![format!("a concurrent read failed: {err}")],
+            Err(err) => {
+                return Sightings {
+                    partial: Vec::new(),
+                    unreadable: std::vec![format!("{err}")],
+                };
+            }
         };
 
-        types
-            .iter()
-            .filter(|name| {
-                let count = seen
-                    .iter()
-                    .filter(|event| event.event_type().as_str() == name.as_str())
-                    .count();
-                count != 0 && count != batch
-            })
-            .cloned()
-            .collect()
+        Sightings {
+            partial: types
+                .iter()
+                .filter(|name| {
+                    let count = seen
+                        .iter()
+                        .filter(|event| event.event_type().as_str() == name.as_str())
+                        .count();
+                    count != 0 && count != batch
+                })
+                .cloned()
+                .collect(),
+            unreadable: Vec::new(),
+        }
     }
 }
 
