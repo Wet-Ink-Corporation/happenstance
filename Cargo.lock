@@ -498,6 +498,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "handles-and-quotas"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "happenstance",
+ "happenstance-sqlite",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "happenstance"
 version = "0.2.0-alpha.1"
 dependencies = [
