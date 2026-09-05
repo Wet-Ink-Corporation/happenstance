@@ -174,3 +174,74 @@ exists.
 in the workspace manifest. One line, works under either answer to Option A, and
 gives the reader a door that opens. Not slipped in with this change, because it is
 a manifest edit rather than the security channel the address was given for.
+
+---
+
+## Option A ratified — 2026-09-04
+
+**The repository owner has approved publishing the repository.** Option B landed
+earlier and closed the reporting channel; Option A closes the rest, and it is the
+only option that does. This section records what that decides and what it costs,
+measured rather than estimated.
+
+**What it fixes that B could not.** `repository` resolves, so the link on three
+crates already on the registry — and two more at `0.2.0` — points somewhere. More
+importantly, the `file:line` citations that this project's rendered documentation
+is *built out of* become followable. A crate whose rustdoc cites `spec/`,
+`references/adr/` and `standards/` for the reasoning behind essentially every
+non-obvious choice, into a repository nobody can read, is a different product from
+the one that documentation describes.
+
+**What becomes public, counted at `53abda9`:**
+
+| tree | files | lines |
+|---|---:|---:|
+| `.bklg/` | 1,318 | 223,694 |
+| `experiments/` | 459 | 103,778 |
+| `.kb/` | 189 | 31,724 |
+| `references/` | 59 | 26,840 |
+| — of which `references/evaluation/` | 29 | 15,094 |
+| `.redkiln/` (config, process pack, telemetry) | 44 | 6,139 |
+
+About 390,000 lines of process artefact against a library — including this
+remediation's own audit and its record of what was wrong.
+
+**Why the middle path was rejected rather than deferred.** Publishing a subset was
+costed and is worse than it looks: the publishable surface cites the process trees
+**115 times** from `crates/`, `spec/`, `standards/`, `docs/`, `examples/` and the
+READMEs — `experiments/` 64, `references/evaluation/` 32, `.bklg/` 16,
+`.redkiln/` 3. Excluding a tree does not hide it; it converts working citations
+into dangling ones on precisely the pages that exist to show their work. And
+`spec-trace` cites `references/adr/` by line range, so that tree could not be
+excluded at all. Turning 115 citations into dead references to satisfy a privacy
+boundary is the same move as amending a clause to match an implementation.
+
+**Pre-publication sweep, run before the switch rather than after**, because
+publishing a private repository exposes its whole history at once:
+
+- No credential patterns in tracked files — keys, tokens, `BEGIN … PRIVATE KEY`,
+  cloud access ids, Slack tokens.
+- No leaked absolute local paths (`C:\Users\…`, `D:\repos\…`): **zero** tracked
+  files.
+- The owner's personal email appears in **no tracked file**. It is in git commit
+  metadata, which is ordinary for an open repository and is the author's own
+  choice of identity.
+- `.redkiln/telemetry/` is the one tree whose content is not argument. Its records
+  are `{ts, actor, worktree, branch, event}` — session starts and ends. It
+  discloses **working patterns**: which days and hours work happened, over months.
+  Nothing secret; it is simply the only thing here that is data about a person
+  rather than about the software. Filenames carry the actor name.
+
+**The one thing left to decide, and it is small.** Whether `.redkiln/telemetry/`
+ships. Everything else in the exposure table is evidence a reader may want to
+check. Telemetry is the exception, and it is the exception on a different axis —
+not sensitive, but not argument either. Removing it from the published tree costs
+three citations from the publishable surface, which is the smallest severance in
+the table by two orders of magnitude.
+
+**When the repository is public, `SECURITY.md` needs one edit.** Its paragraph
+beginning *"That link does not resolve for everyone"* becomes false and should go,
+leaving the advisory link as the primary channel with `security@wet-ink.net`
+beside it. That edit is deliberately **not** made here: writing that the repository
+is public before it is would be the same class of untrue-but-green claim this
+remediation spent its length removing.
