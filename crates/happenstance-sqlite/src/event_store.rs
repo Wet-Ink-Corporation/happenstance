@@ -299,6 +299,44 @@ impl SqliteEventStore {
     /// and the transaction is not.
     pub const MAX_EVENTS_PER_BATCH: usize = 256;
 
+    /// How many bytes of event payload one statement of a page may accumulate
+    /// before it stops taking rows.
+    ///
+    /// **A row is not a bounded quantity, and the row budget could not say so.**
+    /// Each row of a page owns its `data`, up to
+    /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN), and its `metadata`,
+    /// which `check_ceilings` does not bound at all — so a page bounded only in
+    /// rows is bounded, in bytes, by SQLite's own near-gigabyte blob limit
+    /// rather than by anything this crate states. Measured rather than argued:
+    /// one page of 512 events at the data ceiling peaked at **537,036,800 live
+    /// bytes — 512.2 MiB** — in one buffer before a single row reached the
+    /// caller
+    /// (`experiments/one-connection-latency/results/raw/ceiling-residency.txt`).
+    ///
+    /// **Per statement, which is what the name says and what the bound is.** A
+    /// wide query is several statements merged, so the honest ceiling on one
+    /// page's payload residency is this number times
+    /// [`planned_statement_count`](Self::planned_statement_count) — computable
+    /// by a caller, which is the point of it being public, and stated here
+    /// rather than left to be discovered. The alternative, one budget shared
+    /// across the page, was rejected: the first statement would spend it and
+    /// every later one would be cut to a single row, which turns a wide query
+    /// into a page-per-event replay.
+    ///
+    /// **It is checked after the row is taken**, so a page always makes
+    /// progress. That is not hypothetical tidiness: `metadata` is unbounded, so
+    /// one row can exceed this on its own, and a page that refused it would
+    /// stall the read forever.
+    ///
+    /// Eight maximal payloads. It is a **fact this adapter states**, in the
+    /// sense [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) is one, and not a
+    /// measured optimum: it is large enough that a page of maximal events still
+    /// carries eight of them, and small enough that a page's cost is stated in
+    /// megabytes. Whether the pair of budgets should be stated by the adapter at
+    /// all or asked of the caller is a decision this constant does not make;
+    /// the brief is staged in `.kb/_intake/`.
+    pub const MAX_PAGE_BYTES_PER_STATEMENT: usize = 8 * Self::MAX_EVENT_DATA_LEN;
+
     /// How many index arms one prepared statement carries before the query is
     /// split across several.
     ///
@@ -1374,7 +1412,50 @@ struct ReadCursor {
     finished: bool,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many times **this thread** has taken a read's connection, counted only
+    /// under `cfg(test)`.
+    ///
+    /// The one thing about a lock hold that is neither a duration nor a property of
+    /// the machine is **how many times it is taken**, and it is not observable from
+    /// outside this module: the mutex is private, and a prober racing it from
+    /// another thread would be asserting on the scheduler. CF-33's `Rejects:`
+    /// paragraph rules out the wall-clock alternative for exactly the reason that
+    /// makes this the right instrument.
+    ///
+    /// **Thread-local rather than a process-wide counter**, and that is not a
+    /// detail: a `static AtomicUsize` is shared by every test in the binary, and
+    /// they run in parallel — the first spelling of this read `4` where it meant
+    /// `2`, and would have read differently on the next run. The test that uses it
+    /// drives `fetch_page` on its own thread; in production the same call runs on a
+    /// `spawn_blocking` thread, which is why this could never become a production
+    /// counter without moving somewhere the answer is collected.
+    static PAGE_CONNECTION_ACQUISITIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
 impl ReadCursor {
+    /// Takes the connection, and counts having done so when testing.
+    ///
+    /// Every acquisition a read makes goes through here, which is what makes the
+    /// count meaningful: a second `self.connection.lock()` spelled out somewhere
+    /// else would be invisible to it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SqliteEventStoreError::ConnectionPoisoned`] if another thread
+    /// panicked while holding it.
+    fn lock_connection(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, Connection>, SqliteEventStoreError> {
+        #[cfg(test)]
+        PAGE_CONNECTION_ACQUISITIONS.with(|taken| taken.set(taken.get() + 1));
+        self.connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)
+    }
+
     /// Takes ADR-0011's position ceiling, once, and does nothing thereafter.
     ///
     /// # Why this runs on the polling thread rather than on the blocking one
@@ -1400,12 +1481,13 @@ impl ReadCursor {
         if !matches!(self.ceiling, Ceiling::Unsampled) {
             return Ok(());
         }
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
-        let highest: Option<i64> =
-            connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
+        // Scoped so the guard is released before `self.ceiling` is written: the
+        // guard borrows `self`, and holding it across the assignment is
+        // `error[E0506]`. It is also the smaller hold, which is the point.
+        let highest: Option<i64> = {
+            let connection = self.lock_connection()?;
+            connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?
+        };
         // `Ceiling::Empty` is reserved for a table with no rows. Letting a
         // failed decode land there too is the same swallow `head` carried: the
         // read then returns an exhausted first page and the caller sees an empty
@@ -1443,10 +1525,7 @@ impl ReadCursor {
         // sample is not allowed to wait for this thread. See `sample_ceiling`.
         self.sample_ceiling()?;
 
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
+        let connection = self.lock_connection()?;
 
         let Ceiling::At(ceiling) = self.ceiling else {
             return Ok(Page {
@@ -1678,5 +1757,196 @@ impl Stream for SqliteReadStream {
                 ReadState::Done => return Poll::Ready(None),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! What one page of a read costs, measured where the page is built.
+    //!
+    //! [`ReadCursor`] and [`Page`] are private, and deliberately: a page is an
+    //! implementation detail *beneath* `ReadOptions::limit`, and the stream a
+    //! caller gets hands back events rather than pages. So no target in `tests/`
+    //! can see a page boundary at all — it can only observe that a read returned
+    //! everything, which is the property a page of any size satisfies. The two
+    //! ceilings below bound the page and nothing else can see them.
+    //!
+    //! **No clock, and no duration.** The two quantities asserted here are a row
+    //! count and an acquisition count, both exact. CF-33 forbids a conformance
+    //! rule to assert on an operation count, and this is not one — it is the
+    //! adapter's own unit test, and the count is what makes the ceiling a bound
+    //! rather than a number.
+
+    #![allow(clippy::unwrap_used)]
+
+    use happenstance_core::{QueryItem, Tags};
+
+    use super::*;
+
+    /// The two events a page-budget case is built from: `count` of them, each
+    /// carrying `data` bytes of payload and `metadata` bytes beside it.
+    fn seeded(count: usize, data: usize, metadata: usize) -> Vec<Event> {
+        (0..count)
+            .map(|n| {
+                let mut event = Event::new("Sized", vec![b'd'; data])
+                    .unwrap()
+                    .with_tags(Tags::from_pairs([("page", "p1")]).unwrap());
+                if metadata > 0 {
+                    event = event.with_metadata(vec![b'm'; metadata]);
+                }
+                let _ = n;
+                event
+            })
+            .collect()
+    }
+
+    /// A cursor over everything in `store`, in the shape `read` builds.
+    fn cursor(store: &SqliteEventStore, query: &Query) -> ReadCursor {
+        let options = ReadOptions::default();
+        ReadCursor {
+            connection: Arc::clone(&store.connection),
+            runtime: store.runtime.clone(),
+            query: query.clone(),
+            options,
+            resume_from: options.from,
+            remaining: options.limit,
+            ceiling: Ceiling::Unsampled,
+            finished: false,
+        }
+    }
+
+    /// The payload bytes one page actually holds.
+    fn resident(page: &Page) -> usize {
+        page.rows
+            .iter()
+            .map(|event| {
+                event.event.data().len()
+                    + event
+                        .event
+                        .metadata()
+                        .map_or(0, happenstance_core::bytes::Bytes::len)
+            })
+            .sum()
+    }
+
+    /// A page is bounded in **bytes**, not only in rows.
+    ///
+    /// `PAGE_SIZE` is a row count, and a row is not a bounded quantity: each one
+    /// owns its `data`, up to [`SqliteEventStore::MAX_EVENT_DATA_LEN`], and its
+    /// `metadata`, which this store does not bound at all. At the shipped 512
+    /// rows and the shipped data ceiling one page peaks at **512.2 MiB** in a
+    /// single buffer before one row reaches the caller — measured, at
+    /// `experiments/one-connection-latency/results/raw/ceiling-residency.txt`.
+    ///
+    /// Under, at, and one over the budget, in rows of exactly one eighth of it.
+    /// The middle case is the one a row budget alone cannot express.
+    #[tokio::test]
+    async fn a_page_stops_at_the_byte_budget_rather_than_at_the_row_budget() {
+        let per_row = SqliteEventStore::MAX_EVENT_DATA_LEN;
+        let fits = SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT / per_row;
+        let query = Query::all();
+
+        for (seed, expected_first_page, expected_exhausted) in [
+            (fits - 1, fits - 1, true),
+            (fits, fits, false),
+            (fits + 1, fits, false),
+        ] {
+            let store = SqliteEventStore::open_in_memory().unwrap();
+            store.append(&seeded(seed, per_row, 0), None).await.unwrap();
+
+            let page = cursor(&store, &query).fetch_page().unwrap();
+            assert_eq!(
+                page.rows.len(),
+                expected_first_page,
+                "a log of {seed} rows of {per_row} B produced a first page of {} rows",
+                page.rows.len()
+            );
+            assert!(
+                resident(&page) <= SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT,
+                "a log of {seed} rows produced a page of {} B, over the {} B budget",
+                resident(&page),
+                SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT
+            );
+            assert_eq!(
+                page.exhausted, expected_exhausted,
+                "a log of {seed} rows reported exhausted = {}",
+                page.exhausted
+            );
+        }
+    }
+
+    /// A row larger than the whole budget still makes progress.
+    ///
+    /// The budget is applied **after** the row is taken, which is what keeps a
+    /// page from being empty and the read from stalling forever. The row that
+    /// reaches this case is not exotic: `check_ceilings` bounds `data` and does
+    /// **not** bound `metadata` at all — AE-4 — so metadata is the quantity that
+    /// can exceed the page budget on its own.
+    #[tokio::test]
+    async fn one_row_over_the_whole_budget_still_makes_progress() {
+        let oversized = SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT + 1;
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        store.append(&seeded(2, 1, oversized), None).await.unwrap();
+
+        let mut cursor = cursor(&store, &Query::all());
+        let first = cursor.fetch_page().unwrap();
+        assert_eq!(
+            first.rows.len(),
+            1,
+            "a row bigger than the budget must still be yielded, one at a time"
+        );
+        assert!(!first.exhausted, "there is a second row to come");
+
+        cursor.advance(&first);
+        let second = cursor.fetch_page().unwrap();
+        assert_eq!(second.rows.len(), 1, "the second row followed the first");
+    }
+
+    /// The connection is taken per **statement**, not per page.
+    ///
+    /// `PAGE_SIZE`'s doc comment said *"one `spawn_blocking` hop"* while the code
+    /// took the mutex once and held it across the selectivity lookup, every chunk
+    /// of the plan, and the merge. On a query wide enough to be several
+    /// statements that is `ceil(arms / 400)` statements' worth of held mutex, and
+    /// every `append` sharing the handle waits behind all of it: measured at
+    /// 640.7 ms held against 1.7 ms waited, a 371x asymmetry
+    /// (`experiments/one-connection-latency/results/raw/page-lock-hold.txt`).
+    ///
+    /// The count is exact rather than a bound: the ceiling sample, the
+    /// selectivity lookup, and one acquisition per planned statement. Asserting
+    /// equality is what makes this reject *both* wrong implementations — one
+    /// acquisition for the whole page, and one for the whole read.
+    #[tokio::test]
+    async fn a_page_takes_the_connection_once_per_statement() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+
+        // Wide enough that the arm partition genuinely splits: the width is
+        // computed from the public ceiling rather than guessed, so the test
+        // follows the constant if it moves.
+        let items = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT * 2 + 1;
+        let query = Query::from_items((0..items).map(|n| {
+            QueryItem::new(
+                Vec::<String>::new(),
+                Tags::from_pairs([("item", &format!("i{n}")[..])]).unwrap(),
+            )
+            .unwrap()
+        }))
+        .unwrap();
+        let statements = SqliteEventStore::planned_statement_count(&query);
+        assert!(statements > 1, "the fixture must cross the arm width");
+
+        store.append(&seeded(1, 1, 0), None).await.unwrap();
+
+        PAGE_CONNECTION_ACQUISITIONS.with(|taken| taken.set(0));
+        let _ = cursor(&store, &query).fetch_page().unwrap();
+        let taken = PAGE_CONNECTION_ACQUISITIONS.with(std::cell::Cell::get);
+
+        assert_eq!(
+            taken,
+            2 + statements,
+            "one page of a {statements}-statement plan took the connection {taken} times; \
+             the ceiling sample and the selectivity lookup are one each, and every statement \
+             of the plan is one more"
+        );
     }
 }
