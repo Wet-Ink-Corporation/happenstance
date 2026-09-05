@@ -308,13 +308,20 @@
 //! out.** This crate depends on `happenstance-core` with `std`, `memory` and
 //! `conformance` on. Cargo's resolver deliberately does not unify a
 //! dev-dependency's features into `cargo build` and does unify them into
-//! `cargo test`, so your `src/` compiles against a strictly larger contract crate
-//! whenever the suite is in the graph. Name a `memory`- or `std`-gated item in a
-//! helper — `MemoryEventStore`, say — and both of your own commands stay green
-//! while the `error[E0432]` waits for whoever adds your adapter to an
-//! application. Build your library the way they will, `cargo build -p
-//! your-adapter` with no `--all-targets`, before you tag a release. This crate is
-//! a dev-dependency and stays one.
+//! `cargo test`, so your `src/` compiles against a larger contract crate
+//! whenever the suite is in the graph.
+//!
+//! **It bites the population CF-20 exists for and nobody else**, which is why it
+//! is easy to ship: the gap is only a gap if you wrote `default-features =
+//! false`, because otherwise `std` and `memory` are already yours. If you did —
+//! the `no_std` or `wasm32` author — then naming a `memory`-gated item in a
+//! helper, `MemoryEventStore`, say, is green under `cargo test` and
+//! `error[E0432]: unresolved import happenstance_core::MemoryEventStore` under
+//! `cargo build`. Measured in this repository against
+//! `examples/outside-projection-adapter`, not reasoned from the manual. Build
+//! your library the way a consumer will — `cargo build -p your-adapter`, no
+//! `--all-targets` — before you tag a release. This crate is a dev-dependency
+//! and stays one.
 //!
 //! **2. Implement `ProjectionStore` for your store, in `src/`.**
 //!

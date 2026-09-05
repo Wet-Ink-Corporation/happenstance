@@ -1055,10 +1055,17 @@ not the same as what a user needed to be told.
   Inward, the page said nothing about the features its own dev-dependency turns
   on. Cargo does not unify a dev-dependency's features into `cargo build` and
   does unify them into `cargo test`, so an adapter's `src/` compiles against a
-  strictly larger `happenstance-core` whenever the suite is in the graph: name a
-  `memory`-gated item in a helper and both of the author's commands stay green
-  while the `error[E0432]` waits for their first consumer. The page now says so,
-  and says which command to run instead.
+  larger `happenstance-core` whenever the suite is in the graph. The page now
+  says so, says which command to run instead, and says who it bites: only an
+  author who wrote `default-features = false` — the `no_std` or `wasm32`
+  population CF-20 exists for — because otherwise `std` and `memory` are already
+  theirs. That qualification is measured rather than reasoned. Adding a
+  `MemoryEventStore` import to `examples/outside-projection-adapter`'s `src/`
+  with `default-features = false` on its dependency gives
+  `error[E0432]: unresolved import happenstance_core::MemoryEventStore` under
+  `cargo build -p outside-projection-adapter` and a green
+  `cargo test -p outside-projection-adapter --no-run`; without that flag both are
+  green, and the first draft of this entry did not know it.
 
   `cargo xtask lint-pages` gains **`feature_cost_is_stated`**, and it derives
   every requirement rather than restating one. What `conformance` implies is read
