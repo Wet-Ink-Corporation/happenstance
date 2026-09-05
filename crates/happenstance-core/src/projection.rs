@@ -827,3 +827,121 @@ mod tests {
         accepts_the_bare_flavour::<Witness>();
     }
 }
+
+/// The trait-level doc block, read as text because it is published on **two**
+/// pages.
+///
+/// The same mechanism as `store.rs`'s module of this name, and the same defect:
+/// `#[trait_variant::make(SendProjectionStore: Send)]` rebuilds the derived trait
+/// with `..tr.clone()`, so every `///` line above the derivation is rendered
+/// verbatim on `SendProjectionStore`'s page too. `SendProjectionStore` has no doc
+/// comment of its own, so the copying is load-bearing — `missing_docs` is what
+/// would notice it stopping — and the sentences therefore have to be true on
+/// whichever page a reader opened.
+///
+/// The extractor is duplicated from `store.rs` rather than shared: sharing it
+/// would put a test-only module in the crate root, which is the file
+/// `happenstance`'s `contract_surface.rs` derives every gate from.
+#[cfg(test)]
+mod derived_flavour_doc {
+    #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
+
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// This file's own source. The doc block is the deliverable, so it is read
+    /// rather than trusted.
+    const SOURCE: &str = include_str!("projection.rs");
+
+    /// The derivation whose expansion copies the block above it onto a second page.
+    const DERIVATION: &str = "#[trait_variant::make(SendProjectionStore: Send)]";
+
+    /// The two flavours, in the link form a reader can click from either page.
+    const FLAVOURS: [&str; 2] = ["[`ProjectionStore`]", "[`SendProjectionStore`]"];
+
+    /// The `///` lines the derivation copies, marker removed and fences dropped.
+    fn copied_prose() -> Vec<&'static str> {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let make = lines
+            .iter()
+            .position(|line| line.trim_end() == DERIVATION)
+            .expect("the derivation that copies this block onto the second page");
+        let start = lines[..make]
+            .iter()
+            .rposition(|line| {
+                !(line.starts_with("///") || line.starts_with("//") || line.starts_with("#["))
+            })
+            .map_or(0, |index| index + 1);
+        let mut fenced = false;
+        lines[start..make]
+            .iter()
+            .filter_map(|line| {
+                let text = line.strip_prefix("///")?;
+                let text = text.strip_prefix(' ').unwrap_or(text);
+                if text.trim_start().starts_with("```") {
+                    fenced = !fenced;
+                    return None;
+                }
+                if fenced { None } else { Some(text) }
+            })
+            .collect()
+    }
+
+    /// The copied prose in blank-line-separated paragraphs.
+    fn paragraphs() -> Vec<String> {
+        copied_prose()
+            .split(|line| line.is_empty())
+            .filter(|block| !block.is_empty())
+            .map(|block| block.join(" "))
+            .collect()
+    }
+
+    /// A paragraph that distinguishes the flavours names them; it does not point.
+    #[test]
+    fn no_paragraph_tells_the_flavours_apart_by_deixis() {
+        /// Pointers that resolve against the page rather than against a name.
+        const DEIXIS: [&str; 6] = [
+            "this trait",
+            "this is",
+            "this flavour",
+            "this one",
+            "the one to use",
+            "instead",
+        ];
+        for paragraph in paragraphs() {
+            let lower = paragraph.to_lowercase();
+            if !lower.contains("send") {
+                continue;
+            }
+            for pointer in DEIXIS {
+                assert!(
+                    !lower.contains(pointer),
+                    "{DERIVATION} copies this paragraph verbatim onto \
+                     `SendProjectionStore`, where {pointer:?} points at the wrong \
+                     trait. Name the flavour: {paragraph}"
+                );
+            }
+        }
+    }
+
+    /// Both flavours are named, in link form, in the prose a reader lands on.
+    #[test]
+    fn the_block_names_both_flavours_in_link_form() {
+        let prose = copied_prose().join("\n");
+        for flavour in FLAVOURS {
+            let named = if flavour == FLAVOURS[0] {
+                // `[`ProjectionStore`]` is a substring of `[`SendProjectionStore`]`,
+                // so the bare flavour counts only where `Send` does not precede it.
+                prose.matches(flavour).count() > prose.matches(FLAVOURS[1]).count()
+            } else {
+                prose.contains(flavour)
+            };
+            assert!(
+                named,
+                "the block is rendered on both pages, so it must name {flavour} \
+                 rather than leave a reader to infer which trait they are on. \
+                 Prose as read:\n{prose}"
+            );
+        }
+    }
+}
