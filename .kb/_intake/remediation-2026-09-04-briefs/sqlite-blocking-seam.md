@@ -16,7 +16,7 @@ is the defect.** `crates/happenstance-sqlite/src/projection_store.rs:97-98`:
 
 The event store did not apply it. Three of `SendEventStore`'s four methods take a
 blocking `std::sync::Mutex` and run `rusqlite` inline, on whatever thread polled
-them (`event_store.rs:1107-1110`, `:1138-1141`, `:1159-1162`).
+them (`event_store.rs:1202-1205`, `:1138-1141`, `:1159-1162`).
 
 **It is measured, with a control.** `experiments/one-connection-latency/results/raw/reactor-stall.txt`,
 one `current_thread` runtime, a 1 ms `tokio::time::interval`, a second connection
@@ -60,7 +60,7 @@ crates.io page:
 Only the second clause is true.
 
 **And the crate states the principle against itself**, on the very field that
-carries the handle (`event_store.rs:181-187`), explaining why §9 rejected inline:
+carries the handle (`event_store.rs:214-220`), explaining why §9 rejected inline:
 
 > The rejected alternative was to run the statement inline on the calling
 > thread when no runtime is found. … it keeps blocking work on an executor's
@@ -88,7 +88,7 @@ the record rather than discovered by a test.
 
 ### The write path runs inline — by omission, not by decision
 
-`append` (`event_store.rs:1086-1121`) contains no `.await` anywhere:
+`append` (`event_store.rs:1181-1216`) contains no `.await` anywhere:
 
 ```rust
 let recorded_at = now();
@@ -214,7 +214,7 @@ signature, not in the seam.** The projection store's seam is cheap because
 moves it into the closure and the only clone in it is `let id = id.clone();`
 (`projection_store.rs:605-609`). `SendEventStore::append` takes
 `events: &[Event]` and `condition: Option<&AppendCondition>`
-(`event_store.rs:1086-1090`). `spawn_blocking` demands `'static`, so the seam has
+(`event_store.rs:1181-1185`). `spawn_blocking` demands `'static`, so the seam has
 to buy ownership the port declined to give it. The two modules are not the same
 problem wearing two hats; one was handed ownership and one was not.
 
@@ -238,14 +238,14 @@ every `Cow::Borrowed` clones as two words. A `Vec`-backed payload adds **+1 on
 the first clone only** (`bytes` 1.x promotes to a shared header).
 
 Extrapolated to this adapter's declared ceilings — `MAX_EVENTS_PER_BATCH = 256`,
-`MAX_TAGS_PER_EVENT = 128` (`event_store.rs:252`, `:261`) — a worst-case owned
+`MAX_TAGS_PER_EVENT = 128` (`event_store.rs:285`, `:261`) — a worst-case owned
 batch is ≈ 33,280 allocations and ≈ 1.0 MB of copied type/tag data per append.
 **Extrapolated, not measured: the experiment stops at 64 tags.** The common DCB
 append — one event, a handful of owned tags — is 5 to 10 allocations.
 
 ### The captured `Handle` has one door in and no door out
 
-`event_store.rs:369-375`:
+`event_store.rs:440-446`:
 
 ```rust
 fn with_store_id(connection: Connection, store_id: StoreId) -> Self {
@@ -453,7 +453,7 @@ connection, which is a larger change than it sounds.
 writer does not block readers (`holder.rs:15-22`); the only reason these
 `SELECT`s serialise is that **the adapter** serialises them. *Costs a caller:*
 one extra file descriptor and connection per store. *Costs an adapter author:*
-the store must carry an origin it does not have — `event_store.rs:159-188` has
+the store must carry an origin it does not have — `event_store.rs:263-293` has
 three fields and none is a path, which is the *same* missing field that
 `SqliteFixture::connect` works around by calling `SqliteEventStore::open(&self.path)`
 itself (`tests/support/mod.rs:208-210`). *Semver:* additive if it arrives as a
@@ -468,7 +468,7 @@ isolation from it.
 runtime and served from another `append`s and `head`s perfectly (they run inline)
 and every `read` hangs or yields one `Worker` item and terminates, while
 `NoRuntime` — the variant documented for exactly this — is unreachable
-(`event_store.rs:944-950`). In `projection_store.rs` the same capture gates
+(`event_store.rs:1039-1045`). In `projection_store.rs` the same capture gates
 *every write*: a checkpoint that never advances, reported as `Worker(JoinError)`,
 which a projection runner reads as transient and retries forever. *Costs an
 adapter author:* nothing. *Semver:* none. *Forecloses:* nothing today; after
@@ -612,7 +612,7 @@ predicts, H2 is a constructor solving nothing.
 * R2 does not remove the wait, only reschedules it, and it needs a waker
   registration `SqliteReadStream` does not have — so its cost is a rewrite of a
   state machine whose current shape is defended by two named failing tests
-  (`event_store.rs:1297-1301`).
+  (`event_store.rs:1392-1396`).
 * R3 is entangled with a decision this record does not own. It needs the store to
   carry its path — which is the same missing field the J-3+J-4 `Clone`/`connect()`
   question needs, and that question has a different owner, a different semver

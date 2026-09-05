@@ -34,7 +34,7 @@ Decision record: **AE-4-metadata-floor**. Source entry: `references/evaluation/r
 
 So a store that cannot physically hold an event *because of its metadata* has two moves, and both are non-conformant: `AppendError::Store` is forbidden by VT-25, and `StoreLimit::EventDataLen` is a lie whose `guaranteed_minimum()` hands the caller 65,536 — a number about a different field (`crates/happenstance-core/src/limits.rs:55-56`, `:72`).
 
-**The corpus asked the "fourth variant?" question three times and never had `metadata` in the candidate set.** `crates/happenstance-core/src/limits.rs:47-51`, `crates/happenstance-testkit/src/contract.rs:287-290`, `crates/happenstance-sqlite/src/event_store.rs:270-272`, and `references/adr/0015-validated-identifiers-and-store-limits.md:552-557` all reason about `QueryItems` and conclude — correctly — that a query-item refusal is not an append outcome. None of the four considers `metadata`, which *is* an append outcome.
+**The corpus asked the "fourth variant?" question three times and never had `metadata` in the candidate set.** `crates/happenstance-core/src/limits.rs:47-51`, `crates/happenstance-testkit/src/contract.rs:287-290`, `crates/happenstance-sqlite/src/event_store.rs:303-305`, and `references/adr/0015-validated-identifiers-and-store-limits.md:552-557` all reason about `QueryItems` and conclude — correctly — that a query-item refusal is not an append outcome. None of the four considers `metadata`, which *is* an append outcome.
 
 **One shipping adapter has already paid for the gap in writing.** `crates/happenstance-cloudflare/src/event_store.rs:212-217` derives its `data` ceiling by listing what shares the row:
 
@@ -134,9 +134,9 @@ pub enum StoreLimit {
 
 **`guaranteed_minimum` is total and returns `usize`, not `Option<usize>`** (`crates/happenstance-core/src/limits.rs:69-76`). That is load-bearing for the options below: **a new variant cannot exist without a number**. Its doc (`:64-68`) says the number is how a caller tells *"this store is stricter than the contract allows" — a conformance bug —* from *"this payload was always going to be too big to replicate"*.
 
-**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:614-635`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:489-514`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
+**Neither shipping adapter checks metadata.** `happenstance-sqlite`'s `check_ceilings` (`crates/happenstance-sqlite/src/event_store.rs:685-706`) tests `events.len()`, `event.data().len()` and `event.tags().len()`. `happenstance-cloudflare`'s (`crates/happenstance-cloudflare/src/event_store.rs:489-514`) tests the same three against `Ceilings::DECLARED` (`:234-238`: `event_data_len: 1024 * 1024`, `tags_per_event: 1024`, `events_per_batch: 1024`).
 
-**And `happenstance-sqlite` has already written down the opposite of the shared-bound answer**, in a `pub const`'s documentation — `crates/happenstance-sqlite/src/event_store.rs:236-239`:
+**And `happenstance-sqlite` has already written down the opposite of the shared-bound answer**, in a `pub const`'s documentation — `crates/happenstance-sqlite/src/event_store.rs:269-272`:
 
 > The largest `data` payload this store accepts, in **bytes of
 > [`Event::data`]** — not of an encoded row, and not of `data` and
@@ -196,7 +196,7 @@ VT-21's floor and every adapter's declared ceiling apply to `data.len() + metada
 
 - **Costs a caller:** a coupling they did not have. A caller whose payload sits near a store's ceiling now has its accepted size depend on a metadata blob the *typed layer* attaches on their behalf (`crates/happenstance/src/command.rs:359`), which is a payload budget that moves when a codec tag changes length.
 - **Costs an adapter author:** the least code of any option — one addition in an existing comparison — but it makes every already-published number mean something new.
-- **Semver:** type-additive, **behaviourally breaking**, and breaking against text already in the tree. `crates/happenstance-sqlite/src/event_store.rs:236-239` says in a `pub const`'s rustdoc that the number is *"not of `data` and `metadata` together"*, and `StoreLimit::EventDataLen`'s own doc in `happenstance-core` says *"One event's `data` payload"* (`crates/happenstance-core/src/limits.rs:102-103`). Adopting this option makes both false and makes an append that succeeds today fail tomorrow (1,048,576 bytes of `data` plus any metadata). **Of those two, only the second is published** — see the corrected pricing below and in Cost of delay.
+- **Semver:** type-additive, **behaviourally breaking**, and breaking against text already in the tree. `crates/happenstance-sqlite/src/event_store.rs:269-272` says in a `pub const`'s rustdoc that the number is *"not of `data` and `metadata` together"*, and `StoreLimit::EventDataLen`'s own doc in `happenstance-core` says *"One event's `data` payload"* (`crates/happenstance-core/src/limits.rs:102-103`). Adopting this option makes both false and makes an append that succeeds today fail tomorrow (1,048,576 bytes of `data` plus any metadata). **Of those two, only the second is published** — see the corrected pricing below and in Cost of delay.
 
   > **Removed (falsified).** This bullet previously ended *"Free now because nothing
   > is published; not free after 0.1."* `happenstance-core`, `happenstance` and
@@ -216,7 +216,7 @@ VT-21's floor and every adapter's declared ceiling apply to `data.len() + metada
 A new VT clause saying so, plus an obligation that every adapter document how it sizes its *other* declared ceilings to leave metadata room. No change to `limits.rs`, no new variant, no new rule (or one documentation-shaped rule at most).
 
 - **Costs a caller:** nothing to write, and no way to be told. The event that will never fit still arrives as `AppendError::Store` or as a mislabelled `EventDataLen`, so the E2E-42 disappearance (`spec/E2E-CASES.md:1105-1125` — *"a peer that **quarantines** rather than appends: the quarantined event has no local position, is never forwarded, and disappears permanently"*) stays reachable through the channel VT-25 was written to close.
-- **Costs an adapter author:** a paragraph, and an impossible sizing exercise. You cannot size around an unbounded field. Cloudflare's 1 MiB of slack (`event_store.rs:234-236`) is defeated by 1 MiB of metadata beside a 1 MiB payload, and `check_ceilings` at `crates/happenstance-cloudflare/src/event_store.rs:489-514` passes that batch straight through.
+- **Costs an adapter author:** a paragraph, and an impossible sizing exercise. You cannot size around an unbounded field. Cloudflare's 1 MiB of slack (`event_store.rs:267-269`) is defeated by 1 MiB of metadata beside a 1 MiB payload, and `check_ceilings` at `crates/happenstance-cloudflare/src/event_store.rs:489-514` passes that batch straight through.
 - **Semver:** none. It is a specification and documentation change only.
 - **Forecloses:** nothing structurally — it is the "decide later" option, and every other option remains open after it. What it costs is that VT-25's `[FROZEN]` MUST goes on being unsatisfiable for one field, in writing, with a clause acknowledging it.
 

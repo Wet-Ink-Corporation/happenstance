@@ -139,6 +139,8 @@ a note recording that sits in its own sequencing section.
 | `projection-batch-sql-seam.md` | Is `&'static str` the projection batch's final SQL seam, or does the parameterised path get a minted statement type? | **breaking** (landed) / breaking again for the type | soft — the flag already disclaims semver |
 | `testkit-dev-dependency-version-requirement.md` | Does `[workspace.dependencies]` keep its `version` key on the testkit, now that every consumer of it is a dev-dependency? | none | before the first testkit-only bump after `0.2.0` |
 | `timed-assertions-outside-the-testkit.md` | May an adapter's own test target assert on a clock, when CF-33 forbids it to a conformance rule and CF-34 puts performance in a separate harness? | none | not blocking; it is precedent either way |
+| `read-page-budget-rows-bytes-or-caller.md` | Is a read page budgeted in rows, in bytes, or by the caller? | additive (landed) / breaking for a caller-stated knob | `0.2.0` |
+| `sqlite-lane-spec-citation-repoints.md` | **Not a decision — a handoff.** Ten `spec/SPECIFICATION.md` citations this lane's diff moved and was not permitted to edit; one of them fails `spec-trace`. | none | it fails the gate today |
 
 Written by the lane implementing `X-4`, `U-2`, `I-5`, `R-1+J-5` and `R-3`, in the
 same session as the changes they describe, and **without** the author -> two-critic

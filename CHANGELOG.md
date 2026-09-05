@@ -570,6 +570,44 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **A `happenstance-sqlite` read page is bounded in bytes as well as in rows,
+  and it stops holding the connection across the whole page.** `PAGE_SIZE = 512`
+  was the only knob over both, and it is a **row count**, which bounds neither.
+
+  **Residency.** A row is not a bounded quantity: each one owns its `data`, up
+  to `MAX_EVENT_DATA_LEN`, and its `metadata`, which this store does not bound
+  at all. So a page bounded only in rows was bounded, in bytes, by SQLite's
+  near-gigabyte blob limit rather than by anything this crate stated. One page
+  of 512 events at the data ceiling peaked at **537,036,800 live bytes — 512.2
+  MiB** — in one buffer before a single row reached the caller. An operator
+  rebuilding a projection over large events, on a container capped below that,
+  had the process killed with no diagnostic pointing at a read.
+
+  `SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT` is the new budget: **8 MiB**,
+  eight maximal payloads, public so a caller can compute the bound and a test
+  can compute the boundary. It is checked *after* each row is taken, so a page
+  always makes progress — `metadata` is unbounded, so one row can exceed the
+  whole budget by itself. A wide query is several statements merged, so the
+  stated ceiling on one page is this number times `planned_statement_count`.
+
+  **Lock hold.** `PAGE_SIZE`'s own doc said *"one `spawn_blocking` hop"* and the
+  code took the connection mutex once and held it across the selectivity lookup,
+  every statement of the plan, and the merge. Every `append` sharing the handle
+  waited behind all of it: 640.7 ms held against 1.7 ms waited, a **371x**
+  asymmetry, with the sharing appender's p50 untouched at 0.148 ms and its p99
+  at 799.041 ms. Nothing in the median warned anyone. The connection is now
+  taken once per statement, which is sound *because of* ADR-0011's ceiling and
+  not in spite of it: every statement carries `position <= H`, so what commits
+  between two of them is invisible to all of them.
+
+  **What this does not do is pick a different number.** `PAGE_SIZE` is
+  unchanged, and its doc no longer says *"a placeholder until it is measured"* —
+  it has been measured, and the measurement refused to settle it: the aggregate
+  lock hold over a replay scales as `1/PAGE` (2,929.2 s at 64 against 99.1 s at
+  2,048) while residency scales linearly with it, so the two consequences are
+  not co-optimisable by any value of one row count. Whether a read page should
+  be budgeted in rows, in bytes, or by the caller is a decision that adds public
+  surface, and a brief is staged in `.kb/_intake/`.
 - **`happenstance-sqlite` plans a wide query about 33x faster, and the saving is
   taken with the write lock held.** Translating a query into SQL accumulated the
   query's distinct tags into a `Vec<String>` guarded by

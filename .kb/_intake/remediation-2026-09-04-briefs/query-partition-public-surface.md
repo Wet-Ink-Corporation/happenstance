@@ -19,19 +19,19 @@ The lane took the second decision under duress, because the honest fix required 
 
 Two `pub const`s on `SqliteEventStore`, and one `pub fn` reading both.
 
-`crates/happenstance-sqlite/src/event_store.rs:281`:
+`crates/happenstance-sqlite/src/event_store.rs:314`:
 
 ```rust
     pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
 ```
 
-`crates/happenstance-sqlite/src/event_store.rs:308` — **new**:
+`crates/happenstance-sqlite/src/event_store.rs:379` — **new**:
 
 ```rust
     pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = PARAMETER_BUDGET;
 ```
 
-`crates/happenstance-sqlite/src/event_store.rs:326-334` — **changed in what it counts, not in its signature**:
+`crates/happenstance-sqlite/src/event_store.rs:397-405` — **changed in what it counts, not in its signature**:
 
 ```rust
     pub fn planned_statement_count(query: &Query) -> usize {
@@ -66,7 +66,7 @@ So the premise inside `X-1`'s first question — *"once it is no longer the part
 - **Costs a caller:** two numbers to read instead of one, and a caller who wants "will my query fit in one statement" must do arithmetic over both. Nothing forces them to: `planned_statement_count` answers that question directly.
 - **Costs an adapter author:** nothing. Neither constant is on any port.
 - **Semver:** additive today, frozen at `0.2.0`. Two numbers frozen instead of one.
-- **What it buys:** a test can compute the boundary rather than guess at it, which is the reason the arm width was made public in the first place (`event_store.rs:274-276`) and the reason this repository distrusts a merge nothing crosses. `tests/wide_tags.rs` computes its under/at/over cases from `MAX_QUERY_PARAMETERS_PER_STATEMENT` and its narrow-item case from `MAX_QUERY_ARMS_PER_STATEMENT`; with either private, one of those tests goes back to a literal.
+- **What it buys:** a test can compute the boundary rather than guess at it, which is the reason the arm width was made public in the first place (`event_store.rs:307-309`) and the reason this repository distrusts a merge nothing crosses. `tests/wide_tags.rs` computes its under/at/over cases from `MAX_QUERY_PARAMETERS_PER_STATEMENT` and its narrow-item case from `MAX_QUERY_ARMS_PER_STATEMENT`; with either private, one of those tests goes back to a literal.
 
 ### Option 1B — both private, `planned_statement_count` the only public seam
 
@@ -102,7 +102,7 @@ The number is the count of statements that will actually be prepared and run.
 
 - **Costs a caller:** any caller pinning the old number for a wide-tag query sees it change. That caller was pinning a plan the driver refuses; there is no such caller in the workspace, and no such caller anywhere, because the crate is unpublished.
 - **Semver:** none as a signature. A behavioural change to a public function, free today.
-- **Against it:** the function's own doc used to say it is *"the same call the read path makes"* — and it still is. Under 2A that sentence stays true, which is the property the doc was written to protect (`event_store.rs:310-317`): a second `ceil(arms / width)` beside it would agree by arithmetic rather than by construction, and would go on reporting a boundary the read path had stopped taking.
+- **Against it:** the function's own doc used to say it is *"the same call the read path makes"* — and it still is. Under 2A that sentence stays true, which is the property the doc was written to protect (`event_store.rs:381-388`): a second `ceil(arms / width)` beside it would agree by arithmetic rather than by construction, and would go on reporting a boundary the read path had stopped taking.
 
 ### Option 2B — keep it meaning "arms", add a second function
 

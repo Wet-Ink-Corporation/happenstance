@@ -162,7 +162,7 @@ And the successor is already fixed (`:266`): *"If that fires, the successor is `
 
 #### The borrow-binding shape: `happenstance-sqlite`
 
-`crates/happenstance-sqlite/src/event_store.rs:758-779` — `write_batch`, the multi-row insert the falsifier names:
+`crates/happenstance-sqlite/src/event_store.rs:853-874` — `write_batch`, the multi-row insert the falsifier names:
 
 ```rust
 fn write_batch(
@@ -360,7 +360,7 @@ So `EventStore::append`'s `&[Event]` (`crates/happenstance-core/src/store.rs:261
 **Semver class:** `none` today; defers the class to whenever the measurement reports.
 **Forecloses:** nothing. It buys the option and pays for the instrument.
 
-**What the evidence says about its expected outcome:** it depends entirely on which adapter is measured, which is what item 4 exists to force. Against **SQLite** the adapter-side delta is expected to be a null, and that is readable off `event_store.rs:867-876` without running anything: it binds every column from the borrow. Against **`happenstance-cloudflare`** it is not a null by inspection either way — `write_rows` copies payload, metadata and type into owned `SqlValue`s per event, so by-value could move them, and the size of that against a `sql.exec` round trip is unknown. Scheduling this option against SQLite would produce the null; scheduling it against Cloudflare is a real question. **The saving on that axis scales with payload size, not tag count**, so it is a different quantity from the 66x clone finding rather than a larger version of it.
+**What the evidence says about its expected outcome:** it depends entirely on which adapter is measured, which is what item 4 exists to force. Against **SQLite** the adapter-side delta is expected to be a null, and that is readable off `event_store.rs:962-971` without running anything: it binds every column from the borrow. Against **`happenstance-cloudflare`** it is not a null by inspection either way — `write_rows` copies payload, metadata and type into owned `SqlValue`s per event, so by-value could move them, and the size of that against a `sql.exec` round trip is unknown. Scheduling this option against SQLite would produce the null; scheduling it against Cloudflare is a real question. **The saving on that axis scales with payload size, not tag count**, so it is a different quantity from the 66x clone finding rather than a larger version of it.
 
 ### Option B — Keep `&[Event]`; correct the four documentation sites; restate ES-17's falsifier so it names an instrument that could exist; leave the marker where the human puts it
 
