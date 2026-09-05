@@ -33,6 +33,8 @@ related:
   - kb-decision-0012
   - kb-reference-position-visibility-experiment-001
   - kb-open-question-es-17-two-adapter-measurement-001
+  - kb-reference-busy-timeout-margin-001
+  - kb-open-question-adr-0022-falsifiers-fired-001
 source_paths:
   - .kb/_intake/0034-append-condition-experiment-2026-08.md
   - .kb/_intake/0033-adr-0022-append-condition-strategy.md

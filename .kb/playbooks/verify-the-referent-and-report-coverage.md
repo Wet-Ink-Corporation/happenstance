@@ -16,6 +16,8 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-playbook-anchoring-citations-001
   - kb-playbook-declared-page-need-001
+  - kb-playbook-assert-execution-not-discovery-001
+  - kb-governance-what-may-refute-a-finding-001
 source_paths:
   - .kb/_intake/lesson-a-check-that-verifies-the-address-not-the-referent.md
   - xtask/src/spec_trace.rs

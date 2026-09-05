@@ -37,7 +37,18 @@ summary: >-
   "Documentation standards: the page-need discipline," one playbook atom from the docs-that-teach
   initiative; and "Brand identity: the name, the mark, and where it lives," three SD- decisions,
   two reference atoms and two design-tier concept atoms from four staged brand documents, plus a
-  new open question on the unrun trademark search.
+  new open question on the unrun trademark search. The 2026-09-04 wave (`2026-09-04-intake`), the
+  pre-publication review, added ADR-0037 (phase 12) to the ports domain along with three new
+  reference atoms (event-clone allocation cost, the busy-timeout margin at 64 contenders, and the
+  testkit's own nested-block_on lost-wakeup), a new playbook (assert a test's execution, not its
+  discovery) and a new governance atom (what may refute a finding) — and six new open questions:
+  event metadata's undeclared floor, the read page-size budget, no fixture tolerance for transient
+  contention, the remint-identity precondition being trust-only, incomplete parameter chunking on
+  the query-plan arm axis, and whether ADR-0022's own three falsifiers have fired. It also flipped
+  `kb-open-question-adapter-default-projection-feature-001` to superseded there — resolved by a
+  direct manifest fix in both adapter crates rather than by an answering decision atom — and
+  amended `kb-playbook-anchoring-citations-001` in place with a second dated section rather than
+  moving it, per the merge-over-create bias.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -52,7 +63,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
   - .kb/_governance/integration-waves/2026-09-02-intake
-last_reviewed: 2026-09-02
+  - .kb/_governance/integration-waves/2026-09-04-intake
+last_reviewed: 2026-09-04
 ---
 
 # Domain map
@@ -159,7 +171,11 @@ ninth, `.kb/decisions/0035` and `.kb/decisions/0036`: ADR-0035 exempts `worker` 
 `worker-macros` from `deny.toml`'s `async-trait` ban by name, amending `.kb/decisions/0001`'s
 exemption set from outside; ADR-0036 evaluates PS-2's `[FROZEN]` freeze bar against the real
 adapter set for the first time and declines to freeze `ProjectionStore` at `0.2.0`, shipping it
-instead behind the off-by-default `unstable-projection` feature. The full decision list, including
+instead behind the off-by-default `unstable-projection` feature. The 2026-09-04 wave added a tenth,
+`.kb/decisions/0037`, phase 12: the pre-publication review's MSRV atom, extending the
+`kb-decision-0004` → `kb-decision-0029` amendment lineage by one more link rather than superseding
+either — `0.2.0` turns the 1.97.1 floor from a self-imposed constraint into a promise a published
+consumer relies on, without moving the number. The full decision list, including
 status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated here.
 
 **Reference**
@@ -189,6 +205,21 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
   on this runtime (a Node isolate has no per-isolate cap), and the category finding — no streaming
   entry point for a human-readable payload — reproduces the published cost table exactly. Added
   2026-08-20.
+- [`event-clone-allocations-and-layout-2026-09.md`](../reference/event-clone-allocations-and-layout-2026-09.md)
+  (`kb-reference-event-clone-allocations-001`) — the t+2 allocation cost of `Tags::from_pairs`
+  versus `Tag::from_static`, the `Bytes::clone` first-clone allocation, and the corrected 24-byte
+  `Cow<'static, str>` layout. Added 2026-09-04.
+- [`busy-timeout-margin-2026-09.md`](../reference/busy-timeout-margin-2026-09.md)
+  (`kb-reference-busy-timeout-margin-001`) — at the shipped `CONTENDERS = 64` the busy-timeout
+  margin is 1.3x to 1.4x, not more; fewer cores is not safer and the build profile barely enters,
+  both refuting a plausible prediction. Records `busy > 0`, where the 2026-08-16 append-condition
+  experiment recorded `busy = 0` at the same contender count. Added 2026-09-04.
+- [`nested-block-on-lost-wakeup-2026-09.md`](../reference/nested-block-on-lost-wakeup-2026-09.md)
+  (`kb-reference-nested-block-on-lost-wakeup-001`) — `park`/`unpark` coalesce to one token per
+  thread, so a `block_on` nested inside another inside the testkit's own executor can lose its
+  wakeup and hang past CF-33's no-clock rule, naming no rule at all. A second mechanism with the
+  same signature as the pooled-connection deadlock `spec/SPECIFICATION.md` already records. Added
+  2026-09-04.
 
 **Concepts**
 
@@ -203,6 +234,13 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
   (`kb-governance-referent-not-reasoning-001`) — the discrimination between a rename that may be
   rewritten in place and reasoning that, once a decision stands, is never touched, worked out
   against ADR-0001 through ADR-0007.
+- [`what-may-refute-a-finding.md`](../governance/what-may-refute-a-finding.md)
+  (`kb-governance-what-may-refute-a-finding-001`) — the same precedence ladder applied to
+  auditing rather than authoring: dated evidence may annotate a finding and never refute one, a
+  refutation needs a quoted answering sentence, and an accepted decision's currency is computed
+  against `git log`, not assumed. A distinct verb from `kb-governance-referent-not-reasoning-001`
+  above — how a record may be edited, versus what may overturn a finding about it — not a merge
+  into it. Added 2026-09-04.
 
 **Playbooks**
 
@@ -213,6 +251,13 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
 - [`testing-interleavings-with-cold-futures.md`](../playbooks/testing-interleavings-with-cold-futures.md)
   (`kb-playbook-cold-future-hand-polling-001`) — hand-polling two cold futures out of order to
   make a conformance rule observe a specific interleaving with no executor, thread or clock.
+- [`assert-a-tests-execution-not-its-discovery.md`](../playbooks/assert-a-tests-execution-not-its-discovery.md)
+  (`kb-playbook-assert-execution-not-discovery-001`) — a gate check built on `cargo test --list`
+  cannot see a silenced test, since that output is byte-identical with and without `#[ignore]`;
+  the repair asserts on the run's own output. Distinguished from
+  `kb-playbook-verify-referent-report-coverage-001`'s address/referent pairing rather than merged
+  into it — a test suite's discovery and execution are two behaviours of one program, not two ends
+  of one reference. Added 2026-09-04.
 
 **Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
 self-contained list. The ones this domain owns:
@@ -247,7 +292,32 @@ absent runner),
 that gate correctly, and `happenstance-neon`/`happenstance-postgres` still carry
 `default = ["event-store", "projection-store"]` while also naming `happenstance-core`'s
 `unstable-projection` unconditionally in `[dependencies]`, so toggling `default` alone would not
-restore off-by-default there the way it did for `happenstance-sqlite`).
+restore off-by-default there the way it did for `happenstance-sqlite`). **Superseded** 2026-09-03:
+both crates took the `happenstance-sqlite` shape (a gated `projection-store` feature forwarding to
+`happenstance-core/unstable-projection`, the unconditional dependency removed), verified across
+eight feature-combination checks; closed by a direct manifest fix rather than by an answering
+decision atom, since `kb-decision-0036` already commits the port to an off-by-default gate and two
+adapters honouring it settles no fork of its own.
+`kb-open-question-event-metadata-no-floor-001` (added 2026-09-04 — `happenstance-core`'s four
+`MIN_SUPPORTED_*` limits and three-variant `StoreLimit` enum declare no floor for `Event::metadata`
+itself, and no accepted decision states one),
+`kb-open-question-read-page-budget-001` (added 2026-09-04 — `happenstance-sqlite`'s private
+`PAGE_SIZE = 512` is not a port concept, and ADR-0011 settles `read`'s promises without settling
+what a page of it should cost),
+`kb-open-question-testkit-contention-tolerance-001` (added 2026-09-04 — CF-33 forbids a clock, an
+elapsed-time measurement or an operation-count assertion, so a momentarily-busy store and a broken
+one surface as the same failed `Attempt`; no longer hypothetical now that `busy > 0` has been
+observed at the shipped contender count),
+`kb-open-question-remint-precondition-trust-only-001` (added 2026-09-04 — `remint_identity`'s own
+test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker rests on a
+same-process assertion rather than the cross-instance one its text describes),
+`kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter
+budget is enforced on `write_tag_rows`'s insert path but not proven never to be hit on the
+400-arm-per-statement query-chunking path),
+`kb-open-question-adr-0022-falsifiers-fired-001` (added 2026-09-04 — two of ADR-0022's own three
+named re-open conditions have fired and the third cannot fire as written, and nobody has yet
+decided whether the decision is superseded, re-opened, or ratified as still correct with the
+firings recorded against it).
 
 ## The typed layer: decision models, codecs, and payload evolution
 

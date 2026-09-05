@@ -26,6 +26,7 @@ related:
   - kb-playbook-cold-future-hand-polling-001
   - kb-decision-0010
   - kb-decision-0034
+  - kb-open-question-testkit-contention-tolerance-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - references/adr/0013-position-assignment-and-visibility.md

@@ -22,6 +22,7 @@ related:
   - kb-open-question-dcb-no-published-format-001
   - kb-open-question-human-readable-encoding-limits-001
   - kb-reference-wf-11-memory-ceiling-verdict-001
+  - kb-reference-event-clone-allocations-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
   - references/adr/0016-the-wire-format.md

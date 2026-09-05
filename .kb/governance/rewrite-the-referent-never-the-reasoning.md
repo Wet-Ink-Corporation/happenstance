@@ -29,6 +29,8 @@ related:
   - kb-decision-0031
   - kb-decision-0023
   - kb-playbook-declared-page-need-001
+  - kb-governance-what-may-refute-a-finding-001
+  - kb-decision-0037
 source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md

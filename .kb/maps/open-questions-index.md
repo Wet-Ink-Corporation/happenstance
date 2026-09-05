@@ -44,7 +44,19 @@ summary: >-
   own `default`, and `happenstance-neon`/`happenstance-postgres` have not followed) and
   kb-open-question-trademark-search-001 (no trademark search on "happenstance" has been run, and it
   gates filing, registration and physical application of the brand identity), the latter opening
-  this map's first "Brand identity" section.
+  this map's first "Brand identity" section. The 2026-09-04 wave (`2026-09-04-intake`), the
+  pre-publication review, flipped kb-open-question-adapter-default-projection-feature-001 to
+  Superseded — both adapters took happenstance-sqlite's gated-feature shape, closed by a direct
+  manifest fix rather than by an answering decision atom — and added six new questions:
+  kb-open-question-event-metadata-no-floor-001 (Event::metadata has no declared floor among
+  happenstance-core's limits), kb-open-question-read-page-budget-001 (happenstance-sqlite's
+  PAGE_SIZE is a private constant, not a port promise), kb-open-question-testkit-contention-tolerance-001
+  (the fixture contract has no declared tolerance for a momentarily-busy store, and busy > 0 is no
+  longer hypothetical), kb-open-question-remint-precondition-trust-only-001 (remint_identity's own
+  test never restores or clones a store), kb-open-question-query-plan-parameter-chunking-001 (the
+  30,000-parameter budget is unproven on the query-chunking arm axis), and
+  kb-open-question-adr-0022-falsifiers-fired-001 (two of ADR-0022's three named re-open conditions
+  have fired and nobody has re-opened it).
 depends_on: []
 related:
   - kb-map-domain-001
@@ -58,7 +70,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
   - .kb/_governance/integration-waves/2026-09-02-intake
-last_reviewed: 2026-09-02
+  - .kb/_governance/integration-waves/2026-09-04-intake
+last_reviewed: 2026-09-04
 ---
 
 # Open-questions index
@@ -285,7 +298,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   sub-question 3 is answered yes: the exemption was minted by the adapter
   that first needed it, the pattern `kb-decision-0034` records, with no
   umbrella ADR over dependency exceptions required.
-- **Open** — [`projection-store-in-adapter-default-features.md`](../open-questions/projection-store-in-adapter-default-features.md)
+- **Superseded** — [`projection-store-in-adapter-default-features.md`](../open-questions/projection-store-in-adapter-default-features.md)
   (`kb-open-question-adapter-default-projection-feature-001`) — ADR-0036
   ships `ProjectionStore` behind off-by-default `unstable-projection`, and
   `happenstance-sqlite` was fixed 2026-09-02 to stop forwarding the gate
@@ -296,7 +309,57 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   in `[dependencies]`, outside any feature — so toggling `default` alone
   would not restore off-by-default there. Owned by the
   `postgres-and-neon-stores` project; forced before either crate's first
-  publish. Added 2026-09-02.
+  publish. Added 2026-09-02. **Resolved 2026-09-03**: both crates took
+  `happenstance-sqlite`'s shape — `default = ["event-store"]`, a
+  `projection-store` feature forwarding to
+  `happenstance-core/unstable-projection`, the unconditional dependency
+  removed — verified across eight feature-combination checks. Closed by a
+  direct manifest fix rather than by an answering decision atom:
+  `kb-decision-0036` already commits the port to an off-by-default gate, and
+  two adapters honouring it settles no fork of its own.
+- **Open** — [`event-metadata-has-no-declared-floor.md`](../open-questions/event-metadata-has-no-declared-floor.md)
+  (`kb-open-question-event-metadata-no-floor-001`) — `happenstance-core`'s
+  four `MIN_SUPPORTED_*` constants and three-variant `StoreLimit` enum name
+  `EventDataLen`, `TagsPerEvent` and `EventsPerBatch`; `Event::metadata` has
+  no declared floor among them, and neither ADR-0003, ADR-0015 nor ADR-0021
+  states one. Added 2026-09-04.
+- **Open** — [`read-page-budget-is-unspecified.md`](../open-questions/read-page-budget-is-unspecified.md)
+  (`kb-open-question-read-page-budget-001`) — `happenstance-sqlite`'s
+  `PAGE_SIZE = 512` is a private implementation constant, not a port
+  concept; ADR-0011 settles what `read` promises without settling what a
+  page of it should cost, and the WF-11 and projection-fan-out reference
+  atoms already carry adjacent figures with no owning question until now.
+  Added 2026-09-04.
+- **Open** — [`no-fixture-tolerance-for-transient-contention.md`](../open-questions/no-fixture-tolerance-for-transient-contention.md)
+  (`kb-open-question-testkit-contention-tolerance-001`) — CF-33 forbids a
+  conformance rule a clock, an elapsed-time measurement or an
+  operation-count assertion, which guarantees a momentarily-busy store and a
+  broken one surface as the same failed `Attempt`; no longer hypothetical
+  now that the 2026-09-03 busy-timeout measurement observed `busy > 0` at
+  the shipped contender count, one launch in seven. What is not decided is
+  whether the fixture contract grows a declared tolerance, and in what
+  shape. Added 2026-09-04.
+- **Open** — [`remint-identity-precondition-is-trust-only.md`](../open-questions/remint-identity-precondition-is-trust-only.md)
+  (`kb-open-question-remint-precondition-trust-only-001`) —
+  `SqliteEventStore::remint_identity`'s own test runs same-file,
+  same-process, and never actually restores or clones a store; VT-6's
+  `[PROVISIONAL]` marker rests on that narrower assertion rather than the
+  cross-instance one its text describes. Added 2026-09-04.
+- **Open** — [`query-plan-parameter-chunking-incomplete.md`](../open-questions/query-plan-parameter-chunking-incomplete.md)
+  (`kb-open-question-query-plan-parameter-chunking-001`) — the
+  30,000-parameter budget is enforced on `write_tag_rows`'s insert path but
+  is not proven never to be hit on the 400-arm-per-statement query-chunking
+  path, a second, independent axis from
+  `kb-open-question-query-union-rule-unowned-001`. Added 2026-09-04.
+- **Open** — [`adr-0022-falsifiers-have-fired.md`](../open-questions/adr-0022-falsifiers-have-fired.md)
+  (`kb-open-question-adr-0022-falsifiers-fired-001`) — ADR-0022 named three
+  conditions under which it would be re-opened; the 2026-09-03
+  pre-publication review found two fired (`busy > 0` observed, and the
+  captured `tokio::Handle` makes `NoRuntime` unreachable by a different
+  route than the one anticipated) and the third unfireable as written.
+  ADR-0022 is accepted and immutable, so a fired falsifier cannot amend it;
+  what is not decided is whether it is superseded, re-opened, or ratified as
+  still correct with the firings recorded against it. Added 2026-09-04.
 
 ## The typed layer: decision models, codecs, and payload evolution
 

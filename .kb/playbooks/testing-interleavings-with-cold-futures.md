@@ -22,6 +22,7 @@ related:
   - kb-decision-0010
   - kb-reference-position-visibility-experiment-001
   - kb-open-question-poll-count-rule-strength-001
+  - kb-reference-nested-block-on-lost-wakeup-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - references/adr/0013-position-assignment-and-visibility.md
