@@ -1,0 +1,35 @@
+# commit:    4a7ca16-dirty
+# date:      2026-09-05
+# toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+# target:    x86_64-pc-windows-msvc
+# profile:   release
+# cpus:      20
+# sqlite:    3.53.2
+group,arm,shape,metric,value,unit,representative
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,median,136703,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p95,228991,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p99,7102463,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,2.603321208889566,x,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,median,52511,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p95,112511,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p99,212351,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,0.3841247083092544,x,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,median,236927,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p95,971263,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p99,7208959,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,1.733151430473362,x,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,4.511949877168593,x,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,median,358911,ns,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p95,409343,ns,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p99,501247,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,median,2557951,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p95,2836479,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p99,2983935,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,ratio-over/raw/same-schema,7.126978554572025,x,true
+cross-adapter/append,memory,owned/256B/3tags/batch-8,median,2101,ns,true
+cross-adapter/append,memory,owned/256B/3tags/batch-8,p95,9207,ns,true
+cross-adapter/append,memory,owned/256B/3tags/batch-8,p99,21711,ns,true
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,median,234111,ns,true
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p95,1004031,ns,true
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p99,7716863,ns,true
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,ratio-over/memory,111.42836744407425,x,true

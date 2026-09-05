@@ -1,0 +1,90 @@
+    Finished `bench` profile [optimized] target(s) in 0.11s
+     Running benches\typed_command.rs (target\release\deps\typed_command-064609ecf0feca62.exe)
+Gnuplot not found, using plotters backend
+Benchmarking command/boundary-size/memory/0
+Benchmarking command/boundary-size/memory/0: Warming up for 3.0000 s
+Benchmarking command/boundary-size/memory/0: Collecting 10 samples in estimated 2.0001 s (1.3M iterations)
+Benchmarking command/boundary-size/memory/0: Analyzing
+command/boundary-size/memory/0
+                        time:   [1.3215 µs 1.3678 µs 1.4335 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking command/boundary-size/sqlite/0
+Benchmarking command/boundary-size/sqlite/0: Warming up for 3.0000 s
+Benchmarking command/boundary-size/sqlite/0: Collecting 10 samples in estimated 2.1190 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/0: Analyzing
+command/boundary-size/sqlite/0
+                        time:   [1.7596 ms 1.8906 ms 2.0822 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking command/boundary-size/memory/10
+Benchmarking command/boundary-size/memory/10: Warming up for 3.0000 s
+Benchmarking command/boundary-size/memory/10: Collecting 10 samples in estimated 2.0010 s (104k iterations)
+Benchmarking command/boundary-size/memory/10: Analyzing
+command/boundary-size/memory/10
+                        time:   [17.314 µs 18.347 µs 19.034 µs]
+Benchmarking command/boundary-size/sqlite/10
+Benchmarking command/boundary-size/sqlite/10: Warming up for 3.0000 s
+Benchmarking command/boundary-size/sqlite/10: Collecting 10 samples in estimated 2.1290 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/10: Analyzing
+command/boundary-size/sqlite/10
+                        time:   [1.8771 ms 1.9661 ms 2.0722 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking command/boundary-size/memory/100
+Benchmarking command/boundary-size/memory/100: Warming up for 3.0000 s
+Benchmarking command/boundary-size/memory/100: Collecting 10 samples in estimated 2.0068 s (13k iterations)
+Benchmarking command/boundary-size/memory/100: Analyzing
+command/boundary-size/memory/100
+                        time:   [129.11 µs 136.66 µs 148.52 µs]
+Benchmarking command/boundary-size/sqlite/100
+Benchmarking command/boundary-size/sqlite/100: Warming up for 3.0000 s
+Benchmarking command/boundary-size/sqlite/100: Collecting 10 samples in estimated 2.1554 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/100: Analyzing
+command/boundary-size/sqlite/100
+                        time:   [2.4082 ms 2.6280 ms 2.7667 ms]
+Benchmarking command/boundary-size/memory/1000
+Benchmarking command/boundary-size/memory/1000: Warming up for 3.0000 s
+Benchmarking command/boundary-size/memory/1000: Collecting 10 samples in estimated 2.0829 s (1320 iterations)
+Benchmarking command/boundary-size/memory/1000: Analyzing
+command/boundary-size/memory/1000
+                        time:   [1.3611 ms 1.4252 ms 1.4877 ms]
+Benchmarking command/boundary-size/sqlite/1000
+Benchmarking command/boundary-size/sqlite/1000: Warming up for 3.0000 s
+Benchmarking command/boundary-size/sqlite/1000: Collecting 10 samples in estimated 2.0433 s (165 iterations)
+Benchmarking command/boundary-size/sqlite/1000: Analyzing
+command/boundary-size/sqlite/1000
+                        time:   [5.8816 ms 6.1662 ms 6.3863 ms]
+
+Benchmarking command/codec-choice/json
+Benchmarking command/codec-choice/json: Warming up for 3.0000 s
+Benchmarking command/codec-choice/json: Collecting 10 samples in estimated 2.0071 s (14k iterations)
+Benchmarking command/codec-choice/json: Analyzing
+command/codec-choice/json
+                        time:   [129.77 µs 143.18 µs 152.65 µs]
+Benchmarking command/codec-choice/cbor
+Benchmarking command/codec-choice/cbor: Warming up for 3.0000 s
+Benchmarking command/codec-choice/cbor: Collecting 10 samples in estimated 2.0033 s (9350 iterations)
+Benchmarking command/codec-choice/cbor: Analyzing
+command/codec-choice/cbor
+                        time:   [162.49 µs 169.75 µs 175.25 µs]
+Benchmarking command/codec-choice/postcard
+Benchmarking command/codec-choice/postcard: Warming up for 3.0000 s
+Benchmarking command/codec-choice/postcard: Collecting 10 samples in estimated 2.0024 s (34k iterations)
+Benchmarking command/codec-choice/postcard: Analyzing
+command/codec-choice/postcard
+                        time:   [51.903 µs 56.476 µs 64.464 µs]
+
+Benchmarking command/retry/uncontended-control
+Benchmarking command/retry/uncontended-control: Warming up for 3.0000 s
+Benchmarking command/retry/uncontended-control: Collecting 10 samples in estimated 2.0039 s (14k iterations)
+Benchmarking command/retry/uncontended-control: Analyzing
+command/retry/uncontended-control
+                        time:   [131.74 µs 138.59 µs 144.81 µs]
+Benchmarking command/retry/loses-once-then-wins
+Benchmarking command/retry/loses-once-then-wins: Warming up for 3.0000 s
+Benchmarking command/retry/loses-once-then-wins: Collecting 10 samples in estimated 2.0027 s (6380 iterations)
+Benchmarking command/retry/loses-once-then-wins: Analyzing
+command/retry/loses-once-then-wins
+                        time:   [264.07 µs 286.75 µs 308.50 µs]
+

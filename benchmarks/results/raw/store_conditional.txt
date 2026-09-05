@@ -1,0 +1,134 @@
+    Finished `bench` profile [optimized] target(s) in 0.11s
+     Running benches\store_conditional.rs (target\release\deps\store_conditional-6f06d5c1931ba3b3.exe)
+Gnuplot not found, using plotters backend
+Benchmarking conditional/guard-shape/memory/guard/selects-one/1000
+Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Collecting 10 samples in estimated 5.0000 s (274M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Analyzing
+conditional/guard-shape/memory/guard/selects-one/1000
+                        time:   [20.219 ns 20.987 ns 22.000 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Collecting 10 samples in estimated 5.0004 s (531k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Analyzing
+conditional/guard-shape/sqlite/guard/selects-one/1000
+                        time:   [8.4396 µs 9.1200 µs 10.122 µs]
+Benchmarking conditional/guard-shape/memory/guard/selects-all/1000
+Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Collecting 10 samples in estimated 5.0000 s (229M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Analyzing
+conditional/guard-shape/memory/guard/selects-all/1000
+                        time:   [19.563 ns 20.750 ns 21.811 ns]
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Collecting 10 samples in estimated 5.0005 s (485k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Analyzing
+conditional/guard-shape/sqlite/guard/selects-all/1000
+                        time:   [8.5903 µs 9.0269 µs 9.5977 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0000 s (175M iterations)
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Analyzing
+conditional/guard-shape/memory/guard/two-tag-intersection/1000
+                        time:   [19.820 ns 20.825 ns 21.736 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0084 s (19k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Analyzing
+conditional/guard-shape/sqlite/guard/two-tag-intersection/1000
+                        time:   [249.72 µs 269.67 µs 288.69 µs]
+Benchmarking conditional/guard-shape/memory/guard/selects-one/10000
+Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Collecting 10 samples in estimated 5.0000 s (232M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Analyzing
+conditional/guard-shape/memory/guard/selects-one/10000
+                        time:   [19.541 ns 22.588 ns 28.911 ns]
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Collecting 10 samples in estimated 5.0004 s (427k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Analyzing
+conditional/guard-shape/sqlite/guard/selects-one/10000
+                        time:   [9.4737 µs 10.354 µs 11.863 µs]
+Benchmarking conditional/guard-shape/memory/guard/selects-all/10000
+Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Collecting 10 samples in estimated 5.0000 s (207M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Analyzing
+conditional/guard-shape/memory/guard/selects-all/10000
+                        time:   [20.313 ns 21.703 ns 23.813 ns]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Collecting 10 samples in estimated 5.0004 s (499k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Analyzing
+conditional/guard-shape/sqlite/guard/selects-all/10000
+                        time:   [9.4301 µs 9.8807 µs 10.548 µs]
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.0000 s (236M iterations)
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Analyzing
+conditional/guard-shape/memory/guard/two-tag-intersection/10000
+                        time:   [20.028 ns 21.071 ns 22.103 ns]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Warming up for 3.0000 s
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.1096 s (1540 iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Analyzing
+conditional/guard-shape/sqlite/guard/two-tag-intersection/10000
+                        time:   [3.0034 ms 3.1567 ms 3.4287 ms]
+
+mix k=1 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1
+mix k=1 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1
+Benchmarking conditional/contention/memory/1
+Benchmarking conditional/contention/memory/1: Warming up for 3.0000 s
+Benchmarking conditional/contention/memory/1: Collecting 10 samples in estimated 5.0001 s (3.4M iterations)
+Benchmarking conditional/contention/memory/1: Analyzing
+conditional/contention/memory/1
+                        time:   [1.4798 µs 1.5539 µs 1.6469 µs]
+Benchmarking conditional/contention/sqlite/1
+Benchmarking conditional/contention/sqlite/1: Warming up for 3.0000 s
+Benchmarking conditional/contention/sqlite/1: Collecting 10 samples in estimated 6.0909 s (220 iterations)
+Benchmarking conditional/contention/sqlite/1: Analyzing
+conditional/contention/sqlite/1
+                        time:   [21.234 ms 22.340 ms 23.602 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+mix k=8 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=8 committed=1 rejected=7 refused=0 failed=0 events=1
+mix k=8 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=8 committed=1 rejected=7 refused=0 failed=0 events=1
+Benchmarking conditional/contention/memory/8
+Benchmarking conditional/contention/memory/8: Warming up for 3.0000 s
+Benchmarking conditional/contention/memory/8: Collecting 10 samples in estimated 5.0000 s (2.6M iterations)
+Benchmarking conditional/contention/memory/8: Analyzing
+conditional/contention/memory/8
+                        time:   [1.8495 µs 1.9440 µs 2.1095 µs]
+Benchmarking conditional/contention/sqlite/8
+Benchmarking conditional/contention/sqlite/8: Warming up for 3.0000 s
+Benchmarking conditional/contention/sqlite/8: Collecting 10 samples in estimated 5.5907 s (220 iterations)
+Benchmarking conditional/contention/sqlite/8: Analyzing
+conditional/contention/sqlite/8
+                        time:   [24.514 ms 25.497 ms 27.166 ms]
+mix k=64 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+mix k=64 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
+Benchmarking conditional/contention/memory/64
+Benchmarking conditional/contention/memory/64: Warming up for 3.0000 s
+Benchmarking conditional/contention/memory/64: Collecting 10 samples in estimated 5.0001 s (818k iterations)
+Benchmarking conditional/contention/memory/64: Analyzing
+conditional/contention/memory/64
+                        time:   [6.3258 µs 6.4797 µs 6.6732 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking conditional/contention/sqlite/64
+Benchmarking conditional/contention/sqlite/64: Warming up for 3.0000 s
+Benchmarking conditional/contention/sqlite/64: Collecting 10 samples in estimated 6.8414 s (110 iterations)
+Benchmarking conditional/contention/sqlite/64: Analyzing
+conditional/contention/sqlite/64
+                        time:   [59.664 ms 65.742 ms 70.919 ms]
+

@@ -1,0 +1,30 @@
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\benchmarks)
+    Finished `release` profile [optimized] target(s) in 1.21s
+     Running `target\release\overhead.exe`
+commit:    4a7ca16-dirty
+date:      2026-09-05
+toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+target:    x86_64-pc-windows-msvc
+profile:   release
+cpus:      20
+sqlite:    3.53.2
+
+[overhead/append] paired run: 200 recorded rounds, timer overhead 44ns/sample
+  raw/same-schema              n=200     median=      136703ns p95=      228991ns p99=     7102463ns max=     7708671ns              drift=1.089
+  raw/hand-rolled              n=200     median=       52511ns p95=      112511ns p99=      212351ns max=     7929855ns              drift=1.004
+  happenstance-sqlite          n=200     median=      236927ns p95=      971263ns p99=     7208959ns max=     7917567ns              drift=1.114
+
+[overhead/append] raw/same-schema / raw/hand-rolled = 2.60x
+[overhead/append] raw/hand-rolled / raw/same-schema = 0.38x
+[overhead/append] happenstance-sqlite / raw/same-schema = 1.73x
+[overhead/append] happenstance-sqlite / raw/hand-rolled = 4.51x
+[overhead/replay] paired run: 200 recorded rounds, timer overhead 46ns/sample
+  raw/same-schema              n=200     median=      358911ns p95=      409343ns p99=      501247ns max=      680959ns              drift=1.016
+  happenstance-sqlite          n=200     median=     2557951ns p95=     2836479ns p99=     2983935ns max=     3082239ns              drift=1.017
+
+[overhead/replay] happenstance-sqlite / raw/same-schema = 7.13x
+[cross-adapter/append] paired run: 200 recorded rounds, timer overhead 52ns/sample
+  memory                       n=200     median=        2101ns p95=        9207ns p99=       21711ns max=       46303ns              drift=0.909
+  sqlite                       n=200     median=      234111ns p95=     1004031ns p99=     7716863ns max=     7966719ns              drift=1.064
+
+[cross-adapter/append] sqlite / memory = 111.43x
