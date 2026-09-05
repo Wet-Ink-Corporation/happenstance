@@ -654,31 +654,23 @@ mod serde_impls {
             }
         }
 
-        /// Routes one payload through the branch above, borrowed.
-        ///
-        /// Used by both mirrors below. On the `Option` side it is what keeps an
-        /// `Option<Bytes>` from being cloned to be written; on the `Bytes` side
-        /// it is what lets the *borrowing* mirror name a field type at all,
-        /// since serde's `with` attribute hands the function `&Field` and a
-        /// field of type `&Bytes` would arrive as `&&Bytes`.
-        pub(in crate::event::serde_impls) struct Encode<'a>(
-            pub(in crate::event::serde_impls) &'a Bytes,
-        );
-
-        impl Serialize for Encode<'_> {
-            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serialize(self.0, serializer)
-            }
-        }
-
         /// The same branch for `Option<Bytes>`.
         ///
         /// The `Option` layer stays serde's, rather than being folded into one
         /// impl, because that is what keeps `Some(Bytes::new())` — the JSON
         /// string `""` — apart from `None`, which is `null`.
         pub(super) mod optional {
-            pub(in crate::event::serde_impls) use super::Encode;
-            use super::{Bytes, Deserialize, Deserializer, Serializer};
+            use super::{Bytes, Deserialize, Deserializer, Serialize, Serializer};
+
+            /// Routes one payload through the branch above. Borrowed on the way
+            /// out so an `Option<Bytes>` is not cloned to be written.
+            struct Encode<'a>(&'a Bytes);
+
+            impl Serialize for Encode<'_> {
+                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                    super::serialize(self.0, serializer)
+                }
+            }
 
             /// The same, on the way in, where the bytes must be owned.
             struct Decode(Bytes);
@@ -758,47 +750,13 @@ mod serde_impls {
         metadata: Option<Bytes>,
     }
 
-    /// The borrowing counterpart of [`EventWire`], used on the way **out**.
-    ///
-    /// Same `rename`, same field names in the same order, same payload routing —
-    /// so the bytes are the ones `EventWire` wrote and `Deserialize` still reads.
-    /// Nothing here is owned, so encoding allocates nothing of its own.
-    ///
-    /// This is serde's own idiom for the asymmetry: `Deserialize` must produce
-    /// owned values because it is turning bytes into a value, and `Serialize`
-    /// must not, because it already has one. Writing a single mirror and cloning
-    /// into it is what cost a 64-tag `Event` sixty-five transient allocations per
-    /// encode, and a `SequencedEvent` a hundred and thirty
-    /// (`experiments/event-clone-allocations/results/clone-cost.md`).
-    ///
-    /// The two mirrors have to agree, and nothing in the type system makes them:
-    /// `crates/happenstance-core/tests/wire.rs` round-trips every value through
-    /// both formats, which is what catches a field renamed or reordered on one
-    /// side only.
-    #[derive(Serialize)]
-    #[serde(rename = "Event")]
-    struct EventRef<'a> {
-        event_type: &'a EventType,
-        data: payload::Encode<'a>,
-        tags: &'a crate::Tags,
-        /// `Option<Encode>` rather than a `with` module, and it emits exactly
-        /// what `payload::optional::serialize` emits: `serialize_some(&Encode)`
-        /// or `serialize_none`. `Some(Bytes::new())` and `None` stay apart.
-        ///
-        /// **Field order is load-bearing**, here and above: postcard writes a
-        /// struct as its fields in declaration order with no names at all, so a
-        /// mirror whose fields are reordered is a different wire format that
-        /// still compiles and still round-trips against itself.
-        metadata: Option<payload::Encode<'a>>,
-    }
-
     impl Serialize for Event {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            EventRef {
-                event_type: self.event_type(),
-                data: payload::Encode(self.data()),
-                tags: self.tags(),
-                metadata: self.metadata().map(payload::Encode),
+            EventWire {
+                event_type: self.event_type().clone(),
+                data: self.data().clone(),
+                tags: self.tags().clone(),
+                metadata: self.metadata().cloned(),
             }
             .serialize(serializer)
         }
@@ -840,37 +798,13 @@ mod serde_impls {
         event: Event,
     }
 
-    /// The borrowing counterpart of [`SequencedEventWire`].
-    ///
-    /// `event` is an [`EventRef`] rather than an `&Event`, and the difference is
-    /// the whole of this type's reason to exist. `&Event` would forward to
-    /// `Serialize for Event`, which is correct and is *also* what made this value
-    /// pay the copy twice: once cloning the `Event` into the owned mirror, and
-    /// once more inside the impl that mirror's derive called. Naming the
-    /// borrowing mirror inline removes both, and emits the same bytes because
-    /// `EventRef` does.
-    #[derive(Serialize)]
-    #[serde(rename = "SequencedEvent")]
-    struct SequencedEventRef<'a> {
-        position: SequencePosition,
-        id: crate::identity::EventId,
-        recorded_at: crate::identity::RecordedAt,
-        event: EventRef<'a>,
-    }
-
     impl Serialize for SequencedEvent {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            let event = &self.event;
-            SequencedEventRef {
+            SequencedEventWire {
                 position: self.position,
                 id: self.id,
                 recorded_at: self.recorded_at,
-                event: EventRef {
-                    event_type: event.event_type(),
-                    data: payload::Encode(event.data()),
-                    tags: event.tags(),
-                    metadata: event.metadata().map(payload::Encode),
-                },
+                event: self.event.clone(),
             }
             .serialize(serializer)
         }

@@ -374,27 +374,11 @@ mod serde_impls {
         tags: Tags,
     }
 
-    /// The borrowing counterpart of [`QueryItemWire`], used on the way **out**.
-    ///
-    /// Same `rename`, same field names in the same order. `&[EventType]` and
-    /// `Box<[EventType]>` are both a seq in serde's data model, so the bytes are
-    /// unchanged; what goes is `self.types().into()`, which allocated a boxed
-    /// slice and deep-cloned every `EventType` into it, and `self.tags().clone()`,
-    /// which allocated one `String` per tag. Measured at 64 tags: 139 heap
-    /// operations owned against 11 borrowed, for 516 bytes of postcard
-    /// (`experiments/event-clone-allocations/results/clone-cost.md`).
-    #[derive(Serialize)]
-    #[serde(rename = "QueryItem")]
-    struct QueryItemRef<'a> {
-        types: &'a [EventType],
-        tags: &'a Tags,
-    }
-
     impl Serialize for QueryItem {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            QueryItemRef {
-                types: self.types(),
-                tags: self.tags(),
+            QueryItemWire {
+                types: self.types().into(),
+                tags: self.tags().clone(),
             }
             .serialize(serializer)
         }
@@ -428,25 +412,11 @@ mod serde_impls {
         Items(Vec<QueryItem>),
     }
 
-    /// The borrowing counterpart of [`QueryWire`].
-    ///
-    /// Same `rename` and the same two variants in the same order, so the external
-    /// tag is the same byte. `Items(&'a [QueryItem])` emits the seq that
-    /// `Items(Vec<QueryItem>)` emitted; what goes is `items.to_vec()`, which deep-
-    /// cloned every item — each of which owns a `Tags` and a `Box<[EventType]>` —
-    /// to hand the derive a value it could have borrowed.
-    #[derive(Serialize)]
-    #[serde(rename = "Query")]
-    enum QueryRef<'a> {
-        All,
-        Items(&'a [QueryItem]),
-    }
-
     impl Serialize for Query {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             match self {
-                Self::All => QueryRef::All,
-                Self::Items(items) => QueryRef::Items(items),
+                Self::All => QueryWire::All,
+                Self::Items(items) => QueryWire::Items(items.to_vec()),
             }
             .serialize(serializer)
         }

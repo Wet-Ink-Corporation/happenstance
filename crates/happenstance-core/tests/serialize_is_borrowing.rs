@@ -25,11 +25,36 @@
 //! here as well as there, because the experiment is outside the gate and this is
 //! the half that would silently invalidate every published figure.
 //!
-//! **Two: the shape.** A `Serialize` impl in this crate copies nothing. That is
-//! read out of the source, which is unusual and is the point: the thing being
-//! forbidden is a *construction*, the wire mirrors are private, the bytes never
-//! move, and so no behavioural test in any format can see the difference. A
-//! reviewer is the only other instrument, and reviewers passed this five times.
+//! **Two: the pin.** Four golden vectors, so that a change to the mirrors that
+//! moves a byte arrives as a diff somebody has to look at. `wire.rs` already
+//! pins a bare `Event` in postcard for that reason; these extend it to the four
+//! values whose impls the fix rewrites.
+//!
+//! # What is not here, and where it went
+//!
+//! The fix itself. A borrowing mirror at each of the five sites — same `rename`,
+//! same fields in the same order, same payload routing — was written and
+//! measured on this branch at `2f11eb7`: **140 heap operations → 8** for a
+//! 64-tag `SequencedEvent` in postcard, zero delta at every tag count in both
+//! formats, and byte-identical output across all four values in both formats,
+//! checked against the bytes the previous commit produced.
+//!
+//! It is reverted, and not because anything was wrong with it. It adds 66 lines
+//! to `event.rs` and 30 to `query.rs` above `mod tests`, which renumbers three
+//! test functions that `spec/SPECIFICATION.md` cites by line, past
+//! `spec-trace`'s twelve-line tolerance. Repointing those four citations means
+//! editing the specification, which the lane that measured this was not
+//! permitted to do. The proposal, the diff and the four repoints are in
+//! `.kb/_intake/remediation-2026-09-04-briefs/serialize-borrows-what-it-writes.md`.
+//!
+//! The guard that belongs beside the fix — a check that no `Serialize` impl in
+//! this crate calls `.clone()`, `.cloned()`, `.to_vec()`, `.to_owned()` or
+//! `.into()` — is in that brief rather than here, because it is red without the
+//! fix. It reads the source, which is unusual and is the point: the mirrors are
+//! private, the bytes do not move, and the workspace forbids the `unsafe` a
+//! counting allocator needs, so no behavioural test in any format can tell an
+//! owned mirror from a borrowing one. Review was the only other instrument and
+//! it passed this at five sites.
 
 #![cfg(feature = "serde")]
 
@@ -150,130 +175,6 @@ fn the_two_tag_regimes_encode_to_identical_bytes() {
              variant its tags are in — same consequence as above"
         );
     }
-}
-
-// ---------------------------------------------------------------------------
-// The shape
-// ---------------------------------------------------------------------------
-
-/// The three files that carry a hand-written `Serialize` impl.
-const SOURCES: [(&str, &str); 3] = [
-    ("event.rs", include_str!("../src/event.rs")),
-    ("query.rs", include_str!("../src/query.rs")),
-    ("append.rs", include_str!("../src/append.rs")),
-];
-
-/// Every `impl Serialize for …` body in this crate, as `(file, type, body)`.
-///
-/// A brace counter rather than an indentation match: the bodies contain `}` at
-/// several depths, and the closing brace of an `impl` inside `mod serde_impls`
-/// sits at four spaces — as do several lines inside it.
-fn serialize_bodies() -> Vec<(&'static str, String, String)> {
-    let mut found = Vec::new();
-    for (file, source) in SOURCES {
-        let mut rest = source;
-        while let Some(at) = rest.find("impl Serialize for ") {
-            let after = &rest[at + "impl Serialize for ".len()..];
-            let name: String = after
-                .chars()
-                .take_while(|character| character.is_alphanumeric() || *character == '_')
-                .collect();
-            let open =
-                at + after.find('{').expect("an impl has a body") + "impl Serialize for ".len();
-            let mut depth = 0_i32;
-            let mut end = open;
-            for (offset, character) in rest[open..].char_indices() {
-                match character {
-                    '{' => depth += 1,
-                    '}' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            end = open + offset;
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            found.push((file, name, rest[open..=end].to_owned()));
-            rest = &rest[end..];
-        }
-    }
-    assert!(
-        found.len() >= 8,
-        "the extractor found only {} `Serialize` impls, which is fewer than this \
-         crate has had since phase 4. It has stopped matching rather than the \
-         impls having gone",
-        found.len()
-    );
-    found
-}
-
-/// A `Serialize` impl copies nothing.
-///
-/// The wrong implementation this rejects is the one that shipped through
-/// `0.2.0-alpha.1` at five sites:
-///
-/// ```text
-/// EventWire {
-///     event_type: self.event_type().clone(),
-///     data: self.data().clone(),
-///     tags: self.tags().clone(),
-///     metadata: self.metadata().cloned(),
-/// }
-/// .serialize(serializer)
-/// ```
-///
-/// An owned mirror built from a borrowed value, so that a derive can write it
-/// out — and then, for `SequencedEvent`, the whole `Event` cloned into a second
-/// mirror whose derive calls the first impl and clones all four fields again.
-/// Twice, exactly, at every tag count in both formats.
-///
-/// The fix is serde's own idiom and moves no byte: one owned mirror for
-/// `Deserialize`, where the bytes must become a value, and one **borrowing**
-/// mirror for `Serialize`, with the same `rename`, the same field names in the
-/// same order and the same `with` routing.
-///
-/// Why the source and not the behaviour: the mirrors are private, the output is
-/// unchanged, and the crate forbids the `unsafe` a counting allocator needs. No
-/// behavioural test in any format can tell the two apart. This is the one
-/// instrument left, and the alternative — trusting review — is what let five
-/// sites through.
-#[test]
-fn no_serialize_impl_copies_what_it_was_handed() {
-    /// Each is a way of turning a borrow into an owned value.
-    ///
-    /// `.into()` is here because `self.types().into()` was one of the five: a
-    /// `&[EventType]` becoming a `Box<[EventType]>` reads as a conversion and is
-    /// a deep copy. If a `Serialize` impl ever needs one of these for a reason,
-    /// the reason belongs in a comment beside a narrower assertion, not in a
-    /// widening of this list.
-    const COPIES: [&str; 5] = [
-        ".clone()",
-        ".cloned()",
-        ".to_vec()",
-        ".to_owned()",
-        ".into()",
-    ];
-
-    let mut failures = Vec::new();
-    for (file, name, body) in serialize_bodies() {
-        for copy in COPIES {
-            if body.contains(copy) {
-                failures.push(format!(
-                    "`impl Serialize for {name}` ({file}) calls `{copy}`. A \
-                     `Serialize` impl is handed the value by reference and writes \
-                     it; anything it copies first is a transient allocation that \
-                     produces no output. Encoding one 64-tag `SequencedEvent` this \
-                     way cost 130 of its 140 heap operations on copies — see \
-                     `experiments/event-clone-allocations/results/clone-cost.md`. \
-                     Use a borrowing mirror: same `rename`, same fields, same \
-                     order, same `with`"
-                ));
-            }
-        }
-    }
-    assert!(failures.is_empty(), "\n{}", failures.join("\n\n"));
 }
 
 // ---------------------------------------------------------------------------
