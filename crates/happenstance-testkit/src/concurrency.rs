@@ -1172,7 +1172,7 @@ macro_rules! __emit_concurrency_tokio {
         $(
             #[tokio::test(flavor = "multi_thread")]
             async fn $name() {
-                $crate::concurrency::rules::$name(__conformance_fixture)
+                $crate::__private::concurrency_rules::$name(__conformance_fixture)
                     .await
                     .report(::core::stringify!($name));
             }
@@ -1195,7 +1195,7 @@ macro_rules! __emit_concurrency_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::concurrency::rules::$name(__conformance_fixture))
+                $crate::__private::block_on($crate::__private::concurrency_rules::$name(__conformance_fixture))
                     .report(::core::stringify!($name));
             }
         )*
@@ -1241,7 +1241,7 @@ macro_rules! event_store_concurrency_conformance {
             // for this line: an opaque return type carries only the bounds
             // written on it, so `impl Fixture` would leave every rule's
             // `F::Store: Send` unprovable at the call site.
-            async fn __conformance_fixture() -> impl $crate::concurrency::ConcurrentFixture {
+            async fn __conformance_fixture() -> impl $crate::__private::ConcurrentFixture {
                 $fixture
             }
 

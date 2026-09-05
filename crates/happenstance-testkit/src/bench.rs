@@ -840,7 +840,7 @@ macro_rules! __emit_benchmark_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::bench::scenarios::$name(__benchmark_fixture, __benchmark_params())
+                $crate::__private::benchmark_scenarios::$name(__benchmark_fixture, __benchmark_params())
                     .await
                     .report(::core::stringify!($name));
             }
@@ -861,8 +861,8 @@ macro_rules! __emit_benchmark_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on(
-                    $crate::bench::scenarios::$name(__benchmark_fixture, __benchmark_params())
+                $crate::__private::block_on(
+                    $crate::__private::benchmark_scenarios::$name(__benchmark_fixture, __benchmark_params())
                 )
                 .report(::core::stringify!($name));
             }
@@ -936,7 +936,7 @@ macro_rules! event_store_benchmarks {
             // The workload sizes, hoisted the same way and for the same reason.
             // They are the caller's, because no constant here can be right for
             // both an in-process `Vec` and a file under a write lock.
-            fn __benchmark_params() -> $crate::bench::BenchmarkParams {
+            fn __benchmark_params() -> $crate::__private::BenchmarkParams {
                 $params
             }
 
@@ -952,7 +952,7 @@ macro_rules! event_store_benchmarks {
         $crate::event_store_benchmarks!(
             mod_name = $mod_name,
             emit = $emit,
-            params = $crate::bench::BenchmarkParams::SMOKE,
+            params = $crate::__private::BenchmarkParams::SMOKE,
             fixture = $fixture
         );
     };
@@ -968,7 +968,7 @@ macro_rules! event_store_benchmarks {
         $crate::event_store_benchmarks!(
             mod_name = $mod_name,
             emit = $crate::__emit_benchmark_tokio,
-            params = $crate::bench::BenchmarkParams::SMOKE,
+            params = $crate::__private::BenchmarkParams::SMOKE,
             fixture = $fixture
         );
     };
@@ -976,7 +976,7 @@ macro_rules! event_store_benchmarks {
         $crate::event_store_benchmarks!(
             mod_name = dcb_benchmarks,
             emit = $crate::__emit_benchmark_tokio,
-            params = $crate::bench::BenchmarkParams::SMOKE,
+            params = $crate::__private::BenchmarkParams::SMOKE,
             fixture = $fixture
         );
     };

@@ -634,6 +634,38 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **Every item path an exported `happenstance-testkit` macro expands to now goes
+  through `__private`, and a check keeps it that way.** The onboarding page
+  states the discipline as an absolute — the expansion *"never assumes what you
+  have in scope"* — and the entry two releases below cites that sentence to
+  classify a documentation change as not a MINOR event. It was two-thirds true.
+  Twenty-two paths in four of the five suite macros reached past the module:
+  `$crate::concurrency::ConcurrentFixture`, `$crate::bench::BenchmarkParams`,
+  `$crate::block_on`, and each family's `rules` module.
+
+  What that cost was not a caller writing a wrong path but a caller writing
+  **none**. `happenstance_testkit::event_store_concurrency_conformance!(F::new());`
+  is one line, and it compiled only while `$crate::concurrency::ConcurrentFixture`
+  resolved — so moving `ConcurrentFixture` to the crate root, demoting
+  `pub mod concurrency` to private with selective re-exports, or relocating
+  `BenchmarkParams` was a **major** break of this crate that broke one-line
+  callers, and `cargo-semver-checks` could not see it: it reads item paths, not
+  macro bodies. Widening `__private` is additive and is what makes those
+  relocations cheap again.
+
+  The same rule was broken in the other direction one file over, and is fixed
+  with it: `require_read_through!` named `ProjectionProbe` bare, so it resolved
+  against `projection.rs`'s own imports rather than against the expansion site.
+  It is not exported, so it was latent — but that module's own header argues
+  these three helper macros get copied per family, and the copy is where a bare
+  path becomes an `error[E0405]` inside a macro the author did not write.
+
+  `crates/happenstance-testkit/tests/macro_expansion_paths.rs` is the instrument.
+  Macro names stay exempt and the exemption is mechanical rather than a
+  judgement: `macro_rules!` lives in a flat crate-root textual namespace, so
+  `$crate::__private::__emit_tokio` does not exist and cannot be made to. What
+  those emitter names promise is a separate, open question.
+
 - **`ProjectionProbe::probe_read_through`'s page now records the adapter shape
   it cannot serve.** Documentation only, on an item behind `conformance`, which
   makes no semver promise; the signature is untouched and is not this entry's to

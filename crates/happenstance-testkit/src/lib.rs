@@ -317,6 +317,15 @@
 //! module yourself, and it is the one part of this page that is invisible until
 //! it is missing.
 //!
+//! **Every item path in every exported expansion goes through it**, and that
+//! sentence used to be an aspiration rather than a fact: four of the five suite
+//! macros reached past the module for `concurrency::ConcurrentFixture`,
+//! `bench::BenchmarkParams`, `block_on` and each family's `rules`, which froze
+//! those module paths for callers who had named nothing at all.
+//! `tests/macro_expansion_paths.rs` is what makes it a fact — the only exception
+//! is a *macro* name, because `macro_rules!` lives in a flat crate-root textual
+//! namespace and is not reachable through a module in the first place.
+//!
 //! A green run then means what the rule table below says and no more; a red one
 //! names the rule that broke. `examples/outside-projection-adapter/` in this
 //! repository is an adapter written against this page and nothing else, kept in
@@ -695,7 +704,44 @@ macro_rules! projection_store_conformance {
 
 /// Re-exports the macro expansions need to name, so an adapter is not required
 /// to have this crate in scope under that exact name.
+///
+/// **The complete inventory, not two thirds of one.** It carried `Fixture` and
+/// `ProjectionFixture` while four fixture-shaped types existed, and the four
+/// suite macros outside those two reached around it —
+/// `$crate::concurrency::ConcurrentFixture`, `$crate::bench::BenchmarkParams`,
+/// `$crate::block_on` and each family's `rules` module. Twenty-two paths in all,
+/// every one of them a module layout frozen by a caller who wrote one line and
+/// named nothing. `tests/macro_expansion_paths.rs` is what keeps the inventory
+/// complete; widening it is additive and is what makes those relocations cheap
+/// later rather than a major break of this crate.
+///
+/// Emitter and enumeration *macros* are deliberately absent, and the absence is
+/// mechanical rather than a judgement: `macro_rules!` lives in a flat crate-root
+/// textual namespace, so `$crate::__private::__emit_tokio` does not exist and
+/// cannot be made to. What those names promise is C2-03's open question.
+///
+/// Each `cfg` here is copied from the module it re-exports rather than written
+/// fresh: `concurrency` is absent on `wasm32-unknown-unknown`, `bench` is behind
+/// a feature *and* that target gate, and `model` is behind an optional
+/// dependency that does not build for wasm32. A re-export without the matching
+/// gate is an `error[E0432]` in exactly the configuration the two-flavour design
+/// exists for.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::contract::{Fixture, ProjectionFixture};
+    pub use crate::registry::block_on;
+    // The probe is `happenstance-core`'s, not this crate's, and it is here for
+    // the same reason as everything else: `require_read_through!` named it bare,
+    // so it resolved against `projection.rs`'s own `use` rather than against the
+    // crate the expansion lands in.
+    pub use crate::suite::rules;
+    pub use happenstance_core::ProjectionProbe;
+
+    #[cfg(all(feature = "bench", not(target_arch = "wasm32")))]
+    pub use crate::bench::{BenchmarkParams, scenarios as benchmark_scenarios};
+    #[cfg(not(target_arch = "wasm32"))]
+    pub use crate::concurrency::{ConcurrentFixture, rules as concurrency_rules};
+    #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
+    pub use crate::model::rules as model_rules;
+    pub use crate::projection::rules as projection_rules;
 }
