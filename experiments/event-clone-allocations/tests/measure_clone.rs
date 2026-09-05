@@ -18,7 +18,11 @@ use happenstance_core::{
     StoreId, Tag, Tags,
 };
 
-const TAG_COUNTS: [usize; 5] = [0, 1, 8, 32, 64];
+/// 64 is VT-22's floor (`MIN_SUPPORTED_TAGS_PER_EVENT`); 128 is
+/// `SqliteEventStore::MAX_TAGS_PER_EVENT`, the only documented adapter ceiling in
+/// the tree. Both are quoted because the encode delta is linear in the count, so
+/// one number is half an answer.
+const TAG_COUNTS: [usize; 6] = [0, 1, 8, 32, 64, 128];
 
 fn sequenced(event: Event) -> SequencedEvent {
     let position = SequencePosition::new(42).expect("42 is non-zero");

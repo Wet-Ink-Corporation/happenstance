@@ -1,6 +1,27 @@
-   Compiling event-clone-allocations v0.0.0 (D:\repos\happenstance\experiments\event-clone-allocations)
-    Finished `release` profile [optimized] target(s) in 1.00s
-     Running tests\measure_clone.rs (target\release\deps\measure_clone-8186fda074fae2d2.exe)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling thiserror v2.0.20
+   Compiling zmij v1.0.23
+   Compiling futures-core v0.3.34
+   Compiling serde_json v1.0.151
+   Compiling base64 v0.22.1
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling syn v3.0.4
+   Compiling syn v2.0.119
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling trait-variant v0.1.3
+   Compiling cobs v0.3.0
+   Compiling bytes v1.12.1
+   Compiling postcard v1.1.3
+   Compiling happenstance-core v0.2.0-alpha.1 (D:\repos\hs-core\crates\happenstance-core)
+   Compiling event-clone-allocations v0.0.0 (D:\repos\hs-core\experiments\event-clone-allocations)
+    Finished `release` profile [optimized] target(s) in 7.95s
+     Running tests\measure_clone.rs (target\release\deps\measure_clone-89f7f936e6c40bf9.exe)
 
 running 5 tests
 test clone_cost ... 
@@ -16,6 +37,8 @@ from_pairs (Cow::Owned)      Bytes::from_static        32  first: allocs=34     
                                                            again: allocs=34         reallocs=0      heap_ops=34         bytes=1009         deallocs=0
 from_pairs (Cow::Owned)      Bytes::from_static        64  first: allocs=66         reallocs=0      heap_ops=66         bytes=2001         deallocs=0
                                                            again: allocs=66         reallocs=0      heap_ops=66         bytes=2001         deallocs=0
+from_pairs (Cow::Owned)      Bytes::from_static       128  first: allocs=130        reallocs=0      heap_ops=130        bytes=4041         deallocs=0
+                                                           again: allocs=130        reallocs=0      heap_ops=130        bytes=4041         deallocs=0
 from_pairs (Cow::Owned)      Bytes::from(Vec<u8>)       0  first: allocs=2          reallocs=0      heap_ops=2          bytes=41           deallocs=0
                                                            again: allocs=1          reallocs=0      heap_ops=1          bytes=17           deallocs=0
 from_pairs (Cow::Owned)      Bytes::from(Vec<u8>)       1  first: allocs=4          reallocs=0      heap_ops=4          bytes=72           deallocs=0
@@ -26,6 +49,8 @@ from_pairs (Cow::Owned)      Bytes::from(Vec<u8>)      32  first: allocs=35     
                                                            again: allocs=34         reallocs=0      heap_ops=34         bytes=1009         deallocs=0
 from_pairs (Cow::Owned)      Bytes::from(Vec<u8>)      64  first: allocs=67         reallocs=0      heap_ops=67         bytes=2025         deallocs=0
                                                            again: allocs=66         reallocs=0      heap_ops=66         bytes=2001         deallocs=0
+from_pairs (Cow::Owned)      Bytes::from(Vec<u8>)     128  first: allocs=131        reallocs=0      heap_ops=131        bytes=4065         deallocs=0
+                                                           again: allocs=130        reallocs=0      heap_ops=130        bytes=4041         deallocs=0
 from_static (Cow::Borrowed)  Bytes::from_static         0  first: allocs=0          reallocs=0      heap_ops=0          bytes=0            deallocs=0
                                                            again: allocs=0          reallocs=0      heap_ops=0          bytes=0            deallocs=0
 from_static (Cow::Borrowed)  Bytes::from_static         1  first: allocs=1          reallocs=0      heap_ops=1          bytes=24           deallocs=0
@@ -36,6 +61,8 @@ from_static (Cow::Borrowed)  Bytes::from_static        32  first: allocs=1      
                                                            again: allocs=1          reallocs=0      heap_ops=1          bytes=768          deallocs=0
 from_static (Cow::Borrowed)  Bytes::from_static        64  first: allocs=1          reallocs=0      heap_ops=1          bytes=1536         deallocs=0
                                                            again: allocs=1          reallocs=0      heap_ops=1          bytes=1536         deallocs=0
+from_static (Cow::Borrowed)  Bytes::from_static       128  first: allocs=1          reallocs=0      heap_ops=1          bytes=3072         deallocs=0
+                                                           again: allocs=1          reallocs=0      heap_ops=1          bytes=3072         deallocs=0
 from_static (Cow::Borrowed)  Bytes::from(Vec<u8>)       0  first: allocs=1          reallocs=0      heap_ops=1          bytes=24           deallocs=0
                                                            again: allocs=0          reallocs=0      heap_ops=0          bytes=0            deallocs=0
 from_static (Cow::Borrowed)  Bytes::from(Vec<u8>)       1  first: allocs=2          reallocs=0      heap_ops=2          bytes=48           deallocs=0
@@ -46,6 +73,8 @@ from_static (Cow::Borrowed)  Bytes::from(Vec<u8>)      32  first: allocs=2      
                                                            again: allocs=1          reallocs=0      heap_ops=1          bytes=768          deallocs=0
 from_static (Cow::Borrowed)  Bytes::from(Vec<u8>)      64  first: allocs=2          reallocs=0      heap_ops=2          bytes=1560         deallocs=0
                                                            again: allocs=1          reallocs=0      heap_ops=1          bytes=1536         deallocs=0
+from_static (Cow::Borrowed)  Bytes::from(Vec<u8>)     128  first: allocs=2          reallocs=0      heap_ops=2          bytes=3096         deallocs=0
+                                                           again: allocs=1          reallocs=0      heap_ops=1          bytes=3072         deallocs=0
 
 -- the claim, checked --
 all clone-cost assertions hold
@@ -83,6 +112,11 @@ Sequenced  serde_json        64 from_pairs (Cow::Owned)          865  allocs=134
 Event      serde_json        64 from_static (Cow::Borrowed)      749  allocs=3          reallocs=3      heap_ops=6          bytes=2600         deallocs=2
 Sequenced  serde_json        64 from_static (Cow::Borrowed)      865  allocs=4          reallocs=3      heap_ops=7          bytes=4136         deallocs=3
 --         serde_json        64 owned - static                        delta(Event)=65  delta(Sequenced)=130  ratio=2.00
+Event      serde_json       128 from_pairs (Cow::Owned)         1445  allocs=132        reallocs=4      heap_ops=136        bytes=6129         deallocs=131
+Sequenced  serde_json       128 from_pairs (Cow::Owned)         1561  allocs=262        reallocs=4      heap_ops=266        bytes=10170        deallocs=261
+Event      serde_json       128 from_static (Cow::Borrowed)     1445  allocs=3          reallocs=4      heap_ops=7          bytes=5160         deallocs=2
+Sequenced  serde_json       128 from_static (Cow::Borrowed)     1561  allocs=4          reallocs=4      heap_ops=8          bytes=8232         deallocs=3
+--         serde_json       128 owned - static                        delta(Event)=129  delta(Sequenced)=258  ratio=2.00
 Event      postcard           0 from_pairs (Cow::Owned)           51  allocs=2          reallocs=3      heap_ops=5          bytes=89           deallocs=1
 Sequenced  postcard           0 from_pairs (Cow::Owned)           75  allocs=3          reallocs=4      heap_ops=7          bytes=162          deallocs=2
 Event      postcard           0 from_static (Cow::Borrowed)       51  allocs=1          reallocs=3      heap_ops=4          bytes=72           deallocs=0
@@ -108,6 +142,11 @@ Sequenced  postcard          64 from_pairs (Cow::Owned)          587  allocs=133
 Event      postcard          64 from_static (Cow::Borrowed)      563  allocs=2          reallocs=6      heap_ops=8          bytes=2112         deallocs=1
 Sequenced  postcard          64 from_static (Cow::Borrowed)      587  allocs=3          reallocs=7      heap_ops=10         bytes=4096         deallocs=2
 --         postcard          64 owned - static                        delta(Event)=65  delta(Sequenced)=130  ratio=2.00
+Event      postcard         128 from_pairs (Cow::Owned)         1132  allocs=131        reallocs=7      heap_ops=138        bytes=5193         deallocs=130
+Sequenced  postcard         128 from_pairs (Cow::Owned)         1156  allocs=261        reallocs=8      heap_ops=269        bytes=10130        deallocs=260
+Event      postcard         128 from_static (Cow::Borrowed)     1132  allocs=2          reallocs=7      heap_ops=9          bytes=4224         deallocs=1
+Sequenced  postcard         128 from_static (Cow::Borrowed)     1156  allocs=3          reallocs=8      heap_ops=11         bytes=8192         deallocs=2
+--         postcard         128 owned - static                        delta(Event)=129  delta(Sequenced)=258  ratio=2.00
 all encode-cost assertions hold
 ok
 test query_encode_cost ... 

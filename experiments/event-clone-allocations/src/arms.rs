@@ -18,8 +18,8 @@
 //!   without thinking about it, because a `const` tag is what a test fixture
 //!   naturally holds.
 //!
-//! The two build **the same event**. Same type string, same sixty-four tag
-//! strings, same payload — `tests/arms_are_equivalent.rs` asserts `==` and
+//! The two build **the same event**. Same type string, the same tag strings,
+//! same payload — `tests/arms_are_equivalent.rs` asserts `==` and
 //! asserts byte-identical `serde_json` and `postcard` encodings, because an arm
 //! that is cheaper by virtue of encoding less has won nothing.
 
@@ -49,20 +49,150 @@ impl Regime {
 /// The event type string, identical in both regimes.
 pub const EVENT_TYPE: &str = "StudentSubscribed";
 
-/// The sixty-four tag strings, identical in both regimes.
+/// The tag strings, identical in both regimes.
 ///
-/// Sixty-four is [`happenstance_core::MIN_SUPPORTED_TAGS_PER_EVENT`] — VT-22's
-/// floor, the number every conformant adapter must accept, and therefore the
-/// number a cost claim about tags has to be quoted at.
-pub const TAG_LITERALS: [&str; 64] = [
-    "k00:v00", "k01:v01", "k02:v02", "k03:v03", "k04:v04", "k05:v05", "k06:v06", "k07:v07",
-    "k08:v08", "k09:v09", "k10:v10", "k11:v11", "k12:v12", "k13:v13", "k14:v14", "k15:v15",
-    "k16:v16", "k17:v17", "k18:v18", "k19:v19", "k20:v20", "k21:v21", "k22:v22", "k23:v23",
-    "k24:v24", "k25:v25", "k26:v26", "k27:v27", "k28:v28", "k29:v29", "k30:v30", "k31:v31",
-    "k32:v32", "k33:v33", "k34:v34", "k35:v35", "k36:v36", "k37:v37", "k38:v38", "k39:v39",
-    "k40:v40", "k41:v41", "k42:v42", "k43:v43", "k44:v44", "k45:v45", "k46:v46", "k47:v47",
-    "k48:v48", "k49:v49", "k50:v50", "k51:v51", "k52:v52", "k53:v53", "k54:v54", "k55:v55",
-    "k56:v56", "k57:v57", "k58:v58", "k59:v59", "k60:v60", "k61:v61", "k62:v62", "k63:v63",
+/// **Two numbers matter and they are both in this list.** The first sixty-four
+/// are [`happenstance_core::MIN_SUPPORTED_TAGS_PER_EVENT`] — VT-22's floor, the
+/// count every conformant adapter must accept, and therefore the count a cost
+/// claim about tags has to be quoted at. All one hundred and twenty-eight are
+/// `SqliteEventStore::MAX_TAGS_PER_EVENT`
+/// (`crates/happenstance-sqlite/src/event_store.rs:291`), the only *documented*
+/// ceiling any adapter in this workspace has, and therefore the largest event a
+/// caller can rely on being accepted anywhere in the tree.
+///
+/// The list ran to sixty-four until 2026-09-04. It was extended because the
+/// encode-path delta is linear in the tag count and the figure the audit quoted
+/// was the floor's, not the ceiling's — and the ceiling is what a replication
+/// batch of `SqliteEventStore` rows actually carries.
+pub const TAG_LITERALS: [&str; 128] = [
+    "k00:v00",
+    "k01:v01",
+    "k02:v02",
+    "k03:v03",
+    "k04:v04",
+    "k05:v05",
+    "k06:v06",
+    "k07:v07",
+    "k08:v08",
+    "k09:v09",
+    "k10:v10",
+    "k11:v11",
+    "k12:v12",
+    "k13:v13",
+    "k14:v14",
+    "k15:v15",
+    "k16:v16",
+    "k17:v17",
+    "k18:v18",
+    "k19:v19",
+    "k20:v20",
+    "k21:v21",
+    "k22:v22",
+    "k23:v23",
+    "k24:v24",
+    "k25:v25",
+    "k26:v26",
+    "k27:v27",
+    "k28:v28",
+    "k29:v29",
+    "k30:v30",
+    "k31:v31",
+    "k32:v32",
+    "k33:v33",
+    "k34:v34",
+    "k35:v35",
+    "k36:v36",
+    "k37:v37",
+    "k38:v38",
+    "k39:v39",
+    "k40:v40",
+    "k41:v41",
+    "k42:v42",
+    "k43:v43",
+    "k44:v44",
+    "k45:v45",
+    "k46:v46",
+    "k47:v47",
+    "k48:v48",
+    "k49:v49",
+    "k50:v50",
+    "k51:v51",
+    "k52:v52",
+    "k53:v53",
+    "k54:v54",
+    "k55:v55",
+    "k56:v56",
+    "k57:v57",
+    "k58:v58",
+    "k59:v59",
+    "k60:v60",
+    "k61:v61",
+    "k62:v62",
+    "k63:v63",
+    "k64:v64",
+    "k65:v65",
+    "k66:v66",
+    "k67:v67",
+    "k68:v68",
+    "k69:v69",
+    "k70:v70",
+    "k71:v71",
+    "k72:v72",
+    "k73:v73",
+    "k74:v74",
+    "k75:v75",
+    "k76:v76",
+    "k77:v77",
+    "k78:v78",
+    "k79:v79",
+    "k80:v80",
+    "k81:v81",
+    "k82:v82",
+    "k83:v83",
+    "k84:v84",
+    "k85:v85",
+    "k86:v86",
+    "k87:v87",
+    "k88:v88",
+    "k89:v89",
+    "k90:v90",
+    "k91:v91",
+    "k92:v92",
+    "k93:v93",
+    "k94:v94",
+    "k95:v95",
+    "k96:v96",
+    "k97:v97",
+    "k98:v98",
+    "k99:v99",
+    "k100:v100",
+    "k101:v101",
+    "k102:v102",
+    "k103:v103",
+    "k104:v104",
+    "k105:v105",
+    "k106:v106",
+    "k107:v107",
+    "k108:v108",
+    "k109:v109",
+    "k110:v110",
+    "k111:v111",
+    "k112:v112",
+    "k113:v113",
+    "k114:v114",
+    "k115:v115",
+    "k116:v116",
+    "k117:v117",
+    "k118:v118",
+    "k119:v119",
+    "k120:v120",
+    "k121:v121",
+    "k122:v122",
+    "k123:v123",
+    "k124:v124",
+    "k125:v125",
+    "k126:v126",
+    "k127:v127",
 ];
 
 /// The `("k00", "v00")` pairs `Tags::from_pairs` joins back into

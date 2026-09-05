@@ -33,7 +33,7 @@ use happenstance_core::{
 };
 
 const REGIMES: [Regime; 2] = [Regime::Owned, Regime::Static];
-const TAG_COUNTS: [usize; 4] = [0, 1, 8, 64];
+const TAG_COUNTS: [usize; 5] = [0, 1, 8, 64, 128];
 
 /// A fixed identity, so that the byte-identity comparison is not defeated by a
 /// randomly minted `StoreId` or a wall-clock `RecordedAt`.
@@ -47,26 +47,46 @@ fn sequenced(event: Event) -> SequencedEvent {
     )
 }
 
+/// The two counts this experiment quotes are the two the tree actually promises.
+///
+/// The literal table used to be exactly the floor, and the assertion below was
+/// `len() == MIN_SUPPORTED_TAGS_PER_EVENT`. It was extended to 128 on 2026-09-04
+/// because the encode-path delta is linear in the tag count, so a figure quoted
+/// only at the floor is half an answer — and 128 is not an arbitrary second
+/// point, it is `SqliteEventStore::MAX_TAGS_PER_EVENT`, the only documented
+/// adapter ceiling in the workspace.
+///
+/// Both ends are still asserted, so the table cannot drift away from either: it
+/// must *cover* the floor and *end at* the ceiling.
 #[test]
-fn the_floor_is_still_sixty_four() {
+fn the_floor_and_the_documented_ceiling_are_both_covered() {
     assert_eq!(
         happenstance_core::MIN_SUPPORTED_TAGS_PER_EVENT,
         64,
         "VT-22's floor moved; the 64-tag arms are no longer measuring the floor"
     );
+    assert!(
+        arms::TAG_LITERALS.len() >= happenstance_core::MIN_SUPPORTED_TAGS_PER_EVENT,
+        "the literal table must cover the floor"
+    );
     assert_eq!(
         arms::TAG_LITERALS.len(),
-        happenstance_core::MIN_SUPPORTED_TAGS_PER_EVENT,
-        "the literal table must cover the floor exactly"
+        128,
+        "the table ends at `SqliteEventStore::MAX_TAGS_PER_EVENT`. If that          constant moves, move this one with it — a ceiling row measured against          a number no adapter declares is a row about nothing"
     );
 }
 
 #[test]
 fn the_two_tag_tables_agree() {
     // The pairs are derived from the literals by splitting, and the literals are
-    // rebuilt from the pairs by joining. Asserting the round trip is what makes
-    // "same sixty-four tag strings" a checked claim rather than a comment.
-    for (literal, (key, value)) in arms::TAG_LITERALS.iter().zip(arms::tag_pairs(64)) {
+    // rebuilt from the pairs by joining. Asserting the round trip over the whole
+    // table is what makes "the same tag strings" a checked claim rather than a
+    // comment — and it covers the 64 literals added for the ceiling row, which a
+    // hard-coded 64 would have skipped.
+    for (literal, (key, value)) in arms::TAG_LITERALS
+        .iter()
+        .zip(arms::tag_pairs(arms::TAG_LITERALS.len()))
+    {
         assert_eq!(*literal, format!("{key}:{value}"));
     }
 }
