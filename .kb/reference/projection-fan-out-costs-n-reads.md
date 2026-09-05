@@ -26,6 +26,7 @@ depends_on: []
 related:
   - kb-decision-0019
   - kb-decision-0017
+  - kb-open-question-read-page-budget-001
 source_paths:
   - .kb/_intake/contract-defect-log-phase-7.md
   - references/evaluation/phase-7-contract-defects.md

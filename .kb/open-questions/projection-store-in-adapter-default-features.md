@@ -2,7 +2,7 @@
 id: kb-open-question-adapter-default-projection-feature-001
 title: Whether the projection port stays in happenstance-neon's and happenstance-postgres's default features
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ADR-0036 ships ProjectionStore behind an off-by-default unstable-projection gate, and
@@ -18,18 +18,32 @@ summary: >-
   project, whose deskeleton work already contemplates shipping happenstance-neon with
   projection-store off by default. Forced before either crate is published, which is when a
   default nobody re-read becomes a consumer's problem.
+  Resolved 2026-09-03 — no, they do not stay. Both crates now read
+  happenstance-core = { workspace = true, features = ["std"] }, default = ["event-store"] and
+  projection-store = ["happenstance-core/unstable-projection"], the shape happenstance-sqlite took
+  on 2026-09-02, verified across all four feature combinations for each crate, eight checks in
+  total. This atom's central observation held exactly as written and is the reason the fix took two
+  edits per crate rather than one: trimming default alone would have produced a crate that looks
+  gated and is not, so the flag had to leave the unconditional dependency table and become the
+  feature's forward at the same time. Closed here rather than by the owning postgres-and-neon-stores
+  project, whose stories are all still at plan, because the change is three manifest lines per crate
+  with no Rust touched — so the owning project inherits it as done rather than as owed. ADR-0036
+  stands exactly as written, its [PROVISIONAL] marker on PS-3 does not move, and
+  spec/SPECIFICATION.md's impl census is untouched. Neither crate is published and both remain
+  publish = false skeletons, so the exposure closed was latent rather than live.
 depends_on: []
 related:
   - kb-decision-0017
   - kb-decision-0036
 source_paths:
   - .kb/_intake/ps-3-projection-port-ships-gated.md
+  - .kb/_intake/adapter-default-projection-feature-resolved.md
   - crates/happenstance-neon/Cargo.toml
   - crates/happenstance-postgres/Cargo.toml
   - crates/happenstance-sqlite/Cargo.toml
   - crates/happenstance-core/Cargo.toml
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-02
+last_reviewed: 2026-09-04
 ---
 
 # Whether the projection port stays in happenstance-neon's and happenstance-postgres's default features
@@ -95,3 +109,57 @@ The `postgres-and-neon-stores` project
 question has a named owner rather than an orphaned finding. It is forced before
 either crate's first publish, which is when an unexamined default becomes a promise
 made to a consumer rather than a property of an unpublished skeleton.
+
+## Resolved 2026-09-03 — status `superseded`; the flag left the dependency table
+
+Everything above is the state of knowledge on 2026-09-02 and is left exactly as it was
+written. Unlike `kb-open-question-cf-40-ownership-001` and
+`kb-open-question-worker-async-trait-ban-001`, **there is no answering decision atom, and
+deliberately so.** `kb-decision-0036` already commits `ProjectionStore` to an off-by-default
+gate; two more adapters honouring that gate add no obligation, name no rejected alternative
+and settle no fork, and `.kb/decisions/README.md`:32 calls a decision recorded without
+rejected options "indistinguishable from an accident". Both earlier resolutions in this
+layer produced a new decision atom because a decision already existed for reasons of its
+own. This one is ADR-0036 being enforced in the two places that had not yet enforced it, so
+the record is this amendment and the manifests it cites.
+
+**The answer is no — they do not stay.** `happenstance-neon` and `happenstance-postgres`
+now both read `happenstance-core = { workspace = true, features = ["std"] }` in
+`[dependencies]`, `default = ["event-store"]`, and
+`projection-store = ["happenstance-core/unstable-projection"]` — the shape
+`happenstance-sqlite` took on 2026-09-02, with the reasoning written inline beside each of
+the three changed lines in both manifests.
+
+**The diagnosis in "Why the exposure is not the sqlite exposure" held exactly as written,
+and is why the fix took two edits per crate rather than one.** Because `projection-store`
+was `[]` while the dependency table carried `unstable-projection` unconditionally, the
+feature named the capability while doing none of the gating: trimming `default` alone would
+have produced a crate that *looks* gated and is not — a worse state than the one it started
+in, because it would read as fixed. Both halves had to move together, the flag leaving the
+unconditional dependency and becoming the feature's forward, because that is the only
+arrangement in which `--no-default-features` yields a build without the unfrozen port. The
+third of the three things this atom left undecided — whether the two changes land together
+or separately — is therefore answered by the mechanism rather than by preference: together,
+or not at all.
+
+**Verified across all four feature combinations for each crate** —
+`--no-default-features`, default, `--features projection-store`, `--all-features` — eight
+checks in total. No Rust was touched: both crates' projection modules were already gated on
+`feature = "projection-store"` in `src/lib.rs`, which is what let the forward move through
+the manifest alone.
+
+**What this does not change.** `kb-decision-0036` stands exactly as written and its
+`[PROVISIONAL]` marker on PS-3 does not move — nothing here changes what has run the
+projection suite. `spec/SPECIFICATION.md`'s impl census is untouched, and is still not
+restated here. Neither crate is published and both remain `publish = false` skeletons whose
+projection bodies are `todo!()`, so the exposure that closed was latent rather than live;
+closing it now was cheap precisely because nothing depended on the old shape.
+
+**Closed here rather than by the named owner.** The `postgres-and-neon-stores` project has
+not started — its stories are all at `plan` — and the deadline this atom set was *before
+either crate is published*. Three manifest lines per crate with a mechanical verification
+did not need a project, and leaving a known walk-around in place until one starts is how a
+default nobody re-read becomes a consumer's problem. The owning project inherits the change
+as done rather than as owed: its `deskeleton-and-package-readiness` story already
+contemplated shipping `happenstance-neon` with `projection-store` off by default, and now
+finds it that way.

@@ -36,7 +36,12 @@ summary: >-
   carries `phase: null`, since brand work is not one of RUNBOOK.md's fifteen phases. `SD-0002` is
   shared by two atoms — the mark's own construction and binding rules, and a wider standalone-SVG
   delivery rule split out because its scope reaches past the mark — and the table's `SD` column
-  says so rather than collapsing them into one row.
+  says so rather than collapsing them into one row. The 2026-09-04 wave (`2026-09-04-intake`) added
+  ADR-0037 (phase 12), extending the amendment lineage `kb-decision-0004` → `kb-decision-0029`
+  by one more link: `0.2.0` turns the 1.97.1 floor from a self-imposed constraint into a promise a
+  consumer relies on, without moving the number or superseding either atom. Both `kb-decision-0004`
+  and `kb-decision-0029` stay `accepted` and byte-identical — this map's rows for both now carry a
+  second "amended by" annotation rather than a flip, the same shape ADR-0029 used against ADR-0004.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -50,7 +55,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-17-adr-0022-append-condition
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
   - .kb/_governance/integration-waves/2026-09-02-intake
-last_reviewed: 2026-09-02
+  - .kb/_governance/integration-waves/2026-09-04-intake
+last_reviewed: 2026-09-04
 ---
 
 # Decision map
@@ -83,7 +89,7 @@ strength.
 | ADR-0001 | [`kb-decision-0001`](../decisions/0001-async-port-flavours.md) | Async ports in two flavours, Send and !Send | accepted | 0 | — |
 | ADR-0002 | [`kb-decision-0002`](../decisions/0002-crate-naming.md) | Prefixed crate names, with a parallel claim on eventum | **superseded** | 0 | superseded by `kb-decision-0005` |
 | ADR-0003 | [`kb-decision-0003`](../decisions/0003-opaque-payloads.md) | Opaque payloads in the contract crate | accepted (provisional) | 0 | — |
-| ADR-0004 | [`kb-decision-0004`](../decisions/0004-edition-and-msrv.md) | Rust 2024 edition, MSRV 1.85 | accepted (amended, not superseded) | 0 | amended by `kb-decision-0029` |
+| ADR-0004 | [`kb-decision-0004`](../decisions/0004-edition-and-msrv.md) | Rust 2024 edition, MSRV 1.85 | accepted (amended, not superseded) | 0 | amended by `kb-decision-0029`, `kb-decision-0037` |
 | ADR-0005 | [`kb-decision-0005`](../decisions/0005-rename-to-happenstance.md) | Rename the project to happenstance, and make it the contract crate | accepted (partly superseded) | 0 | supersedes `kb-decision-0002`; partly superseded by `kb-decision-0006` |
 | ADR-0006 | [`kb-decision-0006`](../decisions/0006-bare-name-to-the-typed-layer.md) | The bare name goes to the typed layer; the contract becomes happenstance-core | accepted (partly superseded) | 0 | partly superseded by `kb-decision-0007` |
 | ADR-0007 | [`kb-decision-0007`](../decisions/0007-projection-runner-decodes.md) | The projection runner decodes, and therefore splits across the seam | accepted (partly superseded) | 0 | partly supersedes `kb-decision-0006`; partly superseded by `kb-decision-0031` |
@@ -96,7 +102,7 @@ strength.
 | ADR-0014 | [`kb-decision-0014`](../decisions/0014-event-identity-and-recorded-time.md) | The store mints identity, records a time, and the caller supplies neither | accepted | 4 | — |
 | ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
-| ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004` |
+| ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004`; amended by `kb-decision-0037` |
 
 ## 2026-08-13 projection-store ADRs (ADR-0017–0019)
 
@@ -264,6 +270,22 @@ supersedes any row on this map.
 | SD-0001 | [`kb-decision-sd-0001`](../decisions/sd-0001-the-name-names-the-boundary-of-what-occurred.md) | "Happenstance" names the boundary drawn by what occurred, and what that places on copy | accepted | — | — |
 | SD-0002 | [`kb-decision-standalone-svg-one-colourway-001`](../decisions/standalone-svg-carries-one-colourway.md) | A standalone SVG carries one fixed colour, and the surface is selected at the point of use | accepted | — | — |
 | SD-0002 | [`kb-decision-sd-0002`](../decisions/sd-0002-the-mark-and-the-rules-that-bind-it.md) | Seven equal blocks and a lowercase wordmark, and the rules that bind anything carrying the name | accepted | — | — |
+
+## 2026-09-04 intake: the MSRV becomes a promise (ADR-0037)
+
+One decision atom, phase 12, `.kb/decisions/`, from the pre-publication review wave
+(`2026-09-04-intake`). ADR-0037 extends the amendment lineage `kb-decision-0004` →
+`kb-decision-0029` by one more link, on the same axis ADR-0029 used against ADR-0004: `0.2.0`
+publishes four crates — `happenstance-core`, `happenstance`, `happenstance-testkit` and
+`happenstance-sqlite` — from which moment `1.97.1` binds a consumer who may never build the crate
+that forced it. The number does not move and neither `kb-decision-0004` nor `kb-decision-0029` is
+superseded; both stay `accepted` and byte-identical, each gaining a second "amended by" annotation
+on this map rather than a status flip, the same treatment `kb-decision-0007`'s row carries for two
+separate partial supersessions.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0037 | [`kb-decision-0037`](../decisions/0037-msrv-becomes-a-promise-at-0-2-0.md) | The MSRV becomes a promise at 0.2.0, and the number does not move | accepted | 12 | amends `kb-decision-0004`, `kb-decision-0029` |
 
 ## Adding a row
 

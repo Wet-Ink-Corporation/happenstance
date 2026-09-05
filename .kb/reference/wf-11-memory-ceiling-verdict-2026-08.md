@@ -36,6 +36,7 @@ related:
   - kb-open-question-human-readable-encoding-limits-001
   - kb-open-question-workerd-runner-absent-001
   - kb-decision-0023
+  - kb-open-question-read-page-budget-001
 source_paths:
   - .kb/_intake/wf-11-human-readable-encoding-measured-on-this-runtime.md
   - crates/happenstance-cloudflare/tests/wf11_memory_ceiling.rs

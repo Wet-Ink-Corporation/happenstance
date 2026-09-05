@@ -21,6 +21,7 @@ related:
   - kb-decision-0011
   - kb-decision-0010
   - kb-reference-phase-4-5-spec-reconciliation-001
+  - kb-open-question-query-plan-parameter-chunking-001
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
   - references/adr/0011-read-laziness-and-isolation.md

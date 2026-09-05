@@ -23,6 +23,9 @@ related:
   - kb-decision-0012
   - kb-decision-0022
   - kb-reference-append-condition-experiment-001
+  - kb-reference-event-clone-allocations-001
+  - kb-decision-0037
+  - kb-open-question-adr-0022-falsifiers-fired-001
 source_paths:
   - .kb/_intake/0033-adr-0022-append-condition-strategy.md
   - references/adr/0012-append-shape-and-preconditions.md

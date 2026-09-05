@@ -19,15 +19,21 @@ related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-reference-phase-8-spec-reconciliation-001
   - kb-playbook-declared-page-need-001
+  - kb-playbook-assert-execution-not-discovery-001
+  - kb-governance-what-may-refute-a-finding-001
 source_paths:
   - .kb/_intake/lesson-anchoring-citations-in-a-long-lived-document.md
+  - .kb/_intake/2026-09-03-pre-publication-review.md
+  - references/evaluation/review-pre-publication-2026-09-03.md
+  - references/evaluation/phase-7-contract-defects.md
+  - references/evaluation/README.md
   - xtask/src/spec_trace.rs
   - xtask/src/lint_constitution.rs
   - spec/SPECIFICATION.md
   - standards/rust/README.md
   - references/evaluation/phase-4-5-reconciliation.md
   - references/evaluation/review-citation-drift.md
-last_reviewed: 2026-09-02
+last_reviewed: 2026-09-04
 ---
 
 # Anchoring citations in a document whose targets move under it
@@ -112,3 +118,30 @@ line number avoids the tax at the price of ambiguity when a name recurs.
 A dated residual defect this mechanism left behind — the two `ANCHOR_SLACK` constants disagreeing
 with each other — is recorded in `kb-reference-phase-4-5-spec-reconciliation-001`, not here: it is
 true of one constant on one afternoon, not a property of the method.
+
+## A second instance, and an error class no line check can see (2026-09-03)
+
+The pre-publication review found this defect in the document it had modelled its own format on.
+`references/evaluation/phase-7-contract-defects.md`'s *Lifecycle* bullet cites `README.md:83-85`
+for the lifecycle's one permitted in-place change; in `references/evaluation/README.md` that range
+is the **erratum** exception, and the repointing rule is a different paragraph well below it. The
+citation resolves, so nothing fires — the addressing-versus-referent gap
+`kb-playbook-verify-referent-report-coverage-001` names, which the anchor check above closes only
+where an anchor exists.
+
+What is new is the **propagation mechanism**. That bullet is a header template, and later
+evaluation documents copy it rather than re-derive it. The 2026-09-03 review copied it and
+repaired the number to `:228-231` — correct at its pinned commit `56ef6c5`, wrong by the time it
+landed, because the commit that recorded the review inserted exactly 40 lines above that paragraph
+and carried it to `:268-270`. **An error that spreads by imitation cannot be caught by checking
+lines**, because each copy is independently well-formed: the first resolves to the wrong passage,
+the second resolved to the right one on the day it was written. The defect lives in the relation
+between copies, which no per-citation check has in view. Neither instance is repaired here;
+repointing belongs in the evaluation tree, not in an atom about it.
+
+That instance also states the coverage this playbook has been pricing. Explicit anchors are
+enforced over `standards/rust/` alone (`lint_constitution`'s `ATOM_DIR`); derived anchors reach
+`spec/SPECIFICATION.md` and `spec/E2E-CASES.md` alone (`spec_trace`'s `SPEC` and `CASES`).
+`references/evaluation/` — twenty-nine documents, dense in `file:line`, and the tree an auditor
+reads first — has neither. Both instances were found there, which is what an unchecked citation
+habit looks like from the outside.
