@@ -988,10 +988,17 @@ impl Capability {
 
     /// The fixture does not support this operation, for the stated reason.
     ///
-    /// The reason is not a formality. It is printed on every run for every rule
-    /// the decision skips, so it lands in the adapter's CI log where both a
-    /// reviewer and a user of the adapter can read it. Write the real one:
-    /// *why* this store cannot do it, not *that* it cannot.
+    /// The reason is not a formality. It is printed for every rule the decision
+    /// skips, so that it can land in the adapter's CI log where both a reviewer
+    /// and a user of the adapter can read it. Write the real one: *why* this
+    /// store cannot do it, not *that* it cannot.
+    ///
+    /// **"Printed" means printed under `--show-output`.** A skipped rule is a
+    /// test that *passes*, and libtest discards a passing test's stdout, so a
+    /// default `cargo test` in an adapter's own CI shows none of these lines —
+    /// see [`RuleOutcome::report`], which measures exactly that. Write the
+    /// reason for the reader who runs the flag, and configure your CI to pass
+    /// it if you want the reason in front of anyone else.
     ///
     /// # Panics
     ///

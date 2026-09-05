@@ -755,6 +755,29 @@ not the same as what a user needed to be told.
   failed says nothing about atomicity either way, and it reports **distinct**
   errors — a store that cannot be read at all yielded one line per polling pass
   and buried the count under nearly three thousand identical copies.
+- **Three reader-facing surfaces promised a skip line that a stranger's default
+  `cargo test` never shows.** `happenstance-testkit`'s crates.io front page, its
+  docs.rs module page and `Capability::declined`'s own rustdoc each said the
+  fixture's stated reason is printed. A skipped rule is a test that **passes**,
+  and libtest discards a passing test's stdout — which `RuleOutcome::report`'s
+  documentation had measured and stated exactly, twenty lines from the
+  mechanism. Three surfaces asserted the opposite of what a fourth measured, and
+  the three that were wrong are the only three a stranger reads.
+
+  Measured against a fixture already in the tree: `cargo test -p
+  happenstance-sqlite --test conformance` prints **zero** `SKIP` lines, and the
+  same command with `-- --show-output` prints **three**. The named victim is not
+  the adapter author — it is the person who chose that adapter on the strength
+  of a README saying it passes the conformance suite, and who finds out when an
+  acknowledged write is not there after a restart.
+
+  All three now name `--show-output` beside the promise, and
+  `a_promised_skip_line_names_the_flag_it_needs` requires the caveat wherever a
+  surface puts printing next to *stated reason*. **This corrects the sentences
+  and settles nothing else.** Whether CF-18's reporting obligation should be
+  discharged by a mechanism a stranger's default run can observe, or whether the
+  clause is narrowed to what libtest permits, is `[FROZEN]` and an ADR's — the
+  argument is staged in `.kb/_intake/remediation-2026-09-04-briefs/`.
 
 - **`happenstance-cloudflare` chunks a wide query instead of planning it as one
   statement SQLite cannot take.** `positions_matching` was an unbounded

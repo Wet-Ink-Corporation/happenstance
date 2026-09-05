@@ -3233,13 +3233,20 @@ mod mutation_coverage {
     ///
     /// That the caveat is *correct*, only that it is present near the promise.
     /// It reads three files by path and would not notice a fourth surface
-    /// making the same claim, and its window is a character count rather than a
-    /// paragraph — a promise and its caveat separated by more than 900
-    /// characters of prose reads as a violation here even when a human would
-    /// call it fine. The mechanism half of the finding — whether CF-18's
-    /// obligation should be discharged by something a stranger's default
-    /// `cargo test` can observe — is a decision this test does not take and
-    /// must not be read as taking.
+    /// making the same claim. Its trigger is the narrow one — printing within
+    /// 120 characters of the words *stated reason* — so a promise phrased
+    /// without them escapes, and the wider trigger this started with fired on
+    /// `RuleOutcome`'s own prose about `#[must_use]`, which is a false positive
+    /// rather than a find. Its window is a character count rather than a
+    /// paragraph, so a promise and its caveat separated by more than 900
+    /// characters read as a violation here even where a human would not.
+    ///
+    /// The mechanism half of the finding — whether CF-18's obligation should be
+    /// discharged by something a stranger's default `cargo test` can observe,
+    /// or whether the clause is narrowed to what libtest permits — is a
+    /// decision this test does not take and must not be read as taking. CF-18
+    /// is `[FROZEN]`; the decision is an ADR's, and the argument is staged in
+    /// `.kb/_intake/remediation-2026-09-04-briefs/`.
     #[test]
     fn a_promised_skip_line_names_the_flag_it_needs() {
         /// The reader-facing surfaces, by the path a citation would use.
@@ -3272,12 +3279,14 @@ mod mutation_coverage {
 
             for (index, _) in flat.match_indices("print") {
                 let at = flat[..index].chars().count();
-                let near: String = chars[at.saturating_sub(200)..(at + 200).min(chars.len())]
+                let near: String = chars[at.saturating_sub(120)..(at + 120).min(chars.len())]
                     .iter()
                     .collect();
-                // Only the sentences that make the promise. "prints" appears in
-                // this crate about plenty that is not a skip line.
-                if !(near.contains("stated reason") || near.contains("skip")) {
+                // Only the sentences that make the promise. "print" appears in
+                // this crate about plenty that is not a skip line, and the
+                // trigger is deliberately the narrow one: a sentence that puts
+                // *the fixture's stated reason* next to printing it.
+                if !near.contains("stated reason") {
                     continue;
                 }
                 let window: String = chars[at..(at + 900).min(chars.len())].iter().collect();
