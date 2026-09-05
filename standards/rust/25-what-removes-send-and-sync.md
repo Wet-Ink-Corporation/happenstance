@@ -244,7 +244,7 @@ witness that is `Send` on the one target the two-flavour design exists for, and
 learns it on the day Workers enables threads — after the bound it was cited for is
 frozen.
 
-**Evidence.** `crates/happenstance-cloudflare/src/js.rs:25 (unsafe impl Send for JsValue)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/js.rs:23 (unsafe impl Send for JsValue)` ·
 `crates/happenstance-cloudflare/src/js.rs:45 (can only be observed where the code is compiled)` ·
 `crates/happenstance-cloudflare/src/lib.rs:282 (can only ever *inherit*)` ·
 [ES-6](../../spec/SPECIFICATION.md) ·

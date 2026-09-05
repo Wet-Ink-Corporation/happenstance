@@ -197,3 +197,28 @@ Both are residuals rather than blockers: `Q-01`'s adapter fix and `Q-02`'s
 statement are landed and checked, and each brief is about the *instrument* the
 finding got past rather than about the finding. The second recommends an `xtask`
 change the lane was forbidden to make, so it is routed rather than implemented.
+
+## And one from the Cloudflare error-and-manifest lane, produced the same way
+
+| Brief | Question | Semver | Free until |
+|---|---|---|---|
+| `stringified-throw-visibility.md` | `StringifiedThrow`'s field is sealed. Should the type be `pub` at all, when both its in-crate roles are satisfied by `pub(crate)`? | breaking (B, C) / none (A) | the release that first ships `happenstance-cloudflare`, deferred past `0.2.0` |
+
+Written by the lane implementing `G-2` and `N-1`, in the same session as the
+changes it describes, and **without** the author → two-critic → revision pass.
+Same discount.
+
+Two things to know before reading it. **It records a decision the lane took
+rather than deferred**, and says why: the audit routed the choice between
+RS-13-1 (private field) and RS-13-3 (`#[non_exhaustive]` with a public field) to
+a decision record, and RS-13-3 does not close the hazard `G-2` is about —
+an attribute blocks the struct literal and does nothing to an assignment on a
+value already held. Where one of two written rules does not do the job, there is
+no fork. And **it declines to recommend** on the question it *is* about, for a
+different reason from `transient-contention-tolerance.md`: not that the deciding
+instrument is missing, but that the deciding evidence is a fact about consumers
+of a crate that has none yet.
+
+`N-1` produced no brief. It was a manifest comment contradicting `deny.toml` at
+the same commit; `cargo deny check bans` reports `bans ok` and the comment said
+red, so the tool settled it and there was nothing to decide.
