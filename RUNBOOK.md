@@ -175,8 +175,11 @@ phases 0–9 built, and it gates phase 12 rather than sitting beside it.
 `references/evaluation/review-pre-publication-2026-09-03.md` raised **96 finding
 IDs across 84 entries** against `56ef6c5`. On branch `remediation/pre-publication`,
 **65 are closed with the full gate green** and **48 briefs await ratification** in
-`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is genuinely
-blocked: its instrument is the phase-10 adapter that does not exist. Five decisions
+`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is
+genuinely blocked, and narrower than the audit filed it: half of it was refuted
+during the work — the rule's second assertion **does** execute, twice per run —
+and what survives is that it has never been answered by a store with a real
+medium under it, which is the phase-10 adapter that does not exist. Five decisions
 were ratified by the owner during the work, including publishing the repository and
 closing `ANCHOR_SLACK`.
 

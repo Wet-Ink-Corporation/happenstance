@@ -27,7 +27,7 @@ family 93.
 | **Closed** — code landed, full gate green | **65** | 20 in wave one; 45 in waves two and three |
 | **Briefed** — decision authored, awaiting ratification | **48 briefs** | `.kb/_intake/remediation-2026-09-04-briefs/`; every brief written after the first thirteen states in its own text that it did **not** get the author → two-critic → revision pass |
 | **Ratified this session** | **4** | fixture declension (Option A) · `tokio` leaves the driver re-export set · `SECURITY.md` out-of-band channel (Option B) · **`ANCHOR_SLACK` Option C** · **repository publication (Option A)** |
-| **Genuinely blocked** | **1** | `F2-5` — its instrument is the phase-10 adapter that does not exist |
+| **Genuinely blocked** | **1** | `F2-5`, narrowed — **half of it was refuted**. Its "one of its two assertions is untested code" is false: arm 2 executes twice per run, reached by two mutants filed under *other* axes. What survives is that the rule has never been answered by a store with a real medium under it, which is the phase-10 adapter that does not exist |
 | **Found by us, not in the audit** | **~12** | almost all instrument defects; see below |
 
 **The untouched list is empty.** Every one of the audit's 45 remaining findings
