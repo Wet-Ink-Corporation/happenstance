@@ -1761,7 +1761,7 @@ why the name was left here rather than dropped until it could be written.
 
 **Discharged at phase 4.** `limit` is `Option<usize>` (`query.rs:286-288`), the
 builder stores `Some(0)` verbatim (`query.rs:343-347`),
-`zero_limit_means_zero_events` (`query.rs:523-536`) asserts it, and
+`zero_limit_means_zero_events` (`query.rs:553-566`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
 (`crates/happenstance-testkit/src/suite.rs:1539`) and in
 `for_each_event_store_rule!`
@@ -1798,7 +1798,7 @@ position arithmetic as a count.
 **Discharged at phase 4.** The field is on the struct
 (`query.rs:269-289`), the builder is `const` and inclusive
 (`query.rs:318-330`), and `to_is_recorded_and_independent_of_from`
-(`query.rs:538-548`) asserts that direction reverses what the two fields bound
+(`query.rs:568-578`) asserts that direction reverses what the two fields bound
 rather than reassigning them. The MUST stands over every adapter still to come.
 
 **This clause is not a fix for E2E-04.** An upper bound does not let one item of
@@ -3328,7 +3328,7 @@ at all it had to land before the first adapter shipped**, and none has.
 **Discharged at phase 4.** `ReadOptions` now carries `from`, `to`, `backwards`
 and `limit` (`query.rs:269-289`), with `to` inclusive in both directions
 (`query.rs:318-330`) and asserted by `to_is_recorded_and_independent_of_from`
-(`query.rs:538-548`). The state this clause was written against is the one it
+(`query.rs:568-578`). The state this clause was written against is the one it
 forbids: with `from`, `backwards` and `limit` and no upper bound, a backfill
 worker could not be given the closed window [1, *H*] while a tail worker owned
 (*H*, ∞), and `limit` could not stand in, because `event.rs:215-217` forbids
@@ -5506,7 +5506,7 @@ that cannot signal overflow, because at `u64::MAX` the saturating version resume
 at the position it just applied — an infinite reapply loop in the one place
 nobody will test. **That obligation is discharged, not withdrawn:** `next()` is
 `NonZeroU64::checked_add` in `match` form (`event.rs:272-282`) and
-`position_next_signals_overflow` (`event.rs:842-873`) asserts it, so a runner may
+`position_next_signals_overflow` (`event.rs:908-939`) asserts it, so a runner may
 now be written against it. VT-13 is the fix and freezes it, and it
 also establishes the half a runner author will otherwise re-derive: because
 `from` is an inclusive lower bound rather than a seek, `checkpoint.next()` is a

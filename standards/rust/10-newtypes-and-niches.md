@@ -99,7 +99,7 @@ skips the origin store's first event — silently, because every position it the
 sees is greater than the watermark it started from.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:219 (makes position zero unrepresentable)` ·
-`crates/happenstance-core/src/event.rs:962 (option_position_is_niche_optimised)` ·
+`crates/happenstance-core/src/event.rs:1037 (option_position_is_niche_optimised)` ·
 [SPECIFICATION VT-13](../../spec/SPECIFICATION.md) ·
 [std `Option` representation](https://doc.rust-lang.org/std/option/index.html#representation) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -212,7 +212,7 @@ while every metric it publishes says it is caught up and the store reports no
 error at all.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:273 (Saturating made the one method)` ·
-`crates/happenstance-core/src/event.rs:834 (position_next_signals_overflow)` ·
+`crates/happenstance-core/src/event.rs:909 (position_next_signals_overflow)` ·
 [SPECIFICATION VT-13](../../spec/SPECIFICATION.md)
 
 ## RS-10-5. Use `[u8; N]`, not an integer, for an opaque identifier a database will order.

@@ -65,13 +65,13 @@ rather than folded in.
 
 ## Arms 3 and 4 — the `serde` encode path
 
-> **These tables are the state of the tree, and a prototype fix is measured
-> against them below.** Every row here is `happenstance-core` as it ships: each
-> `Serialize` impl builds an *owned* wire mirror. A borrowing mirror on the
-> `Serialize` side — serde's own idiom, keeping the owned one for `Deserialize` —
-> takes every delta to **zero**, and is measured in
-> *[What the prototype costs](#what-the-prototype-costs)*. It is **not landed**;
-> that section says why.
+> **These tables are the measurement that justified a change, and the change has
+> landed.** Every row below was taken at `701191b`, when each `Serialize` impl
+> built an *owned* wire mirror. `happenstance-core` now writes a **borrowing**
+> mirror on the `Serialize` side and keeps the owned one for `Deserialize`, and
+> the delta is **zero at every tag count in both formats**. The after-figures are
+> in *[What it costs now](#what-it-costs-now)*; these rows are kept because a
+> change with the before-state deleted is a change nobody can check.
 
 
 `delta` is the owned row minus the static row at the same tag count and format.
@@ -139,29 +139,15 @@ case as `2 × 128 × 66 = 16,896`, using the *clone* cost `t + 2`. The measured
 and cancels — so the figure is **16,640**, 256 lower. The ratio, the linearity
 and the argument are unaffected.
 
-## What the prototype costs
+## What it costs now
 
-Same harness, same conditions, same values, with a **borrowing** mirror at each
-of the five `Serialize` sites — `Event`, `SequencedEvent`, `QueryItem`, `Query`,
-`AppendCondition` — keeping the owned mirror for `Deserialize`, which is serde's
-own idiom for the asymmetry. Written and measured at **`2f11eb7`** on
-`lane/core-ports`, then reverted.
+Same harness, same conditions, same values, after the borrowing mirrors landed.
+`tests/arms_are_equivalent.rs` still proves the two regimes emit byte-identical
+output, and `crates/happenstance-core/tests/serialize_is_borrowing.rs` pins the
+encodings of four values against the bytes `701191b` produced — so **no byte
+moved**, at 64 tags and at 128, in either format.
 
-`tests/arms_are_equivalent.rs` proves the two regimes still emit byte-identical
-output, and the encodings of four values were compared against the bytes the
-previous commit produced — the four small vectors now pinned in
-`crates/happenstance-core/tests/serialize_is_borrowing.rs`, and the full 64-tag
-values, all 4,124 bytes of them. **No byte moved**, in either format.
-
-**Why it is not landed.** It adds 66 lines to `event.rs` and 30 to `query.rs`
-above each file's `mod tests`, which renumbers three test functions that
-`spec/SPECIFICATION.md` cites by line — `zero_limit_means_zero_events`,
-`to_is_recorded_and_independent_of_from`, `position_next_signals_overflow` —
-past `spec-trace`'s twelve-line tolerance, and repointing those four citations
-means editing the specification. The proposal and the four repoints are in
-`.kb/_intake/remediation-2026-09-04-briefs/serialize-borrows-what-it-writes.md`.
-
-| value | format | tags | out bytes | heap ops today | heap ops on the prototype |
+| value | format | tags | out bytes | heap ops before | heap ops after |
 | --- | --- | ---: | ---: | ---: | ---: |
 | `Event` | postcard | 64 | 563 | 73 | **7** |
 | `SequencedEvent` | postcard | 64 | 587 | 140 | **8** |
@@ -171,25 +157,25 @@ means editing the specification. The proposal and the four repoints are in
 | `SequencedEvent` | serde_json | 128 | 1,561 | 266 | **6** |
 | `QueryItem` | postcard | 64 | 516 | 139 | **8** |
 
-What remains on the prototype is the encoder's own: one allocation for the
-output buffer and the reallocations it performs as it grows. Identical in both
-tag regimes — which is what `delta = 0` says — and scaling with the *output*
-rather than with the value, which is the only thing an encode should cost.
+The remaining operations are the encoder's own: one allocation for the output
+buffer and the reallocations it performs as it grows. They are identical in both
+tag regimes, which is what `delta = 0` says, and they scale with the *output*
+rather than with the value — which is the only thing an encode should cost.
 
-`tests/measure_clone.rs` still asserts `t + 1` and `2(t + 1)`, because that is
-what the tree does. On the prototype both become `0`, and there is no term left
-to write.
+`delta(Event)` and `delta(SequencedEvent)` are now asserted as `0` rather than as
+`t + 1` and `2(t + 1)`. There is no term left to write, and a delta that scaled
+with anything at all would be the defect returning.
 
-### The guaranteed minimums, both ways
+### The guaranteed minimums, re-derived
 
-| | events | tags | transient heap ops today | on the prototype |
+| | events | tags | transient heap ops before | after |
 | --- | ---: | ---: | ---: | ---: |
 | VT-24 × VT-22 floors | 128 | 64 | 16,640 | **0** |
 | SQLite's declared ceilings | 256 | 128 | 66,048 | **0** |
 
-Zero is the *transient* count — the allocations that produce no output. Each
+Zero is the *transient* count — the allocations that produced no output. Each
 encode still allocates its own output buffer and grows it, and that cost is
-unchanged, because the bytes are unchanged.
+unchanged because the bytes are unchanged.
 
 `Serialize for Query` is the same pattern one file over (`query.rs:380`,
 `items.to_vec()`): one 64-tag `QueryItem` costs 139 heap ops owned against 11

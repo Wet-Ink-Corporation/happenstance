@@ -110,7 +110,7 @@ an owned key and a borrowed probe, which is why the counterexample above is
 written that way and not as a round trip.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:136 (promises the borrowed form hashes)` ·
-`crates/happenstance-core/src/event.rs:932 (a_map_keyed_by_event_type_is_probed_by_str)` ·
+`crates/happenstance-core/src/event.rs:1007 (a_map_keyed_by_event_type_is_probed_by_str)` ·
 [SPECIFICATION VT-32](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION VT-33](../../spec/SPECIFICATION.md) ·
 [std `Borrow`](https://doc.rust-lang.org/std/borrow/trait.Borrow.html) *(checked 2026-08-09, rustc 1.97.1)*

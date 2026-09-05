@@ -977,6 +977,43 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **Every `Serialize` impl in `happenstance-core` deep-cloned the value it was
+  handed; `SequencedEvent` did it twice.** No byte moved and no signature moved —
+  the wire mirrors are private, inside `#[cfg(feature = "serde")] mod
+  serde_impls`, and four golden vectors pin the encodings against the bytes the
+  previous commit produced.
+
+  Measured, on rustc 1.97.1, with the encoder's own allocations cancelled by a
+  byte-identity control: encoding **one** 64-tag `SequencedEvent` to postcard
+  cost **140 heap operations to produce 587 bytes**, of which **130 (93%) were
+  transient clones that produced no output. It now costs 8.** At 128 tags —
+  `SqliteEventStore::MAX_TAGS_PER_EVENT`, the only documented adapter ceiling in
+  the workspace — it was 269 and is now 9. One 64-tag `QueryItem` was 139 and is
+  now 8. The delta between the two tag regimes is **zero at 0, 1, 8, 32, 64 and
+  128 tags in both postcard and serde_json**, where it was `t + 1` for `Event`
+  and `2(t + 1)` for `SequencedEvent`.
+
+  A sync runner encoding one batch at the crate's own floors — VT-24's 128 events
+  by VT-22's 64 tags — did **16,640** transient allocations that produced no
+  bytes. (AE-2 states 16,896, having used the *clone* cost `t + 2` where the
+  measured *encode delta* is `t + 1`; the `Box<[Tag]>` allocation is in both arms
+  and cancels.)
+
+  The fix is serde's own idiom for an asymmetry the crate had not taken:
+  `Deserialize` must produce owned values because it is turning bytes into a
+  value, and `Serialize` must not, because it already has one. Five impls —
+  `Event`, `SequencedEvent`, `QueryItem`, `Query`, `AppendCondition` — now build
+  a borrowing mirror with the same `rename`, the same fields in the same order
+  and the same payload routing.
+
+  The table is `experiments/event-clone-allocations/results/clone-cost.md`, which
+  keeps the before-rows. The regression guard is in the gate and reads the source
+  rather than the behaviour, which is unusual and is the point: the mirrors are
+  private, the bytes are unchanged, and the workspace forbids the `unsafe` a
+  counting allocator needs, so no behavioural test in any format can tell the two
+  shapes apart. Review was the only other instrument and it passed this five
+  times.
+
 - **`happenstance`'s crates.io front page claimed a feature parity three codec
   keys contradict.** Under `## Guarantees` it read *"Every feature this crate has
   is forwarded from `happenstance-core`, so the two cannot disagree about what

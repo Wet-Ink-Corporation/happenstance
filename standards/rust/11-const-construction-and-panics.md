@@ -66,7 +66,7 @@ constructor can see the other's hole.
 
 **Evidence.** `crates/happenstance-core/src/validate.rs:53 (pub(crate) const fn check)` ·
 `crates/happenstance-core/src/event.rs:71 (Enforces exactly the rules)` ·
-`crates/happenstance-core/src/event.rs:874 (from_static_and_new_agree)` ·
+`crates/happenstance-core/src/event.rs:949 (from_static_and_new_agree)` ·
 [SPECIFICATION VT-32](../../spec/SPECIFICATION.md)
 
 ## RS-11-2. Put a `from_static` you want the compiler to check in a **free** `const`.
@@ -163,6 +163,6 @@ no test notices because the values in those `const`s are all valid; duplicating
 the validator is the divergence RS-11-1 forbids. Neither exit fails a test, so
 the review that lets it through sees a smaller diff.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:843 (it is the reason the body is a)` ·
+**Evidence.** `crates/happenstance-core/src/event.rs:918 (it is the reason the body is a)` ·
 `crates/happenstance-core/src/validate.rs:8 (iterator adaptors and)` ·
 [const_trait_impl tracking issue #143874](https://github.com/rust-lang/rust/issues/143874) *(checked 2026-08-09, rustc 1.97.1)*
