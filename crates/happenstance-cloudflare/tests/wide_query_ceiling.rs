@@ -92,7 +92,18 @@ const PARAMETER_WIDE_ITEMS: usize = CloudflareEventStore::MAX_QUERY_ARMS_PER_STA
 /// past the wall is planner work this target pays for and proves nothing extra.
 const TYPES_PER_ITEM: usize = 82;
 
-/// `SQLITE_MAX_VARIABLE_NUMBER`, the default this engine is built with.
+/// `SQLITE_MAX_VARIABLE_NUMBER`'s most common default — and **not a portable
+/// fact**, which is why nothing below asserts a refusal at it.
+///
+/// Measured across this repository's three CI hosts: `ubuntu-latest` and
+/// `windows-latest` refuse a statement binding 32,800 parameters;
+/// **`macos-latest` accepts it.** The limit is a compile-time option of whichever
+/// SQLite the runtime was built against, so a target asserting "this engine
+/// refuses N" asserts a property of the host it happened to run on.
+///
+/// That is why [`CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`] is
+/// 30,000 rather than pinned here: the budget must sit below the *lowest* limit
+/// any host imposes, and the headroom is what makes it portable.
 const BOUND_PARAMETERS: usize = 32_766;
 
 /// A fresh Durable Object with the schema applied.
@@ -168,20 +179,38 @@ fn parameter_wide_query() -> Query {
 }
 
 // ---------------------------------------------------------------------------
-// The control: this runtime really does refuse the unpartitioned statement
+// The control: this host's walls, and the budget sitting inside them
 // ---------------------------------------------------------------------------
 
-/// Both walls, hit deliberately, through the storage handle rather than the
-/// adapter.
+/// Both walls, measured through the storage handle rather than the adapter —
+/// and each asserted in the direction that is portable.
 ///
-/// This is the case that makes every other case below mean something. It builds
-/// the two statements a translation with no partition would have built — the
-/// same arm count and the same parameter count the adapter's own plan carries in
-/// total — and asserts the driver refuses each of them. If SQLite ever stopped
-/// refusing, this case fails and says so, rather than the rest of the target
-/// silently degrading into a suite that proves nothing.
+/// **This case was renamed after it went red on `macos-latest`**, and the rename
+/// is the finding. It was
+/// `the_unpartitioned_statement_is_refused_by_this_runtime`, and it asserted
+/// that the driver refuses *both* unpartitioned statements. The compound-`SELECT`
+/// half holds on all three CI hosts. The parameter half does not:
+/// `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option of whichever SQLite the
+/// runtime was built against, and macOS's accepts the 32,800 that ubuntu's and
+/// windows's refuse. The old assertion was a claim about the host it happened to
+/// run on, and it was true on two of three.
+///
+/// What it asserts now is the pair that actually protects this store. A compound
+/// `SELECT` of `ARM_WIDE_ITEMS` terms is refused — the arm wall is real here — and
+/// a statement binding exactly `MAX_QUERY_PARAMETERS_PER_STATEMENT` is
+/// **accepted**, which is the direction that can break us: a host whose limit
+/// sits *below* the budget would reject every partitioned statement this store
+/// emits, and for an append guard that rejection lands inside the turn with the
+/// caller's decision already taken.
+///
+/// It is no longer load-bearing for the six cases below, and that is worth
+/// stating plainly rather than leaving as an inherited justification. Each of
+/// those asserts `planned_statement_count > 1` and that the answer comes from
+/// every chunk — properties of this store's partition, not of the engine — so
+/// they do not silently degrade on a host with a wider wall. This control guards
+/// the *budget*, not their validity.
 #[wasm_bindgen_test]
-fn the_unpartitioned_statement_is_refused_by_this_runtime() {
+fn the_partition_budget_sits_inside_this_hosts_limits() {
     let host = DurableObjectHost::new();
     let sql: SqlStorage = host.storage();
     let store = CloudflareEventStore::new(sql.clone());
@@ -200,24 +229,49 @@ fn the_unpartitioned_statement_is_refused_by_this_runtime() {
          every case below is passing for the wrong reason"
     );
 
-    // One statement binding more than SQLITE_MAX_VARIABLE_NUMBER parameters.
-    let width = PARAMETER_WIDE_ITEMS * TYPES_PER_ITEM;
+    // The parameter axis, asserted in the only direction that is portable.
+    //
+    // This used to assert that the runtime REFUSES a statement binding
+    // `PARAMETER_WIDE_ITEMS * TYPES_PER_ITEM` (32,800) parameters. It does on
+    // `ubuntu-latest` and `windows-latest`; it does **not** on `macos-latest`,
+    // because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option of whichever
+    // SQLite the host was built against. That assertion was a claim about the
+    // host, and it went red on the first CI run that met a host with a wider one.
+    //
+    // What matters for correctness is the other direction, and nothing checked
+    // it: this store partitions to `MAX_QUERY_PARAMETERS_PER_STATEMENT`, so a
+    // host whose limit is **below** that budget would refuse statements the store
+    // considers safe — for the guard, inside the append turn with the caller's
+    // decision already taken, which is VT-24's named timing. A host with a
+    // *higher* limit costs nothing but conservatism.
+    //
+    // The six cases below do not depend on either wall being crossed: each
+    // asserts `planned_statement_count > 1` and that the answer comes from every
+    // chunk, which are properties of this store's partition rather than of the
+    // engine. So this control guards the budget, not their validity.
+    let budget = CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
     assert!(
-        width > BOUND_PARAMETERS,
-        "the fixture must exceed SQLITE_MAX_VARIABLE_NUMBER or it proves nothing"
+        budget < BOUND_PARAMETERS,
+        "the budget must sit below the lowest limit any host imposes, or the \
+         partition is headroom on one machine and a coin toss on the next: \
+         budget {budget}, most common default {BOUND_PARAMETERS}"
     );
-    let placeholders = vec!["?"; width].join(",");
-    let bindings: Vec<SqlValue> = (0..width)
+    let placeholders = vec!["?"; budget].join(",");
+    let bindings: Vec<SqlValue> = (0..budget)
         .map(|n| SqlValue::Text(format!("T{n}")))
         .collect();
-    let refused = sql.exec(
+    let accepted = sql.exec(
         &format!("SELECT position FROM event WHERE event_type IN ({placeholders})"),
         &bindings,
     );
     assert!(
-        refused.is_err(),
-        "this runtime accepted a statement binding {width} parameters, so \
-         SQLITE_MAX_VARIABLE_NUMBER is not what this target believes it is"
+        accepted.is_ok(),
+        "this runtime refused a statement binding {budget} parameters — the \
+         exact width this store partitions to — so every partitioned statement \
+         it emits is one this host rejects, and for a guard that rejection \
+         arrives inside the append turn. Lower \
+         `MAX_QUERY_PARAMETERS_PER_STATEMENT` below this host's limit. Got \
+         {accepted:?}"
     );
 }
 

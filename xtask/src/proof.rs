@@ -876,15 +876,24 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
 /// there is no `mod $mod_name` wrapper, because `event_store_conformance!` is
 /// not involved.
 ///
-/// **The first name is load-bearing in a way the other six are not.**
-/// `the_unpartitioned_statement_is_refused_by_this_runtime` is the control: it
-/// hands this runtime the statement a translation with no partition would have
-/// built and asserts the driver refuses it. Delete that and the six passing
-/// cases below it degrade from *the wall is real and no longer hit* to *nothing
-/// went wrong*, which is a suite that would stay green if
-/// `SQLITE_MAX_COMPOUND_SELECT` were raised out from under it.
+/// **The first name is the control, and what it controls for changed once it
+/// met a third host.** `the_partition_budget_sits_inside_this_hosts_limits`
+/// hands this runtime the two statements a translation with no partition would
+/// have built. It was `the_unpartitioned_statement_is_refused_by_this_runtime`
+/// and asserted the driver refuses both; that went red on `macos-latest`,
+/// because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option and macOS's
+/// SQLite accepts the 32,800 that ubuntu's and windows's refuse. It now asserts
+/// the arm wall is real here **and** that a statement at exactly the partition
+/// budget is accepted — the direction that breaks the store rather than the one
+/// that varies harmlessly.
+///
+/// It is no longer load-bearing for the six below, and the old comment claiming
+/// it was is corrected rather than left standing: each of those asserts
+/// `planned_statement_count > 1` and an answer drawn from every chunk, which are
+/// properties of the partition rather than of the engine, so they do not degrade
+/// into *nothing went wrong* on a host with a wider wall.
 const WIDE_QUERY_CEILING_TESTS: &[&str] = &[
-    "the_unpartitioned_statement_is_refused_by_this_runtime",
+    "the_partition_budget_sits_inside_this_hosts_limits",
     "a_read_past_the_compound_select_ceiling_is_served_from_every_chunk",
     "a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk",
     "an_append_guard_past_the_compound_select_ceiling_is_not_refused",

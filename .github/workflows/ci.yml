@@ -167,28 +167,45 @@ jobs:
   backlog:
     name: backlog and knowledge base
     runs-on: ubuntu-latest
-    # Skipped on a **fork's** pull request, and nowhere else.
+    # ══ DISABLED, 2026-09-04, and disabled LOUDLY rather than deleted ══
     #
-    # This is the one carve-out from the "RED rather than skipped" rule stated
-    # below, and it is deliberately narrow because that rule is right. GitHub
-    # does not pass repository or organisation secrets to a workflow triggered by
-    # a pull request from a fork — by design, so a stranger's branch cannot
-    # exfiltrate them. `REDKILN_TOKEN` is therefore not absent-because-nobody-set-it
-    # there; it is unreachable, and a job that fails for a reason the contributor
-    # cannot act on teaches them only that this project's CI is broken.
+    # This repository has moved off the redkiln version this job pins, and the
+    # pinned CLI therefore reports drift against a process the repository no
+    # longer runs. It is turned off until the next version stabilises, so that
+    # `0.2.0` is not gated on a tool disagreement that says nothing about the
+    # library.
     #
-    # The two cases are different and the condition keeps them different. A
-    # missing or revoked secret on a same-repository push or pull request still
-    # turns this job RED, which is the failure the rule below exists to catch.
-    # Only the structurally impossible case is skipped, and a skipped job is
-    # visible in the checks list rather than a passing tick.
+    # `if: false` rather than deleting the job, and that choice is this job's own
+    # argument applied to itself. Its comment below says a backlog check that
+    # quietly stops running is worth less than no backlog check, *because the
+    # green tick keeps arriving*. A deleted job vanishes from the checks list; a
+    # false-gated one shows as **skipped**, which is visible. Nothing here gets a
+    # passing tick it did not earn.
     #
-    # What it costs: a fork's pull request has not had its backlog or knowledge
-    # base checked. Re-run it from a same-repository branch before merging — see
-    # CONTRIBUTING.md, *The gate*.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # WHAT IS UNCHECKED WHILE THIS IS OFF, stated so it can be weighed:
+    #   * a `.kb` atom whose frontmatter stops validating;
+    #   * an accepted decision atom edited instead of superseded — the immutability
+    #     rule `validate --kb` is the only enforcement of;
+    #   * an item whose system frontmatter was hand-edited with the `PreToolUse`
+    #     hook disabled;
+    #   * a `.redkiln/templates/` customisation reverted by `adopt --templates`,
+    #     and the assertion that the drift set is exactly the six documented files.
+    # Every one of those merges green while this job is off. That is the cost.
+    #
+    # TO RE-ENABLE: restore the `if:` expression preserved immediately below, and
+    # raise `ref:` on the CLI checkout in the same commit — never separately, for
+    # the reason the `ref` comment gives.
+    #
+    #   if: >-
+    #     github.event_name != 'pull_request' ||
+    #     github.event.pull_request.head.repo.full_name == github.repository
+    #
+    # The preserved expression is the fork carve-out: GitHub does not pass
+    # secrets to a workflow triggered from a fork, so `REDKILN_TOKEN` is
+    # unreachable rather than unset there, and a job failing for a reason a
+    # contributor cannot act on teaches them only that this project's CI is
+    # broken. A missing secret on a same-repository push still turns the job RED.
+    if: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
