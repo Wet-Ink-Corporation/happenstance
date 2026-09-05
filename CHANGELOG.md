@@ -766,6 +766,28 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- **`happenstance`'s crates.io front page claimed a feature parity three codec
+  keys contradict.** Under `## Guarantees` it read *"Every feature this crate has
+  is forwarded from `happenstance-core`, so the two cannot disagree about what
+  `default-features = false` means"*, and `Cargo.toml` said the same thing a
+  second time. `json`, `postcard` and `cbor` exist only here, each turning on a
+  third-party dependency; `conformance` exists only in the contract crate; and
+  `json` is in these defaults, so `default-features = false` drops a codec and a
+  type here and nothing of the kind there.
+
+  The sentence was false in exactly the way it declared impossible, and it costs
+  the reader it was written for: an integrator auditing a minimal dependency
+  graph, told there is nothing crate-specific to look at, who finds `serde_json`,
+  `postcard` and `ciborium` at `cargo tree -e features`. `ciborium` is the sharp
+  case, because the manifest records that its licence subtree was read against
+  the workspace allowlist and could have refused.
+
+  The divergence is correct and stays — ADR-0006 gave encoding to the typed
+  layer, so the codecs belong here. Both pages now name what is local instead of
+  denying that anything is, and `manifest_contract.rs` derives the set from both
+  manifests, so a fourth codec cannot be added in silence. The impossibility
+  clause is permitted again if the two feature tables are ever made identical.
+
 - **`SendEventStore`'s and `SendProjectionStore`'s docs.rs pages told the reader
   to implement a different trait.** `trait_variant` rebuilds the derived trait
   with `..tr.clone()`, so `EventStore`'s and `ProjectionStore`'s trait-level doc
