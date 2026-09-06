@@ -20,8 +20,11 @@ claim about `trait_variant` was compiled and refuted.
 
 The larger change is that the design questions this file used to *schedule* are
 now *answered*. [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md)
-carries 200 numbered clauses across three ports — 139 `[FROZEN]`, 49
-`[PROVISIONAL]`, 10 `[DEFERRED]`, two `[NON-NORMATIVE]`. This file no longer
+carries 201 numbered clauses across three ports — 138 `[FROZEN]`, 46
+`[PROVISIONAL]`, 12 `[DEFERRED]`, five `[NON-NORMATIVE]`. Those figures are
+`cargo xtask spec-trace`'s rather than this file's: §7.1 is generated, and the
+checker fails the gate when §1.3's prose disagrees with it — which is the only
+reason a count in a document this long can be trusted at all. This file no longer
 decides what a port promises. It executes those clauses, discharges the
 provisional and deferred ones against named experiments, and makes the 57 cases
 in [`E2E-CASES.md`](spec/E2E-CASES.md) writable in an order that puts the
@@ -635,7 +638,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 47 `[PROVISIONAL]` clauses
+### The 46 `[PROVISIONAL]` clauses
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
@@ -659,7 +662,6 @@ seventeen.
 | The E0195 spelling trap | PS-34 | a third implementer hitting it after the diagnostic is documented | 6, re-tested 11 |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
-| **`read`'s return carries no `Unpin` bound — and this is the one row phase 12 cannot defer** | ES-42 | a consumer that needs `dyn EventStore` where the port has acquired a method the hand-written `Pin<Box<…>>` wrapper cannot box: a generic method, or a return whose lifetime the wrapper cannot name. *Inconvenience is not the falsifier* | **before 12, and the marker says so in terms** — adding a bound to an opaque return type after publish is breaking, so this clause **expires rather than drifts** |
 | Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
 | A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
@@ -697,12 +699,21 @@ where phase 9 had already named them as missing.
 Each new row's falsifier is the clause's own marker rather than a judgement made
 here, and six of the eight rows that moved name their owner in the same marker:
 PS-18, PS-27, PS-30 and PS-38 to `projection-store-freeze` (HS-P0010), ES-41 to
-whichever of phases 9 and 10 lands first, CF-39 to phases 8 and 10. **Two do
-not.** CF-40's marker names no phase, and assigning it is owed. And ES-42's names
-a deadline rather than a phase — *"must be re-evaluated before phase 12"* — which
-made it, while it was missing from this table, **the one clause in the
-specification whose own marker gates the release and which a phase-12 audit
-reading this table could not have seen.** That is what the repair was for.
+whichever of phases 9 and 10 lands first, CF-39 to phases 8 and 10.
+
+**ES-42 was the eighth row and is no longer in this table**, because it is no
+longer provisional. Its marker named a deadline rather than a phase — *"must be
+re-evaluated before phase 12"* — which made it, while it was missing from here,
+**the one clause in the specification whose own marker gated the release and
+which a phase-12 audit reading this table could not have seen.** That is what
+the repair was for, and the re-evaluation it forced ran immediately: no consumer
+needs `dyn EventStore` the E11 erasure wrapper cannot box, so the marker was
+**earned off rather than allowed to expire** and the clause is `[FROZEN]`. The
+count above is 46 rather than 47 for that reason.
+
+**One row is still owed.** CF-40's marker names no phase; assigning it is a
+decision this repair surfaces rather than settles, and
+`.kb/open-questions/cf-40-fixture-limits-ownership.md` is the standing record.
 
 ### The blocked cases
 

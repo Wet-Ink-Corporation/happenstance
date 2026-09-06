@@ -352,7 +352,7 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — 200 numbered clauses, each carrying a maturity marker
+what is **true now** — 201 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and

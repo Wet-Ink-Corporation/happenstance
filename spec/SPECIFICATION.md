@@ -217,7 +217,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 201 clause IDs, of which 196 are normative:
-**137 `[FROZEN]`**, **47 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **five
+**138 `[FROZEN]`**, **46 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **five
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; and PS-32,
 PS-33 and PS-35, the three §4 clauses whose subject was this document's own work
 list and which left the clause space at the typed layer's phase exit, their IDs
@@ -3138,12 +3138,29 @@ stream outlives the statement.
 
 `read`'s return type MUST NOT carry a `+ Unpin` bound.
 
-**[PROVISIONAL — falsified by a consumer that needs `dyn EventStore` where the
-port has acquired a method the hand-written `Pin<Box<…>>` wrapper cannot box: a
-generic method, which is not dyn-compatible, or a return whose lifetime the
-wrapper cannot name. Inconvenience is not the falsifier. Must be re-evaluated
-before phase 12: adding a bound to an opaque return type after publish is
-breaking, so this clause expires rather than drifts.]**
+**[FROZEN]**
+
+**The marker was earned off at phase 12 rather than expiring.** It required
+re-evaluation *before* publication, because adding a bound to an opaque return
+type afterwards is breaking — so this clause could not drift into `0.2.0`
+unexamined, and did not. The re-evaluation asked its own question: does any
+consumer need `dyn EventStore` where the port has acquired a method the
+hand-written `Pin<Box<…>>` wrapper cannot box — a generic method, which is not
+dyn-compatible, or a return whose lifetime the wrapper cannot name? The answer
+at `0.2.0` is no, and the repository owner recorded it as the decision it is.
+
+CF-25's standing qualification does not bite here, and the reason is worth
+stating rather than assumed: it forbids freezing a **port** clause while an axis
+of §6.5's portfolio has no passing implementation at its far end, and this
+clause's `Rule:` is **compile-level**. There is no adapter axis that could
+falsify a property of a return *type*; the evidence is a compile, and E11's
+erasure wrapper is it.
+
+**What would reopen it** is unchanged and is the old falsifier, kept because a
+frozen clause still has to say what a mistake would look like: a consumer that
+genuinely needs the erasure and cannot write it. *Inconvenience is not the
+falsifier* — the wrapper is fifteen lines of downstream code — and reopening now
+costs a new ADR rather than an edit.
 
 - **Rule:** compile-level — the erasure wrapper of ADR-0011's E11 compiles and
   round-trips against `MemoryEventStore` through a hand-written `dyn` wrapper,
@@ -9118,11 +9135,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 34 | 24 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 42 | 32 | 9 | 1 | 0 |
+| §3 `EventStore` | `ES` | 42 | 33 | 8 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 17 | 15 | 3 | 3 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 40 | 33 | 4 | 2 | 1 |
-| **Total** | | **201** | **137** | **47** | **12** | **5** |
+| **Total** | | **201** | **138** | **46** | **12** | **5** |
 
 ### 7.2 The table
 
@@ -9227,7 +9244,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
 | ES-41 | PROVISIONAL | `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
-| ES-42 | PROVISIONAL | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
+| ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 
 #### `PS` — the `ProjectionStore` port (§4)
 
