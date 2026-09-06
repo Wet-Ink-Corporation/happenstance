@@ -106,7 +106,15 @@ cargo test --release --test windowed_arms -- --nocapture --test-threads=1 2>&1 \
   | tee results/raw/windowed-arms.txt
 
 echo
-echo "==> 11. the selectivity lookup's own cost, at VT-23's item floor"
+echo "==> 11. the same three shapes at VT-23's 128-item floor, which is where"
+echo "        the per-arm page budget has 128 arms to be multiplied by. Step 10"
+echo "        concluded that one shape wins both ends; this is the step that"
+echo "        checks whether that survives the width. It does not."
+cargo test --release --test wide_windowed_arms -- --nocapture --test-threads=1 2>&1 \
+  | tee results/raw/wide-windowed-arms.txt
+
+echo
+echo "==> 12. the selectivity lookup's own cost, at VT-23's item floor"
 cargo test --release --test selectivity_cost -- --nocapture --test-threads=1 2>&1 \
   | tee results/raw/selectivity-cost.txt
 

@@ -57,6 +57,26 @@ pub const SEED_DATA: &[u8] = b"seeded";
 /// and the shape ADR-0022 §8's ~200x figure was taken on.
 pub const ROW_MODULUS: u64 = 97;
 
+/// Distinct `bucket:` tag values in [`Corpus::ManyBuckets`].
+///
+/// **128, because that is VT-23's floor** (`spec/SPECIFICATION.md`: every store
+/// must evaluate a query of at least 128 items). One bucket per item makes the
+/// widest conformant query a partition of the log rather than a query naming
+/// the same tag repeatedly.
+pub const BUCKETS: u64 = 128;
+
+/// The `bucket:` tag value for index `k`, zero-padded.
+///
+/// Padded to three digits so that every tag string is the same length and
+/// byte order matches numeric order. Nothing in the SQL depends on that — a tag
+/// is an opaque string to `event_tag` — but a results table that sorts
+/// `bucket:b10` between `bucket:b1` and `bucket:b2` is a table someone has to
+/// read twice.
+#[must_use]
+pub fn bucket_tag(k: u64) -> String {
+    format!("bucket:b{k:03}")
+}
+
 /// Rows written per transaction while seeding.
 const ROWS_PER_TRANSACTION: u64 = 50_000;
 
@@ -94,6 +114,21 @@ pub enum Corpus {
     /// question is vacuous here. That is stated rather than worked around: a tie
     /// is what "no tag is selective" means.
     BothUnselective,
+    /// `bucket:bNNN` (one event in [`BUCKETS`]) and `shard:cold` (all of them).
+    ///
+    /// The corpus a **wide** query needs, and the only reason it exists. VT-23
+    /// requires every store to evaluate a query of 128 items, and the other two
+    /// corpora carry two distinct tag values and 97 — so a 128-item query over
+    /// either of them names at most 97 different things and measures repetition
+    /// rather than width.
+    ///
+    /// [`BUCKETS`] is 128 exactly, so a 128-item query whose *i*th item names
+    /// `bucket:b{i}` **partitions** the log: every event matches exactly one
+    /// arm, the union is the whole store, and no arm duplicates another. That
+    /// is the widest shape the specification's floor describes, and it is also
+    /// the one where a per-arm page budget has the most arms to be multiplied
+    /// by.
+    ManyBuckets,
 }
 
 impl Corpus {
@@ -103,6 +138,10 @@ impl Corpus {
         match self {
             Self::SelectiveAndUnselective => [("shard", "cold"), ("row", "r7")],
             Self::BothUnselective => [("shard", "cold"), ("all", "yes")],
+            // One arbitrary bucket, so a *two-tag* table can be taken over this
+            // corpus too. The corpus exists for the wide case and this pair is
+            // not what it is for; the width lives in the query, not here.
+            Self::ManyBuckets => [("shard", "cold"), ("bucket", "b000")],
         }
     }
 }
@@ -120,6 +159,12 @@ pub fn seed_tags(corpus: Corpus, position: u64) -> [String; 2] {
             "shard:cold".to_owned(),
         ],
         Corpus::BothUnselective => ["all:yes".to_owned(), "shard:cold".to_owned()],
+        // "bucket:b000" < "shard:cold" bytewise, so this pair is already
+        // canonical in the order it is written, like the other two.
+        Corpus::ManyBuckets => [
+            bucket_tag((position - 1) % BUCKETS),
+            "shard:cold".to_owned(),
+        ],
     }
 }
 
@@ -303,6 +348,19 @@ fn bump_cardinality(connection: &Connection, target: u64, corpus: Corpus) -> rus
             // means, and is stated rather than broken with a tiebreak this
             // adapter does not have.
             statement.execute(rusqlite::params!["all:yes", whole_log])?;
+        } else if corpus == Corpus::ManyBuckets {
+            for bucket in 0..BUCKETS {
+                // Positions 1..=target map to bucket (position - 1) % BUCKETS,
+                // so the count is how many of 0..target are congruent to it —
+                // the same arithmetic as the `row:` case, and deliberately not
+                // `target / BUCKETS` alone, which is right only when the
+                // division is exact.
+                let count = target / BUCKETS + u64::from(target % BUCKETS > bucket);
+                statement.execute(rusqlite::params![
+                    bucket_tag(bucket),
+                    i64::try_from(count).unwrap_or(i64::MAX)
+                ])?;
+            }
         } else {
             for bucket in 0..ROW_MODULUS {
                 // Positions 1..=target map to bucket (position - 1) % 97, so the

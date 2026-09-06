@@ -130,10 +130,13 @@ Three parts, in increasing order of what they cost to decide:
 candidate pushes the read's window and page budget **into each arm** instead of
 applying them outside the wrapper, which bounds the matched set at
 `budget x arms` whatever the corpus. It was then measured on this crate's
-harness, and it wins **both** corpora, all three depths and the backwards cell —
-so the crossover this section is about does not arise, and no threshold is
-needed to navigate it. See [`windowed-arms.md`](windowed-arms.md); §4 above is
-kept as written because it is the reasoning that produced the question.
+harness, and at **one arm** it wins both corpora, all three depths and the
+backwards cell ([`windowed-arms.md`](windowed-arms.md)). At VT-23's 128-item
+floor it does not: it still beats what ships everywhere, but loses a broad query
+to `wrapper-exists` by 1.4x–3.4x ([`wide-arms.md`](wide-arms.md)). So a
+crossover survives — narrowed to 1,747x against 3.4x, and asymmetric enough to
+argue for a default rather than a threshold. §4 above is kept as written because
+it is the reasoning that produced the question.
 
 **(1) shipped; (2) and (3) did not.** (2) is a decision about when the adapter
 changes its query plan on data it samples, which is ADR-0022's territory and not

@@ -1,0 +1,57 @@
+
+running 1 test
+test the_windowed_arm_at_the_item_floor ... CONDITIONS	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000	items=128	buckets=128	arms_per_statement=400
+MATCHED	query=partition-128	arms=128	events=500000
+STATEMENT	query=partition-128	cell=first-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=first-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=first-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=partition-128	cell=first-page	shape=in-exists (ships)	rows=512	us_median=572182
+PAGE	query=partition-128	cell=first-page	shape=wrapper-exists	rows=512	us_median=77267
+PAGE	query=partition-128	cell=first-page	shape=windowed-in-exists	rows=512	us_median=264779
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=partition-128	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=736600
+PAGE	query=partition-128	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=102476
+PAGE	query=partition-128	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=320253
+STATEMENT	query=partition-128	cell=late-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=late-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=late-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=partition-128	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=791400
+PAGE	query=partition-128	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=108382
+PAGE	query=partition-128	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=154098
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=in-exists (ships)	sql_bytes=25817	params=387
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=wrapper-exists	sql_bytes=26832	params=387
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=windowed-in-exists	sql_bytes=39257	params=771
+PAGE	query=partition-128	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=680852
+PAGE	query=partition-128	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=103529
+PAGE	query=partition-128	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=312238
+MATCHED	query=needle-128	arms=128	events=3907
+STATEMENT	query=needle-128	cell=first-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=first-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=first-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=needle-128	cell=first-page	shape=in-exists (ships)	rows=512	us_median=24485
+PAGE	query=needle-128	cell=first-page	shape=wrapper-exists	rows=512	us_median=25898015
+PAGE	query=needle-128	cell=first-page	shape=windowed-in-exists	rows=512	us_median=17375
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=needle-128	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=40875
+PAGE	query=needle-128	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=24590183
+PAGE	query=needle-128	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=16604
+STATEMENT	query=needle-128	cell=late-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=late-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=late-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+PAGE	query=needle-128	cell=late-replay-page	shape=in-exists (ships)	rows=391	us_median=45794
+PAGE	query=needle-128	cell=late-replay-page	shape=wrapper-exists	rows=391	us_median=15770962
+PAGE	query=needle-128	cell=late-replay-page	shape=windowed-in-exists	rows=391	us_median=12480
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=in-exists (ships)	sql_bytes=25817	params=387
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=wrapper-exists	sql_bytes=26832	params=387
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=windowed-in-exists	sql_bytes=39257	params=771
+PAGE	query=needle-128	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=27744
+PAGE	query=needle-128	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=23051502
+PAGE	query=needle-128	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=13198
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 468.77s
+

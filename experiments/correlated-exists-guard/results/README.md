@@ -11,7 +11,8 @@ across runs.
 | [`unselective-pair.md`](unselective-pair.md) | **the adversarial corpus** — no tag selective |
 | [`read-path.md`](read-path.md) | **the read path**, and the three candidate repairs for I-3's outer wrapper |
 | [`all-query-wrapper.md`](all-query-wrapper.md) | the one of those three that shipped, and the mechanism it was wrong about |
-| [`windowed-arms.md`](windowed-arms.md) | **the fourth candidate**, which wins both corpora and removes the choice |
+| [`windowed-arms.md`](windowed-arms.md) | **the fourth candidate**, which wins both corpora at one arm |
+| [`wide-arms.md`](wide-arms.md) | the same three shapes at VT-23's 128-item floor, where that stops holding |
 | `raw/*.txt` | command output, tee'd verbatim by `run.sh` |
 
 The tables are written **by hand** from `raw/`, because a table nobody read is a

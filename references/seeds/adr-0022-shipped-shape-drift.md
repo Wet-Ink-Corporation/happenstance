@@ -141,10 +141,39 @@ Four questions, in the order they depend on each other.
    seam, which is exactly the kind of thing ADR-0022 §10 reasoned about when it
    refused to mint `Query::index_arms()`.
 
-   Still unmeasured, and named here rather than left to be discovered: **no
-   multi-item query**. Every cell is a union of one arm, while the soundness
-   argument is about a union of many, and VT-23's 128-item floor puts
-   `budget x arms` at 65,536 positions rather than 512.
+   **That gap has now been measured, and it takes half the claim back.**
+   `results/wide-arms.md`: the same three shapes at VT-23's 128-item floor, on a
+   store where 128 items name 128 distinct tags rather than repeating a few.
+
+   * The windowed arm still beats **what ships** in all eight cells — 2.2x–5.1x
+     on a query whose 128 arms partition the log, 1.4x–3.7x on one where 127
+     arms match nothing.
+   * It no longer beats `wrapper-exists` everywhere. On the broad 128-item query
+     it is **1.4x–3.4x worse**, because `budget x arms` is 65,536 positions
+     materialised to return 512 — bounded, as the argument said, but still 128x
+     more work than the answer needs, where `wrapper-exists` materialises
+     nothing.
+   * On the selective 128-item query `wrapper-exists` is **1,264x–1,747x worse**
+     — 25.9 seconds for one page, the slowest statement in this crate. Width
+     makes `read-path.md`'s *"2.3x worse on a selective query"* an
+     understatement by three orders of magnitude.
+
+   **So question 4 moves a third time, and this is where it rests.** The
+   crossover is real at width and cannot be dissolved by the windowed shape
+   alone. But it is now **asymmetric in the safe direction and bounded on that
+   side**: defaulting to the windowed arm everywhere costs at most 3.4x against
+   the best available shape, where defaulting to `wrapper-exists` costs up to
+   1,747x and defaulting to what ships loses in all eight cells. That argues for
+   **a default with a stated worst case** rather than a sampled threshold, which
+   is a materially easier thing for a decision record to justify and to falsify.
+
+   If a conditional rule is still wanted, the discriminator this evidence points
+   at is not tag selectivity: it is `arm count x page budget` against matched-set
+   size. The adapter holds both halves already — `Selectivity` the per-tag
+   counts, `chunks` the arm count.
+
+   Still unmeasured: **where between 1 and 128 arms the windowed shape stops
+   dominating.** Two points, both floors, nothing between them.
 
 ## What must remain true
 
@@ -167,7 +196,8 @@ Four questions, in the order they depend on each other.
 | `.../results/guard-cost.md` | six shapes x four scenarios x three log sizes |
 | `.../results/read-path.md` | I-3's wrapper, three candidates, the crossover, and the proposed approach |
 | `.../results/all-query-wrapper.md` | the part of that approach which shipped, and the mechanism it corrected |
-| `.../results/windowed-arms.md` | the fourth candidate, measured: one shape that wins both ends of the axis |
+| `.../results/windowed-arms.md` | the fourth candidate at one arm: one shape winning both ends of the axis |
+| `.../results/wide-arms.md` | the same three shapes at VT-23's 128-item floor, where that stops holding |
 | `.../results/seed-ordering.md` | the ordering policy's sign flip, both shapes |
 | `.../results/unselective-pair.md` | the adversarial corpus, and the early-exit hypothesis it produced |
 | `experiments/shipped-append-condition-sql/` | the closed record of the shape that shipped until 2026-09-05 |

@@ -1,4 +1,12 @@
-# The window belongs inside the arm, and then there is no crossover
+# The window belongs inside the arm — at one arm
+
+> **Corrected by [`wide-arms.md`](wide-arms.md), which was run afterwards.**
+> Every cell on this page is a query of **one item**. At VT-23's floor of 128
+> items the conclusion in §1 — that one shape wins both ends, so nothing has to
+> be chosen — **does not hold**: the windowed arm is still better than what ships
+> in all eight wide cells, but it is 1.4x–3.4x worse than `wrapper-exists` on a
+> broad 128-item query, because `budget x arms` is 65,536 positions rather than
+> 512. Read this page for the mechanism and that one for what it costs at width.
 
 Written by hand from [`raw/windowed-arms.txt`](raw/windowed-arms.txt),
 `cargo test --release --test windowed_arms` on 2026-09-05. Two 500,000-event
@@ -48,7 +56,7 @@ The inner `SELECT` is required rather than stylistic: SQLite rejects a bare
 | unselective | late replay | 1,250,408 | 751 | 722 |
 | unselective | backwards from head | 1,208,409 | 1,246 | **1,070** |
 
-## 1. One shape wins both corpora, so there is nothing to choose between
+## 1. One shape wins both corpora at this arm count
 
 Against what ships: **4.7x–8.8x** on the selective corpus, **1,129x–1,732x** on
 the unselective one.
@@ -58,10 +66,18 @@ Against `wrapper-exists`, which is the candidate the crossover was about:
 unselective one — ahead in every cell, though the unselective margin is inside
 this host's noise and is not a claim.
 
-**That is the finding.** `read-path.md`'s crossover was 1,089x one way and 2.3x
-the other, and a rule to navigate it needs a threshold, a cardinality estimate
-and an adapter whose query plan depends on data it sampled. This shape needs
-none of those, because it is not better *at one end* — it is better at both.
+**That is the finding, and its scope is one arm.** `read-path.md`'s crossover
+was 1,089x one way and 2.3x the other, and a rule to navigate it needs a
+threshold, a cardinality estimate and an adapter whose query plan depends on data
+it sampled. At this arm count the shape needs none of those, because it is not
+better *at one end* — it is better at both.
+
+[`wide-arms.md`](wide-arms.md) then took the same three shapes to VT-23's
+128-item floor, and the second half of that sentence stops being true there: the
+crossover returns, narrowed from 1,089x/2.3x to 1,747x/3.4x and moved onto a
+different pair of shapes. This section is left as written, because it is what
+this page's evidence supports and it is the claim the next page had to be run to
+check.
 
 ## 2. Why: the window reaches the index instead of stopping outside it
 
@@ -128,7 +144,9 @@ One machine, one run, 10 rounds per cell, one page size (512, the shipped
 multi-item query is measured**, and that is the gap that matters most: the
 soundness argument in §3 is about a union of arms, and every cell here has a
 union of one. VT-23's 128-item floor is where `budget x arms` is 65,536
-positions rather than 512, and nothing here says what that costs.
+positions rather than 512. **That gap has since been measured**, and it changes
+the conclusion — [`wide-arms.md`](wide-arms.md), and the banner at the top of
+this page.
 
 No full drain — the per-page medians are not multiplied out, because the shipped
 shape's growth with depth and the windowed shape's flatness would make any
