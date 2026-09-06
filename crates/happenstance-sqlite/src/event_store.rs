@@ -447,8 +447,9 @@ impl SqliteEventStore {
     /// asking how many statements will run, not how many the arm arithmetic on
     /// its own would allow.
     ///
-    /// Only the *shape* of the [`Window`](crate::query_sql::Window) below
-    /// reaches the count, never its values: the partition prices the two bounds
+    /// Only the *shape* of the `Window` below reaches the count, never its
+    /// values — it is `pub(crate)`, so this says its name rather than linking to
+    /// it: the partition prices the two bounds
     /// every arm binds and the one budget every chunk binds, and is otherwise
     /// indifferent to what `lo`, `hi` and `budget` hold. A default
     /// `Selectivity` likewise orders tags inside an arm, never the partition.
