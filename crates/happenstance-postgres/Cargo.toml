@@ -24,13 +24,33 @@ futures-core.workspace = true
 thiserror.workspace = true
 # `postgres` is the driver; `runtime-tokio` is the reactor. Nothing else — no
 # TLS backend (see the workspace table), no `macros` (compile-time query
-# checking needs a live `DATABASE_URL`, and this crate has none), no `migrate`
-# (the schema is prose in `event_store.rs` until phase 10 makes it real).
+# checking needs a live `DATABASE_URL`, and this crate has none), and still no
+# `migrate`.
+#
+# That last one stopped being "the schema is prose until phase 10 makes it real"
+# and became a decision. The schema is now real — `migrations/0001_event_log.sql`
+# — and it is applied by `include_str!` and one `execute`, not by `sqlx::migrate!`.
+# Two reasons, and the second is the one that decided it. The version-tracking a
+# migrator buys is worth nothing against a single migration applied to a schema
+# created seconds earlier and dropped at the end of the run; and `migrate` carries
+# its own `_sqlx_migrations` bookkeeping table, which is *per schema* and would
+# therefore be created once per fixture instance under the schema-per-instance
+# isolation this crate's tests use — bookkeeping about a history that, by
+# construction, is one row long. The one-migration discipline ends at first
+# publish, which is `publication-and-positioning`'s to decide; a migrator can be
+# turned on then, in the release that needs it.
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
 
 [dev-dependencies]
 happenstance-testkit.workspace = true
+# `rt-multi-thread` is not decoration: the concurrency family starts
+# `CONTENDERS` contenders, and a current-thread runtime turns that family from a
+# race into a queue.
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+# The live server the fixture talks to. Dev-only, so it reaches no consumer; see
+# the workspace table for the pin, the licence verdict and why this is not
+# `testcontainers-modules`.
+testcontainers.workspace = true
 
 [features]
 # The event store only. `projection-store` left this set with ADR-0036: it forwards

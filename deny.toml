@@ -70,13 +70,41 @@ allow-wildcard-paths = true
 # `crates/happenstance/tests/flavours.rs` still proves that at compile time on
 # every target, which is the guard that was never optional.
 #
-# A third route still fails until someone decides it should not.
+# The third route arrived at phase 10 and was also decided rather than absorbed.
+# `testcontainers` is the live-Postgres fixture's server, and it reaches
+# `async-trait` twice — directly, and through `tonic` under `bollard`, which is
+# how a Docker client speaks to buildkit. ADR-0038 ratifies both
+# (`references/adr/0038-async-trait-through-testcontainers.md`).
+#
+# **This exemption rests on the first argument, not the second, and it is the
+# strongest of the three.** `worker` ships: it is a normal dependency of
+# `happenstance-cloudflare`, and it is exempt on the narrower ground that it uses
+# `async-trait` for its *own* traits. `testcontainers` does not ship at all. It is
+# a `[dev-dependencies]` of `happenstance-postgres` alone, Cargo strips it from
+# the published manifest, and `cargo hack --no-dev-deps` cannot see it — so it is
+# `wasm-bindgen-test`'s case exactly, one crate further from a consumer than the
+# exemption that was already hardest to argue with.
+#
+# What ADR-0001 actually protects is untouched either way: no `happenstance` port
+# passes through the macro, because nothing in this workspace implements a
+# `testcontainers` or `tonic` trait. `crates/happenstance/tests/flavours.rs` still
+# instantiates every typed-layer entry point against a genuinely `!Send` store on
+# every target, and that is the guard that was never optional.
+#
+# `tonic` is named as its own wrapper rather than folded into `testcontainers`
+# because the `wrappers` list matches **direct** parents, and collapsing the two
+# would silently admit `tonic` from anywhere else in the graph — including from a
+# crate that does ship.
+#
+# A fourth route still fails until someone decides it should not.
 deny = [
     { crate = "async-trait", wrappers = [
         "wasm-bindgen-test",
         "worker",
         "worker-macros",
-    ], reason = "ADR-0001: injects `+ Send`, which forecloses wasm32; ADR-0035 exempts the `worker` subtree" },
+        "testcontainers",
+        "tonic",
+    ], reason = "ADR-0001: injects `+ Send`, which forecloses wasm32; ADR-0035 exempts the `worker` subtree, ADR-0038 the dev-only `testcontainers` subtree" },
 ]
 
 [sources]

@@ -67,6 +67,9 @@ pub mod error;
 #[cfg(feature = "event-store")]
 pub mod event_store;
 
+#[cfg(feature = "event-store")]
+pub mod migration;
+
 #[cfg(feature = "projection-store")]
 pub mod projection_store;
 
