@@ -362,6 +362,20 @@ pub(crate) fn is_inert(path: &str) -> bool {
         "standards/pages/",
         "references/",
         "experiments/",
+        // The standing benchmark suite, and it is here for exactly the reason
+        // `experiments/` above is: `benchmarks/Cargo.toml` opens with a bare
+        // `[workspace]` table, so cargo cannot reach it from the root manifest
+        // and nothing in this workspace compiles it. Without this prefix a
+        // change under it is not inert, and the arm below widens the gate to
+        // the **whole workspace** — a full run for a diff that cannot affect a
+        // single member.
+        //
+        // Unlike `spec/` and `standards/pages/`, this prefix is *not* half of a
+        // pair: no unconditional lint runs over it, and none should. CF-34
+        // (`spec/SPECIFICATION.md:8747`) rejects a benchmark result gating a
+        // merge, and a `xtask` step that read this tree on every invocation is
+        // one edit away from being one.
+        "benchmarks/",
         ".github/",
         ".bklg/",
         ".kb/",
@@ -862,6 +876,32 @@ mod tests {
             "standards/pages/00-one-need.md",
             "standards/pages/examples/two-needs.md",
         ] {
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
+    }
+
+    /// The standing benchmark suite reaches no package, and — unlike `spec/`
+    /// and `standards/pages/` — nothing checks it either.
+    ///
+    /// Asserted on the predicate **and** through [`affected_packages`], for the
+    /// reason `the_narrative_tree_is_no_longer_inert` gives one test up: the
+    /// second call alone passes while the prefix sits shadowed behind an
+    /// earlier arm, and could not tell "inert" from "unreachable".
+    ///
+    /// The wrong implementation this rejects is the absent entry, whose symptom
+    /// is not a failure but a **full-workspace gate run** for a diff touching
+    /// only `benchmarks/` — slow enough to be noticed, quiet enough to be
+    /// blamed on the machine.
+    #[test]
+    fn the_benchmark_suite_selects_no_package() {
+        for path in [
+            "benchmarks/Cargo.toml",
+            "benchmarks/src/corpus.rs",
+            "benchmarks/benches/store_append.rs",
+            "benchmarks/results/GRADES.md",
+        ] {
+            assert!(is_inert(path), "{path} should be inert");
             let affected = affected_packages(&changed(&[path]), &members());
             assert!(affected.is_empty(), "{path} should reach no package");
         }

@@ -1,0 +1,213 @@
+# The standing benchmark suite. **Deliberately outside the workspace**, and the
+# empty `[workspace]` table below is what keeps it there: it stops cargo walking
+# up to the repository root manifest and adopting this crate as a member, the
+# same trick every crate under `experiments/` uses.
+#
+# Three reasons, and each is sufficient on its own.
+#
+# 1. **CF-34** (`spec/SPECIFICATION.md:8747`): performance MUST be measured by a
+#    separate harness which is not part of the conformance bar. A crate cargo
+#    cannot see from the root manifest is a crate no gate step can start
+#    depending on by accident.
+# 2. `src/bin/allocations.rs` installs a counting `#[global_allocator]`, which
+#    needs `unsafe impl GlobalAlloc`. The workspace root sets
+#    `unsafe_code = "forbid"`, and `forbid` cannot be overridden from inside a
+#    crate at all — a `deny` could be waived with an `expect`. The instrument
+#    physically cannot live under `crates/`.
+# 3. `criterion` and its graph would otherwise be walked by `cargo deny` on
+#    every run and re-resolved by `cargo hack` once per feature subset, for the
+#    whole workspace. `deny.toml`'s `[graph]` does not set `exclude-dev`
+#    (RS-50-5).
+#
+# **Why `benchmarks/` and not `experiments/`.** An experiment answers one
+# question and is finished; its README is written once and its `results/` are a
+# closed record. This is a *standing* instrument: the same arms are re-run over
+# time and `results/history/` accumulates, because CF-34's own model is that
+# "benchmarks are published per adapter and compared against that adapter's own
+# history". Both trees are outside the workspace and neither gates anything;
+# what separates them is whether the numbers are expected to be taken again.
+[workspace]
+
+[package]
+name = "happenstance-benchmarks"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, at the pinned tree. `memory` because `MemoryEventStore` is one
+# of the three arms and the only one with no I/O in it at all.
+happenstance-core = { path = "../crates/happenstance-core", features = [
+    "std",
+    "memory",
+    "conformance",
+    "unstable-projection",
+] }
+# The typed layer, with every codec on: the codec group measures all three
+# against each other and a missing one is a silently absent column.
+happenstance = { path = "../crates/happenstance", features = [
+    "std",
+    "memory",
+    "json",
+    "cbor",
+    "postcard",
+    "unstable-projection",
+] }
+# **The real adapter, in the graph.** Every SQLite figure calls the shipped
+# `SqliteEventStore` and `SqliteProjectionStore` rather than anything written
+# here, so a number published from this crate is a number for the code that
+# publishes.
+happenstance-sqlite = { path = "../crates/happenstance-sqlite", features = [
+    "event-store",
+    "projection-store",
+    "conformance",
+] }
+# `bench` for `event_store_benchmarks!`, which this crate mounts verbatim so
+# that any other adapter mounting the same macro produces comparable rows
+# (ADR-0022 §3's "the workloads are the testkit's"). A *normal* dependency and
+# not a dev-dependency because `src/fixtures/` implements `Fixture` in the
+# library half, where `benches/` and `src/bin/` can both reach it.
+happenstance-testkit = { path = "../crates/happenstance-testkit", features = [
+    "bench",
+] }
+
+bytes = "1.10"
+futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# The floor arm. Same driver at the same version and the same `bundled` feature
+# the workspace names, so the raw-SQL control is compiled against the SQLite the
+# adapter links — a floor measured against a different SQLite is not a floor.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+
+# Percentiles where criterion's batched model cannot answer. criterion reports a
+# mean and a bootstrap CI over *batches*; a tail latency needs every sample, and
+# the contended and sustained-load arms are exactly where the tail is the
+# finding.
+hdrhistogram = { version = "7.6", default-features = false }
+# User + kernel process time, cross-platform, without an `unsafe` block here.
+# 1.0.0 and unchanged since 2019, which for a crate that wraps two OS calls is
+# stability rather than abandonment; the alternative was `GetProcessTimes` and
+# `getrusage` behind our own `cfg`, and `unsafe` is forbidden everywhere in this
+# repository except the one allocator that cannot avoid it.
+cpu-time = "1.0"
+anyhow = "1"
+# The one error type this crate defines: `commit`'s `decide` callback must be
+# able to fail for the signature to hold, and every arm here needs one that
+# never does. Same major the workspace pins, so the graph gains an edge and not
+# a node.
+thiserror = "2"
+
+[dev-dependencies]
+# The timing engine. Chosen over `divan` on maintenance and over `iai-callgrind`
+# on platform:
+#
+# * `criterion` 0.8.2 — maintained under the `criterion-rs` organisation (the
+#   old `bheisler/criterion.rs` repository is not), released 2026-02, MSRV 1.86.
+#   Gives `Throughput::Elements`/`Bytes`, bootstrap confidence intervals,
+#   outlier classification, and `--save-baseline` / `--baseline`, which is the
+#   mechanism `results/history/` is built on.
+# * `divan` 0.1.21 has had no release since April 2025. The one thing it would
+#   have bought is `AllocProfiler`, and this repository has written a counting
+#   allocator twice already (`experiments/event-clone-allocations/src/counting.rs`,
+#   `experiments/one-connection-latency/src/counting.rs`); `src/counting.rs`
+#   here is those two merged.
+# * `iai-callgrind` cannot run on Windows at all — Valgrind does not support it —
+#   and the development machine and one of the three CI runners are Windows.
+#
+# `html_reports` and `csv_output` are named because neither is a default in 0.8;
+# `async_tokio` is what lets a bench routine be an `async` block, which every
+# SQLite arm must be because `SqliteEventStore::read` hops to `spawn_blocking`.
+criterion = { version = "0.8", features = [
+    "async_tokio",
+    "html_reports",
+    "csv_output",
+] }
+
+# `--release` and `--bench` are what `run.sh` times, and these are the settings
+# it times under. Stated rather than defaulted so README.md's "Build" row is
+# checkable against this manifest instead of against cargo's documentation, and
+# because `[profile.bench]` does **not** inherit `[profile.release]` — a suite
+# that assumed it did would be timing a different binary from the one it
+# documents.
+#
+# `lto = false` and `codegen-units = 16` rather than the workspace release
+# profile's `thin` / `1`: the findings here are ratios and orders of magnitude,
+# and a long link on every edit buys a few percent on arms that do not report a
+# few percent. `experiments/one-connection-latency` states the same profile for
+# the same reason.
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16
+panic = "unwind"
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16
+
+# The house lint policy, restated rather than inherited: `[lints] workspace =
+# true` is unavailable to a crate that is not a member. `unsafe_code` is the one
+# line deliberately **not** copied — `forbid` there is what makes the counting
+# allocator impossible under `crates/`, and it is the reason this crate lives
+# outside it.
+#
+# `.cargo/config.toml` at the repository root sets `-D warnings` ambient and
+# cargo config discovery walks up from here, so every warning below is an error
+# in practice. Registry dependencies are unaffected: cargo passes them
+# `--cap-lints allow`.
+[lints.rust]
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+# Deliberately **not** `deny`, which is what the workspace sets. The `Fixture`
+# contract requires `connect` to panic rather than return a `Result`
+# (`crates/happenstance-testkit/src/contract.rs:332`): a fixture that cannot
+# connect is a broken measurement environment, not a finding. Library code earns
+# the deny; an instrument whose only failure mode is "stop and say so" does not.
+unwrap_used = "allow"
+
+# Every criterion target needs `harness = false`: criterion supplies its own
+# `main` via `criterion_main!`, and libtest's harness would swallow its
+# command-line arguments — including `--save-baseline`, which is the whole
+# mechanism `results/history/` is built on.
+[[bench]]
+name = "store_append"
+harness = false
+
+[[bench]]
+name = "store_replay"
+harness = false
+
+[[bench]]
+name = "store_conditional"
+harness = false
+
+[[bench]]
+name = "store_query_shapes"
+harness = false
+
+[[bench]]
+name = "typed_codec"
+harness = false
+
+[[bench]]
+name = "typed_command"
+harness = false
+
+[[bench]]
+name = "projection_runner"
+harness = false

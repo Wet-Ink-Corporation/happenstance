@@ -313,11 +313,20 @@ fn query_of_widths(widths: &[usize]) -> Query {
 fn the_parameter_partition_splits_one_parameter_over_the_budget_and_not_before() {
     let arms = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
     let budget = SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
+    // What the *statement* binds beside the items' own tags, and it is not
+    // zero: `planned_statement_count` counts the read path, which puts the
+    // window's two ends on every arm and the page budget once on the compound.
+    // A case that means to sit exactly on the ceiling has to leave room for
+    // that, and saying so here is the point — the number this test pins is a
+    // promise about the statement that is issued, not about the query that
+    // asked for it.
+    let overhead = 2 * arms + 1;
+    let items = budget - overhead;
     // A flat width plus a remainder on the last item, so the total is exact.
-    let flat = budget / arms;
+    let flat = items / arms;
     let mut widths = vec![flat; arms];
-    widths[arms - 1] += budget - flat * arms;
-    assert_eq!(widths.iter().sum::<usize>(), budget);
+    widths[arms - 1] += items - flat * arms;
+    assert_eq!(widths.iter().sum::<usize>() + overhead, budget);
 
     let at = query_of_widths(&widths);
     assert_eq!(

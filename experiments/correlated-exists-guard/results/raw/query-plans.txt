@@ -1,0 +1,73 @@
+   Compiling correlated-exists-guard v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\experiments\correlated-exists-guard)
+    Finished `release` profile [optimized] target(s) in 2.37s
+     Running tests\query_plan.rs (target\release\deps\query_plan-d01d70e0274a846b.exe)
+
+running 1 test
+test the_plans_behind_the_numbers ... SEED	size=1000000	events=1000000 tag_rows=2000000 unstamped=0 shard_cold=1000000/1000000 row_r7=10310/10310	db_bytes=183623680	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+REPLAY	size=1000000	query=all	statements=1954	events=1000000	wall_ms=120905	us_per_event=120.91
+
+== the statement fetch_page emits at page 1000 of a Query::all replay ==
+SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position IN (SELECT position FROM event) AND position >= ? AND position <= ? ORDER BY position ASC LIMIT ?
+-- bound: resume_from=511489 ceiling=1000000 limit=512
+   id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+   id=7 parent=0 USING ROWID SEARCH ON TABLE event FOR IN-OPERATOR
+   EXECUTED first_us=66615 second_us=74515 rows=512
+
+== the same statement with `position IN (…)` removed (the control) ==
+SELECT position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at FROM event WHERE position >= ? AND position <= ? ORDER BY position ASC LIMIT ?
+   id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)
+   EXECUTED first_us=212 second_us=182 rows=512
+PAGE	size=1000000	page=1000	with_in_clause_us=74515	without_in_clause_us=182	rows=512
+
+== tag_cardinality, which orders the chain's seed: shard:cold=Some(1000000) row:r7=Some(10310) ==
+
+== the guard statement for shape `chain-as-shipped` (boundary=500000) ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   id=3 parent=0 SEARCH event_tag USING PRIMARY KEY (tag=? AND position=?)
+   id=9 parent=0 LIST SUBQUERY 1
+   id=11 parent=9 SEARCH event_tag USING PRIMARY KEY (tag=?)
+   EXECUTED first_us=7128599 second_us=1372901 rows=1
+GUARD-PLAN	size=1000000	shape=chain-as-shipped	first_us=7128599	second_us=1372901
+
+== the guard statement for shape `chain-bounded-seed` (boundary=500000) ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position > ? AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   id=3 parent=0 SEARCH event_tag USING PRIMARY KEY (tag=? AND position=?)
+   id=9 parent=0 LIST SUBQUERY 1
+   id=11 parent=9 SEARCH event_tag USING PRIMARY KEY (tag=?)
+   EXECUTED first_us=756397 second_us=737354 rows=1
+GUARD-PLAN	size=1000000	shape=chain-bounded-seed	first_us=756397	second_us=737354
+
+== the guard statement for shape `chain-bounded-all-arms` (boundary=500000) ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position > ? AND position IN (SELECT position FROM event_tag WHERE tag = ? AND position > ?))
+   id=3 parent=0 SEARCH event_tag USING PRIMARY KEY (tag=? AND position=?)
+   id=9 parent=0 LIST SUBQUERY 1
+   id=11 parent=9 SEARCH event_tag USING PRIMARY KEY (tag=? AND position>?)
+   EXECUTED first_us=359489 second_us=335254 rows=1
+GUARD-PLAN	size=1000000	shape=chain-bounded-all-arms	first_us=359489	second_us=335254
+
+== the guard statement for shape `grouped-adr0022` (boundary=500000) ==
+SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag IN (?,?) AND event_type IN (?) GROUP BY position HAVING COUNT(DISTINCT tag) = 2)
+   id=2 parent=0 CO-ROUTINE (subquery-1)
+   id=8 parent=2 SEARCH event_tag USING PRIMARY KEY (tag=?)
+   id=28 parent=2 USE TEMP B-TREE FOR GROUP BY
+   id=69 parent=0 SEARCH (subquery-1)
+   EXECUTED first_us=493923 second_us=459609 rows=1
+GUARD-PLAN	size=1000000	shape=grouped-adr0022	first_us=493923	second_us=459609
+
+== the guard statement for shape `chain-exists` (boundary=500000) ==
+SELECT max(position) FROM (SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ? AND seed.event_type IN (?) AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = seed.position))
+   id=5 parent=0 SEARCH seed USING PRIMARY KEY (tag=?)
+   id=13 parent=0 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+   EXECUTED first_us=133 second_us=102 rows=1
+GUARD-PLAN	size=1000000	shape=chain-exists	first_us=133	second_us=102
+
+== the guard statement for shape `chain-exists-bounded-seed` (boundary=500000) ==
+SELECT max(position) FROM (SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ? AND seed.event_type IN (?) AND seed.position > ? AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = seed.position))
+   id=5 parent=0 SEARCH seed USING PRIMARY KEY (tag=? AND position>?)
+   id=16 parent=0 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+   EXECUTED first_us=56 second_us=21 rows=1
+GUARD-PLAN	size=1000000	shape=chain-exists-bounded-seed	first_us=56	second_us=21
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 142.27s
+

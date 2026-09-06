@@ -11,6 +11,28 @@ to any workspace manifest — `Cargo.lock` at the repository root is untouched.
 CF-34 is why: a benchmark that can turn a merge red teaches people to re-run
 until green.
 
+## Superseded as a description of what ships
+
+**Dated 2026-09-05.** Every figure below is correct for the adapter **as it
+stood when they were taken**, and that adapter no longer ships. The intersection
+chain this crate measured was uncorrelated and applied its boundary only in
+Rust; `crates/happenstance-sqlite/src/query_sql.rs` now emits a **correlated**
+chain with the boundary bound into the seed arm, on the evidence
+`experiments/correlated-exists-guard/` produced from this crate's own findings.
+
+Two consequences for a reader:
+
+* `tests/emitted_sql.rs` here **no longer passes**, and that is the transcription
+  guard working rather than failing. It asserts that this crate's `Shape::Chain`
+  is byte-for-byte what the adapter emits, the adapter's SQL changed
+  deliberately, and the assertion caught it. The sibling experiment carries the
+  same guard against the *new* shape.
+* Nothing else in `results/` is wrong. It is a record of a real shape on a real
+  store, and it is why the shape changed — including finding I-3, the read
+  path's outer `position IN (…)` wrapper, which is **still unrepaired** and which
+  `experiments/correlated-exists-guard/results/read-path.md` measures candidates
+  for.
+
 ## Why it exists
 
 ADR-0022 §8 fixes the general multi-tag superset test as
