@@ -100,6 +100,53 @@ pub struct PostgresEventStore {
 }
 
 impl PostgresEventStore {
+    /// The largest `data` payload this store accepts, in **bytes of
+    /// [`Event::data`]** — not of an encoded row, and not of `data` and
+    /// `metadata` together.
+    ///
+    /// A **fact about this adapter**, not a trade. Postgres's own ceilings are
+    /// far above it and are not the binding constraint: a `bytea` field tops out
+    /// near 1 GB, and the wire protocol's `Bind` message near the same. Either
+    /// number is unusable as a stated ceiling, because
+    /// `append_reports_exceeded_store_limits` allocates the ceiling **plus one
+    /// byte** and does it twice per run — a suite that pins a gigabyte per rule
+    /// is a suite nobody runs.
+    ///
+    /// So this is an adapter policy, enforced in `append` before anything
+    /// reaches the wire, and it is deliberately the same number
+    /// `happenstance-sqlite` states: sixteen times VT-21's 65,536-byte floor.
+    /// Two adapters agreeing on a policy number is worth more than two adapters
+    /// each deriving a different one from a limit neither is anywhere near.
+    pub const MAX_EVENT_DATA_LEN: usize = 1_048_576;
+
+    /// The largest number of tags on one event this store accepts.
+    ///
+    /// Twice VT-22's floor of 64. Tags live in one `text[]` column rather than
+    /// in a join table, so unlike the SQLite adapter a tag costs no extra row
+    /// and no extra statement inside the write transaction — the cost here is
+    /// the GIN index's, which builds one entry per element. Like the other two,
+    /// a policy rather than a server limit; see
+    /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN).
+    pub const MAX_TAGS_PER_EVENT: usize = 128;
+
+    /// The largest number of events this store accepts in one append.
+    ///
+    /// Twice VT-24's floor of 128, and the one of the three where a **real**
+    /// Postgres limit is close enough to be worth writing down. The extended
+    /// query protocol carries its parameter count in an `int16`, so one
+    /// statement binds at most 65,535 parameters; at eight columns per event
+    /// that is 8,191 events in a single multi-row `INSERT … VALUES`. An append
+    /// built out of array parameters instead — `UNNEST($1::bigint[], …)` — binds
+    /// eight parameters whatever the batch size and has no such bound at all.
+    ///
+    /// Which of those two shapes `append` takes is not settled here, so this
+    /// ceiling is deliberately far below both rather than derived from either:
+    /// a number that encodes an unchosen SQL strategy is a decision taken by
+    /// accident. `postgres-append-and-frontier-head` may raise it against
+    /// evidence, and `append_reports_exceeded_store_limits` is what would find
+    /// the current value wrong.
+    pub const MAX_EVENTS_PER_BATCH: usize = 256;
+
     /// Wraps an existing pool.
     ///
     /// Takes a pool rather than a connection string because pool sizing,

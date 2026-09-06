@@ -266,7 +266,7 @@ accept the first real one silently. The same shape one level down is an
 attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
-**Evidence.** `./Cargo.toml:183 (the allow protected nothing)` ·
+**Evidence.** `./Cargo.toml:204 (the allow protected nothing)` ·
 `crates/happenstance-ladybug/src/lib.rs:71 (Phase 11 removes both the bodies)` ·
 `crates/happenstance-neon/src/event_store.rs:239 (constructed by decode_append_response)`
 

@@ -304,6 +304,105 @@ jobs:
 
   # Verifies the MSRV claimed in Cargo.toml. This is the only place it is
   # checked, so a change that silently requires a newer compiler fails here.
+  # The live-Postgres conformance run. A SIBLING of `gate`, never a step inside
+  # it, and the distinction is the whole point of this job's existence.
+  #
+  # `xtask/src/main.rs`'s `REQUIRED` array runs on every `cargo xtask ci`, and
+  # `.redkiln/config.yaml` wires `cargo xtask affected` and `cargo xtask ci
+  # --fast` as the verify grains for EVERY other project in this initiative. A
+  # step in there that needs a container breaks all of them, and breaks the
+  # laptop-with-no-Docker case the default gate is promised to keep working. So
+  # the container starts here and nowhere else.
+  #
+  # No credential. Unlike the Neon job, `testcontainers` needs only a daemon, so
+  # this runs on pull requests from anywhere. Said out loud because the Neon
+  # job's secret handling is a different story's problem, and conflating the two
+  # is how a secret ends up gating a container.
+  live-postgres:
+    name: conformance against a live Postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # No `services:` block. The image, its tag and its `max_connections` are
+      # the fixture's (`crates/happenstance-postgres/tests/support/mod.rs`), so
+      # that a developer running the same command locally gets the same server
+      # by construction rather than by remembering to. NF-003 wants the minor
+      # pinned where a reader can see it, and a `services:` block would put it
+      # somewhere `cargo test` never reads.
+      #
+      # `ubuntu-latest` runners ship a running Docker daemon, which is what
+      # `testcontainers` needs and all it needs.
+
+      # Every rule is present in the binary before any of them runs.
+      #
+      # This is not a formality: whole-invocation gating means one wrong flag
+      # turns the run below into `running 0 tests`, and `cargo test` exits 0 on
+      # that. `xtask/src/proof.rs:12-15` is the in-tree statement of the same
+      # problem one layer down — "a file truncated to its `#![cfg(...)]`
+      # attributes passes". The list is captured so the count assertion after
+      # the run can be made against it rather than against a number typed here,
+      # which would drift the first time a rule was added.
+      - name: Every gated test is present in the binary
+        run: |
+          cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --list | tee gated.txt
+          count=$(grep -c ': test$' gated.txt)
+          echo "gated tests: $count"
+          # The event-store family alone is 89 rules. A run that finds fewer
+          # than the families plus this story's own tests has lost an
+          # invocation, not merely a test.
+          if [ "$count" -lt 90 ]; then
+            echo "::error::only $count gated tests are present; an invocation is missing"
+            exit 1
+          fi
+
+      # The run itself. `--show-output` because a declined capability's reason
+      # is printed only under it, and a trade nobody can read is a trade nobody
+      # recorded (CF-18).
+      - name: The conformance suite against a live Postgres
+        run: |
+          cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --show-output             | tee run.txt
+
+      # The vacuity guard, and the reason this job cannot be green having done
+      # nothing. The same flag that keeps the default gate green with no server
+      # keeps a misconfigured job green with no tests, and the two are
+      # indistinguishable in a check mark. DR-9 and the project risk table are
+      # explicit that a flaky live job is fixed or reported, never quietly
+      # weakened — so this step has no `continue-on-error` and the job is not
+      # `if:`-guarded.
+      - name: The run executed every gated test
+        if: always()
+        run: |
+          set -euo pipefail
+          if ! grep -qE '^test result:' run.txt; then
+            echo "::error::no test result line; the suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated.txt)
+          result=$(grep -E '^test result:' run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          # `passed > 0` is NOT a sufficient guard, and the first draft of this
+          # step used it. Drop `--ignored` from the run above and the target
+          # still executes its two no-server tests, so `passed` is 2 and a
+          # `> 0` check waves through a run that touched no rule and started no
+          # container. What has to be asserted is that NOTHING was left ignored
+          # and that the executed count matches what `--list` found.
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated tests did not execute; the run is not the gated run"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated tests"
+            exit 1
+          fi
+
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest

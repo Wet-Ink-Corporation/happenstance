@@ -33,12 +33,15 @@ assert_eq!(hashed.get("CourseDefined"), Some(&"decode"));
 assert_eq!(ordered.get("CourseDefined"), Some(&"decode"));
 ```
 
-**Not** — compiles; the assertions are the bug, and they are the *only* place it
-is visible:
+**Not** — compiles, and the defect is visible only in an assertion. Note *which*
+assertion: the hashes, which disagree on every run. The lookup that motivates the
+whole rule is the consequence rather than the proof, and the comment below says
+why asserting on it instead is a control that fails 1 run in 128:
 
 ```rust
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::hash::{BuildHasher, Hash, Hasher, RandomState};
 
 // The derive spans `arity` *and* `name`; `borrow` yields only `name`.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,10 +56,35 @@ impl Borrow<str> for Kind {
     }
 }
 
+let key = Kind { arity: 3, name: "CourseDefined".into() };
 let mut registry: HashMap<Kind, &str> = HashMap::new();
-registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
 
-assert_eq!(registry.get("CourseDefined"), None, "the entry is present and unreachable");
+// The breakage, stated as the thing that is *always* true. `Borrow`'s contract
+// requires the borrowed form to hash identically to the owned one; the derive
+// spans `arity` as well, so it cannot — and this holds on every run.
+let state = RandomState::new();
+
+let mut owned = state.build_hasher();
+key.hash(&mut owned);
+
+let mut borrowed = state.build_hasher();
+<Kind as Borrow<str>>::borrow(&key).hash(&mut borrowed);
+
+assert_ne!(
+    owned.finish(),
+    borrowed.finish(),
+    "`Hash for Kind` disagrees with the borrowed form: that is the whole defect",
+);
+
+// The lookup miss is the *consequence*, and it is deliberately not the
+// assertion. `get` is not a hash comparison — on a control-byte collision it
+// falls through to `Eq`, which compares `borrow()` against the probe and says
+// yes. So the entry is unreachable only *usually*: measured at 1,537 in 200,000
+// runs, which is hashbrown's 1-in-128. Asserting `None` here made this negative
+// control fire 99.2% of the time and redden the gate at random for the rest,
+// and a control that is itself a coin flip is not a control.
+registry.insert(key, "decode");
+let _usually_none = registry.get("CourseDefined");
 
 // `Ord` breaks the same way, and that is the ordering a `BTreeMap` searches by.
 let (a, b) = (Kind { arity: 2, name: "aa".into() }, Kind { arity: 1, name: "zz".into() });
