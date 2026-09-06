@@ -3,88 +3,114 @@
 Gnuplot not found, using plotters backend
 Benchmarking command/boundary-size/memory/0
 Benchmarking command/boundary-size/memory/0: Warming up for 3.0000 s
-Benchmarking command/boundary-size/memory/0: Collecting 10 samples in estimated 2.0001 s (1.3M iterations)
+Benchmarking command/boundary-size/memory/0: Collecting 10 samples in estimated 2.0000 s (1.0M iterations)
 Benchmarking command/boundary-size/memory/0: Analyzing
 command/boundary-size/memory/0
-                        time:   [1.3215 µs 1.3678 µs 1.4335 µs]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low mild
+                        time:   [1.2359 µs 1.3001 µs 1.3663 µs]
+                        change: [−8.2733% −1.6224% +5.6729%] (p = 0.66 > 0.05)
+                        No change in performance detected.
 Benchmarking command/boundary-size/sqlite/0
 Benchmarking command/boundary-size/sqlite/0: Warming up for 3.0000 s
-Benchmarking command/boundary-size/sqlite/0: Collecting 10 samples in estimated 2.1190 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/0: Collecting 10 samples in estimated 2.3878 s (330 iterations)
 Benchmarking command/boundary-size/sqlite/0: Analyzing
 command/boundary-size/sqlite/0
-                        time:   [1.7596 ms 1.8906 ms 2.0822 ms]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high severe
+                        time:   [1.6178 ms 1.6907 ms 1.8118 ms]
+                        change: [−11.853% −5.5667% +0.6796%] (p = 0.14 > 0.05)
+                        No change in performance detected.
 Benchmarking command/boundary-size/memory/10
 Benchmarking command/boundary-size/memory/10: Warming up for 3.0000 s
-Benchmarking command/boundary-size/memory/10: Collecting 10 samples in estimated 2.0010 s (104k iterations)
+Benchmarking command/boundary-size/memory/10: Collecting 10 samples in estimated 2.0008 s (102k iterations)
 Benchmarking command/boundary-size/memory/10: Analyzing
 command/boundary-size/memory/10
-                        time:   [17.314 µs 18.347 µs 19.034 µs]
+                        time:   [16.579 µs 18.334 µs 19.679 µs]
+                        change: [−10.065% −2.2639% +6.6614%] (p = 0.61 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking command/boundary-size/sqlite/10
 Benchmarking command/boundary-size/sqlite/10: Warming up for 3.0000 s
-Benchmarking command/boundary-size/sqlite/10: Collecting 10 samples in estimated 2.1290 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/10: Collecting 10 samples in estimated 2.3652 s (330 iterations)
 Benchmarking command/boundary-size/sqlite/10: Analyzing
 command/boundary-size/sqlite/10
-                        time:   [1.8771 ms 1.9661 ms 2.0722 ms]
+                        time:   [1.9516 ms 2.2308 ms 2.4863 ms]
+                        change: [−8.5756% +5.1817% +21.427%] (p = 0.56 > 0.05)
+                        No change in performance detected.
 Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high severe
+  1 (10.00%) high mild
 Benchmarking command/boundary-size/memory/100
 Benchmarking command/boundary-size/memory/100: Warming up for 3.0000 s
-Benchmarking command/boundary-size/memory/100: Collecting 10 samples in estimated 2.0068 s (13k iterations)
+Benchmarking command/boundary-size/memory/100: Collecting 10 samples in estimated 2.0044 s (13k iterations)
 Benchmarking command/boundary-size/memory/100: Analyzing
 command/boundary-size/memory/100
-                        time:   [129.11 µs 136.66 µs 148.52 µs]
+                        time:   [121.44 µs 126.51 µs 130.06 µs]
+                        change: [−17.624% −10.672% −3.1266%] (p = 0.02 < 0.05)
+                        Performance has improved.
 Benchmarking command/boundary-size/sqlite/100
 Benchmarking command/boundary-size/sqlite/100: Warming up for 3.0000 s
-Benchmarking command/boundary-size/sqlite/100: Collecting 10 samples in estimated 2.1554 s (275 iterations)
+Benchmarking command/boundary-size/sqlite/100: Collecting 10 samples in estimated 2.1471 s (275 iterations)
 Benchmarking command/boundary-size/sqlite/100: Analyzing
 command/boundary-size/sqlite/100
-                        time:   [2.4082 ms 2.6280 ms 2.7667 ms]
+                        time:   [2.3865 ms 2.5804 ms 2.8711 ms]
+                        change: [−14.262% −4.5040% +7.1797%] (p = 0.47 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking command/boundary-size/memory/1000
 Benchmarking command/boundary-size/memory/1000: Warming up for 3.0000 s
-Benchmarking command/boundary-size/memory/1000: Collecting 10 samples in estimated 2.0829 s (1320 iterations)
+Benchmarking command/boundary-size/memory/1000: Collecting 10 samples in estimated 2.0186 s (1375 iterations)
 Benchmarking command/boundary-size/memory/1000: Analyzing
 command/boundary-size/memory/1000
-                        time:   [1.3611 ms 1.4252 ms 1.4877 ms]
+                        time:   [1.5330 ms 1.6889 ms 1.8389 ms]
+                        change: [+5.1318% +15.184% +27.090%] (p = 0.01 < 0.05)
+                        Performance has regressed.
 Benchmarking command/boundary-size/sqlite/1000
 Benchmarking command/boundary-size/sqlite/1000: Warming up for 3.0000 s
-Benchmarking command/boundary-size/sqlite/1000: Collecting 10 samples in estimated 2.0433 s (165 iterations)
+Benchmarking command/boundary-size/sqlite/1000: Collecting 10 samples in estimated 2.0159 s (165 iterations)
 Benchmarking command/boundary-size/sqlite/1000: Analyzing
 command/boundary-size/sqlite/1000
-                        time:   [5.8816 ms 6.1662 ms 6.3863 ms]
+                        time:   [5.1714 ms 5.4059 ms 5.6147 ms]
+                        change: [−14.965% −10.931% −6.2263%] (p = 0.00 < 0.05)
+                        Performance has improved.
 
 Benchmarking command/codec-choice/json
 Benchmarking command/codec-choice/json: Warming up for 3.0000 s
-Benchmarking command/codec-choice/json: Collecting 10 samples in estimated 2.0071 s (14k iterations)
+Benchmarking command/codec-choice/json: Collecting 10 samples in estimated 2.0021 s (14k iterations)
 Benchmarking command/codec-choice/json: Analyzing
 command/codec-choice/json
-                        time:   [129.77 µs 143.18 µs 152.65 µs]
+                        time:   [121.73 µs 138.56 µs 148.99 µs]
+                        change: [−9.0143% +0.3460% +10.808%] (p = 0.94 > 0.05)
+                        No change in performance detected.
 Benchmarking command/codec-choice/cbor
 Benchmarking command/codec-choice/cbor: Warming up for 3.0000 s
-Benchmarking command/codec-choice/cbor: Collecting 10 samples in estimated 2.0033 s (9350 iterations)
+Benchmarking command/codec-choice/cbor: Collecting 10 samples in estimated 2.0044 s (8910 iterations)
 Benchmarking command/codec-choice/cbor: Analyzing
 command/codec-choice/cbor
-                        time:   [162.49 µs 169.75 µs 175.25 µs]
+                        time:   [163.52 µs 191.92 µs 211.47 µs]
+                        change: [−0.8987% +7.4508% +16.983%] (p = 0.17 > 0.05)
+                        No change in performance detected.
 Benchmarking command/codec-choice/postcard
 Benchmarking command/codec-choice/postcard: Warming up for 3.0000 s
-Benchmarking command/codec-choice/postcard: Collecting 10 samples in estimated 2.0024 s (34k iterations)
+Benchmarking command/codec-choice/postcard: Collecting 10 samples in estimated 2.0015 s (29k iterations)
 Benchmarking command/codec-choice/postcard: Analyzing
 command/codec-choice/postcard
-                        time:   [51.903 µs 56.476 µs 64.464 µs]
+                        time:   [43.782 µs 45.100 µs 47.637 µs]
+                        change: [−27.200% −19.399% −10.501%] (p = 0.00 < 0.05)
+                        Performance has improved.
 
 Benchmarking command/retry/uncontended-control
 Benchmarking command/retry/uncontended-control: Warming up for 3.0000 s
-Benchmarking command/retry/uncontended-control: Collecting 10 samples in estimated 2.0039 s (14k iterations)
+Benchmarking command/retry/uncontended-control: Collecting 10 samples in estimated 2.0033 s (14k iterations)
 Benchmarking command/retry/uncontended-control: Analyzing
 command/retry/uncontended-control
-                        time:   [131.74 µs 138.59 µs 144.81 µs]
+                        time:   [156.23 µs 164.75 µs 171.21 µs]
+                        change: [+2.6952% +12.989% +23.198%] (p = 0.02 < 0.05)
+                        Performance has regressed.
 Benchmarking command/retry/loses-once-then-wins
 Benchmarking command/retry/loses-once-then-wins: Warming up for 3.0000 s
-Benchmarking command/retry/loses-once-then-wins: Collecting 10 samples in estimated 2.0027 s (6380 iterations)
+Benchmarking command/retry/loses-once-then-wins: Collecting 10 samples in estimated 2.0137 s (6875 iterations)
 Benchmarking command/retry/loses-once-then-wins: Analyzing
 command/retry/loses-once-then-wins
-                        time:   [264.07 µs 286.75 µs 308.50 µs]
+                        time:   [280.01 µs 299.56 µs 332.77 µs]
+                        change: [−3.2721% +7.6171% +20.388%] (p = 0.25 > 0.05)
+                        No change in performance detected.
 

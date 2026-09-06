@@ -1,288 +1,409 @@
-    Finished `bench` profile [optimized] target(s) in 0.23s
+    Finished `bench` profile [optimized] target(s) in 1.78s
      Running benches\store_replay.rs (target\release\deps\store_replay-687e4abc0ddd389e.exe)
 Gnuplot not found, using plotters backend
 Benchmarking replay/unfiltered/memory/1000
 Benchmarking replay/unfiltered/memory/1000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/memory/1000: Collecting 10 samples in estimated 5.0021 s (22k iterations)
+Benchmarking replay/unfiltered/memory/1000: Collecting 10 samples in estimated 5.0047 s (24k iterations)
 Benchmarking replay/unfiltered/memory/1000: Analyzing
 replay/unfiltered/memory/1000
-                        time:   [251.50 µs 275.74 µs 303.70 µs]
-                        thrpt:  [3.2927 Melem/s 3.6267 Melem/s 3.9761 Melem/s]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [186.06 µs 188.70 µs 192.99 µs]
+                        thrpt:  [5.1816 Melem/s 5.2993 Melem/s 5.3745 Melem/s]
+                 change:
+                        time:   [−33.381% −29.035% −24.810%] (p = 0.00 < 0.05)
+                        thrpt:  [+32.996% +40.915% +50.107%]
+                        Performance has improved.
 Benchmarking replay/unfiltered/sqlite/1000
 Benchmarking replay/unfiltered/sqlite/1000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/sqlite/1000: Collecting 10 samples in estimated 5.0018 s (3685 iterations)
+Benchmarking replay/unfiltered/sqlite/1000: Collecting 10 samples in estimated 5.0349 s (5665 iterations)
 Benchmarking replay/unfiltered/sqlite/1000: Analyzing
 replay/unfiltered/sqlite/1000
-                        time:   [1.1113 ms 1.1676 ms 1.2267 ms]
-                        thrpt:  [815.20 Kelem/s 856.46 Kelem/s 899.84 Kelem/s]
+                        time:   [828.15 µs 850.05 µs 888.67 µs]
+                        thrpt:  [1.1253 Melem/s 1.1764 Melem/s 1.2075 Melem/s]
+                 change:
+                        time:   [−26.540% −21.113% −15.822%] (p = 0.00 < 0.05)
+                        thrpt:  [+18.795% +26.764% +36.128%]
+                        Performance has improved.
 Benchmarking replay/unfiltered/raw/same-schema/1000
 Benchmarking replay/unfiltered/raw/same-schema/1000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/raw/same-schema/1000: Collecting 10 samples in estimated 5.0096 s (27k iterations)
+Benchmarking replay/unfiltered/raw/same-schema/1000: Collecting 10 samples in estimated 5.0072 s (30k iterations)
 Benchmarking replay/unfiltered/raw/same-schema/1000: Analyzing
 replay/unfiltered/raw/same-schema/1000
-                        time:   [169.08 µs 176.34 µs 186.25 µs]
-                        thrpt:  [5.3692 Melem/s 5.6709 Melem/s 5.9143 Melem/s]
+                        time:   [150.58 µs 152.41 µs 155.31 µs]
+                        thrpt:  [6.4389 Melem/s 6.5613 Melem/s 6.6409 Melem/s]
+                 change:
+                        time:   [−19.039% −13.386% −6.4881%] (p = 0.00 < 0.05)
+                        thrpt:  [+6.9383% +15.454% +23.517%]
+                        Performance has improved.
 Benchmarking replay/unfiltered/memory/10000
 Benchmarking replay/unfiltered/memory/10000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/memory/10000: Collecting 10 samples in estimated 5.1822 s (1375 iterations)
+Benchmarking replay/unfiltered/memory/10000: Collecting 10 samples in estimated 5.0386 s (1430 iterations)
 Benchmarking replay/unfiltered/memory/10000: Analyzing
 replay/unfiltered/memory/10000
-                        time:   [3.6938 ms 3.9666 ms 4.2939 ms]
-                        thrpt:  [2.3289 Melem/s 2.5210 Melem/s 2.7073 Melem/s]
-Found 2 outliers among 10 measurements (20.00%)
-  1 (10.00%) low mild
-  1 (10.00%) high mild
+                        time:   [3.3381 ms 3.4036 ms 3.5688 ms]
+                        thrpt:  [2.8021 Melem/s 2.9381 Melem/s 2.9957 Melem/s]
+                 change:
+                        time:   [−17.644% −10.626% −2.9505%] (p = 0.02 < 0.05)
+                        thrpt:  [+3.0402% +11.889% +21.424%]
+                        Performance has improved.
 Benchmarking replay/unfiltered/sqlite/10000
 Benchmarking replay/unfiltered/sqlite/10000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/sqlite/10000: Collecting 10 samples in estimated 5.9177 s (110 iterations)
+Benchmarking replay/unfiltered/sqlite/10000: Collecting 10 samples in estimated 5.1360 s (385 iterations)
 Benchmarking replay/unfiltered/sqlite/10000: Analyzing
 replay/unfiltered/sqlite/10000
-                        time:   [48.368 ms 53.850 ms 60.286 ms]
-                        thrpt:  [165.88 Kelem/s 185.70 Kelem/s 206.75 Kelem/s]
+                        time:   [12.247 ms 12.699 ms 13.658 ms]
+                        thrpt:  [732.17 Kelem/s 787.46 Kelem/s 816.50 Kelem/s]
+                 change:
+                        time:   [−78.758% −76.852% −74.431%] (p = 0.00 < 0.05)
+                        thrpt:  [+291.09% +331.99% +370.77%]
+                        Performance has improved.
 Benchmarking replay/unfiltered/raw/same-schema/10000
 Benchmarking replay/unfiltered/raw/same-schema/10000: Warming up for 3.0000 s
-Benchmarking replay/unfiltered/raw/same-schema/10000: Collecting 10 samples in estimated 5.1608 s (1155 iterations)
+Benchmarking replay/unfiltered/raw/same-schema/10000: Collecting 10 samples in estimated 5.1703 s (1265 iterations)
 Benchmarking replay/unfiltered/raw/same-schema/10000: Analyzing
 replay/unfiltered/raw/same-schema/10000
-                        time:   [4.5012 ms 4.8685 ms 5.5994 ms]
-                        thrpt:  [1.7859 Melem/s 2.0540 Melem/s 2.2216 Melem/s]
+                        time:   [4.3596 ms 5.0996 ms 6.1810 ms]
+                        thrpt:  [1.6179 Melem/s 1.9609 Melem/s 2.2938 Melem/s]
+                 change:
+                        time:   [−28.848% −12.515% +9.9488%] (p = 0.25 > 0.05)
+                        thrpt:  [−9.0486% +14.305% +40.544%]
+                        No change in performance detected.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
 
 Benchmarking replay/filtered/memory/matches-all/1000
 Benchmarking replay/filtered/memory/matches-all/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/matches-all/1000: Collecting 10 samples in estimated 5.0069 s (22k iterations)
+Benchmarking replay/filtered/memory/matches-all/1000: Collecting 10 samples in estimated 5.0036 s (19k iterations)
 Benchmarking replay/filtered/memory/matches-all/1000: Analyzing
 replay/filtered/memory/matches-all/1000
-                        time:   [216.19 µs 228.10 µs 237.67 µs]
-                        thrpt:  [4.2075 Melem/s 4.3841 Melem/s 4.6255 Melem/s]
+                        time:   [196.70 µs 203.89 µs 220.83 µs]
+                        thrpt:  [4.5284 Melem/s 4.9046 Melem/s 5.0839 Melem/s]
+                 change:
+                        time:   [−10.978% −2.0242% +9.5603%] (p = 0.72 > 0.05)
+                        thrpt:  [−8.7260% +2.0660% +12.332%]
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/filtered/sqlite/matches-all/1000
 Benchmarking replay/filtered/sqlite/matches-all/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/sqlite/matches-all/1000: Collecting 10 samples in estimated 5.0347 s (3190 iterations)
+Benchmarking replay/filtered/sqlite/matches-all/1000: Collecting 10 samples in estimated 5.0432 s (2750 iterations)
 Benchmarking replay/filtered/sqlite/matches-all/1000: Analyzing
 replay/filtered/sqlite/matches-all/1000
-                        time:   [1.3244 ms 1.4131 ms 1.5570 ms]
-                        thrpt:  [642.26 Kelem/s 707.68 Kelem/s 755.03 Kelem/s]
+                        time:   [1.4419 ms 1.5820 ms 1.8076 ms]
+                        thrpt:  [553.21 Kelem/s 632.10 Kelem/s 693.54 Kelem/s]
+                 change:
+                        time:   [−0.9924% +10.435% +23.423%] (p = 0.12 > 0.05)
+                        thrpt:  [−18.978% −9.4489% +1.0023%]
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/filtered/memory/matches-one/1000
 Benchmarking replay/filtered/memory/matches-one/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/matches-one/1000: Collecting 10 samples in estimated 5.0001 s (1.1M iterations)
+Benchmarking replay/filtered/memory/matches-one/1000: Collecting 10 samples in estimated 5.0002 s (1.2M iterations)
 Benchmarking replay/filtered/memory/matches-one/1000: Analyzing
 replay/filtered/memory/matches-one/1000
-                        time:   [3.8243 µs 3.9858 µs 4.1812 µs]
-                        thrpt:  [239.17 Kelem/s 250.89 Kelem/s 261.49 Kelem/s]
-Benchmarking replay/filtered/sqlite/matches-one/1000
-Benchmarking replay/filtered/sqlite/matches-one/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/sqlite/matches-one/1000: Collecting 10 samples in estimated 5.0036 s (49k iterations)
-Benchmarking replay/filtered/sqlite/matches-one/1000: Analyzing
-replay/filtered/sqlite/matches-one/1000
-                        time:   [87.768 µs 96.695 µs 106.29 µs]
-                        thrpt:  [9.4078 Kelem/s 10.342 Kelem/s 11.394 Kelem/s]
-Benchmarking replay/filtered/memory/mixed-selectivity/1000
-Benchmarking replay/filtered/memory/mixed-selectivity/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/mixed-selectivity/1000: Collecting 10 samples in estimated 5.0001 s (22k iterations)
-Benchmarking replay/filtered/memory/mixed-selectivity/1000: Analyzing
-replay/filtered/memory/mixed-selectivity/1000
-                        time:   [217.38 µs 224.45 µs 237.50 µs]
-                        thrpt:  [4.2105 Melem/s 4.4553 Melem/s 4.6003 Melem/s]
+                        time:   [3.9550 µs 4.5505 µs 5.3163 µs]
+                        thrpt:  [188.10 Kelem/s 219.76 Kelem/s 252.84 Kelem/s]
+                 change:
+                        time:   [−8.5165% +5.0817% +20.769%] (p = 0.56 > 0.05)
+                        thrpt:  [−17.197% −4.8359% +9.3093%]
+                        No change in performance detected.
 Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high severe
+Benchmarking replay/filtered/sqlite/matches-one/1000
+Benchmarking replay/filtered/sqlite/matches-one/1000: Warming up for 3.0000 s
+Benchmarking replay/filtered/sqlite/matches-one/1000: Collecting 10 samples in estimated 5.0058 s (44k iterations)
+Benchmarking replay/filtered/sqlite/matches-one/1000: Analyzing
+replay/filtered/sqlite/matches-one/1000
+                        time:   [100.69 µs 112.71 µs 128.23 µs]
+                        thrpt:  [7.7988 Kelem/s 8.8720 Kelem/s 9.9319 Kelem/s]
+                 change:
+                        time:   [+3.7207% +17.305% +31.892%] (p = 0.03 < 0.05)
+                        thrpt:  [−24.180% −14.752% −3.5872%]
+                        Performance has regressed.
+Benchmarking replay/filtered/memory/mixed-selectivity/1000
+Benchmarking replay/filtered/memory/mixed-selectivity/1000: Warming up for 3.0000 s
+Benchmarking replay/filtered/memory/mixed-selectivity/1000: Collecting 10 samples in estimated 5.0131 s (21k iterations)
+Benchmarking replay/filtered/memory/mixed-selectivity/1000: Analyzing
+replay/filtered/memory/mixed-selectivity/1000
+                        time:   [209.83 µs 235.85 µs 268.70 µs]
+                        thrpt:  [3.7216 Melem/s 4.2399 Melem/s 4.7658 Melem/s]
+                 change:
+                        time:   [−13.146% −3.1638% +6.9745%] (p = 0.59 > 0.05)
+                        thrpt:  [−6.5198% +3.2671% +15.135%]
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/filtered/sqlite/mixed-selectivity/1000
 Benchmarking replay/filtered/sqlite/mixed-selectivity/1000: Warming up for 3.0000 s
-Benchmarking replay/filtered/sqlite/mixed-selectivity/1000: Collecting 10 samples in estimated 5.0327 s (3135 iterations)
+Benchmarking replay/filtered/sqlite/mixed-selectivity/1000: Collecting 10 samples in estimated 5.0153 s (3135 iterations)
 Benchmarking replay/filtered/sqlite/mixed-selectivity/1000: Analyzing
 replay/filtered/sqlite/mixed-selectivity/1000
-                        time:   [1.5271 ms 1.7305 ms 1.8975 ms]
-                        thrpt:  [527.00 Kelem/s 577.87 Kelem/s 654.84 Kelem/s]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low severe
+                        time:   [1.4370 ms 1.7443 ms 1.9753 ms]
+                        thrpt:  [506.24 Kelem/s 573.30 Kelem/s 695.89 Kelem/s]
+                 change:
+                        time:   [−16.344% −4.9668% +7.2375%] (p = 0.45 > 0.05)
+                        thrpt:  [−6.7490% +5.2264% +19.538%]
+                        No change in performance detected.
 Benchmarking replay/filtered/memory/matches-all/10000
 Benchmarking replay/filtered/memory/matches-all/10000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/matches-all/10000: Collecting 10 samples in estimated 5.1670 s (1540 iterations)
+Benchmarking replay/filtered/memory/matches-all/10000: Collecting 10 samples in estimated 5.1865 s (1430 iterations)
 Benchmarking replay/filtered/memory/matches-all/10000: Analyzing
 replay/filtered/memory/matches-all/10000
-                        time:   [3.5764 ms 3.7896 ms 4.0050 ms]
-                        thrpt:  [2.4969 Melem/s 2.6388 Melem/s 2.7961 Melem/s]
+                        time:   [3.3766 ms 3.8427 ms 4.1874 ms]
+                        thrpt:  [2.3881 Melem/s 2.6024 Melem/s 2.9615 Melem/s]
+                 change:
+                        time:   [−5.0735% +5.0501% +16.823%] (p = 0.39 > 0.05)
+                        thrpt:  [−14.401% −4.8073% +5.3447%]
+                        No change in performance detected.
 Benchmarking replay/filtered/sqlite/matches-all/10000
 Benchmarking replay/filtered/sqlite/matches-all/10000: Warming up for 3.0000 s
-Benchmarking replay/filtered/sqlite/matches-all/10000: Collecting 10 samples in estimated 9.5726 s (110 iterations)
+Benchmarking replay/filtered/sqlite/matches-all/10000: Collecting 10 samples in estimated 5.9042 s (275 iterations)
 Benchmarking replay/filtered/sqlite/matches-all/10000: Analyzing
 replay/filtered/sqlite/matches-all/10000
-                        time:   [77.510 ms 82.936 ms 89.291 ms]
-                        thrpt:  [111.99 Kelem/s 120.58 Kelem/s 129.02 Kelem/s]
-Found 2 outliers among 10 measurements (20.00%)
-  1 (10.00%) low mild
-  1 (10.00%) high mild
+                        time:   [19.950 ms 21.756 ms 23.743 ms]
+                        thrpt:  [421.18 Kelem/s 459.64 Kelem/s 501.24 Kelem/s]
+                 change:
+                        time:   [−77.760% −75.489% −73.175%] (p = 0.00 < 0.05)
+                        thrpt:  [+272.79% +307.99% +349.65%]
+                        Performance has improved.
 Benchmarking replay/filtered/memory/matches-one/10000
 Benchmarking replay/filtered/memory/matches-one/10000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/matches-one/10000: Collecting 10 samples in estimated 5.0024 s (73k iterations)
+Benchmarking replay/filtered/memory/matches-one/10000: Collecting 10 samples in estimated 5.0027 s (78k iterations)
 Benchmarking replay/filtered/memory/matches-one/10000: Analyzing
 replay/filtered/memory/matches-one/10000
-                        time:   [55.619 µs 58.128 µs 62.028 µs]
-                        thrpt:  [16.122 Kelem/s 17.203 Kelem/s 17.979 Kelem/s]
+                        time:   [56.287 µs 60.650 µs 66.448 µs]
+                        thrpt:  [15.049 Kelem/s 16.488 Kelem/s 17.766 Kelem/s]
+                 change:
+                        time:   [−3.8829% +5.0379% +14.629%] (p = 0.31 > 0.05)
+                        thrpt:  [−12.762% −4.7963% +4.0398%]
+                        No change in performance detected.
 Benchmarking replay/filtered/sqlite/matches-one/10000
 Benchmarking replay/filtered/sqlite/matches-one/10000: Warming up for 3.0000 s
-Benchmarking replay/filtered/sqlite/matches-one/10000: Collecting 10 samples in estimated 5.0013 s (41k iterations)
+Benchmarking replay/filtered/sqlite/matches-one/10000: Collecting 10 samples in estimated 5.0047 s (44k iterations)
 Benchmarking replay/filtered/sqlite/matches-one/10000: Analyzing
 replay/filtered/sqlite/matches-one/10000
-                        time:   [80.381 µs 91.076 µs 100.87 µs]
-                        thrpt:  [9.9136 Kelem/s 10.980 Kelem/s 12.441 Kelem/s]
+                        time:   [96.859 µs 112.85 µs 127.25 µs]
+                        thrpt:  [7.8585 Kelem/s 8.8610 Kelem/s 10.324 Kelem/s]
+                 change:
+                        time:   [−11.369% +5.7496% +26.887%] (p = 0.58 > 0.05)
+                        thrpt:  [−21.190% −5.4370% +12.827%]
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/filtered/memory/mixed-selectivity/10000
 Benchmarking replay/filtered/memory/mixed-selectivity/10000: Warming up for 3.0000 s
-Benchmarking replay/filtered/memory/mixed-selectivity/10000: Collecting 10 samples in estimated 5.0757 s (1375 iterations)
+Benchmarking replay/filtered/memory/mixed-selectivity/10000: Collecting 10 samples in estimated 5.0940 s (1375 iterations)
 Benchmarking replay/filtered/memory/mixed-selectivity/10000: Analyzing
 replay/filtered/memory/mixed-selectivity/10000
-                        time:   [3.5291 ms 3.7272 ms 4.0119 ms]
-                        thrpt:  [2.4926 Melem/s 2.6830 Melem/s 2.8336 Melem/s]
+                        time:   [3.1994 ms 3.6100 ms 3.9480 ms]
+                        thrpt:  [2.5329 Melem/s 2.7701 Melem/s 3.1256 Melem/s]
+                 change:
+                        time:   [−18.086% −9.5284% +0.1701%] (p = 0.09 > 0.05)
+                        thrpt:  [−0.1698% +10.532% +22.080%]
+                        No change in performance detected.
 Benchmarking replay/filtered/sqlite/mixed-selectivity/10000
 Benchmarking replay/filtered/sqlite/mixed-selectivity/10000: Warming up for 3.0000 s
-
-Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 5.3s or enable flat sampling.
-Benchmarking replay/filtered/sqlite/mixed-selectivity/10000: Collecting 10 samples in estimated 5.3369 s (55 iterations)
+Benchmarking replay/filtered/sqlite/mixed-selectivity/10000: Collecting 10 samples in estimated 6.1477 s (275 iterations)
 Benchmarking replay/filtered/sqlite/mixed-selectivity/10000: Analyzing
 replay/filtered/sqlite/mixed-selectivity/10000
-                        time:   [85.657 ms 91.035 ms 97.764 ms]
-                        thrpt:  [102.29 Kelem/s 109.85 Kelem/s 116.74 Kelem/s]
+                        time:   [19.330 ms 20.878 ms 23.469 ms]
+                        thrpt:  [426.10 Kelem/s 478.98 Kelem/s 517.33 Kelem/s]
+                 change:
+                        time:   [−79.573% −77.633% −75.193%] (p = 0.00 < 0.05)
+                        thrpt:  [+303.11% +347.08% +389.54%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 
 Benchmarking replay/cheap-reads/memory/limit-1/1000
 Benchmarking replay/cheap-reads/memory/limit-1/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/limit-1/1000: Collecting 10 samples in estimated 5.0008 s (22k iterations)
+Benchmarking replay/cheap-reads/memory/limit-1/1000: Collecting 10 samples in estimated 5.0098 s (23k iterations)
 Benchmarking replay/cheap-reads/memory/limit-1/1000: Analyzing
 replay/cheap-reads/memory/limit-1/1000
-                        time:   [206.37 µs 218.11 µs 231.63 µs]
+                        time:   [187.83 µs 222.91 µs 266.87 µs]
+                        change: [−25.589% −11.991% +3.4539%] (p = 0.17 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/cheap-reads/sqlite/limit-1/1000
 Benchmarking replay/cheap-reads/sqlite/limit-1/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/limit-1/1000: Collecting 10 samples in estimated 5.0030 s (64k iterations)
+Benchmarking replay/cheap-reads/sqlite/limit-1/1000: Collecting 10 samples in estimated 5.0003 s (66k iterations)
 Benchmarking replay/cheap-reads/sqlite/limit-1/1000: Analyzing
 replay/cheap-reads/sqlite/limit-1/1000
-                        time:   [67.782 µs 76.447 µs 85.385 µs]
+                        time:   [63.159 µs 70.929 µs 80.384 µs]
+                        change: [−25.223% −11.695% +3.8418%] (p = 0.15 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/memory/limit-none/1000
 Benchmarking replay/cheap-reads/memory/limit-none/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/limit-none/1000: Collecting 10 samples in estimated 5.0081 s (22k iterations)
+Benchmarking replay/cheap-reads/memory/limit-none/1000: Collecting 10 samples in estimated 5.0016 s (21k iterations)
 Benchmarking replay/cheap-reads/memory/limit-none/1000: Analyzing
 replay/cheap-reads/memory/limit-none/1000
-                        time:   [217.53 µs 227.53 µs 238.42 µs]
-Found 3 outliers among 10 measurements (30.00%)
-  2 (20.00%) low mild
+                        time:   [208.36 µs 225.93 µs 251.91 µs]
+                        change: [−11.141% −3.1478% +6.9101%] (p = 0.52 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
 Benchmarking replay/cheap-reads/sqlite/limit-none/1000
 Benchmarking replay/cheap-reads/sqlite/limit-none/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/limit-none/1000: Collecting 10 samples in estimated 5.0228 s (3905 iterations)
+Benchmarking replay/cheap-reads/sqlite/limit-none/1000: Collecting 10 samples in estimated 5.0317 s (4345 iterations)
 Benchmarking replay/cheap-reads/sqlite/limit-none/1000: Analyzing
 replay/cheap-reads/sqlite/limit-none/1000
-                        time:   [1.1451 ms 1.2220 ms 1.3093 ms]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [1.0181 ms 1.1617 ms 1.3135 ms]
+                        change: [−26.774% −15.687% −4.2366%] (p = 0.02 < 0.05)
+                        Performance has improved.
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/1000
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/backwards-limit-1/1000: Collecting 10 samples in estimated 5.0068 s (24k iterations)
+Benchmarking replay/cheap-reads/memory/backwards-limit-1/1000: Collecting 10 samples in estimated 5.0017 s (25k iterations)
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/1000: Analyzing
 replay/cheap-reads/memory/backwards-limit-1/1000
-                        time:   [193.87 µs 205.06 µs 221.18 µs]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [175.53 µs 195.79 µs 219.99 µs]
+                        change: [−16.758% −7.7838% +1.6778%] (p = 0.14 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/1000
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/1000: Collecting 10 samples in estimated 5.0000 s (70k iterations)
+Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/1000: Collecting 10 samples in estimated 5.0016 s (70k iterations)
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/1000: Analyzing
 replay/cheap-reads/sqlite/backwards-limit-1/1000
-                        time:   [75.000 µs 78.340 µs 84.002 µs]
-Found 2 outliers among 10 measurements (20.00%)
-  1 (10.00%) low mild
-  1 (10.00%) high mild
+                        time:   [61.650 µs 70.804 µs 84.175 µs]
+                        change: [−22.690% −11.392% +0.9309%] (p = 0.10 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/memory/head/1000
 Benchmarking replay/cheap-reads/memory/head/1000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/head/1000: Collecting 10 samples in estimated 5.0000 s (374M iterations)
+Benchmarking replay/cheap-reads/memory/head/1000: Collecting 10 samples in estimated 5.0000 s (393M iterations)
 Benchmarking replay/cheap-reads/memory/head/1000: Analyzing
 replay/cheap-reads/memory/head/1000
-                        time:   [12.529 ns 12.882 ns 13.492 ns]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [12.259 ns 13.376 ns 14.602 ns]
+                        change: [−2.8913% +4.8396% +12.585%] (p = 0.28 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/sqlite/head/1000
 Benchmarking replay/cheap-reads/sqlite/head/1000: Warming up for 3.0000 s
 Benchmarking replay/cheap-reads/sqlite/head/1000: Collecting 10 samples in estimated 5.0001 s (1.1M iterations)
 Benchmarking replay/cheap-reads/sqlite/head/1000: Analyzing
 replay/cheap-reads/sqlite/head/1000
-                        time:   [4.2026 µs 4.5295 µs 4.8678 µs]
+                        time:   [3.8416 µs 4.4865 µs 5.2422 µs]
+                        change: [−12.183% −2.6220% +9.3391%] (p = 0.68 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/raw/same-schema/head/1000
 Benchmarking replay/cheap-reads/raw/same-schema/head/1000: Warming up for 3.0000 s
 Benchmarking replay/cheap-reads/raw/same-schema/head/1000: Collecting 10 samples in estimated 5.0001 s (1.1M iterations)
 Benchmarking replay/cheap-reads/raw/same-schema/head/1000: Analyzing
 replay/cheap-reads/raw/same-schema/head/1000
-                        time:   [4.1572 µs 4.3896 µs 4.6471 µs]
+                        time:   [3.9074 µs 4.4961 µs 5.1695 µs]
+                        change: [−8.5902% +0.3754% +11.763%] (p = 0.95 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/cheap-reads/memory/limit-1/10000
 Benchmarking replay/cheap-reads/memory/limit-1/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/limit-1/10000: Collecting 10 samples in estimated 5.0412 s (1760 iterations)
+Benchmarking replay/cheap-reads/memory/limit-1/10000: Collecting 10 samples in estimated 5.0194 s (1595 iterations)
 Benchmarking replay/cheap-reads/memory/limit-1/10000: Analyzing
 replay/cheap-reads/memory/limit-1/10000
-                        time:   [2.4757 ms 2.6250 ms 2.7911 ms]
+                        time:   [2.5182 ms 2.8738 ms 3.2220 ms]
+                        change: [−1.0312% +11.360% +28.515%] (p = 0.15 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/sqlite/limit-1/10000
 Benchmarking replay/cheap-reads/sqlite/limit-1/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/limit-1/10000: Collecting 10 samples in estimated 5.0024 s (59k iterations)
+Benchmarking replay/cheap-reads/sqlite/limit-1/10000: Collecting 10 samples in estimated 5.0013 s (78k iterations)
 Benchmarking replay/cheap-reads/sqlite/limit-1/10000: Analyzing
 replay/cheap-reads/sqlite/limit-1/10000
-                        time:   [58.747 µs 68.920 µs 83.013 µs]
+                        time:   [80.088 µs 89.749 µs 100.06 µs]
+                        change: [+6.4781% +21.044% +39.203%] (p = 0.01 < 0.05)
+                        Performance has regressed.
 Benchmarking replay/cheap-reads/memory/limit-none/10000
 Benchmarking replay/cheap-reads/memory/limit-none/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/limit-none/10000: Collecting 10 samples in estimated 5.0178 s (1320 iterations)
+Benchmarking replay/cheap-reads/memory/limit-none/10000: Collecting 10 samples in estimated 5.0746 s (1210 iterations)
 Benchmarking replay/cheap-reads/memory/limit-none/10000: Analyzing
 replay/cheap-reads/memory/limit-none/10000
-                        time:   [3.4505 ms 3.6355 ms 3.9221 ms]
+                        time:   [3.6840 ms 5.4129 ms 6.7166 ms]
+                        change: [−14.247% +9.0672% +39.489%] (p = 0.56 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking replay/cheap-reads/sqlite/limit-none/10000
 Benchmarking replay/cheap-reads/sqlite/limit-none/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/limit-none/10000: Collecting 10 samples in estimated 5.4418 s (110 iterations)
+Benchmarking replay/cheap-reads/sqlite/limit-none/10000: Collecting 10 samples in estimated 5.5998 s (275 iterations)
 Benchmarking replay/cheap-reads/sqlite/limit-none/10000: Analyzing
 replay/cheap-reads/sqlite/limit-none/10000
-                        time:   [38.907 ms 42.040 ms 46.288 ms]
+                        time:   [16.030 ms 17.288 ms 19.443 ms]
+                        change: [−59.476% −53.448% −47.426%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/10000
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/backwards-limit-1/10000: Collecting 10 samples in estimated 5.0504 s (1320 iterations)
+Benchmarking replay/cheap-reads/memory/backwards-limit-1/10000: Collecting 10 samples in estimated 5.1354 s (1595 iterations)
 Benchmarking replay/cheap-reads/memory/backwards-limit-1/10000: Analyzing
 replay/cheap-reads/memory/backwards-limit-1/10000
-                        time:   [2.5676 ms 2.8367 ms 3.1824 ms]
+                        time:   [3.3825 ms 3.5939 ms 4.0431 ms]
+                        change: [−1.9526% +16.977% +39.949%] (p = 0.11 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/10000
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/10000: Collecting 10 samples in estimated 5.0018 s (63k iterations)
+Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/10000: Collecting 10 samples in estimated 5.0038 s (65k iterations)
 Benchmarking replay/cheap-reads/sqlite/backwards-limit-1/10000: Analyzing
 replay/cheap-reads/sqlite/backwards-limit-1/10000
-                        time:   [70.629 µs 76.048 µs 84.433 µs]
+                        time:   [59.335 µs 62.813 µs 69.020 µs]
+                        change: [−26.209% −14.672% −1.3208%] (p = 0.05 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/memory/head/10000
 Benchmarking replay/cheap-reads/memory/head/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/memory/head/10000: Collecting 10 samples in estimated 5.0000 s (384M iterations)
+Benchmarking replay/cheap-reads/memory/head/10000: Collecting 10 samples in estimated 5.0000 s (369M iterations)
 Benchmarking replay/cheap-reads/memory/head/10000: Analyzing
 replay/cheap-reads/memory/head/10000
-                        time:   [13.111 ns 13.572 ns 14.102 ns]
+                        time:   [12.382 ns 13.310 ns 15.046 ns]
+                        change: [−8.5798% −0.4270% +8.6749%] (p = 0.93 > 0.05)
+                        No change in performance detected.
 Benchmarking replay/cheap-reads/sqlite/head/10000
 Benchmarking replay/cheap-reads/sqlite/head/10000: Warming up for 3.0000 s
 Benchmarking replay/cheap-reads/sqlite/head/10000: Collecting 10 samples in estimated 5.0002 s (1.1M iterations)
 Benchmarking replay/cheap-reads/sqlite/head/10000: Analyzing
 replay/cheap-reads/sqlite/head/10000
-                        time:   [4.4901 µs 4.6913 µs 4.9501 µs]
+                        time:   [5.0609 µs 7.2388 µs 8.7675 µs]
+                        change: [+1.7564% +25.520% +56.059%] (p = 0.07 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
 Benchmarking replay/cheap-reads/raw/same-schema/head/10000
 Benchmarking replay/cheap-reads/raw/same-schema/head/10000: Warming up for 3.0000 s
-Benchmarking replay/cheap-reads/raw/same-schema/head/10000: Collecting 10 samples in estimated 5.0001 s (1.1M iterations)
+Benchmarking replay/cheap-reads/raw/same-schema/head/10000: Collecting 10 samples in estimated 5.0006 s (329k iterations)
 Benchmarking replay/cheap-reads/raw/same-schema/head/10000: Analyzing
 replay/cheap-reads/raw/same-schema/head/10000
-                        time:   [4.1771 µs 4.5751 µs 5.1459 µs]
+                        time:   [9.8501 µs 11.293 µs 13.685 µs]
+                        change: [+117.30% +164.58% +222.32%] (p = 0.00 < 0.05)
+                        Performance has regressed.
 
 Benchmarking replay/page-hops/sqlite/256
 Benchmarking replay/page-hops/sqlite/256: Warming up for 3.0000 s
-Benchmarking replay/page-hops/sqlite/256: Collecting 10 samples in estimated 5.0009 s (14k iterations)
+Benchmarking replay/page-hops/sqlite/256: Collecting 10 samples in estimated 5.0256 s (8305 iterations)
 Benchmarking replay/page-hops/sqlite/256: Analyzing
 replay/page-hops/sqlite/256
-                        time:   [352.66 µs 384.05 µs 429.59 µs]
-                        thrpt:  [595.92 Kelem/s 666.58 Kelem/s 725.91 Kelem/s]
+                        time:   [568.41 µs 622.59 µs 668.64 µs]
+                        thrpt:  [382.87 Kelem/s 411.18 Kelem/s 450.38 Kelem/s]
+                 change:
+                        time:   [+38.568% +54.323% +70.903%] (p = 0.00 < 0.05)
+                        thrpt:  [−41.487% −35.201% −27.833%]
+                        Performance has regressed.
 Benchmarking replay/page-hops/sqlite/2048
 Benchmarking replay/page-hops/sqlite/2048: Warming up for 3.0000 s
-Benchmarking replay/page-hops/sqlite/2048: Collecting 10 samples in estimated 5.1165 s (1650 iterations)
+Benchmarking replay/page-hops/sqlite/2048: Collecting 10 samples in estimated 5.0406 s (935 iterations)
 Benchmarking replay/page-hops/sqlite/2048: Analyzing
 replay/page-hops/sqlite/2048
-                        time:   [3.2482 ms 3.4861 ms 3.7077 ms]
-                        thrpt:  [552.37 Kelem/s 587.48 Kelem/s 630.51 Kelem/s]
+                        time:   [3.8754 ms 4.2265 ms 4.9350 ms]
+                        thrpt:  [414.99 Kelem/s 484.56 Kelem/s 528.46 Kelem/s]
+                 change:
+                        time:   [+29.459% +50.452% +78.465%] (p = 0.00 < 0.05)
+                        thrpt:  [−43.967% −33.534% −22.756%]
+                        Performance has regressed.
 Benchmarking replay/page-hops/sqlite/8192
 Benchmarking replay/page-hops/sqlite/8192: Warming up for 3.0000 s
-Benchmarking replay/page-hops/sqlite/8192: Collecting 10 samples in estimated 5.1277 s (165 iterations)
+Benchmarking replay/page-hops/sqlite/8192: Collecting 10 samples in estimated 6.1967 s (275 iterations)
 Benchmarking replay/page-hops/sqlite/8192: Analyzing
 replay/page-hops/sqlite/8192
-                        time:   [29.845 ms 32.192 ms 35.409 ms]
-                        thrpt:  [231.35 Kelem/s 254.47 Kelem/s 274.48 Kelem/s]
+                        time:   [21.615 ms 22.259 ms 22.739 ms]
+                        thrpt:  [360.26 Kelem/s 368.02 Kelem/s 379.00 Kelem/s]
+                 change:
+                        time:   [−42.125% −36.114% −30.564%] (p = 0.00 < 0.05)
+                        thrpt:  [+44.017% +56.529% +72.786%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low severe
 

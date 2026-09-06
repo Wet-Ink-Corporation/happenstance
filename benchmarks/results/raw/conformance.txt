@@ -1,4 +1,4 @@
-    Finished `release` profile [optimized] target(s) in 1.09s
+    Finished `release` profile [optimized] target(s) in 0.30s
      Running tests\conformance_first.rs (target\release\deps\conformance_first-a65effd272d1a177.exe)
 
 running 178 tests
@@ -181,5 +181,5 @@ test sqlite_arm_is_conformant::two_fixture_instances_observe_none_of_each_others
 test sqlite_arm_is_conformant::two_handles_observe_each_others_appends ... ok
 test sqlite_arm_is_conformant::untagged_events_match_query_all ... ok
 
-test result: ok. 178 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+test result: ok. 178 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
 

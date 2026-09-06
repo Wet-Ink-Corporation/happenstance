@@ -1,8 +1,8 @@
    Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\benchmarks)
-    Finished `release` profile [optimized] target(s) in 1.35s
+    Finished `release` profile [optimized] target(s) in 3.54s
      Running `target\release\allocations.exe`
-commit:    4a7ca16-dirty
-date:      2026-09-05
+commit:    b3c8d84-dirty
+date:      2026-09-06
 toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 target:    x86_64-pc-windows-msvc
 profile:   release

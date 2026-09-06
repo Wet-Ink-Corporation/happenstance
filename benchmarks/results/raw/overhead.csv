@@ -1,35 +1,35 @@
-# commit:    4a7ca16-dirty
-# date:      2026-09-05
+# commit:    b3c8d84-dirty
+# date:      2026-09-06
 # toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 # target:    x86_64-pc-windows-msvc
 # profile:   release
 # cpus:      20
 # sqlite:    3.53.2
 group,arm,shape,metric,value,unit,representative
-overhead/append,raw/same-schema,owned/256B/3tags/batch-8,median,136703,ns,true
-overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p95,228991,ns,true
-overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p99,7102463,ns,true
-overhead/append,raw/same-schema,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,2.603321208889566,x,true
-overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,median,52511,ns,true
-overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p95,112511,ns,true
-overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p99,212351,ns,true
-overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,0.3841247083092544,x,true
-overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,median,236927,ns,true
-overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p95,971263,ns,true
-overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p99,7208959,ns,true
-overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,1.733151430473362,x,true
-overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,4.511949877168593,x,true
-overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,median,358911,ns,true
-overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p95,409343,ns,true
-overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p99,501247,ns,true
-overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,median,2557951,ns,true
-overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p95,2836479,ns,true
-overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p99,2983935,ns,true
-overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,ratio-over/raw/same-schema,7.126978554572025,x,true
-cross-adapter/append,memory,owned/256B/3tags/batch-8,median,2101,ns,true
-cross-adapter/append,memory,owned/256B/3tags/batch-8,p95,9207,ns,true
-cross-adapter/append,memory,owned/256B/3tags/batch-8,p99,21711,ns,true
-cross-adapter/append,sqlite,owned/256B/3tags/batch-8,median,234111,ns,true
-cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p95,1004031,ns,true
-cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p99,7716863,ns,true
-cross-adapter/append,sqlite,owned/256B/3tags/batch-8,ratio-over/memory,111.42836744407425,x,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,median,325631,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p95,698367,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,p99,8024063,ns,true
+overhead/append,raw/same-schema,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,2.289838052979108,x,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,median,142207,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p95,323071,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,p99,939519,ns,true
+overhead/append,raw/hand-rolled,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,0.4367121066483228,x,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,median,558079,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p95,1941503,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,p99,8355839,ns,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/same-schema,1.7138386701511834,x,true
+overhead/append,happenstance-sqlite,owned/256B/3tags/batch-8,ratio-over/raw/hand-rolled,3.9244130035792892,x,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,median,846335,ns,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p95,1096703,ns,true
+overhead/replay,raw/same-schema,owned/256B/3tags/2000-events,p99,1465343,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,median,5279743,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p95,7413759,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,p99,17104895,ns,true
+overhead/replay,happenstance-sqlite,owned/256B/3tags/2000-events,ratio-over/raw/same-schema,6.23836069641454,x,true
+cross-adapter/append,memory,owned/256B/3tags/batch-8,median,3901,ns,false
+cross-adapter/append,memory,owned/256B/3tags/batch-8,p95,17215,ns,false
+cross-adapter/append,memory,owned/256B/3tags/batch-8,p99,42623,ns,false
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,median,466431,ns,false
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p95,1627135,ns,false
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,p99,6967295,ns,false
+cross-adapter/append,sqlite,owned/256B/3tags/batch-8,ratio-over/memory,119.5670340938221,x,true
