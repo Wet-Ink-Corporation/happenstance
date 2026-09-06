@@ -40,6 +40,15 @@ thiserror.workspace = true
 # publish, which is `publication-and-positioning`'s to decide; a migrator can be
 # turned on then, in the release that needs it.
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
+# Not dev-only, and the move is deliberate. `read` hands its cursor-opening work
+# to the runtime on the first poll rather than polling it inline, because ES-11
+# requires the read's state to be fixed no later than that poll and a future that
+# only advances while someone is polling it is fixed whenever the caller next
+# gets round to it. `Handle`, `spawn` and `JoinError` are therefore named in this
+# crate's own code and its error enum. `rt` only: nothing here starts a runtime,
+# it joins the one the caller is already on. `happenstance-sqlite` carries tokio
+# for the same reason one layer down.
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
 happenstance-testkit.workspace = true

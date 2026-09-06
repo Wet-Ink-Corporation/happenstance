@@ -92,7 +92,7 @@ happenstance_testkit::event_store_conformance!(
 // channel available before the adapter has a body.
 // ---------------------------------------------------------------------------
 
-/// The eight columns migration 1 is allowed to have, and their shapes.
+/// The columns migration 1 is allowed to have, and their shapes.
 ///
 /// Held as data rather than as a sequence of assertions so that the "exactly
 /// these" check below can be a set comparison: a ninth column added in passing
@@ -107,6 +107,11 @@ const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     ("origin_store", "bytea", true),
     ("origin_position", "bigint", true),
     ("recorded_at", "bigint", false),
+    // The visibility mechanism, added by `postgres-append-and-frontier-head` on
+    // ADR-0013's prior measurement. It was deliberately absent while the schema
+    // story owned this file, so that a schema could not answer the mechanism
+    // question by accident; it is deliberately present now.
+    ("xact_id", "xid8", false),
 ];
 
 #[tokio::test]
@@ -342,21 +347,18 @@ fn capability_constants_are_answered_not_defaulted() {
     assert!(PostgresFixture::SECOND_HANDLE.is_supported());
     assert!(PostgresFixture::REOPEN.is_supported());
 
-    let mid_batch = PostgresFixture::MID_BATCH_FAULT;
-    assert!(!mid_batch.is_supported());
-
-    let reason = mid_batch
-        .reason()
-        .expect("a declined capability carries a reason");
-    assert!(!reason.is_empty());
+    // `MID_BATCH_FAULT` was declined while `append` was `todo!()` and is
+    // supported now that it is not. Both are answers; the failure mode this test
+    // exists for is the third possibility, which is the trait's silent default
+    // on a store that could have co-operated.
     assert!(
-        reason.contains("trigger") || reason.contains("todo!"),
-        "the decline must name a Postgres-specific cause, not a generic one: {reason}"
+        PostgresFixture::MID_BATCH_FAULT.is_supported(),
+        "Postgres can fail between two rows of one batch -- an AFTER INSERT trigger          raising on the nth row does it -- so declining is not an honest answer          once `append` exists to fault"
     );
 
     // Not left at the trait's provided default. Comparing against the default
-    // explicitly is the only way to tell "declined deliberately" from "never
-    // considered", because the two are the same three tokens of Rust.
+    // explicitly is the only way to tell an answer from an omission, because the
+    // two are the same three tokens of Rust at the impl site.
     assert_ne!(
         PostgresFixture::MID_BATCH_FAULT.reason(),
         Defaulted::MID_BATCH_FAULT.reason(),

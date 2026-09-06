@@ -70,6 +70,9 @@ pub mod event_store;
 #[cfg(feature = "event-store")]
 pub mod migration;
 
+#[cfg(feature = "event-store")]
+mod query_sql;
+
 #[cfg(feature = "projection-store")]
 pub mod projection_store;
 

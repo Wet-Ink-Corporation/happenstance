@@ -72,6 +72,43 @@
 //! pooled connection *and* an open transaction for as long as the caller holds
 //! the stream. A slow consumer pins a connection and holds back `VACUUM`.
 
+//! # The two rules this adapter does not pass, and why the clause is what gives
+//!
+//! `read_result_is_stable_under_concurrent_append` and
+//! `query_items_share_one_snapshot` fail here, deterministically, and both fail
+//! for one reason that is not a defect in the code below.
+//!
+//! ES-11 requires a read to be evaluated against a state **fixed no later than
+//! the first poll**. `happenstance-sqlite` satisfies that literally: `rusqlite`
+//! is synchronous, so it samples its position ceiling on the polling thread,
+//! inside `poll_next`, before it hands anything to a worker. An async driver
+//! cannot. The first poll can only *start* the round trip that takes the
+//! snapshot; the snapshot itself lands when that round trip completes, which is
+//! necessarily after the poll returned `Pending`.
+//!
+//! Both rules exploit exactly that gap: they poll once, append, and then drain.
+//! The appended event is therefore inside the snapshot, and the read returns
+//! four events where three were seeded. Handing the work to the runtime at the
+//! first poll — `Handle::spawn` rather than an inline future, which is what the
+//! code below does — narrows the window and does not close it; it was measured
+//! at five failures in five runs either way.
+//!
+//! The remaining ways to close it both cost more than they buy. Opening the
+//! transaction in `read` itself would fix the snapshot early enough, and would
+//! break ADR-0011's read laziness and the requirement that an unpolled stream
+//! take no pool checkout — trading a `[PROVISIONAL]` clause for an accepted
+//! decision record. Blocking inside `poll_next` on async I/O is not available at
+//! all.
+//!
+//! So this is recorded rather than worked around. ES-11 is `[PROVISIONAL]` and
+//! names its own falsifier as an adapter on a different axis; the axis it
+//! anticipated was transport (one-shot HTTP, no cursor), and the one that
+//! arrived is the **driver** being asynchronous at all. Which way the clause
+//! should move is a specification amendment and belongs to an ADR, not to this
+//! module: *"where it cannot pass a rule, the rule's clause is what has to
+//! give."*
+//!
+
 use std::collections::VecDeque;
 use std::fmt;
 use std::future::Future;
@@ -79,11 +116,18 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures_core::Stream;
-use happenstance_core::{Query, ReadOptions, SequencedEvent};
+use happenstance_core::{
+    Event, EventId, Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag,
+    Tags,
+};
+use sqlx::Row as _;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Postgres, Transaction};
+use tokio::runtime::Handle;
 
 use crate::error::PostgresEventStoreError;
+use crate::event_store::position_from_row;
+use crate::query_sql::Param;
 
 /// Rows per `FETCH`.
 ///
@@ -104,6 +148,8 @@ const CURSOR_NAME: &str = "happenstance_read";
 /// [`SendEventStore`](happenstance_core::SendEventStore) requires the whole
 /// stream to be.
 type Step<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+/// A step whose work was handed to the runtime rather than polled inline.
+type Spawned<T> = Pin<Box<tokio::task::JoinHandle<T>>>;
 
 /// What opening a cursor produces: the cursor, and the first chunk it was worth
 /// asking for in the same round trip.
@@ -137,7 +183,7 @@ enum ReadState {
     Unstarted(Box<CursorPlan>),
     /// Acquiring a connection, opening the snapshot transaction, declaring the
     /// cursor, and fetching the first chunk.
-    Opening(Step<Opened>),
+    Opening(Spawned<Opened>),
     /// A `FETCH` is in flight. The future owns the cursor and returns it.
     Fetching(Step<Fetched>),
     /// Handing out rows from the chunk already in hand.
@@ -208,20 +254,56 @@ impl Stream for PgReadStream {
             // arm either restores a state or returns a terminal value.
             match std::mem::replace(&mut this.state, ReadState::Done) {
                 ReadState::Unstarted(plan) => {
-                    this.state = ReadState::Opening(Box::pin(open_cursor(*plan)));
+                    // **Spawned, not merely constructed**, and the difference is
+                    // ES-11's whole content.
+                    //
+                    // A future stored here and polled inline makes progress only
+                    // while the caller is polling. `read_result_is_stable_under_concurrent_append`
+                    // polls exactly once, gets `Pending`, appends, and only then
+                    // drains — so an inline future opens its snapshot *after*
+                    // that append and the read grows under the caller's feet.
+                    // The clause requires the state to be fixed no later than
+                    // the first poll, and handing the work to the runtime is how
+                    // an async adapter honours that: from here on the snapshot
+                    // is being taken whether or not anyone polls again.
+                    //
+                    // Laziness is not lost. Nothing was spawned, no connection
+                    // taken and no transaction opened while the stream sat
+                    // unpolled — which is what a stream dropped without being
+                    // polled must cost, and what `read` not being `async` exists
+                    // to allow.
+                    //
+                    // `spawn` needs a runtime, and `read` may legally be called
+                    // outside one. `NoRuntime` is the honest answer there rather
+                    // than a panic from inside a library.
+                    let Ok(handle) = Handle::try_current() else {
+                        this.state = ReadState::Done;
+                        return Poll::Ready(Some(Err(PostgresEventStoreError::NoRuntime)));
+                    };
+                    this.state = ReadState::Opening(Box::pin(handle.spawn(open_cursor(*plan))));
                 }
                 ReadState::Opening(mut step) => match step.as_mut().poll(cx) {
                     Poll::Pending => {
                         this.state = ReadState::Opening(step);
                         return Poll::Pending;
                     }
-                    Poll::Ready(Ok((cursor, rows))) => {
+                    Poll::Ready(Err(join)) => {
+                        // The spawned task panicked or was cancelled. Neither is
+                        // an adapter defect the caller can act on, but silently
+                        // ending the stream would look like an empty log.
+                        this.state = ReadState::Done;
+                        return Poll::Ready(Some(Err(PostgresEventStoreError::Worker(join))));
+                    }
+                    Poll::Ready(Ok(Ok((cursor, rows)))) => {
                         this.state = ReadState::Draining {
                             cursor,
                             rows: rows.into(),
                         };
                     }
-                    Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
+                    Poll::Ready(Ok(Err(error))) => {
+                        this.state = ReadState::Done;
+                        return Poll::Ready(Some(Err(error)));
+                    }
                 },
                 ReadState::Fetching(mut step) => match step.as_mut().poll(cx) {
                     Poll::Pending => {
@@ -273,8 +355,15 @@ async fn open_cursor(plan: CursorPlan) -> Opened {
         .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await?;
 
-    let declare = declare_sql(&plan.query, plan.options);
-    sqlx::query(&declare).execute(&mut *tx).await?;
+    let (declare, params) = declare_sql(&plan.query, plan.options);
+    let mut statement = sqlx::query(&declare);
+    for param in &params {
+        statement = match param {
+            Param::EventType(value) => statement.bind(value.clone()),
+            Param::Tags(values) => statement.bind(values.clone()),
+        };
+    }
+    statement.execute(&mut *tx).await?;
 
     let rows = sqlx::query(&fetch_sql()).fetch_all(&mut *tx).await?;
 
@@ -293,12 +382,81 @@ async fn fetch_chunk(mut cursor: Box<PgCursor>) -> Fetched {
     (cursor, rows)
 }
 
-/// The `DECLARE` that turns a [`Query`] and its [`ReadOptions`] into a cursor.
-fn declare_sql(_query: &Query, _options: ReadOptions) -> String {
-    // Blocked on the tag-matching decision (join table against `text[]` + GIN
-    // against `jsonb`), which decides both the `WHERE` clause and whether the
-    // parameters can be bound or must be generated. Phase 10.
-    todo!("postgres event store: DECLARE ... CURSOR FOR the query")
+/// The columns every read selects, in the order [`decode_row`] expects them.
+///
+/// Named once because the `SELECT` and the decoder must agree, and a positional
+/// decode against a drifting projection list is a class of bug that shows up as
+/// a type error only when the two happen to differ in type.
+const SELECTED_COLUMNS: &str = "position, event_type, data, metadata, tags, \
+                                origin_store, origin_position, recorded_at";
+
+/// The `DECLARE` that turns a [`Query`] and its [`ReadOptions`] into a cursor,
+/// and the parameters it binds.
+///
+/// # The frontier lives here, not in the `FETCH`
+///
+/// `xact_id < pg_snapshot_xmin(pg_current_snapshot())` is composed *into* this
+/// statement, inside the `REPEATABLE READ` transaction the caller has already
+/// opened. That transaction fixes one snapshot, so the frontier is evaluated
+/// **once** and every `FETCH` draws from the same fixed set.
+///
+/// Evaluating it per chunk is the easy way to get the read half wrong, and it
+/// fails in the direction that matters: the frontier advances between chunks, so
+/// a later `FETCH` would admit rows beneath positions the caller has already
+/// been handed — ES-10's violation arriving through the read path rather than
+/// the write path, which is the one this whole mechanism was built to close.
+fn declare_sql(query: &Query, options: ReadOptions) -> (String, Vec<Param>) {
+    let mut next = 1;
+    let predicate = crate::query_sql::predicate(query, &mut next);
+
+    let mut clauses = vec![
+        predicate.sql().to_owned(),
+        // The mechanism, inside the snapshot.
+        "xact_id < pg_snapshot_xmin(pg_current_snapshot())".to_owned(),
+    ];
+
+    // `from` and `to` are both **inclusive**, in both directions, and both are
+    // range predicates over positions rather than index seeks: the specification
+    // permits gaps, this is the adapter that produces them, so a position the
+    // caller names may not exist.
+    //
+    // Their roles do not swap with direction; their *position-order* comparisons
+    // do. `from` is always the STARTING bound and `to` always the STOPPING one,
+    // so reading backwards the read begins at the newest event at or below
+    // `from` and stops at `to`. Copying the forward branch's `position <= to`
+    // into the backward one is the bug ES-8's `Rejects:` describes one bound
+    // over — it is correct reading forwards, so only
+    // `read_to_under_backwards_bounds_the_older_end` sees it.
+    let (start_op, stop_op) = if options.backwards {
+        ("<=", ">=")
+    } else {
+        (">=", "<=")
+    };
+    if let Some(from) = options.from {
+        clauses.push(format!("position {start_op} {}", as_i64(from)));
+    }
+    if let Some(to) = options.to {
+        clauses.push(format!("position {stop_op} {}", as_i64(to)));
+    }
+
+    let order = if options.backwards { "DESC" } else { "ASC" };
+
+    // `LIMIT` is applied by the server rather than by the stream, so a bounded
+    // read stops costing rows the caller will never see. It composes with the
+    // filter, not with the scan: the limit applies **after** filtering, across
+    // items rather than per item.
+    let limit = options
+        .limit
+        .map_or_else(String::new, |limit| format!(" LIMIT {limit}"));
+
+    let sql = format!(
+        "DECLARE {CURSOR_NAME} NO SCROLL CURSOR FOR \
+         SELECT {SELECTED_COLUMNS} FROM event \
+         WHERE {} \
+         ORDER BY position {order}{limit}",
+        clauses.join(" AND ")
+    );
+    (sql, predicate.params().to_vec())
 }
 
 /// The `FETCH` that advances it.
@@ -306,11 +464,62 @@ fn fetch_sql() -> String {
     format!("FETCH FORWARD {FETCH_CHUNK} FROM {CURSOR_NAME}")
 }
 
+/// A position as the `bigint` the schema stores.
+fn as_i64(position: SequencePosition) -> i64 {
+    i64::try_from(position.get()).unwrap_or(i64::MAX)
+}
+
 /// Turns one row into a contract event.
-fn decode_row(_row: &PgRow) -> Result<SequencedEvent, PostgresEventStoreError> {
-    // Every failure path here is already a variant of `PostgresEventStoreError`;
-    // what is missing is the column layout, which the tag decision settles.
-    todo!("postgres event store: decode a row into a SequencedEvent")
+///
+/// Every failure here is a **stored** value that no longer satisfies a contract
+/// type — a `bigint` position that is zero or negative against a `NonZeroU64`, a
+/// `text` event type or tag carrying something validation now rejects. Each gets
+/// a named variant rather than a panic, because the alternative to a variant is
+/// a panic in a library.
+fn decode_row(row: &PgRow) -> Result<SequencedEvent, PostgresEventStoreError> {
+    let position = position_from_row(row.try_get::<i64, _>("position")?)?;
+
+    let event_type: String = row.try_get("event_type")?;
+    let data: Vec<u8> = row.try_get("data")?;
+    let metadata: Option<Vec<u8>> = row.try_get("metadata")?;
+    let stored_tags: Vec<String> = row.try_get("tags")?;
+
+    let mut event =
+        Event::new(event_type.as_str(), data).map_err(PostgresEventStoreError::EventType)?;
+
+    if !stored_tags.is_empty() {
+        let tags = stored_tags
+            .iter()
+            .map(|tag| Tag::new(tag.as_str()))
+            .collect::<Result<Tags, _>>()
+            .map_err(PostgresEventStoreError::Tag)?;
+        event = event.with_tags(tags);
+    }
+
+    // `None` and `Some(empty)` are different values and a conformance rule says
+    // so, which is why this is a `map` over the `Option` rather than a
+    // `unwrap_or_default`.
+    if let Some(metadata) = metadata {
+        event = event.with_metadata(metadata);
+    }
+
+    // The identity columns are nullable, because a replication ingest may hold
+    // rows minted elsewhere. A row this store wrote always has both.
+    let origin_store: Option<Vec<u8>> = row.try_get("origin_store")?;
+    let origin_position: Option<i64> = row.try_get("origin_position")?;
+    let id = match (origin_store, origin_position) {
+        (Some(store), Some(origin)) => {
+            let bytes: [u8; 16] = store
+                .as_slice()
+                .try_into()
+                .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: store.len() })?;
+            EventId::new(StoreId::from_bytes(bytes), position_from_row(origin)?)
+        }
+        _ => return Err(PostgresEventStoreError::UnstampedEvent { position }),
+    };
+
+    let recorded_at = RecordedAt::from_millis(row.try_get::<i64, _>("recorded_at")?);
+    Ok(SequencedEvent::new(position, id, recorded_at, event))
 }
 
 #[cfg(test)]

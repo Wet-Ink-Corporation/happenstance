@@ -112,20 +112,29 @@ mod tests {
         );
     }
 
-    /// The mechanism's column is a *later* story's, and this is the guard that
-    /// says so out loud rather than in a review comment.
+    /// The mechanism's column is present, and this test changed hands.
     ///
-    /// ADR-0024 chooses between `xid8` + `pg_snapshot_xmin`, a transaction-scoped
-    /// advisory lock and a serialised sequence table, and only the first adds a
-    /// column. Writing that column now would make the decision record describe a
-    /// schema that had already chosen. This test costs nothing and fails loudly
-    /// the moment someone adds it "while they are in there".
+    /// It was written by `postgres-schema-and-live-fixture` asserting the
+    /// **absence** of an `xid8` column, so that a schema story could not settle
+    /// the position-visibility question in passing. That guard did its job and
+    /// is now spent: the story that owns the mechanism has chosen it, on
+    /// ADR-0013's phase-2 measurement, and the column is deliberate.
+    ///
+    /// Inverted rather than deleted. A removed test leaves no trace that the
+    /// schema ever had something to prove; an inverted one records that the
+    /// column arrived through the story entitled to add it, and fails if some
+    /// later edit removes the mechanism while leaving the reads that depend on
+    /// it in place.
     #[test]
-    fn migration_1_does_not_carry_a_visibility_mechanism_column() {
+    fn migration_1_carries_the_visibility_mechanism_column() {
+        let statements = statements();
         assert!(
-            !statements().contains("xid8"),
-            "migration 1 has grown an `xid8` column, which pre-empts ADR-0024. \
-             The mechanism's column belongs to the story that chooses the mechanism."
+            statements.contains("xact_id"),
+            "the frontier mechanism's column is gone, but `head` and every read still              filter on it"
+        );
+        assert!(
+            statements.contains("event_xact_idx"),
+            "the frontier predicate has lost its index, which turns every read into a              sequential scan and charges the mechanism for the absence of an index rather              than for what it costs"
         );
     }
 

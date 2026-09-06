@@ -349,26 +349,21 @@ impl Fixture for PostgresFixture {
     /// "restart" could mean, and the trait says so.
     const REOPEN: Capability = Capability::SUPPORTED;
 
-    /// Declined, and the reason is scope rather than incapacity.
+    /// Supported, and armed for real.
     ///
-    /// Postgres can genuinely offer this — an `AFTER INSERT` trigger armed to
-    /// `RAISE` on the third row would do it, installed over a second pooled
-    /// connection. Taking the trait's silent default on a store that could
-    /// co-operate is the one outcome the architecture brief singles out as
-    /// wrong, so this is a decline with an argument rather than an omission.
+    /// It was declined while `append` was `todo!()` — a fault armed against a
+    /// body that did not exist would have made
+    /// `append_is_atomic_under_a_mid_batch_fault` report on nothing. `append`
+    /// exists now, and taking the trait's silent default on a store that can
+    /// genuinely co-operate is the one outcome the architecture brief singles
+    /// out as wrong.
     ///
-    /// The argument: `append` is `todo!()` in this story by its own PR boundary,
-    /// so a fault armed here would fire against a body that does not exist, and
-    /// `append_is_atomic_under_a_mid_batch_fault` would report on nothing. The
-    /// trigger is cheap to add and belongs in the story that writes the append
-    /// path, where the rule it feeds can actually run.
-    const MID_BATCH_FAULT: Capability = Capability::declined(
-        "not by incapacity: an AFTER INSERT trigger raising on the third row, installed \
-         over a second pooled connection, is available to this fixture and costs two \
-         statements. It is not armed yet because `append` is still `todo!()` in this \
-         crate, so the fault would fire against a body that does not exist and the rule \
-         would report on nothing. `postgres-append-and-frontier-head` arms it",
-    );
+    /// The injection is an `AFTER INSERT` trigger that counts rows within the
+    /// statement and raises on the `after + 1`-th. It works precisely because
+    /// this adapter inserts a batch as **one** multi-row statement: the raise
+    /// aborts that statement, which aborts the transaction, which is the atomic
+    /// unit `append` promises.
+    const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
     /// Mirrored from the adapter's own constants, never restated as literals.
     ///
@@ -385,6 +380,34 @@ impl Fixture for PostgresFixture {
         // two round trips on every handle to re-establish a schema that
         // cannot have gone away.
         PostgresEventStore::new(self.pool().await)
+    }
+
+    async fn arm_mid_batch_fault(&self, after: usize) {
+        let pool = self.pool().await;
+        let threshold = i64::try_from(after).unwrap_or(i64::MAX) + 1;
+        // A per-statement counter, reset by the trigger's own creation, so the
+        // fault fires once for the next batch rather than for every batch.
+        let sql = format!(
+            r"
+            CREATE OR REPLACE FUNCTION mid_batch_fault() RETURNS trigger AS $fn$
+            DECLARE seen bigint;
+            BEGIN
+                seen := coalesce(nullif(current_setting('hs.fault_seen', true), ''), '0')::bigint + 1;
+                PERFORM set_config('hs.fault_seen', seen::text, false);
+                IF seen = {threshold} THEN
+                    RAISE EXCEPTION 'the fixture armed a mid-batch fault';
+                END IF;
+                RETURN NEW;
+            END $fn$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER mid_batch_fault_trigger
+                AFTER INSERT ON event
+                FOR EACH ROW EXECUTE FUNCTION mid_batch_fault();
+            "
+        );
+        pool.execute(sql.as_str())
+            .await
+            .expect("a broken test environment: could not arm the mid-batch fault");
     }
 
     async fn reopen(&self) {
