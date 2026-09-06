@@ -30,6 +30,24 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] — 2026-09-06
+
+The first stable release, and the first to carry all five crates. What the
+number promises is narrower than the word *stable* usually implies, and the
+two halves are worth separating: the `EventStore` clauses marked `[FROZEN]`
+in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
+here, and `ProjectionStore` is not — it ships behind an off-by-default
+`unstable-projection` feature with a written semver exemption until two
+adapters at opposite ends of the batch-shape axis have passed its suite.
+
+`happenstance-sqlite` and `happenstance-cloudflare` join the published set.
+Both previously held a `0.0.0` placeholder, which is not a predecessor: there
+is no upgrade path from it because there was never anything under it.
+
+`0.2.0-alpha.1` is yanked, so the resolvable set is one version.
+
 ### Added
 
 - **A conformance rule for the one pair of read options the suite never put on
@@ -3036,4 +3054,6 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Wet-Ink-Corporation/happenstance/releases/tag/v0.2.0
 [0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main
