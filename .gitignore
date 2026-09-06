@@ -55,3 +55,15 @@ target
 # source file, and the branch refs that make the worktrees findable live in
 # `.git/` regardless.
 .claude/
+
+# Gate and test transcripts written by hand while debugging — `cargo xtask ci >
+# gate-output.log`, `cargo test > test-output.txt` and the like. They are not
+# ignored by `target` because they land at the repository root, and every one of
+# them embeds the absolute path of the machine that produced it. Five of these
+# were sitting untracked-and-unignored at the pre-publication sweep, each
+# carrying `C:\Users\<name>`, each one `git add -A` away from being committed to
+# a repository about to go public.
+#
+# Redirect a run into the scratch directory instead if you want to keep it.
+*.log
+*-output.txt
