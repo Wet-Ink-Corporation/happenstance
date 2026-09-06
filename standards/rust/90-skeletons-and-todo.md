@@ -80,7 +80,7 @@ and the driver's real types are met by whoever writes the bodies — one phase
 after the port was frozen against them.
 
 **Evidence.** `crates/happenstance-postgres/src/projection_store.rs:105 (type Batch = Transaction<'static, Postgres>)` ·
-`crates/happenstance-sqlite/src/projection_store.rs:624 (type Batch = SqliteBatch)` ·
+`crates/happenstance-sqlite/src/projection_store.rs:638 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:10 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
@@ -266,7 +266,7 @@ accept the first real one silently. The same shape one level down is an
 attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
-**Evidence.** `./Cargo.toml:183 (the allow protected nothing)` ·
+**Evidence.** `./Cargo.toml:204 (the allow protected nothing)` ·
 `crates/happenstance-ladybug/src/lib.rs:77 (Phase 11 removes both the bodies)` ·
 `crates/happenstance-neon/src/event_store.rs:239 (constructed by decode_append_response)`
 

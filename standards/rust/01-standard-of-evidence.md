@@ -77,7 +77,7 @@ every future agent on the strength of its `Load when:` line, and there is no
 experiment that would ever remove it — so it accumulates, and the corpus's signal
 per token falls for everyone.
 
-**Evidence.** `CONTRIBUTING.md:172 (Write the wrong implementation)` ·
+**Evidence.** `CONTRIBUTING.md:194 (Write the wrong implementation)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:433 (impl Defect for InnerJoinTagStore)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md#61-the-suites-own-proof-obligation) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
@@ -224,6 +224,6 @@ an adapter by the next agent that loads it because a compiled example is exactly
 what agents trust most.
 
 **Evidence.** `xtask/src/constitution.rs:27 (Doctests also do not receive the workspace)` ·
-`Cargo.toml:180 (unwrap_used = "deny")` ·
+`Cargo.toml:201 (unwrap_used = "deny")` ·
 [rust-clippy#1599](https://github.com/rust-lang/rust-clippy/issues/1599)
 *(checked 2026-08-09, rustc 1.97.1)*

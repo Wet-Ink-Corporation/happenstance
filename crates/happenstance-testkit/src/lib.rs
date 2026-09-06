@@ -243,25 +243,24 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = { version = "0.2.0-alpha.1", features = ["unstable-projection"] }
+//! happenstance-core = { version = "0.2", features = ["unstable-projection"] }
 //!
 //! [features]
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.2.0-alpha.1"
+//! happenstance-testkit = "=0.2.0"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
-//! **Both requirements name the pre-release, and that is not decoration.**
-//! `version = "0.2"` is the line a Rust author writes without thinking, and it
-//! does not resolve: a requirement naming no pre-release never matches a
-//! pre-release version, so while `0.2.0-alpha.1` is the only version on the
-//! registry, `cargo add` answers that no candidate matches. An outsider taking
-//! a pre-release writes the pre-release. When these crates reach a stable
-//! number the requirements become ordinary carets, and
-//! `xtask`'s `recipe_fence_resolves` is what makes this block move with them
-//! rather than going quietly stale here.
+//! **The two requirements are deliberately different shapes.** They named
+//! `0.2.0-alpha.1` in full until `0.2.0` shipped, because a requirement naming
+//! no pre-release never matches a pre-release version and `version = "0.2"` —
+//! the line a Rust author writes without thinking — resolved to nothing at all.
+//! That is over: both crates are on the registry at a stable number and an
+//! ordinary caret works. `xtask`'s `recipe_fence_resolves` is what moved this
+//! block rather than letting it go quietly stale, which is the whole reason
+//! that check exists.
 //!
 //! **The `=` on this crate is a recommendation with a reason** (CF-30). Adding
 //! a conformance rule is a semver-*minor* change that can turn a passing

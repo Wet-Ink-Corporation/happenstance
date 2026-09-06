@@ -367,7 +367,7 @@ toolchain is newer than both, so the local gate is green too. The first party to
 disagree is a consumer on the old compiler, after publication, when the number
 has stopped being a note and become a promise.
 
-**Evidence.** `Cargo.toml:17 (rust-version = "1.97.1")` · `clippy.toml:1 (msrv = "1.97.1")` ·
+**Evidence.** `Cargo.toml:26 (rust-version = "1.97.1")` · `clippy.toml:1 (msrv = "1.97.1")` ·
 `xtask/src/main.rs:1299 (A let-chain, and the first in the workspace)` ·
 [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
 [ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md) ·

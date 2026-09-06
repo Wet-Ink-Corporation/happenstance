@@ -31,8 +31,8 @@ storage-agnostic event sourcing library built on the
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.2.0-alpha.1"                      # the event store
-happenstance-sqlite = { version = "0.2.0-alpha.1", features = ["projection-store"] }
+happenstance-sqlite = "0.2"                                # the event store
+happenstance-sqlite = { version = "0.2", features = ["projection-store"] }
 
 rusqlite = "0.40"                                          # only for tables of your own
 ```

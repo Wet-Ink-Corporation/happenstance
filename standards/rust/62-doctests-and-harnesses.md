@@ -120,7 +120,7 @@ The reader copies it, hits `E0277` on line one of their first attempt, and
 concludes the library's documented entry point does not work.
 
 **Evidence.** `xtask/src/lib.rs:5 (it had never compiled and could not have)` ·
-`crates/happenstance-testkit/src/lib.rs:583 (macro_rules! ignore)` ·
+`crates/happenstance-testkit/src/lib.rs:582 (macro_rules! ignore)` ·
 `xtask/src/lib.rs:16 (inside the package and stays correct after publication)`
 
 ---
@@ -220,8 +220,8 @@ keyword takes a `Fixture` — so an `ignore` fence would still be printing the o
 spelling, unparseable and wrong in two ways, as the first thing every adapter
 author copies out of the macro's documentation.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:583 (macro_rules! ignore)` ·
-`crates/happenstance-testkit/src/lib.rs:605 (Migrating from)` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:582 (macro_rules! ignore)` ·
+`crates/happenstance-testkit/src/lib.rs:604 (Migrating from)` ·
 `xtask/src/lint_constitution.rs:650 (ignore: <reason>)` ·
 [SPECIFICATION CF-15](../../spec/SPECIFICATION.md)
 

@@ -411,17 +411,26 @@ jobs:
       - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           # Compare against the commit this pull request branched from, not the
-          # registry. With no baseline the action asks crates.io, and all three
-          # names sit there at `0.0.0`: Cargo treats every `0.0.x` version as
-          # incompatible with every other, so there is no compatible predecessor
-          # to diff against and the job reports nothing while still going green.
+          # registry. The original reason was that every name sat at `0.0.0` and
+          # Cargo treats each `0.0.x` as incompatible with every other, so there
+          # was no compatible predecessor to diff against and the job reported
+          # nothing while still going green.
           #
-          # Be clear about what this buys. It catches a break introduced *by this
-          # pull request*. It says nothing about breaks against the last release —
-          # a break merged two pull requests ago is part of the baseline and
-          # therefore invisible here. Phase 12 keeps both baselines once a real
-          # `0.1.0` is published: the registry for release safety, this one for
-          # review signal.
+          # **That reason expired at `0.2.0`.** All five crates now have a real
+          # published predecessor, so the registry baseline is available and is
+          # the one that matters for release safety. Adding it is the outstanding
+          # half of phase 12's `cargo-semver-checks` work and is deliberately not
+          # done in the same change as the release itself — the registry has to
+          # carry `0.2.0` before a job can diff against it, and a job that fails
+          # because the version it names does not exist yet teaches nobody
+          # anything.
+          #
+          # Be clear about what the rev baseline buys until then. It catches a
+          # break introduced *by this pull request*. It says nothing about breaks
+          # against the last release — a break merged two pull requests ago is
+          # part of the baseline and therefore invisible here. Both baselines are
+          # kept once the registry one lands: the registry for release safety,
+          # this one for review signal.
           baseline-rev: ${{ github.event.pull_request.base.sha }}
           # Every published crate, the facade included. `happenstance` re-exports
           # the contract wholesale today, so its surface is currently a duplicate
@@ -429,14 +438,12 @@ jobs:
           # installs, and the moment the typed layer grows an API of its own it
           # stops being a duplicate. One extra rustdoc build is cheaper than
           # remembering to add the line later.
-          # Every crate the release publishes, plus the one that is
-          # publish-ready and waiting. `happenstance-sqlite` joined the release
-          # set at the crate-set re-plan and `happenstance-cloudflare` is
-          # publish-ready but deferred past `0.2.0`; both have a public surface,
-          # and a surface no instrument watches is the thing this job exists to
-          # prevent. Added on the argument the paragraph above already makes —
-          # one extra rustdoc build is cheaper than remembering the line later —
-          # and cloudflare is here *before* it ships for exactly that reason.
+          # Every crate the release publishes — all five of them. Both adapters
+          # were watched here *before* they shipped, on the argument the
+          # paragraph above already makes: one extra rustdoc build is cheaper
+          # than remembering to add the line later, and a public surface no
+          # instrument watches is the thing this job exists to prevent. That
+          # foresight is why this line needed no edit at the release.
           package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
 
   # A newly published advisory against a dependency nobody has touched is the one

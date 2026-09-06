@@ -82,7 +82,7 @@ item. That is a heap allocation on every event read, chosen under deadline, in a
 crate whose stream type is already named in a public signature and in the
 adapter's own `shapes.rs` assertions.
 
-**Evidence.** `Cargo.toml:160 (unsafe_code = "forbid")` ·
+**Evidence.** `Cargo.toml:181 (unsafe_code = "forbid")` ·
 `crates/happenstance-sqlite/tests/shapes.rs:23 (needs no pin projection)` ·
 `crates/happenstance-testkit/src/registry.rs:305 (std::task::Wake)` ·
 `crates/happenstance-cloudflare/src/js.rs:33 (The escape hatch is an)` ·
@@ -305,7 +305,7 @@ declares no floor of its own, and the break surfaced only when someone ran a 1.8
 compiler by hand. A floor nobody runs is a number in a manifest, and the consumer
 who finds out is the first one who is not on the pinned toolchain.
 
-**Evidence.** `Cargo.toml:17 (rust-version = "1.97.1")` ·
+**Evidence.** `Cargo.toml:26 (rust-version = "1.97.1")` ·
 `crates/happenstance-testkit/tests/mutation_coverage/correct.rs:429 (stored, condition)` ·
 [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
 [ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md)

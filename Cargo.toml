@@ -3,20 +3,40 @@ resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
 
 [workspace.package]
-# A **pre-release**, and it is the number `happenstance` and `happenstance-core`
-# both inherit. `0.2.0` and not `0.1.0` because phase 4 was a breaking change to
-# a version that had not moved; `-alpha.1` because the API is expected to keep
-# moving until the stable `0.2.0`, and a stable number would make "we can't
-# change that now" available as an argument against the rest of the runbook.
+# The number `happenstance`, `happenstance-core`, `happenstance-sqlite` and
+# `happenstance-cloudflare` all inherit. `happenstance-testkit` does not — see
+# its own manifest, and CF-32 for why.
 #
-# A pre-release only resolves for a requirement that asks for one, so
-# `cargo add happenstance` does not pick this up by accident. That is the
-# intended behaviour, not a limitation.
-version = "0.2.0-alpha.1"
+# `0.2.0` and not `0.1.0` because phase 4 was a breaking change to a version that
+# had not moved, and `cargo-semver-checks` said so on the pull request: seven
+# major lints against `happenstance-core`, every one of them a decision an ADR
+# had already taken. Nothing was published, so nothing downstream broke; the
+# number still had to move, because a true finding is not silenced.
+#
+# **Stable, as of this release, and that costs something on purpose.** The
+# `-alpha.1` that stood here existed so that "we can't change that now" was not
+# available as an argument while the API was still being decided. It is
+# available now, and it should be: the frozen `EventStore` clauses are
+# semver-binding from here. What is *not* covered is `ProjectionStore`, which
+# ships behind an off-by-default `unstable-projection` feature with a written
+# exemption until two adapters at opposite ends of the batch-shape axis have
+# passed its suite.
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wet-Ink-Corporation/happenstance"
+# Both were null until the release, which made `repository` the *only* outbound
+# link on five crates.io pages — and it 404'd anonymously for as long as the
+# repository was private, so a reader wanting the specification, the decision
+# records or a security contact had one door and it was locked. Cheap to state
+# and load-bearing when it is the only one.
+#
+# `documentation` is NOT here, and its absence is the decision. docs.rs is
+# per crate, so one inherited URL would point four of the five at the wrong page
+# — worse than leaving it unset, because crates.io falls back to the right
+# `docs.rs/<name>` on its own. Each publishable crate names its own below.
+homepage = "https://github.com/Wet-Ink-Corporation/happenstance"
 authors = ["Ryan Britton"]
 keywords = ["event-sourcing", "dcb", "cqrs", "event-store"]
 categories = ["database", "data-structures"]
@@ -32,13 +52,14 @@ categories = ["database", "data-structures"]
 # `std` requirement) into every adapter.
 #
 # The three requirement strings move with the version above, and this is the
-# highest-cost line in the file to get wrong: `version = "0.2.0"` never matches a
-# `0.2.0-alpha.1` release, so leaving one behind resolves fine from the path
-# while the workspace is intact and fails only on the *second* `cargo publish` —
-# after `happenstance-core` is live and unremovable.
-happenstance-core = { version = "0.2.0-alpha.1", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.2.0-alpha.1", path = "crates/happenstance", default-features = false }
-happenstance-testkit = { version = "0.2.0-alpha.1", path = "crates/happenstance-testkit" }
+# highest-cost line in the file to get wrong: a requirement naming a version
+# that was never released resolves fine from the path while the workspace is
+# intact and fails only on the *second* `cargo publish` — after
+# `happenstance-core` is live and unremovable. They moved off `0.2.0-alpha.1`
+# in the same commit as the version, which is the only order that is ever green.
+happenstance-core = { version = "0.2.0", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.2.0", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { version = "0.2.0", path = "crates/happenstance-testkit" }
 
 # --- external ---
 # WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`

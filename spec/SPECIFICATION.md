@@ -5312,7 +5312,7 @@ program that puts one depot's inventory under another depot's checkpoint. What
 that program can no longer do everywhere is *run*: the hole is closed at run
 time by PS-15 rather than at the type level, and since phase 8 an adapter
 outside the testkit closes it — `begin` mints the batch with the store's own
-stamp (`crates/happenstance-sqlite/src/projection_store.rs:632`) and `commit`
+stamp (`crates/happenstance-sqlite/src/projection_store.rs:646`) and `commit`
 compares it before the file is touched.
 
 E2E-19 proposes tying the batch to the receiver's lifetime and calls it "the

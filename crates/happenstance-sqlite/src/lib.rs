@@ -85,11 +85,29 @@
 //! one.
 
 #![doc(html_no_source)]
+// `docs.rs` builds this crate with `--all-features` and `--cfg docsrs`
+// (`Cargo.toml`'s `[package.metadata.docs.rs]`), which means the rendered page
+// shows `projection_store` beside `event_store` with nothing to distinguish
+// them. Two of this crate's three features are off by default and one of those
+// gates an explicitly unstable port, so a reader who cannot see a badge draws
+// the wrong conclusion from a page that is otherwise accurate — they add
+// `SqliteProjectionStore` to a project and discover the feature flag from a
+// compiler error, and the semver exemption never.
+//
+// `feature(doc_cfg)` is nightly, which is why this is `cfg_attr`-gated on
+// `docsrs` rather than written plainly: the flag is set by the docs.rs build and
+// by the gate's own nightly rustdoc step, and by nothing a consumer runs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(any(feature = "event-store", feature = "projection-store"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "event-store", feature = "projection-store")))
+)]
 pub mod connection;
 
 #[cfg(feature = "event-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
 pub mod event_store;
 
 #[cfg(feature = "event-store")]
@@ -98,7 +116,16 @@ mod query_sql;
 #[cfg(feature = "event-store")]
 mod row;
 
+// No `///` doc on this declaration, and that is a constraint rather than a
+// preference: a doc comment written *here* is resolved in **this** module's
+// scope, while the module's own `//!` header is resolved in its own. Attaching
+// one made every intra-doc link inside `projection_store.rs` — `SendProjectionStore`,
+// `SqliteBatch`, `SqliteProjectionStoreError` — fail to resolve, and
+// `-D rustdoc::broken-intra-doc-links` turned that into four errors. The
+// stability note this used to carry now lives in the module's own header, where
+// the names it wants to link to are in scope.
 #[cfg(feature = "projection-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub mod projection_store;
 
 /// Re-exported so a caller can name the driver types this crate's own

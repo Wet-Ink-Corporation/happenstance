@@ -1,5 +1,19 @@
 //! SQLite-backed [`SendProjectionStore`].
 //!
+//! # Stability: this module is not covered by the crate's version
+//!
+//! Everything else `happenstance-sqlite` publishes is semver-binding at
+//! `0.2.0`. This module is not, and the exemption is written down rather than
+//! implied: it sits behind the off-by-default `projection-store` feature, which
+//! forwards `happenstance-core`'s `unstable-projection`, and that port stays
+//! exempt until two adapters at **opposite ends of the batch-shape axis** have
+//! passed its conformance suite. Today the two shapes that clear the suite are
+//! both testkit-side instruments, which is one shape wearing two hats.
+//!
+//! On docs.rs the feature shows as a badge on this module. The badge says which
+//! flag; this paragraph says what the flag costs, because a reader who takes a
+//! dependency on a page cannot see a semver exemption in a feature name.
+//!
 //! # Status: a projection store that has run the suite it did not write
 //!
 //! SQLite is the adapter that makes the checkpoint invariant easy to honour: the

@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance-sqlite"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -129,10 +131,16 @@ conformance = ["happenstance-core/conformance"]
 # with the packaging story. Same two keys as the other three publishable crates,
 # for the same reason: without `all-features`, docs.rs renders this crate's
 # default set and `conformance` disappears from the page, and `--cfg docsrs` is
-# what makes a future `doc(cfg(...))` render its gate rather than nothing. No
-# item here carries that attribute yet; the configuration is set now because it
-# is a property of *publishing*, and a page is rendered once per release rather
-# than once per attribute.
+# what makes `doc(cfg(...))` render its gate rather than nothing.
+#
+# This comment used to end "no item here carries that attribute yet", and the
+# configuration was set anyway because it is a property of *publishing* and a
+# page is rendered once per release rather than once per attribute. The items
+# carry it now — `src/lib.rs` gates `connection`, `event_store` and
+# `projection_store` — which is what makes the two keys below do anything. The
+# one that matters is `projection_store`: it is off by default and forwards an
+# explicitly unstable port, and before the badge a docs.rs reader had no way to
+# see either.
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

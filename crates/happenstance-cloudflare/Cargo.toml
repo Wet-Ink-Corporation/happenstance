@@ -10,6 +10,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+# docs.rs renders this one for `wasm32-unknown-unknown` — see the
+# `[package.metadata.docs.rs]` block below, which is the only one in the
+# workspace that sets a target. The URL is the same shape regardless.
+documentation = "https://docs.rs/happenstance-cloudflare"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
