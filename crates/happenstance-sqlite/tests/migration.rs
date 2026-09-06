@@ -10,9 +10,41 @@
 //! [`rusqlite::Connection`]. Nothing is doubled: there is no fake driver, no
 //! in-memory stand-in for the file, and no second hand-rolled encoding.
 //!
-//! The event-store half is gated on the feature that provides it, so the
-//! `cargo hack` feature powerset does not compile a test against a module that
-//! was configured out.
+//! Each half is gated on the feature that provides it, so nothing here compiles
+//! a test against a module that was configured out. The event-store half is the
+//! file-level `#![cfg]` below; the projection half is one `#[test]`, gated at its
+//! own boundary, because `projection-store` is off by default and widening the
+//! file-level attribute would take the pragma readbacks out of the default build
+//! with it.
+//!
+//! That second gate is newer than this sentence's first draft, which claimed the
+//! property for the whole file while one assertion mid-body of
+//! `pragmas_are_in_effect_on_every_connection` reached
+//! `happenstance_sqlite::projection_store` unguarded — so `cargo test -p
+//! happenstance-sqlite` did not compile at all. No gate step caught it: the
+//! `cargo hack` feature powerset runs `--no-dev-deps`, which cannot be combined
+//! with `--all-targets` and so never builds a test target, and every other step
+//! passes `--all-features`.
+//!
+//! # Why the gate was not widened to catch the next one, and what was measured
+//!
+//! The obvious repair is a second `cargo hack` step carrying `--all-targets`
+//! (the existing one cannot: `cargo hack` 0.6.45 answers *"--no-dev-deps may not
+//! be used together with --all-targets"*, because `--no-dev-deps` rewrites each
+//! manifest). It was measured before being declined. `cargo hack check
+//! --workspace --feature-powerset --all-targets --keep-going`, 2026-09-03 at
+//! rustc 1.97.1: **68 of 214 configurations fail.** Four are this bug, fixed
+//! here. The other 64 are `happenstance`, every one an `error[E0432]` on
+//! `happenstance::Json` and `happenstance::commit` from four test targets that
+//! assume the `json` and `memory` features their crate's `default` supplies —
+//! the same defect in a crate this change does not own.
+//!
+//! So the step stays out rather than arriving red, and this paragraph is what a
+//! step would have been: a gate step that cannot go green is not a gate step,
+//! and one softened with a skip list is worse than none. Adding it is right
+//! once `happenstance`'s 64 are fixed, and it will owe `--locked` — it rewrites
+//! no manifest, so the exemption the existing powerset step relies on does not
+//! reach it.
 
 #![cfg(feature = "event-store")]
 #![allow(clippy::unwrap_used)]
@@ -22,11 +54,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 
-use happenstance_core::StoreId;
+use happenstance_core::{AppendError, Event, SendEventStore, StoreId};
 use happenstance_sqlite::connection::{
     BUSY_TIMEOUT_MS, ConnectionSettings, JOURNAL_MODE, SYNCHRONOUS, open_configured,
 };
-use happenstance_sqlite::event_store::{SCHEMA_VERSION, SqliteEventStore};
+use happenstance_sqlite::event_store::{SCHEMA_VERSION, SqliteEventStore, SqliteEventStoreError};
 use rusqlite::Connection;
 
 /// A temporary database path that deletes itself, and its WAL sidecars, on drop.
@@ -75,6 +107,18 @@ impl Drop for TempDb {
 /// that a wrong `open` cannot both write the file and describe it.
 fn raw(path: &Path) -> Connection {
     Connection::open(path).unwrap()
+}
+
+/// The smallest valid event, for the identity assertions below.
+fn event(event_type: &str) -> Event {
+    Event::new(event_type, &b"{}"[..]).unwrap()
+}
+
+/// How many rows the `event` table holds, read through a raw connection.
+fn rows(path: &Path) -> i64 {
+    raw(path)
+        .query_row("SELECT count(*) FROM event", [], |row| row.get(0))
+        .unwrap()
 }
 
 /// The names SQLite reports for the objects this crate created, with its own
@@ -434,6 +478,67 @@ fn remint_replaces_the_persisted_identity() {
     assert_eq!(identity_rows, 1, "a re-mint replaces, it does not append");
 }
 
+/// R-3 — an append through a handle the file has outgrown is refused, not
+/// stamped under the incarnation that was retired.
+///
+/// VT-6 permits mint-once **only if** an adapter can detect that its state was
+/// restored or cloned, **or** the deployment is documented to invoke the
+/// re-mint. This adapter takes the second branch, so `remint_identity`'s
+/// documented procedure is the half of the permission it rests on — and that
+/// procedure says *"Run it with nothing else holding the database open"*, a
+/// precondition nothing enforced. A live handle keeps the `store_id` it read at
+/// construction, so after a re-mint it goes on minting `EventId`s under the
+/// retired incarnation; the collision surfaces only when a replication peer sees
+/// the same `(StoreId, SequencePosition)` twice, and by then its dedup has
+/// dropped real facts.
+///
+/// The cross-process and restore-from-backup cases are genuinely undetectable
+/// from inside SQLite, and VT-6's `Rejects:` paragraph accepts that risk in
+/// terms. This is the strictly narrower **in-process** one: no external actor is
+/// involved, and the split is visible to the program that caused it — under a
+/// lock the writer is already holding.
+#[tokio::test]
+async fn an_append_through_a_handle_the_file_has_outgrown_is_refused() {
+    let db = TempDb::new("outgrown-handle");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    let retired = store.store_id();
+
+    store.append(&[event("Before")], None).await.unwrap();
+    let before = rows(db.path());
+
+    let minted = SqliteEventStore::remint_identity(db.path()).unwrap();
+    assert_ne!(
+        retired, minted,
+        "the re-mint must move the persisted identity"
+    );
+
+    let refused = store
+        .append(&[event("After")], None)
+        .await
+        .expect_err("the stale handle must not stamp an event under the retired incarnation");
+    assert!(
+        matches!(
+            refused,
+            AppendError::Store(SqliteEventStoreError::IdentityMoved { handle, persisted })
+                if handle == retired && persisted == minted
+        ),
+        "the refusal must name both incarnations, so an operator can tell which \
+         handle to drop; got {refused:?}"
+    );
+    assert_eq!(
+        rows(db.path()),
+        before,
+        "a refused append leaves the file as it was"
+    );
+
+    // The file is not poisoned: a handle opened after the re-mint appends under
+    // the new incarnation, which is the whole point of the procedure.
+    let fresh = SqliteEventStore::open(db.path()).unwrap();
+    assert_eq!(fresh.store_id(), minted);
+    fresh.append(&[event("After")], None).await.unwrap();
+    assert_eq!(rows(db.path()), before + 1);
+}
+
 /// AC-006 — `recorded_at` is returned as stored, and neither `open` nor
 /// `migrate` writes to it.
 ///
@@ -487,11 +592,15 @@ fn recorded_at_is_returned_as_stored_after_a_reopen() {
     assert_eq!(read_again, stamped);
 }
 
-/// AC-007 — the three pragmas are read back off the live connection, per handle,
-/// for both stores in this crate.
+/// AC-007 — the three pragmas are read back off the live connection, per handle.
 ///
 /// A pragma that was executed is not a pragma that is in effect: SQLite silently
 /// accepts one it does not recognise.
+///
+/// The projection store's half of AC-007 is
+/// `projection_store_open_configures_its_connection` — not a link, because that
+/// item does not exist in this crate's default configuration — split out so that
+/// this one keeps running when `projection-store` is off.
 #[test]
 fn pragmas_are_in_effect_on_every_connection() {
     let db = TempDb::new("pragmas");
@@ -532,11 +641,13 @@ fn pragmas_are_in_effect_on_every_connection() {
         );
     }
 
-    // The projection store's connection is configured through the same one
-    // function, so its handle runs under the same three values read off the
-    // same kind of live connection.
-    let projection_connection = open_configured(db.path()).unwrap();
-    let settings = ConnectionSettings::read_back(&projection_connection).unwrap();
+    // Both stores' connections are configured through the same one function, so
+    // any handle it hands back runs under the same three values read off the
+    // same kind of live connection. `open_configured` is compiled in under
+    // `event-store` as well as under `projection-store`, so this stays here,
+    // where it runs under the crate's default features.
+    let shared_connection = open_configured(db.path()).unwrap();
+    let settings = ConnectionSettings::read_back(&shared_connection).unwrap();
     assert_eq!(settings.journal_mode(), JOURNAL_MODE);
     assert_eq!(settings.synchronous(), SYNCHRONOUS);
     assert_eq!(
@@ -545,17 +656,37 @@ fn pragmas_are_in_effect_on_every_connection() {
         "a projection connection with no busy timeout fails immediately against \
          the event store's BEGIN IMMEDIATE write lock"
     );
+}
 
-    // And that it is genuinely the path `SqliteProjectionStore::open` takes,
-    // observed rather than asserted from the source: on a file nothing else has
-    // ever touched, the journal mode left behind is the one that `open` set
-    // before its own migration ran. WAL is a persistent property of the file,
-    // which is what makes the observation outlive the connection.
-    //
-    // This assertion used to be a `catch_unwind` around a `todo!()`, with a
-    // message telling whoever landed the projection migration to assert on the
-    // return value instead. `projection-store-passes-the-borrowed-suite` landed
-    // it, so this is that assertion.
+/// AC-007, the projection store's half — that `open_configured` is genuinely the
+/// path `SqliteProjectionStore::open` takes, observed rather than asserted from
+/// the source.
+///
+/// On a file nothing else has ever touched, the journal mode left behind is the
+/// one that `open` set before its own migration ran. WAL is a persistent
+/// property of the file, which is what makes the observation outlive the
+/// connection.
+///
+/// This assertion used to be a `catch_unwind` around a `todo!()`, with a message
+/// telling whoever landed the projection migration to assert on the return value
+/// instead. `projection-store-passes-the-borrowed-suite` landed it, so this is
+/// that assertion.
+///
+/// # Why the `cfg` is here and not on the file
+///
+/// This is the only assertion in this target that names
+/// `happenstance_sqlite::projection_store`, and that module is behind
+/// `projection-store` — which left `default` under PS-3's verdict and ADR-0036
+/// and is not coming back. Widening the file-level `#![cfg(feature =
+/// "event-store")]` to cover both would take the pragma readbacks out of the
+/// default build with it, which is the coverage this file exists for; leaving
+/// the reference buried mid-body of a `cfg`-less test made `cargo test -p
+/// happenstance-sqlite` an `error[E0433]` rather than a smaller run. The gate
+/// is therefore written at the test boundary, where a reader can see which
+/// feature buys which test.
+#[cfg(feature = "projection-store")]
+#[test]
+fn projection_store_open_configures_its_connection() {
     let untouched = TempDb::new("projection-open");
     happenstance_sqlite::projection_store::SqliteProjectionStore::open(untouched.path())
         .expect("the projection store's migration has landed, and must apply cleanly");

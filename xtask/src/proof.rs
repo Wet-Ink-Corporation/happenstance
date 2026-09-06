@@ -31,6 +31,28 @@
 //! command and discarding its output is the decorative-gate failure CLAUDE.md
 //! names, one level up from the decorative *rule* ADR-0010 is about.
 //!
+//! # And a listing cannot see an `#[ignore]`
+//!
+//! That was the whole of the mechanism, and it was half of one. libtest prints
+//! `name: test` for an ignored test exactly as it prints one that will run:
+//! `experiments/gate-vacuity/results/raw/list-diff.txt` is **empty**, and it is
+//! the diff of this file's own `--list` output for `projection_harness_parity`
+//! with and without an `#[ignore = "…"]` on both of its tests. An assertion over
+//! that listing cannot observe the attribute, and `cargo test` exits 0 over
+//! `0 passed; 2 ignored` — so with that attribute on all thirty-one names these
+//! nine targets carry, `cargo xtask ci` ran all of its steps and exited 0, four
+//! of the nine artefacts having executed nothing while the step printed *"N
+//! named tests present"* about each. The spelling that survives is not even an
+//! obscure one: bare `#[ignore]` is refused by `clippy::pedantic`'s
+//! `ignore_without_reason`, whose own diagnostic ends `help: add a reason with =
+//! ".."`.
+//!
+//! So [`check`] reads the run's own output as well, and [`unexecuted`] is the
+//! half that can disagree with the attribute: a name libtest did not report as
+//! having *passed* fails the step, whatever the exit status said. The listing
+//! assertion is kept rather than replaced — it is what fails a *renamed* test
+//! before a build's worth of tests run, and it names the missing one.
+//!
 //! # The lists here are expectations, and they are meant to be edited
 //!
 //! Each entry's `tests` duplicate names that also live in the target's own
@@ -906,6 +928,69 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
         host: CLOUDFLARE_HOST,
         tests: WF11_MEMORY_CEILING_TESTS,
     },
+    WasmUnitTarget {
+        // The query-ceiling target, and the fourth row. It exists because the
+        // adapter's own partition is otherwise asserted only by arithmetic over
+        // the *strings* it builds — how many compound terms, how many bound
+        // parameters — and arithmetic about a string is not evidence that SQLite
+        // would have refused the string or that the merge behind the partition
+        // reassembles the right rows. The wall is reachable in this harness and
+        // was simply never approached; this row approaches it.
+        //
+        // It is **not** a `WASM_TARGETS` row, for that registry's own stated
+        // reason: every row there is held to a `RuleFamily`'s exhaustive
+        // enumeration, and this target runs no conformance rule of either suite.
+        // It could not: `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag
+        // each, which is 128 arms and 128 parameters, inside both of SQLite's
+        // pushdown limits by two orders of magnitude — so no rule the suite
+        // enumerates can cross either wall, which is the whole finding.
+        //
+        // A second target rather than more cases in `durable_object_conformance`,
+        // and forced by the same two things that forced WF-11's: that harness is
+        // held to three lines and defines nothing of its own, and a target whose
+        // first case deliberately drives the driver into refusing a statement
+        // must not share an object with the rules.
+        package: "happenstance-cloudflare",
+        selector: &["--test", "wide_query_ceiling"],
+        source_dir: "crates/happenstance-cloudflare/tests",
+        gate: WASM32_TARGET_GATE,
+        host: CLOUDFLARE_HOST,
+        tests: WIDE_QUERY_CEILING_TESTS,
+    },
+];
+
+/// The query-ceiling target's cases, by the name `--list` prints them.
+///
+/// Hand-written and **unprefixed**, for the reasons
+/// [`WF11_MEMORY_CEILING_TESTS`] gives: there is no enumeration behind these
+/// names, so the row is a citation and a rename should have to be noticed; and
+/// there is no `mod $mod_name` wrapper, because `event_store_conformance!` is
+/// not involved.
+///
+/// **The first name is the control, and what it controls for changed once it
+/// met a third host.** `the_partition_budget_sits_inside_this_hosts_limits`
+/// hands this runtime the two statements a translation with no partition would
+/// have built. It was `the_unpartitioned_statement_is_refused_by_this_runtime`
+/// and asserted the driver refuses both; that went red on `macos-latest`,
+/// because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option and macOS's
+/// SQLite accepts the 32,800 that ubuntu's and windows's refuse. It now asserts
+/// the arm wall is real here **and** that a statement at exactly the partition
+/// budget is accepted — the direction that breaks the store rather than the one
+/// that varies harmlessly.
+///
+/// It is no longer load-bearing for the six below, and the old comment claiming
+/// it was is corrected rather than left standing: each of those asserts
+/// `planned_statement_count > 1` and an answer drawn from every chunk, which are
+/// properties of the partition rather than of the engine, so they do not degrade
+/// into *nothing went wrong* on a host with a wider wall.
+const WIDE_QUERY_CEILING_TESTS: &[&str] = &[
+    "the_partition_budget_sits_inside_this_hosts_limits",
+    "a_read_past_the_compound_select_ceiling_is_served_from_every_chunk",
+    "a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk",
+    "an_append_guard_past_the_compound_select_ceiling_is_not_refused",
+    "an_append_guard_past_the_bound_parameter_ceiling_is_not_refused",
+    "a_wide_guard_answers_from_every_chunk_not_the_first",
+    "a_parameter_wide_guard_answers_from_every_chunk_not_the_first",
 ];
 
 /// The WF-11 probe's two cases, by the name `--list` prints them.
@@ -986,7 +1071,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// module takes its own detector with it, and only a list written down
 /// elsewhere notices.
 ///
-/// The four groups, and what each is the last guard on:
+/// The five groups, and what each is the last guard on:
 ///
 /// * the `!Send` twins, including the positive control, which are the only
 ///   assertions that run on a target where `wasm-bindgen`'s
@@ -994,9 +1079,28 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// * the three write-path all-or-none guards, which reject the shape the adapter
 ///   itself had — N inserts, a throw converted to `Err(…)`, and a turn that
 ///   commits the rows written before it;
+/// * the four cases that hold the identity stamp's three application sites, one
+///   site at a time — see below;
 /// * the read path's ceiling detectors and their three committed negative
 ///   controls, which are the whole of ADR-0011 as this adapter implements it;
 /// * the ES-6 reconstruction, which is project AC-005's artefact.
+///
+/// # Why the stamp needs four names rather than two
+///
+/// `STAMPED` (`origin_position IS NOT NULL`) is applied at three sites in
+/// `crates/happenstance-cloudflare/src/event_store.rs` — `evaluate`,
+/// `max_position` and `render_chunk` — and ES-18 needs all three. The two cases
+/// that shipped with the stamp both assert through `head`, which is
+/// `max_position` and nothing else, so `evaluate`'s filter and `render_chunk`'s
+/// could each be deleted with the entire gate green, this array included.
+///
+/// The two added since fail when *their own* site's filter is removed and only
+/// then, verified per site: `evaluate` removed fails the guard case alone,
+/// `render_chunk` removed fails the replay case alone, and `max_position`
+/// removed fails the original two alone. All four are named here because the
+/// shape this array exists to catch is the one that put two of them out of reach
+/// to begin with — a case that stops being compiled takes its own detector with
+/// it, and `--list` is the only thing that notices.
 const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "wasm_tests::the_probe_is_not_vacuous",
     "wasm_tests::the_js_boundary_types_are_not_send",
@@ -1005,6 +1109,10 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::write_path_tests::a_batch_that_throws_after_its_first_row_leaves_nothing_behind",
     "event_store::write_path_tests::a_batch_that_throws_while_stamping_identity_leaves_nothing_behind",
     "event_store::write_path_tests::a_batch_whose_discard_also_fails_reports_both_failures",
+    "event_store::write_path_tests::a_batch_whose_index_cleanup_fails_leaves_the_store_holding_none_of_it",
+    "event_store::write_path_tests::a_batch_whose_row_removal_fails_leaves_the_store_holding_none_of_it",
+    "event_store::write_path_tests::an_append_guard_does_not_count_a_row_a_failed_batch_left_behind",
+    "event_store::read_path_tests::a_replay_across_a_refused_append_yields_only_what_landed",
     "event_store::read_path_tests::read_is_stable_under_an_interleaved_append",
     "event_store::read_path_tests::a_ceilingless_paging_read_is_rejected",
     "event_store::read_path_tests::a_cursor_held_across_a_poll_is_rejected",
@@ -1483,13 +1591,41 @@ fn check(artefact: &Artefact) -> Result<()> {
         println!("{package}/{target}: {present} named tests present");
     }
 
-    let status = Command::new("cargo")
+    // `.output()` rather than `.status()`, and the transcript forwarded
+    // verbatim, so the step's log is unchanged for a reader. What changes is
+    // that the run's own report is now *read* on the way past: the exit status
+    // cannot tell `2 passed` from `0 passed; 2 ignored`, and neither can the
+    // `--list` assertion above it — libtest prints an ignored test's name in
+    // that listing exactly as it prints a running one's.
+    let run = Command::new("cargo")
         .args(cargo_args(artefact))
-        .status()
+        .output()
         .with_context(|| format!("failed to launch `cargo test` for `{package}`'s `{target}`"))?;
 
-    if !status.success() {
-        bail!("`{package}`'s `{target}` proof artefact failed with {status}");
+    let transcript = String::from_utf8_lossy(&run.stdout);
+    print!("{transcript}");
+    eprint!("{}", String::from_utf8_lossy(&run.stderr));
+
+    if !run.status.success() {
+        bail!(
+            "`{package}`'s `{target}` proof artefact failed with {}",
+            run.status
+        );
+    }
+
+    let silent = unexecuted(tests, &transcript);
+    if !silent.is_empty() {
+        let count = silent.len();
+        bail!(
+            "`{package}`'s `{target}` exited 0 without running {count} of the tests \
+             the gate names: {silent:?}\n\n\
+             The target built and libtest was happy — an `#[ignore = \"…\"]` costs \
+             nothing but a zero in the `passed` column, and `clippy::pedantic`'s \
+             `ignore_without_reason` hands an author that exact spelling in its own \
+             `help:` line. These are the clauses' own names. If one was silenced \
+             deliberately, the clause in `SPECIFICATION.md` that cites it is now \
+             checked by nothing, and that is the change to make first."
+        );
     }
 
     Ok(())
@@ -2055,6 +2191,55 @@ fn list(args: &[&str], env: &[(&str, &str)], label: &str) -> Result<Vec<String>>
         .filter_map(|line| line.trim().strip_suffix(": test"))
         .map(str::to_owned)
         .collect())
+}
+
+/// The named tests one run's own output does not report as having **passed**.
+///
+/// # Why the run's output, and not a second listing
+///
+/// The obvious route is closed. `cargo test -- --list --ignored` would name the
+/// silenced tests outright, but the locked `wasm-bindgen-test 0.3.76`
+/// (`Cargo.lock:1985-1986`) offers `--include-ignored` and no run-only-ignored
+/// mode, so it is a mechanism the two arms of this file could never share. A
+/// run's own stdout is the one surface every libtest-shaped runner here prints
+/// in the same shape — and this file was already producing it and throwing it
+/// away, which is the decorative-gate failure one level up from the one the
+/// module documentation opens with.
+///
+/// # Why each name, and not the reported `passed` count
+///
+/// Comparing `tests.len()` against the run's `passed` is the cheaper
+/// comparison and it answers a different question: `2 passed` is also what a
+/// target prints whose two *named* tests were `#[ignore]`d and two others
+/// added. The names are what the clauses cite and what [`ARTEFACTS`] exists to
+/// hold, so the outcome is read per name.
+///
+/// The parse is libtest's per-test outcome line, `test <name> ... ok`, trimmed
+/// and matched whole. A name that appears only on an `ignored` or a `FAILED`
+/// line is *not* reported as having passed — which is the distinction a
+/// substring search over the same text cannot make, because an ignored test
+/// prints its name too.
+///
+/// # What this does not observe
+///
+/// Only the names an [`Artefact`] carries, and only for the targets [`check`]
+/// runs. A tenth test inside one of those targets may still be `#[ignore]`d
+/// without failing here, deliberately and for the reason the module
+/// documentation gives for the subset check — what may not happen in silence is
+/// a name a clause cites going quiet.
+pub(crate) fn unexecuted<'a>(named: &[&'a str], run_output: &str) -> Vec<&'a str> {
+    let passed: Vec<&str> = run_output
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("test "))
+        .filter_map(|line| line.strip_suffix(" ... ok"))
+        .collect();
+
+    named
+        .iter()
+        .copied()
+        .filter(|name| !passed.contains(name))
+        .collect()
 }
 
 #[cfg(test)]

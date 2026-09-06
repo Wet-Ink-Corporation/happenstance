@@ -85,11 +85,18 @@ use crate::query::{Query, ReadOptions};
 
 /// A DCB-compliant event store.
 ///
-/// This is the `!Send` flavour and the one to use in generic bounds; see the
-/// [module documentation](self) for why. Adapters that can be `Send` should
-/// implement [`SendEventStore`] instead and get this for free.
+/// Two traits, one set of doc attributes. `trait_variant` derives
+/// [`SendEventStore`] from [`EventStore`] and copies this block onto it, so
+/// every sentence here is written to hold on whichever of the two pages you
+/// opened. [`EventStore`] states no `Send` requirement and is what generic code
+/// binds; [`SendEventStore`] adds it and hands back [`EventStore`] free. The
+/// [module documentation](self) has the reason the split exists.
 ///
 /// # Implementing this trait
+///
+/// Implement [`SendEventStore`] where the store can be shared across threads,
+/// which is every native adapter; implement [`EventStore`] only where `Send`
+/// cannot be had at all, as on `wasm32`.
 ///
 /// The specification's requirements are obligations on the implementer, and
 /// [`happenstance-testkit`](https://docs.rs/happenstance-testkit) checks every one of
@@ -101,7 +108,7 @@ use crate::query::{Query, ReadOptions};
 ///
 /// # Writing generic code over a store
 ///
-/// Bound on this trait, not [`SendEventStore`], unless you need to cross a
+/// Bound on [`EventStore`], not [`SendEventStore`], unless you need to cross a
 /// thread boundary:
 ///
 /// ```
@@ -150,14 +157,14 @@ pub trait EventStore {
 
     /// Reads the events matching `query`, in the order `options` asks for.
     ///
-    /// The returned stream is **lazy**: nothing is executed until it is first
-    /// polled, and failures surface as `Err` items rather than up front. That
-    /// is what lets an adapter stream a million-event replay without buffering
-    /// it, and it is why this method is not `async` — putting the stream at the
-    /// top level of the return type is what allows [`SendEventStore`] to mark
-    /// the *stream* `Send`, not merely the future that produces it.
-    ///
-    /// Use [`collect`] when a `Vec` is genuinely what you want.
+    /// Evaluated against one state **sampled no later than the first poll**; laziness
+    /// is permitted, never required. An adapter issuing more than one statement per
+    /// `read` must capture a position ceiling no later than that poll and bound every
+    /// later statement by it. Failures surface as `Err` items rather than up front.
+    /// This method is not `async` because putting the stream at the top level of the
+    /// return type is what allows [`SendEventStore`] to mark the *stream* `Send`, not
+    /// merely the future that produces it, and it is what lets an adapter stream a
+    /// million-event replay without buffering it. Use [`collect`] for a `Vec`.
     ///
     /// # Ordering
     ///
@@ -315,6 +322,154 @@ pub trait EventStore {
     /// Returns the adapter's error if the lookup fails.
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error>;
 }
+
+// =====================================================================
+// ES-13's regression pin, and the guard that keeps it where cargo looks
+// =====================================================================
+
+/// ES-13's regression pin: the query must outlive the stream.
+///
+/// A carrier, not an API — the two fences below are the artefact, and a doc
+/// comment needs an item to sit on. It sits in `src/` because rustdoc collects
+/// doctests from the **lib target only**. It lived in
+/// `crates/happenstance-core/tests/frozen_signatures.rs` from phase 4 until
+/// F1-04, where nothing ever compiled it; the guard below is what stops it
+/// drifting back there.
+///
+/// ES-13 freezes [`EventStore::read`] on `&Query` and names taking the query
+/// **by value** as the wrong fix. What the reference costs is that the opaque
+/// return type captures the query's lifetime, so the query has to be owned by
+/// something that outlives the stream: a *parameter* is, and a local never can
+/// be. The diagnostic depends on how the return type is spelled, which is why
+/// ES-13 states the defect rather than pinning a code:
+///
+/// | Arrangement | Diagnostic |
+/// |---|---|
+/// | `store.read(&Query::all(), ..)` bound to a `let` | `error[E0716]` |
+/// | returned, bare `-> impl Stream<..>` | `error[E0597]` |
+/// | returned, `+ '_` or `+ 'a` | `error[E0515]` |
+/// | returned inside a struct, bare | `error[E0597]` |
+///
+/// All four are the same defect reported from two ends. Without a lifetime bound
+/// the compiler reasons from the *borrow* — `&query` must outlive the return and
+/// `query` drops at the end of the function. With one, the opaque type is
+/// required to live for `'a`, so it reasons from the *value* instead. The cause
+/// either way is that the opaque type captures the query's lifetime.
+///
+/// # The control
+///
+/// Paired per RS-62-1, and it carries the half of the check the refusal cannot:
+/// it is the one thing here that goes red when `read`, `Query` or `ReadOptions`
+/// is renamed or moved behind a feature, which a lone `compile_fail` fence
+/// reports as passing.
+///
+/// ```
+/// use futures_core::Stream;
+/// use happenstance_core::{EventStore, Query, ReadOptions, SequencedEvent};
+///
+/// // The query comes from the caller, so it outlives the returned stream.
+/// fn replay<'a, S: EventStore>(
+///     store: &'a S,
+///     query: &'a Query,
+/// ) -> impl Stream<Item = Result<SequencedEvent, S::Error>> + 'a {
+///     store.read(query, ReadOptions::new())
+/// }
+/// # fn main() {}
+/// ```
+///
+/// # The refusal
+///
+/// The same function over a **local** query. The fence carries no error code:
+/// the table above has four of them, and rustdoc 1.97.1 compares an annotated
+/// code, finds no match, and reports the fence as passing anyway (RS-62-1).
+///
+/// ```compile_fail
+/// use futures_core::Stream;
+/// use happenstance_core::{EventStore, Query, ReadOptions, SequencedEvent};
+///
+/// fn escapes<S: EventStore>(store: &S) -> impl Stream<Item = Result<SequencedEvent, S::Error>> {
+///     let query = Query::all();
+///     store.read(&query, ReadOptions::new())
+/// }
+/// # fn main() {}
+/// ```
+#[doc(hidden)]
+#[expect(dead_code, reason = "a doc carrier: the fence above is the item")]
+fn es_13_the_query_must_outlive_the_stream() {}
+
+/// A doc fence inside an integration test target is never handed to a compiler.
+///
+/// rustdoc collects doctests from the **lib target only**, so a fence in a
+/// `tests/` file is compiled as prose: it cannot fail, and it cannot be told
+/// apart from one that has stopped being Rust. Measured rather than reasoned
+/// about — `crates/happenstance-core/tests/frozen_signatures.rs` carried a
+/// `compile_fail` fence claiming to pin ES-13 from phase 4 until F1-04, and with
+/// that fence's body replaced by a line of English both
+/// `cargo test -p happenstance-core --doc` and
+/// `cargo test -p happenstance-core --test frozen_signatures` still exit `0`.
+///
+/// So the pin moved to `es_13_the_query_must_outlive_the_stream` above, and this
+/// is the standing guard on the move: it fails if that file opens a doc fence
+/// again. It reads the file rather than reasoning about it, the way
+/// `mod module_doc` below reads this one.
+///
+/// ```
+/// // Anchored on the package root rather than on relative depth, per RS-62-5:
+/// // the path a packaged `.crate` resolves is then the path checked here.
+/// const ARTEFACT: &str = include_str!(concat!(
+///     env!("CARGO_MANIFEST_DIR"),
+///     "/tests/frozen_signatures.rs"
+/// ));
+///
+/// // Spelled with escapes on purpose. A literal fence inside a doctest inside a
+/// // doc comment is three nested parsers deep, and the needle is the one thing
+/// // here that must not be guessed at by any of them.
+/// const FENCE: &str = "\u{60}\u{60}\u{60}";
+///
+/// fn main() {
+///     let opened: Vec<usize> = ARTEFACT
+///         .lines()
+///         .enumerate()
+///         .filter(|(_, line)| {
+///             let text = line.trim_start();
+///             text.strip_prefix("//!")
+///                 .or_else(|| text.strip_prefix("///"))
+///                 .is_some_and(|body| body.trim_start().starts_with(FENCE))
+///         })
+///         .map(|(index, _)| index + 1)
+///         .collect();
+///
+///     assert!(
+///         opened.is_empty(),
+///         "tests/frozen_signatures.rs opens a doc fence at line(s) {opened:?}. \
+///          cargo hands a doc fence to a compiler from the lib target only, so \
+///          whatever that one claims to pin is decorative. Move it beside \
+///          `es_13_the_query_must_outlive_the_stream` in src/store.rs."
+///     );
+///
+///     // The other direction, and it is the half a reader would not think to
+///     // ask for: an empty `tests/` file satisfies everything above, so on its
+///     // own this guard stays green the day the pin it points at is deleted.
+///     const HERE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store.rs"));
+///     const CARRIER: &str = "fn es_13_the_query_must_outlive_the_stream() {}";
+///
+///     // Matched as a whole *line*, not as a substring. `contains` is satisfied
+///     // by the `const` two lines up — this doctest is inside the file it is
+///     // reading — and passed unchanged with the item renamed, measured.
+///     assert!(
+///         HERE.lines().any(|line| line.trim_start() == CARRIER),
+///         "ES-13's pin has left src/store.rs, where cargo compiles its fence"
+///     );
+///     assert!(
+///         HERE.contains(&[FENCE, "compile_fail"].concat()),
+///         "src/store.rs opens no `compile_fail` fence, so nothing rejects the \
+///          escaping arrangement ES-13's `Rejects:` line forbids"
+///     );
+/// }
+/// ```
+#[doc(hidden)]
+#[expect(dead_code, reason = "a doc carrier: the fence above is the item")]
+fn a_doc_fence_in_an_integration_test_target_is_never_compiled() {}
 
 /// Drains a [`read`](EventStore::read) stream into a `Vec`, stopping at the
 /// first error.
@@ -1079,5 +1234,150 @@ help: disambiguate the method for candidate #2
              `variant.rs`, confirm the attributes are still copied, then move this \
              constant"
         );
+    }
+}
+
+/// The trait-level doc block, read as text because it is published on **two**
+/// pages.
+///
+/// `#[trait_variant::make(SendEventStore: Send)]` rebuilds the derived trait with
+/// `..tr.clone()`, so every `///` line above the derivation is rendered verbatim
+/// on `SendEventStore`'s page as well as on [`EventStore`]'s. That copying is not
+/// an accident to be worked around — the module above *depends* on it, because
+/// `SendEventStore` has no doc comment of its own and `missing_docs` would fail
+/// the build the moment it stopped. One attribute set therefore serves two items,
+/// and the obligation that follows is the one no compiler can state: **a sentence
+/// in this block has to be true on both pages.**
+///
+/// The wrong implementation this rejects is the one that shipped through
+/// `0.2.0-alpha.1` — "This is the `!Send` flavour … implement `SendEventStore`
+/// instead" — rendered unchanged on `SendEventStore`, where the first clause is
+/// false and the second is circular. Deixis is what breaks — "this trait", "the
+/// one to use", "instead" all resolve against *the page*, and the page is not
+/// fixed. Naming a flavour does not break, which is why the second test demands
+/// it rather than merely permitting it.
+///
+/// The alternative that lost: write the flavour-specific sentences on the derived
+/// trait instead. There is no derived trait to write them on — it exists only in
+/// the expansion — and suppressing the copy to hand-write two doc blocks would
+/// abandon `missing_docs` as the standing guard the module above relies on.
+///
+/// The extractor below is duplicated in `projection.rs`, which carries the same
+/// defect behind the same derivation. Sharing it would mean a test-only module in
+/// the crate root, and the crate root is the file `happenstance`'s
+/// `contract_surface.rs` derives every gate from; twenty lines of test helper are
+/// the cheaper of the two.
+#[cfg(test)]
+mod derived_flavour_doc {
+    #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
+
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// This file's own source. The doc block is the deliverable, so it is read
+    /// rather than trusted.
+    const SOURCE: &str = include_str!("store.rs");
+
+    /// The derivation whose expansion copies the block above it onto a second page.
+    const DERIVATION: &str = "#[trait_variant::make(SendEventStore: Send)]";
+
+    /// The two flavours, in the link form a reader can click from either page.
+    const FLAVOURS: [&str; 2] = ["[`EventStore`]", "[`SendEventStore`]"];
+
+    /// The `///` lines the derivation copies, marker removed and fences dropped.
+    ///
+    /// Fences are dropped because a doctest is code: `S: EventStore` in an example
+    /// is a bound, not a sentence, and holding it to a prose rule would forbid the
+    /// one thing the example exists to show.
+    fn copied_prose() -> Vec<&'static str> {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let make = lines
+            .iter()
+            .position(|line| line.trim_end() == DERIVATION)
+            .expect("the derivation that copies this block onto the second page");
+        let start = lines[..make]
+            .iter()
+            .rposition(|line| {
+                !(line.starts_with("///") || line.starts_with("//") || line.starts_with("#["))
+            })
+            .map_or(0, |index| index + 1);
+        let mut fenced = false;
+        lines[start..make]
+            .iter()
+            .filter_map(|line| {
+                let text = line.strip_prefix("///")?;
+                let text = text.strip_prefix(' ').unwrap_or(text);
+                if text.trim_start().starts_with("```") {
+                    fenced = !fenced;
+                    return None;
+                }
+                if fenced { None } else { Some(text) }
+            })
+            .collect()
+    }
+
+    /// The copied prose in blank-line-separated paragraphs.
+    ///
+    /// The paragraph is the unit, not the sentence, because a sentence split on
+    /// `.` fragments `https://docs.rs/…` and every fragment then satisfies the
+    /// rule below vacuously.
+    fn paragraphs() -> Vec<String> {
+        copied_prose()
+            .split(|line| line.is_empty())
+            .filter(|block| !block.is_empty())
+            .map(|block| block.join(" "))
+            .collect()
+    }
+
+    /// A paragraph that distinguishes the flavours names them; it does not point.
+    ///
+    /// Rejects the shipped text three times over, and rejects any future sentence
+    /// that says "this" where the reader may be standing on either page.
+    #[test]
+    fn no_paragraph_tells_the_flavours_apart_by_deixis() {
+        /// Pointers that resolve against the page rather than against a name.
+        const DEIXIS: [&str; 6] = [
+            "this trait",
+            "this is",
+            "this flavour",
+            "this one",
+            "the one to use",
+            "instead",
+        ];
+        for paragraph in paragraphs() {
+            let lower = paragraph.to_lowercase();
+            // Only paragraphs that draw the distinction are held to the rule:
+            // `# Implementing this trait` is true on both pages and stays.
+            if !lower.contains("send") {
+                continue;
+            }
+            for pointer in DEIXIS {
+                assert!(
+                    !lower.contains(pointer),
+                    "{DERIVATION} copies this paragraph verbatim onto \
+                     `SendEventStore`, where {pointer:?} points at the wrong trait. \
+                     Name the flavour: {paragraph}"
+                );
+            }
+        }
+    }
+
+    /// Both flavours are named, in link form, in the prose a reader lands on.
+    ///
+    /// The negative test above is satisfiable by saying nothing at all, and
+    /// `missing_docs` is satisfied by one line. This is what stops the fix from
+    /// being deletion: whichever page a reader opens, the other flavour is a click
+    /// away and the two are told apart by name.
+    #[test]
+    fn the_block_names_both_flavours_in_link_form() {
+        let prose = copied_prose().join("\n");
+        for flavour in FLAVOURS {
+            assert!(
+                prose.contains(flavour),
+                "the block is rendered on both pages, so it must name {flavour} \
+                 rather than leave a reader to infer which trait they are on. \
+                 Prose as read:\n{prose}"
+            );
+        }
     }
 }

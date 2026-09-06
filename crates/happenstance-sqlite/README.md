@@ -33,7 +33,37 @@ storage-agnostic event sourcing library built on the
 ```toml
 happenstance-sqlite = "0.2.0-alpha.1"                      # the event store
 happenstance-sqlite = { version = "0.2.0-alpha.1", features = ["projection-store"] }
+
+rusqlite = "0.40"                                          # only for tables of your own
 ```
+
+**You do not need that third line to name the driver.** `Connection`,
+`rusqlite::Error` and `rusqlite::types::Value` are all on this crate's public
+signatures, so all three are re-exported: reach them as
+`happenstance_sqlite::rusqlite::…`. What that buys is *type identity* — the
+`rusqlite::Error` you match on is the one this crate's error enum actually
+carries, rather than a second copy that prints the same and meets you as
+`error[E0308]` the first time you try to act on a failure. Add a `rusqlite`
+line of your own when you use SQLite for tables of your own; the re-export is
+not a substitute for a dependency, and it forwards only the features this crate
+enabled.
+
+**`tokio` is not re-exported, and it is the one place you may need a line we do
+not give you.** `tokio::task::JoinError` and `tokio::runtime::TryCurrentError`
+are variants of the error enums, so matching on either means naming `tokio`
+yourself:
+
+```toml
+tokio = "1"                                                # only to match on JoinError
+```
+
+It was re-exported and is not any more. This crate takes `tokio` at
+`features = ["rt"]`, so `happenstance_sqlite::tokio` was a *partial* `tokio` —
+no `macros`, no `rt-multi-thread`, no `time` — and reaching for it and then
+writing `#[tokio::main]` produced an `error[E0433]` further from its cause than
+the mismatch the re-export was there to prevent. Your own line resolves to the
+same `tokio` this crate uses for any semver-compatible requirement, which is
+every consumer who already had one.
 
 **`event-store` is on by default. `projection-store` is not, and the asymmetry
 is deliberate.**

@@ -67,6 +67,15 @@ macro_rules! emit_timed_csv {
                     "{}: every pass must account for every attempt it made, got {record:?}",
                     ::core::stringify!($name)
                 );
+                // The other half, and available to a third-party emitter for
+                // the same reason the first is: a row whose contended pass
+                // never ran is a row whose number means something else, and a
+                // CSV is exactly where that is unrecoverable later.
+                assert!(
+                    record.is_complete(),
+                    "{}: every pass the scenario owes must have run, got {record:?}",
+                    ::core::stringify!($name)
+                );
                 println!(
                     "{},{},{}",
                     ::core::stringify!($name),
@@ -351,4 +360,82 @@ fn a_record_summarises_itself_in_one_line() {
         summary.contains("replay-all") && summary.contains("replay-tagged"),
         "and that one line carries every pass, got: {summary}"
     );
+}
+
+/// A fixture whose very first append loses, so the boundary is never planted.
+///
+/// The input no in-process store produces, and the one this file has no other
+/// way to reach: `MemoryEventStore` accepts an unconditional append always, so
+/// nothing in the reference implementation can drive
+/// `conditional_append_under_contention`'s early return. `violate_next(1)`
+/// spends its single arming on the seed — a migration half-applied, a
+/// permission revoked, a pool exhausted, all reported through the same seam —
+/// and every handle opened afterwards is transparent, exactly as an adapter
+/// whose seed failed for a transient reason would be.
+///
+/// The arming lives behind an `Arc` that `Clone` shares, so one prototype
+/// cloned per `connect` is one fixture with one arming, as
+/// `tests/faulty_store_conformance.rs` records.
+#[derive(Debug)]
+struct SeedViolatesFixture(happenstance_testkit::SendFaultyStore<MemoryHandle>);
+
+impl SeedViolatesFixture {
+    fn new() -> Self {
+        let handle = happenstance_testkit::block_on(MemoryFixture::new().connect());
+        Self(happenstance_testkit::SendFaultyStore::new(handle).violate_next(1))
+    }
+}
+
+impl Fixture for SeedViolatesFixture {
+    type Store = happenstance_testkit::SendFaultyStore<MemoryHandle>;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+    const REOPEN: Capability = Capability::declined(
+        "the wrapped store is a MemoryEventStore, so there is no durable medium \
+         to reopen over and the wrapper adds none",
+    );
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        core::future::ready(self.0.clone())
+    }
+}
+
+/// A contended run that never happened must not report as a completed one.
+///
+/// The scenario's early return is honest about the record it builds — one seed
+/// pass, no contended pass — but nothing read it. Every counter in that record
+/// adds up, so `is_well_formed` is true, and the contended pass that is the
+/// entire measurement is *absent* rather than zero. The distinction between
+/// "contention produced no rejections" and "contention never happened" is the
+/// one the module documentation says the record exists to preserve, and it is
+/// the one an adapter author comparing two releases' `BENCH` lines cannot
+/// recover afterwards.
+///
+/// **Rejects: a `report` whose completion half is discharged by a predicate
+/// that cannot be false.**
+#[test]
+#[should_panic(expected = "did not complete")]
+fn a_contended_run_that_never_happened_is_not_reported_as_complete() {
+    let record = happenstance_testkit::block_on(scenarios::conditional_append_under_contention(
+        || async { SeedViolatesFixture::new() },
+        BenchmarkParams::new(4, 3, 8),
+    ));
+
+    assert_eq!(
+        record.passes().len(),
+        1,
+        "the seed pass is the whole of what the scenario produced, got {record:?}"
+    );
+    assert!(
+        record.pass("contend").is_none(),
+        "the contended pass is absent, not zero"
+    );
+    assert!(
+        record.is_well_formed(),
+        "and the record is well-formed all the same — every attempt it made is \
+         accounted for, which is why well-formedness cannot carry completion"
+    );
+
+    record.report("conditional_append_under_contention");
 }

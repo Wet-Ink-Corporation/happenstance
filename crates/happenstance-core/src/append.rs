@@ -296,17 +296,48 @@ mod serde_impls {
         guards: Vec<GuardWire>,
     }
 
+    /// The borrowing counterpart of [`GuardWire`], used on the way **out**.
+    ///
+    /// Same `rename`, same two fields in the same order. `&Query` serialises
+    /// through the blanket `impl Serialize for &T`, which forwards to `Query`'s
+    /// own impl, so the bytes are unchanged; what goes is `guard.query.clone()`,
+    /// which deep-cloned every `QueryItem` in the guard.
+    #[derive(Serialize)]
+    #[serde(rename = "Guard")]
+    struct GuardRef<'a> {
+        query: &'a Query,
+        after: Option<SequencePosition>,
+    }
+
+    /// The guard sequence, written straight from the slice.
+    ///
+    /// A hand-written `Serialize` rather than a `Vec<GuardRef<'_>>` field on a
+    /// borrowing [`Wire`], because a `Vec` would be one allocation this does not
+    /// need. `collect_seq` takes the length from the iterator's `size_hint`,
+    /// which a slice iterator supplies exactly, so postcard writes the same
+    /// length prefix the `Vec` wrote.
+    struct GuardsRef<'a>(&'a [Guard]);
+
+    impl Serialize for GuardsRef<'_> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.collect_seq(self.0.iter().map(|guard| GuardRef {
+                query: &guard.query,
+                after: guard.after,
+            }))
+        }
+    }
+
+    /// The borrowing counterpart of [`Wire`].
+    #[derive(Serialize)]
+    #[serde(rename = "AppendCondition")]
+    struct WireRef<'a> {
+        guards: GuardsRef<'a>,
+    }
+
     impl Serialize for AppendCondition {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            Wire {
-                guards: self
-                    .guards()
-                    .iter()
-                    .map(|guard| GuardWire {
-                        query: guard.query.clone(),
-                        after: guard.after,
-                    })
-                    .collect(),
+            WireRef {
+                guards: GuardsRef(self.guards()),
             }
             .serialize(serializer)
         }

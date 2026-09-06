@@ -1,12 +1,12 @@
-   Compiling event-clone-allocations v0.0.0 (D:\repos\happenstance\experiments\event-clone-allocations)
-    Finished `release` profile [optimized] target(s) in 0.49s
-     Running tests\measure_read.rs (target\release\deps\measure_read-b85b62aa4f2fbc2f.exe)
+   Compiling event-clone-allocations v0.0.0 (D:\repos\hs-core\experiments\event-clone-allocations)
+    Finished `release` profile [optimized] target(s) in 1.00s
+     Running tests\measure_read.rs (target\release\deps\measure_read-502c395eff2d4436.exe)
 
 running 3 tests
 test all_versus_a_matching_tag_query ... 
 == control: which query, 10000 events, limit=1 ==
-  Query::all()      allocs=40002      reallocs=12     heap_ops=40014      bytes=3149872      deallocs=39997
-  tag query         allocs=40002      reallocs=12     heap_ops=40014      bytes=3149872      deallocs=39997
+  Query::all()      allocs=6          reallocs=0      heap_ops=6          bytes=1231         deallocs=1
+  tag query         allocs=6          reallocs=0      heap_ops=6          bytes=1231         deallocs=1
 ok
 test read_limit_one ... 
 == arms 5 & 6: read(limit=1) against a fully-matching query ==
@@ -17,43 +17,36 @@ refuse. Payload = Bytes::from_static, so no promotion allocation lands
 in a read.
 
 -- 10 events x 2 owned tags (clone cost per event = 4 allocations) --
-  real store, limit=1                returned=1        allocs=42         reallocs=2      heap_ops=44         bytes=3670         deallocs=37  median=     2.400µs [2.100µs..3.500µs]
+  real store, limit=1                returned=1        allocs=6          reallocs=0      heap_ops=6          bytes=1231         deallocs=1  median=   300.000ns [200.000ns..400.000ns]
   real store, limit=None             returned=10       allocs=42         reallocs=4      heap_ops=46         bytes=5398         deallocs=1                                    
-  replica BEFORE, limit=1            returned=1        allocs=41         reallocs=2      heap_ops=43         bytes=3094         deallocs=36  median=     2.000µs [1.900µs..2.100µs]
-  replica AFTER,  limit=1            returned=1        allocs=5          reallocs=0      heap_ops=5          bytes=655          deallocs=0  median=   100.000ns [100.000ns..200.000ns]
-  => limit=1 costs 0.9565x what limit=None costs on the real store; the fix costs 0.116279x the before arm (5 vs 43 heap ops)
+  replica BEFORE, limit=1            returned=1        allocs=41         reallocs=2      heap_ops=43         bytes=3094         deallocs=36  median=     1.800µs [1.800µs..1.900µs]
+  replica AFTER,  limit=1            returned=1        allocs=5          reallocs=0      heap_ops=5          bytes=655          deallocs=0  median=   200.000ns [100.000ns..200.000ns]
+  => limit=1 costs 0.1304x what limit=None costs on the real store; the fix costs 0.116279x the before arm (5 vs 43 heap ops)
   => bytes requested: before=3094 after=655 (0.211700x)
 
 -- 10000 events x 2 owned tags (clone cost per event = 4 allocations) --
-  real store, limit=1                returned=1        allocs=40002      reallocs=12     heap_ops=40014      bytes=3149872      deallocs=39997  median=     3.130ms [2.899ms..3.182ms]
+  real store, limit=1                returned=1        allocs=6          reallocs=0      heap_ops=6          bytes=1231         deallocs=1  median=   500.000ns [300.000ns..800.000ns]
   real store, limit=None             returned=10000    allocs=40002      reallocs=24     heap_ops=40026      bytes=5508592      deallocs=1                                    
-  replica BEFORE, limit=1            returned=1        allocs=40001      reallocs=12     heap_ops=40013      bytes=3149296      deallocs=39996  median=     3.101ms [3.028ms..3.368ms]
-  replica AFTER,  limit=1            returned=1        allocs=5          reallocs=0      heap_ops=5          bytes=655          deallocs=0  median=   300.000ns [100.000ns..300.000ns]
-  => limit=1 costs 0.9997x what limit=None costs on the real store; the fix costs 0.000125x the before arm (5 vs 40013 heap ops)
+  replica BEFORE, limit=1            returned=1        allocs=40001      reallocs=12     heap_ops=40013      bytes=3149296      deallocs=39996  median=     3.116ms [2.945ms..3.711ms]
+  replica AFTER,  limit=1            returned=1        allocs=5          reallocs=0      heap_ops=5          bytes=655          deallocs=0  median=   300.000ns [200.000ns..500.000ns]
+  => limit=1 costs 0.0001x what limit=None costs on the real store; the fix costs 0.000125x the before arm (5 vs 40013 heap ops)
   => bytes requested: before=3149296 after=655 (0.000208x)
 
--- 1000000 events x 2 owned tags (clone cost per event = 4 allocations) --
-  real store, limit=1                returned=1        allocs=4000002    reallocs=18     heap_ops=4000020    bytes=229995520    deallocs=3999997  median=   383.059ms [330.449ms..412.302ms]
-  real store, limit=None             returned=1000000  allocs=4000002    reallocs=36     heap_ops=4000038    bytes=380989888    deallocs=1                                    
-  replica BEFORE, limit=1            returned=1        allocs=4000001    reallocs=18     heap_ops=4000019    bytes=229994944    deallocs=3999996  median=   311.186ms [268.011ms..342.044ms]
-  replica AFTER,  limit=1            returned=1        allocs=5          reallocs=0      heap_ops=5          bytes=655          deallocs=0  median=     2.000µs [1.900µs..2.200µs]
-  => limit=1 costs 1.0000x what limit=None costs on the real store; the fix costs 0.000001x the before arm (5 vs 4000019 heap ops)
-  => bytes requested: before=229994944 after=655 (0.000003x)
-
--- 10000 events x 64 owned tags (clone cost per event = 66 allocations) --
-  real store, limit=1                returned=1        allocs=660002     reallocs=12     heap_ops=660014     bytes=22369872     deallocs=659935  median=    40.008ms [34.513ms..48.310ms]
-  real store, limit=None             returned=10000    allocs=660002     reallocs=24     heap_ops=660026     bytes=24728592     deallocs=1                                    
-  replica BEFORE, limit=1            returned=1        allocs=660001     reallocs=12     heap_ops=660013     bytes=22369296     deallocs=659934  median=    34.207ms [33.889ms..44.500ms]
-  replica AFTER,  limit=1            returned=1        allocs=67         reallocs=0      heap_ops=67         bytes=2577         deallocs=0  median=     1.800µs [1.700µs..1.900µs]
-  => limit=1 costs 1.0000x what limit=None costs on the real store; the fix costs 0.000102x the before arm (67 vs 660013 heap ops)
-  => bytes requested: before=22369296 after=2577 (0.000115x)
-
-ok
+thread 'read_limit_one' (58188) panicked at tests\measure_read.rs:194:9:
+the real store (6) and the replica (40013) disagree
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
 test the_fix_is_free_and_only_free_when_unlimited ... 
 == control: limit=None, 10000 events ==
   before allocs=40001      reallocs=12     heap_ops=40013      bytes=3149296      deallocs=0
   after  allocs=40001      reallocs=12     heap_ops=40013      bytes=3149296      deallocs=0
 ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.60s
+failures:
 
+failures:
+    read_limit_one
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `--test measure_read`

@@ -25,6 +25,30 @@ use crate::domain::DomainEvent;
 /// write, which is why this is a trait rather than an enum of the three below.
 /// An enum would have been shorter and would have forbidden it.
 ///
+/// # Reading a tag this build did not write
+///
+/// Writing is open and reading is not, and the asymmetry is worth knowing
+/// before taking the invitation above. Every event is framed with the tag of
+/// the codec that wrote it, and a reader decodes under the codec that tag
+/// names: the codec in hand when the tags agree, and otherwise a fixed chain
+/// of the three this crate ships — `Json`, `Postcard`, `Cbor` — each behind
+/// the feature that turns it on. A tag answering to none of them is
+/// [`CodecError::UnknownTag`].
+///
+/// For those three the refusal is one feature away from going away. For a
+/// codec of your own it is permanent: nothing registers one, so no build
+/// resolves its tag except a build already reading with that codec. An
+/// application that writes under its own codec for a year and then adopts
+/// `Json` reads every historical event as `UnknownTag` — an empty fold, and
+/// an append condition matching nothing.
+///
+/// So a codec of your own is safe as the **only** codec a log is ever read
+/// with, and not as one of several. That limit is recorded as an open
+/// question rather than defended as a design: the repair — a defaulted
+/// resolution method here, a registry, or sealing this trait and withdrawing
+/// the invitation above — has not been decided, and the three cost a caller
+/// different things.
+///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
 /// signature that already carries a store error and a domain error — the
@@ -80,10 +104,18 @@ pub trait Codec {
 pub enum CodecError {
     /// An event was written by a codec no reader here can name.
     ///
-    /// It means exactly one thing: a tag *was* written and this build cannot
-    /// honour it. An event carrying no framing region at all is not this — it
-    /// decodes with the codec already in hand, because refusing it would make
-    /// every log written before the typed layer existed unreadable.
+    /// A tag *was* written and this build cannot honour it. An event carrying
+    /// no framing region at all is not this — it decodes with the codec
+    /// already in hand, because refusing it would make every log written
+    /// before the typed layer existed unreadable.
+    ///
+    /// **Two conditions, and they differ in whether they can be repaired.** A
+    /// tag naming one of this crate's three codecs is a feature away: turn
+    /// `postcard` on and the same event decodes. A tag written by a codec
+    /// from outside this crate is a dead end — nothing registers one, so no
+    /// build resolves it except one reading with that codec itself. See
+    /// [`Codec`]'s *Reading a tag this build did not write* for why the
+    /// second case exists and what is open about it.
     #[error("no codec is registered for tag `{tag}`")]
     UnknownTag {
         /// The tag read off the event.

@@ -300,36 +300,50 @@ impl SendEventStore for MemoryEventStore {
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
         let guard = self.read_guard();
 
-        // Filter, order and truncate under the lock, then release it. The
-        // stream that leaves this function borrows nothing.
+        // Filter, order and limit under the lock, then release it. The stream
+        // that leaves this function borrows nothing.
         let matched = guard
             .iter()
             .filter(|event| query.matches(event.event_type(), event.tags()));
 
+        // After filtering and ordering, never before: `limit` cuts the result
+        // set the caller would otherwise have seen. A limit of zero yields
+        // nothing, which is the point of it being `Option<usize>`.
+        //
+        // `unwrap_or(usize::MAX)` is how `Option<usize>` reaches `take`. No
+        // store can hold `usize::MAX` events, so the unlimited case is
+        // unchanged and pays nothing for the branch it no longer takes.
+        let limit = options.limit.unwrap_or(usize::MAX);
+
         // `from` is the starting bound and `to` the stopping one, so reading
         // backwards swaps which side of the position order each sits on. Both
         // are inclusive in both directions.
-        let mut selected: Vec<SequencedEvent> = if options.backwards {
+        //
+        // Where `take` sits in each chain is load-bearing at both ends. Below
+        // `rev()` and below both bounds filters, so it cuts the *result* set
+        // and never the *scanned* one — one link earlier it is the wrong
+        // implementation ES-14 `[FROZEN]` rejects, and in the backwards branch
+        // it would return the lowest matching positions instead of the
+        // highest. Above `cloned()`, so the tail beyond `limit` is never
+        // cloned: collecting first and cutting afterwards made `limit(1)` cost
+        // what an unlimited read costs, which is the whole of the reduction
+        // `limit` is supposed to buy.
+        let selected: Vec<SequencedEvent> = if options.backwards {
             matched
                 .rev()
                 .filter(|event| options.from.is_none_or(|from| event.position <= from))
                 .filter(|event| options.to.is_none_or(|to| event.position >= to))
+                .take(limit)
                 .cloned()
                 .collect()
         } else {
             matched
                 .filter(|event| options.from.is_none_or(|from| event.position >= from))
                 .filter(|event| options.to.is_none_or(|to| event.position <= to))
+                .take(limit)
                 .cloned()
                 .collect()
         };
-
-        // After filtering and ordering, never before: `limit` truncates the
-        // result set the caller would otherwise have seen. A limit of zero
-        // truncates to nothing, which is the point of it being `Option<usize>`.
-        if let Some(limit) = options.limit {
-            selected.truncate(limit);
-        }
 
         drop(guard);
         Snapshot(selected.into_iter())
@@ -447,7 +461,7 @@ mod tests {
     // fully-qualified calls.
     use super::{AppendCondition, Event, MemoryEventStore, Query, ReadOptions};
     use crate::store::EventStore;
-    use crate::{QueryItem, Tags, collect};
+    use crate::{QueryItem, SequencePosition, Tags, collect};
 
     fn event(event_type: &str) -> Event {
         Event::new(event_type, &b"{}"[..]).unwrap()
@@ -847,5 +861,250 @@ mod tests {
             .unwrap();
         assert_eq!(matched.len(), 1);
         assert_eq!(matched[0].position.get(), 2);
+    }
+    // ---------------------------------------------------------------------
+    // ES-14: `limit` truncates the filtered, ordered result set — and does so
+    // without first materialising the part it is about to throw away.
+    // ---------------------------------------------------------------------
+
+    /// A store whose matches are deliberately scattered.
+    ///
+    /// Neither the head nor the tail of the log is a match, and the two tag
+    /// values interleave, so an implementation that limited the *scanned* set
+    /// rather than the *result* set answers differently from one that does not
+    /// — which a uniformly-matching store would hide.
+    async fn scattered() -> MemoryEventStore {
+        let store = MemoryEventStore::new();
+        let mut batch = Vec::new();
+        for index in 0..12u32 {
+            let event_type = if index % 3 == 0 { "A" } else { "B" };
+            let course = if index % 2 == 0 { "c1" } else { "c2" };
+            batch
+                .push(event(event_type).with_tags(Tags::from_pairs([("course", course)]).unwrap()));
+        }
+        store.append(&batch, None).await.unwrap();
+        store
+    }
+
+    /// Every query/option combination the matrix below walks.
+    fn matrix() -> Vec<(Query, ReadOptions)> {
+        let queries = [
+            Query::all(),
+            Query::from_item(QueryItem::of_types(["A"]).unwrap()),
+            Query::from_item(
+                QueryItem::tagged(Tags::from_pairs([("course", "c1")]).unwrap()).unwrap(),
+            ),
+            Query::from_items([
+                QueryItem::of_types(["A"]).unwrap(),
+                QueryItem::tagged(Tags::from_pairs([("course", "c2")]).unwrap()).unwrap(),
+            ])
+            .unwrap(),
+        ];
+
+        let mut combinations = Vec::new();
+        for query in queries {
+            for backwards in [false, true] {
+                for from in [None, Some(3), Some(9)] {
+                    for to in [None, Some(10)] {
+                        let mut options = ReadOptions::new();
+                        if backwards {
+                            options = options.backwards();
+                        }
+                        if let Some(from) = from {
+                            options = options.from(SequencePosition::new(from).unwrap());
+                        }
+                        if let Some(to) = to {
+                            options = options.to(SequencePosition::new(to).unwrap());
+                        }
+                        combinations.push((query.clone(), options));
+                    }
+                }
+            }
+        }
+        combinations
+    }
+
+    #[tokio::test]
+    async fn read_limit_is_the_first_n_of_the_unlimited_read() {
+        // ES-14 `[FROZEN]`, stated as an oracle that shares no step with the
+        // implementation's truncation: the unlimited read *is* the filtered,
+        // ordered result set, so `limit(n)` must equal its first `n` — whatever
+        // the read path does internally to get there.
+        //
+        // This is the property the H2 remediation must preserve. It is what
+        // rejects `.take(limit)` hoisted one link too far, above the bounds
+        // filters or above `rev()`, where it would limit the SCANNED set: on
+        // this store the two answers differ across most of the matrix, because
+        // the head and the tail of the log are misses.
+        let store = scattered().await;
+
+        for (query, options) in matrix() {
+            let unlimited = collect(store.read(&query, options)).await.unwrap();
+
+            for limit in [0usize, 1, 2, 5, 100] {
+                let limited = collect(store.read(&query, options.limit(limit)))
+                    .await
+                    .unwrap();
+                let expected = &unlimited[..limit.min(unlimited.len())];
+
+                assert_eq!(
+                    limited.iter().map(|e| e.position).collect::<Vec<_>>(),
+                    expected.iter().map(|e| e.position).collect::<Vec<_>>(),
+                    "limit({limit}) must be the first {limit} of the unlimited \
+                     read for {options:?}, not a truncation of a differently \
+                     ordered or differently filtered set"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn backwards_limit_takes_the_highest_matches_not_the_lowest() {
+        // The ordering invariant `rev()`-before-`take()` protects, stated on
+        // its own because the matrix above compares two reads through the same
+        // code path and this compares one read against hand-written positions.
+        //
+        // The layout is Miss, Hit, Hit, Hit, Miss: a `take` above `rev()` would
+        // hand back the two LOWEST matching positions, and a `take` above the
+        // query filter would hand back nothing at all, because position 1 is a
+        // miss. Both are the shape ES-14 `[FROZEN]` rejects.
+        let store = MemoryEventStore::new();
+        let hit = Tags::from_pairs([("course", "c1")]).unwrap();
+        let miss = Tags::from_pairs([("course", "c2")]).unwrap();
+        store
+            .append(
+                &[
+                    event("A").with_tags(miss.clone()),
+                    event("A").with_tags(hit.clone()),
+                    event("A").with_tags(hit.clone()),
+                    event("A").with_tags(hit),
+                    event("A").with_tags(miss),
+                ],
+                None,
+            )
+            .await
+            .unwrap();
+
+        let query = Query::from_item(
+            QueryItem::tagged(Tags::from_pairs([("course", "c1")]).unwrap()).unwrap(),
+        );
+
+        let backwards = collect(store.read(&query, ReadOptions::new().backwards().limit(2)))
+            .await
+            .unwrap();
+        assert_eq!(
+            backwards
+                .iter()
+                .map(|e| e.position.get())
+                .collect::<Vec<_>>(),
+            [4, 3],
+            "backwards `limit(2)` must be the two highest MATCHING positions, \
+             in descending order"
+        );
+
+        let forwards = collect(store.read(&query, ReadOptions::new().limit(2)))
+            .await
+            .unwrap();
+        assert_eq!(
+            forwards
+                .iter()
+                .map(|e| e.position.get())
+                .collect::<Vec<_>>(),
+            [2, 3],
+            "forwards `limit(2)` must be the two lowest MATCHING positions"
+        );
+    }
+
+    /// This file's own source, so the read path's shape can be asserted rather
+    /// than reasoned about — the pattern `mod module_doc` uses in `store.rs`.
+    const SOURCE: &str = include_str!("memory.rs");
+
+    /// The body of `SendEventStore::read`, cut out of the production source.
+    ///
+    /// Cut *above* this test module on purpose. [`SOURCE`] includes this module
+    /// too, and every needle the assertion looks for is spelled here as a
+    /// literal, so an uncut haystack would be satisfied by the test itself.
+    fn read_body() -> &'static str {
+        let production = SOURCE.split("#[cfg(test)]").next().unwrap();
+        let open = production.find("    fn read(").unwrap();
+        let close = production[open..].find("    async fn append(").unwrap();
+        &production[open..open + close]
+    }
+
+    #[test]
+    fn read_takes_the_limit_before_it_clones() {
+        // ES-14 `[FROZEN]` requires `limit` to truncate the filtered, ordered
+        // set. It does not require that set to be MATERIALISED first, and
+        // materialising it is what this store used to do: `.cloned()` ran over
+        // every match and `Vec::truncate` then dropped the tail it had just
+        // finished cloning. Measured, `limit(1)` against a million matching
+        // events cost what `limit(None)` cost to four significant figures —
+        // 4,000,020 heap operations against 4,000,038 — to return one event.
+        //
+        // No behavioural test can see that. The two spellings agree on every
+        // input by construction, which is why the matrix above is a regression
+        // guard and not a red test; and an allocation count is out of reach in
+        // this crate, because `unsafe_code = "forbid"` bars a counting global
+        // allocator. So the shape is pinned instead, in both directions ES-14
+        // and the measurement care about:
+        //
+        //   * BELOW `rev()` and below both bounds filters, so `take` can never
+        //     limit the SCANNED set — the wrong implementation ES-14 rejects;
+        //   * ABOVE `cloned()`, so it never copies a tail it is about to drop.
+        //
+        // A pin on source shape is the instrument of last resort, and it is
+        // used here for the reason `store.rs` uses one: the obligation is real,
+        // it is not a type, and nothing else in the gate can see it.
+        const STEPS: &[(&str, &str)] = &[
+            ("query-filter", ".filter(|event| query.matches"),
+            ("rev", ".rev()"),
+            ("bound-filter", ".filter(|event| options."),
+            ("take", ".take("),
+            ("cloned", ".cloned()"),
+            ("collect", ".collect()"),
+        ];
+
+        let body = read_body();
+        let mut seen: Vec<(usize, &str)> = Vec::new();
+        for (label, needle) in STEPS {
+            let mut at = 0;
+            while let Some(offset) = body[at..].find(needle) {
+                seen.push((at + offset, label));
+                at += offset + needle.len();
+            }
+        }
+        seen.sort_unstable();
+        let order: Vec<&str> = seen.into_iter().map(|(_, label)| label).collect();
+
+        assert_eq!(
+            order,
+            [
+                // one scan, shared by both branches
+                "query-filter",
+                // backwards: reversed, then bounded, then LIMITED, then cloned
+                "rev",
+                "bound-filter",
+                "bound-filter",
+                "take",
+                "cloned",
+                "collect",
+                // forwards: the same chain without the reversal
+                "bound-filter",
+                "bound-filter",
+                "take",
+                "cloned",
+                "collect",
+            ],
+            "`MemoryEventStore::read` must apply `take(limit)` below `rev()` \
+             and below both bounds filters — above either it would limit the \
+             scanned set, which ES-14 [FROZEN] rejects — and above `cloned()`, \
+             so the discarded tail is never cloned at all"
+        );
+
+        assert!(
+            !body.contains("truncate"),
+            "`MemoryEventStore::read` still truncates after collecting, so \
+             every match beyond `limit` is cloned and then dropped"
+        );
     }
 }

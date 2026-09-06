@@ -181,6 +181,42 @@
 //! consecutive identical runs behind them are in
 //! `experiments/durable-object-limits/README.md`.
 //!
+//! ## The query widths this store does *not* refuse
+//!
+//! A separate table on purpose, because it answers a different question. Every
+//! row above is a value the store **refuses**, and names the `StoreLimit` it
+//! refuses with. What follows is the opposite: a query wider than either number
+//! is **chunked and merged, never refused**, because a `Query` bounds nothing by
+//! design — VT-23 requires every store to evaluate at least 128 items and puts
+//! no ceiling above that — and a query-item refusal is not an append outcome, so
+//! the contract has no variant to report one through.
+//!
+//! | Width | Value | What it is |
+//! | --- | --- | --- |
+//! | [`MAX_QUERY_ARMS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT) | 400 | index arms in one statement, under `SQLITE_MAX_COMPOUND_SELECT`'s 500 terms |
+//! | [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT) | 30,000 | bound parameters in one statement, under `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 |
+//!
+//! **They are published because VT-23 does not ask for them.** Unlike VT-21,
+//! VT-22 and VT-24, VT-23 imposes no documentation obligation — a store *may*
+//! refuse a wider query and need not say where. That silence is exactly how two
+//! adapters shipped under one contract at one version can have materially
+//! different query capability with nothing on either page to compare. So the two
+//! numbers here are the ones `happenstance-sqlite` publishes, and they are the
+//! same numbers because they are properties of the SQLite underneath a Durable
+//! Object's storage rather than of either adapter: an application developed
+//! against the sibling and deployed here plans the same way in both places.
+//!
+//! [`planned_statement_count`](event_store::CloudflareEventStore::planned_statement_count)
+//! is how a caller asks the question directly, before deploying rather than
+//! after: it is the same call both paths plan with, counted.
+//!
+//! What does differ is the **merge**, and it differs for this runtime's reason.
+//! A Durable Object is a single isolate with a real memory ceiling, so the read
+//! path here sorts and truncates after every statement of a page rather than
+//! after all of them — one page plus one chunk resident, however wide the query
+//! — which is exact rather than approximate. `src/query_sql.rs` carries the
+//! argument.
+//!
 //! ## The model family is not in the graph on this target
 //!
 //! It sits behind the testkit's off-by-default `proptest` feature, and both
@@ -362,6 +398,10 @@
 //!   is reported as
 //!   [`event_store::CloudflareEventStoreError::StoredPosition`].
 //!
+//! **What a dropped `append` future does** is ES-23's question, and it is
+//! answered in [`event_store`]'s own `# Cancellation` section — beside the
+//! body it is about.
+//!
 //! # Targets
 //!
 //! `wasm32-unknown-unknown` is the target this crate exists for and the only
@@ -456,6 +496,11 @@ pub mod sql_storage;
 pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStream};
 pub use js::{JsHandle, JsThrow, StringifiedThrow};
 pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
+
+/// The two crates whose types this adapter's own signatures name, re-exported so
+/// a caller cannot end up holding a second, identically-printing copy of either.
+/// `reexported_paths` at the foot of this file states what that does and does not buy.
+pub use {happenstance_core, worker};
 
 /// Compiled proof that the types this crate exists for are `!Send`.
 ///
@@ -963,3 +1008,34 @@ mod es6_reconstruction {
         );
     }
 }
+
+/// Compiled proof that every path this crate promises a caller actually
+/// resolves from outside it — and the statement of what that promise is not.
+///
+/// **Type identity and discoverability**, and nothing more. A consumer of this
+/// crate necessarily has `worker` in their own manifest, because they write the
+/// `#[durable_object]` class the README's example takes a `&worker::State` from;
+/// so the two copies are guaranteed to exist and are unified by nothing but
+/// luck. Re-exporting is what turns that luck into a path. It is not a
+/// substitute for their dependency — features this crate did not enable do not
+/// arrive through it — and it is not a claim about which versions travel
+/// together.
+///
+/// ```
+/// fn state(s: &happenstance_cloudflare::worker::State)
+///     -> &happenstance_cloudflare::worker::State { s }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn thrown(e: happenstance_cloudflare::worker::Error)
+///     -> happenstance_cloudflare::worker::Error { e }
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// fn bound<S: happenstance_cloudflare::happenstance_core::EventStore>(_s: S) {}
+/// # fn main() {}
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}

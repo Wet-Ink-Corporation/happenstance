@@ -1,7 +1,7 @@
 # happenstance-testkit
 
 The conformance suite for [happenstance](https://github.com/Wet-Ink-Corporation/happenstance)
-event store adapters. Eighty-nine rules, each tracing to a MUST in the
+event store adapters. Ninety-three rules, each tracing to a MUST in the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/)
 and each shown to reject a named wrong implementation before it was trusted to
 pass.
@@ -15,8 +15,12 @@ pass.
 > stores fails *exactly* the rules its registry row claims — so a rule that
 > stopped discriminating is a red build rather than a green one.
 >
-> What is still early is everything around that. **No adapter has run this
-> suite**; the workspace's storage crates are skeletons. The `ProjectionStore`
+> What is still early is everything around that. **`happenstance-sqlite` has
+> run this suite** — its own front page says so in those words, *an adapter,
+> and it has run the suite* (`crates/happenstance-sqlite/src/lib.rs:3`), and
+> `tests/conformance.rs` mounts it three times — but every other storage crate
+> is still a skeleton.
+> The `ProjectionStore`
 > suite is now all seventeen rules the specification names, each with a wrong
 > store in this crate's `tests/` that fails it — but the port it checks is still
 > `[PROVISIONAL]` and ships behind an off-by-default feature, because both
@@ -47,6 +51,16 @@ rule needing a capability your fixture declines still runs as a test and prints
 your stated reason; it is never silently dropped from the binary, because a rule
 that is absent is indistinguishable in CI output from a rule that passed.
 `fixtures::MemoryFixture` is the worked example to read first.
+
+**Run the suite with `-- --show-output` if you want to see those lines.** A
+skipped rule is a test that *passes*, and libtest discards a passing test's
+stdout, so a default `cargo test` shows you `N passed` and no `SKIP` line —
+however many capabilities your fixture declined and however good your reasons
+were. This is a real limit rather than a nicety: `cargo test -p
+happenstance-sqlite --test conformance` prints zero `SKIP` lines and the same
+command with `-- --show-output` prints three. A fixture that declines the
+optional capabilities is legal and honest, and a green run over it is not
+evidence that every rule ran.
 
 ### The model-based suite
 

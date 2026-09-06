@@ -62,7 +62,7 @@ somebody else's crate: a generic retry loop written against `EventStore` sees
 either aborts the command or — in a sync runner — parks an event that would have
 succeeded on the next attempt.
 
-**Evidence.** `crates/happenstance-core/src/error.rs:188 (lifted out of the adapter's error type)` · `crates/happenstance-core/src/error.rs:253 (is_condition_violated)` · `crates/happenstance-core/src/error.rs:261 (pub fn map_store<F, T>)` · `crates/happenstance-sqlite/src/event_store.rs:851 (Append-condition violations are)` ·
+**Evidence.** `crates/happenstance-core/src/error.rs:188 (lifted out of the adapter's error type)` · `crates/happenstance-core/src/error.rs:253 (is_condition_violated)` · `crates/happenstance-core/src/error.rs:261 (pub fn map_store<F, T>)` · `crates/happenstance-sqlite/src/event_store.rs:1148 (Append-condition violations are)` ·
 [SPECIFICATION ES-25](../../spec/SPECIFICATION.md) ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)
 
@@ -180,7 +180,7 @@ it does, every conformance fixture and every doctest written against it grows a
 dead `Err` arm, and the first one written as `unreachable!()` turns a proof into
 a latent panic.
 
-**Evidence.** `crates/happenstance-core/src/memory.rs:286 (An uninhabited error is worth having)` · `crates/happenstance-core/src/memory.rs:291 (pub enum MemoryStoreError {})` · `crates/happenstance-core/src/error.rs:84 (match never {})` — atom 12 owns the `From<Infallible>` spelling of the same mechanism
+**Evidence.** `crates/happenstance-core/src/memory.rs:286 (An uninhabited error is worth having)` · `crates/happenstance-core/src/memory.rs:291 (pub enum MemoryStoreError {})` · `crates/happenstance-core/src/error.rs:85 (match never {})` — atom 12 owns the `From<Infallible>` spelling of the same mechanism
 
 ---
 
@@ -348,7 +348,7 @@ adapter. The wall arrives last, at `type Error = …`, where there is nothing to
 write — by then the error enum, every `?` site and every test have been rewritten
 around a parameter that has to come back out.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:864 (Carried as a unit variant rather than wrapping)` ·
-`crates/happenstance-sqlite/src/event_store.rs:866 (it is neither)` ·
-`crates/happenstance-core/src/store.rs:149 (type Error: core::error::Error + 'static)` · `crates/happenstance-core/src/projection.rs:421 (type Error)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1161 (Carried as a unit variant rather than wrapping)` ·
+`crates/happenstance-sqlite/src/event_store.rs:1163 (it is neither)` ·
+`crates/happenstance-core/src/store.rs:156 (type Error: core::error::Error + 'static)` · `crates/happenstance-core/src/projection.rs:424 (type Error: core::error::Error + 'static)` ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

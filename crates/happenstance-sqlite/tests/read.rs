@@ -777,3 +777,215 @@ async fn contains_event_id_answers_from_the_stored_origin_pair() {
     );
     assert!(!store.contains_event_id(elsewhere).await.unwrap());
 }
+
+// ---------------------------------------------------------------------------
+// X-3 — a stored position the contract cannot represent is reported, never
+// resolved into the nearest position that happens to be representable
+// ---------------------------------------------------------------------------
+//
+// `SequencePosition::new` refuses exactly one value, zero, so the decode sites
+// that reached for `i64::unsigned_abs` split a corrupt row into two distinct
+// silent answers and neither of them is an error:
+//
+// * a **negative** position is *forged* into its positive twin, which is a
+//   position some other row legitimately holds;
+// * a **zero** position is caught by `SequencePosition::new` and then discarded
+//   again by the `and_then` wrapped around it at the two sites that carry one,
+//   so the store answers "empty" about a file with rows in it.
+//
+// Both are exercised below, because they are different lies told through
+// different channels and a fix for one is not a fix for the other.
+
+/// Drains a stream, keeping the failure rather than panicking on it.
+///
+/// [`drain`] is the right shape for every criterion whose subject is the events;
+/// the six below have the *failure* as their subject, so they need the `Result`
+/// the shared helper would otherwise unwrap away.
+async fn try_drain(
+    store: &SqliteEventStore,
+    query: &Query,
+    options: ReadOptions,
+) -> Result<Vec<SequencedEvent>, SqliteEventStoreError> {
+    let mut stream = Box::pin(store.read(query, options));
+    let mut out = Vec::new();
+    while let Some(item) = core::future::poll_fn(|context| stream.as_mut().poll_next(context)).await
+    {
+        out.push(item?);
+    }
+    Ok(out)
+}
+
+/// Corrupts a row through a connection the store never held.
+///
+/// Out of band on purpose. No conformant caller can reach this through the port,
+/// which is precisely why the decode is the only thing standing between a row
+/// SQLite accepted and a caller's decision model.
+fn corrupt(db: &TempDb, sql: &str) {
+    db.raw()
+        .execute(sql, [])
+        .expect("the corruption is the test environment's, not the adapter's");
+}
+
+/// VT-11 — a negative stored `position` is reported, never returned as its
+/// positive twin.
+///
+/// Decoding a stored `-2` with `i64::unsigned_abs` mints a **second** row at
+/// position 2, and the `ok_or(InvalidPosition)` beside it never fires. Two rows
+/// then share one position, the page's own `dedup_by_key(position)` drops one of
+/// them, and the read answers with the forgery in the place of an event that is
+/// still in the file.
+#[tokio::test]
+async fn a_negative_stored_position_is_reported_rather_than_read_as_its_positive_twin() {
+    let db = TempDb::new("negative-position");
+    let store = db.open();
+    store
+        .append(&[event("A"), event("B"), event("C")], None)
+        .await
+        .unwrap();
+
+    corrupt(&db, "UPDATE event SET position = -2 WHERE position = 3");
+
+    match try_drain(&store, &Query::all(), ReadOptions::new()).await {
+        Err(SqliteEventStoreError::InvalidPosition(-2)) => {}
+        outcome => panic!(
+            "a stored position of `-2` must surface as `InvalidPosition(-2)`, and \
+             this store answered {outcome:?}. Absolutising it hands `C` the \
+             position `B` already holds — VT-11 says positions are unique — and \
+             the page's own dedup then drops `B`, so the caller is told the log \
+             is `[A, C]` while the file still holds three rows, and folds that \
+             into a decision model whose boundary names the wrong event"
+        ),
+    }
+}
+
+/// VT-8 — a negative stored `origin_position` is reported, never absolutised
+/// into another event's identity.
+///
+/// The `EventId` is rebuilt from the *stored* origin pair, so absolutising `-1`
+/// gives the second row the identity the first row already carries: one
+/// `EventId`, two positions, in a store whose `contains_event_id` probe is what
+/// replication ingest deduplicates on.
+#[tokio::test]
+async fn a_negative_stored_origin_position_is_reported_rather_than_absolutised() {
+    let db = TempDb::new("negative-origin");
+    let store = db.open();
+    store.append(&[event("A"), event("B")], None).await.unwrap();
+
+    corrupt(
+        &db,
+        "UPDATE event SET origin_position = -1 WHERE position = 2",
+    );
+
+    match try_drain(&store, &Query::all(), ReadOptions::new()).await {
+        Err(SqliteEventStoreError::InvalidPosition(-1)) => {}
+        outcome => panic!(
+            "a stored origin position of `-1` must surface as \
+             `InvalidPosition(-1)`, and this store answered {outcome:?}. \
+             Absolutising it stamps the second row with the first row's \
+             `EventId`, which VT-8 forbids at store level and which a sync \
+             runner would read as *already ingested*"
+        ),
+    }
+}
+
+/// `head` reports a negative highest row rather than forging a head no row
+/// holds.
+///
+/// The answer the unfixed store gives is `Some(1)` — a head that looks entirely
+/// ordinary, that no later read can corroborate, and that a command loop will
+/// happily use as an append condition's boundary.
+#[tokio::test]
+async fn a_head_whose_highest_row_is_negative_is_reported_rather_than_forged() {
+    let db = TempDb::new("negative-head");
+    let store = db.open();
+    store.append(&[event("Only")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = -1");
+
+    match store.head().await {
+        Err(SqliteEventStoreError::InvalidPosition(-1)) => {}
+        outcome => panic!(
+            "a highest stored position of `-1` must surface as \
+             `InvalidPosition(-1)`, and this store answered {outcome:?}. A head \
+             of `1` names a position this file does not contain, offered through \
+             the one channel a caller has no way to question"
+        ),
+    }
+}
+
+/// `head` reports a stored zero rather than discarding the failure and calling
+/// the store empty.
+///
+/// This is the swallow rather than the forgery: `SequencePosition::new(0)` does
+/// answer `None`, and the `Ok(highest.and_then(…))` around it turns that `None`
+/// into the `None` that means *empty store*. A caller that trusts it appends
+/// against a boundary of zero into a log that already has rows.
+#[tokio::test]
+async fn a_head_whose_highest_row_is_zero_is_reported_rather_than_answered_empty() {
+    let db = TempDb::new("zero-head");
+    let store = db.open();
+    store.append(&[event("Only")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = 0");
+
+    match store.head().await {
+        Err(SqliteEventStoreError::InvalidPosition(0)) => {}
+        outcome => panic!(
+            "a highest stored position of `0` must surface as \
+             `InvalidPosition(0)`, and this store answered {outcome:?}. \
+             `Ok(None)` says *empty* about a file with a row in it, and it says \
+             it by discarding a failure the decode had already detected — the \
+             shape `SqliteProjectionStore::position_from_row` already refuses"
+        ),
+    }
+}
+
+/// The read ceiling reports a negative sample rather than sampling a ceiling no
+/// row holds.
+///
+/// The forged ceiling and the forged row agree with each other, which is what
+/// makes this the quietest of the family: the read returns a plausible event at
+/// a plausible position, and nothing in the answer hints that the file
+/// disagrees.
+#[tokio::test]
+async fn a_read_ceiling_sampled_from_a_negative_row_is_reported_rather_than_forged() {
+    let db = TempDb::new("negative-ceiling");
+    let store = db.open();
+    store.append(&[event("Only")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = -1");
+
+    match try_drain(&store, &Query::all(), ReadOptions::new()).await {
+        Err(SqliteEventStoreError::InvalidPosition(-1)) => {}
+        outcome => panic!(
+            "a ceiling sampled as `-1` must surface as `InvalidPosition(-1)`, \
+             and this store answered {outcome:?}. Both halves absolutise, so the \
+             ceiling and the row agree on a position the file does not hold and \
+             the read looks correct from the outside"
+        ),
+    }
+}
+
+/// The read ceiling reports a stored zero rather than sampling `Ceiling::Empty`.
+///
+/// `sample_ceiling` discards the failure the same way `head` does, and the
+/// consequence is the second silent lie in one store: a read that yields nothing
+/// at all, exhausted on its first page, about a log that is not empty.
+#[tokio::test]
+async fn a_read_ceiling_sampled_from_a_zero_row_is_reported_rather_than_empty() {
+    let db = TempDb::new("zero-ceiling");
+    let store = db.open();
+    store.append(&[event("Only")], None).await.unwrap();
+
+    corrupt(&db, "UPDATE event SET position = 0");
+
+    match try_drain(&store, &Query::all(), ReadOptions::new()).await {
+        Err(SqliteEventStoreError::InvalidPosition(0)) => {}
+        outcome => panic!(
+            "a ceiling sampled as `0` must surface as `InvalidPosition(0)`, and \
+             this store answered {outcome:?}. `Ceiling::Empty` turns the whole \
+             read into an exhausted first page, so the caller sees an empty log \
+             rather than a store that cannot describe itself"
+        ),
+    }
+}

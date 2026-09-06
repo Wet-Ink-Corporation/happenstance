@@ -1613,9 +1613,9 @@ its actual limit; until phase 8 no store in this workspace had one to document,
 and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
 states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
 `MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
-(`crates/happenstance-sqlite/src/event_store.rs:245`, `:252`, `:261`) — enforces
-them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:475`,
-`:482`, `:488`), and mirrors them onto its fixture so
+(`crates/happenstance-sqlite/src/event_store.rs:284`, `:291`, `:300`) — enforces
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:558`,
+`:565`, `:571`), and mirrors them onto its fixture so
 `append_reports_exceeded_store_limits` reads them rather than a literal. All
 three clear their floors with room, VT-23's 128-item floor is evaluated by the
 same adapter through chunked statements rather than refused, and each number is
@@ -1761,11 +1761,11 @@ why the name was left here rather than dropped until it could be written.
 
 **Discharged at phase 4.** `limit` is `Option<usize>` (`query.rs:286-288`), the
 builder stores `Some(0)` verbatim (`query.rs:343-347`),
-`zero_limit_means_zero_events` (`query.rs:523-536`) asserts it, and
+`zero_limit_means_zero_events` (`query.rs:553-566`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
-(`crates/happenstance-testkit/src/suite.rs:1327`) and in
+(`crates/happenstance-testkit/src/suite.rs:1539`) and in
 `for_each_event_store_rule!`
-(`crates/happenstance-testkit/src/registry.rs:136`).
+(`crates/happenstance-testkit/src/registry.rs:138`).
 
 This is a deliberate divergence from the DCB reference implementation, which
 treats `limit: 0` as unlimited through JavaScript falsiness, and the ADR that
@@ -1798,7 +1798,7 @@ position arithmetic as a count.
 **Discharged at phase 4.** The field is on the struct
 (`query.rs:269-289`), the builder is `const` and inclusive
 (`query.rs:318-330`), and `to_is_recorded_and_independent_of_from`
-(`query.rs:538-548`) asserts that direction reverses what the two fields bound
+(`query.rs:568-578`) asserts that direction reverses what the two fields bound
 rather than reassigning them. The MUST stands over every adapter still to come.
 
 **This clause is not a fix for E2E-04.** An upper bound does not let one item of
@@ -2597,7 +2597,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:959` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:998` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2688,7 +2688,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 twelve real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode failures
-(`crates/happenstance-sqlite/src/event_store.rs:857-950`), and
+(`crates/happenstance-sqlite/src/event_store.rs:1011-1104`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2751,7 +2751,7 @@ rather than the breadth: `LocalMemoryEventStore`
 `impl EventStore for` in a genuinely downstream crate, sitting beside the
 blanket impl without `error[E0119]` and passing every rule natively and on
 `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:146`) and
+(`crates/happenstance-cloudflare/src/event_store.rs:992`) and
 `happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
 `:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
@@ -2996,7 +2996,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:973` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:1337` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site: the store captures a `tokio::runtime::Handle` at construction
 and falls back to `Handle::try_current`, so the lazy spawn has a runtime to hop
@@ -3185,6 +3185,28 @@ not *n* per query item and not an arbitrary *n*.
   at only one end would let one direction pass while the other failed. CF-12 is
   the obligation to run any read option against a filtering query at all, and
   names `limit` and `backwards` as belonging in the same pass.
+  `read_from_composes_with_limit` is the sixth, added at phase 12: the budget
+  spent on a read that also carries a **forwards** cursor. Until it landed, every
+  rule that paired `limit` with `from` also carried `backwards`, so a store that
+  applied the budget everywhere except its forward resume branch —
+  `ForwardPagingBudgetStore` — passed all eighty-nine and was indistinguishable
+  from a conformant one. The caller that composition serves is the one this
+  clause and VT-28 are both written about: a paging loop resuming from its
+  checkpoint.
+  `read_to_composes_with_limit` is the seventh, and it is the budget beside an
+  **upper bound** — ES-16's window and this clause's budget on one read, with the
+  budget the smaller of the two. It was argued to be unnecessary and the argument
+  was half right: `to` and `limit` both cut the back of the read and commute
+  exactly, so a store that applies them in the wrong order answers every read
+  correctly. Commuting is a statement about *order*, and the defect that arrives
+  here is about *applicability*: `WindowedPagingBudgetStore` answers a closed
+  window with its own statement — `BETWEEN ? AND ?` rather than `LIMIT ?` — and
+  the budget was threaded into the paged statement alone, on the argument that a
+  window makes a budget redundant. It is redundant only while the budget is the
+  larger of the two, which is the case an author checks by hand and the opposite
+  of the one a backfill worker is in on every call but its last. That store
+  passed all ninety-two rules that preceded this one, measured with an empty
+  `fails` list rather than argued.
 - **Cases:** E2E-12, E2E-13.
 - **Rejects:** an adapter implementing a multi-item query as one statement per
   item with `LIMIT n` on each — the same shape ES-12 rejects, failing here for an
@@ -3306,7 +3328,7 @@ at all it had to land before the first adapter shipped**, and none has.
 **Discharged at phase 4.** `ReadOptions` now carries `from`, `to`, `backwards`
 and `limit` (`query.rs:269-289`), with `to` inclusive in both directions
 (`query.rs:318-330`) and asserted by `to_is_recorded_and_independent_of_from`
-(`query.rs:538-548`). The state this clause was written against is the one it
+(`query.rs:568-578`). The state this clause was written against is the one it
 forbids: with `from`, `backwards` and `limit` and no upper bound, a backfill
 worker could not be given the closed window [1, *H*] while a tail worker owned
 (*H*, ∞), and `limit` could not stand in, because `event.rs:215-217` forbids
@@ -3315,7 +3337,10 @@ treating position arithmetic as a count. The workaround —
 works at 211 events and is fatal at 53 million.
 
 - **Rule:** `read_to_is_inclusive`, `read_from_and_to_bound_a_closed_window`,
-  `read_to_under_backwards_bounds_the_older_end` — VT-29 names the same three.
+  `read_to_under_backwards_bounds_the_older_end`,
+  `read_to_composes_with_multi_item_query` — VT-29 names the first three, which
+  are the ones about the *field*. The fourth is this clause's alone and landed
+  later; see the amendment below.
   `ToBoundIgnoredStore` is the options struct matched on the fields it knows and
   `ToIsExclusiveStore` the exclusive reading; `BackwardsToIsAnUpperBoundStore` is
   the third, which this clause did not predict and which only the backwards rule
@@ -3332,6 +3357,29 @@ works at 211 events and is fatal at 53 million.
   unbounded one with no error anywhere. It also rejects an adapter that reads
   `to` as exclusive, which yields a window one event short at every chunk
   boundary and is invisible until the chunks are reassembled.
+
+**Amended: the three rules above all issue `Query::all()`, and one shape needed a
+fourth.** `read_to_composes_with_multi_item_query` is the upper bound against a
+*filtering* query, and it is CF-12's finding one bound over rather than a second
+statement of this clause's own. The adapter it rejects generates
+`WHERE a OR b AND position <= ?` — `AND` binds tighter than `OR`, so the window's
+top is conjoined with the last disjunct alone and every event matching an earlier
+item comes back above the window. With a single-item query there is nothing for
+the `OR` to bind wrongly across, so all three rules above pass it, and the lower
+bound is conjoined correctly, so `read_from_composes_with_multi_item_query`
+passes it too. `UnparenthesisedToPredicateStore` is that store. Until this rule
+it was registered as caught by the **model family alone** — which is behind an
+optional dependency and `cfg(not(target_arch = "wasm32"))`, so the two adapters
+in this workspace that will build their `WHERE` clause by concatenation and run
+on that target, `happenstance-cloudflare` and `happenstance-neon`, ran nothing
+that could see it.
+
+A fifth rule exercises `to` and is **ES-14's** rather than this clause's:
+`read_to_composes_with_limit` puts a window and a row budget on one read, with
+the budget the smaller. What it rejects is a store that drops the budget because
+the window is present, which is a failure of the *budget* obligation met through
+this clause's field — so it is listed there, and named here so that a reader
+counting this clause's rules knows where the fifth went.
 
 ---
 
@@ -3536,7 +3584,7 @@ needs it" — and had to be corrected. **That correction landed in `3c704d3`.** 
 `append` doc no longer offers the returned position for a follow-up condition; it
 states the refusal and points at the read instead (`store.rs:179-187`). The
 obligation stands over every future edit to that doc: the sound `after` comes
-from a read — `read_decision_model` (`store.rs:369-379`) — which is what the DCB
+from a read — `read_decision_model` (`store.rs:517-527`) — which is what the DCB
 loop already does.
 
 #### ES-20 — An empty batch is refused, and refused first
@@ -3830,7 +3878,7 @@ rather than a contradiction — underspecified upstream, settled here.
 
 The pairing that falls out is exact and requires no arithmetic:
 `read_decision_model` returns the maximum position observed and
-`AppendCondition::after_opt` consumes it (`store.rs:369-379`, `append.rs:191-212`).
+`AppendCondition::after_opt` consumes it (`store.rs:517-527`, `append.rs:191-212`).
 The pairing that does *not* fall out is the checkpoint resume path, where
 `ProjectionStore::checkpoint` returns an inclusive-consumed position and
 `ReadOptions::from` is inclusive, so the caller must advance by hand through
@@ -4021,9 +4069,9 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:952`,
+`crates/happenstance-sqlite/src/event_store.rs:1106`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
-`crates/happenstance-cloudflare/src/event_store.rs:146` and
+`crates/happenstance-cloudflare/src/event_store.rs:992` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
@@ -5264,7 +5312,7 @@ program that puts one depot's inventory under another depot's checkpoint. What
 that program can no longer do everywhere is *run*: the hole is closed at run
 time by PS-15 rather than at the type level, and since phase 8 an adapter
 outside the testkit closes it — `begin` mints the batch with the store's own
-stamp (`crates/happenstance-sqlite/src/projection_store.rs:552`) and `commit`
+stamp (`crates/happenstance-sqlite/src/projection_store.rs:632`) and `commit`
 compares it before the file is touched.
 
 E2E-19 proposes tying the batch to the receiver's lifetime and calls it "the
@@ -5458,7 +5506,7 @@ that cannot signal overflow, because at `u64::MAX` the saturating version resume
 at the position it just applied — an infinite reapply loop in the one place
 nobody will test. **That obligation is discharged, not withdrawn:** `next()` is
 `NonZeroU64::checked_add` in `match` form (`event.rs:272-282`) and
-`position_next_signals_overflow` (`event.rs:842-873`) asserts it, so a runner may
+`position_next_signals_overflow` (`event.rs:908-939`) asserts it, so a runner may
 now be written against it. VT-13 is the fix and freezes it, and it
 also establishes the half a runner author will otherwise re-derive: because
 `from` is an inclusive lower bound rather than a seek, `checkpoint.next()` is a
@@ -7445,7 +7493,7 @@ eight citations that look current and are not. §6.3 onward is written in the
 present tense, and where CF-15 – CF-21 have since changed what the measurement
 describes, the clause says so in place. Twenty-seven rules,
 enumerated then as now in exactly one place
-(`crates/happenstance-testkit/src/registry.rs:98-140`), and a store that ignores
+(`crates/happenstance-testkit/src/registry.rs:98-142`), and a store that ignores
 tags entirely when evaluating an
 append condition passes all of them; a store that assigns positions outside its
 transaction passes all of them; a store that returns `Ok` from `append` and loses
@@ -7793,7 +7841,8 @@ survived, and is the argument for the rule rather than against it.
 
 **CF-12.** At least one rule MUST compose `ReadOptions::from` with a
 **multi-item** query. `[FROZEN]`
-Rule: `read_from_composes_with_multi_item_query`.
+Rule: `read_from_composes_with_multi_item_query`,
+`read_from_composes_with_limit`.
 Cases: E2E-10; scenario S7 in PRESSURE-TEST.md:620-624.
 Rejects: an adapter generating `WHERE a OR b AND position >= ?` without
 parentheses — the textbook operator-precedence bug, which silently returns every
@@ -7808,8 +7857,8 @@ clause requires `from` × multi-item because that is where the generated SQL is
 most likely to be wrong; `backwards` and `limit` against a filtering query
 SHOULD be covered in the same rule.
 
-**Discharged at phase 3 stage 4, and the SHOULD was taken.** All three options are
-exercised against the same two-item query in the one rule, because the measured
+**Discharged at phase 3 stage 4, and the SHOULD was taken.** All three options
+appear against the same two-item query in the one rule, because the measured
 finding is *one* gap — no read option against a filtering query at all — and three
 rules would have suggested three. `UnparenthesisedPredicateStore` is the mutant
 the clause names, and it is a scalpel: with a single item there is nothing for the
@@ -7818,6 +7867,31 @@ suite had. Four other mutants fail the rule as well, which is what a rule
 exercising three options against a filtering query should do — `LimitBeforeFilterStore`,
 `ItemOrderedUnionStore`, `FetchOneExtraStore` and `BackwardsIgnoredStore` each on
 their own axis.
+
+**Amended at phase 12: appearing is not composing.** The paragraph above said
+"all three options are exercised" and was read for two phases as though the
+composition existed. It did not. `read_from_composes_with_multi_item_query` issues
+the three options as **three separate reads** — `from(anchor)`, then
+`backwards()`, then `backwards().limit(2)` — so forwards `from` composed with
+`limit` was issued at no call site in the suite, and neither were the other
+combinations `from` did not happen to be paired with. That is the one composition
+three `[FROZEN]` clauses name as the consumer that motivates them: ES-14's budget,
+VT-28's `.limit(budget - fetched)` at parity, and this clause's cursor. A budget
+loop that resumes carries `from`. `ForwardPagingBudgetStore` — `limit` applied
+only where `from` is absent — passed all eighty-nine rules and was
+indistinguishable from both conformant controls. `read_from_composes_with_limit`
+is the rule that closes it, and it is the second rule this clause claims;
+`UnparenthesisedPredicateStore` and `LimitPerItemStore` fail it too, which is
+what makes it a statement about the *merged* result rather than about either
+item.
+
+**And the `to` side is ES-16's, not this clause's.** This clause's MUST names
+`ReadOptions::from` and stays as written; what the same measurement said about
+the *upper* bound — that no read-option rule composed it with a filtering query
+either — is discharged by `read_to_composes_with_multi_item_query` under **ES-16**,
+where the read semantics of `to` live. It is recorded here because the two rules
+are twins and a reader arriving at the shape from this end should be sent one
+clause over rather than left to conclude the gap is still open.
 
 **CF-13.** A rule MUST assert the visibility invariant — that once a reader has
 observed position *P*, no event at a position at or below *P* becomes visible
@@ -7992,6 +8066,12 @@ implementation it is shown to reject.
 **CF-17.** The fixture SHOULD be able to **reopen**: invalidate every
 outstanding handle's process-level state such that a subsequent `connect()`
 observes only what was durably committed. The capability constant is `REOPEN`.
+A fixture declaring `REOPEN` supported MUST make `reopen` discard that state
+**over a medium that outlives the process's hold on it**, so that the subsequent
+`connect()` reads what was durably committed rather than what a live object still
+happens to hold. The fixture MUST state the mechanism. A fixture over a store
+with no medium outside the process MUST decline the capability with that as its
+stated reason.
 `[PROVISIONAL — falsified by a legitimate adapter that is durable and cannot
 express even a reopen through this contract. The Durable Object is why the weaker
 half is the one named: its storage outlives the isolate, so it can discard handle
@@ -8012,10 +8092,41 @@ the rule executed rather than reporting a skip everywhere; since phase 8
 `SqliteFixture` in `crates/happenstance-sqlite/tests/support/mod.rs` supplies it
 too, and it is the first that supplies it over a medium outside the process.
 Cases: E2E-07.
-Rejects: nothing on its own — it is an enabling clause, and CF-14 carries the
-rejection. It is `SHOULD` rather than `MUST` because `MemoryEventStore` is
+Rejects: `NoopReopenFixture` in the testkit's own `tests/` — declares the
+capability supported and **overrides `reopen` with an empty body** over a
+completely correct but entirely volatile store, so it never reaches the trait's
+panic. It is what the declaration MUST added above is written against, and it is
+**not** a registered mutant, because **no rule of this family can reject it**,
+and that is a property of the capability rather than a gap in the rule set:
+arming a mid-batch fault has a port-observable consequence — the append must
+answer `Err`, which is what CF-39 is written on — and reopening has none. A
+correct `reopen` over a durable medium and an empty one over a `Vec` produce
+byte-identical observations through `EventStore`.
+That is measured rather than argued. `LiveHandleReopenFixture` in the testkit's
+own `tests/` is `SqliteFixture` in miniature — an honest reopen that closes the
+connections the *fixture* holds and leaves the medium alone, because reopening a
+file does not replace it — and it answers every proposed separating observation
+exactly as `NoopReopenFixture` does, including the sharpest one: what a handle
+taken *before* the call can still do afterwards. An honest reopen that
+*replaces* the live log answers differently. So two honest fixtures sit on
+opposite sides of that partition with the liar on one of them, and a rule built
+from it rejects `happenstance-sqlite`.
+`reopen_over_claiming_is_undetectable_and_this_is_the_record` is what carries the
+hazard instead: it drives the fixture through every rule and pins the two things
+that are measurable — it fails none, and it converts
+`acknowledged_writes_survive_a_reopen`,
+`reopened_store_does_not_reissue_an_event_id` and `recorded_time_survives_a_reopen`
+from reported skips into passes, while an honest twin one line apart reports them
+as skips. So the day a rule starts rejecting it, the record goes red.
+What the declaration MUST buys is therefore what CF-39 bought for
+the write path and no more: the hazard is *stated* rather than undetectable.
+A *forgotten* override is a different mistake and is already handled: the trait's
+provided body panics and its message names this hazard.
+CF-14 still carries the rejection of a store that loses an acknowledged write.
+The clause is `SHOULD` rather than `MUST` because `MemoryEventStore` is
 legitimately volatile and must stay a first-class fixture; CF-18 is what stops
-that from becoming an excuse.
+that from becoming an excuse, and the MUST added above is conditional on
+declaring, which is a different sentence.
 
 This clause's first draft deferred a split — `restart` into "reopen the handle"
 and "restart the host" — to whichever adapter forced it. The split is
@@ -8115,7 +8226,7 @@ would be asserting a number the store cannot honour. The first named instrument
 has landed and answered the **constant-ceiling** half: `happenstance-sqlite`
 states all three, each mirrored from the adapter's own `pub const` rather than
 restated (`crates/happenstance-sqlite/tests/support/mod.rs:189-195`, mirroring
-`crates/happenstance-sqlite/src/event_store.rs:245`, `:252` and `:261`), and
+`crates/happenstance-sqlite/src/event_store.rs:284`, `:291` and `:300`), and
 `append_reports_exceeded_store_limits` runs there rather than skipping. On a
 store whose ceilings *are* constants, an `Option<usize>` says exactly where the
 boundary is and the rule asserts a number the store honours. What is still live
@@ -8243,7 +8354,7 @@ and `conformance_test!` no longer exists anywhere in the workspace:
 `for_each_event_store_rule!`, in
 `crates/happenstance-testkit/src/registry.rs`, has been the single enumeration
 ever since, `event_store_conformance!`
-(`crates/happenstance-testkit/src/lib.rs:238`) is built by invoking it, and
+(`crates/happenstance-testkit/src/lib.rs:613`) is built by invoking it, and
 `no_orphan_rules` is what now makes the two agree. What the clause forbids from
 here is a second hand-maintained list of the *same* family — reintroducing the
 pair that drifts, under whatever name — which is the arrangement the paragraph
@@ -8262,9 +8373,9 @@ three families with one list each is the arrangement, not the exception.
 
 **The model family landed at stage 5**, and it is the worked example of the
 paragraph above rather than a plan for one. Its enumeration is
-`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:706`, and it
+`for_each_model_rule!` at `crates/happenstance-testkit/src/model.rs:772`, and it
 lives beside the single rule it names, `ops_agree_with_the_model` at
-`crates/happenstance-testkit/src/model.rs:592`. `event_store_model_conformance!`
+`crates/happenstance-testkit/src/model.rs:658`. `event_store_model_conformance!`
 is built by invoking it exactly as `event_store_conformance!` is built by
 invoking `for_each_event_store_rule!`. Two things it settles, and both were
 open:
@@ -8542,7 +8653,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:552-679`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1015`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1083`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
 Seven axes, and **the adapter column carries three ticks — durability, handle
@@ -9216,7 +9327,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-9 | FROZEN | `duplicate_items_do_not_duplicate_events` | E2E-32 |
 | CF-10 | FROZEN | `condition_against_an_empty_store_admits_the_append` | E2E-47 |
 | CF-11 | FROZEN | `empty_batch_is_refused_before_the_condition_is_evaluated` | E2E-06 |
-| CF-12 | FROZEN | `read_from_composes_with_multi_item_query` | E2E-10 |
+| CF-12 | FROZEN | `read_from_composes_with_multi_item_query`, `read_from_composes_with_limit` | E2E-10 |
 | CF-13 | FROZEN | `nothing_below_an_observed_position_appears_later` | E2E-01, E2E-02 |
 | CF-14 | DEFERRED | `acknowledged_writes_survive_a_reopen` | E2E-07 |
 | CF-15 | FROZEN | `two_fixture_instances_observe_none_of_each_others_appends` (the suite rule; t… | E2E-08, E2E-09 |

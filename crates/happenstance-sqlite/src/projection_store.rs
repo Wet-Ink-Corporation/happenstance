@@ -400,6 +400,23 @@ impl PendingStatement {
 /// would have to be reported for it or waived for everything. Fill one through
 /// [`push`](Self::push) — queueing the application's own read-model SQL is the
 /// caller's whole job — and hand it back to `commit` or `reset`.
+///
+/// # The statement is fixed and the values are bound
+///
+/// This is the one place in the workspace a consumer is handed a SQL-text seam,
+/// and the values that flow through it are exactly the bytes the library
+/// guarantees it does not inspect: ADR-0003 makes payloads opaque `Bytes`,
+/// forwarded and validated by nothing. So [`push`](Self::push) takes a
+/// `&'static str` — a statement that exists in the source — and the values go
+/// beside it as bound parameters. Assembling the text out of decoded event data
+/// is a SQL injection whose source is the event log, and it commits inside the
+/// same `BEGIN IMMEDIATE` that advances the checkpoint, so it is recorded as
+/// *progress*: nothing replays those events and nothing re-derives the rows.
+///
+/// [`push_raw_sql`](Self::push_raw_sql) is the escape hatch for a statement
+/// whose *shape* is genuinely computed — an `IN (…)` list sized at run time is
+/// the honest case — and it is separately named so that reaching for it is a
+/// decision rather than a default.
 #[derive(Debug, Clone)]
 pub struct SqliteBatch {
     statements: Vec<PendingStatement>,
@@ -420,7 +437,70 @@ impl SqliteBatch {
     }
 
     /// Queues a statement to run when the batch commits.
-    pub fn push(&mut self, sql: impl Into<String>, params: impl IntoIterator<Item = Value>) {
+    ///
+    /// # Security
+    ///
+    /// The statement text is fixed and the values are **bound**, never
+    /// interpolated. A statement assembled out of event data at run time is a
+    /// SQL injection whose source is the log, and it commits inside the same
+    /// `BEGIN IMMEDIATE` that advances the checkpoint — so the projection never
+    /// replays those events and nothing re-derives the rows it corrupted.
+    ///
+    /// That has to be a type obligation rather than a paragraph, because
+    /// nothing in the gate reads prose
+    /// (`standards/rust/70-rustdoc-obligations.md`, RS-70-5). The interpolated
+    /// spelling does not compile:
+    ///
+    /// ```compile_fail,E0308
+    /// use happenstance_sqlite::projection_store::SqliteBatch;
+    /// use happenstance_sqlite::rusqlite::types::Value;
+    ///
+    /// fn queue(batch: &mut SqliteBatch, account: &str) {
+    ///     batch.push(
+    ///         format!("DELETE FROM balance WHERE account = '{account}'"),
+    ///         core::iter::empty::<Value>(),
+    ///     );
+    /// }
+    /// ```
+    ///
+    /// `&'static str` is the narrowest type that admits every statement written
+    /// in source and refuses every statement assembled at run time — a literal,
+    /// a `const`, a `concat!`, all of them fine. The alternative considered was
+    /// a newtype minted from a literal by a macro, which buys the same
+    /// guarantee and costs the caller an import and a wrapper for it. Where the
+    /// shape genuinely is computed, reach for
+    /// [`push_raw_sql`](Self::push_raw_sql) deliberately.
+    pub fn push(&mut self, sql: &'static str, params: impl IntoIterator<Item = Value>) {
+        self.push_raw_sql(sql, params);
+    }
+
+    /// Queues a statement this crate cannot see the provenance of.
+    ///
+    /// The unconstrained twin of [`push`](Self::push), for the one case its
+    /// `&'static str` cannot express: a statement whose *shape* depends on a
+    /// run-time value, of which the honest example is an `IN (…)` list sized by
+    /// how many keys are being written. Build the placeholders, bind the values.
+    ///
+    /// # Security
+    ///
+    /// The obligation [`push`](Self::push) discharges in the type system moves
+    /// to the caller here, in full, and this method's name is the whole of the
+    /// warning: **no value may be interpolated into `sql`**. What the two
+    /// callers inside this crate do is the pattern
+    /// (`probe_write` and `probe_delete_all` below) — the text is fixed, every
+    /// value is a [`Value`] beside it.
+    ///
+    /// The wrong implementation this refuses to hide is the one a reviewer
+    /// waves through because it reads like the parameterised form:
+    /// `push_raw_sql(format!("… WHERE account = '{account}'"), [])`, with
+    /// `account` decoded out of an event payload. It runs in the same
+    /// transaction that advances the checkpoint, so a successful injection is
+    /// recorded as progress and no later run re-derives the corrupted rows.
+    pub fn push_raw_sql(
+        &mut self,
+        sql: impl Into<String>,
+        params: impl IntoIterator<Item = Value>,
+    ) {
         self.statements.push(PendingStatement {
             sql: sql.into().into_boxed_str(),
             params: params.into_iter().collect(),

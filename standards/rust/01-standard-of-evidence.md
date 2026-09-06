@@ -77,8 +77,8 @@ every future agent on the strength of its `Load when:` line, and there is no
 experiment that would ever remove it — so it accumulates, and the corpus's signal
 per token falls for everyone.
 
-**Evidence.** `CONTRIBUTING.md:163 (Write the wrong implementation)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:432 (impl Defect for)` ·
+**Evidence.** `CONTRIBUTING.md:172 (Write the wrong implementation)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:433 (impl Defect for InnerJoinTagStore)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md#61-the-suites-own-proof-obligation) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
@@ -125,7 +125,7 @@ demonstrate. The gate is green, the atom looks proved, and the constraint it
 documents has been unchecked since phase 0.
 
 **Evidence.** `xtask/src/constitution.rs:22 (cfg(doctest))` ·
-`spec/SPECIFICATION.md:5993 (silently ignores)` ·
+`spec/SPECIFICATION.md:6049 (silently ignores)` ·
 [rustdoc unstable features](https://doc.rust-lang.org/rustdoc/unstable-features.html#error-numbers-for-compile_fail-doctests)
 *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -224,6 +224,6 @@ an adapter by the next agent that loads it because a compiled example is exactly
 what agents trust most.
 
 **Evidence.** `xtask/src/constitution.rs:27 (Doctests also do not receive the workspace)` ·
-`Cargo.toml:122 (unwrap_used = "deny")` ·
+`Cargo.toml:180 (unwrap_used = "deny")` ·
 [rust-clippy#1599](https://github.com/rust-lang/rust-clippy/issues/1599)
 *(checked 2026-08-09, rustc 1.97.1)*
