@@ -10,12 +10,6 @@ reaches the maintainers privately.
 and choose *Report a vulnerability*. It is the better mechanism where it is
 available: it keeps the report, the fix and the advisory in one thread.
 
-**That link does not resolve for everyone, and if it 404s for you, nothing is
-wrong with your report — use the address above.** The repository is not public
-yet. This is stated rather than left for you to discover, because the alternative
-is a reporter following a broken link, reading the next paragraph, and concluding
-there is nowhere to go.
-
 **Please do not open a public issue for a vulnerability**, and please do not send
 a proof of concept to a public discussion. Everything else in this project is
 deliberately in the open — the specification, the backlog, the evidence behind
@@ -27,25 +21,27 @@ was missed rather than ignored, and say so — on the same thread, or by email.
 
 ## What is in scope
 
-The crates this repository publishes, at their published versions:
+The five crates this repository publishes, at their published versions:
 
 - `happenstance`
 - `happenstance-core`
 - `happenstance-testkit`
+- `happenstance-sqlite`
+- `happenstance-cloudflare`
 
-**Two crates are packaged but not yet on the registry**, and the distinction
-matters when you are deciding what to report against. For both, the only thing
-under the name on crates.io today is a `0.0.0` placeholder with no
-functionality and no dependencies — it never linked a driver and has never put
-anything in front of a consumer. **Report against the source rather than
-against that placeholder**, and each joins the list above when it ships. While
-the repository is private, describe what you found and mail it to the address
-above; you will not be asked for a link you cannot reach.
+The last two joined this list at `0.2.0`. Before that the only thing under either
+name on crates.io was a `0.0.0` placeholder with no functionality and no
+dependencies — it never linked a driver and never put anything in front of a
+consumer. **A report against a `0.0.0` placeholder is a report against nothing**;
+if you are looking at one, you are looking at a version that predates the crate.
 
-- `happenstance-sqlite` **is** in the `0.2.0` release and simply has not shipped
-  yet.
-- `happenstance-cloudflare` is finished and packaged but deliberately **not** in
-  the `0.2.0` release.
+Two notes on `happenstance-cloudflare`, because it is the member of that list
+whose evidence is thinnest and you should know that before you weigh a finding
+against it. It passes the conformance suite under a `node:sqlite`-backed shim
+rather than under `workerd` itself — `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`
+is the standing record of what that does and does not establish — and it is
+`wasm32`-only, so nothing in the host test matrix exercises it. Findings there
+are especially welcome for exactly that reason.
 
 Things worth reporting, because they are what this library is *for*:
 
@@ -76,14 +72,23 @@ Things worth reporting, because they are what this library is *for*:
 
 ## Supported versions
 
-Pre-1.0, and honestly so. There is no long-term support branch and no backporting:
-a fix lands in the next release, and the release before it is not patched. Pin an
-exact version, read [`CHANGELOG.md`](CHANGELOG.md) at each upgrade, and expect the
-API to move until the first stable `0.2.0`.
+Pre-1.0, and honestly so. There is no long-term support branch and no
+backporting: a fix lands in the next release, and the release before it is not
+patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
+upgrade.
+
+`0.2.0` is the first stable release, and what that does and does not promise is
+worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
+[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from here.
+`ProjectionStore` is **not**: it ships behind an off-by-default
+`unstable-projection` feature and carries a documented semver exemption until two
+adapters at opposite ends of the batch-shape axis have passed its conformance
+suite. A breaking change there is not a violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.2.0-alpha.*` | ✅ current pre-release |
+| `0.2.0` | ✅ current |
+| `0.2.0-alpha.*` | ❌ yanked at the `0.2.0` release |
 | anything earlier | ❌ |
 
 ## Disclosure
