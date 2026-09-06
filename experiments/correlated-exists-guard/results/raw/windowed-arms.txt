@@ -13,9 +13,16 @@ PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=4 parent=0 SEA
 PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=selective	cell=first-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=selective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=26788
-PAGE	corpus=selective	cell=first-page	shape=wrapper-exists	rows=512	us_median=61234
-PAGE	corpus=selective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=5665
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=first-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=selective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=24665
+PAGE	corpus=selective	cell=first-page	shape=wrapper-exists	rows=512	us_median=54872
+PAGE	corpus=selective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=5582
+PAGE	corpus=selective	cell=first-page	shape=merge-join	rows=512	us_median=4669
 PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -28,9 +35,16 @@ PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=4 parent=
 PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=42206
-PAGE	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=68473
-PAGE	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=5530
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=mid-replay-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=selective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=39030
+PAGE	corpus=selective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=55801
+PAGE	corpus=selective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=4131
+PAGE	corpus=selective	cell=mid-replay-page	shape=merge-join	rows=512	us_median=4872
 PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -43,9 +57,16 @@ PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=4 parent
 PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=63656
-PAGE	corpus=selective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=74103
-PAGE	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=7264
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=late-replay-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=selective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=46169
+PAGE	corpus=selective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=49639
+PAGE	corpus=selective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=5544
+PAGE	corpus=selective	cell=late-replay-page	shape=merge-join	rows=512	us_median=3993
 PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -58,9 +79,16 @@ PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=4 par
 PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=33892
-PAGE	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=77501
-PAGE	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=6570
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=selective	cell=backwards-from-head	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=selective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=18952
+PAGE	corpus=selective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=52527
+PAGE	corpus=selective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=3975
+PAGE	corpus=selective	cell=backwards-from-head	shape=merge-join	rows=512	us_median=4785
 CONDITIONS	corpus=unselective	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000
 PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=unselective	cell=first-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
@@ -74,9 +102,16 @@ PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=4 parent=0 S
 PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=unselective	cell=first-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=unselective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=1178687
-PAGE	corpus=unselective	cell=first-page	shape=wrapper-exists	rows=512	us_median=1294
-PAGE	corpus=unselective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=920
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=first-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=unselective	cell=first-page	shape=in-exists (ships)	rows=512	us_median=908541
+PAGE	corpus=unselective	cell=first-page	shape=wrapper-exists	rows=512	us_median=751
+PAGE	corpus=unselective	cell=first-page	shape=windowed-in-exists	rows=512	us_median=528
+PAGE	corpus=unselective	cell=first-page	shape=merge-join	rows=512	us_median=527
 PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -89,9 +124,16 @@ PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=4 paren
 PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=1264879
-PAGE	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=1278
-PAGE	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=906
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=mid-replay-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=unselective	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=928931
+PAGE	corpus=unselective	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=773
+PAGE	corpus=unselective	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=638
+PAGE	corpus=unselective	cell=mid-replay-page	shape=merge-join	rows=512	us_median=595
 PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -104,9 +146,16 @@ PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=4 pare
 PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=1250408
-PAGE	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=751
-PAGE	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=722
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=late-replay-page	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=unselective	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=930602
+PAGE	corpus=unselective	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=673
+PAGE	corpus=unselective	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=514
+PAGE	corpus=unselective	cell=late-replay-page	shape=merge-join	rows=512	us_median=467
 PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=4 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
 PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=8 parent=0 LIST SUBQUERY 2
 PLAN	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	id=12 parent=8 SEARCH seed USING PRIMARY KEY (tag=?)
@@ -119,10 +168,17 @@ PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=4 p
 PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=8 parent=0 LIST SUBQUERY 3
 PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=14 parent=8 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
 PLAN	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	id=27 parent=8 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
-PAGE	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=1208409
-PAGE	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=1246
-PAGE	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=1070
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=2 parent=0 CO-ROUTINE m
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=8 parent=2 SEARCH seed USING PRIMARY KEY (tag=? AND position>? AND position<?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=21 parent=2 SEARCH m0 EXISTS USING PRIMARY KEY (tag=? AND position=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=36 parent=0 SCAN m
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=39 parent=0 SEARCH event USING INTEGER PRIMARY KEY (rowid=?)
+PLAN	corpus=unselective	cell=backwards-from-head	shape=merge-join	id=53 parent=0 USE TEMP B-TREE FOR ORDER BY
+PAGE	corpus=unselective	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=866210
+PAGE	corpus=unselective	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=829
+PAGE	corpus=unselective	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=802
+PAGE	corpus=unselective	cell=backwards-from-head	shape=merge-join	rows=512	us_median=730
 ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.68s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.98s
 

@@ -1,5 +1,11 @@
 # The window belongs inside the arm — at one arm
 
+> **Superseded by [`merge-join.md`](merge-join.md).** A fourth shape — the arms
+> merged as a compound with the budget on the compound rather than on each arm,
+> which is SQLite's own co-routine merge — wins every cell in both this table
+> and the wide one. The pages below are kept because they are how that shape was
+> found, and because each records a claim that had to be run to be refuted.
+
 > **Corrected by [`wide-arms.md`](wide-arms.md), which was run afterwards.**
 > Every cell on this page is a query of **one item**. At VT-23's floor of 128
 > items the conclusion in §1 — that one shape wins both ends, so nothing has to
@@ -8,8 +14,11 @@
 > broad 128-item query, because `budget x arms` is 65,536 positions rather than
 > 512. Read this page for the mechanism and that one for what it costs at width.
 
-Written by hand from [`raw/windowed-arms.txt`](raw/windowed-arms.txt),
-`cargo test --release --test windowed_arms` on 2026-09-05. Two 500,000-event
+Written by hand from the `raw/windowed-arms.txt` recorded at commit `429cf05`.
+That file has since been **regenerated** by the same test with a fourth shape
+added, so the working copy carries a later run than the three columns below; this
+page's run is in git, and the current one is in
+[`merge-join.md`](merge-join.md). Two 500,000-event
 stores, one 512-row page per statement, 10 rounds per cell with the leading
 shape rotated, full-row projection.
 

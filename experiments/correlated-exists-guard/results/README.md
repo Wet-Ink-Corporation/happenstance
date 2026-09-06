@@ -13,6 +13,7 @@ across runs.
 | [`all-query-wrapper.md`](all-query-wrapper.md) | the one of those three that shipped, and the mechanism it was wrong about |
 | [`windowed-arms.md`](windowed-arms.md) | **the fourth candidate**, which wins both corpora at one arm |
 | [`wide-arms.md`](wide-arms.md) | the same three shapes at VT-23's 128-item floor, where that stops holding |
+| [`merge-join.md`](merge-join.md) | **the shape that wins both floors** — SQLite's own co-routine merge |
 | `raw/*.txt` | command output, tee'd verbatim by `run.sh` |
 
 The tables are written **by hand** from `raw/`, because a table nobody read is a

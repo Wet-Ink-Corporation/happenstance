@@ -559,6 +559,145 @@ fn windowed_item_sql(
     format!("SELECT position FROM ({inner})")
 }
 
+/// The window pushed into every arm, and the **budget left on the compound**.
+///
+/// # Why this exists beside [`windowed_arms_sql`]
+///
+/// `windowed_arms_sql` gives each arm its own `ORDER BY … LIMIT budget`, which
+/// bounds the matched set at `budget x arms`. At VT-23's 128-item floor that is
+/// 65,536 positions materialised to return 512, and
+/// [`results/wide-arms.md`](../results/wide-arms.md) is where it stops paying.
+///
+/// The bound wanted is `budget` **total**, and getting it needs a *merge* of
+/// ordered streams rather than a union of truncated ones. SQLite has that:
+///
+/// > An alternative method of computing a compound is to run each subquery as a
+/// > co-routine, arrange for their outputs to appear in sorted order, and merge
+/// > the results together. […] because the co-routine doesn't need to run to
+/// > completion before the outer query begins, the first rows appear sooner,
+/// > and if the overall query is abandoned before finishing, less work is done
+/// > overall.
+/// > — <https://sqlite.org/lang_select.html>
+///
+/// So the `LIMIT` goes where SQLite's grammar already insists it goes — on the
+/// compound, once — and each arm stays an ordered index range scan over
+/// `(tag, position)`. `EXPLAIN QUERY PLAN` says `MERGE (UNION)` when the
+/// planner takes it, and that is the observable this shape is judged by:
+/// **`USE TEMP B-TREE FOR ORDER BY` inside the compound means it declined**, and
+/// the shape is then a sort of the whole matched set rather than a merge.
+///
+/// This is not a novel trick. PostgreSQL's planner does the same thing for
+/// `UNION ALL` under `ORDER BY … LIMIT` and calls it `MergeAppend`; limit
+/// pushdown into union arms has been in it since 2005. SQLite will do it and
+/// cannot be asked to, so the shape has to be written this way to get it.
+///
+/// # The arm keeps the window, and only the window
+///
+/// Each arm carries `position >= ? AND position <= ?` — without it the merge is
+/// still a merge but every co-routine rewinds to the start of its tag range, so
+/// a page late in a replay pays for the prefix beneath it. It does **not** carry
+/// a per-arm `LIMIT`: that is the thing this shape exists not to do.
+#[must_use]
+pub fn merged_arms_sql(
+    items: &[QueryItem],
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    let direction = if window.backwards { "DESC" } else { "ASC" };
+    let arms = if items.is_empty() {
+        "SELECT position FROM event WHERE 0".to_owned()
+    } else {
+        items
+            .iter()
+            .map(|item| merged_item_sql(item, selectivity, window, params))
+            .collect::<Vec<_>>()
+            // `UNION`, not `UNION ALL`: two items may match one event and the
+            // page must not carry it twice. The merge deduplicates as it goes,
+            // which is why this costs nothing here and a `DISTINCT` would.
+            .join(" UNION ")
+    };
+    params.push(Value::Integer(window.budget));
+    format!("{arms} ORDER BY position {direction} LIMIT ?")
+}
+
+/// One arm of [`merged_arms_sql`]: the window, no limit, no subquery wrapper.
+fn merged_item_sql(
+    item: &QueryItem,
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    let tags = selectivity.most_selective_first(distinct_tags(item));
+    let types = item.types();
+
+    if tags.is_empty() {
+        let mut sql = String::from("SELECT position FROM event WHERE 1");
+        if !types.is_empty() {
+            for event_type in types {
+                params.push(Value::Text(event_type.as_str().to_owned()));
+            }
+            sql.push_str(&format!(
+                " AND event_type IN ({})",
+                placeholders(types.len())
+            ));
+        }
+        params.push(Value::Integer(window.lo));
+        params.push(Value::Integer(window.hi));
+        sql.push_str(" AND position >= ? AND position <= ?");
+        return sql;
+    }
+
+    let mut sql =
+        String::from("SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ?");
+    params.push(Value::Text(tags[0].clone()));
+    if !types.is_empty() {
+        for event_type in types {
+            params.push(Value::Text(event_type.as_str().to_owned()));
+        }
+        sql.push_str(&format!(
+            " AND seed.event_type IN ({})",
+            placeholders(types.len())
+        ));
+    }
+    params.push(Value::Integer(window.lo));
+    params.push(Value::Integer(window.hi));
+    sql.push_str(" AND seed.position >= ? AND seed.position <= ?");
+    for (index, tag) in tags[1..].iter().enumerate() {
+        params.push(Value::Text(tag.clone()));
+        sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM event_tag AS m{index} WHERE m{index}.tag = ? \
+             AND m{index}.position = seed.position)"
+        ));
+    }
+    sql
+}
+
+/// One page over [`merged_arms_sql`]'s output.
+///
+/// A `JOIN` rather than `position IN (…)`, and that is the whole point: `IN`
+/// would materialise the compound before emitting a row and throw the merge's
+/// early exit away. The join drives from `m`, which arrives already ordered and
+/// already `budget`-bounded, and seeks `event` by rowid per row.
+///
+/// The outer `ORDER BY` is not redundant even though `m` is ordered — SQLite
+/// does not know that a co-routine's output order survives the join, so it adds
+/// `USE TEMP B-TREE FOR ORDER BY` over at most `budget` rows. Dropping it would
+/// make the page's order an accident of the plan, which is the one thing a read
+/// contract may not do.
+///
+/// No parameters follow this: [`merged_arms_sql`] has already bound the window
+/// and the budget.
+#[must_use]
+pub fn merge_page_sql(matched: &str, columns: &str, backwards: bool) -> String {
+    let direction = if backwards { "DESC" } else { "ASC" };
+    format!(
+        "SELECT {} FROM event JOIN ({matched}) AS m ON m.position = event.position \
+         ORDER BY event.position {direction}",
+        qualified(columns, "event")
+    )
+}
+
 /// The shipped intersection chain, optionally carrying the boundary in its seed.
 ///
 /// `bound` is `None` for the shape that ships. When it is `Some`, the seed arm

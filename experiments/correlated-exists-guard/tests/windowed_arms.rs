@@ -46,8 +46,8 @@
 
 use correlated_exists_guard::Shape;
 use correlated_exists_guard::chain::{
-    PAGE_COLUMNS, Selectivity, Window, Wrapper, arms_sql, correlated_arms_sql, page_sql_directed,
-    windowed_arms_sql,
+    PAGE_COLUMNS, Selectivity, Window, Wrapper, arms_sql, correlated_arms_sql, merge_page_sql,
+    merged_arms_sql, page_sql_directed, windowed_arms_sql,
 };
 use correlated_exists_guard::seed::Corpus;
 use happenstance_sqlite::connection::ConnectionSettings;
@@ -202,6 +202,17 @@ fn shapes(
             PAGE_COLUMNS,
             window.backwards,
         ),
+        params,
+    ));
+
+    // The compound merge. It binds its own window and budget and takes no
+    // tail, because the arms carry the bounds and the compound carries the
+    // limit — which is the whole difference from the shape above.
+    let mut params = Vec::new();
+    let matched = merged_arms_sql(items, selectivity, window, &mut params);
+    out.push((
+        "merge-join",
+        merge_page_sql(&matched, PAGE_COLUMNS, window.backwards),
         params,
     ));
 

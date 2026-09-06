@@ -1,7 +1,16 @@
 # At VT-23's floor the windowed arm stops dominating
 
-Written by hand from [`raw/wide-windowed-arms.txt`](raw/wide-windowed-arms.txt),
-`cargo test --release --test wide_windowed_arms` on 2026-09-05. One
+> **Superseded by [`merge-join.md`](merge-join.md).** A fourth shape — the arms
+> merged as a compound with the budget on the compound rather than on each arm,
+> which is SQLite's own co-routine merge — wins every cell in both this table
+> and the wide one. The pages below are kept because they are how that shape was
+> found, and because each records a claim that had to be run to be refuted.
+
+Written by hand from the `raw/wide-windowed-arms.txt` recorded at commit
+`58ec849`. That file has since been **regenerated** by the same test with a
+fourth shape added, so the working copy carries a later run than the three
+columns below; this page's run is in git, and the current one is in
+[`merge-join.md`](merge-join.md). One
 500,000-event store over `Corpus::ManyBuckets`, **128 items per query** — VT-23's
 floor — one 512-row page per statement, 5 rounds per cell with the leading shape
 rotated, full-row projection. The returned page is compared column-by-column

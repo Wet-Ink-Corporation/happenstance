@@ -158,22 +158,69 @@ Four questions, in the order they depend on each other.
      makes `read-path.md`'s *"2.3x worse on a selective query"* an
      understatement by three orders of magnitude.
 
-   **So question 4 moves a third time, and this is where it rests.** The
-   crossover is real at width and cannot be dissolved by the windowed shape
-   alone. But it is now **asymmetric in the safe direction and bounded on that
-   side**: defaulting to the windowed arm everywhere costs at most 3.4x against
-   the best available shape, where defaulting to `wrapper-exists` costs up to
-   1,747x and defaulting to what ships loses in all eight cells. That argues for
-   **a default with a stated worst case** rather than a sampled threshold, which
-   is a materially easier thing for a decision record to justify and to falsify.
+   **And then a fifth candidate settled it, because the first four were all
+   answering the wrong question.** `results/merge-join.md`.
 
-   If a conditional rule is still wanted, the discriminator this evidence points
-   at is not tag selectivity: it is `arm count x page budget` against matched-set
-   size. The adapter holds both halves already — `Selectivity` the per-tag
-   counts, `chunks` the arm count.
+   `in-exists`, `wrapper-exists` and the windowed arm all produce the whole
+   matched set and then take a page from it — they differ only in whether they
+   materialise it, test it per row, or truncate it per arm. That is why each is
+   best at one end of some axis, and why every new axis produced a new crossover.
+   A paged read does not ask *"which positions match?"*; it asks *"the next
+   `budget` matching positions in order"*, and the answer to that is a **merge of
+   ordered streams with early termination**.
 
-   Still unmeasured: **where between 1 and 128 arms the windowed shape stops
-   dominating.** Two points, both floors, nothing between them.
+   SQLite already has it. Its compound-`SELECT` handling runs each arm as a
+   co-routine and merges them in sorted order, abandoning the rest when the
+   `LIMIT` is met (<https://sqlite.org/lang_select.html>); PostgreSQL's planner
+   does the same under the name `MergeAppend` and has pushed `LIMIT` into union
+   arms since 2005. **The windowed arm was a hand-rolled, worse version of a
+   standard optimisation both engines already have** — worse because a per-arm
+   limit bounds work at `budget x arms` where a merge bounds it at `budget`.
+
+   The shape is the arms unioned with the window on each and the **budget on the
+   compound**, joined to `event` rather than fed to `position IN (…)`:
+
+   ```sql
+   SELECT event.<cols> FROM event JOIN (
+       <arm> UNION <arm> … ORDER BY position ASC LIMIT ?
+   ) AS m ON m.position = event.position ORDER BY event.position ASC
+   ```
+
+   It wins **sixteen cells out of sixteen** across both arm-count floors, both
+   corpora at each, both directions and three replay depths: 4.0x–11.6x and
+   1,187x–1,993x over what ships at one arm, 82x–108x and 2.7x–4.3x at 128, and
+   ahead of `wrapper-exists` everywhere by 11x–15x and 1,625x–1,904x. No cell in
+   either table has a different winner, which is the first time that has been
+   true here.
+
+   **So question 4 becomes a much smaller question.** It was *"what threshold
+   decides between two plans?"*, then *"is there a reason to keep either of
+   them?"*. It is now *"is there any reason not to adopt the shape both engines'
+   planners already implement?"* — and this evidence names none. There is no
+   crossover to navigate, so no threshold, no sampling for plan choice, and no
+   query plan that depends on data the adapter measured.
+
+   Three things the pass still owns, and they are about seams and risk rather
+   than about which shape is faster:
+
+   * **`query_sql::chunks` gains the read's window, direction and budget**, which
+     only the read path has — the guard takes `max(position)` over the matched
+     set and has no window at all. The two callers of the module they
+     deliberately share stop passing the same shape of argument, and
+     `fetch_page`'s outer wrapper stops existing rather than being replaced.
+   * **The shape depends on a planner choice that cannot be requested.** Every
+     cell measured reported `MERGE (UNION)`; `USE TEMP B-TREE FOR ORDER BY`
+     inside the compound would mean SQLite declined and the statement had become
+     a sort of the whole matched set. That is a falsifier an adapter can assert
+     on in its own tests, and it is a better §16 re-opening condition than the
+     one ADR-0022 has.
+   * **Above `MAX_QUERY_ARMS_PER_STATEMENT` the merge is per chunk**, so a query
+     of 800 items merges twice and the page budget is spent twice before the
+     Rust-side merge. That is the same soundness argument the adapter already
+     makes for chunking, but it is argued and not measured.
+
+   Still unmeasured: **arm counts between 1 and 128, and above 400.** Two points,
+   both floors, nothing between or beyond them.
 
 ## What must remain true
 
@@ -198,6 +245,7 @@ Four questions, in the order they depend on each other.
 | `.../results/all-query-wrapper.md` | the part of that approach which shipped, and the mechanism it corrected |
 | `.../results/windowed-arms.md` | the fourth candidate at one arm: one shape winning both ends of the axis |
 | `.../results/wide-arms.md` | the same three shapes at VT-23's 128-item floor, where that stops holding |
+| `.../results/merge-join.md` | **the shape to decide on** — SQLite's own co-routine merge, sixteen cells out of sixteen |
 | `.../results/seed-ordering.md` | the ordering policy's sign flip, both shapes |
 | `.../results/unselective-pair.md` | the adversarial corpus, and the early-exit hypothesis it produced |
 | `experiments/shipped-append-condition-sql/` | the closed record of the shape that shipped until 2026-09-05 |
