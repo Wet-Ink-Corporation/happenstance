@@ -6,19 +6,29 @@ a contract for storage, and a published conformance suite that decides who meets
 it.
 
 [![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/happenstance.svg)](https://crates.io/crates/happenstance)
+[![docs.rs](https://img.shields.io/docsrs/happenstance)](https://docs.rs/happenstance)
+[![MSRV](https://img.shields.io/badge/MSRV-1.97.1-blue)](#minimum-supported-rust-version)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: early, and worth being precise about.** The contract, the typed layer
-> and a 116-rule conformance suite across four families are real and tested, and
-> **SQLite is a finished adapter that has run the suite** — the event-store,
-> projection, concurrency and model families, against a real file on disk.
-> `0.2.0-alpha.1` is on crates.io — `happenstance`, `happenstance-core` and
-> `happenstance-testkit` — published so the public surface has a baseline later
-> versions can be diffed against, rather than because it is ready to be depended
-> on. This tree is **ahead** of that release: `0.2.0` adds `happenstance-sqlite`
-> to it. Postgres, Neon, Ladybug and replication come after that, and the ambition
-> is the whole list rather than the first four. See [status](#status).
+> **Status: `0.2.0`, and worth being precise about what that number claims.** The
+> contract, the typed layer and a 116-rule conformance suite across four families
+> are real and tested, and **two adapters have run the suite** — SQLite against a
+> real file on disk, across the event-store, projection, concurrency and model
+> families, and a Cloudflare Durable Object on `wasm32`. All five crates are on
+> crates.io.
+>
+> What `0.2.0` promises: the `EventStore` clauses marked `[FROZEN]` in
+> [the specification](spec/SPECIFICATION.md) are semver-binding from here.
+> What it does not: `ProjectionStore` ships behind an off-by-default
+> `unstable-projection` feature and is exempt from semver until two adapters at
+> opposite ends of the batch-shape axis have passed its suite.
+>
+> What it is not is production mileage — see the note under [status](#status),
+> which is narrower than the ticks suggest. Postgres, Neon, Ladybug and
+> replication come next, and the ambition is the whole list rather than the first
+> five.
 
 ---
 
@@ -123,11 +133,11 @@ checkpoint until the runner has caught up, and `200` after.
 
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ on crates.io at `0.2.0-alpha.1` |
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ on crates.io at `0.2.0-alpha.1` |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0-alpha.1` — 116 rules across four families |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ passes the suite against a real file; ships in `0.2.0` |
-| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ passes the suite under `workerd`; publish-ready, held back from `0.2.0` |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ on crates.io at `0.2.0` |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ on crates.io at `0.2.0` |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0` — 116 rules across four families |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ on crates.io at `0.2.0`; passes the suite against a real file |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ on crates.io at `0.2.0`; passes the suite on `wasm32` — read the note below |
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 stub, design notes only |
 | [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
@@ -142,11 +152,13 @@ The four 🔲 rows are not placeholders in the empty sense: each carries the des
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
 
-`happenstance-cloudflare` is the row most easily misread. It is finished and
-packaged — licences, README, reserved name — and is deliberately **not** in the
-`0.2.0` release: its own front page says it is not frozen, and a first release is
-a poor place to promise stability for a `wasm32`-only adapter. It ships when that
-sentence stops being true.
+`happenstance-cloudflare` is the row most easily misread, and it ships in
+`0.2.0` with the thinnest evidence of the five. Two things a reader should have
+before weighing it. It passes the conformance suite under a `node:sqlite`-backed
+shim rather than under `workerd` itself — `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`
+is the standing record of what that establishes and what it does not — and it is
+`wasm32`-only, so nothing in the host test matrix exercises it. Its own front
+page does not claim a frozen API, and neither does this row.
 
 [`RUNBOOK.md`](RUNBOOK.md) explains why the remaining work is ordered as it is —
 sequenced by blast radius, with the artefact each phase has to produce before it
@@ -157,13 +169,23 @@ answer to what is built.
 
 ```toml
 [dependencies]
-happenstance = "0.2.0-alpha.1"
+happenstance = "0.2"
 ```
 
-The pre-release has to be named in full — Cargo will not select a pre-release from
-a plain `"0.2"` requirement. It is an early cut and the API will move under it. A
-git dependency on this repository is the other option, and is what to use if you
-want the tree rather than the release.
+Add an adapter when you want durability — `happenstance-sqlite = "0.2"` — and
+`happenstance-testkit` as a `[dev-dependencies]` if you are writing one of your
+own. **Pin the testkit exactly.** Adding a conformance rule is a semver-*minor*
+change that can turn a passing adapter's CI red, which is why it carries its own
+version number rather than the workspace's.
+
+## Minimum supported Rust version
+
+**1.97.1**, and it is a promise from `0.2.0` rather than a preference: raising it
+is a breaking change and needs a decision record, not a commit message. The
+floor moved to 1.97.1 at phase 2 for a dependency's build script rather than for
+anything in this workspace — five of the five database crates here declare no
+`rust-version` at all, so neither `cargo hack --rust-version` nor `resolver = "3"`
+can protect a floor against them, and only running the compiler finds it.
 
 ```rust
 use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
