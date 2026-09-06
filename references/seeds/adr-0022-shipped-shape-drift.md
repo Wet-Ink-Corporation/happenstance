@@ -40,6 +40,19 @@ Three things follow, and the third is new:
    decision record was not, because that is not a side effect a code change gets
    to have.
 
+   **And then it moved once more, on the read path.** `fetch_page` no longer
+   wraps the matched set at all: it emits a compound of windowed arms with the
+   page budget on the compound, joined to `event`, which SQLite runs as merged
+   co-routines with early termination. Sixteen cells out of sixteen against the
+   three alternatives, at both of VT-23's arm-count floors
+   (`results/merge-join.md`). Question 4 below records how that was arrived at.
+
+   So the adapter's shape has changed three times in a week and the record has
+   described none of them. That is the whole of why this seed exists, and the
+   chronology in §4 is kept rather than collapsed because three of the four
+   candidates were refuted by a measurement rather than by an argument, and a
+   pass that only sees the winner cannot tell which.
+
 ## What the ADR pass is being asked to settle
 
 Four questions, in the order they depend on each other.
@@ -58,10 +71,16 @@ Four questions, in the order they depend on each other.
    measured `Selectivity::read_for` at **40x** a `BTreeSet` at VT-23's 128-item
    floor, *inside the write lock*, and that has not been repaired. The trade
    moved; nobody has re-taken it.
-4. **I-3's outer wrapper, which is the open one.** `fetch_page` wraps every chunk
-   in a second, uncorrelated `WHERE position IN (<matched>)`, and that is now the
-   read path's floor: the correlated chain is worth 1.7x there against
-   1,617x–1,681x on the guard.
+4. **I-3's outer wrapper.** The shape is settled and shipped; what is open is
+   whether the record says so, and what the seam between the two callers should
+   be. The rest of this item is the chronology that got there, in the order it
+   happened, because three of the four candidates were refuted by a measurement
+   and the fourth was found by reading a manual — and a pass shown only the
+   winner cannot tell which claims were tested.
+
+   `fetch_page` used to wrap every chunk in a second, uncorrelated
+   `WHERE position IN (<matched>)`, and that was the read path's floor: the
+   correlated chain was worth 1.7x there against 1,617x–1,681x on the guard.
    `experiments/correlated-exists-guard/results/read-path.md` prices three
    candidates and finds a **crossover** rather than a winner — the best shape for
    a broad query is 1,089x better there and 2.3x worse on a selective one.
@@ -193,21 +212,35 @@ Four questions, in the order they depend on each other.
    either table has a different winner, which is the first time that has been
    true here.
 
-   **So question 4 becomes a much smaller question.** It was *"what threshold
-   decides between two plans?"*, then *"is there a reason to keep either of
-   them?"*. It is now *"is there any reason not to adopt the shape both engines'
-   planners already implement?"* — and this evidence names none. There is no
-   crossover to navigate, so no threshold, no sampling for plan choice, and no
-   query plan that depends on data the adapter measured.
+   **So question 4 becomes a much smaller question, and it has been acted on.**
+   It was *"what threshold decides between two plans?"*, then *"is there a reason
+   to keep either of them?"*. It is now *"is there any reason not to adopt the
+   shape both engines' planners already implement?"* — and this evidence names
+   none. There is no crossover to navigate, so no threshold, no sampling for plan
+   choice, and no query plan that depends on data the adapter measured.
 
-   Three things the pass still owns, and they are about seams and risk rather
-   than about which shape is faster:
+   **`query_sql` now emits it.** `Window` and `page_statements` are new; `chunks`
+   is the guard's alone; `fetch_page`'s outer wrapper is gone rather than
+   replaced. The whole gate is green, the 89 conformance rules included, and
+   three assertions came with it — two on the query plan in `event_store.rs`, and
+   one in `experiments/correlated-exists-guard/tests/emitted_sql.rs` that traces
+   the statement off a running store.
 
-   * **`query_sql::chunks` gains the read's window, direction and budget**, which
-     only the read path has — the guard takes `max(position)` over the matched
-     set and has no window at all. The two callers of the module they
-     deliberately share stop passing the same shape of argument, and
-     `fetch_page`'s outer wrapper stops existing rather than being replaced.
+   **Shipping it does not settle the record, and this seed still stands.** What
+   the adapter emits and what `.kb/decisions/` says have now diverged for the
+   third time in one week; the difference is only that the divergence is
+   documented in the adapter and measured in an experiment rather than
+   discovered later. Questions 1, 2 and 3 are untouched by any of it.
+
+   Three things the pass owns about the shape itself, and they are about seams
+   and risk rather than about which one is faster:
+
+   * **The two callers of one module stopped passing the same argument.** That
+     module doc's opening claim — *"one question, asked in two places"* — is now
+     false as written: the guard asks *"is there a matching position above the
+     boundary?"* and a paged read asks for *"the next `budget` positions in
+     order"*, which is not the same question and never was. Whether that seam
+     should stay one module is the pass's call.
    * **The shape depends on a planner choice that cannot be requested.** Every
      cell measured reported `MERGE (UNION)`; `USE TEMP B-TREE FOR ORDER BY`
      inside the compound would mean SQLite declined and the statement had become

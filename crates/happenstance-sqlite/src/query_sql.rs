@@ -97,29 +97,32 @@
 //! materialisation for it to shrink. `AppendCondition::new(query)` with no
 //! anchor — a unique name, an idempotency key — is exactly that case.
 //!
-//! # What this does not fix
+//! # The read path merges rather than wrapping
 //!
-//! The **read** path wraps every chunk in a second, uncorrelated
-//! `WHERE position IN (<matched>)` (`event_store.rs`'s `fetch_page`), and on a
-//! tagged query that wrapper materialises the matched set whatever this module
-//! emits. There it is the read path's floor: the correlated chain is worth 1.7x
-//! against 1,617x–1,681x on the guard.
+//! Both callers go through this module, and they ask different questions of it.
+//! The guard asks *"is there any matching position above the boundary?"* and
+//! takes `max(position)` over [`chunks`]. A paged read asks for **the next
+//! `budget` matching positions in order**, which is not a set operation at all,
+//! and [`page_statements`] is where that difference finally lives.
 //!
-//! One half of that is fixed and the other is not, and the line between them is
-//! whether the adapter has to *estimate* anything. When the chunk matches every
-//! event the wrapper is a tautology over the whole table, which is true by
-//! construction — [`matches_every_event`] says so and `fetch_page` omits it.
-//! What that was worth, and why, is on `matches_every_event` itself: the two
-//! cases do not even share a failure mode, so they do not share a paragraph.
+//! It used to be papered over: `fetch_page` took `chunks`' output and wrapped it
+//! in a second, uncorrelated `WHERE position IN (<matched>)`, so the matched set
+//! was produced in full and *then* paged. That is finding I-3, and it cost the
+//! read path everything the correlated chain won — 1.7x there against
+//! 1,617x–1,681x on the guard.
 //!
-//! For a **tagged** query the wrapper does materialise, and choosing between
-//! that and a per-row membership test is a genuine crossover — the replacement
-//! is 1,089x better on a query matching every event and 2.3x worse on one
-//! matching 1 in 97. Picking between them means the adapter changing its query
-//! plan on data it samples, which is ADR-0022's to decide and not this
-//! module's; `experiments/correlated-exists-guard/results/read-path.md` prices
-//! the candidates and `references/seeds/adr-0022-shipped-shape-drift.md`
-//! records what the decision is owed.
+//! Three replacements were measured before this one and each won at one end of
+//! some axis and lost at another, because all three still produced the matched
+//! set first. [`page_statements`] instead gives each arm the read's window,
+//! leaves the budget on the compound, and joins the result to `event` — which is
+//! the shape SQLite merges as co-routines with early termination. It wins
+//! sixteen cells out of sixteen across both of VT-23's arm-count floors, both
+//! selectivity extremes at each, both directions and three replay depths:
+//! `experiments/correlated-exists-guard/results/merge-join.md`.
+//!
+//! The merge is a **planner choice**, so it is asserted rather than assumed —
+//! see `page_statements`, and `event_store.rs`'s
+//! `the_page_plan_is_a_merge_and_not_a_sort`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -261,50 +264,242 @@ pub(crate) fn chunks(
     }
 }
 
-/// Whether a chunk built with these arguments matches **every** event in the
-/// log, so that a caller wrapping it in a membership test would be emitting a
-/// tautology.
+/// The read's own bounds, as the arms of a paged read can carry them.
 ///
-/// It answers for [`chunks`]'s arguments rather than for a `Query` alone,
-/// because the two conditions are not the same one. `Query::all` short-circuits
-/// to `SELECT position FROM event`, which is every position there is — but only
-/// while `bound` is `None`. With a boundary the same query becomes
-/// `… WHERE position > ?`, which is a real restriction and must keep its
-/// wrapper. A predicate that read only the `Query` would be right on the read
-/// path, wrong on the append path, and silently wrong rather than loudly.
+/// `fetch_page` used to apply all four of these *outside* the membership test —
+/// `AND position >= ? AND position <= ? ORDER BY … LIMIT ?` — where none of them
+/// could reach the arm that produced the matched set. That is finding I-3, and
+/// [`page_statements`] is where they go instead.
 ///
-/// # Why the read path asks, and what the wrapper actually costs
+/// `lo` and `hi` are in **position order**, not in read order: under `backwards`
+/// the caller's `resume_from` is the *upper* bound and `to` the lower one, and
+/// resolving that is the caller's job because only it knows which of `from`,
+/// `to` and the ceiling are present.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Window {
+    /// Inclusive lower bound in position order. `0` means the start of the log —
+    /// a position is a `NonZeroU64`, so the clause is then vacuous and is still
+    /// emitted, because an arm that carried the window on some reads and not
+    /// others would be two shapes wearing one name.
+    pub(crate) lo: i64,
+    /// Inclusive upper bound in position order. Always at least as tight as the
+    /// ceiling ADR-0011 requires, so ES-12 is discharged by this field and there
+    /// is deliberately no second mechanism for it.
+    pub(crate) hi: i64,
+    /// `min(remaining, PAGE_SIZE)` — the page budget, beneath
+    /// [`ReadOptions::limit`](happenstance_core::ReadOptions::limit) and never
+    /// equal to it.
+    pub(crate) budget: i64,
+    /// Whether the read runs newest-first, which decides both the compound's
+    /// `ORDER BY` and therefore *which* `budget` positions the merge keeps.
+    pub(crate) backwards: bool,
+}
+
+/// One statement per chunk for a paged read: the arms **merged**, not unioned
+/// into a set and then paged.
 ///
-/// `fetch_page` wraps each chunk in `WHERE position IN (<matched>)` and then
-/// appends its own `position >= ?` for `resume_from`. For `Query::all` the
-/// chunk is `SELECT position FROM event`, and the cost of that is **not** the
-/// materialisation it looks like: `position` is the rowid, so SQLite answers
-/// the `IN` with `USING ROWID SEARCH ON TABLE event FOR IN-OPERATOR` and drives
-/// the scan *from the subquery*, in its order, from its first row.
+/// # Why this is not `chunks` with a wrapper
 ///
-/// **That is where `resume_from` goes.** A range predicate on `position` can be
-/// pushed into a rowid range scan; it cannot be pushed into a search driven by
-/// an `IN` list, so every page re-walks the whole prefix of the log below its
-/// own starting point and discards it. The cost therefore grows with how far
-/// into a replay the page sits, which makes a full replay at least quadratic in
-/// the length of the log — and a replay is the commonest read in the library.
-/// Measured at 500,000 events, one 512-row page:
+/// The other three shapes this replaced all answer *"which positions match?"*
+/// and then take a page from the answer — materialising the matched set,
+/// testing it per row, or truncating it per arm. Each is best at one end of some
+/// axis, and every axis added produced a new crossover: selectivity in
+/// `results/read-path.md`, then arm count in `results/wide-arms.md`.
 ///
-/// | page | wrapped | omitted |
-/// | --- | ---: | ---: |
-/// | first | 122 µs | 100 µs |
-/// | half-way | 22,955 µs | 147 µs |
-/// | 90% in | 56,310 µs | 182 µs |
+/// A paged read does not ask that question. It asks for **the next `budget`
+/// matching positions in order**, and the answer to that is a merge of ordered
+/// streams with early termination. SQLite has one, for compound `SELECT`s:
 ///
-/// Omitting the wrapper needs no cardinality estimate and no sampling: the set
-/// is the whole table by construction. The tagged case is a different question
-/// — there the same wrapper really does materialise, and replacing it is a
-/// crossover rather than a win. This predicate deliberately does not try to
-/// answer that one; see
-/// `experiments/correlated-exists-guard/results/all-query-wrapper.md` for the
-/// table above and `.../results/read-path.md` for the crossover.
-pub(crate) fn matches_every_event(query: &Query, bound: Option<i64>) -> bool {
-    query.items().is_none() && bound.is_none()
+/// > An alternative method of computing a compound is to run each subquery as a
+/// > co-routine, arrange for their outputs to appear in sorted order, and merge
+/// > the results together. […] because the co-routine doesn't need to run to
+/// > completion before the outer query begins, the first rows appear sooner, and
+/// > if the overall query is abandoned before finishing, less work is done
+/// > overall.
+/// > — <https://sqlite.org/lang_select.html>
+///
+/// PostgreSQL's planner does the same thing under the name `MergeAppend`.
+/// Neither engine can be *asked* for it; the statement has to be shaped so that
+/// it is available, and three details are what make it so.
+///
+/// * **The `LIMIT` sits on the compound, once.** SQLite's grammar allows it
+///   nowhere else, and that restriction is the feature: a per-arm limit bounds
+///   the work at `budget × arms` — 65,536 rows at VT-23's 128-item floor — where
+///   the merge bounds it at `budget`.
+/// * **Each arm carries the window and no limit.** Without `position >= ?` every
+///   co-routine rewinds to the start of its tag range, so a page late in a
+///   replay pays for the whole prefix beneath it.
+/// * **`JOIN`, not `position IN (…)`.** An `IN` list is uncorrelated, so SQLite
+///   materialises the compound before emitting a row and the early exit is
+///   thrown away. That is finding I-3 exactly.
+///
+/// # The plan is a promise, and it is asserted
+///
+/// The merge is a *planner choice*. `EXPLAIN QUERY PLAN` says `MERGE (UNION)`
+/// when it is taken; a `USE TEMP B-TREE FOR ORDER BY` **inside the co-routine**
+/// means SQLite declined and the statement has quietly become a sort of the
+/// whole matched set — same rows, same order, and the cost class this function
+/// exists to avoid. `the_page_plan_is_a_merge_and_not_a_sort` in this module is
+/// what holds that, and it is the falsifier for the whole shape.
+///
+/// # Chunking is unchanged
+///
+/// A query wider than `max_arms` still becomes several statements merged by the
+/// caller, and each carries the full `budget`: the merged top *b* of a union is
+/// a subset of the union of the per-chunk tops. That argument is the same one
+/// that makes the compound's single `LIMIT` sound one level down.
+///
+/// Measured against the three shapes it replaces, sixteen cells out of sixteen:
+/// `experiments/correlated-exists-guard/results/merge-join.md`.
+pub(crate) fn page_statements(
+    query: &Query,
+    selectivity: &Selectivity,
+    max_arms: usize,
+    window: Window,
+    columns: &str,
+) -> Vec<(String, Vec<Value>)> {
+    let max_arms = max_arms.max(1);
+    let direction = if window.backwards { "DESC" } else { "ASC" };
+
+    // No items is every event, so there is no membership test to merge and the
+    // page is a bounded scan of `event` itself. Emitting the general shape here
+    // would join `event` to a subquery over `event` — finding I-3's tautology in
+    // a new costume.
+    let Some(items) = query.items() else {
+        return vec![(
+            format!(
+                "SELECT {columns} FROM event WHERE position >= ? AND position <= ? \
+                 ORDER BY position {direction} LIMIT ?"
+            ),
+            vec![
+                Value::Integer(window.lo),
+                Value::Integer(window.hi),
+                Value::Integer(window.budget),
+            ],
+        )];
+    };
+
+    items
+        .chunks(max_arms)
+        .map(|chunk| {
+            let mut params = Vec::new();
+            let compound = windowed_arms_sql(chunk, selectivity, window, &mut params);
+            let sql = format!(
+                "SELECT {} FROM event JOIN ({compound}) AS m \
+                 ON m.position = event.position ORDER BY event.position {direction}",
+                qualified(columns)
+            );
+            (sql, params)
+        })
+        .collect()
+}
+
+/// The compound [`page_statements`] merges: one windowed arm per item, `UNION`ed,
+/// with the budget on the compound.
+///
+/// `UNION` rather than `UNION ALL` because two items may match one event and the
+/// page must not carry it twice. The merge deduplicates as it goes, which is why
+/// that costs nothing here and a `DISTINCT` would.
+fn windowed_arms_sql(
+    items: &[QueryItem],
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    let direction = if window.backwards { "DESC" } else { "ASC" };
+    let arms = if items.is_empty() {
+        // Unconstructable — `Query::from_items` refuses an empty list — but a
+        // `SELECT` with no arms is a syntax error rather than an empty result,
+        // so the case is spelled rather than assumed.
+        "SELECT position FROM event WHERE 0".to_owned()
+    } else {
+        items
+            .iter()
+            .map(|item| windowed_item_sql(item, selectivity, window, params))
+            .collect::<Vec<_>>()
+            .join(" UNION ")
+    };
+    params.push(Value::Integer(window.budget));
+    format!("{arms} ORDER BY position {direction} LIMIT ?")
+}
+
+/// One arm of the compound: [`item_sql`]'s shape with the window and no limit.
+///
+/// The parameter order is the textual order of the `?`s and nothing else — seed
+/// tag, types, `lo`, `hi`, chained tags. Getting that wrong binds a tag string
+/// to a position comparison, which is not an error and not a wrong plan: it is
+/// zero rows.
+fn windowed_item_sql(
+    item: &QueryItem,
+    selectivity: &Selectivity,
+    window: Window,
+    params: &mut Vec<Value>,
+) -> String {
+    let tags = selectivity.most_selective_first(distinct_tags(item));
+    let types = item.types();
+
+    if tags.is_empty() {
+        let mut sql =
+            String::from("SELECT position FROM event WHERE position >= ? AND position <= ?");
+        params.push(Value::Integer(window.lo));
+        params.push(Value::Integer(window.hi));
+        if !types.is_empty() {
+            for event_type in types {
+                params.push(Value::Text(event_type.as_str().to_owned()));
+            }
+            write!(sql, " AND event_type IN ({})", placeholders(types.len()))
+                .expect("writing to a String cannot fail");
+        }
+        return sql;
+    }
+
+    let mut sql =
+        String::from("SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ?");
+    params.push(Value::Text(tags[0].clone()));
+    if !types.is_empty() {
+        for event_type in types {
+            params.push(Value::Text(event_type.as_str().to_owned()));
+        }
+        write!(
+            sql,
+            " AND seed.event_type IN ({})",
+            placeholders(types.len())
+        )
+        .expect("writing to a String cannot fail");
+    }
+
+    // The window on the seed, which is what turns
+    // `SEARCH seed USING PRIMARY KEY (tag=?)` into
+    // `(tag=? AND position>? AND position<?)` — a seek into the interior of one
+    // contiguous `(tag, position)` range rather than a walk from its start.
+    params.push(Value::Integer(window.lo));
+    params.push(Value::Integer(window.hi));
+    sql.push_str(" AND seed.position >= ? AND seed.position <= ?");
+
+    for (index, tag) in tags[1..].iter().enumerate() {
+        params.push(Value::Text(tag.clone()));
+        write!(
+            sql,
+            " AND EXISTS (SELECT 1 FROM event_tag AS m{index} WHERE m{index}.tag = ? \
+             AND m{index}.position = seed.position)"
+        )
+        .expect("writing to a String cannot fail");
+    }
+    sql
+}
+
+/// A comma-separated column list with every name prefixed by `event.`.
+///
+/// The join puts two `position` columns in scope and a bare one is
+/// `ambiguous column name: position` — a *prepare* error, so it surfaces as a
+/// failure rather than as a wrong answer, which is the only reason this is safe
+/// to do by string manipulation.
+fn qualified(columns: &str) -> String {
+    columns
+        .split(',')
+        .map(|column| format!("event.{}", column.trim()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The `UNION` of one arm per item.
@@ -453,7 +648,9 @@ pub(crate) fn placeholders(n: usize) -> String {
 mod tests {
     use happenstance_core::{Query, QueryItem, Tags};
 
-    use super::{Selectivity, chunks, matches_every_event};
+    use super::{Selectivity, Value, Window, chunks, page_statements};
+
+    const COLUMNS: &str = "position, event_type";
 
     fn tagged_query() -> Query {
         let tags = Tags::from_pairs([("subject", "s1")]).expect("two non-empty strings");
@@ -461,51 +658,136 @@ mod tests {
             .expect("a non-empty item list")
     }
 
-    /// The predicate and the SQL it speaks for are one fact, so they are
-    /// asserted together.
-    ///
-    /// `matches_every_event` is true exactly when `chunks` emits the
-    /// unrestricted `SELECT position FROM event`. Asserting only the boolean
-    /// would let the two drift: someone tightening that chunk to carry a
-    /// predicate of its own would leave `fetch_page` omitting a wrapper the
-    /// plan had come to need, and every test of read *behaviour* would still
-    /// pass, because a redundant wrapper is invisible and a missing one is not.
-    #[test]
-    fn an_unbounded_all_query_is_every_event_and_says_so_in_sql() {
-        let query = Query::all();
-        let plan = chunks(&query, &Selectivity::default(), 8, None);
+    fn window() -> Window {
+        Window {
+            lo: 7,
+            hi: 900,
+            budget: 512,
+            backwards: false,
+        }
+    }
 
-        assert!(matches_every_event(&query, None));
+    /// A read over every event joins nothing: it is a bounded scan of `event`.
+    ///
+    /// The general shape would join `event` to a compound over `event`, which is
+    /// finding I-3's tautology in a new costume — the wrapper removed from the
+    /// outside and reintroduced as a self-join.
+    #[test]
+    fn an_all_query_pages_without_a_join() {
+        let plan = page_statements(&Query::all(), &Selectivity::default(), 8, window(), COLUMNS);
+
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].0, "SELECT position FROM event");
-        assert!(plan[0].1.is_empty());
+        assert_eq!(
+            plan[0].0,
+            "SELECT position, event_type FROM event \
+             WHERE position >= ? AND position <= ? ORDER BY position ASC LIMIT ?"
+        );
+        assert_eq!(plan[0].1.len(), 3);
     }
 
-    /// The wrong implementation this predicate exists to reject: one that reads
-    /// only the `Query`.
+    /// The three details that make the merge available, asserted as text
+    /// because each is invisible in a result and decisive in a plan.
     ///
-    /// `Query::all` under a guard is `position > ?` — a real restriction. A
-    /// caller that dropped its membership test on the strength of the query
-    /// alone would be probing the whole log against a boundary it had stopped
-    /// applying, and that is an **accepted append that should have been
-    /// rejected**, not a slow read.
+    /// `the_page_plan_is_a_merge_and_not_a_sort` in `event_store.rs` asserts
+    /// that SQLite then *takes* the merge. This one asserts that it was offered.
     #[test]
-    fn a_boundary_makes_the_same_query_a_restriction() {
-        let query = Query::all();
-        let plan = chunks(&query, &Selectivity::default(), 8, Some(41));
+    fn a_tagged_page_carries_the_window_per_arm_and_the_budget_on_the_compound() {
+        let plan = page_statements(
+            &tagged_query(),
+            &Selectivity::default(),
+            8,
+            window(),
+            COLUMNS,
+        );
 
-        assert!(!matches_every_event(&query, Some(41)));
-        assert_eq!(plan[0].0, "SELECT position FROM event WHERE position > ?");
-        assert_eq!(plan[0].1.len(), 1);
+        assert_eq!(plan.len(), 1);
+        let sql = &plan[0].0;
+
+        // The window is on the arm, where the index can use it.
+        assert!(
+            sql.contains("seed.position >= ? AND seed.position <= ?"),
+            "the arm lost its window: {sql}"
+        );
+        // The budget is on the compound, once. A per-arm `LIMIT` would bound the
+        // work at `budget x arms` and cost the merge — measured at 17x-48x on a
+        // broad 128-item query in `results/merge-join.md`.
+        assert_eq!(sql.matches(" LIMIT ?").count(), 1, "{sql}");
+        assert!(sql.contains("ORDER BY position ASC LIMIT ?"), "{sql}");
+        // A join, not a membership test. `IN` would materialise the compound
+        // before emitting a row and throw the early exit away.
+        assert!(
+            sql.contains(") AS m ON m.position = event.position"),
+            "{sql}"
+        );
+        assert!(!sql.contains("position IN ("), "{sql}");
+        // Qualified, because the join puts two `position` columns in scope.
+        assert!(sql.starts_with("SELECT event.position, event.event_type FROM event JOIN ("));
     }
 
-    /// A tagged query is a restriction under either bound. This is the case the
-    /// read path's crossover is about, and it stays wrapped deliberately.
+    /// Backwards flips both orderings together, and that is the whole of it.
+    ///
+    /// The arm's direction decides *which* `budget` positions the merge keeps.
+    /// An arm ordered `ASC` under a compound ordered `DESC` keeps the oldest
+    /// rather than the newest and returns a page that is **short** rather than
+    /// obviously wrong — which is why there is one `backwards` field and not
+    /// two.
     #[test]
-    fn a_tagged_query_is_never_every_event() {
-        let query = tagged_query();
+    fn backwards_orders_the_compound_and_the_page_alike() {
+        let mut window = window();
+        window.backwards = true;
+        let plan = page_statements(&tagged_query(), &Selectivity::default(), 8, window, COLUMNS);
 
-        assert!(!matches_every_event(&query, None));
-        assert!(!matches_every_event(&query, Some(0)));
+        let sql = &plan[0].0;
+        assert!(sql.contains("ORDER BY position DESC LIMIT ?"), "{sql}");
+        assert!(sql.ends_with("ORDER BY event.position DESC"), "{sql}");
+        assert_eq!(sql.matches("ASC").count(), 0, "{sql}");
+    }
+
+    /// A query wider than the pushdown limit becomes several statements, each
+    /// carrying the **whole** budget.
+    ///
+    /// Not a share of it: the merged top *b* of a union is a subset of the union
+    /// of the per-chunk tops, so a chunk given `budget / n` could drop a row the
+    /// page needed whenever the matches are unevenly spread across chunks.
+    #[test]
+    fn a_wide_query_chunks_and_every_chunk_keeps_the_full_budget() {
+        let items = (0..5)
+            .map(|index| {
+                let value = format!("s{index}");
+                let tags =
+                    Tags::from_pairs([("subject", value.as_str())]).expect("non-empty strings");
+                QueryItem::tagged(tags).expect("a non-empty tag set")
+            })
+            .collect::<Vec<_>>();
+        let query = Query::from_items(items).expect("a non-empty item list");
+
+        let plan = page_statements(&query, &Selectivity::default(), 2, window(), COLUMNS);
+
+        assert_eq!(plan.len(), 3);
+        for (sql, params) in &plan {
+            assert_eq!(sql.matches(" LIMIT ?").count(), 1, "{sql}");
+            assert_eq!(params.last(), Some(&Value::Integer(512)), "{sql}");
+        }
+    }
+
+    /// The guard path is untouched by any of this, and its boundary still
+    /// reaches SQLite.
+    ///
+    /// `Query::all` under a guard is `position > ?` — a real restriction, not a
+    /// tautology. A change that treated the two paths alike would drop that
+    /// boundary, and the result is an **accepted append that should have been
+    /// rejected** rather than a slow read.
+    #[test]
+    fn the_guard_still_binds_its_boundary() {
+        let unbounded = chunks(&Query::all(), &Selectivity::default(), 8, None);
+        assert_eq!(unbounded[0].0, "SELECT position FROM event");
+        assert!(unbounded[0].1.is_empty());
+
+        let bounded = chunks(&Query::all(), &Selectivity::default(), 8, Some(41));
+        assert_eq!(
+            bounded[0].0,
+            "SELECT position FROM event WHERE position > ?"
+        );
+        assert_eq!(bounded[0].1.len(), 1);
     }
 }

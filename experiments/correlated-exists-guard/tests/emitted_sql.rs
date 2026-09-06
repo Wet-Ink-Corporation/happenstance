@@ -18,9 +18,16 @@
 //! 2. **The paged read statement, captured rather than written out.**
 //!    `tests/query_plan.rs` explains and times the statement `fetch_page` emits
 //!    at page 1,000; taking it from a trace rather than from a string literal is
-//!    what makes the plan a plan *of the shipped read*. Page 1 differs from every
-//!    later page — it carries no `resume_from` — so the steady-state statement is
-//!    page 2's, and this file asserts page 2 and page 3 are one string.
+//!    what makes the plan a plan *of the shipped read*.
+//!
+//!    **Every page is now one string, page 1 included.** It used not to be:
+//!    `resume_from` was a clause the first page omitted, so the first statement
+//!    differed from every later one and the steady state was page 2. The merge
+//!    shape carries the window as a field with `lo = 0` when there is nothing to
+//!    resume from — a position is a `NonZeroU64`, so the clause is vacuous
+//!    rather than absent — and an arm that carried the window on some pages and
+//!    not others would be two shapes wearing one name. This file asserts the
+//!    stronger property that replaced the old one.
 //!
 //! It is a **debug** target on purpose. It reads SQL rather than a clock, so a
 //! release build would buy nothing and the `run.sh` step that runs it is the one
@@ -228,7 +235,7 @@ async fn the_adapter_emits_the_chain_this_crate_transcribes() {
     }
     assert_eq!(drained, EVENTS, "the whole log must come back");
 
-    let pages = traced("FROM event WHERE position IN");
+    let pages = traced("FROM event WHERE position >=");
     println!();
     println!(
         "== the statements a paged Query::all replay emits ({} pages) ==",
@@ -242,17 +249,79 @@ async fn the_adapter_emits_the_chain_this_crate_transcribes() {
         "{EVENTS} events at {PAGE} a page is three statements, not {}",
         pages.len()
     );
-    assert_ne!(
+    assert_eq!(
         pages[0], pages[1],
-        "page 1 carries no `resume_from`, so it must differ from page 2"
+        "page 1 must be the same string as page 2: the window is a field with a          vacuous lower bound, not a clause the first page omits"
     );
     assert_eq!(
         pages[1], pages[2],
-        "every page after the first must be one string; only the bound values move"
+        "every page must be one string; only the bound values move"
     );
     println!();
-    println!("== the steady-state page statement (page 2 == page 1,000) ==");
+    println!("== the page statement (page 1 == page 2 == page 1,000) ==");
     println!("{}", pages[1]);
+
+
+    // ---- 3. the paged read of a *tagged* query --------------------------------
+    //
+    // Section 2 traces `Query::all`, which the adapter serves with a bounded
+    // scan and no join at all — so it says nothing about the shape everything
+    // in `results/merge-join.md` is about. This traces a two-tag read and
+    // asserts the three properties that make SQLite's co-routine merge
+    // available, on the statement the running store actually prepared.
+    //
+    // The unit tests in `query_sql.rs` assert the same three on
+    // `page_statements`' output. What they cannot see is `page_window` — the
+    // step that resolves `resume_from`, `to`, the ceiling and the direction
+    // into the window — so a bug there would leave every unit test green and
+    // every figure in `results/` about SQL the adapter does not emit. That gap
+    // is the only reason this file exists.
+
+    log().lock().expect("the log").clear();
+    let tagged = query_of(&[seed::SEED_TYPE], &[("shard", "cold"), ("row", "r7")]);
+    {
+        use futures_core::Stream;
+        let stream = EventStore::read(&store, &tagged, ReadOptions::default());
+        let mut stream = core::pin::pin!(stream);
+        let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+        loop {
+            match Stream::poll_next(stream.as_mut(), &mut context) {
+                core::task::Poll::Ready(Some(item)) => {
+                    item.expect("every row must decode");
+                }
+                core::task::Poll::Ready(None) => break,
+                core::task::Poll::Pending => tokio::task::yield_now().await,
+            }
+        }
+    }
+
+    let tagged_pages = traced("FROM event JOIN (");
+    println!();
+    println!("== the statement a paged two-tag read emits ==");
+    let page = tagged_pages
+        .first()
+        .expect("a tagged read must emit at least one page statement");
+    println!("{page}");
+
+    // The window is on the arm, where `(tag, position)` can use both columns.
+    assert!(
+        page.contains("seed.position >= ? AND seed.position <= ?"),
+        "the arm lost its window, so every co-routine rewinds to the start of \
+         its tag range: {page}"
+    );
+    // The budget is on the compound, once. A per-arm limit bounds the work at
+    // `budget x arms` and costs the merge — 17x-48x on a broad 128-item query.
+    assert_eq!(
+        page.matches(" LIMIT ?").count(),
+        1,
+        "the budget must sit on the compound and nowhere else: {page}"
+    );
+    // A join, not a membership test: `IN` materialises the compound before
+    // emitting a row, which is finding I-3.
+    assert!(
+        !page.contains("position IN ("),
+        "the outer wrapper is back: {page}"
+    );
 
     drop(store);
     remove(&path);

@@ -12,7 +12,7 @@ are kept because they are how this shape was found.
 
 ## What was wrong with the previous three candidates
 
-All of them — `in-exists` (what ships), `wrapper-exists` and
+All of them — `in-exists` (what shipped until this page), `wrapper-exists` and
 `windowed-in-exists` — answer *"which positions match?"* by producing the whole
 matched set and then taking a page from it. They differ only in what they do
 with that set: materialise it, test it per row, or truncate it per arm. That is
@@ -70,7 +70,7 @@ sort of the whole matched set. That is the observable to assert on.
 
 ## One arm — `windowed-arms.md`'s two corpora, 500,000 events
 
-| corpus | cell | `in-exists` (ships) | `wrapper-exists` | `windowed` | **`merge-join`** |
+| corpus | cell | `in-exists` (was shipping) | `wrapper-exists` | `windowed` | **`merge-join`** |
 | --- | --- | ---: | ---: | ---: | ---: |
 | selective | first page | 24,665 | 54,872 | 5,582 | **4,669** |
 | selective | mid-replay | 39,030 | 55,801 | **4,131** | 4,872 |
@@ -83,7 +83,7 @@ sort of the whole matched set. That is the observable to assert on.
 
 ## 128 arms — `wide-arms.md`'s two queries, VT-23's floor
 
-| query | cell | `in-exists` (ships) | `wrapper-exists` | `windowed` | **`merge-join`** |
+| query | cell | `in-exists` (was shipping) | `wrapper-exists` | `windowed` | **`merge-join`** |
 | --- | --- | ---: | ---: | ---: | ---: |
 | partition-128 | first page | 654,774 | 87,479 | 326,473 | **7,985** |
 | partition-128 | mid-replay | 636,387 | 91,047 | 313,745 | **7,011** |
@@ -125,15 +125,31 @@ The residue is arm count: 128 co-routines cost about 1.6x one co-routine
 (12,175 against 4,669 on comparable selective cells). That is a bounded,
 predictable, monotone cost with no crossing.
 
-## 3. What it costs the adapter
+## 3. What it costs the adapter — and what it cost, now that it has shipped
 
-`query_sql::chunks` must take the read's window, direction and budget, which only
-the read path has — the guard takes `max(position)` over the matched set and has
-no window at all. The two callers of the module they deliberately share stop
-passing the same shape of argument.
+**This shipped.** `query_sql` gained `Window` and `page_statements`; `chunks`
+is now the guard's alone. The two callers of the module they deliberately share
+stopped passing the same shape of argument, which is the seam cost this section
+predicted, and `fetch_page`'s own
+`WHERE position IN (…) AND position >= ? … LIMIT ?` disappeared into the
+compound rather than being replaced.
 
-`fetch_page`'s own `WHERE position >= ? AND position <= ? … LIMIT ?` disappears
-into the compound, so the wrapper stops existing rather than being replaced.
+Two assertions came with it, because the merge is a planner choice and the
+statement stays *correct* when the planner declines:
+
+* `event_store.rs`'s `the_page_plan_is_a_merge_and_not_a_sort` walks the plan's
+  parent chain and fails if a sorter sits **beneath the co-routine**. A
+  `USE TEMP B-TREE FOR ORDER BY` at the top level is expected — it orders at most
+  `budget` joined rows, because SQLite does not know a co-routine's order
+  survives a join — so grepping the plan would have asserted nothing.
+* `every_arm_seeks_into_its_tag_range_rather_than_rewinding` fails if an arm
+  reaches the index by `tag` alone.
+
+`tests/emitted_sql.rs` in this crate traces the statement off a **running**
+store, which is the only thing that covers `page_window` — the step that
+resolves `resume_from`, `to`, the ceiling and the direction into the window, and
+the one place a bug would leave every unit test green and every figure here
+about SQL the adapter does not emit.
 
 ## What this page does not show
 
