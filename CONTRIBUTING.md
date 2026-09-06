@@ -23,6 +23,28 @@ the conformance suite, which is the exact condition its banner had named.
 ADR-0003 and ADR-0004 still carry theirs. Do not let an unpublished API surface, or an
 MSRV nobody depends on, decide a design question on its own.
 
+## One thing to get right before you clone, on Windows
+
+**Clone to a short path.** `D:\hs` is fine; a checkout nested a few levels under
+your user profile is not.
+
+`experiments/` carries result transcripts whose filenames encode the condition
+that produced them, and the longest of them is around 100 characters. Under
+Windows' default 260-character path limit that leaves very little room for the
+directory above it, and the failure is not a warning:
+
+```text
+error: unable to create file experiments/busy-timeout-margin/results/raw/waits/
+waits-headroom-c20-n96-begin-immediate-probe-positions_are_unique_under_concurrent_appends.txt:
+Filename too long
+fatal: Could not reset index file to revision 'HEAD'
+```
+
+That is a `git worktree add` into a path that was merely *deepish*, and it leaves
+a half-populated tree behind. `git config --global core.longpaths true` also
+fixes it, and is the better fix if you already have the checkout where you want
+it. Linux and macOS are unaffected.
+
 ## The gate
 
 ```console

@@ -1,0 +1,89 @@
+name: A conformance rule is wrong, or my adapter cannot pass it
+description: >-
+  The suite rejects an implementation you believe is correct, or demands
+  something the storage cannot do.
+labels: ["conformance"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        This is the report the project most wants and is least likely to get on
+        its own. `happenstance-testkit` decides whether an adapter is safe to
+        depend on, and the four implementations in this workspace all serialise
+        their writers and assign positions under a lock — four adapters, one
+        storage shape. A rule frozen against that is frozen against SQLite
+        wearing four hats, and the only thing that finds it is a store at the
+        other end of an axis.
+
+
+        **If instead you have found a rule that a *broken* store passes**, that
+        is a vulnerability under `SECURITY.md` — report it privately.
+
+  - type: input
+    id: rule
+    attributes:
+      label: Rule name
+      description: As the suite prints it.
+      placeholder: read_to_composes_with_limit
+    validations:
+      required: true
+
+  - type: input
+    id: family
+    attributes:
+      label: Family
+      description: event store, projection store, model, or concurrency.
+      placeholder: event store
+    validations:
+      required: true
+
+  - type: textarea
+    id: storage
+    attributes:
+      label: What is underneath your adapter
+      description: >-
+        The axis matters more than the product name. Does it serialise writers?
+        Does it assign positions inside the transaction that commits them? Is
+        there an interactive transaction at all, or is each statement a
+        round trip? Can it hold a cursor?
+    validations:
+      required: true
+
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Fixture capabilities
+      description: >-
+        What your `Fixture` declares for `SECOND_HANDLE` and `REOPEN`, and the
+        reason it gives for declining either. A declined capability still runs
+        the rule and reports your stated reason, so the reason is part of the
+        report.
+    validations:
+      required: true
+
+  - type: textarea
+    id: argument
+    attributes:
+      label: Why you believe the rule is wrong
+      description: >-
+        The most useful shape is: here is an implementation that is correct by
+        the specification's own clauses and fails this rule. The second most
+        useful is: here is what the rule demands, here is why this storage
+        cannot do it, and here is what it can guarantee instead.
+
+
+        Please name the clause the rule claims to check. If the rule and the
+        clause disagree, that is a finding regardless of which one is wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: wrong_implementation
+    attributes:
+      label: What a fixed rule should still reject
+      description: >-
+        Optional, and disproportionately valuable. A rule that no adapter can
+        fail is decorative — so if the rule is loosened, something has to stay
+        forbidden. Naming that something is most of the work of the fix.
+    validations:
+      required: false
