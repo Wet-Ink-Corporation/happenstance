@@ -180,7 +180,7 @@ holds.
 question, answered per port.** The two coincide in §3 and come apart in §4, and
 the difference is deliberate rather than an inconsistency:
 
-- `EventStore` ships stable at 0.1, so a `[FROZEN]` `ES` clause is semver-binding
+- `EventStore` ships stable at `0.2.0`, so a `[FROZEN]` `ES` clause is semver-binding
   as well as decision-binding.
 - `ProjectionStore` does not. PS-2 forbids freezing the port until a hostile store
   has been failed and two adapters at opposite ends of the batch-shape axis have
@@ -582,9 +582,9 @@ in `crates/happenstance-core/tests/wire.rs` rather than rules in
 `happenstance-testkit`. They are no less binding; they are simply in the only
 place that can fail them.
 
-**Nothing is published.** `happenstance-core` has never been released, so every
-signature change below costs nothing but the edit. Where a clause reverses a
-decision recorded in the code, it says so.
+**`0.2.0` is published.** `happenstance-core` is on crates.io, so a signature
+change below now costs a version bump and a changelog entry rather than only the
+edit. Where a clause reverses a decision recorded in the code, it says so.
 
 ---
 

@@ -31,7 +31,7 @@ crates/happenstance-core/        the contract. types, ports, errors, in-memory s
 crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
-crates/happenstance-cloudflare/  🔩 skeleton. the workspace's only !Send store. wasm32.
+crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
 crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
@@ -92,7 +92,9 @@ RUNBOOK.md                       the plan of record, and how far it has got.
 false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
 A skeleton exists to be disagreed with by a type checker — it is an *instrument*
 first and a target second, and it is not an adapter until it has run the
-conformance suite. None of them has.
+conformance suite. **Two have stopped being skeletons**: `happenstance-sqlite` at
+phase 8 and `happenstance-cloudflare` at phase 9, and both are published. The
+four that carry the marker above have not, and the marker is the claim.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
@@ -211,12 +213,15 @@ code around it.
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
-   **weigh the floor, do not obey it.** Nothing is published, so no downstream
-   consumer is pinned to anything, and ADR-0004 carries a **provisional** marker
-   for exactly that reason — it loses the marker at phase 12, when first publish
-   turns the MSRV into a promise. Raising it was a deliberate trade recorded in
-   an ADR, which is what the old text asked for; what stays forbidden is moving
-   it in silence.
+   **weigh the floor, and from `0.2.0` it is also a promise.** The old text here
+   said *"nothing is published, so no downstream consumer is pinned to anything"*,
+   and that was ADR-0004's whole reason for carrying a **provisional** marker.
+   `0.2.0` is what the marker named as its own end: five crates are on crates.io,
+   consumers are pinned, and raising the floor is now a breaking change that
+   needs a decision record rather than a commit message. Raising it at phase 2
+   was a deliberate trade recorded in an ADR, which is what the old text asked
+   for; what stays forbidden is moving it in silence, and the bar for moving it
+   at all is higher than it was.
 
    Two things follow that are easy to miss. The MSRV now **equals**
    `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two
