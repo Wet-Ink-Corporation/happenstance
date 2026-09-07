@@ -665,7 +665,7 @@ seventeen.
 | Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
 | A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
-| The guaranteed minimum tag count | CF-40 | a domain event legitimately carrying more than 64 tags. The richest event in the six scenarios is Wattline's `SessionStarted`, at eight | **owed.** The clause's marker names no phase and `.kb/open-questions/cf-40-fixture-limits-ownership.md` is the standing record. Assigning it is one of the decisions this table's repair surfaces rather than settles |
+| A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
 | Durability's rule shape; benchmarks are not conformance | CF-17, CF-34 | a store that loses an acknowledged write, and an adapter that scans where it should seek and passes every rule | 8 |
 | **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store that self-paginates; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
 
@@ -711,9 +711,16 @@ needs `dyn EventStore` the E11 erasure wrapper cannot box, so the marker was
 **earned off rather than allowed to expire** and the clause is `[FROZEN]`. The
 count above is 46 rather than 47 for that reason.
 
-**One row is still owed.** CF-40's marker names no phase; assigning it is a
-decision this repair surfaces rather than settles, and
-`.kb/open-questions/cf-40-fixture-limits-ownership.md` is the standing record.
+**Every row names an owner.** The first pass at this repair recorded CF-40 as
+owed one, and that was an error in the repair rather than a gap in the
+specification: CF-40's clause is written as `**CF-40.**` in §6 rather than under
+a `####` heading, so a search that assumed the heading form found the *nearest
+marker after a mention of it* — VT-22's, three thousand lines away — and copied
+that clause's falsifier and its silence about phases. CF-40's own marker names
+phases 9 and 10 explicitly. Corrected here, and worth leaving on the record:
+a clause written in a different shape from its neighbours is exactly what a
+mechanical read gets wrong, and the anchor discipline the citation checkers
+enforce exists for the same reason.
 
 ### The blocked cases
 
