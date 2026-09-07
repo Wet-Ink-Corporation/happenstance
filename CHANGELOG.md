@@ -75,6 +75,48 @@ not the same as what a user needed to be told.
   that crate catches it in one line. That is a different limitation from the poll
   count, it belongs to ADR-0024, and it is written down rather than absorbed.
 
+- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` carries
+  `#[non_exhaustive]`, so it can be matched downstream but not built.** This
+  settles the question the `to` entry below left open in terms — *"whether the
+  variant should also carry `#[non_exhaustive]` … is deliberately not settled
+  here; it belongs with the crate's public surface at first publish"*. This is
+  that publish, and the answer is yes.
+
+  The evidence is the entry below rather than a preference. `Op::Read` mirrors
+  `ReadOptions` option-for-option; `ReadOptions` is `#[non_exhaustive]` and grew
+  `to` at phase 4 without breaking anyone, while this variant grew the same
+  field and broke every downstream construction and struct pattern. `limit`'s
+  own documentation already names the next widening (VT-28), so the hole was
+  left open with the next break visible through it.
+
+  **The attribute is on the variant, not on `Op`, and that distinction is the
+  reason it is defensible.** `standards/rust/13-sealing-and-exhaustiveness.md`'s
+  RS-13-5 forbids `#[non_exhaustive]` on an enum designed not to grow, because
+  it costs every downstream `match` a `_ =>` arm forever and permanently stops
+  the compiler reporting a variant somebody forgot. `Op` is exactly such an
+  enum — its own documentation argues a fourth variant out of existence — and it
+  carries no attribute, so a downstream `match` over the three stays exhaustive
+  and still breaks the day a fourth arrives. Variant-level costs a `..` in one
+  arm and buys field additivity.
+
+  What breaks: a downstream `Op::Read { … }` construction is now
+  `error[E0639]`, and a downstream struct pattern must carry `..`. Neither
+  affects matching or field access. There is **no** constructor to replace the
+  struct expression, deliberately: nobody has been shown to build an `Op` by
+  hand, and the generator is the only thing that ever has. If that turns out to
+  be wrong the constructor is additive and can arrive at any minor.
+
+  The seal is compiled rather than asserted, and it had to be compiled
+  *downstream* — `#[non_exhaustive]` is inert inside the crate that defines it,
+  so no test in `happenstance-testkit` can fail this. It lives in
+  `happenstance-sqlite`, the first crate downstream of the testkit that mounts
+  the model family, as a `compile_fail` doctest paired with a twin that must
+  compile — the same pairing `happenstance-testkit` already uses for
+  `happenstance_core`'s `Query::Items`, and for the same measured reason: a bare
+  `compile_fail` passes when the snippet fails to compile for *any* reason. The
+  block was additionally compiled as an ordinary test to confirm `E0639` is the
+  only error it produces.
+
 ## [0.2.0] — 2026-09-06
 
 The first stable release, and the first to carry all five crates. What the
@@ -1108,7 +1150,9 @@ is no upgrade path from it because there was never anything under it.
   should also carry `#[non_exhaustive]` — so that the *next* field is not a
   second break — is deliberately not settled here; it belongs with the crate's
   public surface at first publish, and a brief for it is staged in
-  `.kb/_intake/`.
+  `.kb/_intake/`. **It was settled before this version left the tree: see the
+  `#[non_exhaustive]` entry above, which takes the attribute and cites this
+  paragraph as its evidence.**
 
   The `to` bound is generated weighted towards absent, four reads in five, and
   that weighting is measured rather than tidy: sampling it the way the other

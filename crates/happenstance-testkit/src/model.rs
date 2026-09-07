@@ -174,6 +174,34 @@ pub enum Op {
     /// wrong store this file could not disagree with, `WHERE a OR b AND position
     /// <= ?`, is registered as `UnparenthesisedToPredicateStore` and is what
     /// closing this bought.
+    ///
+    /// `#[non_exhaustive]` on the **variant**, so no downstream crate can build
+    /// one directly and a downstream `match` must carry `..`. It landed in the
+    /// release after `to` did, and deliberately not before: `to`'s arrival is
+    /// the evidence for it. `ReadOptions` upstream is `#[non_exhaustive]` and
+    /// grew `to` at phase 4 without breaking anybody; this variant mirrors that
+    /// type option-for-option, did not carry the attribute, and so took the
+    /// break `ReadOptions` was spared. `limit`'s own note below already names
+    /// the next widening (VT-28), which is the same hole staying open.
+    ///
+    /// **This is not the thing [RS-13-5] forbids, and the distinction is the
+    /// whole reason it is here rather than on `Op`.** That rule is about an
+    /// *enum* designed not to grow, and `Op` is exactly that — its own doc
+    /// above says the three are the whole of the port's surface and argues a
+    /// fourth out of existence. Enum-level would cost every downstream `match`
+    /// a `_ =>` arm forever, and permanently stop the compiler reporting a
+    /// variant nobody will add. Variant-level costs a `..` in one arm and buys
+    /// the field additivity the variant demonstrably needs. Matching stays
+    /// legal; construction does not.
+    ///
+    /// **Downstream, the struct spelling is the only one that matches**, the
+    /// same way it is for [`Query::Items`] — though the `E0603` edge that rule
+    /// records does not arise here, because this is a struct-form variant and
+    /// has no tuple constructor to be made private.
+    ///
+    /// [RS-13-5]: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/standards/rust/13-sealing-and-exhaustiveness.md
+    /// [`Query::Items`]: happenstance_core::Query::Items
+    #[non_exhaustive]
     Read {
         /// What to match.
         query: Query,

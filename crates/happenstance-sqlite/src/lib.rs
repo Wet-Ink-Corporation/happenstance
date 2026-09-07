@@ -211,3 +211,90 @@ pub use happenstance_core;
 /// ```
 #[cfg(doctest)]
 mod reexported_paths {}
+
+/// Compiled proof that [`Op::Read`] cannot be built from outside the testkit,
+/// and can still be matched.
+///
+/// **Why here rather than in `happenstance-testkit`.** `#[non_exhaustive]` is
+/// inert inside the crate that defines it, so the testkit's own tests cannot
+/// fail this and never could — the same reason `happenstance-testkit` hosts the
+/// equivalent proof for `happenstance_core`'s `Query::Items` rather than
+/// `happenstance-core` doing it. This crate is the first one downstream of the
+/// testkit that mounts the model family
+/// (`tests/conformance.rs:102`), so it is where the seal is real.
+///
+/// **What the seal is for.** `Op` is the model family's alphabet, and a
+/// downstream crate building an `Op::Read` by hand is building an operation the
+/// generator's weighting never produced and the model was never checked
+/// against — a `Model::apply` answer nobody has a reason to trust, reported as
+/// a conformance result. The variant is also the one that demonstrably grows:
+/// `to` arrived at the `0.2.0` pass and `limit`'s own documentation already
+/// names VT-28 as the next widening. Sealing it makes that growth additive,
+/// which is what `ReadOptions` upstream has had since phase 4 and what this
+/// variant, mirroring it option-for-option, did not.
+///
+/// **Rejects:** an `Op::Read` without `#[non_exhaustive]`. Strike the attribute
+/// and the first block below compiles, so the test fails with *"Test compiled
+/// successfully, but it's marked `compile_fail`"*.
+///
+/// ```compile_fail
+/// use happenstance_core::Query;
+/// use happenstance_testkit::model::{Anchor, Op};
+///
+/// let op = Op::Read {
+///     query: Query::all(),
+///     from: Anchor::Unset,
+///     to: Anchor::Head,
+///     backwards: false,
+///     limit: None,
+/// };
+/// assert!(matches!(op, Op::Read { .. }));
+/// ```
+///
+/// The **twin** is the same block with the one refused expression removed, and
+/// it must compile. Every name in the snippet above appears in it — `Query`,
+/// `Anchor`, `Op`, the module path, all five field names in the pattern — so a
+/// renamed item, a moved module or a feature that stopped being forwarded
+/// breaks the twin, and a broken twin is a hard failure rather than a quietly
+/// satisfied `compile_fail`. That pairing is not belt and braces: it is
+/// measured, in `experiments/wire-format/`, where a type-name typo, a misspelt
+/// trait and a wrong crate path all reported ok against a false claim. The
+/// error-code annotation does not close it either — rustdoc on 1.97.1 silently
+/// ignores one it cannot match, so `compile_fail,E0639` would be the weaker
+/// check and not the stricter one.
+///
+/// The pair was nonetheless checked against the compiler directly rather than
+/// argued: compiled as an ordinary integration test in this crate, that block
+/// is `error[E0639]: cannot create non-exhaustive variant using struct
+/// expression`, and that is the **only** error it produces. Recorded because it
+/// is the one thing neither half of the pair can report about itself.
+///
+/// ```
+/// use happenstance_core::Query;
+/// use happenstance_testkit::model::{Anchor, Op};
+///
+/// // The five field values the refused expression wanted. Binding them here is
+/// // what proves the block above fails on its construction and not on any of
+/// // the names it happens to mention.
+/// let (query, from, to, backwards, limit) =
+///     (Query::all(), Anchor::Unset, Anchor::Head, false, None::<usize>);
+/// assert!(!query.is_all() || from != to || !backwards || limit.is_none());
+///
+/// // Matching stays legal downstream, which is what variant-level
+/// // `#[non_exhaustive]` buys over enum-level: `Op` itself carries no
+/// // attribute, so this `match` is still exhaustive over the three variants
+/// // and still stops compiling the day a fourth is added — which is the
+/// // report the author of that fourth variant wants, and what RS-13-5 is
+/// // protecting.
+/// let op = Op::Append { events: Vec::new() };
+/// let name = match op {
+///     Op::Append { .. } => "append",
+///     Op::AppendConditional { .. } => "conditional",
+///     Op::Read { .. } => "read",
+/// };
+/// assert_eq!(name, "append");
+/// ```
+///
+/// [`Op::Read`]: happenstance_testkit::model::Op::Read
+#[cfg(doctest)]
+mod op_read_is_sealed_downstream {}
