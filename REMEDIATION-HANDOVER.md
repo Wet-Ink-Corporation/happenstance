@@ -1,5 +1,15 @@
 # Pre-publication remediation — handover
 
+> **Superseded as a status report, kept as a record.** This document is accurate
+> about the remediation and stale about the project. Two of its claims below have
+> since been overtaken: `F2-5` is **discharged** — phase 10's Postgres adapter
+> answers it with an `AFTER INSERT` trigger arming a real mid-batch fault — and
+> **seventeen of the briefs are ratified**, the ones whose window closed at
+> `0.2.0`. Neither is corrected in place, because this is the record of what that
+> effort found and concluded, and rewriting it would discard the trail.
+>
+> For current state, start at [`HANDOVER.md`](HANDOVER.md).
+
 **Branch:** `remediation/pre-publication` · **236 commits** over `main` ·
 192 files, +38,044 / −1,057
 **Source:** `references/evaluation/review-pre-publication-2026-09-03.md` — 96 finding

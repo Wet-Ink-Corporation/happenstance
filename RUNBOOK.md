@@ -201,7 +201,14 @@ their subject; they are repaired, and `REMEDIATION-HANDOVER.md` lists them. The
 scoped-gate command set has grown by four commands, each added because something
 went red downstream of a gate that could not see it.
 
-**`REMEDIATION-HANDOVER.md` is the entry point.** It carries the scoreboard, the
+**[`HANDOVER.md`](HANDOVER.md) is the entry point now**, and it supersedes the
+paragraph below as *the* place to start: it carries where the `0.2.0` path
+actually got to, the decisions already taken that must not be re-opened, and the
+one thing about this tree that will mislead a reader — it describes `0.2.0` as
+published, in the present tense, and it is not.
+
+**`REMEDIATION-HANDOVER.md` is the entry point to the remediation**, and remains
+the best account of that effort's method and traps. It carries the scoreboard, the
 method, the briefs awaiting ratification, and the operational traps — including
 the three false "completions" that were read as results before being caught.
 
