@@ -163,7 +163,7 @@ turned out to be one DCB already provides.
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
@@ -212,7 +212,7 @@ phase 3 into phase 6 while the table above makes phase 4 depend on it, and nobod
 noticed for a whole document revision.
 
 ```
-0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
+0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 10 ─▶ 12 ─▶ 13 ─▶ 14
 
 one branch that rejoins the trunk:
     1 ─▶ 3 ─▶ 4          phase 4 is frozen against the instrument phase 3 builds
@@ -220,13 +220,12 @@ one branch that rejoins the trunk:
 one that floats — after 4, before 12, otherwise unconstrained:
     4 ─▶ 5               the wire format; nothing between it and 12 reads it
 
-three that never rejoin — off the 0.1 path:
+two that never rejoin — off the 0.1 path:
     2, 4    ─▶ 9
-    2, 4, 6 ─▶ 10
     6       ─▶ 11
 ```
 
-**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 12**, with 3 on it too
+**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 10 → 12**, with 3 on it too
 unless a second pair of hands takes it. Phase 3 depends only on phase 1, so it
 *can* run alongside the trunk — but it is not optional and cannot be skipped,
 because 4 waits on it. Solo it is serial and the estimate below says so.
@@ -4754,12 +4753,43 @@ have been three.
 
 ## Phase 12 — Publish `0.2.0`
 
-**Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit` and
-`happenstance-sqlite` on crates.io, rendering on docs.rs.
+**Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — **five crates**, decided at
+the `0.2.0` release pass — on crates.io, rendering on docs.rs.
 
 **Why here.** Publication no longer waits on replication: with identity settled in
 phase 5 and `IngestStore` living in the sync crate, nothing in `happenstance-sync`
 touches the contract's public surface.
+
+**It does now wait on phase 10, and that is a decision rather than a discovery.**
+The dependency row above reads `7, 8, 10`; it read `7, 8` until the `0.2.0`
+release pass, and the phase that moved it is **F2-5**.
+
+F2-5's actionable half was refuted by execution — `dropped_append_future_leaves_no_partial_batch`'s
+second arm runs twice per run, in both feature configurations, and has since the
+rule's first commit. What survives is that **the rule has never been answered by a
+store with a real medium under it**: every store that has ever reached either arm
+is an `Rc<RefCell<…>>` in the testkit's own test target, where *"the future was
+dropped"* means a local went out of scope rather than a connection was severed.
+The store that would answer it is phase 10's.
+
+The repository owner chose to hold the release for that answer. It is worth
+recording that this runs **against** the pre-publication review's own verdict on
+this class — *"no fix here is a breaking change, and every one of them is
+available at the same price after `0.2.0`"* — and against this file's own
+sequencing argument, which put phase 10 off the trunk precisely because its
+design contribution was already spent. The trade is roughly eleven days and two
+adapters against publishing a conformance suite whose atomicity rule has only
+ever been proved against a `RefCell`. Taken deliberately, with the counter-argument
+in front of it.
+
+**Two consequences follow, and neither is a cost.** The seventeen briefs ratified
+at the release pass were ratified because their window closed at `0.2.0`;
+deferring the release widens that window rather than closing it, so the
+implementation queue they created can be worked unhurried. And the repository
+stays private until the release, so the documents that now describe `0.2.0` in the
+present tense are visible only to whoever picks this tree up — which is the one
+group they can still mislead.
 
 And what "why here" is *not*: it is not "publishing freezes the public API". The
 API was frozen in phases 4 – 6, on evidence, which is what makes publishing safe.
