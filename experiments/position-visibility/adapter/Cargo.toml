@@ -1,0 +1,59 @@
+# Deliberately outside the workspace. The empty `[workspace]` table stops cargo
+# walking up to the root manifest and adopting this crate as a member — the same
+# trick `experiments/one-connection-latency/` and its siblings use.
+#
+# Two reasons, and the second is why this crate exists at all.
+#
+# 1. CF-34: performance is measured by a separate harness that is not part of the
+#    conformance bar. A crate cargo cannot see from the root manifest is a crate
+#    no gate step can start depending on by accident.
+# 2. It needs `happenstance-postgres`'s `naive-arm` feature, which is off by
+#    default precisely so no consumer can reach it. A workspace member enabling it
+#    would put the unguarded store into `--all-features` builds of the whole
+#    workspace.
+[workspace]
+
+[package]
+name = "position-visibility-adapter"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract, at the pinned tree.
+happenstance-core = { path = "../../../crates/happenstance-core", features = [
+    "std",
+] }
+# **The real adapter, in the graph, and that is the whole point of this crate.**
+#
+# Phase 2 measured four SQL scripts through `pgbench`. What it could not measure
+# was the adapter: no connection pool, no transaction whose lifetime is tied to
+# `append`'s async boundary, no cursor, no error mapping — the four gaps
+# `.kb/open-questions/postgres-arm-c-structural-cost.md` names. This crate calls
+# the shipped `PostgresEventStore`, so the ratio it reports is a ratio for the
+# code that publishes.
+#
+# `naive-arm` is what supplies the **baseline**. It is the same store with the
+# visibility predicate removed — `nextval()` unguarded, which is what Postgres
+# does by default — so the pairing is one adapter against itself with exactly the
+# mechanism under test switched off, rather than one codebase against another.
+happenstance-postgres = { path = "../../../crates/happenstance-postgres", features = [
+    "event-store",
+    "naive-arm",
+] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "postgres",
+    "runtime-tokio",
+] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+
+# `--release` is what `run.sh` times, and these are the settings it times under.
+# Stated rather than defaulted so the README's conditions table is checkable
+# against this manifest.
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16
+panic = "unwind"

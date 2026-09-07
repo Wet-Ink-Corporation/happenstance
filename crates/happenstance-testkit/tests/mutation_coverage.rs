@@ -1757,6 +1757,23 @@ const REGISTRY: &[Declared] = &[
     },
     // --- Position visibility --------------------------------------------
     Declared {
+        name: "PollPaddedPositionStore",
+        kind: Kind::Mutant,
+        // Declared as failing exactly what `PreCommitPositionStore` fails,
+        // because its DEFECT is exactly `PreCommitPositionStore`'s: the same
+        // sequence advanced outside the same transaction, publishing the same
+        // rows late. The only difference is that its `append` needs one more
+        // poll. If this claim is wrong, the run says so -- which is the entire
+        // point of the instrument.
+        fails: &[
+            "interleaved_appends_on_one_handle_elect_one_winner",
+            "nothing_below_an_observed_position_appears_later",
+        ],
+        provenance: "The bounding instrument `spec/SPECIFICATION.md` names under ES-10 and              assigns to phase 10: a poll-padding decorator over `PreCommitPositionStore`,              calibrated against a real adapter rather than chosen by an author.              ADR-0013 deferred the calibration because \"an author choosing n is the              reference-store failure mode with one more step\", and phase 10 supplied the              adapter: `happenstance-postgres`'s `append` measures at 3 polls against a live              server (`crates/happenstance-postgres/tests/poll_shape.rs`), and the unpadded              mutant needs 2, so the padding is 1. The rule polls A, B, B, A -- two polls per              future -- so this store's window sits one poll outside the schedule while its              defect is untouched.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "PreCommitPositionStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2486,6 +2503,7 @@ macro_rules! for_each_mutant {
             crate::mutants::RestampingFixture,
             crate::mutants::SharedBackingFixture,
             crate::mutants::PreCommitPositionFixture,
+            crate::mutants::PollPaddedPositionFixture,
             crate::mutants::BorrowHoldingFixture,
             crate::mutants::RefetchingPagedFixture,
             crate::mutants::SwallowedReadFaultFixture,
@@ -2635,9 +2653,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Forty rows below are marked [`ModelOutcome::Agreed`] at this commit; two of
-/// them are the conformant controls and *must* be, which leaves **thirty-eight
-/// misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// Forty-one rows below are marked [`ModelOutcome::Agreed`] at this commit; two
+/// of them are the conformant controls and *must* be, which leaves
+/// **thirty-nine misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2648,8 +2666,12 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// forty-two — the drift the pre-publication review found wherever a number was
 /// written beside the list it describes. It was corrected to thirty-nine and
 /// thirty-seven, and was stale again by one inside the day, because a mutant
-/// landed and nothing counted. **A corrected number is not a fix for a number
-/// nothing counts.** The shapes below are still the shapes; they no longer
+/// landed and nothing counted. It went stale a third way at phase 10's merge,
+/// where neither branch was wrong on its own — one added a row, the other
+/// corrected the sentence for its own additions, and `git` took both with no
+/// conflict. **A corrected number is not a fix for a number nothing counts**,
+/// and a number two authors correct separately is the same failure wearing a
+/// second hat. The shapes below are still the shapes; they no longer
 /// enumerate every name, and the honest instrument is the assertion.
 ///
 /// Every miss carries a defect the model **cannot express**, and the boundary is
@@ -2837,6 +2859,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("RestampingFixture", ModelOutcome::Agreed),
     ("SharedBackingFixture", ModelOutcome::Agreed),
     ("PreCommitPositionStore", ModelOutcome::Agreed),
+    ("PollPaddedPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
     ("RefetchingPagedStore", ModelOutcome::Agreed),
     // Agreed, and it has to be: unarmed, this store is completely conformant,
@@ -3330,15 +3353,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 40,
-            "`MODEL_COVERAGE`'s heading says forty rows are `Agreed` and the \
+            agreed, 41,
+            "`MODEL_COVERAGE`'s heading says forty-one rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            38,
-            "`MODEL_COVERAGE`'s heading says thirty-eight misses and the table \
+            39,
+            "`MODEL_COVERAGE`'s heading says thirty-nine misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

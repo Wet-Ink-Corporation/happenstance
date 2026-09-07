@@ -33,7 +33,9 @@ crates/happenstance-testkit/     conformance suite. the bar every adapter must c
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
-crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
+crates/happenstance-postgres/    the store that does not serialise its writers. event store
+                                 real and conformant at phase 10; 🔩 projection store still
+                                 a skeleton.
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
@@ -72,6 +74,9 @@ references/                      evidence kept for citation, binding nothing.
   scenarios/                       six deployments the contract was walked against.
   adapter-shapes.md                what the six skeletons told the type checker.
   adr/                             the full decision records. cite these by line.
+  architecture/                    the workspace drawn — one traced command loop, the
+                                   in-process boundary, and where operator-owned
+                                   storage begins. self-contained HTML and its source.
   seeds/                           raw material for `/redkiln:initiative`.
 docs/                            user documentation. nothing else.
 RUNBOOK.md                       the plan of record, and how far it has got.
@@ -93,8 +98,17 @@ false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
 A skeleton exists to be disagreed with by a type checker — it is an *instrument*
 first and a target second, and it is not an adapter until it has run the
 conformance suite. **Two have stopped being skeletons**: `happenstance-sqlite` at
-phase 8 and `happenstance-cloudflare` at phase 9, and both are published. The
-four that carry the marker above have not, and the marker is the claim.
+phase 8 and `happenstance-cloudflare` at phase 9, and both are published.
+
+`happenstance-postgres` is the **half case**, and the marker is split rather than
+dropped. Its *event store* has run the suite — 101 of 101 against a live
+PostgreSQL 17.10, including the concurrency family at 64 contenders — so by the
+rule above it is an adapter, and the arm it buys ES-10 with is recorded in
+ADR-0024 rather than still open. Its *projection store* is untouched `todo!()`,
+which is what the crate's remaining `#![allow(clippy::todo)]` now covers, and
+`publish = false` stands until `deskeleton-and-package-readiness` removes it. The
+**three** that carry the marker whole — ladybug, neon, sync — have run nothing,
+and the marker is the claim.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.

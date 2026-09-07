@@ -307,4 +307,4 @@ contract layer never looks inside a payload.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:447 (Payloads are frequently large and rarely UTF-8)` ·
 `crates/happenstance-core/src/event.rs:450 (struct ByteLen)` ·
-`Cargo.toml:183 (missing_debug_implementations)`
+`Cargo.toml:215 (missing_debug_implementations)`

@@ -6293,6 +6293,39 @@ pub mod rules {
     /// first, a reader sees B's higher position, and then A's lower one appears
     /// underneath it. It is the one mutant in the registry whose bug is a
     /// faithful model of a real database rather than an implementation slip.
+    /// # The schedule changed at phase 10; the name and the clause did not
+    ///
+    /// It used to poll the two writers `A, B, B, A` — two polls each — and that
+    /// made the rule's strength depend on a property no `Fixture` can express:
+    /// how many polls the adapter's `append` needs. ADR-0013 recorded the gap
+    /// when it lifted ES-10 to `[FROZEN]`, and `spec/SPECIFICATION.md` named the
+    /// instrument that would settle it and assigned it to phase 10 — *"if it
+    /// fires, the rule changes and this clause does not."*
+    ///
+    /// It fired. `PollPaddedPositionStore` is `PreCommitPositionStore` with one
+    /// extra `Pending` in its `append`: the same defect, one more poll. Under the
+    /// old schedule it **passed**.
+    ///
+    /// The padding is measured, not chosen — ADR-0013 refused to let an author
+    /// pick it and waited for an adapter with real I/O.
+    /// `happenstance-postgres`'s `append` measures at 3 polls against a live
+    /// server, the unpadded mutant takes 2, so the padding is 1.
+    ///
+    /// **What changed:** the slow writer is polled once, to take its number;
+    /// the fast writer is then driven **to completion** rather than polled a
+    /// fixed number of times. That asks for what the rule needs — the fast
+    /// writer has committed — rather than for a proxy that happens to imply it
+    /// when a store suspends exactly once.
+    ///
+    /// # What this rule still cannot see
+    ///
+    /// An adapter whose `append` hands its work to a runtime advances
+    /// **off-poll**, so no poll-based schedule decides when its transaction
+    /// commits. `happenstance-postgres` is that shape, and a deliberately naive
+    /// arm of it passes this rule even after the change. Padding a poll-driven
+    /// state machine cannot model a store that is not poll-driven, so the
+    /// decorator above cannot reach it either. That limitation belongs to
+    /// ADR-0024 and is recorded rather than papered over.
     pub async fn nothing_below_an_observed_position_appears_later<F: Fixture>(
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
@@ -6310,47 +6343,48 @@ pub mod rules {
         // Both futures exist before either is polled, and both hold `&store`.
         // On the `Send` flavour that would need `Sync`; here it needs nothing.
         let mut slow = pin!(store.append(&slow_batch, None));
-        let mut fast = pin!(store.append(&fast_batch, None));
+        let fast = pin!(store.append(&fast_batch, None));
+        // Set by `poll_once` and read below, so that a store finishing on its
+        // first poll — every store whose `append` has no `.await` in it — is
+        // never awaited after it returned `Ready`, which is a contract
+        // violation. The fast writer needs no such flag: it is never polled
+        // before it is awaited, because the slow writer has already taken the
+        // lower number and that is all the ordering this rule needs.
         let mut slow_done = false;
-        let mut fast_done = false;
 
         // Every position ever observed, in the order it first became visible.
         let mut seen: Vec<u64> = Vec::new();
 
         // Step 1 — the slow writer starts, and takes whatever position its
-        // adapter hands out.
+        // adapter hands out. ONE poll, because that is all it takes to reach the
+        // allocation: a store that allocates outside its transaction does so
+        // before its first suspension, which is what makes the number stable
+        // across the window that follows.
         assert_appended(poll_once(slow.as_mut(), &mut slow_done).await);
         observe(&store, &mut seen, "after the slow writer's first poll").await;
 
-        // Step 2 — the fast writer starts, and takes the next one. A store that
-        // allocates outside its transaction has now handed out two numbers and
-        // published neither row.
-        assert_appended(poll_once(fast.as_mut(), &mut fast_done).await);
-        observe(&store, &mut seen, "after the fast writer's first poll").await;
-
-        // Step 3 — THE INTERLEAVING. The writer that started *second* is
-        // resumed first and commits first, so its higher position becomes
-        // visible while the lower one is still in flight.
-        assert_appended(poll_once(fast.as_mut(), &mut fast_done).await);
+        // Step 2 — THE INTERLEAVING, and it is an `await` rather than a count of
+        // polls. The writer that started *second* is driven all the way to
+        // completion while the first is still suspended, so its higher position
+        // becomes visible with the lower one still in flight.
+        //
+        // Counting polls here is what the schedule used to do — `B, B` — and it
+        // is what made the rule's strength depend on the adapter. Two polls is
+        // enough to commit a store that suspends once and not one that suspends
+        // twice, so a store needing three polls simply never finished inside the
+        // schedule and the window never opened where the rule looked. Driving to
+        // completion asks for the thing the rule actually needs (the fast writer
+        // has committed) rather than for a proxy that happens to imply it on some
+        // adapters.
+        assert_appended(Some(fast.await));
         observe(&store, &mut seen, "after the fast writer committed").await;
 
-        // Step 4 — and only now does the slow writer's row land, carrying the
+        // Step 3 — and only now does the slow writer's row land, carrying the
         // position underneath the one a reader has already seen.
-        assert_appended(poll_once(slow.as_mut(), &mut slow_done).await);
-        observe(&store, &mut seen, "after the slow writer committed").await;
-
-        // Whatever the schedule left unfinished, finish — in the same hostile
-        // order, so an adapter needing three polls is not let off. Asserting
-        // "two polls was enough" would be over-specification: a store with real
-        // I/O under it may take any number, and a rule a legal adapter fails is
-        // a finding about the rule (CF-6).
-        if !fast_done {
-            assert_appended(Some(fast.await));
-        }
         if !slow_done {
             assert_appended(Some(slow.await));
         }
-        observe(&store, &mut seen, "after both appends completed").await;
+        observe(&store, &mut seen, "after the slow writer committed").await;
 
         // The non-vacuity anchor. Without it a store that returned nothing from
         // every read would satisfy every assertion above by never showing a

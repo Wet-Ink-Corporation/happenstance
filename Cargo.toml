@@ -171,6 +171,38 @@ proptest = "1"
 # no published crate's graph, feature set or MSRV floor moves; `cargo hack
 # --no-dev-deps --rust-version` cannot see it at all.
 trybuild = "1.0"
+# The live-Postgres fixture's server. Dev-only in both directions: it is a
+# `[dev-dependencies]` of `happenstance-postgres` alone, so no published graph,
+# feature set or MSRV floor moves, and `cargo hack --no-dev-deps --rust-version`
+# cannot see it at all. It declares `rust-version = "1.88"`, comfortably under
+# this workspace's 1.97.1 floor — but the msrv job's second half runs a full
+# `cargo test --workspace --all-features`, which does not hide dev-deps, so that
+# is where the claim is actually checked.
+#
+# `default-features = false` on a measurement rather than on taste. The graph
+# reaches `rustls` and `ring` either way; `ring` is `Apache-2.0 AND ISC` and
+# passes, and it stops short of `webpki-roots`, which is the `CDLA-Permissive-2.0`
+# offender the `sqlx` note above names. The flag buys a statement of what is
+# asked for, not a smaller graph.
+
+#
+# Deliberately **not** `testcontainers-modules`. Its Postgres module carries its
+# own image tag, which this fixture would have to override anyway, and the tag is
+# the one thing that must be pinned where a reader can see it: an unpinned image
+# makes a red job unattributable to a change in this repository. The fixture says
+# `GenericImage::new("postgres", "17.10")` — the exact server
+# `experiments/position-visibility/` took its numbers on.
+# `reusable-containers` is named back on purpose, and it is a bug fix rather
+# than a convenience. The fixture holds its `ContainerAsync` in a `static`, which
+# Rust never drops at process exit, so nothing stopped the server and every run
+# of the test binary left another Postgres behind -- twenty-seven of them before
+# the machine ran out of memory mid-suite and made the leak visible. The crate's
+# intended fix is its `watchdog` feature, which does not build on Windows
+# (`SIGQUIT` is Unix-only) and this workspace treats Windows as first-class.
+# Reuse bounds the leak at exactly one container instead of one per run.
+testcontainers = { version = "0.28", default-features = false, features = [
+    "reusable-containers",
+] }
 # Only ever a `cfg(target_arch = "wasm32")` dev-dependency. It is here so the
 # testkit can *demonstrate* the third harness (CF-23); nothing in the published
 # graph depends on it.

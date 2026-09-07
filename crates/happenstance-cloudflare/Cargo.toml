@@ -65,11 +65,19 @@ thiserror.workspace = true
 # measurement into a green checkmark, because that decision was never a
 # manifest's to take; the finding stood, recorded against AC-008 in
 # `worker-binding-layer/_ledger.md`, until it was taken where decisions are
-# taken. **ADR-0035 took it.** `deny.toml`'s single `async-trait` entry now
-# names three wrappers — `wasm-bindgen-test`, `worker`, `worker-macros` — with
-# a `reason` citing both ADR-0001 and ADR-0035, the open question that raised
-# it (`.kb/open-questions/deny-bans-red-on-the-worker-dependency.md`) reads
-# `superseded`, and `cargo deny check bans` reports `bans ok`.
+# taken. **ADR-0035 took it.** It put `worker` and `worker-macros` beside
+# `wasm-bindgen-test` in `deny.toml`'s single `async-trait` entry, with a
+# `reason` citing both ADR-0001 and ADR-0035; the open question that raised it
+# (`.kb/open-questions/deny-bans-red-on-the-worker-dependency.md`) reads
+# `superseded`, and `cargo deny check bans` reports `bans ok`. A third route has
+# since joined the same entry and it is **not this crate's**: phase 10 added
+# `testcontainers` and `tonic` for `happenstance-postgres`'s live-server
+# fixture, ratified by ADR-0038, so one entry now carries five wrappers across
+# three decisions. That is worth saying here only so a reader who greps the
+# entry does not read the two extra names as `worker`'s — they are
+# `[dev-dependencies]` and reach no published artifact, which is
+# `wasm-bindgen-test`'s argument rather than the narrower one this crate had to
+# make.
 #
 # `crates/happenstance-cloudflare/tests/publish_readiness.rs` is what keeps
 # this paragraph and `deny.toml` from drifting apart again, which is the

@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "happenstance — a DCB event-sourcing library",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Wet-Ink-Corporation/happenstance",
+      "revision": "910c5ac611660dd02ca5daaf76895518d3deaf58"
+    },
+    "viewBox": [
+      1354,
+      600
+    ],
+    "views": [
+      {
+        "id": "command-loop",
+        "label": "The command loop",
+        "focus": [
+          "app",
+          "typed",
+          "core",
+          "sqlite",
+          "sqlitefile"
+        ],
+        "note": "Read only what the decision needs, decide, then append conditioned on that same query."
+      },
+      {
+        "id": "portfolio",
+        "label": "Why four adapters",
+        "focus": [
+          "core",
+          "sqlite",
+          "postgres",
+          "cloudflare",
+          "neon"
+        ],
+        "note": "A port frozen against one storage shape is frozen against that shape wearing four hats."
+      },
+      {
+        "id": "ownership",
+        "label": "What the library owns",
+        "focus": [
+          "sqlitefile",
+          "pgserver",
+          "dostorage",
+          "neonep"
+        ],
+        "note": "Schema, credentials and durability stop at the adapter edge; nothing to the right is ours."
+      },
+      {
+        "id": "gate",
+        "label": "The conformance gate",
+        "focus": [
+          "testkit",
+          "core",
+          "sqlite",
+          "postgres"
+        ],
+        "note": "An adapter that compiles but has not run the suite is not an adapter."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "app",
+      "type": "external",
+      "label": "Application",
+      "sublabel": "domain events + models",
+      "pos": [
+        20,
+        216
+      ],
+      "size": [
+        140,
+        54
+      ]
+    },
+    {
+      "id": "typed",
+      "type": "backend",
+      "label": "happenstance",
+      "sublabel": "typed layer · commit loop",
+      "tag": "owns encoding",
+      "pos": [
+        270,
+        201
+      ],
+      "size": [
+        200,
+        84
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance/src/command.rs",
+          "line": 219,
+          "label": "commit()"
+        },
+        {
+          "path": "crates/happenstance/src/runner.rs",
+          "line": 416,
+          "label": "run_projection()"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "happenstance-core",
+      "sublabel": "the contract · ports + types",
+      "tag": "no I/O, no serde",
+      "pos": [
+        610,
+        201
+      ],
+      "size": [
+        200,
+        84
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-core/src/store.rs",
+          "line": 142,
+          "label": "EventStore"
+        },
+        {
+          "path": "crates/happenstance-core/src/projection.rs",
+          "line": 418,
+          "label": "ProjectionStore"
+        }
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "backend",
+      "label": "happenstance-sqlite",
+      "sublabel": "SendEventStore · serialising",
+      "tag": "suite green",
+      "pos": [
+        880,
+        60
+      ],
+      "size": [
+        212,
+        66
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-sqlite/src/event_store.rs"
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "backend",
+      "label": "happenstance-postgres",
+      "sublabel": "SendEventStore · pooled",
+      "tag": "101/101 live",
+      "pos": [
+        880,
+        160
+      ],
+      "size": [
+        212,
+        66
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-postgres/src/event_store.rs"
+        }
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "type": "backend",
+      "label": "happenstance-cloudflare",
+      "sublabel": "EventStore · !Send, wasm32",
+      "tag": "suite green",
+      "pos": [
+        880,
+        260
+      ],
+      "size": [
+        212,
+        66
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-cloudflare/src/sql_storage.rs"
+        }
+      ]
+    },
+    {
+      "id": "neon",
+      "type": "backend",
+      "label": "happenstance-neon",
+      "sublabel": "EventStore · one-shot HTTP",
+      "tag": "skeleton",
+      "pos": [
+        880,
+        360
+      ],
+      "size": [
+        212,
+        66
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-neon/src/transport.rs"
+        }
+      ]
+    },
+    {
+      "id": "sqlitefile",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "one file on disk",
+      "brand": "sqlite",
+      "pos": [
+        1162,
+        60
+      ],
+      "size": [
+        162,
+        66
+      ]
+    },
+    {
+      "id": "pgserver",
+      "type": "database",
+      "label": "PostgreSQL 17",
+      "sublabel": "pooled TCP sessions",
+      "brand": "postgresql",
+      "pos": [
+        1162,
+        160
+      ],
+      "size": [
+        162,
+        66
+      ]
+    },
+    {
+      "id": "dostorage",
+      "type": "cloud",
+      "label": "Durable Object",
+      "sublabel": "per-object SQL storage",
+      "brand": "cloudflare",
+      "pos": [
+        1162,
+        260
+      ],
+      "size": [
+        162,
+        66
+      ]
+    },
+    {
+      "id": "neonep",
+      "type": "cloud",
+      "label": "Neon",
+      "sublabel": "serverless /sql",
+      "brand": "neon",
+      "pos": [
+        1162,
+        360
+      ],
+      "size": [
+        162,
+        66
+      ]
+    },
+    {
+      "id": "testkit",
+      "type": "security",
+      "label": "happenstance-testkit",
+      "sublabel": "the bar every adapter clears",
+      "tag": "89 + 5 + model rules",
+      "pos": [
+        578,
+        470
+      ],
+      "size": [
+        264,
+        76
+      ],
+      "sources": [
+        {
+          "path": "crates/happenstance-testkit/src/lib.rs",
+          "line": 491,
+          "label": "conformance!"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "One binary — every crate here links in, nothing is called over a wire",
+      "wraps": [
+        "typed",
+        "core",
+        "sqlite",
+        "postgres",
+        "cloudflare",
+        "neon"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Conformance gate — the suite must pass",
+      "wraps": [
+        "sqlite",
+        "postgres",
+        "cloudflare",
+        "neon"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Operator-owned storage",
+      "wraps": [
+        "sqlitefile",
+        "pgserver",
+        "dostorage",
+        "neonep"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app-to-typed",
+      "from": "app",
+      "to": "typed",
+      "label": "commit()",
+      "variant": "emphasis"
+    },
+    {
+      "id": "typed-to-core",
+      "from": "typed",
+      "to": "core",
+      "label": "read → decide → append",
+      "variant": "emphasis"
+    },
+    {
+      "id": "retry",
+      "from": "core",
+      "to": "typed",
+      "label": "ConditionViolated → re-decide",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "id": "core-to-sqlite",
+      "from": "core",
+      "to": "sqlite",
+      "variant": "emphasis"
+    },
+    {
+      "id": "core-to-postgres",
+      "from": "core",
+      "to": "postgres"
+    },
+    {
+      "id": "core-to-cloudflare",
+      "from": "core",
+      "to": "cloudflare"
+    },
+    {
+      "id": "core-to-neon",
+      "from": "core",
+      "to": "neon"
+    },
+    {
+      "id": "sqlite-io",
+      "from": "sqlite",
+      "to": "sqlitefile",
+      "label": "rusqlite",
+      "variant": "emphasis"
+    },
+    {
+      "id": "postgres-io",
+      "from": "postgres",
+      "to": "pgserver",
+      "label": "sqlx pool"
+    },
+    {
+      "id": "cloudflare-io",
+      "from": "cloudflare",
+      "to": "dostorage",
+      "label": "SqlStorage"
+    },
+    {
+      "id": "neon-io",
+      "from": "neon",
+      "to": "neonep",
+      "label": "HTTPS /sql"
+    },
+    {
+      "id": "testkit-reads-contract",
+      "from": "testkit",
+      "to": "core",
+      "label": "rules trace the spec",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The traced path",
+      "items": [
+        "The handler reads only what its decision needs, across any number of entities — no aggregate drawn in advance",
+        "The fold that produced the state also produces the Query the append is conditioned on",
+        "ConditionViolated is a typed variant, so the loop re-decides from a pristine model rather than parsing an error"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Two ports, two flavours",
+      "items": [
+        "EventStore carries no Send bound so it compiles on wasm32; trait_variant derives SendEventStore from it",
+        "read returns the stream at the top level and is not async — nesting it would silently drop + Send",
+        "ProjectionStore is behind unstable-projection and is not frozen; no two unlike batch shapes have settled it"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Instruments, and the gate",
+      "items": [
+        "Memory, RefCell, rusqlite and a Durable Object all assign positions under a lock — four adapters, one shape",
+        "Postgres allocates positions outside the transaction and Neon has no cursor at all; both exist to sit elsewhere",
+        "89 rules, 5 concurrency rules at 64 contenders, a model family — and every rule has a mutant that fails it"
+      ]
+    }
+  ]
+}

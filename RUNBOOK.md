@@ -161,7 +161,7 @@ turned out to be one DCB already provides.
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
 | 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
-| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
+| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
 | 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |

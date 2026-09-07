@@ -24,13 +24,46 @@ futures-core.workspace = true
 thiserror.workspace = true
 # `postgres` is the driver; `runtime-tokio` is the reactor. Nothing else — no
 # TLS backend (see the workspace table), no `macros` (compile-time query
-# checking needs a live `DATABASE_URL`, and this crate has none), no `migrate`
-# (the schema is prose in `event_store.rs` until phase 10 makes it real).
+# checking needs a live `DATABASE_URL`, and this crate has none), and still no
+# `migrate`.
+#
+# That last one stopped being "the schema is prose until phase 10 makes it real"
+# and became a decision. The schema is now real — `migrations/0001_event_log.sql`
+# — and it is applied by `include_str!` and one `execute`, not by `sqlx::migrate!`.
+# Two reasons, and the second is the one that decided it. The version-tracking a
+# migrator buys is worth nothing against a single migration applied to a schema
+# created seconds earlier and dropped at the end of the run; and `migrate` carries
+# its own `_sqlx_migrations` bookkeeping table, which is *per schema* and would
+# therefore be created once per fixture instance under the schema-per-instance
+# isolation this crate's tests use — bookkeeping about a history that, by
+# construction, is one row long. The one-migration discipline ends at first
+# publish, which is `publication-and-positioning`'s to decide; a migrator can be
+# turned on then, in the release that needs it.
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
+# Not dev-only, and the move is deliberate. `read` hands its cursor-opening work
+# to the runtime on the first poll rather than polling it inline, because ES-11
+# requires the read's state to be fixed no later than that poll and a future that
+# only advances while someone is polling it is fixed whenever the caller next
+# gets round to it. `Handle`, `spawn` and `JoinError` are therefore named in this
+# crate's own code and its error enum. `rt` only: nothing here starts a runtime,
+# it joins the one the caller is already on. `happenstance-sqlite` carries tokio
+# for the same reason one layer down.
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-happenstance-testkit.workspace = true
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+# `proptest` is what the model family is behind: `event_store_model_conformance!`
+# does not exist without it, so omitting the feature does not fail to compile --
+# it silently mounts one fewer family, which is the failure this whole crate's
+# gating is written against.
+happenstance-testkit = { workspace = true, features = ["proptest"] }
+# `rt-multi-thread` is not decoration: the concurrency family starts
+# `CONTENDERS` contenders, and a current-thread runtime turns that family from a
+# race into a queue.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+# The live server the fixture talks to. Dev-only, so it reaches no consumer; see
+# the workspace table for the pin, the licence verdict and why this is not
+# `testcontainers-modules`.
+testcontainers.workspace = true
 
 [features]
 # The event store only. `projection-store` left this set with ADR-0036: it forwards
@@ -45,6 +78,18 @@ event-store = []
 # named the capability while doing none of the gating, and turning it off changed
 # nothing a consumer could observe.
 projection-store = ["happenstance-core/unstable-projection"]
+# The negative control, and off by default in the strongest sense: no consumer
+# can reach it, and the default build does not contain it.
+#
+# It exposes `PostgresEventStore::new_naive`, which is this adapter with the
+# visibility frontier taken out -- the naive `nextval()` store ES-10 names in its
+# `Rejects:`. It exists so that `nothing_below_an_observed_position_appears_later`
+# can be shown to REJECT something, because a rule no implementation can fail is
+# decorative and this crate's whole reason for existing is that rule.
+#
+# Exercised once by `tests/rule_controls.rs` and recorded. It is deliberately NOT
+# a second deliberately-broken fixture kept alive as a maintained instrument.
+naive-arm = []
 
 [lints]
 workspace = true
