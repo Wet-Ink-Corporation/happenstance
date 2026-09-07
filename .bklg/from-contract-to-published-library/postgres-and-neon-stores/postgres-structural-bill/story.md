@@ -20,10 +20,11 @@ archetype: capability
 slice: position-visibility-decision
 owner: ryan-britton
 created: 2026-08-12
-updated: 2026-08-13T05:10:20.242Z
+updated: 2026-09-07T17:15:15.110Z
 links:
   pr: null
-  commits: []
+  commits:
+    - 8273c8d
   kb: []
 gate_open: false
 schema: 1
