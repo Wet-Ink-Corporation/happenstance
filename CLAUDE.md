@@ -132,14 +132,24 @@ questions — putting something in the wrong one is how it stops being findable.
   discipline the ADRs were always written under and nothing previously enforced.
 
   **A decision lives in two places on purpose.** `.kb/decisions/` holds the
-  seventeen *atoms* — canonical, ~100 lines each, carrying the frontmatter, the
+  numbered *atoms* — canonical, ~115 lines each, carrying the frontmatter, the
   status and the supersession graph that `validate --kb` enforces.
   `references/adr/` holds the full original records, up to 1,508 lines, carrying
   the compiler transcripts, the rejected alternatives and the measurement tables
   a summary cannot hold. Link the atom; cite the record by `file:line`. Deleting
-  the second because the first exists would discard about 78% of the corpus, and
+  the second because the first exists would discard about 76% of the corpus, and
   `spec-trace` will catch you, because `spec/SPECIFICATION.md` cites line ranges
   that only exist in the long form.
+
+  **The count is deliberately not written here.** It said *"the seventeen
+  atoms"* until 2026-09-07 and by then there were thirty-two, because a number
+  in a file that loads on every task is a number nobody re-reads — the same
+  defect this file already names one paragraph down, where the publishable-crate
+  count is spelled with its members precisely because a bare count had drifted
+  once. `ls .kb/decisions/` is the answer and cannot go stale. Note that the two
+  directories do **not** hold the same number of things: not every atom has a
+  long-form record behind it, so an atom without one in `references/adr/` is
+  normal rather than a gap to fill.
 
   Atoms are authored by `/redkiln:kb-ingest` from `.kb/_intake/`, not by hand:
   hand-writing them produces the directory layout of the process without the
@@ -170,6 +180,19 @@ arriving. **While it is off, nothing enforces `.kb` frontmatter validation, the
 immutability of accepted decision atoms, hand-edited item frontmatter, or the
 six-template assertion above** — all four merge green. The restore path and the
 full cost are written at the job in `.github/workflows/ci.yml`.
+
+**`doctor` also reports four `process-pack` advisories, and they are not the six.**
+`initiative.yaml`, `project.yaml`, `project-lite.yaml` and `story.yaml` under
+`.redkiln/processes/` all differ *substantively* from the installed CLI's bundled
+defaults. That is the same cause as the disabled job one paragraph up — the packs
+were pinned at `init` and the installed CLI has moved on — but it is a different
+set of files with a different remedy (`adopt --packs`, not `--templates`), and it
+was undocumented here until 2026-09-07 while the six-template case was written
+down twice. Read the advisory count as **six plus four**; a fifth pack advisory
+means a pack changed without a decision, exactly as a seventh template does.
+`adopt --packs` is not forbidden the way `adopt --templates` is, but it is not
+free either: it adopts a process the in-flight backlog was not planned under, so
+it waits for a quiet moment rather than being run because `upgrade` suggested it.
 
 **Never run `redkiln adopt --templates`.** `redkiln upgrade` recommends it, and it
 is wrong here: it would overwrite all six customisations with the bundled defaults,

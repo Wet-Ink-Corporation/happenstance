@@ -177,14 +177,42 @@ phases 0–9 built, and it gates phase 12 rather than sitting beside it.
 
 `references/evaluation/review-pre-publication-2026-09-03.md` raised **96 finding
 IDs across 84 entries** against `56ef6c5`. On branch `remediation/pre-publication`,
-**65 are closed with the full gate green** and **48 briefs await ratification** in
-`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is
-genuinely blocked, and narrower than the audit filed it: half of it was refuted
-during the work — the rule's second assertion **does** execute, twice per run —
-and what survives is that it has never been answered by a store with a real
-medium under it, which is the phase-10 adapter that does not exist. Five decisions
-were ratified by the owner during the work, including publishing the repository and
-closing `ANCHOR_SLACK`.
+**65 are closed with the full gate green** and **49 briefs were written** to
+`.kb/_intake/remediation-2026-09-04-briefs/`. Five decisions were ratified by the
+owner during the work, including publishing the repository and closing
+`ANCHOR_SLACK`.
+
+**Two claims this paragraph carried until 2026-09-07 have since been overtaken,
+and they are corrected here rather than left to age.** They are corrected in
+place because this section is *status*, not a record: the argument it makes about
+phase 12's exit criteria below is unchanged and still stands.
+
+- It said **48 briefs await ratification**. **Seventeen are ratified** — the
+  seventeen whose decision window closes at publication, recorded as
+  `RATIFY-0.2.0` in `.kb/_intake/ratifications-2026-09-06-pre-publication.md`,
+  nine on their own recommendation and eight reviewed individually. The other
+  thirty-two carry no deadline or one after this release and stay staged. Six of
+  the seventeen oblige code that ratification did not write, and that queue is
+  what stands between here and phase 12.
+- It said `F2-5` is **genuinely blocked** on *"the phase-10 adapter that does not
+  exist"*. **The adapter exists and F2-5 is discharged.** Half of the finding was
+  refuted during the work — the rule's second assertion **does** execute, twice
+  per run — and the residual was that it had never been answered by a store with
+  a real medium under it. `happenstance-postgres` answered it in its own terms:
+  the fixture arms an `AFTER INSERT` trigger and both fault rules pass, because
+  the batch is one multi-row statement and the raise aborts precisely the unit
+  `append` promises atomic. The hold that fact bought is lifted, and phase 12's
+  preamble carries the full account.
+
+**The episode is worth keeping rather than tidying away, and so is this
+correction.** The hold was taken on a stale status row *in this file*, which
+phase 12's preamble already names as the same class of defect the `0.2.0` pass
+spent its length repairing. The row above was stale in exactly that way for
+three days after the thing it described had changed, in a file whose own
+argument is that such a row sends somebody to build what is already built.
+`xtask`'s `runbook_status_matches_the_registry` holds the **status table**
+against the registry and the changelog; it does not reach this prose, and
+nothing does.
 
 **What it changes about phase 12's exit criteria, which are stated below at
 `Phase 12 — Publish 0.2.0`.** Those criteria audit every `[PROVISIONAL]` and
@@ -4806,9 +4834,30 @@ here rather than assumed.
 **What phase 10 still owes phase 12 is `happenstance-neon`, not Postgres.** The
 Postgres half meets phase 10's exit criterion — the concurrency family green at
 64 contenders against a live server, with the visibility cost measured in
-ADR-0024's arm C. Whether the Neon half is a dependency of *publication* or of
-phase 10's own closure is a live question, and the dependency row above should be
-re-read before it is trusted again.
+ADR-0024's arm C, and since 2026-09-07 that is a claim **CI** makes rather than
+one machine: the `live-postgres` job runs the 101 gated tests against a pinned
+PostgreSQL under Docker and passed on the push of `b0d9e67`.
+
+**Decided 2026-09-07: the Neon half is a dependency of phase 10's own closure,
+not of publication.** `0.2.0` ships on the Postgres half. ES-11 and ES-12
+therefore publish `[PROVISIONAL]` with their falsifier scheduled in phase 10's
+remainder, which the exit criteria below permit in terms — audit that against
+`cargo xtask spec-trace` and the provisional ledger, never against this
+sentence. Phase 10 stays `in progress` in the status table rather than being
+marked `done` over half its scope, and Neon is 16 `todo!()` bodies, not the six
+that a count of `EventStore` trait methods suggests.
+
+**The dependency row above still reads `7, 8, 10`, deliberately, and here is
+why it is not being narrowed to say so.** `xtask`'s
+`runbook_status_matches_the_registry` parses that cell by splitting on commas
+and matching each entry against a phase number. `10 (Postgres half)` parses as
+one entry that matches no row, so it would resolve to nothing and the check
+would quietly stop verifying phase 10 through this edge — a false negative,
+which is the direction that lint's own documentation says it will not accept.
+The qualification lives here, in prose the parser never reads, and the row stays
+a row the parser can. **Anyone re-reading that row for its scope should land
+here**, which is the failure mode the paragraph it replaced predicted and did
+not prevent.
 
 And what "why here" is *not*: it is not "publishing freezes the public API". The
 API was frozen in phases 4 – 6, on evidence, which is what makes publishing safe.
