@@ -83,7 +83,25 @@
 //!   hold — which is precisely the second kind of row the phase-2 portfolio table
 //!   asks for.
 //!
-//! Nothing above is a measurement, and the choice is owed one.
+//! **The measurement was owed and has been taken. ADR-0024 is the record.**
+//!
+//! The choice is `xid8` + `pg_snapshot_xmin`, on two numbers rather than a
+//! preference. Steady state, against this built adapter with the predicate
+//! removed as the paired baseline: the median ratio straddles 1.0 at every
+//! concurrency level with about a 20% spread, so no cost large enough to matter
+//! is measurable — and the two arms that cost 16x and 30x would be unmissable at
+//! that precision. Staleness, which is the real bill: 0.59 ms unloaded and
+//! **4,799 ms behind a five-second write transaction held anywhere on the
+//! cluster**, against an unguarded arm unaffected by the same hold at 0.60 ms.
+//!
+//! What follows for a caller, and the crate does not soften it: `head` is a
+//! frontier, read-your-own-writes does not hold and is not claimed, and the
+//! staleness bound is the longest open write transaction on the server — which a
+//! consumer neither controls nor can necessarily observe.
+//!
+//! `references/adr/0024-position-visibility-mechanism.md` carries the argument,
+//! the losing arms and what each lost on, and the parts this decision inherits
+//! rather than owns.
 
 use futures_core::Stream;
 use happenstance_core::{

@@ -1,0 +1,52 @@
+# position-visibility, re-measured against the built adapter
+# tag=-adapter run_secs=20 levels=[1, 8, 32] repeats=3 staleness_samples=9 seed_rows=10000 warmup_secs=5 settle_secs=8
+# baseline = PostgresEventStore::new_naive (unguarded nextval)
+# arm_c    = PostgresEventStore::new      (xid8 + pg_snapshot_xmin)
+
+## conditions
+fsync = on
+synchronous_commit = on
+wal_sync_method = fdatasync
+full_page_writes = on
+max_connections = 200
+server_version = 17.10 (Debian 17.10-1.pgdg13+1)
+
+## throughput, paired, 3 repetition(s) per level
+clients,repeat,arm,tps,tps_ratio,bracketing_baseline_tps,baseline_drift
+1,1,baseline,80.2,1.000,77.0,1.085
+1,1,arm_c,80.6,1.047,77.0,1.085
+1,1,baseline,73.9,1.000,77.0,1.085
+1,2,baseline,73.4,1.000,80.2,1.185
+1,2,arm_c,75.4,0.940,80.2,1.185
+1,2,baseline,87.0,1.000,80.2,1.185
+1,3,baseline,68.1,1.000,65.5,1.085
+1,3,arm_c,75.1,1.148,65.5,1.085
+1,3,baseline,62.8,1.000,65.5,1.085
+# level 1: arm_c ratio min 0.940 median 1.047 max 1.148
+8,1,baseline,62.7,1.000,69.9,1.231
+8,1,arm_c,71.6,1.023,69.9,1.231
+8,1,baseline,77.2,1.000,69.9,1.231
+8,2,baseline,96.2,1.000,78.2,1.600
+8,2,arm_c,68.3,0.873,78.2,1.600
+8,2,baseline,60.2,1.000,78.2,1.600
+8,3,baseline,85.7,1.000,79.2,1.177
+8,3,arm_c,68.2,0.860,79.2,1.177
+8,3,baseline,72.8,1.000,79.2,1.177
+# level 8: arm_c ratio min 0.860 median 0.873 max 1.023
+32,1,baseline,34.1,1.000,34.0,1.005
+32,1,arm_c,28.4,0.833,34.0,1.005
+32,1,baseline,34.0,1.000,34.0,1.005
+32,2,baseline,53.2,1.000,42.5,1.668
+32,2,arm_c,43.9,1.033,42.5,1.668
+32,2,baseline,31.9,1.000,42.5,1.668
+32,3,baseline,35.7,1.000,35.7,1.003
+32,3,arm_c,38.9,1.089,35.7,1.003
+32,3,baseline,35.8,1.000,35.7,1.003
+# level 32: arm_c ratio min 0.833 median 1.033 max 1.089
+
+## staleness (append -> head admits it), milliseconds, 9 sample(s)
+scenario,arm,min_ms,median_ms,max_ms
+control,baseline,2.324,2.605,3.479
+held_5s,baseline,1.667,2.173,4.467
+control,arm_c,1.785,2.311,3.578
+held_5s,arm_c,4783.140,4793.428,4800.041
