@@ -3857,6 +3857,21 @@ pub(crate) struct PreCommitPositionStore {
     /// THE DEFECT: the sequence, shared by every handle and advanced *outside*
     /// the transaction that will publish the row.
     sequence: Rc<Cell<Option<SequencePosition>>>,
+    /// Extra `Pending` returns inserted into the window, and **not** a second
+    /// defect.
+    ///
+    /// Zero for `PreCommitPositionFixture`, which is the mutant as it has always
+    /// been. Non-zero for `PollPaddedPositionFixture`, which is the bounding
+    /// instrument `spec/SPECIFICATION.md` names under ES-10 and assigns to phase
+    /// 10: *"the bounding instrument — a poll-padding decorator over
+    /// `PreCommitPositionStore` — is named and owed by phase 10 (ADR-0024); if it
+    /// fires, the rule changes and this clause does not."*
+    ///
+    /// Padding changes only **how many polls** `append` needs. The allocation is
+    /// still outside the transaction and the rows still publish late, so the
+    /// declared defect is identical; what moves is whether the rule's schedule
+    /// can still see it.
+    padding: usize,
 }
 
 impl EventStore for PreCommitPositionStore {
@@ -3923,6 +3938,15 @@ impl EventStore for PreCommitPositionStore {
         // indistinguishable from a correct one.
         YieldOnce(false).await;
 
+        // The padding, which widens the window in POLLS without touching the
+        // defect. `append` now needs `2 + padding` polls, and the rule's
+        // schedule gives each future exactly two — so at a padding of one this
+        // store's window has moved outside the schedule while remaining exactly
+        // as broken.
+        for _ in 0..self.padding {
+            YieldOnce(false).await;
+        }
+
         // THE DEFECT, second half: the rows become visible now, which may be
         // after a later-positioned transaction has already published its own.
         self.committed
@@ -3986,6 +4010,69 @@ impl Fixture for PreCommitPositionFixture {
         PreCommitPositionStore {
             committed: Rc::clone(&self.committed),
             sequence: Rc::clone(&self.sequence),
+            padding: 0,
+        }
+    }
+}
+
+/// How many extra polls the padded arm's `append` needs, and where the number
+/// came from.
+///
+/// **Measured, not chosen.** ADR-0013 refused to pick this by authorship —
+/// *"an author choosing n is the reference-store failure mode with one more
+/// step — so the calibration waits for an adapter with real I/O"* — and
+/// `.kb/open-questions/poll-count-bounds-the-visibility-rule.md` sub-question 3
+/// asks whether `n` comes from `happenstance-postgres`'s actual `append` or from
+/// a synthetic worst case. It comes from the adapter.
+///
+/// `crates/happenstance-postgres/tests/poll_shape.rs` polls that adapter's real
+/// `append` against a live PostgreSQL 17.10 and reports **3 polls** at a
+/// one-millisecond cadence (and 25,096 in a tight loop, which is the same fact
+/// wearing a different hat: the work is on a runtime, so a tight loop is
+/// counting how fast it can ask rather than how many steps there are).
+///
+/// `PreCommitPositionStore` needs two polls unpadded, so one unit of padding
+/// makes three — the number the adapter actually exhibits, and the number
+/// `spec/SPECIFICATION.md` names when it says *"against a store whose `append`
+/// needs three polls the interleaving window never opens where the rule looks
+/// and the rule cannot fail."*
+pub(crate) const MEASURED_POLL_PADDING: usize = 1;
+
+/// `PreCommitPositionStore`, padded to the poll count a real adapter exhibits.
+///
+/// The bounding instrument ES-10 names and phase 10 owes. Its whole purpose is
+/// to answer one question with a run rather than an argument: does
+/// `nothing_below_an_observed_position_appears_later` still reject a store whose
+/// defect is unchanged but whose window has moved by one poll?
+#[derive(Debug)]
+pub(crate) struct PollPaddedPositionFixture {
+    committed: Rc<RefCell<Vec<SequencedEvent>>>,
+    sequence: Rc<Cell<Option<SequencePosition>>>,
+}
+
+impl Fixture for PollPaddedPositionFixture {
+    type Store = PreCommitPositionStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability =
+        Capability::declined("this instrument exists for the position-visibility axis only");
+
+    async fn connect(&self) -> Self::Store {
+        PreCommitPositionStore {
+            committed: Rc::clone(&self.committed),
+            sequence: Rc::clone(&self.sequence),
+            padding: MEASURED_POLL_PADDING,
+        }
+    }
+}
+
+impl Subject for PollPaddedPositionFixture {
+    const NAME: &'static str = "PollPaddedPositionStore";
+
+    fn open() -> Self {
+        Self {
+            committed: Rc::new(RefCell::new(Vec::new())),
+            sequence: Rc::new(Cell::new(None)),
         }
     }
 }

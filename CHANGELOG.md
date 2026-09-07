@@ -24,6 +24,51 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- **`nothing_below_an_observed_position_appears_later`'s schedule** (ES-10,
+  CF-13). The rule's name, its assertions and the clause it checks are all
+  unchanged; what changed is how it drives the two writers. It used to poll them
+  `A, B, B, A` — two polls each — and that made its discriminating power depend
+  on something no fixture can express: how many polls the adapter's `append`
+  needs. ADR-0013 recorded the gap when it lifted ES-10 to `[FROZEN]`, and
+  `spec/SPECIFICATION.md` names the instrument that would settle it and assigns
+  it to phase 10.
+
+  **The instrument was built and it fired.** `PollPaddedPositionStore` is
+  `PreCommitPositionStore` — positions allocated outside the transaction, which
+  is what Postgres does by default — with its `append` padded by one extra
+  `Pending`. Identical defect, one more poll. Under the old schedule it **passed**
+  the rule.
+
+  The padding is measured rather than chosen, which is what ADR-0013 waited for:
+  *"an author choosing n is the reference-store failure mode with one more step —
+  so the calibration waits for an adapter with real I/O."*
+  `happenstance-postgres`'s `append` measures at **3 polls** against a live
+  PostgreSQL 17.10 (`crates/happenstance-postgres/tests/poll_shape.rs`), the
+  unpadded mutant needs 2, so the padding is 1 — and 3 is the number the
+  specification names when it says a store needing three polls slips the window.
+
+  The new schedule polls the slow writer **once**, to take its number, then
+  drives the fast writer **to completion** rather than counting polls at it. That
+  asks for the thing the rule needs — the fast writer has committed — instead of
+  a proxy that happened to imply it on adapters suspending exactly once. Every
+  in-tree adapter still passes; `PreCommitPositionStore` and
+  `PollPaddedPositionStore` both now fail it.
+
+  ES-10 is untouched and still `[FROZEN]`, as the clause pre-authorises: where a
+  rule cannot detect a defect the clause forbids, the rule is what gives.
+
+  **A second limitation is now recorded and is not fixed by this.** An adapter
+  whose `append` hands its work to a runtime advances *off-poll*, so no
+  poll-based schedule controls when its transaction commits. The same
+  `poll_shape.rs` measurement shows it: 3 polls at a one-millisecond cadence,
+  25,096 in a tight loop. `happenstance-postgres` is that shape, and a
+  deliberately naive arm of it — the shipped store with the visibility predicate
+  removed — passes this rule even after the change, while a hand-built probe in
+  that crate catches it in one line. That is a different limitation from the poll
+  count, it belongs to ADR-0024, and it is written down rather than absorbed.
+
 ### Added
 
 - **Four demonstration applications, each on a real SQLite file.** Between them

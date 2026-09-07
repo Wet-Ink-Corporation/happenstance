@@ -1544,6 +1544,23 @@ const REGISTRY: &[Declared] = &[
     },
     // --- Position visibility --------------------------------------------
     Declared {
+        name: "PollPaddedPositionStore",
+        kind: Kind::Mutant,
+        // Declared as failing exactly what `PreCommitPositionStore` fails,
+        // because its DEFECT is exactly `PreCommitPositionStore`'s: the same
+        // sequence advanced outside the same transaction, publishing the same
+        // rows late. The only difference is that its `append` needs one more
+        // poll. If this claim is wrong, the run says so -- which is the entire
+        // point of the instrument.
+        fails: &[
+            "interleaved_appends_on_one_handle_elect_one_winner",
+            "nothing_below_an_observed_position_appears_later",
+        ],
+        provenance: "The bounding instrument `spec/SPECIFICATION.md` names under ES-10 and              assigns to phase 10: a poll-padding decorator over `PreCommitPositionStore`,              calibrated against a real adapter rather than chosen by an author.              ADR-0013 deferred the calibration because \"an author choosing n is the              reference-store failure mode with one more step\", and phase 10 supplied the              adapter: `happenstance-postgres`'s `append` measures at 3 polls against a live              server (`crates/happenstance-postgres/tests/poll_shape.rs`), and the unpadded              mutant needs 2, so the padding is 1. The rule polls A, B, B, A -- two polls per              future -- so this store's window sits one poll outside the schedule while its              defect is untouched.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
         name: "PreCommitPositionStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2176,6 +2193,7 @@ macro_rules! for_each_mutant {
             crate::mutants::RestampingFixture,
             crate::mutants::SharedBackingFixture,
             crate::mutants::PreCommitPositionFixture,
+            crate::mutants::PollPaddedPositionFixture,
             crate::mutants::BorrowHoldingFixture,
             crate::mutants::RefetchingPagedFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
@@ -2484,6 +2502,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("RestampingFixture", ModelOutcome::Agreed),
     ("SharedBackingFixture", ModelOutcome::Agreed),
     ("PreCommitPositionStore", ModelOutcome::Agreed),
+    ("PollPaddedPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
     ("RefetchingPagedStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),

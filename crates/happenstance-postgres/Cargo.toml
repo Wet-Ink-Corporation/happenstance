@@ -78,6 +78,18 @@ event-store = []
 # named the capability while doing none of the gating, and turning it off changed
 # nothing a consumer could observe.
 projection-store = ["happenstance-core/unstable-projection"]
+# The negative control, and off by default in the strongest sense: no consumer
+# can reach it, and the default build does not contain it.
+#
+# It exposes `PostgresEventStore::new_naive`, which is this adapter with the
+# visibility frontier taken out -- the naive `nextval()` store ES-10 names in its
+# `Rejects:`. It exists so that `nothing_below_an_observed_position_appears_later`
+# can be shown to REJECT something, because a rule no implementation can fail is
+# decorative and this crate's whole reason for existing is that rule.
+#
+# Exercised once by `tests/rule_controls.rs` and recorded. It is deliberately NOT
+# a second deliberately-broken fixture kept alive as a maintained instrument.
+naive-arm = []
 
 [lints]
 workspace = true

@@ -210,6 +210,12 @@ async fn server() -> &'static Server {
 pub(crate) struct PostgresFixture {
     /// The schema this instance owns. Unique per instance per process.
     schema: String,
+    /// Whether `connect` hands out the naive arm rather than the shipped one.
+    ///
+    /// Always `false` except in the negative control, and the field exists at
+    /// all only under that feature.
+    #[cfg(feature = "naive-arm")]
+    naive: bool,
     /// This instance's one pool, built on first use.
     ///
     /// **One pool per instance, not one per `connect()`**, and the first
@@ -250,7 +256,33 @@ impl PostgresFixture {
         Self {
             schema: format!("hs_{}_{ordinal}", std::process::id()),
             pool: OnceCell::new(),
+            #[cfg(feature = "naive-arm")]
+            naive: false,
         }
+    }
+
+    /// A fixture whose handles have the visibility mechanism removed.
+    ///
+    /// Everything else is identical -- same container, same schema-per-instance
+    /// isolation, same migration, same append path. Only `head` and `read` lose
+    /// the frontier predicate, which is the single difference the control is
+    /// measuring. See `PostgresEventStore::new_naive`.
+    #[cfg(feature = "naive-arm")]
+    pub(crate) fn naive() -> Self {
+        Self {
+            naive: true,
+            ..Self::new()
+        }
+    }
+
+    /// This instance's pool, for a test that needs to drive raw SQL against the
+    /// same schema its handles use.
+    ///
+    /// Exposed only to the in-crate test targets. The conformance rules never
+    /// need it; the negative-control probe does, because it has to control
+    /// transaction ordering that no port method exposes.
+    pub(crate) async fn pool_for_test(&self) -> PgPool {
+        self.pool().await
     }
 
     /// The schema this instance owns, for tests that need to address it directly.
@@ -406,7 +438,12 @@ impl Fixture for PostgresFixture {
         // than here: it is idempotent, but running it per `connect()` spends
         // two round trips on every handle to re-establish a schema that
         // cannot have gone away.
-        PostgresEventStore::new(self.pool().await)
+        let pool = self.pool().await;
+        #[cfg(feature = "naive-arm")]
+        if self.naive {
+            return PostgresEventStore::new_naive(pool);
+        }
+        PostgresEventStore::new(pool)
     }
 
     async fn arm_mid_batch_fault(&self, after: usize) {

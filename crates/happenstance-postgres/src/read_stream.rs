@@ -123,7 +123,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use tokio::runtime::Handle;
 
 use crate::error::PostgresEventStoreError;
-use crate::event_store::position_from_row;
+use crate::event_store::{Visibility, position_from_row};
 use crate::query_sql::Param;
 
 /// Rows per `FETCH`.
@@ -167,6 +167,8 @@ struct CursorPlan {
     /// the conformance suite's concurrency family does exactly that -- and
     /// `Handle::try_current` there finds nothing.
     runtime: Option<Handle>,
+    /// Whether this read carries the visibility frontier.
+    visibility: Visibility,
     query: Query,
     options: ReadOptions,
 }
@@ -292,6 +294,7 @@ impl PgReadStream {
     pub(crate) fn new(
         pool: PgPool,
         runtime: Option<Handle>,
+        visibility: Visibility,
         query: &Query,
         options: ReadOptions,
     ) -> Self {
@@ -299,6 +302,7 @@ impl PgReadStream {
             state: ReadState::Unstarted(Box::new(CursorPlan {
                 pool,
                 runtime,
+                visibility,
                 query: query.clone(),
                 options,
             })),
@@ -430,7 +434,7 @@ async fn open_cursor(plan: CursorPlan) -> Opened {
         .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await?;
 
-    let (declare, params) = declare_sql(&plan.query, plan.options);
+    let (declare, params) = declare_sql(&plan.query, plan.options, plan.visibility);
     let mut statement = sqlx::query(&declare);
     for param in &params {
         statement = match param {
@@ -488,14 +492,19 @@ const SELECTED_COLUMNS: &str = "position, event_type, data, metadata, tags, \
 /// a later `FETCH` would admit rows beneath positions the caller has already
 /// been handed — ES-10's violation arriving through the read path rather than
 /// the write path, which is the one this whole mechanism was built to close.
-fn declare_sql(query: &Query, options: ReadOptions) -> (String, Vec<Param>) {
+fn declare_sql(
+    query: &Query,
+    options: ReadOptions,
+    visibility: Visibility,
+) -> (String, Vec<Param>) {
     let mut next = 1;
     let predicate = crate::query_sql::predicate(query, &mut next);
 
     let mut clauses = vec![
         predicate.sql().to_owned(),
-        // The mechanism, inside the snapshot.
-        "xact_id < pg_snapshot_xmin(pg_current_snapshot())".to_owned(),
+        // The mechanism, inside the snapshot. `Visibility::Naive` yields
+        // `TRUE` here, which is the whole of the negative control's difference.
+        visibility.predicate().to_owned(),
     ];
 
     // `from` and `to` are both **inclusive**, in both directions, and both are

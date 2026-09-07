@@ -145,6 +145,45 @@ pub struct PostgresEventStore {
     /// runtime that owns the reactor and leaves the caller's bare `block_on`
     /// waiting on a `JoinHandle`, which is a plain future and needs nothing.
     runtime: Option<Handle>,
+    /// Whether reads carry the visibility frontier.
+    ///
+    /// Always `Visibility::Frontier` for a store any consumer can build.
+    /// `Visibility::Naive` exists only behind the off-by-default `naive-arm`
+    /// feature, and only so that a conformance rule can be shown to REJECT the
+    /// implementation this adapter deliberately is not. See
+    /// [`new_naive`](Self::new_naive).
+    visibility: Visibility,
+}
+
+/// Whether a store admits rows its transaction cannot yet vouch for.
+///
+/// Two arms of one adapter rather than two adapters, which is the point: the
+/// naive arm differs from the shipped one in exactly the predicate under test
+/// and in nothing else, so a rule that fails against it is failing on the
+/// mechanism rather than on an unrelated difference between two codebases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Visibility {
+    /// Reads and `head` carry `xact_id < pg_snapshot_xmin(pg_current_snapshot())`.
+    Frontier,
+    /// They do not. `head` is `max(position)` and a read admits every committed
+    /// row, which is what `nextval()` allocating outside the transaction makes
+    /// wrong.
+    #[cfg(feature = "naive-arm")]
+    Naive,
+}
+
+impl Visibility {
+    /// The `WHERE` fragment this arm adds, already `AND`-able.
+    pub(crate) fn predicate(self) -> &'static str {
+        match self {
+            Self::Frontier => "xact_id < pg_snapshot_xmin(pg_current_snapshot())",
+            // `TRUE` rather than an empty string so every caller can splice it
+            // in without a special case, and so the two arms differ by a value
+            // rather than by a branch at each site.
+            #[cfg(feature = "naive-arm")]
+            Self::Naive => "TRUE",
+        }
+    }
 }
 
 impl PostgresEventStore {
@@ -210,6 +249,38 @@ impl PostgresEventStore {
             // first operation, as `NoRuntime`, if no runtime is found by then
             // either.
             runtime: Handle::try_current().ok(),
+            visibility: Visibility::Frontier,
+        }
+    }
+
+    /// A store with the visibility mechanism **removed**, for use as a negative
+    /// control and for nothing else.
+    ///
+    /// # What this is for
+    ///
+    /// `nothing_below_an_observed_position_appears_later` (CF-13) is the rule
+    /// this whole adapter exists to pass, and a rule no implementation can fail
+    /// is decorative. This constructor builds the implementation it must fail:
+    /// the same schema, the same append path, the same sequence — and `head` and
+    /// `read` with the frontier predicate taken out, which is precisely the
+    /// naive `nextval()` store the specification's ES-10 names in its
+    /// `Rejects:`.
+    ///
+    /// Two arms of one adapter, not two adapters. Everything except the
+    /// predicate under test is shared, so a rule that fails here is failing on
+    /// the mechanism rather than on some unrelated difference.
+    ///
+    /// # Why it is behind a feature
+    ///
+    /// Off by default, so no consumer can reach it and the default build does
+    /// not contain it. It is exercised once, by
+    /// `tests/rule_controls.rs`, and recorded — it is not a second
+    /// deliberately-broken fixture kept alive as a maintained instrument.
+    #[cfg(feature = "naive-arm")]
+    pub fn new_naive(pool: PgPool) -> Self {
+        Self {
+            visibility: Visibility::Naive,
+            ..Self::new(pool)
         }
     }
 
@@ -333,7 +404,13 @@ impl SendEventStore for PostgresEventStore {
         // this is the one method whose *whole body* has to be real: acquiring
         // the connection is deferred into the stream's first poll, and the
         // laziness stops being a nicety and becomes load-bearing.
-        PgReadStream::new(self.pool.clone(), self.runtime.clone(), query, options)
+        PgReadStream::new(
+            self.pool.clone(),
+            self.runtime.clone(),
+            self.visibility,
+            query,
+            options,
+        )
     }
 
     async fn append(
@@ -403,11 +480,12 @@ impl SendEventStore for PostgresEventStore {
         // unrelated database moved it from 0.7 ms to 4,010 ms when it was
         // measured — which is a documented capability limit, not a tuning knob.
         let pool = self.pool.clone();
+        let predicate = self.visibility.predicate();
         let highest: Option<i64> = self
             .on_runtime(async move {
-                sqlx::query_scalar(
-                    "SELECT max(position) FROM event              WHERE xact_id < pg_snapshot_xmin(pg_current_snapshot())",
-                )
+                sqlx::query_scalar(&format!(
+                    "SELECT max(position) FROM event WHERE {predicate}"
+                ))
                 .fetch_one(&pool)
                 .await
                 .map_err(PostgresEventStoreError::from)
