@@ -69,6 +69,21 @@ const RESERVED_DESCRIPTION: &str =
 /// so occurrences are checked for a negation rather than merely counted.
 const FLAT_CLAIM: &str = "passes the dcb conformance suite";
 
+/// The claim the manifest's `cargo deny` paragraph may not make while
+/// `deny.toml` exempts `worker`, spelled the way the manifest spelled it.
+///
+/// The wrong implementation this names is not hypothetical either: it is what
+/// the paragraph said on 2026-09-03, three days after `deny.toml` carried the
+/// ratified entry and `cargo deny check bans` began reporting `bans ok`.
+const RED_BANS_CLAIM: &str = "`cargo deny check bans` is **red**";
+
+/// The routing the same paragraph may not carry once the question is settled.
+///
+/// An escalation is a present-tense statement that something is *open*. Pointing
+/// a reader at a decision that has already been taken elsewhere is how a
+/// contributor re-litigates it.
+const ESCALATION: &str = "escalated to";
+
 /// The phrase the README uses to say the run declines nothing.
 ///
 /// Held in both directions below: present while the fixture supports every
@@ -123,6 +138,67 @@ fn manifest_code() -> String {
         .filter(|line| !line.trim_start().starts_with('#'))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// The manifest's prose, split into paragraphs.
+///
+/// The inverse of [`manifest_code`], and it exists because this crate's manifest
+/// records *decisions* in comments — several paragraphs of them — and a record
+/// that has gone stale against the artefact it describes is exactly as
+/// misleading as the stale README the checks above reject. A run of `#` lines is
+/// a block; a bare `#` separates two paragraphs inside it, which is the
+/// convention the manifest already writes.
+fn manifest_comment_paragraphs() -> Vec<String> {
+    let mut paragraphs = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+
+    for line in packaged("Cargo.toml").lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') && trimmed != "#" {
+            current.push(trimmed.to_owned());
+        } else if !current.is_empty() {
+            paragraphs.push(current.join("\n"));
+            current.clear();
+        }
+    }
+    if !current.is_empty() {
+        paragraphs.push(current.join("\n"));
+    }
+
+    paragraphs
+}
+
+/// `deny.toml`'s `deny` entry for `async-trait`, from the crate name to the
+/// brace that closes it.
+///
+/// Text rather than parsed TOML on purpose: this target links no TOML parser,
+/// and the entry is read for two facts a substring answers — which wrappers it
+/// names, and which decisions its `reason` cites.
+fn async_trait_deny_entry(deny: &str) -> Option<&str> {
+    let at = deny.find(r#"crate = "async-trait""#)?;
+    let rest = &deny[at..];
+    let end = rest.find('}')?;
+    Some(&rest[..=end])
+}
+
+/// Every `ADR-<four digits>` in `text`, in first-appearance order, deduplicated.
+fn adr_ids(text: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut rest = text;
+
+    while let Some(at) = rest.find("ADR-") {
+        let after = &rest[at + "ADR-".len()..];
+        let digits: String = after.chars().take_while(char::is_ascii_digit).collect();
+        if digits.len() == 4 {
+            let id = format!("ADR-{digits}");
+            if !found.contains(&id) {
+                found.push(id);
+            }
+        }
+        rest = after;
+    }
+
+    found
 }
 
 /// The `[package]` table's value for `key`, unquoted.
@@ -579,6 +655,81 @@ fn no_unimplemented_body_or_scoped_allow_survives() {
                  unimplemented body",
                 path.display(),
                 number + 1
+            );
+        }
+    }
+}
+
+/// N-1. The manifest's `cargo deny check bans` paragraph says what `deny.toml`
+/// says.
+///
+/// This crate's manifest is where the price of taking the real `worker` crate is
+/// recorded, and the record is good practice — *"a silent one is how a guard
+/// dies"* is the paragraph's own sentence. What nothing checked is whether the
+/// record survives the question being **answered**. It did not: `deny.toml`'s
+/// single `async-trait` entry now names `worker` and `worker-macros` as wrappers
+/// and cites ADR-0035 for it, `cargo deny check bans` reports `bans ok`, and the
+/// manifest went on declaring the step red and routing the reader to an
+/// escalation for a decision already taken.
+///
+/// The wrong implementation, and it is the one that shipped: **three artefacts
+/// at one commit disagreeing, with the manifest the only one that is wrong.** A
+/// contributor reads a present-tense unratified finding and either re-opens a
+/// settled question or stops believing the green gate the rest of the evidence
+/// rests on. They find the contradiction only by opening `deny.toml` themselves.
+///
+/// Every side of the comparison is an artefact that moves on its own — the
+/// wrappers list, and the ADR ids inside the entry's own `reason` string — so
+/// this cannot be satisfied by editing the sentence into agreement with a string
+/// this file also writes.
+///
+/// **Its limits, stated rather than implied.** It reads the *shape* of the
+/// claim, not its truth: it cannot run `cargo deny`, and a paragraph that goes
+/// wrong some third way passes here. And it is vacuous once this crate is
+/// unpacked from its `.crate` artifact, where `deny.toml` no longer resolves —
+/// the same limit [`repository`] carries for the licence comparison.
+#[test]
+fn the_manifest_reports_the_async_trait_ban_the_way_deny_toml_settled_it() {
+    let Some(deny) = repository("deny.toml") else {
+        return;
+    };
+    let entry = async_trait_deny_entry(&deny).expect(
+        "deny.toml must carry a `deny` entry for `async-trait`; ADR-0001 is what puts it there",
+    );
+
+    let paragraphs: Vec<String> = manifest_comment_paragraphs()
+        .into_iter()
+        .filter(|paragraph| paragraph.contains("cargo deny check bans"))
+        .collect();
+    assert!(
+        !paragraphs.is_empty(),
+        "the manifest must keep saying what taking `worker` costs the ban — this crate is why the \
+         exemption exists, and an unrecorded price is the failure mode the paragraph itself names"
+    );
+
+    // `worker` absent from the wrappers list would mean the ban really is red,
+    // and the paragraph would be right to say so. The assertions below are about
+    // the state `deny.toml` is actually in.
+    if !entry.contains(r#""worker""#) {
+        return;
+    }
+
+    for paragraph in &paragraphs {
+        assert!(
+            !paragraph.contains(RED_BANS_CLAIM),
+            "`deny.toml` exempts `worker` and the check passes, but the manifest still declares it \
+             red:\n{paragraph}"
+        );
+        assert!(
+            !paragraph.contains(ESCALATION),
+            "the question this paragraph escalates was answered — `deny.toml`'s entry is the \
+             answer — so the paragraph routes a reader to a decision already taken:\n{paragraph}"
+        );
+        for adr in adr_ids(entry) {
+            assert!(
+                paragraph.contains(&adr),
+                "`deny.toml`'s `async-trait` entry cites {adr} and the manifest paragraph does \
+                 not; the two describe one exemption or a reader meets two:\n{paragraph}"
             );
         }
     }

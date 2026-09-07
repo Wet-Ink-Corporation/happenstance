@@ -184,3 +184,41 @@ pub use projection_memory::{
 /// Re-exported so adapters and callers can name payload types without adding a
 /// direct dependency on a specific `bytes` version.
 pub use bytes;
+
+/// Re-exported for the reason [`bytes`] is, one trait over: `Stream` appears at
+/// the *top level* of [`EventStore::read`]'s signature, so every adapter and
+/// every generic caller is forced to name it, and two `Stream` traits that print
+/// identically fail as `error[E0277]` naming a trait the author can see is
+/// implemented.
+pub use futures_core;
+
+/// Compiled proof that every path this crate promises a caller actually
+/// resolves from outside it — and the statement of what that promise is not.
+///
+/// A re-export is a **type-identity and discoverability** guarantee: one
+/// `Bytes` and one `Stream` in a build rather than two that print identically,
+/// and reachable without a second manifest line for a caller to get wrong. It
+/// is **not** a substitute for a consumer's own dependency — features a caller
+/// did not enable do not arrive through it — and it is not a statement about
+/// which versions of which crates travel together.
+///
+/// `#[cfg(doctest)]` because the module carries no items. It exists to be
+/// compiled by `cargo test -p happenstance-core --doc`, which is the only place
+/// in this workspace where a `happenstance_core::…` path is resolved the way a
+/// consumer resolves it: from outside.
+///
+/// ```
+/// fn payload(b: happenstance_core::bytes::Bytes) -> usize { b.len() }
+/// # fn main() { assert_eq!(payload(happenstance_core::bytes::Bytes::from_static(b"{}")), 2); }
+/// ```
+///
+/// `Stream` sits at the *top level* of `EventStore::read`'s signature rather
+/// than inside a future (ADR-0008), so no adapter and no generic caller can
+/// avoid naming it:
+///
+/// ```
+/// fn readable<S: happenstance_core::futures_core::Stream>(_s: S) {}
+/// # fn main() {}
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}

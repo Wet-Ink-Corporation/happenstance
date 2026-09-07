@@ -1085,6 +1085,31 @@ impl Projection for OrderStatus {
     }
 }
 
+/// The upsert into the first table, and into the second.
+///
+/// Two constants rather than one `format!` over a table name, and the reason is
+/// [`SqliteBatch::push`], which takes `&'static str`. Interpolating a
+/// table name here was *safe* — it was a `&'static str` chosen by one of the
+/// three constructors below and could never hold user input — but that safety
+/// lived in a comment, and a comment is what the signature stopped accepting.
+/// The two statements differ in one identifier, which is exactly the amount of
+/// duplication that buys the property.
+///
+/// [`push_raw_sql`](SqliteBatch::push_raw_sql) is the escape hatch for
+/// a statement whose *shape* is decided at run time — an `IN (…)` list sized by
+/// how many keys are being written. This one's shape is not: only which of two
+/// fixed statements runs is decided at run time, and that is a choice between
+/// constants rather than a statement built from a value.
+const UPSERT_DAILY_DISPATCHES: &str = "INSERT INTO daily_dispatches (day, dispatched) VALUES (?1, ?2) \
+     ON CONFLICT(day) \
+     DO UPDATE SET dispatched = daily_dispatches.dispatched + excluded.dispatched";
+
+/// The same statement against the backfill's own table. See
+/// [`UPSERT_DAILY_DISPATCHES`] for why this is a second constant.
+const UPSERT_DAILY_DISPATCHES_V2: &str = "INSERT INTO daily_dispatches_v2 (day, dispatched) VALUES (?1, ?2) \
+     ON CONFLICT(day) \
+     DO UPDATE SET dispatched = daily_dispatches_v2.dispatched + excluded.dispatched";
+
 /// How much went out each day, counted one of two ways.
 ///
 /// One type with two configurations rather than two types, because the blue
@@ -1099,8 +1124,8 @@ struct DailyDispatches {
     id: ProjectionId,
     /// Every event, so the tags constrain nothing.
     scope: Tags,
-    /// The table this instance writes into.
-    table: &'static str,
+    /// The upsert this instance issues, and with it the table it writes into.
+    upsert: &'static str,
     /// What one dispatch adds to its day.
     counting: Counting,
 }
@@ -1120,7 +1145,7 @@ impl DailyDispatches {
         Self {
             id: ProjectionId::new("daily_dispatches"),
             scope: Tags::empty(),
-            table: "daily_dispatches",
+            upsert: UPSERT_DAILY_DISPATCHES,
             counting: Counting::Orders,
         }
     }
@@ -1130,7 +1155,7 @@ impl DailyDispatches {
         Self {
             id: ProjectionId::new("daily_dispatches_v2"),
             scope: Tags::empty(),
-            table: "daily_dispatches_v2",
+            upsert: UPSERT_DAILY_DISPATCHES_V2,
             counting: Counting::Units,
         }
     }
@@ -1140,7 +1165,7 @@ impl DailyDispatches {
         Self {
             id: ProjectionId::new("daily_dispatches_v2"),
             scope: Tags::empty(),
-            table: "daily_dispatches",
+            upsert: UPSERT_DAILY_DISPATCHES,
             counting: Counting::Units,
         }
     }
@@ -1174,19 +1199,11 @@ impl Projection for DailyDispatches {
             | Fulfilment::OrderCancelled { .. } => return Ok(()),
         };
 
-        // The table name is interpolated rather than bound, because SQLite
-        // binds values and not identifiers. It is safe here for a reason worth
-        // stating rather than assuming: `table` is a `&'static str` chosen by
-        // one of the three constructors above and can never hold user input.
-        batch.push(
-            format!(
-                "INSERT INTO {table} (day, dispatched) VALUES (?1, ?2) \
-                 ON CONFLICT(day) \
-                 DO UPDATE SET dispatched = {table}.dispatched + excluded.dispatched",
-                table = self.table
-            ),
-            [Value::Text(day), Value::Integer(delta)],
-        );
+        // Which of the two constants runs is the whole of what this instance's
+        // configuration decides. SQLite binds values and not identifiers, so a
+        // table name can only ever reach a statement by being part of its text —
+        // which is why the statement, and not the name, is the thing chosen.
+        batch.push(self.upsert, [Value::Text(day), Value::Integer(delta)]);
 
         Ok(())
     }

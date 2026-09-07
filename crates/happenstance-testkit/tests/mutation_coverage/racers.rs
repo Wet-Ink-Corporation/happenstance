@@ -308,7 +308,9 @@ macro_rules! racing_fixture {
 ///
 /// The control this file needs for the same reason `variants.rs` holds two: a
 /// table in which nothing passes is a table that proves the harness rejects
-/// everything. It is also the shape almost every adapter in this workspace will
+/// everything. Its `RACERS` row says so in the data now
+/// (`RacerKind::ConformantControl`) rather than by an empty list and this
+/// paragraph — deleting this store used to leave every meta-test green. It is also the shape almost every adapter in this workspace will
 /// have — rusqlite behind a connection, a Durable Object, `MemoryEventStore`
 /// itself — which is why `happenstance-postgres`, whose writers are *not*
 /// serialised, is the instrument the runbook still owes.

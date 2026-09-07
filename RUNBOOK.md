@@ -20,8 +20,11 @@ claim about `trait_variant` was compiled and refuted.
 
 The larger change is that the design questions this file used to *schedule* are
 now *answered*. [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md)
-carries 200 numbered clauses across three ports — 139 `[FROZEN]`, 49
-`[PROVISIONAL]`, 10 `[DEFERRED]`, two `[NON-NORMATIVE]`. This file no longer
+carries 201 numbered clauses across three ports — 138 `[FROZEN]`, 46
+`[PROVISIONAL]`, 12 `[DEFERRED]`, five `[NON-NORMATIVE]`. Those figures are
+`cargo xtask spec-trace`'s rather than this file's: §7.1 is generated, and the
+checker fails the gate when §1.3's prose disagrees with it — which is the only
+reason a count in a document this long can be trusted at all. This file no longer
 decides what a port promises. It executes those clauses, discharges the
 provisional and deferred ones against named experiments, and makes the 57 cases
 in [`E2E-CASES.md`](spec/E2E-CASES.md) writable in an order that puts the
@@ -153,19 +156,54 @@ turned out to be one DCB already provides.
 | 3 | [The suite becomes an instrument](#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it, and every mutant fails exactly its declared rules |
 | 4 | [Freeze the contract](#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | **done** | `frozen_signatures.rs` — a generic consumer returning a read stream from a function, holding one in a struct, spawning a replay under the `Send` flavour, and keeping its batch after appending it; plus a `compile_fail` doctest pinning the arrangement that does **not** compile. Two of the four cases turned out not to fail pre-freeze, and the criterion says which and why |
 | 5 | [Freeze the wire format](#phase-5--freeze-the-wire-format) | 4 | **done** | two `wire.rs` files — 21 tests and four const assertions across `happenstance-core` and `happenstance-sync`, every envelope shape round-tripping in JSON *and* postcard, sparse shapes included, each postcard round trip framed against a trailer so a field-count desynchronisation reports as a wrong value rather than as a short buffer; plus three negative controls that fail without the fix and are asserted **by name** in `xtask/src/proof.rs`. **Floats: anywhere between phase 4 and phase 12** |
-| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | not started | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
-| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | not started | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
+| 6 | [Freeze `ProjectionStore`](#phase-6--freeze-projectionstore) | 4 | done | `CheckpointOnlyStore` **failing** the projection suite, and two unlike batch shapes passing it |
+| 7 | [The typed layer and the example](#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | done | a `trybuild` compile-fail case: add an event variant, the crate stops compiling until the fold handles it |
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
-| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | not started | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
-| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | not started | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
+| 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
+| 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | not started | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
 place.
+
+### The pre-publication remediation, and what it did to phase 12
+
+Not a phase, and deliberately not given a row above: it is a review of everything
+phases 0–9 built, and it gates phase 12 rather than sitting beside it.
+
+`references/evaluation/review-pre-publication-2026-09-03.md` raised **96 finding
+IDs across 84 entries** against `56ef6c5`. On branch `remediation/pre-publication`,
+**65 are closed with the full gate green** and **48 briefs await ratification** in
+`.kb/_intake/remediation-2026-09-04-briefs/`. One finding, `F2-5`, is
+genuinely blocked, and narrower than the audit filed it: half of it was refuted
+during the work — the rule's second assertion **does** execute, twice per run —
+and what survives is that it has never been answered by a store with a real
+medium under it, which is the phase-10 adapter that does not exist. Five decisions
+were ratified by the owner during the work, including publishing the repository and
+closing `ANCHOR_SLACK`.
+
+**What it changes about phase 12's exit criteria, which are stated below at
+`Phase 12 — Publish 0.2.0`.** Those criteria audit every `[PROVISIONAL]` and
+`[DEFERRED]` clause on a published surface and ask nothing about whether a
+`[FROZEN]` one is *met by the adapter being published*. This remediation found
+four cases where it was not — `Q-01`, `X-3`, `Q-02` and `F2-5` — with the disproof
+already in the tree in every case, written by the adapter's own author. Whoever
+takes phase 12 should read that as a gap in the criteria rather than as four
+findings that happen to be closed now.
+
+The other thing it changes is what "the gate is green" is worth. Several checks
+this runbook relies on were found to be reporting about themselves rather than
+their subject; they are repaired, and `REMEDIATION-HANDOVER.md` lists them. The
+scoped-gate command set has grown by four commands, each added because something
+went red downstream of a gate that could not see it.
+
+**`REMEDIATION-HANDOVER.md` is the entry point.** It carries the scoreboard, the
+method, the briefs awaiting ratification, and the operational traps — including
+the three false "completions" that were read as results before being caught.
 
 ### The critical path
 
@@ -174,7 +212,7 @@ phase 3 into phase 6 while the table above makes phase 4 depend on it, and nobod
 noticed for a whole document revision.
 
 ```
-0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 12 ─▶ 13 ─▶ 14
+0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 10 ─▶ 12 ─▶ 13 ─▶ 14
 
 one branch that rejoins the trunk:
     1 ─▶ 3 ─▶ 4          phase 4 is frozen against the instrument phase 3 builds
@@ -182,13 +220,12 @@ one branch that rejoins the trunk:
 one that floats — after 4, before 12, otherwise unconstrained:
     4 ─▶ 5               the wire format; nothing between it and 12 reads it
 
-three that never rejoin — off the 0.1 path:
+two that never rejoin — off the 0.1 path:
     2, 4    ─▶ 9
-    2, 4, 6 ─▶ 10
     6       ─▶ 11
 ```
 
-**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 12**, with 3 on it too
+**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 10 → 12**, with 3 on it too
 unless a second pair of hands takes it. Phase 3 depends only on phase 1, so it
 *can* run alongside the trunk — but it is not optional and cannot be skipped,
 because 4 waits on it. Solo it is serial and the estimate below says so.
@@ -537,21 +574,32 @@ Three obligations, all mechanical to check, all previously answerable only by
 prose search — and the middle one previously not answerable at all, which is why
 phase 12's audit of it had nothing behind it.
 
-### The 10 `[DEFERRED]` clauses
+### The 12 `[DEFERRED]` clauses
 
-Thirteen rows are listed; three are struck. Two were settled at phase 2 and their
+Seventeen rows are listed; four are struck. Two were settled at phase 2 and their
 markers moved in the specification at phase 3; the third, CF-13, was settled at
-phase 3 by running the experiment its own marker named. **Ten remain.** The struck
-rows stay because a reader arriving from an older commit needs to find them, and
-because a table that quietly loses a row cannot be checked against anything.
+phase 3 by running the experiment its own marker named; the fourth, PS-33, was
+**demoted rather than settled** — §7.2 carries it as `NON-NORMATIVE`, so it is not
+a deferral at all any more. **Twelve remain.** The struck rows stay because a
+reader arriving from an older commit needs to find them, and because a table that
+quietly loses a row cannot be checked against anything.
+
+Three of the twelve — PS-18, PS-27 and PS-30 — are new to this table and were not
+new to the specification. They sat in the **provisional** ledger below while §7.2
+carried them as deferred, which is most of why that ledger's heading said
+forty-nine against a specification that said forty-seven. They did not disappear;
+they moved.
 
 | Clause | What it defers | Owning phase |
 |---|---|---|
 | ~~ES-6~~ | ~~`Error: Send + Sync`~~ | **settled at 2 — ADR-0009**, and `[FROZEN]` in the specification since phase 3 |
 | ES-39 | a store reporting history it does not hold | 14 |
 | WF-1 | DCB wire interoperability | 13 |
-| PS-33 | evaluating ADR-0007's falsifier | 7 |
+| ~~PS-33~~ | ~~evaluating ADR-0007's falsifier~~ | **demoted at §7.2 to `NON-NORMATIVE`**, and therefore not a deferral. It was a clause about this document's own work rather than about a store's behaviour |
 | ~~PS-35~~ | ~~one derivation ADR covering both ports~~ | **settled at 2 — ADR-0008**, and `[FROZEN]` in the specification since phase 3 |
+| PS-18 | a refusable reset — `refused_reset_changes_nothing` | 6 — `projection-store-freeze` (HS-P0010), which takes the count when the first adapter over storage this workspace does not control clears the projection suite. Evaluated at the typed layer's phase exit and the count came back **unavailable rather than zero**: the mechanism and its rule both exist; no projection adapter has shipped to implement protection |
+| PS-27 | "skip and record" atomicity on a projection failure | 6 — `projection-store-freeze` (HS-P0010), which owns both the suite rule and the port surface a skip record would be written through. The count is **zero**: the alpha's runner halts on the first failure and offers no failure-policy seam, so no path could write a skip record. **Not withdrawn** — the Kestrel Motor shred case still needs it |
+| PS-30 | a panicking `apply` rolls back | 6 — `projection-store-freeze` (HS-P0010), once a fan-out runner is buildable at all. The runner is not built, so the MUST binds nothing today. Its contingency is a **benchmark rather than an assertion** and is deliberately outside the gate under CF-34; the harness now exists as `experiments/polling-cost`, which is the artefact that reopens this clause |
 | SY-14 | idempotent bulk ingest in bounded round trips | 13 |
 | SY-18 | peer-declared limits | 13 |
 | SY-27 | scoped versus whole-log replication | 13 |
@@ -561,21 +609,19 @@ because a table that quietly loses a row cannot be checked against anything.
 | CF-14 | durability across a reopen | 8 — the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). **Phase 9's reading: the deferral still holds, and one more of the three named implementations has answered with one shape** — `CloudflareFixture` expressed `REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and `SqliteFixture` use, and `acknowledged_writes_survive_a_reopen` with its two neighbours ran and passed with **zero** `SKIP` in the wasm32 conformance run, so "durable" needed no grading. **The far end is untouched** — this project supplied no store that can lose an acknowledged write to a *fault* rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s (HS-P0012), and what the run could *not* exercise is in phase 9's session log, *The CF-14 re-read* |
 | CF-27 | the suffix-store instrument | 14 — **phase 9's reading: more real, not less, and this runtime is why.** *Eviction* is the wrong hazard — a Durable Object's storage outlives its isolate — but the same `Storage` object this adapter reaches through carries `delete_all()` (`worker-0.8.5/src/durable.rs:449`), so a wholesale purge happens with no `EventStore` method involved and the store passes every rule unchanged afterwards, which is how the specification's **No, and nothing is planned** completeness row comes to understate the exposure by one adapter. The instrument that would settle it — a testkit-adjacent store holding only a suffix and reporting that it does — is **deliberately not built here**: it stays `retention-and-incomplete-logs`' (HS-P0018) and phase 14's, and the argument is in phase 9's session log, *The CF-27 re-read* |
 
-Checked against `SPECIFICATION.md` §7.2's maturity column, and at phase 9 **the two
-sets are no longer equal**. `cargo xtask spec-trace` counts **twelve** `[DEFERRED]`
-clauses — WF-1, ES-39, **PS-18**, **PS-27**, **PS-30**, SY-14, SY-18, SY-27, SY-28,
-SY-32, CF-14, CF-27 — while this table lists ten live rows and names **PS-33**,
-which §7.2 now carries as `NON-NORMATIVE` and not as deferred at all. So three
-projection clauses are deferred in the specification and unlisted here, and one row
-here names a clause the specification has since demoted.
+Checked against `SPECIFICATION.md` §7.2's maturity column, and **the two sets are
+equal again as of the `0.2.0` release pass**. `cargo xtask spec-trace` counts
+**twelve** `[DEFERRED]` clauses — WF-1, ES-39, PS-18, PS-27, PS-30, SY-14, SY-18,
+SY-27, SY-28, SY-32, CF-14, CF-27 — and this table now lists exactly those twelve.
 
-The drift predates this reading and is **recorded rather than repaired in
-passing**: reconciling a maturity table is a clause question and this pass is a
-prose re-read of CF-14 and CF-27 with no licence to move a marker, a row or a
-census figure. It is handed to ADR-0023's queue row and to whichever pass owns the
-projection deferrals. **No deferred clause listed here is unowned** — which is the
-property this paragraph was written to protect, and it still holds; the three that
-are *not* listed are owed an owning phase by the pass that reconciles the table.
+Phase 9 read this and recorded the drift rather than repairing it, on the ground
+that reconciling a maturity table is a clause question and a prose re-read of
+CF-14 and CF-27 had no licence to move a row. That was right then and it is what
+made the repair cheap now: the three projection clauses were **named** as missing
+rather than merely absent, so this pass had only to move them, and each one's
+falsifier and owner came from its own marker rather than from a judgement made
+here. **No deferred clause listed here is unowned**, which is the property that
+paragraph was written to protect.
 
 **One of them sits on a surface phase 12 publishes**, and it is safe. WF-1 (DCB
 wire interoperability) is owned by phase 13, after publication, but the format is
@@ -591,7 +637,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 49 `[PROVISIONAL]` clauses
+### The 46 `[PROVISIONAL]` clauses
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
@@ -610,14 +656,17 @@ seventeen.
 | The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
 | No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 — **answered**; the one-paragraph verdict is in phase 9's session log. It answers *this* falsifier only: the clause's own benchmark-shaped one — E2E-32's fan-out runner holding N views within their staleness budget — is untouched and stays phase 7's |
 | The whole batch shape and write seam | PS-4 – PS-6, PS-9, PS-11, PS-12, PS-15 | **PS-2 alone** — `CheckpointOnlyStore` passing, or a third adapter disagreeing with the two that froze it | 6, re-tested 11 |
-| Reset, checkpoint regression, chunked rebuild, query drift | PS-16, PS-18, PS-22 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset | 6 |
-| Failure policy | PS-27, PS-30 | one poisoned projection stalling the others | 6, exercised 7 |
+| Reset, checkpoint regression, chunked rebuild, query drift | PS-16, PS-22 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset | 6 |
 | Ship behind `unstable-projection` | PS-3 | the two batch shapes disagreeing at phase 6 | 6, decided at 12 |
 | The E0195 spelling trap | PS-34 | a third implementer hitting it after the diagnostic is documented | 6, re-tested 11 |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
+| Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
+| Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
+| A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
+| A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
 | Durability's rule shape; benchmarks are not conformance | CF-17, CF-34 | a store that loses an acknowledged write, and an adapter that scans where it should seek and passes every rule | 8 |
-| **The portfolio's residual exposure** — the five clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble | ES-10, ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: position allocation (ES-10) by a Postgres store that assigns outside the transaction and still passes; transport (ES-11, ES-12) by a one-shot-HTTP store that self-paginates; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms | 10 (ES-10, ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
+| **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store that self-paginates; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
 
 Every group names a phase in the [status table](#status). **PS-2 is the single
 gate under thirteen of these rows**, which is why phase 6 is worth its six days
@@ -633,20 +682,44 @@ was right; the rows were short. Counted again at phase 3's close, group by group
 against `spec-trace`'s own list of `[PROVISIONAL]` clause IDs: the two sets were
 equal **at that commit**.
 
-**They are not equal now, and phase 5 recounted rather than repaired.** The
-heading said forty-six; the specification says **49** (`SPECIFICATION.md:219-221`,
-and §7.1's totals row at `:8138`, whose per-section column sums to the same
-number). The heading is corrected above. The rows have not been, because the
-arithmetic is phase 4's rather than ADR-0016's and adding a row means deciding a
-falsifier and an owning phase, which is not a thing to do in passing: phase 4
-added CF-39, CF-40, ES-41 and **ES-42**, and lifted ES-10 — 46 − 1 + 4 = 49.
-Counted clause by clause against the specification's own `PROVISIONAL` rows, the
-groups above are short by **ES-41, ES-42, CF-39 and CF-40**, and the last row
-still carries **ES-10**, which is no longer provisional. That is five edits and
-it is the next pass's, not this one's — but it is phase 12's audit that reads
-this table, so it cannot wait past then. Recorded here, and in ADR-0016's
-amendment section, precisely because a table that quietly disagrees with its own
-heading is what the previous paragraph is about.
+**They were not equal, and the `0.2.0` release pass repaired it.** Phase 5
+recounted and left the rows; phase 5's own note said the repair could not wait
+past phase 12's audit, and this is that audit.
+
+**Phase 5's arithmetic was wrong in both directions, which is why the heading
+said 49 against a specification that said 47.** It read the delta as *phase 4
+added CF-39, CF-40, ES-41 and ES-42, and lifted ES-10 — 46 − 1 + 4 = 49*. Counted
+clause by clause against §7.2's generated maturity column, the real delta is
+**46 − 4 + 5 = 47**: a fifth addition, **PS-38**, minted by ADR-0030 and listed
+nowhere here; and three further removals, **PS-18, PS-27 and PS-30**, which were
+not lifted at all — they moved to `[DEFERRED]`, where they are now listed, and
+where phase 9 had already named them as missing.
+
+Each new row's falsifier is the clause's own marker rather than a judgement made
+here, and six of the eight rows that moved name their owner in the same marker:
+PS-18, PS-27, PS-30 and PS-38 to `projection-store-freeze` (HS-P0010), ES-41 to
+whichever of phases 9 and 10 lands first, CF-39 to phases 8 and 10.
+
+**ES-42 was the eighth row and is no longer in this table**, because it is no
+longer provisional. Its marker named a deadline rather than a phase — *"must be
+re-evaluated before phase 12"* — which made it, while it was missing from here,
+**the one clause in the specification whose own marker gated the release and
+which a phase-12 audit reading this table could not have seen.** That is what
+the repair was for, and the re-evaluation it forced ran immediately: no consumer
+needs `dyn EventStore` the E11 erasure wrapper cannot box, so the marker was
+**earned off rather than allowed to expire** and the clause is `[FROZEN]`. The
+count above is 46 rather than 47 for that reason.
+
+**Every row names an owner.** The first pass at this repair recorded CF-40 as
+owed one, and that was an error in the repair rather than a gap in the
+specification: CF-40's clause is written as `**CF-40.**` in §6 rather than under
+a `####` heading, so a search that assumed the heading form found the *nearest
+marker after a mention of it* — VT-22's, three thousand lines away — and copied
+that clause's falsifier and its silence about phases. CF-40's own marker names
+phases 9 and 10 explicitly. Corrected here, and worth leaving on the record:
+a clause written in a different shape from its neighbours is exactly what a
+mechanical read gets wrong, and the anchor discipline the citation checkers
+enforce exists for the same reason.
 
 ### The blocked cases
 
@@ -2868,9 +2941,9 @@ limits). Discharges ES-8 – ES-40, VT-1 – VT-31.
       produce four boundaries and one condition cannot carry them today, which is
       what blocks E2E-04 and E2E-05.
 - [ ] `happenstance_core::prelude` exporting `EventStore` (not `SendEventStore`),
-      so the default import path cannot produce E0034; `pub use futures_core;`
-      beside `pub use bytes;`, since `Stream` appears in `read`'s signature and
-      every adapter is forced to name it.
+      so the default import path cannot produce E0034. This item's second half —
+      `pub use futures_core;` beside `pub use bytes;` — **landed** (`lib.rs:193`),
+      and each adapter re-exports its driver with it. The prelude is what is left.
 - [ ] `ConditionViolated`'s `Display` interpolates the `conflicting_position` the
       store already populates, and names the remedy.
 
@@ -4680,12 +4753,43 @@ have been three.
 
 ## Phase 12 — Publish `0.2.0`
 
-**Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit` and
-`happenstance-sqlite` on crates.io, rendering on docs.rs.
+**Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — **five crates**, decided at
+the `0.2.0` release pass — on crates.io, rendering on docs.rs.
 
 **Why here.** Publication no longer waits on replication: with identity settled in
 phase 5 and `IngestStore` living in the sync crate, nothing in `happenstance-sync`
 touches the contract's public surface.
+
+**It does now wait on phase 10, and that is a decision rather than a discovery.**
+The dependency row above reads `7, 8, 10`; it read `7, 8` until the `0.2.0`
+release pass, and the phase that moved it is **F2-5**.
+
+F2-5's actionable half was refuted by execution — `dropped_append_future_leaves_no_partial_batch`'s
+second arm runs twice per run, in both feature configurations, and has since the
+rule's first commit. What survives is that **the rule has never been answered by a
+store with a real medium under it**: every store that has ever reached either arm
+is an `Rc<RefCell<…>>` in the testkit's own test target, where *"the future was
+dropped"* means a local went out of scope rather than a connection was severed.
+The store that would answer it is phase 10's.
+
+The repository owner chose to hold the release for that answer. It is worth
+recording that this runs **against** the pre-publication review's own verdict on
+this class — *"no fix here is a breaking change, and every one of them is
+available at the same price after `0.2.0`"* — and against this file's own
+sequencing argument, which put phase 10 off the trunk precisely because its
+design contribution was already spent. The trade is roughly eleven days and two
+adapters against publishing a conformance suite whose atomicity rule has only
+ever been proved against a `RefCell`. Taken deliberately, with the counter-argument
+in front of it.
+
+**Two consequences follow, and neither is a cost.** The seventeen briefs ratified
+at the release pass were ratified because their window closed at `0.2.0`;
+deferring the release widens that window rather than closing it, so the
+implementation queue they created can be worked unhurried. And the repository
+stays private until the release, so the documents that now describe `0.2.0` in the
+present tense are visible only to whoever picks this tree up — which is the one
+group they can still mislead.
 
 And what "why here" is *not*: it is not "publishing freezes the public API". The
 API was frozen in phases 4 – 6, on evidence, which is what makes publishing safe.

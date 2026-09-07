@@ -183,6 +183,29 @@ impl Fixture for SqliteFixture {
          would retire that clause's falsifier from a story that has no say in it",
     );
 
+    /// Declined, and — unlike [`MID_BATCH_FAULT`](Self::MID_BATCH_FAULT) above —
+    /// by **incapacity** rather than by scope. The two look identical in a `SKIP`
+    /// line, so the difference is written here.
+    ///
+    /// This adapter reads through one `rusqlite::Statement` held open across
+    /// polls, over a local file. There is no fetch between two pages to fail:
+    /// the rows are already the driver's, `step` does not go anywhere, and the
+    /// only way to make it error would be to corrupt the database file
+    /// underneath a live statement — a fault about SQLite rather than about this
+    /// adapter's read path, which would say nothing about whether the `Err` arm
+    /// is used correctly. The adapters that can answer this are the paged ones:
+    /// `happenstance-cloudflare` over `SqlStorage` and `happenstance-neon` over
+    /// one-shot HTTP, where a fetch is a round trip that can really fail.
+    const READ_FAULT: Capability = Capability::declined(
+        "this adapter reads through one rusqlite statement held open across \
+         polls over a local file, so there is no fetch between two pages to \
+         fail: the rows are already the driver's and `step` does not go \
+         anywhere. Making it error would mean corrupting the file underneath a \
+         live statement, which is a fault about SQLite rather than about this \
+         read path. The paged adapters are where this capability has something \
+         to inject",
+    );
+
     /// Mirrored from the adapter's own constant rather than restated, so a
     /// number can never be declared here at one value and enforced there at
     /// another.

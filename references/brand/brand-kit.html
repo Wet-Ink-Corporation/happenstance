@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>happenstance — Brand Kit</title>
+<style>
+  :root{--sun:#FFB627;--deep:#E08700;--ember:#A85B00;--ink:#2A211B;--paper:#FFFCF4;--stone:#F4F1EA;
+        --rule:rgba(42,33,27,.13);--mute:rgba(42,33,27,.58);}
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 0 120px;background:var(--stone);color:var(--ink);
+    font-family:'IBM Plex Sans','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .shell{max-width:1060px;margin:0 auto;padding:0 34px}
+  .cover{background:var(--ink);color:var(--paper);padding:82px 34px 74px;margin-bottom:20px}
+  .cover .shell{display:flex;align-items:center;gap:44px;flex-wrap:wrap}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--sun);margin:0 0 14px}
+  .cover h1{font-size:38px;font-weight:600;letter-spacing:-.03em;margin:0 0 14px;line-height:1}
+  .cover p{margin:0;font-size:15.5px;line-height:1.62;color:rgba(255,252,244,.74);max-width:48ch}
+  .toc{background:var(--paper);border-bottom:1px solid var(--rule);padding:16px 34px;margin-bottom:46px}
+  .toc .shell{display:flex;gap:22px;flex-wrap:wrap;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .toc a{color:var(--mute);text-decoration:none}
+  .toc a:hover{color:var(--ember)}
+  section{margin-bottom:52px;scroll-margin-top:20px}
+  .num{font-size:11px;font-weight:750;letter-spacing:.16em;color:var(--sun);
+       background:var(--ink);border-radius:20px;padding:3px 10px;margin-right:10px}
+  h2{font-size:19px;font-weight:650;letter-spacing:-.02em;margin:0 0 8px;display:flex;align-items:center}
+  .rulebar{height:1px;background:var(--rule);margin:14px 0 20px}
+  .lede{font-size:14px;line-height:1.66;color:var(--mute);max-width:74ch;margin:0 0 22px}
+  .lede b{color:var(--ink);font-weight:640}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:14px}
+  .tile{background:var(--paper);border:1px solid var(--rule);border-radius:16px;padding:22px;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:170px}
+  .tile.dark{background:var(--ink)}
+  .cap{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);text-align:center;line-height:1.55}
+  .tile.dark .cap{color:rgba(255,252,244,.52)}
+  .panel{background:var(--paper);border:1px solid var(--rule);border-radius:16px;padding:26px}
+  table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--rule);
+        border-radius:16px;overflow:hidden;font-size:13px}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-size:9.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--mute)}
+  tr:last-child td{border-bottom:none}
+  .dot{width:30px;height:30px;border-radius:8px;border:1px solid var(--rule)}
+  code{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+       background:rgba(42,33,27,.07);padding:2px 6px;border-radius:4px}
+  .ladder{display:flex;align-items:flex-end;gap:32px;flex-wrap:wrap;background:var(--paper);
+          border:1px solid var(--rule);border-radius:16px;padding:30px 28px 22px}
+  .step{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .px{font-size:10px;font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums}
+  .yes,.nope{position:relative}
+  .yes::before,.nope::before{position:absolute;top:12px;left:12px;font-size:9.5px;font-weight:750;
+    letter-spacing:.1em;padding:3px 9px;border-radius:20px}
+  .yes::before{content:"USE";background:rgba(27,107,58,.13);color:#1B6B3A}
+  .nope::before{content:"DON'T";background:rgba(163,52,31,.12);color:#A3341F}
+  .swatchbig{border-radius:16px;padding:22px;min-height:132px;display:flex;flex-direction:column;justify-content:flex-end;
+             border:1px solid var(--rule)}
+  .swatchbig .n{font-size:14px;font-weight:650;letter-spacing:-.01em}
+  .swatchbig .h{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:11.5px;opacity:.72;margin-top:3px}
+  .typerow{display:flex;align-items:baseline;gap:18px;padding:13px 0;border-bottom:1px solid var(--rule)}
+  .typerow:last-child{border-bottom:none}
+  .typemeta{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);
+            min-width:150px;flex:none}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<path id="word" d="M7.4 -74H20.2V-43.5H20.7Q22.3 -47.7 25.8 -50.6Q29.2 -53.4 35.3 -53.4Q43.4 -53.4 47.7 -48.1Q52 -42.8 52 -33V0H39.2V-31.7Q39.2 -37.3 37.2 -40.1Q35.2 -42.9 30.6 -42.9Q28.6 -42.9 26.8 -42.4Q24.9 -41.8 23.5 -40.8Q22 -39.7 21.1 -38.2Q20.2 -36.6 20.2 -34.5V0H7.4Z M101.9 0Q97.7 0 95.2 -2.5Q92.8 -4.9 92.2 -9H91.6Q90.3 -3.9 86.3 -1.4Q82.3 1.2 76.4 1.2Q68.4 1.2 64.1 -3Q59.8 -7.2 59.8 -14.2Q59.8 -22.3 65.6 -26.2Q71.4 -30.2 82.1 -30.2H91V-34Q91 -38.4 88.7 -40.8Q86.4 -43.2 81.3 -43.2Q76.8 -43.2 74.1 -41.2Q71.3 -39.3 69.4 -36.6L61.8 -43.4Q64.7 -47.9 69.5 -50.7Q74.3 -53.4 82.2 -53.4Q92.8 -53.4 98.3 -48.6Q103.8 -43.8 103.8 -34.8V-10.2H109V0ZM80.7 -8.1Q85 -8.1 88 -10Q91 -11.9 91 -15.6V-22.5H82.8Q72.8 -22.5 72.8 -16.1V-14.4Q72.8 -11.2 74.8 -9.7Q76.9 -8.1 80.7 -8.1Z M116.7 -52.2H129.5V-43.6H129.9Q131.3 -48.1 135.2 -50.8Q139.1 -53.4 144.3 -53.4Q154.3 -53.4 159.6 -46.4Q164.8 -39.3 164.8 -26.2Q164.8 -13 159.6 -5.9Q154.3 1.2 144.3 1.2Q139.1 1.2 135.2 -1.5Q131.4 -4.2 129.9 -8.7H129.5V20H116.7ZM140.2 -9.4Q145.2 -9.4 148.3 -12.7Q151.4 -16 151.4 -21.6V-30.6Q151.4 -36.2 148.3 -39.6Q145.2 -42.9 140.2 -42.9Q135.6 -42.9 132.6 -40.6Q129.5 -38.3 129.5 -34.5V-17.9Q129.5 -13.8 132.6 -11.6Q135.6 -9.4 140.2 -9.4Z M174 -52.2H186.8V-43.6H187.2Q188.6 -48.1 192.5 -50.8Q196.4 -53.4 201.6 -53.4Q211.6 -53.4 216.9 -46.4Q222.1 -39.3 222.1 -26.2Q222.1 -13 216.9 -5.9Q211.6 1.2 201.6 1.2Q196.4 1.2 192.6 -1.5Q188.7 -4.2 187.2 -8.7H186.8V20H174ZM197.5 -9.4Q202.5 -9.4 205.6 -12.7Q208.7 -16 208.7 -21.6V-30.6Q208.7 -36.2 205.6 -39.6Q202.5 -42.9 197.5 -42.9Q192.9 -42.9 189.9 -40.6Q186.8 -38.3 186.8 -34.5V-17.9Q186.8 -13.8 189.9 -11.6Q192.9 -9.4 197.5 -9.4Z M252.4 1.2Q246.6 1.2 242.1 -0.8Q237.5 -2.7 234.4 -6.2Q231.2 -9.8 229.5 -14.9Q227.8 -19.9 227.8 -26.2Q227.8 -32.4 229.5 -37.4Q231.1 -42.4 234.2 -46Q237.3 -49.5 241.8 -51.5Q246.3 -53.4 252 -53.4Q258.1 -53.4 262.6 -51.3Q267.1 -49.2 270 -45.6Q272.9 -42 274.4 -37.2Q275.8 -32.5 275.8 -27.1V-22.9H241.1V-21.6Q241.1 -15.9 244.3 -12.4Q247.5 -9 253.8 -9Q258.6 -9 261.7 -11Q264.7 -13 267.1 -16.1L274 -8.4Q270.8 -3.9 265.3 -1.4Q259.7 1.2 252.4 1.2ZM252.2 -43.8Q247.1 -43.8 244.1 -40.4Q241.1 -37 241.1 -31.6V-30.8H262.5V-31.7Q262.5 -37.1 259.9 -40.5Q257.2 -43.8 252.2 -43.8Z M284.4 0V-52.2H297.2V-43.5H297.7Q299.3 -47.7 302.8 -50.6Q306.2 -53.4 312.3 -53.4Q320.4 -53.4 324.7 -48.1Q329 -42.8 329 -33V0H316.2V-31.7Q316.2 -37.3 314.2 -40.1Q312.2 -42.9 307.6 -42.9Q305.6 -42.9 303.8 -42.4Q301.9 -41.8 300.5 -40.8Q299 -39.7 298.1 -38.2Q297.2 -36.6 297.2 -34.5V0Z M357.6 1.2Q350.1 1.2 345 -1.4Q339.9 -3.9 336 -8.4L343.8 -16Q346.7 -12.7 350.2 -10.8Q353.6 -8.9 358.1 -8.9Q362.7 -8.9 364.8 -10.5Q366.8 -12.1 366.8 -14.9Q366.8 -17.2 365.4 -18.6Q363.9 -19.9 360.4 -20.4L355.2 -21.1Q346.7 -22.2 342.3 -26Q337.8 -29.7 337.8 -36.9Q337.8 -40.7 339.2 -43.8Q340.6 -46.8 343.2 -49Q345.8 -51.1 349.5 -52.2Q353.1 -53.4 357.6 -53.4Q361.4 -53.4 364.4 -52.9Q367.3 -52.3 369.7 -51.2Q372.1 -50.2 374.1 -48.7Q376.1 -47.1 378 -45.2L370.5 -37.7Q368.2 -40.1 365 -41.7Q361.8 -43.3 358 -43.3Q353.8 -43.3 352 -41.8Q350.1 -40.3 350.1 -37.9Q350.1 -35.3 351.7 -34Q353.2 -32.6 356.9 -32L362.2 -31.3Q379.1 -28.9 379.1 -15.9Q379.1 -12.1 377.6 -9Q376 -5.8 373.2 -3.6Q370.4 -1.3 366.5 0Q362.5 1.2 357.6 1.2Z M403.2 0Q396.6 0 393.2 -3.5Q389.7 -6.9 389.7 -13.3V-42H382V-52.2H386Q388.9 -52.2 390 -53.6Q391 -54.9 391 -57.6V-66.5H402.5V-52.2H413.2V-42H402.5V-10.2H412.4V0Z M460 0Q455.8 0 453.4 -2.5Q450.9 -4.9 450.3 -9H449.7Q448.4 -3.9 444.4 -1.4Q440.4 1.2 434.5 1.2Q426.5 1.2 422.2 -3Q417.9 -7.2 417.9 -14.2Q417.9 -22.3 423.7 -26.2Q429.5 -30.2 440.2 -30.2H449.1V-34Q449.1 -38.4 446.8 -40.8Q444.5 -43.2 439.4 -43.2Q434.9 -43.2 432.2 -41.2Q429.4 -39.3 427.5 -36.6L419.9 -43.4Q422.8 -47.9 427.6 -50.7Q432.4 -53.4 440.3 -53.4Q450.9 -53.4 456.4 -48.6Q461.9 -43.8 461.9 -34.8V-10.2H467.1V0ZM438.8 -8.1Q443.1 -8.1 446.1 -10Q449.1 -11.9 449.1 -15.6V-22.5H440.9Q430.9 -22.5 430.9 -16.1V-14.4Q430.9 -11.2 433 -9.7Q435 -8.1 438.8 -8.1Z M474.8 0V-52.2H487.6V-43.5H488.1Q489.7 -47.7 493.2 -50.6Q496.6 -53.4 502.7 -53.4Q510.8 -53.4 515.1 -48.1Q519.4 -42.8 519.4 -33V0H506.6V-31.7Q506.6 -37.3 504.6 -40.1Q502.6 -42.9 498 -42.9Q496 -42.9 494.2 -42.4Q492.3 -41.8 490.9 -40.8Q489.4 -39.7 488.5 -38.2Q487.6 -36.6 487.6 -34.5V0Z M551.5 1.2Q545.7 1.2 541.2 -0.7Q536.7 -2.6 533.7 -6.2Q530.6 -9.8 529 -14.9Q527.4 -19.9 527.4 -26.2Q527.4 -32.5 529 -37.5Q530.6 -42.5 533.7 -46Q536.7 -49.6 541.2 -51.5Q545.7 -53.4 551.5 -53.4Q559.4 -53.4 564.5 -49.9Q569.7 -46.4 572 -40.2L561.5 -35.5Q560.6 -38.8 558.2 -41Q555.7 -43.1 551.5 -43.1Q546.1 -43.1 543.5 -39.7Q540.8 -36.3 540.8 -30.8V-21.3Q540.8 -15.8 543.5 -12.4Q546.1 -9.1 551.5 -9.1Q556.1 -9.1 558.6 -11.4Q561.1 -13.8 562.5 -17.3L572.3 -12.6Q569.7 -5.7 564.4 -2.2Q559.1 1.2 551.5 1.2Z M600.1 1.2Q594.3 1.2 589.8 -0.8Q585.2 -2.7 582 -6.2Q578.9 -9.8 577.2 -14.9Q575.5 -19.9 575.5 -26.2Q575.5 -32.4 577.2 -37.4Q578.8 -42.4 581.9 -46Q585 -49.5 589.5 -51.5Q594 -53.4 599.7 -53.4Q605.8 -53.4 610.3 -51.3Q614.8 -49.2 617.7 -45.6Q620.6 -42 622 -37.2Q623.5 -32.5 623.5 -27.1V-22.9H588.8V-21.6Q588.8 -15.9 592 -12.4Q595.2 -9 601.5 -9Q606.3 -9 609.4 -11Q612.4 -13 614.8 -16.1L621.7 -8.4Q618.5 -3.9 613 -1.4Q607.4 1.2 600.1 1.2ZM599.9 -43.8Q594.8 -43.8 591.8 -40.4Q588.8 -37 588.8 -31.6V-30.8H610.2V-31.7Q610.2 -37.1 607.5 -40.5Q604.9 -43.8 599.9 -43.8Z"/>
+<g id="mk"><circle cx="50" cy="50" r="15"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(51.4286 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(102.8571 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(154.2857 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(205.7143 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(257.1429 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(308.5714 50 50)"/></g>
+<g id="mkc"><circle cx="50" cy="50" r="22"/><rect x="42.5" y="3" width="15" height="20" rx="5.5"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(51.4286 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(102.8571 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(154.2857 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(205.7143 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(257.1429 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(308.5714 50 50)"/></g>
+</defs></svg>
+
+<div class="cover">
+  <div class="shell">
+    <svg viewBox="0 0 100 100" width="150" height="150" aria-hidden="true"><use href="#mk" fill="#FFB627"/></svg>
+    <div>
+      <p class="kicker">Brand Kit · v1 · August 2026</p>
+      <h1>happenstance</h1>
+      <p>Seven equal records radiating from a solid disc. The records are a log — same size, same pitch, no privileged first one. The disc is the boundary drawn across them. Everything in this kit derives from those two shapes.</p>
+    </div>
+  </div>
+</div>
+
+<nav class="toc"><div class="shell">
+  <a href="#idea">01 The idea</a><a href="#mark">02 The mark</a><a href="#space">03 Clear space</a>
+  <a href="#sizes">04 Sizes</a><a href="#wordmark">05 Wordmark</a><a href="#lockups">06 Lockups</a>
+  <a href="#colour">07 Colour</a><a href="#type">08 Typography</a><a href="#use">09 Correct use</a><a href="#assets">10 Assets</a>
+</div></nav>
+
+<div class="shell">
+
+<section id="idea">
+  <h2><span class="num">01</span>The idea</h2>
+  <div class="rulebar"></div>
+  <p class="lede">happenstance is a storage-agnostic, DCB-compliant event sourcing library for Rust. Its central idea is that <b>a consistency boundary is drawn by what actually occurred</b>, rather than fixed in advance when a schema is written — deliberate, but not pre-declared.</p>
+  <p class="lede">The mark states that directly. The equal blocks are records in an append-only log: identical, evenly pitched, none of them first. The solid centre is the boundary those records turned out to form. Read together, they say <b>the shape came from the sequence</b>.</p>
+  <p class="lede">The palette carries the second half of the personality. Warm amber against a warm near-black is a deliberate departure from the greys and blues of the surrounding ecosystem, and it signals what the project is: precise, but not cold.</p>
+</section>
+
+<section id="mark">
+  <h2><span class="num">02</span>The mark</h2>
+  <div class="rulebar"></div>
+  <p class="lede">The mark is built on a 100-unit square from a single block repeated seven times at a pitch of 360°/7. One block sits at twelve o'clock, which places the gap at six and keeps the mark symmetric about the vertical axis. <b>Every dimension is specified; none is drawn by eye.</b></p>
+  <div class="row">
+    <div class="tile">
+      <svg width="200" height="200" viewBox="0 0 100 100">
+        <g stroke="rgba(42,33,27,.18)" stroke-width=".5" fill="none">
+          <circle cx="50" cy="50" r="38.5"/><circle cx="50" cy="50" r="25.5"/><circle cx="50" cy="50" r="15"/>
+          <line x1="50" y1="4" x2="50" y2="96"/>
+        </g>
+        <use href="#mk" fill="#FFB627"/>
+      </svg>
+      <span class="cap">Construction grid</span>
+    </div>
+    <div class="tile">
+      <svg width="200" height="200" viewBox="0 0 100 100">
+        <g fill="rgba(42,33,27,.10)"><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(51.4286 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(102.8571 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(154.2857 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(205.7143 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(257.1429 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(308.5714 50 50)"/><circle cx="50" cy="50" r="15"/></g>
+        <rect x="45.5" y="11.5" width="9" height="13" rx="3.6" fill="#FFB627"/>
+        <g stroke="#A85B00" stroke-width=".55"><line x1="40" y1="11.5" x2="40" y2="24.5"/><line x1="38" y1="11.5" x2="42" y2="11.5"/><line x1="38" y1="24.5" x2="42" y2="24.5"/><line x1="45.5" y1="29" x2="54.5" y2="29"/><line x1="45.5" y1="27" x2="45.5" y2="31"/><line x1="54.5" y1="27" x2="54.5" y2="31"/></g>
+        <text x="35" y="20" font-size="5" fill="#A85B00" text-anchor="end" font-family="monospace">13</text>
+        <text x="58" y="31" font-size="5" fill="#A85B00" font-family="monospace">9</text>
+      </svg>
+      <span class="cap">The block · 9 × 13 · corner r 3.6</span>
+    </div>
+    <div class="tile">
+      <svg width="200" height="200" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="32" fill="none" stroke="rgba(42,33,27,.2)" stroke-width=".6" stroke-dasharray="2 2"/>
+        <g stroke="#A85B00" stroke-width=".55" fill="none">
+          <path d="M50 18 A32 32 0 0 1 70.03 25.06"/>
+        </g>
+        <use href="#mk" fill="#FFB627" opacity=".9"/>
+        <text x="74" y="24" font-size="5.4" fill="#A85B00" font-family="monospace">51.4286°</text>
+      </svg>
+      <span class="cap">Pitch · 360° ÷ 7</span>
+    </div>
+  </div>
+  <table style="margin-top:14px">
+    <tr><th style="width:30%">Element</th><th style="width:26%">Specification</th><th>Note</th></tr>
+    <tr><td>Block count</td><td><code>7</code></td><td>Fixed. The count is part of the identity.</td></tr>
+    <tr><td>Pitch</td><td><code>51.4286°</code></td><td>First block at 0° (twelve o'clock).</td></tr>
+    <tr><td>Block</td><td><code>9 × 13</code>, radius <code>3.6</code></td><td>Corner radius is 0.4 of block width.</td></tr>
+    <tr><td>Block centre radius</td><td><code>32</code></td><td>Inner edge at 25.5, outer edge at 38.5.</td></tr>
+    <tr><td>Centre disc</td><td><code>r 15</code>, solid</td><td>No bore, no aperture, no inner ring.</td></tr>
+    <tr><td>Hub gap</td><td><code>10.5</code></td><td>Blocks stand clear of the disc at all times.</td></tr>
+    <tr><td>Gap : block width</td><td><code>2.19 : 1</code></td><td>Records read as separated, never as teeth.</td></tr>
+    <tr><td>Artwork extent</td><td><code>77 × 77</code> in a 100 box</td><td>Centred; 11.5 units of margin on each side.</td></tr>
+  </table>
+</section>
+
+<section id="space">
+  <h2><span class="num">03</span>Clear space</h2>
+  <div class="rulebar"></div>
+  <p class="lede">Clear space is <b>one block length — 13 units, or 17% of the artwork width</b> — on every side. Nothing sets inside it: no type, no rule, no edge of a container. The measure scales with the mark, so it holds at any size.</p>
+  <div class="row" style="grid-template-columns:1fr 1fr">
+    <div class="tile">
+      <svg width="230" height="230" viewBox="0 0 140 140">
+        <rect x="12" y="12" width="116" height="116" fill="none" stroke="rgba(42,33,27,.2)" stroke-width=".7" stroke-dasharray="3 3"/>
+        <g fill="rgba(255,182,39,.22)"><rect x="12" y="12" width="116" height="13"/><rect x="12" y="115" width="116" height="13"/><rect x="12" y="25" width="13" height="90"/><rect x="115" y="25" width="13" height="90"/></g>
+        <use href="#mk" fill="#FFB627" transform="translate(20 20)"/>
+      </svg>
+      <span class="cap">Mark · one block on every side</span>
+    </div>
+    <div class="tile">
+      <svg width="100%" viewBox="-100 -170 861 300" style="max-width:300px">
+        <rect x="-100" y="-170" width="861" height="300" fill="none" stroke="rgba(42,33,27,.2)" stroke-width="3" stroke-dasharray="10 10"/>
+        <g fill="rgba(255,182,39,.22)"><rect x="-100" y="-170" width="861" height="46"/><rect x="-100" y="84" width="861" height="46"/><rect x="-100" y="-124" width="46" height="208"/><rect x="715" y="-124" width="46" height="208"/></g>
+        <use href="#word" fill="#2A211B"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/>
+      </svg>
+      <span class="cap">Lockup · clear space equals the mark's own diameter</span>
+    </div>
+  </div>
+</section>
+
+<section id="sizes">
+  <h2><span class="num">04</span>Sizes and variants</h2>
+  <div class="rulebar"></div>
+  <p class="lede">The mark ships in two weights. <b>Primary</b> is the standard drawing and is used at 32px and above. <b>Compact</b> is a heavier reduction for 32px and below, with a larger centre and thicker blocks so the form survives rasterisation. The badge places the compact mark on an ink plate, which guarantees contrast on any browser chrome.</p>
+  <div class="ladder">
+    <div class="step"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#mk" fill="#FFB627"/></svg><span class="px">96 · primary</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="64" height="64"><use href="#mk" fill="#FFB627"/></svg><span class="px">64 · primary</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="48" height="48"><use href="#mk" fill="#FFB627"/></svg><span class="px">48 · primary</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="32" height="32"><use href="#mk" fill="#FFB627"/></svg><span class="px">32 · primary</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="32" height="32"><use href="#mkc" fill="#FFB627"/></svg><span class="px">32 · compact</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="24" height="24"><use href="#mkc" fill="#FFB627"/></svg><span class="px">24 · compact</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="16" height="16"><use href="#mkc" fill="#FFB627"/></svg><span class="px">16 · compact</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg><span class="px">32 · badge</span></div>
+    <div class="step"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg><span class="px">16 · badge</span></div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div class="tile"><svg viewBox="0 0 100 100" width="82" height="82"><use href="#mk" fill="#FFB627"/></svg><span class="cap">Sun on paper</span></div>
+    <div class="tile dark"><svg viewBox="0 0 100 100" width="82" height="82"><use href="#mk" fill="#FFB627"/></svg><span class="cap">Sun on ink</span></div>
+    <div class="tile"><svg viewBox="0 0 100 100" width="82" height="82"><use href="#mk" fill="#2A211B"/></svg><span class="cap">Single colour · ink</span></div>
+    <div class="tile dark"><svg viewBox="0 0 100 100" width="82" height="82"><use href="#mk" fill="#FFFCF4"/></svg><span class="cap">Single colour · paper</span></div>
+  </div>
+  <p class="lede" style="margin-top:18px"><b>Minimum size</b> is 16px for the badge and compact mark. Below that, use the wordmark alone.</p>
+</section>
+
+<section id="wordmark">
+  <h2><span class="num">05</span>Wordmark</h2>
+  <div class="rulebar"></div>
+  <p class="lede">The wordmark is set lowercase, always — matching the crate name, including at the start of a sentence. Where a sentence would force a capital, recast the sentence.</p>
+  <div class="panel" style="margin-bottom:14px;display:flex;justify-content:center;padding:38px 26px">
+    <svg viewBox="-14 -83.8 655.4 123.8" style="width:100%;max-width:460px" role="img" aria-label="happenstance wordmark"><use href="#word" fill="#2A211B"/></svg>
+  </div>
+  <div class="panel">
+    <table style="border:none;border-radius:0">
+      <tr><th style="width:26%">Attribute</th><th>Specification</th></tr>
+      <tr><td>Typeface</td><td>IBM Plex Sans SemiBold (600)</td></tr>
+      <tr><td>Case</td><td>Lowercase</td></tr>
+      <tr><td>Tracking</td><td>−2.7%, applied over the font's own kerning</td></tr>
+      <tr><td>Mark placement</td><td>Annotation marker at the top right of the final <code>e</code>. Diameter 0.40em (0.57× cap height); top edge 0.06em above the cap line; left edge 0.06em inside the word's advance, nesting in the pocket the round <code>e</code> leaves open. Centre at (0.641em, −0.56em) from the wordmark origin.</td></tr>
+      <tr><td>Delivery</td><td>Outlined paths. The shipped SVGs render identically with no font installed.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="lockups">
+  <h2><span class="num">06</span>Lockups</h2>
+  <div class="rulebar"></div>
+  <p class="lede">The horizontal lockup is primary and covers nearly every application. In it the mark sits as a small annotation marker against the word — small, raised, and nested into the <b>e</b>, so word and mark read as a single object.</p>
+  <div class="row" style="grid-template-columns:1fr">
+    <div class="tile" style="align-items:flex-start;padding:34px">
+      <svg viewBox="-14 -90 689 130" style="width:100%;max-width:580px" role="img" aria-label="happenstance horizontal lockup"><use href="#word" fill="#2A211B"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+      <span class="cap" style="align-self:flex-start">Horizontal · primary</span>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div class="tile dark" style="padding:32px">
+      <svg viewBox="-14 -90 689 130" style="width:100%;max-width:330px" role="img" aria-label="happenstance lockup reversed"><use href="#word" fill="#FFFCF4"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+      <span class="cap">Horizontal · reversed, for ink surfaces</span>
+    </div>
+    <div class="tile" style="padding:32px">
+      <svg viewBox="-14 -263.8 655.4 303.8" style="width:100%;max-width:168px" role="img" aria-label="happenstance stacked lockup"><use href="#mk" fill="#FFB627" transform="translate(313.7 -179.8) scale(1.81818) translate(-50 -50)"/><use href="#word" fill="#2A211B"/></svg>
+      <span class="cap">Stacked · square placements</span>
+    </div>
+    <div class="tile" style="padding:32px">
+      <svg viewBox="0 0 100 100" width="86" height="86"><use href="#mk" fill="#FFB627"/></svg>
+      <span class="cap">Mark alone · avatars, favicons, app icons</span>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:20px"><b>Serving light and dark surfaces.</b> Each lockup file carries one fixed colour. Select between them at the point of use, where the background is known:</p>
+  <div class="panel"><code style="background:none;padding:0;font-size:12.5px;line-height:1.9;display:block">&lt;picture&gt;<br>&nbsp;&nbsp;&lt;source media="(prefers-color-scheme: dark)" srcset="assets/brand/happenstance-lockup-horizontal-reversed.svg"&gt;<br>&nbsp;&nbsp;&lt;img src="assets/brand/happenstance-lockup-horizontal.svg" alt="happenstance"&gt;<br>&lt;/picture&gt;</code></div>
+</section>
+
+<section id="colour">
+  <h2><span class="num">07</span>Colour</h2>
+  <div class="rulebar"></div>
+  <p class="lede">Five colours. <b>Sun</b> is the identity and appears on every application. <b>Ink</b> and <b>Paper</b> carry everything else — both are warm, and the warmth is deliberate: it keeps the amber from sitting against a neutral it has nothing in common with.</p>
+  <div class="row" style="grid-template-columns:repeat(auto-fit,minmax(178px,1fr))">
+    <div class="swatchbig" style="background:#FFB627;color:#2A211B"><div class="n">Sun</div><div class="h">#FFB627 · rgb(255,182,39)</div></div>
+    <div class="swatchbig" style="background:#E08700;color:#FFFCF4"><div class="n">Deep</div><div class="h">#E08700 · rgb(224,135,0)</div></div>
+    <div class="swatchbig" style="background:#A85B00;color:#FFFCF4"><div class="n">Ember</div><div class="h">#A85B00 · rgb(168,91,0)</div></div>
+    <div class="swatchbig" style="background:#2A211B;color:#FFFCF4"><div class="n">Ink</div><div class="h">#2A211B · rgb(42,33,27)</div></div>
+    <div class="swatchbig" style="background:#FFFCF4;color:#2A211B"><div class="n">Paper</div><div class="h">#FFFCF4 · rgb(255,252,244)</div></div>
+  </div>
+  <table style="margin-top:14px">
+    <tr><th></th><th>Colour</th><th>Role</th><th>On paper</th><th>On ink</th></tr>
+    <tr><td style="width:56px"><div class="dot" style="background:#FFB627"></div></td><td>Sun</td><td>The mark. Graphic fills, highlights, accents.</td><td>1.71:1</td><td>10.34:1</td></tr>
+    <tr><td><div class="dot" style="background:#E08700"></div></td><td>Deep</td><td>Secondary fills, hover states, chart series.</td><td>2.68:1</td><td>6.60:1</td></tr>
+    <tr><td><div class="dot" style="background:#A85B00"></div></td><td>Ember</td><td>Amber text: links, labels, inline emphasis.</td><td>4.92:1</td><td>3.13:1</td></tr>
+    <tr><td><div class="dot" style="background:#2A211B"></div></td><td>Ink</td><td>Body text, wordmark, dark surfaces.</td><td>15.38:1</td><td>—</td></tr>
+    <tr><td><div class="dot" style="background:#FFFCF4"></div></td><td>Paper</td><td>Light surfaces. Warm, not white.</td><td>—</td><td>15.38:1</td></tr>
+  </table>
+  <p class="lede" style="margin-top:16px">Ratios are WCAG 2.1 relative luminance. <b>Sun is a graphic colour.</b> On light surfaces it is used for shapes and fills; for amber-coloured text, use Ember, which meets AA at 4.92:1. On ink, Sun is a text colour and reads at 10.34:1 — and at 10.79:1 on GitHub dark <code>#0D1117</code>.</p>
+</section>
+
+<section id="type">
+  <h2><span class="num">08</span>Typography</h2>
+  <div class="rulebar"></div>
+  <p class="lede"><b>IBM Plex Sans</b> for everything set in words; <b>IBM Plex Mono</b> for code, identifiers, versions and file paths. One family, two voices, open licence — and a mono that was designed alongside the sans rather than found to match it.</p>
+  <div class="panel">
+    <div class="typerow"><span class="typemeta">Display · 600 · −3%</span><span style="font-size:34px;font-weight:600;letter-spacing:-.03em">Boundaries drawn by what happened</span></div>
+    <div class="typerow"><span class="typemeta">Heading · 650 · −2%</span><span style="font-size:21px;font-weight:650;letter-spacing:-.02em">A published conformance suite</span></div>
+    <div class="typerow"><span class="typemeta">Body · 400 · 1.65</span><span style="font-size:15px;line-height:1.65">Storage agnostic is a claim anyone can check, and third parties can ship adapters against it.</span></div>
+    <div class="typerow"><span class="typemeta">Label · 700 · +.12em</span><span style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase">Conformance · 89 rules</span></div>
+    <div class="typerow"><span class="typemeta">Mono · Plex Mono 400</span><span style="font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:14px">cargo add happenstance</span></div>
+  </div>
+</section>
+
+<section id="use">
+  <h2><span class="num">09</span>Correct use</h2>
+  <div class="rulebar"></div>
+  <p class="lede">The mark is fixed artwork. Place it, scale it, and choose a colourway from the palette — those are the available decisions.</p>
+  <div class="row">
+    <div class="tile yes"><svg viewBox="0 0 100 100" width="76" height="76" style="margin-top:14px"><use href="#mk" fill="#FFB627"/></svg><span class="cap">Upright, at any scale</span></div>
+    <div class="tile nope"><svg viewBox="0 0 100 100" width="76" height="76" style="margin-top:14px"><use href="#mk" fill="rgba(42,33,27,.28)" transform="rotate(22 50 50)"/></svg><span class="cap">Never rotate</span></div>
+    <div class="tile nope"><svg viewBox="0 0 140 100" width="100" height="72" preserveAspectRatio="none" style="margin-top:14px"><use href="#mk" fill="rgba(42,33,27,.28)"/></svg><span class="cap">Never stretch or condense</span></div>
+    <div class="tile nope" style="background:#3A6EA5"><svg viewBox="0 0 100 100" width="76" height="76" style="margin-top:14px"><use href="#mk" fill="#7FB3E8"/></svg><span class="cap" style="color:rgba(255,252,244,.72)">Never recolour outside the palette</span></div>
+  </div>
+  <table style="margin-top:14px">
+    <tr><th style="width:34%">Rule</th><th>Detail</th></tr>
+    <tr><td>Block count is fixed</td><td>Seven, always. The count is part of the identity.</td></tr>
+    <tr><td>Orientation is fixed</td><td>One block at twelve o'clock. The mark never rotates.</td></tr>
+    <tr><td>Proportions are fixed</td><td>Scale uniformly. No stretching, condensing, arching or perspective.</td></tr>
+    <tr><td>Colour comes from the palette</td><td>Sun, Ink or Paper as a single fill. No gradients, shadows, glows or outlines.</td></tr>
+    <tr><td>Clear space is honoured</td><td>One block length on every side, at every size.</td></tr>
+    <tr><td>The wordmark stays lowercase</td><td>Recast the sentence rather than capitalise the name.</td></tr>
+    <tr><td>The mark follows the word</td><td>In the lockup the mark annotates the final <code>e</code>. It is never placed before the word.</td></tr>
+  </table>
+</section>
+
+<section id="assets">
+  <h2><span class="num">10</span>Assets</h2>
+  <div class="rulebar"></div>
+  <p class="lede">All artwork is SVG and lives in <code>assets/brand/</code>. Wordmarks are outlined, so no font is required at the point of use.</p>
+  <table>
+    <tr><th style="width:46%">File</th><th>Use</th></tr>
+    <tr><td><code>happenstance-lockup-horizontal.svg</code></td><td>Primary lockup. Ink wordmark, for light surfaces.</td></tr>
+    <tr><td><code>happenstance-lockup-horizontal-reversed.svg</code></td><td>Primary lockup. Paper wordmark, for ink surfaces.</td></tr>
+    <tr><td><code>happenstance-lockup-stacked.svg</code></td><td>Square and near-square placements.</td></tr>
+    <tr><td><code>happenstance-wordmark.svg</code></td><td>Wordmark alone.</td></tr>
+    <tr><td><code>happenstance-mark.svg</code></td><td>Mark, primary weight. 32px and above.</td></tr>
+    <tr><td><code>happenstance-mark-compact.svg</code></td><td>Mark, compact weight. 32px and below.</td></tr>
+    <tr><td><code>happenstance-mark-mono.svg</code></td><td>Mark in a single inherited colour via <code>currentColor</code>.</td></tr>
+    <tr><td><code>favicon.svg</code></td><td>Ink badge for browser chrome, avatars and app icons.</td></tr>
+  </table>
+  <p class="lede" style="margin-top:16px">Palette tokens for direct use:<br>
+  <code>--sun:#FFB627</code> <code>--deep:#E08700</code> <code>--ember:#A85B00</code> <code>--ink:#2A211B</code> <code>--paper:#FFFCF4</code></p>
+  <p class="lede">The reasoning behind every rule here is in <code>SD-0001-what-happenstance-means.md</code> and <code>SD-0002-the-mark.md</code>, alongside this file. The identity in use is in <code>showcase.html</code>.</p>
+</section>
+
+</div>
+</body>
+</html>

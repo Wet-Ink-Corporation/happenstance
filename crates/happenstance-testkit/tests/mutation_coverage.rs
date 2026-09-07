@@ -64,6 +64,7 @@ mod racers;
 #[path = "mutation_coverage/variants.rs"]
 mod variants;
 
+use happenstance_core::{Query, ReadOptions, SequencedEvent};
 use harness::{Origin, RUNTIME_PANICS, SubjectReport, Verdict};
 
 // =====================================================================
@@ -79,6 +80,70 @@ enum Kind {
     /// A store that is legally different from `MemoryEventStore` and MUST pass
     /// everything (CF-5).
     ConformantVariant,
+    /// A store with a named defect that **no rule of the event-store family can
+    /// see**, and which the *model* family therefore has to.
+    ///
+    /// It looks like a hole in [`Kind::Mutant`]'s contract and is the opposite:
+    /// a mutant with an empty `fails` list is rejected outright, because a
+    /// defect nothing catches is a defect nobody knows about. This kind is what
+    /// makes "nothing in this family catches it, and here is what does" a
+    /// *checked* claim.
+    ///
+    /// It carries **three** obligations, and the split between them is the whole
+    /// design:
+    ///
+    /// 1. Every rule of the event-store family must pass or skip for a declared
+    ///    reason — exactly as for a mutant with nothing in `fails`. That is the
+    ///    claim *"no rule sees it"*, measured rather than asserted, by
+    ///    `mutants_fail_exactly_their_declared_rules`.
+    /// 2. It must carry a [`Witness`] in [`MODEL_ONLY_WITNESSES`]: a fixed log
+    ///    and read on which its own `Defect::select` answers differently from
+    ///    [`crate::correct`]. That is the claim *"it is defective at all"*, and
+    ///    it holds in **every feature configuration**, which is what obligation
+    ///    3 cannot do.
+    /// 3. [`MODEL_COVERAGE`] must claim it [`ModelOutcome::Rejected`], and the
+    ///    model must deliver it. That is the claim *"the model is what catches
+    ///    it"*.
+    ///
+    /// Obligation 2 was not there when this kind landed, and its absence was a
+    /// real hole rather than a theoretical one. An adversarial review registered
+    /// [`crate::mutants::HidingPlaceStore`] — a bare `impl Defect` with no
+    /// defect whatever — under this kind, satisfying 1 honestly and 3 with a
+    /// lie, and `cargo test --no-default-features --test mutation_coverage`
+    /// reported nine passes, because obligation 3 is behind
+    /// `#[cfg(feature = "proptest")]` and `cargo hack`'s powerset builds that
+    /// configuration. `Kind::Mutant` is unabusable because its bar is data in
+    /// this same table; a kind that borrows a *family* for its bar can have the
+    /// bar compiled out from under it.
+    ///
+    /// The shape it exists for is a defect that needs a *query* and a *read
+    /// option* together, where the family's rules for that option all issue
+    /// `Query::all()`. The suite's answer to that for `from` was CF-12's rule;
+    /// where no such rule exists, the generative family is what is left, and
+    /// this kind records which of the two is doing the work.
+    ///
+    /// # It has no members at this commit, and that is the healthy outcome
+    ///
+    /// `UnparenthesisedToPredicateStore` was the only store ever filed here — the
+    /// `to` half of exactly the shape above, with all three `to` rules issuing
+    /// `Query::all()`. `read_to_composes_with_multi_item_query` is now the rule
+    /// the kind's own documentation said would end it, so the row is an ordinary
+    /// [`Kind::Mutant`] with one entry in `fails`.
+    ///
+    /// That matters more than a tidy-up, because the gap was worse than "no rule
+    /// sees it": the model family is `proptest`-gated **and**
+    /// `cfg(not(target_arch = "wasm32"))`, so on the two targets that most need
+    /// a generated `WHERE` clause — Cloudflare Workers and Neon — nothing in the
+    /// binary caught it at all. A kind that records "the other family has this"
+    /// is only as good as where the other family runs.
+    ///
+    /// The variant is **kept**, empty. Withdrawing it is a decision about the
+    /// registry's vocabulary and belongs to an ADR pass, not to the lane that
+    /// happened to empty it; and the machinery is dormant rather than wrong —
+    /// [`MODEL_ONLY_WITNESSES`] is empty, the two tests over it are tied to that
+    /// emptiness in both directions, and a store filed here tomorrow is held to
+    /// all three obligations unchanged.
+    ModelOnlyMutant,
 }
 
 /// Why a mutant's declared rule fails.
@@ -218,7 +283,8 @@ struct Declared {
 /// `OFFSET`; `backwards` lost between two structs; an upper bound ignored, read
 /// as exclusive, and never swapped under `backwards`; a budget of zero read as no
 /// budget, a budget written per query item and never re-applied to the union,
-/// `LIMIT n + 1`, and `LIMIT` pushed into the scan ahead of the filter;
+/// `LIMIT n + 1`, `LIMIT` pushed into the scan ahead of the filter, and a budget
+/// spent everywhere except the branch that serves a forward cursor;
 /// `WHERE a OR b AND position >= ?` without parentheses; a paging window anchored on a `max(position)` that is `NULL` on
 /// an empty store; one position bound for a whole batch; `RETURNING` read from
 /// the wrong end and read without checking there is a row; probe-then-insert
@@ -252,9 +318,24 @@ struct Declared {
 /// `two_fixture_instances_observe_none_of_each_others_appends` fails at "the
 /// append must actually have landed", `read_from_is_inclusive` and
 /// `query_items_are_or` at their `all.len()` guards. Those rows evidence the
-/// anchor, not the headline property, and they are inflation rather than vacuity
-/// — no rule in the table is covered by that mutant alone. The `expect` field is
-/// what makes the distinction visible where it has been written down.
+/// anchor, not the headline property, and they are inflation rather than
+/// vacuity.
+///
+/// This paragraph used to close by saying that no rule in the table is covered
+/// by that mutant alone. That was false, and it was the one sentence a reviewer
+/// uses to stop checking: `untagged_events_match_query_all` appears in exactly
+/// one `fails` list in the whole event-store registry, and it is this one. The
+/// intent survives where the sentence did not — for that rule
+/// `InnerJoinTagStore` is the headline mutant rather than an inflation row,
+/// because the rule body carries a single assertion and so has no anchor to
+/// fail at. That is a property of the rule today rather than of the registry,
+/// which is why it is now pinned rather than restated: the `expect` field names
+/// the assertion, and `the_shotgun_mutants_sole_coverage_is_pinned` requires a
+/// pin wherever this mutant is a rule's only evidence. The day that rule
+/// acquires a second assertion the pin fails, rather than the discount quietly
+/// becoming wrong while the paragraph tells the auditor not to look. Elsewhere
+/// the `expect` field is what makes the distinction visible where it has been
+/// written down.
 ///
 /// *Not covered, and each of these is a real axis rather than an oversight:*
 ///
@@ -360,6 +441,12 @@ const REGISTRY: &[Declared] = &[
             "query_item_types_are_or",
             "query_items_are_or",
             "untagged_events_match_query_all",
+            // Since the rule gained its non-vacuity anchor: this store drops
+            // every untagged event from every read, so the anchor — a query for
+            // the type just appended must select it — is what it fails. Another
+            // inflation row, and the reason the anchor was owed: without it a
+            // store that returns nothing at all passed the rule.
+            "query_matching_nothing_yields_empty",
             "duplicate_items_do_not_duplicate_events",
             "query_item_order_does_not_change_the_result_set",
             "read_from_is_inclusive",
@@ -386,7 +473,16 @@ const REGISTRY: &[Declared] = &[
              writes first, and it is invisible until an untagged event is \
              written.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The one rule in the whole event-store registry this store is the
+        // *only* evidence for, so it is the one row here that may not be read
+        // as anchor inflation. Pinned to the head relation itself: the rule
+        // carries a single assertion today, and this is what makes a second
+        // one visible rather than silently converting the mutant's only
+        // registered evidence into an anchor failure.
+        expect: &[(
+            "untagged_events_match_query_all",
+            "must still be matched by Query::all()",
+        )],
     },
     Declared {
         name: "TypesAreAndStore",
@@ -458,6 +554,16 @@ const REGISTRY: &[Declared] = &[
             "limit_applies_across_items_not_per_item",
             "query_union_is_item_concatenation",
             "query_items_share_one_snapshot",
+            // And L1-1's rule for the same reason: its two items match three
+            // events each and nothing matches both, so the budgeted page comes
+            // back empty and this store fails at the arrangement anchor rather
+            // than at the budget.
+            "read_from_composes_with_limit",
+            // And the `to` twin of CF-12's rule, for the same reason once more:
+            // its tag item and its type item share no event, so the window comes
+            // back empty and this store fails at the arrangement anchor rather
+            // than at the bound.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the same joiner bug one level up: the item list assembled with the \
              separator that belongs inside an item.",
@@ -479,7 +585,15 @@ const REGISTRY: &[Declared] = &[
              both `read` and the condition probe, which is why it shows up on \
              both.",
         mode: FailureMode::Assertion,
-        expect: &[],
+        // The widening is the whole defect, and the rule that catches it is the
+        // only place an author meets it. `read_ok` already owns the error half
+        // one layer down, so the assertion in
+        // `query_matching_nothing_yields_empty` can only ever fire on a store
+        // that returned *events* — this pin is what holds its message to that.
+        expect: &[(
+            "query_matching_nothing_yields_empty",
+            "must yield no events",
+        )],
     },
     Declared {
         name: "TagJoinFanOutStore",
@@ -587,6 +701,10 @@ const REGISTRY: &[Declared] = &[
             // The two `to`-only rules leave `from` unset, so it passes those.
             "read_from_and_to_bound_a_closed_window",
             "read_from_a_gap_position",
+            // The budgeted resume too, one composition over: an `OFFSET` of the
+            // cursor's numeric value starts the page at the wrong event, so what
+            // comes back is the wrong three events rather than too many.
+            "read_from_composes_with_limit",
         ],
         provenance: "a position anchor read as an index. `OFFSET` is the parameter already \
              in the paging query, and a `u64` position slots into it without \
@@ -635,6 +753,15 @@ const REGISTRY: &[Declared] = &[
             // but wrong.
             "read_limit_zero_yields_nothing",
             "limit_applies_across_items_not_per_item",
+            // Off by one on the budgeted resume as well. Inflation on the axis
+            // `read_limit_truncates` already owns: L1-1's rule is about a budget
+            // that is never spent, not about one spent a row late.
+            "read_from_composes_with_limit",
+            // And off by one inside a window, for the same reason once more: a
+            // budget spent a row late is spent a row late under every bound.
+            // What that rule owns alone is the budget dropped entirely because
+            // a bound was present.
+            "read_to_composes_with_limit",
         ],
         provenance: "ubiquitous: every cursor-paging implementation fetches `LIMIT n + 1` to \
              answer \"is there more\", and most of them trim. This one forgot, \
@@ -649,6 +776,11 @@ const REGISTRY: &[Declared] = &[
             "read_to_is_inclusive",
             "read_from_and_to_bound_a_closed_window",
             "read_to_under_backwards_bounds_the_older_end",
+            // And the multi-item rule, which is not inflation but the honest
+            // shape of an ignored field: a bound nobody applies is wrong under
+            // every query. What that rule owns alone is the store that applies
+            // it to one disjunct.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the shape every `#[non_exhaustive]` options struct invites, and the one \
              ES-16's `Rejects:` names first: an adapter written before `to` existed \
@@ -667,6 +799,10 @@ const REGISTRY: &[Declared] = &[
             "read_to_is_inclusive",
             "read_from_and_to_bound_a_closed_window",
             "read_to_under_backwards_bounds_the_older_end",
+            // For `ToBoundIgnoredStore`'s reason: an off-by-one on the bound is
+            // an off-by-one under every query shape, and the window this rule
+            // reads ends on an event the store drops.
+            "read_to_composes_with_multi_item_query",
         ],
         provenance: "the other half of ES-16's `Rejects:`. `WHERE position < ?` is the \
              defensible reading of an upper bound in half the APIs anyone has used, \
@@ -709,6 +845,37 @@ const REGISTRY: &[Declared] = &[
         expect: &[("read_limit_zero_yields_nothing", "must yield nothing")],
     },
     Declared {
+        name: "ForwardPagingBudgetStore",
+        kind: Kind::Mutant,
+        fails: &["read_from_composes_with_limit"],
+        provenance: "a forward read that branches on `from` and never threads `limit` into the \
+             resume branch — the shape that arises when the cursor is added to a paging \
+             query written before it, which is the order every SQL adapter in this \
+             workspace will be written in. The backwards branch is left correct, so \
+             `read_backwards_from_with_limit` passes. The caller it breaks is a projection \
+             resuming from its checkpoint with a budget: it asks for five hundred events \
+             and is handed the whole stream, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "WindowedPagingBudgetStore",
+        kind: Kind::Mutant,
+        // One entry, and one is the whole claim. This store passed all
+        // ninety-two rules that preceded `read_to_composes_with_limit`,
+        // measured with an empty list rather than argued: the bound's own rules
+        // issue no budget, the budget's own rules issue no bound, and a budget
+        // smaller than the window is the one arrangement in which neither can
+        // stand in for the other.
+        fails: &["read_to_composes_with_limit"],
+        provenance: "`ForwardPagingBudgetStore`'s defect one read option over. A closed window is              a different statement from a page — `BETWEEN ? AND ?` rather than `LIMIT ?`              — and the budget was threaded into the one that had a paging clause              already. The argument that writes it is that the window is the bound that              matters and the budget is redundant, which is true exactly when the budget              is larger than the window and false on every call a backfill worker makes              but its last. It hands back the whole window to a caller who asked for a              page, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "read_to_composes_with_limit",
+            "the smaller of them is what the caller gets",
+        )],
+    },
+    Declared {
         name: "LimitBeforeFilterStore",
         kind: Kind::Mutant,
         fails: &[
@@ -735,6 +902,10 @@ const REGISTRY: &[Declared] = &[
             // there at the `limit` assertion rather than at the precedence one,
             // which is what `UnparenthesisedPredicateStore`'s row protects.
             "read_from_composes_with_multi_item_query",
+            // Not inflation either: L1-1's rule pages a window that STRADDLES
+            // the two items' blocks, which is the one shape a per-item budget
+            // cannot produce. It spends three rows on each item and returns five.
+            "read_from_composes_with_limit",
         ],
         provenance: "an adapter that cannot express a disjunction in one statement emits one \
              per `QueryItem`, and the row budget goes onto each of them because \
@@ -752,7 +923,21 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "UnparenthesisedPredicateStore",
         kind: Kind::Mutant,
-        fails: &["read_from_composes_with_multi_item_query"],
+        fails: &[
+            "read_from_composes_with_multi_item_query",
+            // And L1-1's rule, which is the same predicate with a budget on it:
+            // the cursor binds to the `Right` item alone, the whole `Left` block
+            // survives it, and the first three rows of the page are three events
+            // the caller had already checkpointed.
+            "read_from_composes_with_limit",
+            // And the `to` twin's rule, because this store dangles **both**
+            // bounds off the last disjunct rather than only the upper one. That
+            // is what keeps it distinct from `UnparenthesisedToPredicateStore`
+            // in the other direction: this one is strictly the worse store, and
+            // a strictly worse store failing a superset of the rules is the
+            // registry working.
+            "read_to_composes_with_multi_item_query",
+        ],
         provenance: "`WHERE a OR b AND position >= ?` — the textbook operator-precedence bug, \
              reached by string-concatenating a cursor clause onto a disjunction someone else \
              built. It is invisible to a single-item query, which is every read-option rule \
@@ -765,6 +950,34 @@ const REGISTRY: &[Declared] = &[
         // that names the precedence bug.
         expect: &[(
             "read_from_composes_with_multi_item_query",
+            "must bound EVERY item of the query",
+        )],
+    },
+    Declared {
+        name: "UnparenthesisedToPredicateStore",
+        kind: Kind::Mutant,
+        // One entry, and the entry is this row's whole content. It was
+        // `Kind::ModelOnlyMutant` with an empty list, because the three `to`
+        // rules all issued `Query::all()` and with no items there is nothing
+        // for the `OR` to bind wrongly across — so the only thing in the tree that
+        // could see this store was the model family, which is `proptest`-gated
+        // and `cfg(not(target_arch = "wasm32"))`. A Cloudflare or Neon adapter
+        // carrying this precedence bug passed every rule it actually runs.
+        // `read_to_composes_with_multi_item_query` is the rule that closes it:
+        // CF-12's shape, one bound over.
+        fails: &["read_to_composes_with_multi_item_query"],
+        provenance: "`WHERE a OR b AND position <= ?` — `UnparenthesisedPredicateStore` one bound \
+             over, and reached the same way: the window's top appended to a `WHERE` string that \
+             already carries a disjunction someone else built. The caller it breaks is a bounded \
+             backfill worker owning `[1, H]` while a tail worker owns everything above it: the \
+             backfill reads past its own window and re-delivers events the tail worker has \
+             already processed, with no error anywhere.",
+        mode: FailureMode::Assertion,
+        // The rule makes one assertion, and other mutants fail it from other
+        // directions — an ignored bound, an exclusive one. This is the row that
+        // names the precedence bug.
+        expect: &[(
+            "read_to_composes_with_multi_item_query",
             "must bound EVERY item of the query",
         )],
     },
@@ -1640,6 +1853,27 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "SwallowedReadFaultStore",
+        kind: Kind::Mutant,
+        fails: &["arming_a_read_fault_makes_the_stream_yield_an_error"],
+        provenance: "`let Ok(page) = fetch().await else { return Poll::Ready(None) };` \
+             — a failed page fetch reported as the end of the stream. It is the most \
+             natural way to get a fallible fetch past a `poll_next` that must return a \
+             value, and both adapters that will need one are already in the tree: \
+             `happenstance-cloudflare` over `SqlStorage` and `happenstance-neon` over \
+             one-shot HTTP, neither of which can hold a cursor open across polls. The port \
+             expresses the failure per item and this store declines to use it. What the \
+             consumer sees is a short, SUCCESSFUL read: a projection runner applies two \
+             events of five, commits the checkpoint at the truncation point, and the rest \
+             are never applied, with `Ok` everywhere and no error to log. Who finds out is \
+             whoever reconciles the read model against the log, months later.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "arming_a_read_fault_makes_the_stream_yield_an_error",
+            "MUST cause the next read's stream to yield an `Err` ITEM",
+        )],
+    },
+    Declared {
         name: "AwaitAcrossBorrowStore",
         kind: Kind::Mutant,
         fails: &[
@@ -2077,6 +2311,79 @@ const REGISTRY: &[Declared] = &[
     },
 ];
 
+/// A deterministic disagreement between a store's own read path and
+/// [`crate::correct`]'s — the bar [`Kind::ModelOnlyMutant`] is held to in
+/// **every** feature configuration.
+///
+/// # Why the kind needed one
+///
+/// [`Kind::Mutant`] is unabusable because its bar is *data in the same table*: a
+/// non-empty `fails` list, checked wherever the registry compiles at all. The
+/// model-only kind was landed with a bar that borrowed another family instead —
+/// `MODEL_COVERAGE` must claim `Rejected` — and a family can be compiled out.
+/// An adversarial review demonstrated it: `HidingPlaceStore`, a store with no
+/// defect whatever, was registered under this kind with an empty `fails` list
+/// and a `MODEL_COVERAGE` row claiming `Rejected`, and
+/// `cargo test --no-default-features --test mutation_coverage` reported nine
+/// passes. `cargo hack`'s feature powerset builds that configuration, so it was
+/// reachable in the real gate.
+///
+/// This table is the repair, and it is deliberately not a second claim. A claim
+/// can be written down falsely; this holds a *scenario* and a **function
+/// pointer to the mutant's own `Defect::select`**, and
+/// `every_model_only_mutant_demonstrates_its_defect` does the comparing. To
+/// satisfy it a store has to actually answer a read differently from the
+/// reference implementation, in a run that needs no generator, no runtime and no
+/// optional dependency.
+///
+/// # Why it is not extended to every mutant
+///
+/// Because for every other kind the rule *is* the witness, and a second one
+/// would be a snapshot of what the rule already asserts —
+/// `mutants_fail_exactly_their_declared_rules` drives each declared failure and
+/// `Declared::expect` pins which assertion fired. The witness exists only where
+/// no rule of this family can see the defect, which is exactly the hole the kind
+/// names.
+/// A `Defect::select`, as a value.
+///
+/// Named for `clippy::type_complexity`, and it earns the name anyway: it is the
+/// signature every mutant's read path has, and writing it once says that the
+/// witness holds *the store's own function* rather than a copy of it.
+type SelectFn =
+    fn(&[SequencedEvent], &Query, ReadOptions) -> Result<Vec<SequencedEvent>, correct::LogError>;
+
+#[derive(Debug)]
+struct Witness {
+    /// The `REGISTRY` row this witness answers for.
+    name: &'static str,
+    /// The mutant's own read path, as a function pointer.
+    ///
+    /// `<T as Defect>::select` rather than a re-implementation, so the thing
+    /// measured is the store itself and a witness cannot drift away from the
+    /// defect it demonstrates.
+    select: SelectFn,
+    /// The log to read, the query, and the options — all fixed.
+    scenario: fn() -> (Vec<SequencedEvent>, Query, ReadOptions),
+}
+
+/// One row per [`Kind::ModelOnlyMutant`] in [`REGISTRY`], and no others.
+///
+/// **Empty since `read_to_composes_with_multi_item_query` landed**, and the
+/// emptiness is a measured claim rather than an oversight.
+/// `UnparenthesisedToPredicateStore` was the kind's only member; the rule that
+/// closed CF-12's gap for `to` sees it, so it is an ordinary [`Kind::Mutant`]
+/// with one entry in `fails` and its witness would now be an orphan — which
+/// `every_model_only_mutant_demonstrates_its_defect`'s second loop rejects by
+/// name.
+///
+/// The **kind** is deliberately left standing. Whether a kind with no members
+/// should be withdrawn (as `Kind::StatedOnlyDefect` was, for a different and
+/// worse reason — its bar was unsound) is a decision, and a decision belongs in
+/// an ADR pass rather than in the lane that emptied it. What holds the emptiness
+/// honest meanwhile is the pair of `is_empty` assertions on the two tests below:
+/// a table with rows and no members is caught, and so is a member with no row.
+const MODEL_ONLY_WITNESSES: &[Witness] = &[];
+
 /// Hands every registered store **type** to `$callback`.
 ///
 /// Mirrors `happenstance_testkit::for_each_event_store_rule!`, and for the same
@@ -2111,6 +2418,8 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ToIsExclusiveStore>,
             crate::mutants::MutantFixture<crate::mutants::BackwardsToIsAnUpperBoundStore>,
             crate::mutants::MutantFixture<crate::mutants::LimitZeroIsUnlimitedStore>,
+            crate::mutants::MutantFixture<crate::mutants::ForwardPagingBudgetStore>,
+            crate::mutants::MutantFixture<crate::mutants::WindowedPagingBudgetStore>,
 
             crate::mutants::MutantFixture<crate::mutants::SharedBatchPositionStore>,
             crate::mutants::MutantFixture<crate::mutants::ReturnsFirstOfBatchStore>,
@@ -2134,6 +2443,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::LimitPerItemStore>,
             crate::mutants::MutantFixture<crate::mutants::ItemDedupByTypeStore>,
             crate::mutants::MutantFixture<crate::mutants::UnparenthesisedPredicateStore>,
+            crate::mutants::MutantFixture<crate::mutants::UnparenthesisedToPredicateStore>,
             crate::mutants::MutantFixture<crate::mutants::NullHeadPagingStore>,
             crate::mutants::MutantFixture<crate::mutants::ConditionBeforeEmptinessStore>,
             crate::mutants::MutantFixture<crate::mutants::AfterValidatedAgainstHeadStore>,
@@ -2178,6 +2488,7 @@ macro_rules! for_each_mutant {
             crate::mutants::PreCommitPositionFixture,
             crate::mutants::BorrowHoldingFixture,
             crate::mutants::RefetchingPagedFixture,
+            crate::mutants::SwallowedReadFaultFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
         }
     };
@@ -2321,18 +2632,45 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// that actually matters — *what is this test blind to* — and it answers it in a
 /// form that goes red when the answer changes.
 ///
-/// # The twenty-one it does not catch are three shapes, not twenty-one
+/// # What it does not catch is a handful of shapes, not a list
 ///
-/// Twenty-three rows below are marked [`ModelOutcome::Agreed`]. Two of those are
-/// the conformant controls and *must* be, which leaves **twenty-one misses** — a
-/// number that has more than doubled since stage 5, when this heading last said
-/// eight and the table it documents said eighteen, and that gained one at phase 8
-/// when `RestampingFixture` arrived. Every one of the twenty-one
-/// carries a defect the model **cannot
-/// express**, and the boundary is sharp enough to state in one line: the model
-/// drives *one handle*, on *one fixture*, through a *strictly sequential* stream
-/// of *non-empty* batches of *typical* values, and it never reopens and never
-/// arms a fixture.
+/// **Count the table rather than this sentence** — and something now does.
+/// Forty rows below are marked [`ModelOutcome::Agreed`] at this commit; two of
+/// them are the conformant controls and *must* be, which leaves **thirty-eight
+/// misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// against the table, and the count of controls it subtracts is derived from
+/// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
+/// time.
+///
+/// That check is here because the sentence has now drifted twice, at two
+/// scales. This heading said *twenty-one* and the paragraph under it said
+/// *twenty-three rows* for several phases while the table itself said forty and
+/// forty-two — the drift the pre-publication review found wherever a number was
+/// written beside the list it describes. It was corrected to thirty-nine and
+/// thirty-seven, and was stale again by one inside the day, because a mutant
+/// landed and nothing counted. **A corrected number is not a fix for a number
+/// nothing counts.** The shapes below are still the shapes; they no longer
+/// enumerate every name, and the honest instrument is the assertion.
+///
+/// Every miss carries a defect the model **cannot express**, and the boundary is
+/// sharp enough to state in one line: the model drives *one handle*, on *one
+/// fixture*, through a *strictly sequential* stream of *non-empty* batches of
+/// *typical* values, and it never reopens and never arms a fixture.
+///
+/// **Three names left this list at phase 12**, and they are worth naming because
+/// what moved was the *generator* rather than any store. `ToBoundIgnoredStore`,
+/// `ToIsExclusiveStore` and `BackwardsToIsAnUpperBoundStore` were misses for one
+/// reason: [`Op`]`::Read` carried four of the five read options, `to` was the
+/// missing one, and `Model::select`'s two `to` branches were therefore dead
+/// code. All three are rejected now, and a fourth store —
+/// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
+/// which is what `Kind::ModelOnlyMutant` recorded until
+/// `read_to_composes_with_multi_item_query` landed and made it an ordinary
+/// mutant — the row below stays `Rejected` and the model stays what proves it,
+/// but it is no longer the *only* thing that does. `LimitZeroIsUnlimitedStore` is
+/// the read option still on this list, and it is a *value* boundary rather than
+/// a missing field: `Op::Read` generates `Option<usize>` over `1..4` and never
+/// proposes the zero, which is the exclusion the ten value edges sit behind.
 ///
 /// * `EmptyBatchIsANoOpStore`, `EmptyBatchPanicsStore`,
 ///   `ConditionBeforeEmptinessStore` — the empty batch, which [`Op`] does not
@@ -2405,10 +2743,25 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // edges sit on, one method over.
     ("EmptyHeadIsFirstStore", ModelOutcome::Agreed),
     ("DefaultQueryHeadStore", ModelOutcome::Agreed),
-    ("ToBoundIgnoredStore", ModelOutcome::Agreed),
-    ("ToIsExclusiveStore", ModelOutcome::Agreed),
-    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Agreed),
+    // The upper bound, and all three moved from `Agreed` to `Rejected` at phase
+    // 12 without any of them changing. What changed is the generator: `Op::Read`
+    // now carries a `to`, so `Model::select`'s two `to` branches execute. They
+    // sat under the *head* comment above only because that is where the table
+    // put them, and they were never about `head`.
+    ("ToBoundIgnoredStore", ModelOutcome::Rejected),
+    ("ToIsExclusiveStore", ModelOutcome::Rejected),
+    ("BackwardsToIsAnUpperBoundStore", ModelOutcome::Rejected),
+    // The `to` twin of the precedence bug. This row was once the whole of what
+    // caught it — `Kind::ModelOnlyMutant` — and it is now a second instrument
+    // beside `read_to_composes_with_multi_item_query`, which is the arrangement
+    // every other row here has.
+    ("UnparenthesisedToPredicateStore", ModelOutcome::Rejected),
+    // A *value* boundary rather than a missing field: `Op::Read`'s limit is
+    // `Option<usize>` over `1..4` and never proposes the zero this store
+    // mishandles.
     ("LimitZeroIsUnlimitedStore", ModelOutcome::Agreed),
+    ("ForwardPagingBudgetStore", ModelOutcome::Rejected),
+    ("WindowedPagingBudgetStore", ModelOutcome::Rejected),
     ("LimitPerItemStore", ModelOutcome::Rejected),
     ("ItemDedupByTypeStore", ModelOutcome::Rejected),
     // Append.
@@ -2486,6 +2839,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("PreCommitPositionStore", ModelOutcome::Agreed),
     ("BorrowHoldingStore", ModelOutcome::Agreed),
     ("RefetchingPagedStore", ModelOutcome::Agreed),
+    // Agreed, and it has to be: unarmed, this store is completely conformant,
+    // and nothing in the model family arms a read fault. The row is the
+    // measurement that the generative family is not what catches it.
+    ("SwallowedReadFaultStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),
 ];
 
@@ -2523,8 +2880,18 @@ enum RacerOutcome {
 struct Racer {
     /// Matches the store's own [`harness::Subject::NAME`].
     name: &'static str,
-    /// The **exact** set of concurrency rules this store fails. Empty iff it is
-    /// the conformant control.
+    /// Whether this row is a defect or the family's conformant control.
+    ///
+    /// [`Declared::kind`]'s twin, and it is a field rather than a reading of
+    /// `fails` for the reason `fails.is_empty()` is *not* the same question. An
+    /// empty `fails` list is also what a disarmed mutant looks like, and this
+    /// family documents its own rendezvous flakiness at length — so emptying a
+    /// flaky row's list is the cheaper repair than fixing a rendezvous, and a
+    /// control derived from emptiness would be manufactured by exactly that
+    /// edit.
+    kind: RacerKind,
+    /// The **exact** set of concurrency rules this store fails. Empty iff this
+    /// row is [`RacerKind::ConformantControl`].
     fails: &'static [&'static str],
     /// CF-4's obligation, one family over: the real adapter shape that makes
     /// this store plausible. Never empty.
@@ -2544,6 +2911,22 @@ struct Racer {
     /// A pin naming a rule the store does not declare is an error: a pin on a
     /// rule that never fails is a claim nothing evaluates.
     expect: &'static [(&'static str, &'static str)],
+}
+
+/// What a [`Racer`] row claims about its store.
+///
+/// [`Kind`]'s counterpart for the concurrency family. The event-store family
+/// and the projection family both carry one and both assert that a conformant
+/// member is registered; this family did not, and its control was held by an
+/// empty list and a paragraph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RacerKind {
+    /// A store with a named defect, which MUST fail exactly the rules it
+    /// declares.
+    Racing,
+    /// A store that is legally different from `MemoryEventStore` and MUST pass
+    /// every rule of this family (CF-5).
+    ConformantControl,
 }
 
 /// Every store the concurrency family is driven against here.
@@ -2578,6 +2961,7 @@ struct Racer {
 ///   CI job timeout is the only thing that notices.
 const RACERS: &[Racer] = &[
     Racer {
+        kind: RacerKind::ConformantControl,
         name: "LockedStore",
         fails: &[],
         provenance: "the conformant control: one mutex held across the whole append, which is \
@@ -2596,6 +2980,7 @@ const RACERS: &[Racer] = &[
     // an instruction that has been written down once already and will read as an
     // unfilled gap to the next person who looks for it.
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
@@ -2623,6 +3008,7 @@ const RACERS: &[Racer] = &[
         ],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalVersionStore",
         fails: &["k_disjoint_boundaries_admit_exactly_k_commits"],
         provenance: "optimistic concurrency control on a single version number: a Durable \
@@ -2638,6 +3024,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RacingSequenceStore",
         fails: &["positions_are_unique_under_concurrent_appends"],
         provenance: "`SELECT max(position) FROM events` before `BEGIN`, which is the \
@@ -2652,6 +3039,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "GlobalHeadStore",
         fails: &["append_returns_the_callers_own_last_position"],
         provenance: "`INSERT …;` then `SELECT max(position) FROM events`, two statements with \
@@ -2664,6 +3052,7 @@ const RACERS: &[Racer] = &[
         )],
     },
     Racer {
+        kind: RacerKind::Racing,
         name: "RowAtATimeStore",
         fails: &["a_concurrent_reader_never_sees_a_partial_batch"],
         provenance: "`for event in batch { conn.execute(INSERT, …)? }` with the `BEGIN` \
@@ -2769,9 +3158,10 @@ fn all_concurrency_rules() -> Vec<&'static str> {
 /// that `cargo test mutation_coverage::every_rule_has_a_mutant` resolves.
 mod mutation_coverage {
     use super::{
-        Declared, FailureMode, Kind, Origin, RACERS, REGISTRY, RUNTIME_PANICS, RacerOutcome,
-        Verdict, all_concurrency_rules, all_projection_rules, all_rules, declared, racer_names,
-        racer_reports, registered_names, registered_second_handle, reports,
+        Declared, FailureMode, Kind, MODEL_ONLY_WITNESSES, Origin, RACERS, REGISTRY,
+        RUNTIME_PANICS, RacerKind, RacerOutcome, Verdict, all_concurrency_rules,
+        all_projection_rules, all_rules, declared, racer_names, racer_reports, registered_names,
+        registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
     use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
@@ -2817,6 +3207,297 @@ mod mutation_coverage {
              so they certify nothing. Write the wrong implementation into \
              `tests/mutation_coverage/mutants.rs` and declare it in `REGISTRY` \
              (ADR-0010 §1): {decorative:?}"
+        );
+    }
+
+    /// Every surface that promises a printed skip names the flag that prints it.
+    ///
+    /// L1-3. CF-18 requires a rule whose capability is unmet to be emitted as a
+    /// test that **reports** the skip with the fixture's stated reason, and the
+    /// clause's own `Rejects:` turns on that landing *in the adapter's CI log
+    /// where a reviewer and a user of the adapter can both see it*. A rule that
+    /// skips is a test that **passes**, and libtest discards a passing test's
+    /// stdout. `RuleOutcome::report`'s own documentation measured this and says
+    /// so exactly; three reader-facing surfaces said the opposite, and they are
+    /// the only three a stranger reads.
+    ///
+    /// Measured against a fixture already in the tree, before this test was
+    /// written: `cargo test -p happenstance-sqlite --test conformance` prints
+    /// **zero** `SKIP` lines, and the same command with `-- --show-output`
+    /// prints **three**. Exactly one CI in the world passes that flag.
+    ///
+    /// **Rejects: a promise about an adapter author's CI log that is true only
+    /// in this repository.**
+    ///
+    /// # What this does not verify
+    ///
+    /// That the caveat is *correct*, only that it is present near the promise.
+    /// It reads three files by path and would not notice a fourth surface
+    /// making the same claim. Its trigger is the narrow one — printing within
+    /// 120 characters of the words *stated reason* — so a promise phrased
+    /// without them escapes, and the wider trigger this started with fired on
+    /// `RuleOutcome`'s own prose about `#[must_use]`, which is a false positive
+    /// rather than a find. Its window is a character count rather than a
+    /// paragraph, so a promise and its caveat separated by more than 900
+    /// characters read as a violation here even where a human would not.
+    ///
+    /// The mechanism half of the finding — whether CF-18's obligation should be
+    /// discharged by something a stranger's default `cargo test` can observe,
+    /// or whether the clause is narrowed to what libtest permits — is a
+    /// decision this test does not take and must not be read as taking. CF-18
+    /// is `[FROZEN]`; the decision is an ADR's, and the argument is staged in
+    /// `.kb/_intake/remediation-2026-09-04-briefs/`.
+    #[test]
+    fn a_promised_skip_line_names_the_flag_it_needs() {
+        /// The reader-facing surfaces, by the path a citation would use.
+        const SURFACES: &[(&str, &str)] = &[
+            (
+                "crates/happenstance-testkit/README.md",
+                include_str!("../README.md"),
+            ),
+            (
+                "crates/happenstance-testkit/src/lib.rs",
+                include_str!("../src/lib.rs"),
+            ),
+            (
+                "crates/happenstance-testkit/src/contract.rs",
+                include_str!("../src/contract.rs"),
+            ),
+        ];
+
+        for (name, text) in SURFACES {
+            let flat: Vec<char> = text
+                .replace("//!", " ")
+                .replace("///", " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .collect();
+            let flat: String = flat.into_iter().collect();
+            let chars: Vec<char> = flat.chars().collect();
+
+            for (index, _) in flat.match_indices("print") {
+                let at = flat[..index].chars().count();
+                let near: String = chars[at.saturating_sub(120)..(at + 120).min(chars.len())]
+                    .iter()
+                    .collect();
+                // Only the sentences that make the promise. "print" appears in
+                // this crate about plenty that is not a skip line, and the
+                // trigger is deliberately the narrow one: a sentence that puts
+                // *the fixture's stated reason* next to printing it.
+                if !near.contains("stated reason") {
+                    continue;
+                }
+                let window: String = chars[at..(at + 900).min(chars.len())].iter().collect();
+                assert!(
+                    window.contains("--show-output"),
+                    "{name} promises a printed skip and does not name \
+                     `--show-output` within the same passage. A skipped rule is \
+                     a test that passes, and libtest discards a passing test's \
+                     stdout, so this sentence is true in this repository and \
+                     nowhere else. The passage: {window:.400}"
+                );
+            }
+        }
+    }
+
+    /// The `MODEL_COVERAGE` heading's counted claim, made falsifiable.
+    ///
+    /// The heading states how many rows are `Agreed` and how many of those are
+    /// misses. Nothing checked either number: the meta-test below walks the
+    /// table row by row and asserts that each row's claimed outcome equals the
+    /// observed one, which is a statement about the *rows* and says nothing
+    /// about the sentence over them. So the sentence drifted — by nineteen, for
+    /// several phases, and again by one within a day of being corrected.
+    ///
+    /// **Rejects: a counted claim over a machine-readable table with nothing
+    /// counting the table.**
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_model_coverage_heading_counts_the_table() {
+        let agreed = MODEL_COVERAGE
+            .iter()
+            .filter(|(_, outcome)| *outcome == ModelOutcome::Agreed)
+            .count();
+
+        // Derived from `REGISTRY` rather than written here: the rows that
+        // *must* be `Agreed` are exactly the conformant variants, and a second
+        // list of their names is a second thing to keep in step.
+        let controls = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ConformantVariant)
+            .count();
+
+        assert_eq!(
+            agreed, 40,
+            "`MODEL_COVERAGE`'s heading says forty rows are `Agreed` and the \
+             table holds {agreed}. The heading is prose and this is what \
+             makes it a claim, so correct the two together"
+        );
+        assert_eq!(
+            agreed - controls,
+            38,
+            "`MODEL_COVERAGE`'s heading says thirty-eight misses and the table \
+             holds {}. Every one of them is a defect the model cannot \
+             express, and the heading's shape bullets are what say why",
+            agreed - controls
+        );
+
+        // And the sentence itself, read out of this file. The two assertions
+        // above pin the *table*; without this one the heading and the numbers
+        // asserted here could still disagree, which is the shape the finding
+        // was about — a claim beside a list, with nothing joining them. There
+        // is no type that says "this doc comment states this count", so the
+        // check reads the source (RS-81-1).
+        //
+        // # What this does not verify
+        //
+        // Only the two sentences it names, and only their numerals spelled as
+        // words. A heading rewritten in different words fails loudly here
+        // rather than passing silently, which is the right way round; what it
+        // cannot see is whether the shape bullets beneath still describe the
+        // misses they claim to. That is what `MODEL_ONLY_WITNESSES` and the
+        // per-row assertions in `the_model_rule_rejects_exactly_what_it_claims`
+        // are for.
+        // Normalised first: a doc comment is wrapped, so the sentence being
+        // looked for is split across `///` lines and no substring search over
+        // the raw file can find it.
+        let source: String = include_str!("mutation_coverage.rs")
+            .replace("///", " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = spelled(agreed);
+        let misses = spelled(agreed - controls);
+
+        let counted = format!("{}{} rows below are", rows[..1].to_uppercase(), &rows[1..]);
+        assert!(
+            source.contains(&counted),
+            "the `MODEL_COVERAGE` heading must say {counted:?}, and it does not. \
+             The table holds {agreed} `Agreed` rows; correct the sentence."
+        );
+        assert!(
+            source.contains(&format!("**{misses} misses**")),
+            "the `MODEL_COVERAGE` heading must say \"**{misses} misses**\", and \
+             it does not. The table holds {agreed} `Agreed` rows of which \
+             {controls} are conformant controls."
+        );
+    }
+
+    /// A count spelled the way this file's prose spells it, for 0..=99.
+    ///
+    /// Written out rather than pulled in: the numbers a coverage heading states
+    /// are the one thing a reader compares across releases, and a dependency
+    /// added so that a test can say "thirty-eight" would be a dependency in the
+    /// conformance crate's own test binary for the sake of one string.
+    #[cfg(feature = "proptest")]
+    fn spelled(n: usize) -> String {
+        const UNITS: [&str; 20] = [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ];
+        const TENS: [&str; 10] = [
+            "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        ];
+
+        assert!(
+            n < 100,
+            "this file's prose spells no number above ninety-nine"
+        );
+        if n < 20 {
+            return UNITS[n].to_owned();
+        }
+        let (tens, unit) = (n / 10, n % 10);
+        if unit == 0 {
+            TENS[tens].to_owned()
+        } else {
+            format!("{}-{}", TENS[tens], UNITS[unit])
+        }
+    }
+
+    /// The `REGISTRY` caution's discount, made falsifiable.
+    ///
+    /// The paragraph over the table tells a reviewer that the shotgun mutant's
+    /// long `fails` list is *inflation rather than vacuity* — many of its rows
+    /// evidence a rule's setup anchor rather than the property the rule is
+    /// named for — and closes with the reassurance that no rule is covered by
+    /// that mutant alone. That closing clause is what makes the discount safe
+    /// to apply, and it is the one part of the paragraph nothing evaluates.
+    ///
+    /// Where the shotgun mutant *is* a rule's only evidence, the discount has
+    /// to stop, and what stops it is an `expect` pin naming the assertion the
+    /// mutant is supposed to trip. Without one, the day that rule acquires a
+    /// second assertion its only registered evidence may be an anchor failure,
+    /// CF-1's obligation is discharged in name only — and the paragraph told
+    /// the auditor not to look.
+    ///
+    /// **Rejects: a reassurance aimed at exactly the audit it makes
+    /// unnecessary.**
+    #[test]
+    fn the_shotgun_mutants_sole_coverage_is_pinned() {
+        // Derived, then checked against the paragraph. The store whose rows a
+        // reader is told to discount is the one that trips the most rules, so
+        // the test follows the table; the equality below is what keeps the
+        // paragraph and the table talking about the same store.
+        let mut by_breadth: Vec<&Declared> = REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::Mutant)
+            .collect();
+        by_breadth.sort_by_key(|entry| core::cmp::Reverse(entry.fails.len()));
+        let shotgun = by_breadth[0];
+        assert!(
+            shotgun.fails.len() > by_breadth[1].fails.len(),
+            "two mutants tie for the broadest `fails` list, so the caution over              `REGISTRY` no longer names a single store"
+        );
+        assert_eq!(
+            shotgun.name, "InnerJoinTagStore",
+            "the caution over `REGISTRY` names `InnerJoinTagStore` as the \
+             mutant whose rows may be read as anchor inflation, and the \
+             broadest mutant is now `{}` — so the paragraph is about a \
+             different store than the table is",
+            shotgun.name
+        );
+
+        let unpinned: Vec<&str> = all_rules()
+            .into_iter()
+            .filter(|rule| {
+                let evidence: Vec<&str> = REGISTRY
+                    .iter()
+                    .filter(|entry| entry.kind == Kind::Mutant && entry.fails.contains(rule))
+                    .map(|entry| entry.name)
+                    .collect();
+                evidence == [shotgun.name]
+            })
+            .filter(|rule| !shotgun.expect.iter().any(|(pinned, _)| pinned == rule))
+            .collect();
+
+        assert!(
+            unpinned.is_empty(),
+            "`{}` is the only evidence for {unpinned:?}, and its row pins no \
+             assertion there. The caution over `REGISTRY` says its rows may \
+             be discounted as anchor inflation; that discount is only safe \
+             where the mutant is not the sole evidence, so a rule it alone \
+             covers owes an `expect` pin naming the assertion it trips",
+            shotgun.name
         );
     }
 
@@ -2904,21 +3585,7 @@ mod mutation_coverage {
                 );
             }
 
-            match entry.kind {
-                Kind::Mutant => assert!(
-                    !entry.fails.is_empty(),
-                    "`{}` is a mutant that fails nothing, which is a conformant \
-                     store filed under the wrong kind",
-                    entry.name
-                ),
-                Kind::ConformantVariant => assert!(
-                    entry.fails.is_empty(),
-                    "`{}` is a conformant variant that declares failures; a \
-                     variant that fails a rule is either a mutant or evidence \
-                     the rule is over-specified (CF-6)",
-                    entry.name
-                ),
-            }
+            assert_kind_agrees_with_the_failure_list(entry);
         }
 
         assert!(
@@ -2928,6 +3595,360 @@ mod mutation_coverage {
             "no conformant variant is registered, so \
              `conformant_variants_pass_everything` asserts over nothing — which \
              is the vacuity of CF-5 reintroduced one level up"
+        );
+    }
+
+    /// Each [`Kind`]'s claim about what `fails` may hold — and, for
+    /// [`Kind::ModelOnlyMutant`], about what catches the store instead.
+    ///
+    /// Split out of `mutant_registry_is_exhaustive` rather than inlined,
+    /// because the three arms are one question — *does this row's kind agree
+    /// with the rest of the row* — and the enclosing test is a list of
+    /// unrelated ones.
+    fn assert_kind_agrees_with_the_failure_list(entry: &Declared) {
+        match entry.kind {
+            Kind::Mutant => assert!(
+                !entry.fails.is_empty(),
+                "`{}` is a mutant that fails nothing, which is a conformant \
+                 store filed under the wrong kind",
+                entry.name
+            ),
+            Kind::ModelOnlyMutant => {
+                assert!(
+                    entry.fails.is_empty(),
+                    "`{}` is filed as caught only by the model family and \
+                     declares a rule of the event-store family that it fails, \
+                     so it is an ordinary mutant. Change the kind rather than \
+                     the list",
+                    entry.name
+                );
+                // Obligation two, and it is feature-**independent**, which is
+                // the whole repair. The kind shipped with only the `cfg`-gated
+                // obligation below, and an adversarial review registered
+                // `HidingPlaceStore` — a store with no defect at all — under
+                // this kind, with an empty `fails` list and a `MODEL_COVERAGE`
+                // row claiming `Rejected`, and watched
+                // `--no-default-features` report nine passes. `Kind::Mutant` is
+                // unabusable because its bar is data in this same table;
+                // borrowing a family for a bar means the bar can be compiled
+                // out, and `cargo hack`'s powerset compiles exactly that.
+                //
+                // Presence here is only half of it: a row can be added as
+                // easily as a claim. `every_model_only_mutant_demonstrates_its_defect`
+                // is the other half — it runs the witness and compares the
+                // store's own answer against `crate::correct`'s.
+                assert!(
+                    MODEL_ONLY_WITNESSES
+                        .iter()
+                        .any(|witness| witness.name == entry.name),
+                    "`{}` is filed as caught only by the model family and carries no \
+                     `MODEL_ONLY_WITNESSES` row, so nothing in this build has shown it is \
+                     defective at all. Add a fixed scenario on which its own `Defect::select` \
+                     disagrees with `crate::correct`",
+                    entry.name
+                );
+
+                // Obligation three, and the one that needs the model family
+                // itself: not merely *a* defect, but one this binary's model
+                // actually rejects. It can only be checked where that family is
+                // compiled, which is why obligation two above exists and does
+                // not depend on it.
+                #[cfg(feature = "proptest")]
+                {
+                    let claimed = MODEL_COVERAGE
+                        .iter()
+                        .find(|(row, _)| *row == entry.name)
+                        .map(|(_, outcome)| *outcome);
+                    assert_eq!(
+                        claimed,
+                        Some(ModelOutcome::Rejected),
+                        "`{}` is filed as caught only by the model family, and \
+                         `MODEL_COVERAGE` claims {claimed:?} rather than \
+                         `Rejected` — so nothing in this binary catches it and \
+                         the kind is a place to hide it",
+                        entry.name
+                    );
+                }
+            }
+            Kind::ConformantVariant => assert!(
+                entry.fails.is_empty(),
+                "`{}` is a conformant variant that declares failures; a \
+                 variant that fails a rule is either a mutant or evidence the \
+                 rule is over-specified (CF-6)",
+                entry.name
+            ),
+        }
+    }
+
+    /// Every [`Kind::ModelOnlyMutant`] really is defective, measured rather
+    /// than claimed — in **every** feature configuration.
+    ///
+    /// The kind's other two obligations are both statements *about* a store: its
+    /// `fails` list is empty, and `MODEL_COVERAGE` says the model rejects it.
+    /// The first is true of a correct store as well, and the second is behind
+    /// `proptest`. Between them they left the configuration `cargo hack` builds
+    /// with no bar at all, and an adversarial review walked `HidingPlaceStore`
+    /// straight through it.
+    ///
+    /// This runs the store's own [`crate::mutants::Defect::select`] against a
+    /// fixed log and read, and requires it to answer differently from
+    /// [`crate::correct::select`]. No generator, no runtime, no feature — the
+    /// same shape as the experiment crate's `defect_is_real.rs`, which exists
+    /// for the same reason one family over.
+    ///
+    /// Both directions, because an orphan witness is a scenario nobody runs
+    /// against anything and reads as coverage.
+    #[test]
+    fn every_model_only_mutant_demonstrates_its_defect() {
+        for entry in REGISTRY
+            .iter()
+            .filter(|entry| entry.kind == Kind::ModelOnlyMutant)
+        {
+            let witness = MODEL_ONLY_WITNESSES
+                .iter()
+                .find(|witness| witness.name == entry.name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{}` is a `ModelOnlyMutant` with no witness; \
+                         `mutant_registry_is_exhaustive` owns this failure",
+                        entry.name
+                    )
+                });
+
+            let (log, query, options) = (witness.scenario)();
+            let observed = (witness.select)(&log, &query, options);
+            let correct = crate::correct::select(&log, &query, options);
+
+            let disagrees = match &observed {
+                Ok(events) => events != &correct,
+                // A read that fails where the correct one succeeds is a
+                // disagreement too, and the sharpest kind.
+                Err(_) => true,
+            };
+            assert!(
+                disagrees,
+                "`{}` is filed as a defect only the model family can see, and its own witness \
+                 does not show a defect at all: reading {query:?} under {options:?} it answered \
+                 exactly what `crate::correct` answers, {correct:?}. Either the witness is the \
+                 wrong scenario or the store has stopped being wrong",
+                entry.name
+            );
+        }
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let owner = declared(witness.name);
+            assert!(
+                owner.is_some_and(|entry| entry.kind == Kind::ModelOnlyMutant),
+                "`{}` has a `MODEL_ONLY_WITNESSES` row and is not a registered \
+                 `ModelOnlyMutant`, so the scenario is never evaluated against anything and \
+                 reads as coverage",
+                witness.name
+            );
+        }
+    }
+
+    /// The positive control on the bar above: a store with **no defect** cannot
+    /// satisfy it.
+    ///
+    /// Without this, `every_model_only_mutant_demonstrates_its_defect` is
+    /// satisfied by a comparison that always reports a disagreement — the same
+    /// vacuity `conformant_variants_pass_everything` exists to rule out one
+    /// table over. [`crate::mutants::HidingPlaceStore`] is the review's own
+    /// refutation, kept in the tree and driven through **every** scenario the
+    /// witness table holds; it agrees with `crate::correct` on all of them, so
+    /// no witness for it could be written.
+    ///
+    /// What this does and does not prove: it does not prove that *no* scenario
+    /// anywhere would separate a defect-free store from the reference
+    /// implementation — nothing could, and the two are the same function. It
+    /// proves the comparison is a real one, over the exact inputs the bar
+    /// accepts today.
+    ///
+    /// # Why the guard is an equivalence and not `!is_empty()`
+    ///
+    /// It was `assert!(!MODEL_ONLY_WITNESSES.is_empty())`, whose whole content
+    /// was *this control must actually run*. That is right while the kind has a
+    /// member and wrong the moment it does not: with no
+    /// [`Kind::ModelOnlyMutant`] registered, the bar this controls
+    /// (`every_model_only_mutant_demonstrates_its_defect`) iterates over nothing
+    /// too, so a control that ran would be controlling nothing — and a bare
+    /// `!is_empty()` would demand a witness for a store that must not have one.
+    ///
+    /// The equivalence says the same thing in both states: **the witness table
+    /// is empty exactly when the kind has no members.** A row without a member
+    /// is an orphan scenario, which is coverage theatre; a member without a row
+    /// is a defect nothing has shown to be a defect, which is the hole
+    /// `HidingPlaceStore` walked through. Both directions stay checked, and the
+    /// day the kind is used again this control is non-vacuous with it.
+    #[test]
+    fn the_model_only_bar_rejects_a_store_with_no_defect() {
+        assert_eq!(
+            MODEL_ONLY_WITNESSES.is_empty(),
+            !REGISTRY
+                .iter()
+                .any(|entry| entry.kind == Kind::ModelOnlyMutant),
+            "the witness table and the `ModelOnlyMutant` rows in `REGISTRY` must be empty or              non-empty together: {} witness row(s) against {} registered member(s). A row with              no member is a scenario nobody evaluates; a member with no row is a defect nothing              has shown to be one",
+            MODEL_ONLY_WITNESSES.len(),
+            REGISTRY
+                .iter()
+                .filter(|entry| entry.kind == Kind::ModelOnlyMutant)
+                .count(),
+        );
+
+        for witness in MODEL_ONLY_WITNESSES {
+            let (log, query, options) = (witness.scenario)();
+            let hiding = <crate::mutants::HidingPlaceStore as crate::mutants::Defect>::select(
+                &log, &query, options,
+            )
+            .expect("the correct read path is infallible");
+            assert_eq!(
+                hiding,
+                crate::correct::select(&log, &query, options),
+                "`HidingPlaceStore` overrides no step of `Defect` and must therefore answer \
+                 every read exactly as `crate::correct` does. It did not, on `{}`'s scenario — \
+                 which means the witness comparison is measuring something other than the \
+                 defect, and every row it passes is suspect",
+                witness.name
+            );
+        }
+    }
+
+    /// The rules a fixture buys by lying about `REOPEN` — the ones it converts
+    /// from reported skips into passes.
+    ///
+    /// The whole of this suite's durability certification, and the reason the
+    /// incentive runs backwards. Written out rather than derived, so that a rule
+    /// leaving the set is an edit somebody makes on purpose; every name is
+    /// checked against `for_each_event_store_rule!` below, so a typo is a
+    /// failure rather than a silently empty claim.
+    const CERTIFIED_BY_OVER_CLAIMING_REOPEN: &[&str] = &[
+        "acknowledged_writes_survive_a_reopen",
+        "reopened_store_does_not_reissue_an_event_id",
+        "recorded_time_survives_a_reopen",
+    ];
+
+    /// CF-17's hazard, recorded as what it is: **nothing detects it**, and the
+    /// two consequences that *are* measurable are measured here.
+    ///
+    /// # Why this is a test and not a `REGISTRY` row
+    ///
+    /// It was a row. `NoopReopenFixture` — `REOPEN: SUPPORTED`, an empty
+    /// `reopen`, over a completely correct but entirely volatile store — cannot
+    /// be a [`Kind::Mutant`], because it fails nothing and that assertion is
+    /// right and was not weakened. It was given a fourth kind whose obligation
+    /// was a **scenario separating it from an honest fixture**, and an
+    /// adversarial review showed that obligation to be wrong twice over: the
+    /// row's two `fn() -> String` pointers had no tie to the store named in it,
+    /// so two string literals satisfied the bar; and the scenario that was
+    /// written separated two *styles of `reopen` implementation* rather than
+    /// honest from defective.
+    ///
+    /// The second finding is the one that killed the kind rather than the row.
+    /// [`crate::mutants::ClosingFixture`] and
+    /// [`crate::mutants::LiveHandleReopenFixture`] are **both honest**, and they
+    /// answer the stale-handle scenario differently; the liar answers with the
+    /// second. `LiveHandleReopenFixture` is `SqliteFixture` in miniature — the
+    /// workspace's only real durable adapter fixture — so a rule written from
+    /// that partition rejects `happenstance-sqlite`. The audit said this in
+    /// advance: *a correct `reopen` over a durable medium and an empty one over
+    /// a `Vec` produce byte-identical observations through `EventStore`*. If
+    /// that is true then **no scenario can demonstrate this defect**, and an
+    /// obligation demanding one is unsatisfiable in principle. The honest move
+    /// was to withdraw the obligation, not to keep hunting for a scenario.
+    ///
+    /// # What is left, and it is not nothing
+    ///
+    /// Three assertions, all measured rather than asserted:
+    ///
+    /// 1. The liar **fails no rule**, driven through every one of them. That is
+    ///    the claim "nothing sees it", and it goes red the day something does.
+    /// 2. It converts [`CERTIFIED_BY_OVER_CLAIMING_REOPEN`] from reported skips
+    ///    into passes, while its honest twin — the same store, one line apart,
+    ///    declining `REOPEN` — reports them as skips. That is the incentive
+    ///    inversion, in-tree and reproducible, rather than a score quoted from
+    ///    an experiment nobody in review ran.
+    /// 3. Two honest fixtures land on opposite sides of the sharpest partition
+    ///    anyone has proposed, with the liar on one of them. That is the
+    ///    standing falsifier for every reopen rule that will ever be proposed,
+    ///    and it is why CF-17's obligation is a MUST no rule enforces.
+    ///
+    /// What is **not** here is a check that the defect is real. Nothing in this
+    /// workspace can supply one, and a test that appeared to would be worse than
+    /// this comment.
+    #[test]
+    fn reopen_over_claiming_is_undetectable_and_this_is_the_record() {
+        let rules = all_rules();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            assert!(
+                rules.contains(rule),
+                "`{rule}` is not a rule of this family. Check the spelling against \
+                 `for_each_event_store_rule!` — a claim naming a rule that does not exist is \
+                 evaluated against nothing"
+            );
+        }
+
+        // 1 — the liar fails nothing, over every rule there is.
+        let liar = run_subject::<crate::mutants::NoopReopenFixture>();
+        let rejected: Vec<&str> = liar
+            .outcomes
+            .iter()
+            .filter(|(_, verdict)| matches!(verdict, Verdict::Panicked { .. }))
+            .map(|(rule, _)| *rule)
+            .collect();
+        assert!(
+            rejected.is_empty(),
+            "`NoopReopenFixture` declares `REOPEN` supported over a store that reopens nothing, \
+             and this record says no rule of this family can reject it. These did: {rejected:?}. \
+             That is good news and it means the record is out of date — promote the fixture to a \
+             `Kind::Mutant` row declaring exactly these rules, and delete this test rather than \
+             relaxing it"
+        );
+
+        // 2 — the incentive inversion: the same store, one line apart.
+        let honest = run_subject::<crate::mutants::HonestVolatileFixture>();
+        for rule in CERTIFIED_BY_OVER_CLAIMING_REOPEN {
+            let lied = liar
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the liar"));
+            assert!(
+                matches!(lied, Verdict::Passed),
+                "`{rule}` is claimed as one an over-claiming fixture converts into a pass, and \
+                 against `NoopReopenFixture` it {}",
+                lied.describe()
+            );
+
+            let told_the_truth = honest
+                .verdict(rule)
+                .unwrap_or_else(|| panic!("`{rule}` was not driven against the honest twin"));
+            assert!(
+                matches!(told_the_truth, Verdict::Skipped { .. }),
+                "`{rule}` must be a reported *skip* against a fixture that honestly declines \
+                 `REOPEN`, or there is no inversion to report: the liar and the honest twin are \
+                 the same store one line apart. It {}",
+                told_the_truth.describe()
+            );
+        }
+
+        // 3 — the falsifier. Two honest fixtures, opposite answers, and the liar
+        //     sitting with one of them.
+        let replaying = crate::mutants::closing_reopen_observed();
+        let live_handle = crate::mutants::live_handle_reopen_observed();
+        let lying = crate::mutants::noop_reopen_observed();
+        assert_ne!(
+            replaying, live_handle,
+            "the two honest reopen styles must answer the stale-handle scenario differently, or \
+             this assertion has stopped being the falsifier it exists to be. `ClosingFixture` \
+             replaces the live log; `LiveHandleReopenFixture` does not, because reopening a file \
+             does not replace the file"
+        );
+        assert_eq!(
+            lying, live_handle,
+            "`NoopReopenFixture` must answer exactly as an HONEST durable-shaped fixture does. \
+             That equality is the whole reason no rule may be written here: \
+             `LiveHandleReopenFixture` is `SqliteFixture` in miniature, and a rule that rejected \
+             the liar on this observation would reject the workspace's only durable adapter with \
+             it. If this has stopped holding, something has become observable and CF-17 may be \
+             enforceable after all — which is a finding, not a test to adjust"
         );
     }
 
@@ -2963,7 +3984,12 @@ mod mutation_coverage {
             let Some(entry) = declared(report.name) else {
                 continue; // `mutant_registry_is_exhaustive` owns this failure.
             };
-            if entry.kind != Kind::Mutant {
+            // `Kind::ModelOnlyMutant` runs through this loop too, and with an
+            // empty `fails` list every rule takes the undeclared arm — which is
+            // exactly the claim that kind makes: *no rule of this family sees
+            // it*. Filing it as a mutant caught elsewhere would be worth nothing
+            // if the "elsewhere" were assumed rather than measured here.
+            if entry.kind == Kind::ConformantVariant {
                 continue;
             }
 
@@ -3312,6 +4338,7 @@ mod mutation_coverage {
                     *reason == DecliningFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningFixture::REOPEN_REASON
                         || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
+                        || *reason == DecliningFixture::READ_FAULT_REASON
                         // CF-40: a fixture with no ceiling reports the testkit's
                         // reason rather than its own, because the sentence is the
                         // same for every store that has none. See
@@ -3830,32 +4857,18 @@ mod mutation_coverage {
         );
     }
 
-    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    /// The static half of `the_concurrency_rules_reject_exactly_what_they_claim`:
+    /// what the table says, before any store is driven.
     ///
-    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
-    /// cannot have one: every store it drives fails *no* event-store rule, and
-    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
-    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
-    /// makes it a check rather than a list.
-    ///
-    /// # Why this one matters more than it looks
-    ///
-    /// A racing rule is the easiest kind to write in a form that cannot fail:
-    /// start some threads, assert something true of the *final* state, and the
-    /// test is green whatever happened in between. Every rule in this family was
-    /// written against a store that breaks it, and this test is what keeps that
-    /// true — including through the refactor that quietly turns a rendezvous
-    /// into a race and a rejection into a coin toss. A store that used to be
-    /// rejected and now passes shows up here, by name.
-    #[test]
-    fn the_concurrency_rules_reject_exactly_what_they_claim() {
-        let rules = all_concurrency_rules();
-        let names = racer_names();
-
+    /// Split out because the test crossed `clippy::too_many_lines`, and split
+    /// *here* rather than anywhere else because this is the seam: everything
+    /// above reads `RACERS` and `for_each_racer!`, everything below reads the
+    /// answers a running store gave.
+    fn racer_table_agrees_with_the_enumeration(rules: &[&str], names: &[&str]) {
         // The two lists that drift, held together exactly as
         // `mutant_registry_is_exhaustive` holds `for_each_mutant!` and
         // `REGISTRY`.
-        for name in &names {
+        for name in names {
             let Some(row) = RACERS.iter().find(|row| row.name == *name) else {
                 panic!(
                     "`{name}` is enumerated in `for_each_racer!` but has no \
@@ -3883,6 +4896,22 @@ mod mutation_coverage {
                      is a claim nothing evaluates"
                 );
             }
+
+            // The two halves of the kind, in both directions. A control that
+            // declares a failure is not a control, and a racing store that
+            // declares none is a defect nothing catches — which is the state
+            // `mutant_registry_is_exhaustive` rejects one family over, and the
+            // state an author reaches by emptying a flaky row's list rather
+            // than repairing its rendezvous.
+            assert_eq!(
+                row.fails.is_empty(),
+                row.kind == RacerKind::ConformantControl,
+                "`{name}` is registered as {:?} with {} declared failure(s). A \
+                 conformant control declares none, and a racing store that \
+                 declares none has had its defect disarmed rather than fixed",
+                row.kind,
+                row.fails.len()
+            );
         }
         for row in RACERS {
             assert!(
@@ -3892,7 +4921,31 @@ mod mutation_coverage {
                 row.name
             );
         }
+    }
 
+    /// CF-1 and CF-3, applied to `event_store_concurrency_conformance!`.
+    ///
+    /// The concurrency family has no [`REGISTRY`](super::REGISTRY) row and
+    /// cannot have one: every store it drives fails *no* event-store rule, and
+    /// `mutant_registry_is_exhaustive` rejects a row with an empty `fails` list.
+    /// [`RACERS`](super::RACERS) is its registry, and this is the meta-test that
+    /// makes it a check rather than a list.
+    ///
+    /// # Why this one matters more than it looks
+    ///
+    /// A racing rule is the easiest kind to write in a form that cannot fail:
+    /// start some threads, assert something true of the *final* state, and the
+    /// test is green whatever happened in between. Every rule in this family was
+    /// written against a store that breaks it, and this test is what keeps that
+    /// true — including through the refactor that quietly turns a rendezvous
+    /// into a race and a rejection into a coin toss. A store that used to be
+    /// rejected and now passes shows up here, by name.
+    #[test]
+    fn the_concurrency_rules_reject_exactly_what_they_claim() {
+        let rules = all_concurrency_rules();
+        let names = racer_names();
+
+        racer_table_agrees_with_the_enumeration(&rules, &names);
         // Both directions, per (store, rule).
         for (store, rule, outcome, description) in racer_reports() {
             let Some(row) = RACERS.iter().find(|row| row.name == store) else {
@@ -3966,5 +5019,22 @@ mod mutation_coverage {
                  decorative"
             );
         }
+
+        // The other direction, and the one this family had only in prose. The
+        // event-store family asserts it over `REGISTRY` and the projection
+        // family over its own table; here the control was an empty `fails` list
+        // and a provenance paragraph, so deleting `LockedStore` outright left
+        // every assertion above holding and the gate green — measured, not
+        // argued.
+        assert!(
+            RACERS
+                .iter()
+                .any(|row| row.kind == RacerKind::ConformantControl),
+            "no conformant control is registered for the concurrency family, so \
+             its five rules have only ever been passed by stores registered as \
+             defective — which is the vacuity of CF-5 reintroduced in the one \
+             family whose rules are macro-emitted and have no `REGISTRY` row to \
+             fall back on"
+        );
     }
 }

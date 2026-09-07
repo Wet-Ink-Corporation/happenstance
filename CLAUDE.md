@@ -31,7 +31,7 @@ crates/happenstance-core/        the contract. types, ports, errors, in-memory s
 crates/happenstance/             the typed layer. today a facade over the contract.
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
-crates/happenstance-cloudflare/  🔩 skeleton. the workspace's only !Send store. wasm32.
+crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
 crates/happenstance-postgres/    🔩 skeleton. the target that does not serialise writers.
 crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
@@ -92,7 +92,9 @@ RUNBOOK.md                       the plan of record, and how far it has got.
 false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
 A skeleton exists to be disagreed with by a type checker — it is an *instrument*
 first and a target second, and it is not an adapter until it has run the
-conformance suite. None of them has.
+conformance suite. **Two have stopped being skeletons**: `happenstance-sqlite` at
+phase 8 and `happenstance-cloudflare` at phase 9, and both are published. The
+four that carry the marker above have not, and the marker is the claim.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
@@ -141,9 +143,19 @@ artifact is yours to write freely.
 Six templates under `.redkiln/templates/` are deliberately customised — `spec.md`,
 `_design.md`, `_intake-brief.md`, `discover.md` and the two gate checklists — so
 `redkiln doctor` reports six `template-drift` advisories forever. That is expected,
-and the `backlog` CI job asserts the set is **exactly** those six: a seventh is a
+and the `backlog` CI job asserted the set was **exactly** those six: a seventh is a
 template someone changed without deciding to, and a missing one is a customisation
 reverted by `adopt --templates`.
+
+**That job is disabled as of 2026-09-04** — this repository has moved off the
+redkiln version it pins, so the pinned CLI reports drift against a process the
+repository no longer runs. It is `if: false` rather than deleted, so it shows as
+*skipped* rather than vanishing: the job's own argument is that a check which
+quietly stops running is worth less than none, because the green tick keeps
+arriving. **While it is off, nothing enforces `.kb` frontmatter validation, the
+immutability of accepted decision atoms, hand-edited item frontmatter, or the
+six-template assertion above** — all four merge green. The restore path and the
+full cost are written at the job in `.github/workflows/ci.yml`.
 
 **Never run `redkiln adopt --templates`.** `redkiln upgrade` recommends it, and it
 is wrong here: it would overwrite all six customisations with the bundled defaults,
@@ -201,12 +213,15 @@ code around it.
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
-   **weigh the floor, do not obey it.** Nothing is published, so no downstream
-   consumer is pinned to anything, and ADR-0004 carries a **provisional** marker
-   for exactly that reason — it loses the marker at phase 12, when first publish
-   turns the MSRV into a promise. Raising it was a deliberate trade recorded in
-   an ADR, which is what the old text asked for; what stays forbidden is moving
-   it in silence.
+   **weigh the floor, and from `0.2.0` it is also a promise.** The old text here
+   said *"nothing is published, so no downstream consumer is pinned to anything"*,
+   and that was ADR-0004's whole reason for carrying a **provisional** marker.
+   `0.2.0` is what the marker named as its own end: five crates are on crates.io,
+   consumers are pinned, and raising the floor is now a breaking change that
+   needs a decision record rather than a commit message. Raising it at phase 2
+   was a deliberate trade recorded in an ADR, which is what the old text asked
+   for; what stays forbidden is moving it in silence, and the bar for moving it
+   at all is higher than it was.
 
    Two things follow that are easy to miss. The MSRV now **equals**
    `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two
@@ -337,7 +352,7 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — 200 numbered clauses, each carrying a maturity marker
+what is **true now** — 201 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and

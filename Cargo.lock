@@ -168,7 +168,7 @@ dependencies = [
 
 [[package]]
 name = "course-subscriptions"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "handles-and-quotas"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "ciborium",
  "futures-core",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-cloudflare"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-core"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "base64",
  "bytes",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-ladybug"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "happenstance-core",
  "thiserror",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-neon"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-postgres"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -588,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-sqlite"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-sync"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-testkit"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -975,7 +975,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "outside-projection-adapter"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "happenstance-core",
  "happenstance-testkit",
@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "rebuilding-read-models"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -1630,7 +1630,7 @@ checksum = "c3a6bfce3d99adfa72d24750a61f782f3036a81e7f86d8841ee1326deaebd171"
 
 [[package]]
 name = "telemetry-across-codecs"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -1684,7 +1684,7 @@ dependencies = [
 
 [[package]]
 name = "tickets-over-http"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -1841,7 +1841,7 @@ dependencies = [
 
 [[package]]
 name = "transfers-on-sqlite"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "happenstance",
@@ -2345,7 +2345,7 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
 name = "xtask"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",

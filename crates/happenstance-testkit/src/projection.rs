@@ -213,8 +213,13 @@ macro_rules! require {
 /// policy here, only a switch in a second place.
 macro_rules! require_read_through {
     ($fixture:ident) => {
-        if !<<$fixture as $crate::ProjectionFixture>::Store as ProjectionProbe>::READS_THROUGH_BATCH
-        {
+        // One line, and deliberately over the width: rustfmt's macro-body
+        // formatting is not idempotent across a wrapped `as` inside a qualified
+        // path — it re-indents the continuation on every run — so a break here
+        // makes `cargo fmt --check` fail forever.
+        #[rustfmt::skip]
+        let __reads_through_batch = <<$fixture as $crate::__private::ProjectionFixture>::Store as $crate::__private::ProjectionProbe>::READS_THROUGH_BATCH;
+        if !__reads_through_batch {
             return $crate::RuleOutcome::Skipped {
                 capability: $crate::NO_BATCH_READ_PATH,
                 reason: $crate::NO_BATCH_READ_PATH_REASON,
@@ -1929,7 +1934,7 @@ macro_rules! __emit_projection_tokio {
         $(
             #[tokio::test]
             async fn $name() {
-                $crate::projection::rules::$name(__conformance_fixture)
+                $crate::__private::projection_rules::$name(__conformance_fixture)
                     .await
                     .report(::core::stringify!($name));
             }
@@ -1950,7 +1955,7 @@ macro_rules! __emit_projection_blocking {
         $(
             #[test]
             fn $name() {
-                $crate::block_on($crate::projection::rules::$name(__conformance_fixture))
+                $crate::__private::block_on($crate::__private::projection_rules::$name(__conformance_fixture))
                     .report(::core::stringify!($name));
             }
         )*
@@ -1977,7 +1982,7 @@ macro_rules! __emit_projection_wasm {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
             async fn $name() {
-                let __outcome = $crate::projection::rules::$name(__conformance_fixture).await;
+                let __outcome = $crate::__private::projection_rules::$name(__conformance_fixture).await;
                 if let Some(__line) = __outcome.skip_line(::core::stringify!($name)) {
                     ::wasm_bindgen_test::console_log!("{}", __line);
                 }
@@ -2016,7 +2021,7 @@ fn declared_projection_rules() -> Vec<&'static str> {
 /// # What this checks, and what it cannot
 ///
 /// One direction is free and must stay free: every emitter expands to
-/// `$crate::projection::rules::$name`, so a name in the enumeration with no rule
+/// `$crate::__private::projection_rules::$name`, so a name in the enumeration with no rule
 /// behind it is `error[E0425]` in every harness. An emitter resolving rules
 /// through a `HashMap<&str, fn>` would convert that compile error into a
 /// run-time one and is forbidden for exactly that reason.

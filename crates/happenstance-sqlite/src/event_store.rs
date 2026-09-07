@@ -92,8 +92,17 @@
 //!   Multi-tag items must be probed most-selective-tag-first and SQLite cannot
 //!   supply per-value cardinality: `ANALYZE` stores an *average*, which is
 //!   exactly wrong for a tag set where one value matches a third of the log and
-//!   another matches one percent. Measured, a two-tag boundary costs roughly
-//!   200x a single-tag one (ADR-0022 §8).
+//!   another matches one percent.
+//!
+//!   That requirement is only true because the intersection chain is
+//!   **correlated** — `query_sql.rs`'s module documentation is the long form,
+//!   and it is a private module, so this is a path rather than a link. On the
+//!   uncorrelated shape this crate emitted until then, obeying it cost 37x–42x
+//!   rather than earning anything, because the chained arm was materialised and
+//!   the seed's selectivity could not reach it. A future edit that returns the
+//!   chain to `position IN (…)` must delete this bullet in the same change, or
+//!   the crate will be requiring the slower ordering in its own public
+//!   documentation. Measured in `experiments/correlated-exists-guard/`.
 //!
 //! And three that predate them:
 //!
@@ -112,6 +121,45 @@
 //! creation and read back on every open, beside the schema-version marker that
 //! gives migration 2 something to test against. See
 //! [`SqliteEventStore::remint_identity`] for what that mint-once choice costs.
+//!
+//! # Cancellation
+//!
+//! **What a dropped `append` future does here: nothing, because there is nothing
+//! to drop.** `append` refuses an empty batch, checks this store's declared
+//! ceilings, locks the connection and calls `append_locked` inline. There is no
+//! `.await` anywhere in that body — none anywhere in this module at all — so
+//! a future polled once has already run to completion by the time `poll` returns,
+//! and no outcome depends on whether the caller then drops it. **A dropped
+//! `append` future cannot be cancelled by this adapter.**
+//!
+//! This is the statement **ES-23** obliges every adapter to make. The clause is
+//! `[FROZEN]`, its two outcomes are *the append committed* and *it did not*, and
+//! the port refuses to choose between them on a caller's behalf
+//! ([`EventStore::append`](happenstance_core::EventStore::append)'s own
+//! `# Cancellation` section) precisely so that each adapter has to answer.
+//!
+//! **It does not license the opposite reading either.** A caller MUST NOT treat a
+//! dropped future as evidence about *any* store, this one included: generic code
+//! binds the port rather than this crate, and the next store in the same program
+//! may answer differently. Where an outcome genuinely has to be resolved, ES-24
+//! is the mechanism — a conditional append is at-most-once under verbatim
+//! reissue, so reissuing the identical batch settles it with no identity and no
+//! idempotency key.
+//!
+//! **The answer survives the move this crate is most likely to make.** ADR-0012
+//! and the port's own documentation both name a pooled `rusqlite` adapter working
+//! in `tokio::task::spawn_blocking` as *"the shape that looks cancellation-safe
+//! and is not"* — dropping the `JoinHandle` does not cancel the closure, so the
+//! `COMMIT` still runs. That is the same answer as the one above reached by a
+//! different route: moving the work would change *where* it happens, not whether
+//! a drop can stop it. What such a change would owe this section is the new
+//! reason, not a new verdict.
+//!
+//! It is checked rather than promised. `tests/cancellation_statement.rs` fails if
+//! this section goes missing, and fails again if `append` acquires a suspension
+//! point and the section stops being true — the half ADR-0012 recorded that a
+//! heading-check alone could not have.
+//!
 
 use std::future::Future;
 use std::path::Path;
@@ -133,11 +181,44 @@ use tokio::task::{JoinError, JoinHandle};
 use crate::connection::ConnectionSettings;
 use crate::query_sql::Selectivity;
 
-/// How many rows one `spawn_blocking` hop fetches.
+/// How many **rows** one statement of a page fetches.
 ///
 /// The point of paging at all is that a replay of a million events must not be
-/// buffered, which is the promise [`EventStore::read`](happenstance_core::EventStore::read)
-/// makes. The value is a placeholder until it is measured.
+/// buffered, which is the promise
+/// [`EventStore::read`](happenstance_core::EventStore::read) makes. This is one
+/// of the two budgets that keeps it, and it is the one stated in rows;
+/// [`MAX_PAGE_BYTES_PER_STATEMENT`](SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT)
+/// is the other. **Neither is derivable from the other**, which is the whole
+/// reason there are two: a row is not a bounded quantity, so a row count bounds
+/// a page's cardinality and says nothing about its size.
+///
+/// # It is no longer a placeholder, and the measurement refused to settle it
+///
+/// This doc used to end *"a placeholder until it is measured"*.
+/// `experiments/one-connection-latency` measured it, across a 32x range — 64 to
+/// 2,048 — over a one-million-event log, and what it found is that the three
+/// things this number moves do not agree.
+///
+/// * **The per-page lock hold barely depends on it.** 1.06–1.15x across the
+///   whole range, inside the run's own noise (`results/raw/page-lock-hold.txt`).
+///   What moves it is query *width*: 146.6 → 203.3 → 684.2 ms at 1, 400 and
+///   1,200 items, because the statements per page go 1 → 1 → 3.
+/// * **The aggregate held-mutex time over a whole replay scales as `1/PAGE`** —
+///   2,929.2 s at 64 against 99.1 s at 2,048, extrapolated from the same run and
+///   labelled as an extrapolation there. That argues for raising it.
+/// * **Residency scales linearly with it, and residency is the quantity with no
+///   ceiling of its own.** One page of 512 events at
+///   [`MAX_EVENT_DATA_LEN`](SqliteEventStore::MAX_EVENT_DATA_LEN) peaked at
+///   537,036,800 live bytes — 512.2 MiB — before one row reached the caller
+///   (`results/raw/ceiling-residency.txt`). At 2,048 the same page would be
+///   about 2 GiB. That argues for lowering it.
+///
+/// **No value of a row count settles both**, which is why the byte budget sits
+/// beside it rather than replacing it, and why this number did not move: moving
+/// it is the decision the measurement declined to make, and it is not this
+/// constant's to take. Whether a read page should be budgeted in rows, in bytes,
+/// or by the caller belongs with phase 8's owner and adds public surface to a
+/// crate about to be published; the brief is staged in `.kb/_intake/`.
 const PAGE_SIZE: usize = 512;
 
 /// A SQLite-backed event store.
@@ -260,6 +341,44 @@ impl SqliteEventStore {
     /// and the transaction is not.
     pub const MAX_EVENTS_PER_BATCH: usize = 256;
 
+    /// How many bytes of event payload one statement of a page may accumulate
+    /// before it stops taking rows.
+    ///
+    /// **A row is not a bounded quantity, and the row budget could not say so.**
+    /// Each row of a page owns its `data`, up to
+    /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN), and its `metadata`,
+    /// which `check_ceilings` does not bound at all — so a page bounded only in
+    /// rows is bounded, in bytes, by SQLite's own near-gigabyte blob limit
+    /// rather than by anything this crate states. Measured rather than argued:
+    /// one page of 512 events at the data ceiling peaked at **537,036,800 live
+    /// bytes — 512.2 MiB** — in one buffer before a single row reached the
+    /// caller
+    /// (`experiments/one-connection-latency/results/raw/ceiling-residency.txt`).
+    ///
+    /// **Per statement, which is what the name says and what the bound is.** A
+    /// wide query is several statements merged, so the honest ceiling on one
+    /// page's payload residency is this number times
+    /// [`planned_statement_count`](Self::planned_statement_count) — computable
+    /// by a caller, which is the point of it being public, and stated here
+    /// rather than left to be discovered. The alternative, one budget shared
+    /// across the page, was rejected: the first statement would spend it and
+    /// every later one would be cut to a single row, which turns a wide query
+    /// into a page-per-event replay.
+    ///
+    /// **It is checked after the row is taken**, so a page always makes
+    /// progress. That is not hypothetical tidiness: `metadata` is unbounded, so
+    /// one row can exceed this on its own, and a page that refused it would
+    /// stall the read forever.
+    ///
+    /// Eight maximal payloads. It is a **fact this adapter states**, in the
+    /// sense [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) is one, and not a
+    /// measured optimum: it is large enough that a page of maximal events still
+    /// carries eight of them, and small enough that a page's cost is stated in
+    /// megabytes. Whether the pair of budgets should be stated by the adapter at
+    /// all or asked of the caller is a decision this constant does not make;
+    /// the brief is staged in `.kb/_intake/`.
+    pub const MAX_PAGE_BYTES_PER_STATEMENT: usize = 8 * Self::MAX_EVENT_DATA_LEN;
+
     /// How many index arms one prepared statement carries before the query is
     /// split across several.
     ///
@@ -274,20 +393,83 @@ impl SqliteEventStore {
     /// The number is public so that a test can compute the boundary rather than
     /// guess at it: a merge that never executes is dead code behind a green
     /// suite, which is the failure mode this whole project exists to retire.
+    ///
+    /// It is **one of two** axes, and it is not the one that binds first on a
+    /// query of wide items — see
+    /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](Self::MAX_QUERY_PARAMETERS_PER_STATEMENT).
     pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+
+    /// How many bound parameters one query statement carries before the query is
+    /// split across several.
+    ///
+    /// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766, and the translation binds
+    /// one parameter per tag and one per type of every item in a chunk. So this
+    /// and [`MAX_QUERY_ARMS_PER_STATEMENT`](Self::MAX_QUERY_ARMS_PER_STATEMENT)
+    /// are **independent** axes rather than two spellings of one width: 400 items
+    /// of a single tag each is 400 arms and 400 parameters, while the same 400
+    /// items at [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT) tags apiece is
+    /// still 400 arms and 51,200 parameters. Partitioning on arms alone planned
+    /// that second query as one statement and `prepare` refused it with SQLite's
+    /// own *"too many SQL variables"* — on the append path, inside
+    /// `BEGIN IMMEDIATE`, with the caller's decision already made, which is the
+    /// timing VT-24 rejects by name.
+    ///
+    /// The number is the same budget the multi-row tag insert has chunked to
+    /// since the write path was written, and it sits below SQLite's ceiling with
+    /// headroom rather than at it, for the reason given where it is defined: a
+    /// statement that binds one extra parameter per row should not be within
+    /// rounding distance of the wall. A query is not a different kind of
+    /// statement.
+    ///
+    /// Public for the same reason the arm width is public — a test that has to
+    /// guess the boundary is a test that stops crossing it — and it is the
+    /// ceiling `tests/wide_tags.rs` computes its under, at and over cases from.
+    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = PARAMETER_BUDGET;
 
     /// How many prepared statements one page of `query` will take.
     ///
-    /// Never zero: [`Query::all`] is one chunk, straight to the `event` table.
+    /// Never zero: [`Query::all`] is one statement, straight to the `event`
+    /// table.
+    ///
     /// This is the seam a test uses to observe a wide query genuinely crossing
     /// the boundary, so it is **the same call** the read path makes —
-    /// `query_sql::chunks`, counted — never a second `ceil(arms / width)` that
-    /// would go on reporting a boundary `fetch_page` had stopped taking. A
-    /// default `Selectivity` orders tags inside an arm, never the partition.
+    /// `query_sql::page_statements`, counted — never a second `ceil(arms /
+    /// width)` that would go on reporting a boundary `fetch_page` had stopped
+    /// taking. It followed `chunks` until the read path stopped using it, and
+    /// moving it was not optional: the two partition identically today, so a
+    /// count left behind would have agreed by arithmetic rather than by
+    /// construction and gone on agreeing right up until it mattered.
+    ///
+    /// It counts **the real partition**, which is both ceilings and not the arm
+    /// one alone. That changes what the number says for a query of wide items:
+    /// it used to report `1` for a plan of 51,200 bound parameters, a statement
+    /// that cannot be prepared. A caller sizing a query against this seam is
+    /// asking how many statements will run, not how many the arm arithmetic on
+    /// its own would allow.
+    ///
+    /// Only the *shape* of the `Window` below reaches the count, never its
+    /// values — it is `pub(crate)`, so this says its name rather than linking to
+    /// it: the partition prices the two bounds
+    /// every arm binds and the one budget every chunk binds, and is otherwise
+    /// indifferent to what `lo`, `hi` and `budget` hold. A default
+    /// `Selectivity` likewise orders tags inside an arm, never the partition.
     #[must_use]
     pub fn planned_statement_count(query: &Query) -> usize {
-        let width = Self::MAX_QUERY_ARMS_PER_STATEMENT;
-        crate::query_sql::chunks(query, &Selectivity::default(), width).len()
+        let window = crate::query_sql::Window {
+            lo: 0,
+            hi: i64::MAX,
+            budget: i64::try_from(PAGE_SIZE).unwrap_or(i64::MAX),
+            backwards: false,
+        };
+        crate::query_sql::page_statements(
+            query,
+            &Selectivity::default(),
+            Self::MAX_QUERY_ARMS_PER_STATEMENT,
+            Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            window,
+            crate::row::COLUMNS,
+        )
+        .len()
     }
 
     /// Wraps an already-open connection onto an **already-migrated** database.
@@ -497,11 +679,48 @@ impl SqliteEventStore {
 
     /// Everything that happens inside the one `BEGIN IMMEDIATE`.
     ///
-    /// In order: every guard probed against the state the store already held —
-    /// which is free, because no row of this batch exists yet — then the rows
-    /// inserted, then the identity stamped, then commit. A guard violation drops
-    /// the transaction without committing, which is what "a rejected append
-    /// leaves the file byte-identical" means.
+    /// In order: the file's own incarnation checked against this handle's, then
+    /// every guard probed against the state the store already held — which is
+    /// free, because no row of this batch exists yet — then the rows inserted,
+    /// then the identity stamped, then commit. A guard violation drops the
+    /// transaction without committing, which is what "a rejected append leaves
+    /// the file byte-identical" means, and the identity check answers the same
+    /// way.
+    ///
+    /// # Why the incarnation is re-read here and not trusted from construction
+    ///
+    /// [`remint_identity`](Self::remint_identity) documents *"run it with
+    /// nothing else holding the database open"*, and VT-6 rests half of its
+    /// mint-once permission on that documented procedure. A precondition nobody
+    /// can check is a precondition somebody will violate: a handle from before a
+    /// restore, or a health check that reopened the store early, keeps the
+    /// `store_id` it read at construction and goes on stamping [`EventId`]s
+    /// under an incarnation the file has retired.
+    ///
+    /// **This is one indexed read on a four-row `WITHOUT ROWID` table, under a
+    /// lock the writer already holds**, which is why it is affordable on the
+    /// path where everything else waits. Guarding inside `remint_identity`
+    /// instead cannot work and was not attempted: a process-wide open-path
+    /// registry needs a canonical path key that symlinks, hardlinks, `file:`
+    /// URIs, UNC paths and two paths to one inode all defeat, and it would still
+    /// see nothing at all when the re-mint is another process. Here, the
+    /// persisted identity is simply a row, and it is as true for a restore from
+    /// backup as for the in-process case R-3 was narrowest about.
+    ///
+    /// What it does **not** buy: an event already written under the retired
+    /// incarnation keeps it, which is correct — it was written by the
+    /// incarnation being retired, and `remint_identity` says so.
+    ///
+    /// It goes through [`read_identity`] rather than a bespoke `SELECT`, which
+    /// costs one extra row read — the schema version, which that function checks
+    /// first — and buys the property this crate keeps insisting on elsewhere:
+    /// **one spelling of what identity a file carries**, so `open`, `new`,
+    /// `migrate`, `remint_identity` and this cannot disagree. The extra check
+    /// has a second effect worth naming rather than discovering: an append now
+    /// also refuses with
+    /// [`UnsupportedSchemaVersion`](SqliteEventStoreError::UnsupportedSchemaVersion)
+    /// if a newer build migrated the file while this handle was open, which is
+    /// the same class of stale-handle bug one field over.
     fn append_locked(
         connection: &mut Connection,
         store_id: StoreId,
@@ -512,6 +731,17 @@ impl SqliteEventStore {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(store_error)?;
+
+        // First, and before the guards: a condition evaluated against a file
+        // this handle no longer speaks for answers a question nobody asked.
+        let persisted = read_identity(&transaction).map_err(AppendError::Store)?;
+        if persisted != store_id {
+            drop(transaction);
+            return Err(AppendError::Store(SqliteEventStoreError::IdentityMoved {
+                handle: store_id,
+                persisted,
+            }));
+        }
 
         if let Some(condition) = condition
             && let Some(conflict) = evaluate(&transaction, condition).map_err(store_error)?
@@ -574,6 +804,14 @@ impl SqliteEventStore {
 /// headroom rather than at it, because the arithmetic that matters is done once
 /// in `happenstance-core`'s `limits.rs` and an adapter that binds one extra
 /// parameter per row should not be within rounding distance of the wall.
+///
+/// **Three consumers, not one.** It was written for the multi-row tag insert and
+/// for a while that was its only caller, while the query path — which spends
+/// parameters the same way, one per tag — partitioned on arms alone and reached
+/// the wall at the adapter's own documented chunk width. The other two are
+/// `query_sql::chunks`, through
+/// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT),
+/// and the selectivity lookup that runs before it.
 const PARAMETER_BUDGET: usize = 30_000;
 
 /// Bound parameters one `event_tag` row costs.
@@ -595,9 +833,67 @@ fn now() -> RecordedAt {
     RecordedAt::from_millis(millis)
 }
 
+/// What one row of a page costs in resident bytes.
+///
+/// The two **opaque** payloads and nothing else: `data`, which this store bounds
+/// at [`SqliteEventStore::MAX_EVENT_DATA_LEN`], and `metadata`, which it does
+/// not bound at all. They are the two quantities a caller controls and the only
+/// two that can make a row arbitrarily large; the type, the tags and the fixed
+/// fields are bounded by their own ceilings and are noise beside a megabyte
+/// blob.
+///
+/// It is deliberately **not** the event's full heap footprint. Counting the
+/// allocator's size-class rounding, the `Vec` headers and the tag strings would
+/// be a truer number and a less useful budget: a ceiling a caller can compute
+/// from what they appended is worth more than one only a profiler can predict.
+/// The residency measurement made the same choice and says so —
+/// `experiments/one-connection-latency/results/raw/ceiling-residency.txt`
+/// reports a lower bound.
+fn payload_bytes(event: &SequencedEvent) -> usize {
+    event.event.data().len()
+        + event
+            .event
+            .metadata()
+            .map_or(0, happenstance_core::bytes::Bytes::len)
+}
+
 /// A [`SequencePosition`] as the integer SQLite stores.
 fn as_i64(position: SequencePosition) -> i64 {
     i64::try_from(position.get()).unwrap_or(i64::MAX)
+}
+
+/// A stored position as a [`SequencePosition`], or the error that says why not.
+///
+/// **Zero and negatives are rejected rather than resolved**, and the rejection
+/// is `u64::try_from` rather than `i64::unsigned_abs`. That is the whole of the
+/// decision, and it is worth spelling out because the absolutising form reads
+/// like a guard and is not one: [`SequencePosition`] wraps a `NonZeroU64`, so
+/// `SequencePosition::new` refuses exactly one value, and
+/// `SequencePosition::new(stored.unsigned_abs())` hands it a value it accepts
+/// for every negative there is. A stored `-3` decoded that way becomes position
+/// 3 — a second row at a position another row already holds, which VT-11
+/// forbids, and, because [`crate::row::to_event`] rebuilds the identity from the
+/// stored origin pair, a second event carrying an [`EventId`] another event
+/// already holds, which VT-8 forbids. The `ok_or` beside it fires for one input
+/// in 2^64 and reads, in review, like a guard that fires for all of them.
+///
+/// The stored value is carried into the error **unmodified**, so an operator
+/// reading the log sees the number that is in the file rather than the number
+/// the decode wished were there.
+///
+/// This is `projection_store::position_from_row` verbatim, and deliberately so:
+/// both halves of this crate answer to the same rule, and one of them answering
+/// it a different way is how the halves drift.
+///
+/// # Errors
+///
+/// Returns [`SqliteEventStoreError::InvalidPosition`] if `stored` is zero or
+/// negative.
+pub(crate) fn position_from_row(stored: i64) -> Result<SequencePosition, SqliteEventStoreError> {
+    u64::try_from(stored)
+        .ok()
+        .and_then(SequencePosition::new)
+        .ok_or(SqliteEventStoreError::InvalidPosition(stored))
 }
 
 /// Wraps an adapter failure as the port's store-error arm.
@@ -637,18 +933,56 @@ fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEve
 /// is the standing guard; the conformance suite cannot reach it, because
 /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 and the chunk width is 400.
 ///
+/// The same argument runs a second time on the **parameter** axis, and it took
+/// longer to see because a partition on arms looks like a partition. A guard of
+/// 400 items — the arm width exactly, therefore one chunk — carrying
+/// [`MAX_TAGS_PER_EVENT`](SqliteEventStore::MAX_TAGS_PER_EVENT) tags apiece
+/// binds 51,200 of SQLite's 32,766 bound parameters, and the selectivity lookup
+/// on the line below reaches the same wall earlier still, on a query of ordinary
+/// two-tag items, because it accumulates across the whole query rather than
+/// across a chunk. Both are bounded by
+/// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT)
+/// now, and `tests/wide_tags.rs` crosses that axis here as well as on the read
+/// path, because this is the caller that holds the write lock.
+///
 /// `after: None` is a boundary of zero, because positions start at one. Guards
 /// are checked in order and the first violation ends the evaluation.
 fn evaluate(
     connection: &Connection,
     condition: &AppendCondition,
-) -> rusqlite::Result<Option<SequencePosition>> {
+) -> Result<Option<SequencePosition>, SqliteEventStoreError> {
+    // X-3, on the append path, and it runs before any guard rather than inside
+    // one. Every arm below carries `position > ?`, so SQLite discards a corrupt
+    // *negative* position before `max(position)` sees it — and a guard whose
+    // only match is corrupt then reports no violation at all, which is the
+    // silence the decode-before-compare fix below exists to break. The boundary
+    // pushdown reintroduced it one layer down, in SQL, where no decode can
+    // reach.
+    //
+    // One index endpoint seek, once per condition rather than once per guard,
+    // inside a transaction that is about to do far more work than this.
+    let lowest: Option<i64> =
+        connection.query_row("SELECT min(position) FROM event", [], |row| row.get(0))?;
+    if let Some(stored) = lowest {
+        position_from_row(stored)?;
+    }
+
     for guard in condition.guards() {
-        let selectivity = Selectivity::read_for(connection, &guard.query)?;
+        let selectivity = Selectivity::read_for(
+            connection,
+            &guard.query,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )?;
+        // The boundary reaches SQLite rather than only Rust. See
+        // `query_sql::chunks`: the comparison below stays, and the bound makes
+        // it trivially true rather than load-bearing.
+        let boundary = guard.after.map_or(0, as_i64);
         let plan = crate::query_sql::chunks(
             &guard.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            Some(boundary),
         );
 
         // `Option<i64>`'s own ordering is what merges the chunks: `None` sorts
@@ -664,11 +998,19 @@ fn evaluate(
             highest = highest.max(chunk);
         }
 
-        let boundary = guard.after.map_or(0, as_i64);
-        if let Some(highest) = highest
-            && highest > boundary
-        {
-            return Ok(SequencePosition::new(highest.unsigned_abs()));
+        if let Some(stored) = highest {
+            // Decoded **before** the comparison, never after it. The order is
+            // the whole point: comparing the stored `i64` first is what makes a
+            // corrupt row invisible to the one check whose job is to see it. A
+            // guard whose highest match is stored at `-3` fails `-3 > 0`, so the
+            // guard reports no violation about a row that matches it, and the
+            // append it waves through is the append the condition existed to
+            // refuse. Decoding first turns that silence into a refusal naming
+            // the row.
+            let conflict = position_from_row(stored)?;
+            if stored > boundary {
+                return Ok(Some(conflict));
+            }
         }
     }
     Ok(None)
@@ -692,7 +1034,7 @@ fn write_batch(
     store_id: StoreId,
     events: &[Event],
     recorded_at: RecordedAt,
-) -> rusqlite::Result<SequencePosition> {
+) -> Result<SequencePosition, SqliteEventStoreError> {
     let mut positions = Vec::with_capacity(events.len());
     {
         let mut insert = connection.prepare(
@@ -745,9 +1087,13 @@ fn write_batch(
         )?;
     }
 
+    // `AUTOINCREMENT` continues from `max(largest rowid, sqlite_sequence)`, so a
+    // file whose rows are already negative hands the next insert a negative
+    // rowid — and absolutising it would acknowledge the write at a position no
+    // row holds and the next honest append will. Refusing inside the
+    // transaction is what makes that a rollback rather than a forged receipt.
     let last = positions.last().copied().unwrap_or_default();
-    SequencePosition::new(last.unsigned_abs())
-        .ok_or(rusqlite::Error::IntegralValueOutOfRange(0, last))
+    position_from_row(last)
 }
 
 /// Inserts every `(tag, position, event_type)` row, chunked to the parameter
@@ -932,6 +1278,38 @@ pub enum SqliteEventStoreError {
         len: usize,
     },
 
+    /// This handle mints identities under an incarnation the file has retired.
+    ///
+    /// [`remint_identity`](SqliteEventStore::remint_identity)'s documented
+    /// procedure says to run it *"with nothing else holding the database open"*,
+    /// and until this variant existed nothing enforced it. A handle reads the
+    /// incarnation once, at construction, so a handle that outlives a re-mint
+    /// goes on stamping [`EventId`]s under the retired one — which is the
+    /// failure VT-6's own `Rejects:` paragraph calls *"the one failure mode in
+    /// the replication design with no error path and no observable symptom"*.
+    ///
+    /// **The narrow case, and it is deliberately narrow.** VT-6 accepts the
+    /// undetectable ones — a file restored from a backup by another process, a
+    /// copy taken while nothing was running — because SQLite cannot see them.
+    /// This is the one a program *can* see: the split happened inside this
+    /// process, and the persisted identity is readable under the lock the writer
+    /// is already holding.
+    ///
+    /// Both incarnations are carried because one of them is not actionable: the
+    /// answer is *drop this handle and reopen*, and knowing which handle is
+    /// stale is the whole of the diagnosis.
+    #[error(
+        "this handle mints identities under store {handle}, and the database now \
+         carries {persisted}: it was re-minted while this handle was open, so the \
+         handle must be dropped and the store reopened"
+    )]
+    IdentityMoved {
+        /// What this handle read at construction, and would have stamped with.
+        handle: StoreId,
+        /// What the file carries now.
+        persisted: StoreId,
+    },
+
     /// A stored row carries no event identity.
     ///
     /// Unreachable if the write path is correct — `append` stamps the origin
@@ -1074,7 +1452,13 @@ impl SendEventStore for SqliteEventStore {
         // `NULL` on an empty table is the `None` arm, not an error.
         let highest: Option<i64> =
             connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
-        Ok(highest.and_then(|value| SequencePosition::new(value.unsigned_abs())))
+        // `transpose`, not `and_then`. The distinction is the whole of it: the
+        // `None` this returns must mean *the table is empty* and nothing else,
+        // and an `and_then` here gives a failed decode the same spelling — so a
+        // store holding a row at position 0 reports itself empty, and the caller
+        // that believes it appends against a boundary of zero into a log that
+        // already has events in it.
+        highest.map(position_from_row).transpose()
     }
 
     /// Whether this store already holds the event `id` names.
@@ -1214,7 +1598,50 @@ struct ReadCursor {
     finished: bool,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many times **this thread** has taken a read's connection, counted only
+    /// under `cfg(test)`.
+    ///
+    /// The one thing about a lock hold that is neither a duration nor a property of
+    /// the machine is **how many times it is taken**, and it is not observable from
+    /// outside this module: the mutex is private, and a prober racing it from
+    /// another thread would be asserting on the scheduler. CF-33's `Rejects:`
+    /// paragraph rules out the wall-clock alternative for exactly the reason that
+    /// makes this the right instrument.
+    ///
+    /// **Thread-local rather than a process-wide counter**, and that is not a
+    /// detail: a `static AtomicUsize` is shared by every test in the binary, and
+    /// they run in parallel — the first spelling of this read `4` where it meant
+    /// `2`, and would have read differently on the next run. The test that uses it
+    /// drives `fetch_page` on its own thread; in production the same call runs on a
+    /// `spawn_blocking` thread, which is why this could never become a production
+    /// counter without moving somewhere the answer is collected.
+    static PAGE_CONNECTION_ACQUISITIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
 impl ReadCursor {
+    /// Takes the connection, and counts having done so when testing.
+    ///
+    /// Every acquisition a read makes goes through here, which is what makes the
+    /// count meaningful: a second `self.connection.lock()` spelled out somewhere
+    /// else would be invisible to it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SqliteEventStoreError::ConnectionPoisoned`] if another thread
+    /// panicked while holding it.
+    fn lock_connection(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, Connection>, SqliteEventStoreError> {
+        #[cfg(test)]
+        PAGE_CONNECTION_ACQUISITIONS.with(|taken| taken.set(taken.get() + 1));
+        self.connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)
+    }
+
     /// Takes ADR-0011's position ceiling, once, and does nothing thereafter.
     ///
     /// # Why this runs on the polling thread rather than on the blocking one
@@ -1240,16 +1667,96 @@ impl ReadCursor {
         if !matches!(self.ceiling, Ceiling::Unsampled) {
             return Ok(());
         }
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
-        let highest: Option<i64> =
-            connection.query_row("SELECT max(position) FROM event", [], |row| row.get(0))?;
-        self.ceiling = highest
-            .and_then(|value| SequencePosition::new(value.unsigned_abs()))
-            .map_or(Ceiling::Empty, Ceiling::At);
+        // Scoped so the guard is released before `self.ceiling` is written: the
+        // guard borrows `self`, and holding it across the assignment is
+        // `error[E0506]`. It is also the smaller hold, which is the point.
+        // Both endpoints, in one statement, because both are one seek to an end
+        // of the `position` index and the second is therefore free.
+        //
+        // `min` is here for X-3 and is not decoration. Every arm of a paged read
+        // now carries `position >= ?` — that is what turns a walk from the start
+        // of a tag range into a seek into its interior, and it is most of what
+        // the merge-join shape buys. It also means SQLite filters a corrupt
+        // *negative* position out before any row reaches `row::to_event`, so the
+        // decode that exists to reject it never sees it and the read quietly
+        // returns a log with a row missing. Testing the low end once, here,
+        // restores the property the pushdown removed, and restores it *wider*:
+        // it fails on a corrupt row anywhere in the file rather than only on one
+        // the query happened to match.
+        //
+        // The alternative that does not work is widening the arms to
+        // `(position >= ? OR position < 1)`. It reads as the smaller change and
+        // it is the more expensive one: SQLite answers the disjunction by
+        // dropping the lower bound from the seek entirely —
+        // `SEARCH seed USING PRIMARY KEY (tag=? AND position<?)`, measured — so
+        // every page late in a replay pays for the prefix beneath it again.
+        let (lowest, highest): (Option<i64>, Option<i64>) = {
+            let connection = self.lock_connection()?;
+            connection.query_row(
+                "SELECT min(position), max(position) FROM event",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?
+        };
+        if let Some(stored) = lowest {
+            position_from_row(stored)?;
+        }
+        // `Ceiling::Empty` is reserved for a table with no rows. Letting a
+        // failed decode land there too is the same swallow `head` carried: the
+        // read then returns an exhausted first page and the caller sees an empty
+        // log rather than a store that cannot describe itself.
+        self.ceiling = match highest {
+            Some(stored) => Ceiling::At(position_from_row(stored)?),
+            None => Ceiling::Empty,
+        };
         Ok(())
+    }
+
+    /// The cursor's bounds resolved into position order, for
+    /// [`query_sql::page_statements`](crate::query_sql).
+    ///
+    /// **`resume_from` and `to` swap ends under `backwards`, and only here.**
+    /// `resume_from` is inclusive in both directions; which side of the position
+    /// order it sits on is what `backwards` decides. Under `backwards`, `from`
+    /// stays the *starting* — and therefore higher — bound and `to` the stopping
+    /// one: they swap roles in position order, not in meaning. Copying
+    /// `position <= ?` into the descending branch is correct forwards, passes
+    /// two of the three read-bound rules, and returns the oldest events where
+    /// the newest were asked for.
+    ///
+    /// The ceiling **composes** with `to` rather than replacing it — `min`, not
+    /// an alternative — because *H* is an upper bound whichever way the read
+    /// runs: forwards it tightens the stopping end, backwards the starting one.
+    /// Every chunk inherits it through this one field, which is how ES-12
+    /// survives a read becoming multi-statement, and there is deliberately no
+    /// second mechanism for it.
+    ///
+    /// `lo` falls back to `0` rather than to `resume_from`'s absence being a
+    /// missing clause: a position is a `NonZeroU64`, so `position >= 0` is
+    /// vacuous, and an arm shape that carried the window on some reads and not
+    /// others would be two shapes wearing one name.
+    ///
+    /// It is applied per hop and never carried as per-chunk state across one:
+    /// `advance()` folds only the *merged* page back into `resume_from`, which
+    /// is what stops the historical `resume_after` bug returning in a new
+    /// disguise.
+    fn page_window(&self, ceiling: SequencePosition, budget: usize) -> crate::query_sql::Window {
+        let ceiling = as_i64(ceiling);
+        let resume_from = self.resume_from.map(as_i64);
+        let to = self.options.to.map(as_i64);
+
+        let (lower, upper) = if self.options.backwards {
+            (to, resume_from)
+        } else {
+            (resume_from, to)
+        };
+
+        crate::query_sql::Window {
+            lo: lower.unwrap_or(0),
+            hi: upper.map_or(ceiling, |bound| bound.min(ceiling)),
+            budget: i64::try_from(budget).unwrap_or(i64::MAX),
+            backwards: self.options.backwards,
+        }
     }
 
     /// Runs one page's worth of SQL. Called only on a blocking thread.
@@ -1273,15 +1780,28 @@ impl ReadCursor {
     ///
     /// Every item of one query shares this one predicate, which is how ES-12 is
     /// discharged. There is deliberately no second mechanism for it.
+    ///
+    /// # The connection is taken per statement, not per page
+    ///
+    /// The mutex used to be taken once here and held to the end of the function
+    /// — across the selectivity lookup, every chunk of the plan, and the merge,
+    /// sort, dedup and truncate. That is `planned_statement_count` statements'
+    /// worth of held mutex, and every `append` sharing the handle waits behind
+    /// all of it: measured at 640.7 ms held against 1.7 ms waited, a **371x**
+    /// asymmetry, with the sharing appender's p50 untouched at 0.148 ms and its
+    /// p99 at 799.041 ms
+    /// (`experiments/one-connection-latency/results/raw/page-lock-hold.txt`).
+    /// Nothing in the median warns anyone.
+    ///
+    /// Releasing it between statements is sound **because of the ceiling and not
+    /// in spite of it**: every statement carries `position <= H`, so what a
+    /// concurrent writer commits between two of them is above *H* and invisible
+    /// to all of them. ES-11 is discharged by the sample, never by the hold —
+    /// which is the whole point of ADR-0011, and is why this was free to change.
     fn fetch_page(&mut self) -> Result<Page, SqliteEventStoreError> {
         // A no-op if `poll_next` already took it, which it always has — the
         // sample is not allowed to wait for this thread. See `sample_ceiling`.
         self.sample_ceiling()?;
-
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
 
         let Ceiling::At(ceiling) = self.ceiling else {
             return Ok(Page {
@@ -1298,86 +1818,101 @@ impl ReadCursor {
             });
         }
 
-        let selectivity = Selectivity::read_for(&connection, &self.query)?;
+        // One acquisition, released before the plan is built: the lookup is one
+        // statement per 30,000 tags and the planning that follows it is pure
+        // Rust, which has no business holding a database connection.
+        let selectivity = {
+            let connection = self.lock_connection()?;
+            Selectivity::read_for(
+                &connection,
+                &self.query,
+                SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            )?
+        };
 
         // **Chunk and merge, never refuse.** A `Query` bounds nothing by design;
         // SQLite compiles a `UNION` of n arms as one compound `SELECT` and stops
         // at `SQLITE_MAX_COMPOUND_SELECT`, which is 500 by default. An adapter
         // that returned an error at its own pushdown limit would be inventing a
         // refusal the contract has no way to report, so a wide query becomes
-        // `ceil(arms / MAX_QUERY_ARMS_PER_STATEMENT)` statements merged here.
+        // several statements merged here. The partition is over *both* of
+        // SQLite's pushdown limits, because the second one —
+        // `SQLITE_MAX_VARIABLE_NUMBER`, one bound parameter per tag and per type
+        // — is reached by a query of 400 wide items that the arm count alone
+        // calls a single statement.
         //
-        // Every chunk statement is **identical in shape** — same ceiling, same
-        // `resume_from`, same `to`, same direction, same page budget — which is
-        // what makes merging them sound rather than approximate.
-        let plan = crate::query_sql::chunks(
+        // Every chunk statement is **identical in shape** — same window, same
+        // direction, same page budget — which is what makes merging them sound
+        // rather than approximate.
+        //
+        // The bounds go **into** the statement rather than around it, which is
+        // the whole of finding I-3's repair: `query_sql::page_statements` puts
+        // them on each arm and the budget on the compound, so SQLite merges the
+        // arms as co-routines and abandons them when the page is full. There is
+        // no `WHERE position IN (<matched>)` wrapper here any more — it was not
+        // replaced, it stopped existing.
+        let plan = crate::query_sql::page_statements(
             &self.query,
             &selectivity,
             SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            self.page_window(ceiling, budget),
+            crate::row::COLUMNS,
         );
         let mut merged: Vec<SequencedEvent> = Vec::with_capacity(budget);
 
-        for (matched, arm_params) in plan {
-            let mut params = arm_params;
-            let columns = crate::row::COLUMNS;
-            let mut sql = format!("SELECT {columns} FROM event WHERE position IN ({matched})");
+        // The row budget every statement that was cut short by the **byte**
+        // budget agrees on, and the page is truncated to it.
+        //
+        // The soundness argument is the one `truncate(budget)` already rested
+        // on, generalised. A statement returns its matching rows in position
+        // order, so a statement that stopped early is complete up to its own
+        // last row and says nothing below it; keeping a prefix no longer than
+        // the *shortest* such statement therefore keeps only positions every
+        // statement had a chance to contribute to. Keeping more would drop
+        // events silently — `advance()` moves `resume_from` past the page's last
+        // position, so a row another chunk would have supplied below it is never
+        // asked for again.
+        //
+        // It survives the merge-join rewrite unchanged, and had to: the byte
+        // budget is about how much of a row `metadata` can be, which no amount
+        // of pushing the window into the arms bounds. The rewrite removed the
+        // reason a statement returns too *many* rows, not the reason one row can
+        // be too *large*.
+        let mut effective = budget;
 
-            // `resume_from` is inclusive in both directions; which side of the
-            // position order it sits on is what `backwards` decides. Under
-            // `backwards`, `from` stays the *starting* (higher) bound and `to`
-            // the stopping (lower) one — they swap roles in position order, not
-            // in meaning. Copying `position <= ?` into the descending branch is
-            // correct forwards, passes two of the three read-bound rules, and
-            // returns the oldest events where the newest were asked for.
-            //
-            // It is applied **per chunk and per hop**, never carried as
-            // per-chunk state across a hop: `advance()` folds only the *merged*
-            // page back into `resume_from`, which is what stops the historical
-            // `resume_after` bug returning in a new disguise.
-            if let Some(from) = self.resume_from {
-                sql.push_str(if self.options.backwards {
-                    " AND position <= ?"
-                } else {
-                    " AND position >= ?"
-                });
-                params.push(Value::Integer(as_i64(from)));
-            }
-            if let Some(to) = self.options.to {
-                sql.push_str(if self.options.backwards {
-                    " AND position >= ?"
-                } else {
-                    " AND position <= ?"
-                });
-                params.push(Value::Integer(as_i64(to)));
-            }
+        for (sql, params) in plan {
+            // One acquisition per statement, released before the next is built.
+            // See this function's `# The connection is taken per statement`.
+            let (taken, cut) = {
+                let connection = self.lock_connection()?;
+                let mut statement = connection.prepare(&sql)?;
+                let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
 
-            // The ceiling **composes** with `to` rather than replacing it, and
-            // it is the same clause in both directions because *H* is an upper
-            // bound either way: forwards it tightens the stopping end,
-            // backwards it tightens the starting one. Every chunk carries it,
-            // which is how ES-12 survives a read becoming multi-statement.
-            sql.push_str(" AND position <= ?");
-            params.push(Value::Integer(as_i64(ceiling)));
+                // The **byte** budget, beside the row budget, because a row is
+                // not a bounded quantity. It is checked *after* the row is
+                // taken, which is what guarantees a page of at least one row —
+                // `metadata` is unbounded, so one row can exceed the whole
+                // budget on its own, and a page that refused it would stall the
+                // read forever.
+                let mut resident = 0usize;
+                let mut taken = 0usize;
+                let mut cut = false;
+                while let Some(row) = rows.next()? {
+                    let event = crate::row::to_event(row)?;
+                    resident += payload_bytes(&event);
+                    merged.push(event);
+                    taken += 1;
+                    if resident >= SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT {
+                        cut = true;
+                        break;
+                    }
+                }
+                (taken, cut)
+            };
 
-            sql.push_str(if self.options.backwards {
-                " ORDER BY position DESC"
-            } else {
-                " ORDER BY position ASC"
-            });
-
-            // The page budget, which is `min(remaining, PAGE_SIZE)` and is an
-            // implementation detail *beneath* `ReadOptions::limit` — never a
-            // limit applied per page, and never one applied per query item. A
-            // chunk may return at most this many rows, and the merged top
-            // `budget` is a subset of the union of the per-chunk tops, so
-            // bounding each one loses nothing.
-            sql.push_str(" LIMIT ?");
-            params.push(Value::Integer(i64::try_from(budget).unwrap_or(i64::MAX)));
-
-            let mut statement = connection.prepare(&sql)?;
-            let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
-            while let Some(row) = rows.next()? {
-                merged.push(crate::row::to_event(row)?);
+            if cut {
+                effective = effective.min(taken);
             }
         }
 
@@ -1391,12 +1926,15 @@ impl ReadCursor {
         }
         merged.dedup_by_key(|event| event.position);
 
-        // Computed **before** truncation. Every chunk returned fewer rows than
-        // the budget exactly when the merged set is short of it: a chunk's rows
-        // are already distinct, so a chunk that filled its budget puts that many
-        // distinct positions into the merge.
-        let exhausted = merged.len() < budget;
-        merged.truncate(budget);
+        // Computed **before** truncation, and it now has two ways to be false.
+        // Every chunk returned fewer rows than the budget exactly when the
+        // merged set is short of it: a chunk's rows are already distinct, so a
+        // chunk that filled its budget puts that many distinct positions into
+        // the merge. A chunk stopped by the **byte** budget is the second way,
+        // and it is not exhaustion at all — it is a page that ended early with
+        // rows still behind it, so it must resume however short it looks.
+        let exhausted = effective == budget && merged.len() < budget;
+        merged.truncate(effective);
 
         Ok(Page {
             rows: merged,
@@ -1504,5 +2042,491 @@ impl Stream for SqliteReadStream {
                 ReadState::Done => return Poll::Ready(None),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! What one page of a read costs, measured where the page is built.
+    //!
+    //! [`ReadCursor`] and [`Page`] are private, and deliberately: a page is an
+    //! implementation detail *beneath* `ReadOptions::limit`, and the stream a
+    //! caller gets hands back events rather than pages. So no target in `tests/`
+    //! can see a page boundary at all — it can only observe that a read returned
+    //! everything, which is the property a page of any size satisfies. The two
+    //! ceilings below bound the page and nothing else can see them.
+    //!
+    //! **No clock, and no duration.** The two quantities asserted here are a row
+    //! count and an acquisition count, both exact. CF-33 forbids a conformance
+    //! rule to assert on an operation count, and this is not one — it is the
+    //! adapter's own unit test, and the count is what makes the ceiling a bound
+    //! rather than a number.
+
+    #![allow(clippy::unwrap_used)]
+
+    use happenstance_core::{QueryItem, Tags};
+
+    use super::*;
+
+    /// The two events a page-budget case is built from: `count` of them, each
+    /// carrying `data` bytes of payload and `metadata` bytes beside it.
+    fn seeded(count: usize, data: usize, metadata: usize) -> Vec<Event> {
+        (0..count)
+            .map(|n| {
+                let mut event = Event::new("Sized", vec![b'd'; data])
+                    .unwrap()
+                    .with_tags(Tags::from_pairs([("page", "p1")]).unwrap());
+                if metadata > 0 {
+                    event = event.with_metadata(vec![b'm'; metadata]);
+                }
+                let _ = n;
+                event
+            })
+            .collect()
+    }
+
+    /// A cursor over everything in `store`, in the shape `read` builds.
+    fn cursor(store: &SqliteEventStore, query: &Query) -> ReadCursor {
+        let options = ReadOptions::default();
+        ReadCursor {
+            connection: Arc::clone(&store.connection),
+            runtime: store.runtime.clone(),
+            query: query.clone(),
+            options,
+            resume_from: options.from,
+            remaining: options.limit,
+            ceiling: Ceiling::Unsampled,
+            finished: false,
+        }
+    }
+
+    /// The payload bytes one page actually holds.
+    fn resident(page: &Page) -> usize {
+        page.rows
+            .iter()
+            .map(|event| {
+                event.event.data().len()
+                    + event
+                        .event
+                        .metadata()
+                        .map_or(0, happenstance_core::bytes::Bytes::len)
+            })
+            .sum()
+    }
+
+    /// A page is bounded in **bytes**, not only in rows.
+    ///
+    /// `PAGE_SIZE` is a row count, and a row is not a bounded quantity: each one
+    /// owns its `data`, up to [`SqliteEventStore::MAX_EVENT_DATA_LEN`], and its
+    /// `metadata`, which this store does not bound at all. At the shipped 512
+    /// rows and the shipped data ceiling one page peaks at **512.2 MiB** in a
+    /// single buffer before one row reaches the caller — measured, at
+    /// `experiments/one-connection-latency/results/raw/ceiling-residency.txt`.
+    ///
+    /// Under, at, and one over the budget, in rows of exactly one eighth of it.
+    /// The middle case is the one a row budget alone cannot express.
+    #[tokio::test]
+    async fn a_page_stops_at_the_byte_budget_rather_than_at_the_row_budget() {
+        let per_row = SqliteEventStore::MAX_EVENT_DATA_LEN;
+        let fits = SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT / per_row;
+        let query = Query::all();
+
+        for (seed, expected_first_page, expected_exhausted) in [
+            (fits - 1, fits - 1, true),
+            (fits, fits, false),
+            (fits + 1, fits, false),
+        ] {
+            let store = SqliteEventStore::open_in_memory().unwrap();
+            store.append(&seeded(seed, per_row, 0), None).await.unwrap();
+
+            let page = cursor(&store, &query).fetch_page().unwrap();
+            assert_eq!(
+                page.rows.len(),
+                expected_first_page,
+                "a log of {seed} rows of {per_row} B produced a first page of {} rows",
+                page.rows.len()
+            );
+            assert!(
+                resident(&page) <= SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT,
+                "a log of {seed} rows produced a page of {} B, over the {} B budget",
+                resident(&page),
+                SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT
+            );
+            assert_eq!(
+                page.exhausted, expected_exhausted,
+                "a log of {seed} rows reported exhausted = {}",
+                page.exhausted
+            );
+        }
+    }
+
+    /// A row larger than the whole budget still makes progress.
+    ///
+    /// The budget is applied **after** the row is taken, which is what keeps a
+    /// page from being empty and the read from stalling forever. The row that
+    /// reaches this case is not exotic: `check_ceilings` bounds `data` and does
+    /// **not** bound `metadata` at all — AE-4 — so metadata is the quantity that
+    /// can exceed the page budget on its own.
+    #[tokio::test]
+    async fn one_row_over_the_whole_budget_still_makes_progress() {
+        let oversized = SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT + 1;
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        store.append(&seeded(2, 1, oversized), None).await.unwrap();
+
+        let mut cursor = cursor(&store, &Query::all());
+        let first = cursor.fetch_page().unwrap();
+        assert_eq!(
+            first.rows.len(),
+            1,
+            "a row bigger than the budget must still be yielded, one at a time"
+        );
+        assert!(!first.exhausted, "there is a second row to come");
+
+        cursor.advance(&first);
+        let second = cursor.fetch_page().unwrap();
+        assert_eq!(second.rows.len(), 1, "the second row followed the first");
+    }
+
+    /// The connection is taken per **statement**, not per page.
+    ///
+    /// `PAGE_SIZE`'s doc comment said *"one `spawn_blocking` hop"* while the code
+    /// took the mutex once and held it across the selectivity lookup, every chunk
+    /// of the plan, and the merge. On a query wide enough to be several
+    /// statements that is `ceil(arms / 400)` statements' worth of held mutex, and
+    /// every `append` sharing the handle waits behind all of it: measured at
+    /// 640.7 ms held against 1.7 ms waited, a 371x asymmetry
+    /// (`experiments/one-connection-latency/results/raw/page-lock-hold.txt`).
+    ///
+    /// The count is exact rather than a bound: the ceiling sample, the
+    /// selectivity lookup, and one acquisition per planned statement. Asserting
+    /// equality is what makes this reject *both* wrong implementations — one
+    /// acquisition for the whole page, and one for the whole read.
+    #[tokio::test]
+    async fn a_page_takes_the_connection_once_per_statement() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+
+        // Wide enough that the arm partition genuinely splits: the width is
+        // computed from the public ceiling rather than guessed, so the test
+        // follows the constant if it moves.
+        let items = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT * 2 + 1;
+        let query = Query::from_items((0..items).map(|n| {
+            QueryItem::new(
+                Vec::<String>::new(),
+                Tags::from_pairs([("item", &format!("i{n}")[..])]).unwrap(),
+            )
+            .unwrap()
+        }))
+        .unwrap();
+        let statements = SqliteEventStore::planned_statement_count(&query);
+        assert!(statements > 1, "the fixture must cross the arm width");
+
+        store.append(&seeded(1, 1, 0), None).await.unwrap();
+
+        PAGE_CONNECTION_ACQUISITIONS.with(|taken| taken.set(0));
+        let _ = cursor(&store, &query).fetch_page().unwrap();
+        let taken = PAGE_CONNECTION_ACQUISITIONS.with(std::cell::Cell::get);
+
+        assert_eq!(
+            taken,
+            2 + statements,
+            "one page of a {statements}-statement plan took the connection {taken} times; \
+             the ceiling sample and the selectivity lookup are one each, and every statement \
+             of the plan is one more"
+        );
+    }
+
+    /// A byte-cut page loses nothing, on a plan of several statements.
+    ///
+    /// This is the assertion the truncation argument has to survive, and the one
+    /// a naive byte budget fails. Two statements each stop early, at different
+    /// points in position order; the page keeps a prefix no longer than the
+    /// shorter of the two, because `advance()` moves `resume_from` past the
+    /// page's last row and anything the *other* statement would have supplied
+    /// below that row is never asked for again.
+    ///
+    /// The two matching items are placed at index 0 and at index
+    /// `MAX_QUERY_ARMS_PER_STATEMENT`, so the partition is what separates them
+    /// rather than the test asserting where the boundary is.
+    #[tokio::test]
+    async fn a_byte_cut_page_drops_no_event_across_statements() {
+        let per_row = SqliteEventStore::MAX_EVENT_DATA_LEN;
+        let fits = SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT / per_row;
+        let store = SqliteEventStore::open_in_memory().unwrap();
+
+        // Alternating tags, so consecutive positions land in different chunks.
+        let seeded: Vec<Event> = (0..fits * 3)
+            .map(|n| {
+                let side = if n % 2 == 0 { "a" } else { "b" };
+                Event::new("Sized", vec![b'd'; per_row])
+                    .unwrap()
+                    .with_tags(Tags::from_pairs([("side", side)]).unwrap())
+            })
+            .collect();
+        let expected: Vec<SequencePosition> = {
+            store.append(&seeded, None).await.unwrap();
+            let head = store.head().await.unwrap().unwrap();
+            (1..=head.get()).filter_map(SequencePosition::new).collect()
+        };
+
+        let arms = SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+        let items = (0..=arms).map(|n| {
+            let tag = match n {
+                0 => "a".to_owned(),
+                n if n == arms => "b".to_owned(),
+                other => format!("absent{other}"),
+            };
+            QueryItem::new(
+                Vec::<String>::new(),
+                Tags::from_pairs([("side", &tag[..])]).unwrap(),
+            )
+            .unwrap()
+        });
+        let query = Query::from_items(items).unwrap();
+        assert!(
+            SqliteEventStore::planned_statement_count(&query) > 1,
+            "the fixture must span more than one statement"
+        );
+
+        let mut cursor = cursor(&store, &query);
+        let mut observed = Vec::new();
+        let mut pages = 0;
+        while !cursor.finished {
+            let page = cursor.fetch_page().unwrap();
+            assert!(
+                resident(&page) <= SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT,
+                "page {pages} held {} B, over the budget",
+                resident(&page)
+            );
+            observed.extend(page.rows.iter().map(|event| event.position));
+            cursor.advance(&page);
+            pages += 1;
+            assert!(pages < 100, "the read stopped making progress");
+        }
+
+        assert_eq!(
+            observed, expected,
+            "a page cut by the byte budget dropped events the other statement              would have supplied"
+        );
+        assert!(pages > 1, "the fixture must take more than one page");
+    }
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use happenstance_core::{Query, QueryItem, Tags};
+    use rusqlite::Connection;
+
+    use super::SqliteEventStore;
+    use crate::query_sql::{Selectivity, Window, page_statements};
+
+    /// A store with enough rows for the planner to have an opinion.
+    ///
+    /// Two tags per event over a hundred `subject:` values, so a two-item query
+    /// names two arms of about fifty rows each out of five thousand. Small
+    /// enough to build in a test and large enough that a plan is a choice: on a
+    /// table of ten rows SQLite may reach the same answer by a route that says
+    /// nothing about what it does on a real log.
+    fn seeded() -> Connection {
+        let mut connection = Connection::open_in_memory().expect("an in-memory database");
+        SqliteEventStore::migrate(&mut connection).expect("migrating must succeed");
+
+        let transaction = connection.transaction().expect("a transaction");
+        for position in 1..=5_000i64 {
+            transaction
+                .execute(
+                    "INSERT INTO event (position, event_type, data, metadata, tags, \
+                     origin_store, origin_position, recorded_at) \
+                     VALUES (?, 'Seeded', X'00', NULL, X'1f', X'00000000000000000000000000000000', ?, 0)",
+                    rusqlite::params![position, position],
+                )
+                .expect("an event row");
+            for tag in [
+                format!("subject:s{}", position % 100),
+                "shard:cold".to_owned(),
+            ] {
+                transaction
+                    .execute(
+                        "INSERT INTO event_tag (tag, position, event_type) VALUES (?, ?, 'Seeded')",
+                        rusqlite::params![tag, position],
+                    )
+                    .expect("a tag row");
+            }
+        }
+        transaction.commit().expect("the seed must commit");
+        connection
+    }
+
+    /// `EXPLAIN QUERY PLAN` as `(id, parent, detail)` rows.
+    fn plan_rows(
+        connection: &Connection,
+        sql: &str,
+        params: &[rusqlite::types::Value],
+    ) -> Vec<(i64, i64, String)> {
+        let mut statement = connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .expect("the plan must prepare");
+        statement
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(3)?))
+            })
+            .expect("the plan must run")
+            .map(|row| row.expect("a plan row"))
+            .collect()
+    }
+
+    /// Whether `node` is `ancestor` or sits beneath it.
+    fn descends_from(rows: &[(i64, i64, String)], node: i64, ancestor: i64) -> bool {
+        let mut current = node;
+        // The tree is shallow and finite; the bound is a guard against a
+        // malformed plan rather than an expected case.
+        for _ in 0..=rows.len() {
+            if current == ancestor {
+                return true;
+            }
+            match rows.iter().find(|(id, _, _)| *id == current) {
+                Some((_, parent, _)) if *parent != current => current = *parent,
+                _ => return false,
+            }
+        }
+        false
+    }
+
+    /// **The falsifier for the whole read shape.**
+    ///
+    /// `page_statements` is built so that SQLite *may* run the compound's arms
+    /// as co-routines and merge them, stopping when the page is full. It cannot
+    /// be asked to: the merge is a planner choice, and the same statement is
+    /// still correct — same rows, same order — when the planner declines and
+    /// sorts the whole matched set instead. What changes is the cost class, and
+    /// nothing else in this crate would notice.
+    ///
+    /// So the plan is asserted directly. Two claims, and the second is the one
+    /// that would catch a regression:
+    ///
+    /// * the compound is merged (`MERGE`), rather than unioned into a transient
+    ///   table;
+    /// * **no sorter sits beneath the co-routine.** A `USE TEMP B-TREE FOR ORDER
+    ///   BY` at the top level is expected and cheap — it orders at most `budget`
+    ///   joined rows, because SQLite does not know a co-routine's order survives
+    ///   the join. One *inside* the co-routine means the arms were collected and
+    ///   sorted, which is the shape this design exists to avoid, and it is why
+    ///   this test walks the parent chain rather than grepping the whole plan.
+    ///
+    /// Measured consequence of getting this wrong, at 500,000 events:
+    /// `experiments/correlated-exists-guard/results/merge-join.md`.
+    #[test]
+    fn the_page_plan_is_a_merge_and_not_a_sort() {
+        let connection = seeded();
+
+        let items = ["s1", "s2"]
+            .into_iter()
+            .map(|subject| {
+                let tags = Tags::from_pairs([("subject", subject), ("shard", "cold")])
+                    .expect("two non-empty pairs");
+                QueryItem::tagged(tags).expect("a non-empty tag set")
+            })
+            .collect::<Vec<_>>();
+        let query = Query::from_items(items).expect("a non-empty item list");
+        let selectivity = Selectivity::read_for(
+            &connection,
+            &query,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .expect("the lookup must succeed");
+
+        let plan = page_statements(
+            &query,
+            &selectivity,
+            SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            Window {
+                lo: 1,
+                hi: 5_000,
+                budget: 512,
+                backwards: false,
+            },
+            crate::row::COLUMNS,
+        );
+        assert_eq!(plan.len(), 1);
+        let rows = plan_rows(&connection, &plan[0].0, &plan[0].1);
+        let rendered = rows
+            .iter()
+            .map(|(id, parent, detail)| format!("id={id} parent={parent} {detail}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            rows.iter().any(|(_, _, detail)| detail.contains("MERGE")),
+            "the compound was not merged — the arms are being collected before \
+             the page is taken:\n{rendered}"
+        );
+
+        let Some(&(coroutine, _, _)) = rows
+            .iter()
+            .find(|(_, _, detail)| detail.contains("CO-ROUTINE"))
+        else {
+            panic!("no co-routine in the plan:\n{rendered}")
+        };
+
+        for (id, _, detail) in &rows {
+            assert!(
+                !(detail.contains("TEMP B-TREE") && descends_from(&rows, *id, coroutine)),
+                "a sorter sits inside the co-routine, so the whole matched set is \
+                 being ordered before the page is taken:\n{rendered}"
+            );
+        }
+    }
+
+    /// Each arm reaches the `(tag, position)` index through **both** of its
+    /// columns.
+    ///
+    /// `SEARCH … (tag=?)` alone means the window did not reach the index and
+    /// every co-routine rewinds to the start of its tag range, so a page late in
+    /// a replay pays for the whole prefix beneath it — the defect
+    /// `results/all-query-wrapper.md` measured at 56,310 µs against 182 µs.
+    /// The distinguishing text is the range constraint on the second column.
+    /// The plan names the **alias**, `seed`, and not `event_tag`, which is worth
+    /// knowing before writing an assertion against it.
+    #[test]
+    fn every_arm_seeks_into_its_tag_range_rather_than_rewinding() {
+        let connection = seeded();
+
+        let tags = Tags::from_pairs([("subject", "s1")]).expect("one non-empty pair");
+        let query = Query::from_item(QueryItem::tagged(tags).expect("a non-empty tag set"));
+        let selectivity = Selectivity::read_for(
+            &connection,
+            &query,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        )
+        .expect("the lookup must succeed");
+
+        let plan = page_statements(
+            &query,
+            &selectivity,
+            SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+            Window {
+                lo: 2_500,
+                hi: 5_000,
+                budget: 512,
+                backwards: false,
+            },
+            crate::row::COLUMNS,
+        );
+        let rows = plan_rows(&connection, &plan[0].0, &plan[0].1);
+        let rendered = rows
+            .iter()
+            .map(|(_, _, detail)| detail.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            rows.iter().any(|(_, _, detail)| {
+                detail.contains("SEARCH seed")
+                    && detail.contains("tag=?")
+                    && detail.contains("position>")
+            }),
+            "the arm's window did not reach the index:\n{rendered}"
+        );
     }
 }

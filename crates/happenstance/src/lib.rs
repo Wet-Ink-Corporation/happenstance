@@ -55,7 +55,7 @@
 //! }
 //! let store = MemoryEventStore::new();
 //! let seats = Seats { scope: Tags::empty(), taken: 0 };
-//! let retry = Retry::attempts(3.try_into()?);
+//! let retry = Retry::attempts(core::num::NonZeroU32::new(3).unwrap());
 //! let take =
 //!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
 //! let done = commit(&store, seats, retry, take).await?;
@@ -190,7 +190,7 @@ mod codec;
 mod command;
 mod domain;
 // `runner`, not `projection`. The contract crate already publishes a
-// `projection` module, and this crate's glob re-export makes it
+// `projection` module, and this crate re-exports it as
 // `happenstance::projection`; a private module of the same name shadows it
 // silently, which is a breaking change to a facade whose whole promise is that
 // the contract's paths still work here.
@@ -239,4 +239,116 @@ pub use domain::{DecisionModel, DomainEvent};
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use runner::{Progressed, Projection, ProjectionError, run_projection};
 
-pub use happenstance_core::*;
+// The contract's surface, mounted here so a reader who installed the facade can
+// still type the paths the contract's own documentation uses.
+//
+// Written out rather than globbed, and the glob is what shipped: `pub use
+// happenstance_core::*;` re-exports whatever the *compiled* contract crate
+// exposes, and the contract's projection items are gated on **its**
+// `unstable-projection`, not on this crate's. `happenstance-testkit` is this
+// crate's dev-dependency and enables that feature unconditionally, so under
+// `cargo test` — and in any consumer's graph where a second crate asks for it —
+// the whole unfrozen projection port resolved at `happenstance::` with this
+// crate's `unstable-projection` off, which is the opposite of what that
+// feature's manifest comment promises a reader.
+//
+// The glob cost a second thing that never showed up as a failure: every future
+// addition to the contract crate was an addition to this crate's public surface
+// with nobody reviewing it, and a name added to both crates was a hard break in
+// a crate that had not changed. An explicit list turns that collision into
+// `error[E0255]` here, at home, in the commit that causes it.
+//
+// The gates below are the contract's own, feature for feature.
+// `tests/contract_surface.rs` derives them from `happenstance-core`'s crate root
+// and fails if the two lists stop agreeing.
+pub use happenstance_core::store;
+pub use happenstance_core::{AppendCondition, Guard};
+pub use happenstance_core::{AppendError, ConditionViolated, InvalidEventType};
+pub use happenstance_core::{Event, EventParts, EventType, MAX_EVENT_TYPE_LEN};
+pub use happenstance_core::{EventId, RecordedAt, StoreId};
+pub use happenstance_core::{EventStore, SendEventStore, collect, read_decision_model};
+pub use happenstance_core::{InvalidQuery, InvalidTag};
+pub use happenstance_core::{MAX_TAG_LEN, Tag, Tags};
+pub use happenstance_core::{
+    MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
+    MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
+};
+pub use happenstance_core::{Query, QueryItem, ReadOptions};
+pub use happenstance_core::{SequencePosition, SequencedEvent};
+
+// The two crates the contract re-exports so that a caller names one `Bytes` and
+// one `Stream` rather than two that print identically (RS-40-4). Passed through
+// for the same reason they are re-exported there: a facade that stopped at the
+// contract's *types* would send a reader back to their own manifest to add a
+// `bytes` line, and the version they picked is the one the compiler complains
+// about.
+pub use happenstance_core::{bytes, futures_core};
+
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use happenstance_core::{MemoryEventStore, MemoryStoreError};
+
+// The unfrozen port, behind this crate's gate as well as the contract's. The
+// module is on the list because a *module* is a name too, and `src/tests.rs`'s
+// `same_projection_id` is the witness that `happenstance::projection` still
+// resolves to the contract's.
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use happenstance_core::projection;
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use happenstance_core::{Authority, Checkpoint, CommitError, ProjectionId};
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use happenstance_core::{ProjectionStore, ResetError, SendProjectionStore};
+
+#[cfg(all(feature = "memory", feature = "unstable-projection"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
+)]
+pub use happenstance_core::{
+    MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
+};
+// Deliberately absent: `ProjectionProbe`. The contract gates it on
+// `conformance`, a feature this crate does not forward and should not — it is a
+// test double, and a test double belongs in `happenstance-testkit` rather than
+// in an application's own dependency graph. It reached `happenstance::` through
+// the glob anyway, which is the plainest statement of what the glob was doing:
+// mounting a name no consumer of this crate could turn on *or* off.
+
+/// The contract crate under its own name, beside the list above.
+///
+/// The list re-exports every *item*; it does not re-export the **crate**, so
+/// `happenstance_core::EventStore` — the spelling in the contract's own
+/// documentation, in every adapter's, and in every diagnostic — does not
+/// resolve through this facade without it. It adds a path, not a type: the
+/// list already guarantees there is one contract crate here, and this makes
+/// it nameable.
+pub use happenstance_core;
+
+/// Compiled proof that the contract crate is nameable here.
+///
+/// Reachable under its own name, that is, and not only through the list
+/// above.
+///
+/// The list puts every *item* in this crate's root; it does not put the
+/// **crate** there. A signature copied out of `happenstance-core`'s own
+/// documentation, or out of an adapter's, is written
+/// `happenstance_core::EventStore` — and a reader who installed `happenstance`
+/// rather than the contract should not have to rewrite it to compile it.
+///
+/// ```
+/// fn bound<S: happenstance::happenstance_core::EventStore>(_s: S) {}
+/// # fn main() {}
+/// ```
+///
+/// ```
+/// use happenstance::happenstance_core::bytes::Bytes;
+/// fn payload(b: Bytes) -> usize { b.len() }
+/// # fn main() {
+/// #     assert_eq!(payload(Bytes::from_static(b"{}")), 2);
+/// # }
+/// ```
+#[cfg(doctest)]
+mod reexported_paths {}

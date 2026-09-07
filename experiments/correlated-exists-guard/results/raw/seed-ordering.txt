@@ -1,0 +1,35 @@
+   Compiling correlated-exists-guard v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\experiments\correlated-exists-guard)
+    Finished `release` profile [optimized] target(s) in 1.26s
+     Running tests\seed_ordering.rs (target\release\deps\seed_ordering-20bb7dd606e90ef4.exe)
+
+running 1 test
+test most_selective_first_against_least_selective_first ... SEED	size=500000	events=500000 tag_rows=1000000 unstamped=0 shard_cold=500000/500000 row_r7=5155/5155	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+CARDINALITY	shard_cold=Some(500000)	row_r7=Some(5155)
+SEED-ORDER	shape=chain-as-shipped	size=500000	scenario=accepted-2tag-at-head	boundary=500000	most_selective_first_us_median=978539	least_selective_first_us_median=25817	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	shape=chain-as-shipped	size=500000	scenario=rejected-2tag-unbounded	boundary=0	most_selective_first_us_median=800550	least_selective_first_us_median=22508	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	shape=chain-as-shipped	size=500000	scenario=rejected-2tag-midlog	boundary=250000	most_selective_first_us_median=935364	least_selective_first_us_median=21759	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT position FROM event_tag WHERE tag = ? AND event_type IN (?) AND position IN (SELECT position FROM event_tag WHERE tag = ?))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	shape=chain-exists	size=500000	scenario=accepted-2tag-at-head	boundary=500000	most_selective_first_us_median=28	least_selective_first_us_median=59	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ? AND seed.event_type IN (?) AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = seed.position))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	shape=chain-exists	size=500000	scenario=rejected-2tag-unbounded	boundary=0	most_selective_first_us_median=26	least_selective_first_us_median=57	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ? AND seed.event_type IN (?) AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = seed.position))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+SEED-ORDER	shape=chain-exists	size=500000	scenario=rejected-2tag-midlog	boundary=250000	most_selective_first_us_median=29	least_selective_first_us_median=58	rounds=25	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+   statement (identical text for both orderings): SELECT max(position) FROM (SELECT seed.position AS position FROM event_tag AS seed WHERE seed.tag = ? AND seed.event_type IN (?) AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = seed.position))
+   most-selective-first bound (what ships): [Text("row:r7"), Text("Seeded"), Text("shard:cold")]
+   least-selective-first bound (the control): [Text("shard:cold"), Text("Seeded"), Text("row:r7")]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 76.76s
+

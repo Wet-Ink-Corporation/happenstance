@@ -20,6 +20,8 @@ that shapes a page whose job is orientation.
 | Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
 | Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
+| The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
+| Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
 
 | Looking for | It is at |
 | --- | --- |

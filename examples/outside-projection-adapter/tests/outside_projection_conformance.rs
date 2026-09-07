@@ -12,6 +12,18 @@
 //! crate that already has the fixture trait in scope under its own name; this
 //! one does not, and would not compile if the re-export were missing.
 
+// Behind this crate's own `conformance` flag, and it has to be: the flag is
+// what compiles `impl ProjectionProbe for OutsideProjectionStore` in `src/`,
+// and `ProjectionFixture::Store` is bound on that trait — so without it this
+// file does not compile, and a bare `cargo test -p outside-projection-adapter`
+// must therefore not see it at all. The gate runs `--all-features`, which is
+// what makes the target run rather than quietly configure out. This is the
+// shape `crates/happenstance-sqlite/tests/projection.rs` already lives in, and
+// it arrived here only when the manifest started following the published
+// recipe: while `conformance` was on unconditionally in `[dependencies]`, the
+// coupling existed and nothing expressed it.
+#![cfg(feature = "conformance")]
+
 mod support;
 
 use support::OutsideFixture;

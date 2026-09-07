@@ -13,6 +13,25 @@ on:
   schedule:
     - cron: "17 7 * * 2"
 
+# What the `GITHUB_TOKEN` handed to every job below may do. Stated here rather
+# than inherited, and that is the whole of it: with no `permissions:` key the
+# token takes the *repository's* default scope — a setting changed in the web UI,
+# by someone who is not reading this file, and historically read-write on a
+# repository created before GitHub flipped the default. Every step here reads the
+# tree and nothing writes to the repository, so `contents: read` is what the jobs
+# need and the rest is blast radius. A job that genuinely needs more raises it at
+# the job, where a reviewer reads the grant beside the steps that use it; none
+# does today.
+#
+# The credential this does *not* govern is `REDKILN_TOKEN` in the `backlog` job.
+# That is a separate fine-grained token with read-only Contents on one sibling
+# repository, and its scope lives at the organisation rather than here.
+#
+# `cargo xtask lint-workflows` is what keeps this key present — in every workflow
+# this repository grows, not only in this one.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -38,11 +57,19 @@ jobs:
         # written for ships there.
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # rust-toolchain.toml pins the channel, the components and the
       # wasm32 target, so there is nothing to configure here.
-      - uses: dtolnay/rust-toolchain@stable
+      #
+      # The SHA is the head of that action's `stable` BRANCH, not a release tag:
+      # dtolnay/rust-toolchain publishes no version tags, and its branches are
+      # the same action differing only in `action.yml`'s default `toolchain`
+      # input — `stable` on this one. So pinning freezes the default along with
+      # the code, which is what `@stable` meant and no longer leaves to whoever
+      # can push to that branch. Raising it is `git ls-remote` on the branch,
+      # and the date beside it says what the pin is behind.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
 
       # A second toolchain on the runner, for exactly one step of the gate: the
       # `--cfg docsrs` rustdoc build. It earns its place because
@@ -77,10 +104,10 @@ jobs:
       - name: Install nightly, for the docs.rs configuration step
         run: rustup toolchain install nightly --profile minimal
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install supplementary tools
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-hack,cargo-deny
 
@@ -118,7 +145,7 @@ jobs:
       # gate red — it turns that claim into a lie, silently, which is why the
       # step's own comment in `xtask/src/main.rs` points back here.
       - name: Install the wasm32 conformance runner
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
 
@@ -140,30 +167,47 @@ jobs:
   backlog:
     name: backlog and knowledge base
     runs-on: ubuntu-latest
-    # Skipped on a **fork's** pull request, and nowhere else.
+    # ══ DISABLED, 2026-09-04, and disabled LOUDLY rather than deleted ══
     #
-    # This is the one carve-out from the "RED rather than skipped" rule stated
-    # below, and it is deliberately narrow because that rule is right. GitHub
-    # does not pass repository or organisation secrets to a workflow triggered by
-    # a pull request from a fork — by design, so a stranger's branch cannot
-    # exfiltrate them. `REDKILN_TOKEN` is therefore not absent-because-nobody-set-it
-    # there; it is unreachable, and a job that fails for a reason the contributor
-    # cannot act on teaches them only that this project's CI is broken.
+    # This repository has moved off the redkiln version this job pins, and the
+    # pinned CLI therefore reports drift against a process the repository no
+    # longer runs. It is turned off until the next version stabilises, so that
+    # `0.2.0` is not gated on a tool disagreement that says nothing about the
+    # library.
     #
-    # The two cases are different and the condition keeps them different. A
-    # missing or revoked secret on a same-repository push or pull request still
-    # turns this job RED, which is the failure the rule below exists to catch.
-    # Only the structurally impossible case is skipped, and a skipped job is
-    # visible in the checks list rather than a passing tick.
+    # `if: false` rather than deleting the job, and that choice is this job's own
+    # argument applied to itself. Its comment below says a backlog check that
+    # quietly stops running is worth less than no backlog check, *because the
+    # green tick keeps arriving*. A deleted job vanishes from the checks list; a
+    # false-gated one shows as **skipped**, which is visible. Nothing here gets a
+    # passing tick it did not earn.
     #
-    # What it costs: a fork's pull request has not had its backlog or knowledge
-    # base checked. Re-run it from a same-repository branch before merging — see
-    # CONTRIBUTING.md, *The gate*.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # WHAT IS UNCHECKED WHILE THIS IS OFF, stated so it can be weighed:
+    #   * a `.kb` atom whose frontmatter stops validating;
+    #   * an accepted decision atom edited instead of superseded — the immutability
+    #     rule `validate --kb` is the only enforcement of;
+    #   * an item whose system frontmatter was hand-edited with the `PreToolUse`
+    #     hook disabled;
+    #   * a `.redkiln/templates/` customisation reverted by `adopt --templates`,
+    #     and the assertion that the drift set is exactly the six documented files.
+    # Every one of those merges green while this job is off. That is the cost.
+    #
+    # TO RE-ENABLE: restore the `if:` expression preserved immediately below, and
+    # raise `ref:` on the CLI checkout in the same commit — never separately, for
+    # the reason the `ref` comment gives.
+    #
+    #   if: >-
+    #     github.event_name != 'pull_request' ||
+    #     github.event.pull_request.head.repo.full_name == github.repository
+    #
+    # The preserved expression is the fork carve-out: GitHub does not pass
+    # secrets to a workflow triggered from a fork, so `REDKILN_TOKEN` is
+    # unreachable rather than unset there, and a job failing for a reason a
+    # contributor cannot act on teaches them only that this project's CI is
+    # broken. A missing secret on a same-repository push still turns the job RED.
+    if: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # redkiln is a Claude Code plugin in this organisation's private redkiln
       # repository — it is not on npm, and a workflow's built-in `GITHUB_TOKEN`
@@ -186,7 +230,7 @@ jobs:
       # under the assertion below whenever redkiln released. Raise this in the
       # same commit that upgrades the local plugin, never separately.
       - name: Check out the redkiln CLI
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Wet-Ink-Corporation/redkiln
           ref: v0.18.0
@@ -197,7 +241,7 @@ jobs:
       # `node:util.parseArgs`). 24 rather than 22 so CI runs what this repository
       # is developed on; the committed `dist/` bundle is self-contained, so there
       # is nothing to install.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
 
@@ -308,19 +352,25 @@ jobs:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # `master` rather than `stable` because this job names its own toolchain
+      # below, and on that branch `action.yml` marks the input required rather
+      # than defaulting it — which is the branch to be on when the number is the
+      # point. It was `@master` unpinned until this commit: a BRANCH, so every
+      # run of this job took whatever had been pushed to it, on a repository
+      # nobody here controls.
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # the `master` branch, 2026-09-03
         with:
           # 1.97.1 as of ADR-0029, raised from 1.85. Kept spelled out here rather
           # than deferring to `rust-toolchain.toml` so that this job fails loudly
           # if the two ever disagree — the pin and the promise are different
           # facts that currently happen to be the same number.
           toolchain: "1.97.1"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # `--no-dev-deps` because dev-dependencies are free to require a newer
       # compiler than the published crates do. This is what a *consumer* sees.
       - name: Install cargo-hack
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-hack
       - run: cargo hack check --workspace --no-dev-deps --rust-version
@@ -353,25 +403,34 @@ jobs:
       # cargo-semver-checks cannot resolve a rev it does not have. `0` takes the
       # full history, which is the only depth that is right regardless of how far
       # the branch has diverged.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           # Compare against the commit this pull request branched from, not the
-          # registry. With no baseline the action asks crates.io, and all three
-          # names sit there at `0.0.0`: Cargo treats every `0.0.x` version as
-          # incompatible with every other, so there is no compatible predecessor
-          # to diff against and the job reports nothing while still going green.
+          # registry. The original reason was that every name sat at `0.0.0` and
+          # Cargo treats each `0.0.x` as incompatible with every other, so there
+          # was no compatible predecessor to diff against and the job reported
+          # nothing while still going green.
           #
-          # Be clear about what this buys. It catches a break introduced *by this
-          # pull request*. It says nothing about breaks against the last release —
-          # a break merged two pull requests ago is part of the baseline and
-          # therefore invisible here. Phase 12 keeps both baselines once a real
-          # `0.1.0` is published: the registry for release safety, this one for
-          # review signal.
+          # **That reason expired at `0.2.0`.** All five crates now have a real
+          # published predecessor, so the registry baseline is available and is
+          # the one that matters for release safety. Adding it is the outstanding
+          # half of phase 12's `cargo-semver-checks` work and is deliberately not
+          # done in the same change as the release itself — the registry has to
+          # carry `0.2.0` before a job can diff against it, and a job that fails
+          # because the version it names does not exist yet teaches nobody
+          # anything.
+          #
+          # Be clear about what the rev baseline buys until then. It catches a
+          # break introduced *by this pull request*. It says nothing about breaks
+          # against the last release — a break merged two pull requests ago is
+          # part of the baseline and therefore invisible here. Both baselines are
+          # kept once the registry one lands: the registry for release safety,
+          # this one for review signal.
           baseline-rev: ${{ github.event.pull_request.base.sha }}
           # Every published crate, the facade included. `happenstance` re-exports
           # the contract wholesale today, so its surface is currently a duplicate
@@ -379,14 +438,12 @@ jobs:
           # installs, and the moment the typed layer grows an API of its own it
           # stops being a duplicate. One extra rustdoc build is cheaper than
           # remembering to add the line later.
-          # Every crate the release publishes, plus the one that is
-          # publish-ready and waiting. `happenstance-sqlite` joined the release
-          # set at the crate-set re-plan and `happenstance-cloudflare` is
-          # publish-ready but deferred past `0.2.0`; both have a public surface,
-          # and a surface no instrument watches is the thing this job exists to
-          # prevent. Added on the argument the paragraph above already makes —
-          # one extra rustdoc build is cheaper than remembering the line later —
-          # and cloudflare is here *before* it ships for exactly that reason.
+          # Every crate the release publishes — all five of them. Both adapters
+          # were watched here *before* they shipped, on the argument the
+          # paragraph above already makes: one extra rustdoc build is cheaper
+          # than remembering to add the line later, and a public surface no
+          # instrument watches is the thing this job exists to prevent. That
+          # foresight is why this line needed no edit at the release.
           package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
 
   # A newly published advisory against a dependency nobody has touched is the one
@@ -404,10 +461,10 @@ jobs:
     # unproven scheduled job is indistinguishable from one that never runs.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-deny
       - run: cargo deny check advisories

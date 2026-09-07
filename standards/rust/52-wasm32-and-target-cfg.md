@@ -52,9 +52,9 @@ four green wasm32 steps as "it runs on Workers" ships an adapter that aborts the
 module on its first recorded timestamp, found by a user in a Worker — where
 `println!` writes nowhere, so nothing says why.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:369 (The host build is a convenience rather than evidence)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:409 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
-`xtask/src/main.rs:239 (wasm32 build of the contract crate)` ·
+`xtask/src/main.rs:243 (name: "wasm32 build of the contract crate")` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-52-2. A feature is not target-scoped: an item behind a per-target optional dependency needs the target condition too.
@@ -104,9 +104,9 @@ and the author is told the target is fine; the combination that fails is the one
 enables the feature — in a crate they did not write, naming a crate they never
 asked for.
 
-**Evidence.** `crates/happenstance-testkit/Cargo.toml:99 (optional = true)` ·
-`crates/happenstance-testkit/src/fixtures.rs:487 (feature is not target-scoped)` ·
-`xtask/src/main.rs:914 (feature is not target-scoped)`
+**Evidence.** `crates/happenstance-testkit/Cargo.toml:115 (optional = true)` ·
+`crates/happenstance-testkit/src/fixtures.rs:507 (feature is not target-scoped)` ·
+`xtask/src/main.rs:937 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 
@@ -156,8 +156,8 @@ message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
 **Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:142 (is denied under)` ·
-`crates/happenstance-cloudflare/src/lib.rs:481 (mod not_send_probe)` ·
-`xtask/src/main.rs:312 (wasm32 build of the Cloudflare adapter)`
+`crates/happenstance-cloudflare/src/lib.rs:526 (mod not_send_probe)` ·
+`xtask/src/main.rs:316 (name: "wasm32 build of the Cloudflare adapter")`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
 
@@ -216,6 +216,6 @@ would then be held hostage by a version bump of the crate whose only job is to
 grade them, and the failure would read as a missing dependency in their crate.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
-`crates/happenstance-testkit/src/registry.rs:276 (macro_rules! __emit_wasm {)` ·
-`.github/workflows/ci.yml:198 (type-checks for wasm32 and then cannot run there)` ·
+`crates/happenstance-testkit/src/registry.rs:282 (macro_rules! __emit_wasm {)` ·
+`.github/workflows/ci.yml:147 (Install the wasm32 conformance runner)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md)

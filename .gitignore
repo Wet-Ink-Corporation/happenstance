@@ -67,3 +67,11 @@ target
 # Redirect a run into the scratch directory instead if you want to keep it.
 *.log
 *-output.txt
+
+# Local credentials. `NEON_CONNECTION` and anything like it. This path was
+# tracked-but-never-committed once, carrying a live Neon password on disk beside
+# an empty staged blob — one `git add -A` from a public repository, which is the
+# same failure the transcript rules above were written for.
+.env
+.env.*
+!.env.example

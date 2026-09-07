@@ -15,16 +15,21 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: implemented and measured; not released, and not frozen.** Every
-> [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
-> `append`, `head`, `contains_event_id` and `read` all execute SQL against the
-> object's storage — and the event-store conformance suite runs against this
-> adapter inside the repository's own gate, on `wasm32-unknown-unknown`.
+> **Status: released at `0.2.0`, and the release with the thinnest evidence of
+> the five.** Every [`EventStore`](https://docs.rs/happenstance-core) body is
+> real — `migrate`, `append`, `head`, `contains_event_id` and `read` all execute
+> SQL against the object's storage — and the event-store conformance suite runs
+> against this adapter inside the repository's own gate, on
+> `wasm32-unknown-unknown`.
 >
-> What has **not** happened: no release, no version to depend on, and no frozen
-> API. The conformance run stands the adapter up against a Durable Object host
-> backed by real SQLite rather than against `workerd`; the section below says
-> what that does and does not cover, in the run's own terms.
+> **What the version number does and does not cover.** It inherits the
+> workspace's `0.2.0`, so the frozen `EventStore` clauses it implements are
+> semver-binding here as everywhere. What it is not is *mileage*: the conformance
+> run stands the adapter up against a Durable Object host backed by real SQLite
+> rather than against `workerd`, and nothing in the host test matrix exercises a
+> `wasm32`-only crate. The section below says what that does and does not cover,
+> in the run's own terms, and it is the reason this paragraph is longer than the
+> other four crates' put together.
 
 ## Use
 

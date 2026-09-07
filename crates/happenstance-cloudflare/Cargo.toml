@@ -10,6 +10,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+# docs.rs renders this one for `wasm32-unknown-unknown` — see the
+# `[package.metadata.docs.rs]` block below, which is the only one in the
+# workspace that sets a target. The URL is the same shape regardless.
+documentation = "https://docs.rs/happenstance-cloudflare"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -52,19 +57,27 @@ thiserror.workspace = true
 # unmodified eight-licence allowlist, and `worker`'s declared
 # `rust-version = "1.75"` sits well under ADR-0029's 1.97.1 floor.
 #
-# *And one price that is not paid yet, stated because a silent one is how a
-# guard dies.* `cargo deny check bans` is **red**: `deny.toml` bans
-# `async-trait` (ADR-0001 — it injects `+ Send`, which forecloses wasm32), and
-# `worker` 0.8.5 depends on it unconditionally, as does `worker-macros`. The
-# ban's own comment says such a route "fails until someone decides it should"
-# be a wrapper, and that decision is not this manifest's to take: widening the
-# `wrappers` list here would turn the measurement into a green checkmark and
-# delete the finding. So the finding stands, recorded against AC-008 in
-# `worker-binding-layer/_ledger.md` and escalated to ADR-0023
-# (`adr-0023-and-atom-resolutions`), which is where the wrapper entries land if
-# they are ratified.
+# *And one price, in the past tense — a silent guard dies, and a stale record
+# of one misleads.* `cargo deny check bans` **was red** when this row landed:
+# `deny.toml` bans `async-trait` (ADR-0001 — it injects `+ Send`, which
+# forecloses wasm32), and `worker` 0.8.5 depends on it unconditionally, as does
+# `worker-macros`. This manifest did not widen the `wrappers` list to turn the
+# measurement into a green checkmark, because that decision was never a
+# manifest's to take; the finding stood, recorded against AC-008 in
+# `worker-binding-layer/_ledger.md`, until it was taken where decisions are
+# taken. **ADR-0035 took it.** `deny.toml`'s single `async-trait` entry now
+# names three wrappers — `wasm-bindgen-test`, `worker`, `worker-macros` — with
+# a `reason` citing both ADR-0001 and ADR-0035, the open question that raised
+# it (`.kb/open-questions/deny-bans-red-on-the-worker-dependency.md`) reads
+# `superseded`, and `cargo deny check bans` reports `bans ok`.
 #
-# What it does *not* mean, since a red ban invites the wrong inference:
+# `crates/happenstance-cloudflare/tests/publish_readiness.rs` is what keeps
+# this paragraph and `deny.toml` from drifting apart again, which is the
+# failure this text is the recovered form of: the question was answered and the
+# sites citing it were not swept.
+#
+# What the exemption does *not* mean — a lifted ban invites the wrong inference
+# as readily as a red one did:
 # `worker` uses `#[async_trait]` for its own `DurableObject` trait, and no
 # happenstance port gains a bound from it. `happenstance-core` still declares
 # each port once without a `Send` bound and lets `trait_variant` derive the

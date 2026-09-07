@@ -1,0 +1,73 @@
+
+running 1 test
+test the_windowed_arm_at_the_item_floor ... CONDITIONS	journal_mode=wal	synchronous=1	busy_timeout_ms=5000	sqlite=3.53.2	size=500000	items=128	buckets=128	arms_per_statement=400
+MATCHED	query=partition-128	arms=128	events=500000
+STATEMENT	query=partition-128	cell=first-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=first-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=first-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=partition-128	cell=first-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=partition-128	cell=first-page	shape=in-exists (ships)	rows=512	us_median=654774
+PAGE	query=partition-128	cell=first-page	shape=wrapper-exists	rows=512	us_median=87479
+PAGE	query=partition-128	cell=first-page	shape=windowed-in-exists	rows=512	us_median=326473
+PAGE	query=partition-128	cell=first-page	shape=merge-join	rows=512	us_median=7985
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=partition-128	cell=mid-replay-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=partition-128	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=636387
+PAGE	query=partition-128	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=91047
+PAGE	query=partition-128	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=313745
+PAGE	query=partition-128	cell=mid-replay-page	shape=merge-join	rows=512	us_median=7011
+STATEMENT	query=partition-128	cell=late-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=partition-128	cell=late-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=partition-128	cell=late-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=partition-128	cell=late-replay-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=partition-128	cell=late-replay-page	shape=in-exists (ships)	rows=512	us_median=685001
+PAGE	query=partition-128	cell=late-replay-page	shape=wrapper-exists	rows=512	us_median=93486
+PAGE	query=partition-128	cell=late-replay-page	shape=windowed-in-exists	rows=512	us_median=110462
+PAGE	query=partition-128	cell=late-replay-page	shape=merge-join	rows=512	us_median=6400
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=in-exists (ships)	sql_bytes=25817	params=387
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=wrapper-exists	sql_bytes=26832	params=387
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=windowed-in-exists	sql_bytes=39257	params=771
+STATEMENT	query=partition-128	cell=backwards-from-head	shape=merge-join	sql_bytes=31737	params=641
+PAGE	query=partition-128	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=665135
+PAGE	query=partition-128	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=80383
+PAGE	query=partition-128	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=297280
+PAGE	query=partition-128	cell=backwards-from-head	shape=merge-join	rows=512	us_median=6171
+MATCHED	query=needle-128	arms=128	events=3907
+STATEMENT	query=needle-128	cell=first-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=first-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=first-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=needle-128	cell=first-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=needle-128	cell=first-page	shape=in-exists (ships)	rows=512	us_median=32477
+PAGE	query=needle-128	cell=first-page	shape=wrapper-exists	rows=512	us_median=19779043
+PAGE	query=needle-128	cell=first-page	shape=windowed-in-exists	rows=512	us_median=14683
+PAGE	query=needle-128	cell=first-page	shape=merge-join	rows=512	us_median=12175
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=needle-128	cell=mid-replay-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=needle-128	cell=mid-replay-page	shape=in-exists (ships)	rows=512	us_median=33937
+PAGE	query=needle-128	cell=mid-replay-page	shape=wrapper-exists	rows=512	us_median=18531612
+PAGE	query=needle-128	cell=mid-replay-page	shape=windowed-in-exists	rows=512	us_median=14466
+PAGE	query=needle-128	cell=mid-replay-page	shape=merge-join	rows=512	us_median=10733
+STATEMENT	query=needle-128	cell=late-replay-page	shape=in-exists (ships)	sql_bytes=25816	params=387
+STATEMENT	query=needle-128	cell=late-replay-page	shape=wrapper-exists	sql_bytes=26831	params=387
+STATEMENT	query=needle-128	cell=late-replay-page	shape=windowed-in-exists	sql_bytes=39128	params=771
+STATEMENT	query=needle-128	cell=late-replay-page	shape=merge-join	sql_bytes=31735	params=641
+PAGE	query=needle-128	cell=late-replay-page	shape=in-exists (ships)	rows=391	us_median=43452
+PAGE	query=needle-128	cell=late-replay-page	shape=wrapper-exists	rows=391	us_median=17502855
+PAGE	query=needle-128	cell=late-replay-page	shape=windowed-in-exists	rows=391	us_median=10628
+PAGE	query=needle-128	cell=late-replay-page	shape=merge-join	rows=391	us_median=10171
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=in-exists (ships)	sql_bytes=25817	params=387
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=wrapper-exists	sql_bytes=26832	params=387
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=windowed-in-exists	sql_bytes=39257	params=771
+STATEMENT	query=needle-128	cell=backwards-from-head	shape=merge-join	sql_bytes=31737	params=641
+PAGE	query=needle-128	cell=backwards-from-head	shape=in-exists (ships)	rows=512	us_median=33157
+PAGE	query=needle-128	cell=backwards-from-head	shape=wrapper-exists	rows=512	us_median=21107773
+PAGE	query=needle-128	cell=backwards-from-head	shape=windowed-in-exists	rows=512	us_median=12650
+PAGE	query=needle-128	cell=backwards-from-head	shape=merge-join	rows=512	us_median=11087
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 423.70s
+

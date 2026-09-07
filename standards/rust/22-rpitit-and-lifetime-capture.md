@@ -54,7 +54,7 @@ failure in CI, and the fix that first suggests itself is
 have seen that the future has no `Send` bound and never will have one.
 
 **Evidence.** `crates/happenstance-testkit/src/contract.rs:97 (Why the methods are spelled)` ·
-`crates/happenstance-neon/src/transport.rs:40 (async_fn_in_trait)` ·
+`crates/happenstance-neon/src/transport.rs:41 (async_fn_in_trait)` ·
 [SPECIFICATION CF-20](../../spec/SPECIFICATION.md) *(why `Fixture` is
 hand-written and un-derived, and so is subject to the lint)* ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
@@ -118,9 +118,9 @@ suggests itself is the `#[allow]` rustc prints: it compiles, deletes the only
 signal, and hands every native caller a stream it cannot hold across an await —
 in a crate whose conformance suite does not exist yet, so nothing else asks.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:156 (putting the stream at the)` ·
-`crates/happenstance-core/src/memory.rs:614 (send_flavour_stream_is_send_in_generic_code)` ·
-`crates/happenstance-sync/tests/cursor_shape_probe.rs:43 (Nesting the stream inside the future)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:164 (putting the stream at the)` ·
+`crates/happenstance-core/src/memory.rs:628 (send_flavour_stream_is_send_in_generic_code)` ·
+`crates/happenstance-sync/tests/cursor_shape_probe.rs:40 (Nesting the stream inside the future)` ·
 `crates/happenstance-sync/tests/cursor_shape_probe.rs:54 (refining_impl_trait)` ·
 [SPECIFICATION ES-2](../../spec/SPECIFICATION.md) *(the `read` case,
 `[FROZEN]`, and the two tests it takes)* ·
@@ -181,8 +181,8 @@ compiles everywhere, changes a `[FROZEN]` clause with no ADR, and reaches review
 as a signature that got simpler.
 
 **Evidence.** `crates/happenstance-core/tests/frozen_signatures.rs:62 (fn replay<'a, S: EventStore>)` ·
-`crates/happenstance-core/tests/frozen_signatures.rs:210 (error[E0716])` ·
-`crates/happenstance-core/src/memory.rs:672 (Inlining is E0716)` ·
+`crates/happenstance-core/tests/frozen_signatures.rs:222 (error[E0716])` ·
+`crates/happenstance-core/src/memory.rs:686 (Inlining is E0716)` ·
 [SPECIFICATION ES-13](../../spec/SPECIFICATION.md) *(`[FROZEN]`: `read`
 takes `&Query`, and what by-value costs)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
@@ -204,7 +204,7 @@ decorative shape RS-01-1 exists to forbid, and its `Do` example — binding
 compiles. The id is spent and is never reused.
 
 The transcript is kept where it happened rather than restated here:
-`crates/happenstance-sqlite/src/projection_store.rs:534 (transcript this line used to carry)`
+`crates/happenstance-sqlite/src/projection_store.rs:628 (transcript this line used to carry)`
 holds the error verbatim beside the impl that paid it, and
 `experiments/live-handle-projection-batch/live_handle.rs:68 (exactly where PS-5 says it is)`
 holds the same finding from the borrowed end.

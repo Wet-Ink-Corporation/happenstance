@@ -1,6 +1,12 @@
 # Changelog
 
-Notable changes to `happenstance`, `happenstance-core` and `happenstance-testkit`.
+Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — every crate this
+workspace currently publishes.
+
+`cargo xtask lints` derives that set from `xtask/src/package.rs`'s
+`PUBLISHABLE` and fails this file if the two disagree, so the scope above
+stays exactly as wide as what actually ships.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
@@ -24,7 +30,265 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] — 2026-09-06
+
+The first stable release, and the first to carry all five crates. What the
+number promises is narrower than the word *stable* usually implies, and the
+two halves are worth separating: the `EventStore` clauses marked `[FROZEN]`
+in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
+here, and `ProjectionStore` is not — it ships behind an off-by-default
+`unstable-projection` feature with a written semver exemption until two
+adapters at opposite ends of the batch-shape axis have passed its suite.
+
+`happenstance-sqlite` and `happenstance-cloudflare` join the published set.
+Both previously held a `0.0.0` placeholder, which is not a predecessor: there
+is no upgrade path from it because there was never anything under it.
+
+`0.2.0-alpha.1` is yanked, so the resolvable set is one version.
+
 ### Added
+
+- **A conformance rule for the one pair of read options the suite never put on
+  the same read — breaking in practice, so pin `happenstance-testkit` exactly
+  before taking it.** `happenstance-testkit` gains
+  **`read_to_composes_with_limit`**, the ninety-third event-store rule: a closed
+  window and a row budget together, with the **budget the smaller** of the two.
+
+  The defect it detects is a budget that never reaches the windowed statement,
+  because a closed window is a different statement from a page:
+
+  ```text
+  if let Some(to) = options.to {
+      self.read_window(options.from, to)   // <- limit never reaches here
+  } else {
+      self.read_paged(options.from, options.limit)
+  }
+  ```
+
+  The reasoning behind it is an argument rather than a slip: *the caller gave me
+  both ends of the window, so the window is the bound that matters and the row
+  budget is redundant.* It is redundant exactly while the budget is the larger of
+  the two — which is the case an author checks by hand — and it is the whole
+  point when the budget is smaller, which is the case a backfill worker is in on
+  every call but its last. VT-29 already states the converse of the same
+  confusion: `limit` cannot stand in for `to`. Neither stands in for the other.
+
+  `WindowedPagingBudgetStore` is that adapter, and it **passed all ninety-two
+  rules that preceded this one** — measured, by registering it with an empty
+  failure list and letting the meta-test drive every rule at it, not argued. The
+  bound's own three rules issue no budget; the budget's own rules issue no bound;
+  and with the budget smaller than the window even `ToBoundIgnoredStore` and
+  `ToIsExclusiveStore` answer this read correctly, because the budget masks the
+  bound. What a caller loses is the page it sized: it asked for five hundred
+  events of its window and got the window, with `Ok` everywhere.
+
+  **One argument this retires.** `read_from_composes_with_limit` landed with a
+  note saying no such rule was owed, because `to` and `limit` both cut the back
+  of a read and therefore commute. The commutation is real, and it has been
+  measured: the wrong implementation an adversarial review proposed for the pair
+  — the budget applied before the bound — answers every read exactly as the
+  reference implementation does, in both directions, and is deliberately **not**
+  registered. But commuting is a statement about the *order* two options are
+  applied in, and this defect is about *applicability*: it drops one option
+  because the other is present. The note is corrected in place rather than
+  deleted.
+- **A conformance rule that turns a model-only defect into an ordinary one —
+  breaking in practice, so pin `happenstance-testkit` exactly before taking it.**
+  `happenstance-testkit` gains **`read_to_composes_with_multi_item_query`**, the
+  ninety-second event-store rule: `ReadOptions::to` against a **filtering**
+  query.
+
+  The defect it detects is the textbook operator-precedence bug on the upper
+  bound:
+
+  ```text
+  WHERE type = ? OR tag = ? AND position <= ?
+  ```
+
+  `AND` binds tighter than `OR`, so the window's top is conjoined with the last
+  disjunct alone and every event matching an earlier item comes back from above
+  the window. It is what an adapter produces when the `to` clause is appended to
+  a `WHERE` string that already carries a disjunction someone else built — which
+  is how a `WHERE` clause gets built anywhere the driver cannot take a query
+  tree. The caller it breaks is a bounded backfill worker owning `[1, H]` while a
+  tail worker owns everything above it: the backfill reads past its own window
+  and re-delivers events the tail worker has already processed, with `Ok`
+  everywhere and no error to log.
+
+  **What is new here is not the store but where it can be seen.**
+  `UnparenthesisedToPredicateStore` was already in the registry, filed as caught
+  by the *model* family alone — an honest record of a real hole, and a worse one
+  than it looked: that family is behind the optional `proptest` dependency **and**
+  behind `cfg(not(target_arch = "wasm32"))`. The two adapters in this workspace
+  that will build their predicate by concatenation and run on that target,
+  `happenstance-cloudflare` and `happenstance-neon`, ran nothing at all that
+  could see it. All three existing `to` rules issue `Query::all()`, where there
+  is nothing for the `OR` to bind wrongly across, and the lower bound is
+  conjoined correctly, so `read_from_composes_with_multi_item_query` passes it
+  too. It is an ordinary mutant now, failing exactly one rule.
+
+  CF-12 closed this gap for `from` at phase 3; ES-16 is the clause that closes it
+  for `to`, and its rule list names the new rule.
+- **`happenstance-cloudflare` publishes the two query widths it plans against:
+  `CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT` (400),
+  `MAX_QUERY_PARAMETERS_PER_STATEMENT` (30,000) and
+  `planned_statement_count`.** They are the sibling's numbers, and deliberately
+  so: both are properties of the SQLite underneath a Durable Object's storage
+  rather than of either adapter, so two adapters over one engine disagreeing
+  about them would be two guesses rather than one measurement.
+
+  They are **not** a fourth row of the crate's *capacity limits* table and must
+  not be read as one. Every row there is a value the store **refuses**, naming
+  the `StoreLimit` it refuses with; a query wider than either of these is
+  chunked and merged, never refused. The front page carries them under *The
+  query widths this store does not refuse*, with
+  `planned_statement_count` as the way to ask the question directly.
+
+  Published because VT-23 does *not* ask for them. Unlike VT-21, VT-22 and
+  VT-24 it imposes no documentation obligation, and that silence is how two
+  adapters shipped under one contract at one version came to have materially
+  different query capability with nothing on either page to compare. Additive,
+  and free only until `0.2.0`.
+- **`happenstance-sqlite` publishes its second query ceiling:
+  `SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`.** SQLite pushes back in
+  two units and the crate declared one of them. `MAX_QUERY_ARMS_PER_STATEMENT`
+  bounds the arms of a `UNION` against `SQLITE_MAX_COMPOUND_SELECT`; this bounds
+  the bound parameters of one statement against `SQLITE_MAX_VARIABLE_NUMBER`,
+  which the translation spends one per tag and one per type of every item in a
+  chunk. The two axes move independently: 400 items of a single tag each is 400
+  arms and 400 parameters, and the same 400 items at `MAX_TAGS_PER_EVENT` tags
+  apiece is still 400 arms and **51,200** parameters against a limit of 32,766.
+
+  It is public for the reason the arm width is public — a test that has to guess
+  the boundary is a test that stops crossing it — and its value is `30_000`, the
+  same `PARAMETER_BUDGET` the multi-row tag insert has chunked to since the write
+  path was written. Additive, and free only until `0.2.0` turns it into a
+  promise.
+- **`happenstance` no longer glob re-exports `happenstance-core`, and the
+  contract's projection surface no longer arrives without the feature that
+  gates it.** The crate root's `pub use happenstance_core::*;` became an
+  explicit, `#[cfg]`-carrying list of every contract item, name by name.
+
+  The glob re-exported whatever the **compiled** contract crate exposed, and the
+  contract gates its projection items on **its own** `unstable-projection`, not
+  on this crate's. `happenstance-testkit` is this crate's dev-dependency and
+  enables that feature unconditionally, so under `cargo test` —
+  and in any consumer graph where a second crate asks for it —
+  `happenstance::Checkpoint`, `::ProjectionId`, `::ProjectionStore`,
+  `::SendProjectionStore`, `::Authority`, `::CommitError`, `::ResetError`,
+  `::ProjectionProbe`, `::projection` and `::MemoryProjectionStore` all resolved
+  with `unstable-projection` **off**. The manifest promises the opposite: *"A
+  reader has to type the word `unstable` before any of them is in their build."*
+  The user-visible shape is an auto-import — `happenstance::Checkpoint` offered
+  by an editor, accepted into library code, compiling under `cargo test` and
+  failing under `cargo build`.
+
+  **Breaking, narrowly**, and free only at `0.2.0-alpha.1`: anyone who reached a
+  leaked path loses it and gains the feature flag that was always meant to be
+  the door. `ProjectionProbe` is gone from this crate outright — the contract
+  gates it on `conformance`, a feature `happenstance` does not forward, so no
+  consumer of this crate could turn it on *or* off. It is a test double and it
+  lives in `happenstance-testkit`.
+
+  The glob's second cost was quieter and is closed by the same change: every
+  future addition to `happenstance-core` was an addition to `happenstance`'s
+  public surface with nobody reviewing it, and a name added to both crates was a
+  hard break in a crate that had not changed. An explicit list makes that
+  collision `error[E0255]` in the commit that causes it.
+
+  `crates/happenstance/tests/contract_surface.rs` is what holds it: it derives
+  each item's gate from `happenstance-core`'s own crate root and compares it
+  against the hand-written list here, so a contract item added behind a feature
+  and mirrored here without one fails at home rather than on docs.rs.
+
+- **A second conformance rule, breaking in practice for the same reason: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`arming_a_read_fault_makes_the_stream_yield_an_error`**, and with it
+  `Fixture::READ_FAULT` and `Fixture::arm_read_fault` — both **defaulted**, so no
+  existing fixture has to change and a fixture that says nothing declines and
+  reports a skip.
+
+  It closes a hole with a shape worth stating: `EventStore::read` yields
+  `Result<SequencedEvent, Self::Error>` **per item**, and until now nothing in
+  the suite ever reached that `Err` arm. `Fixture` carried `MID_BATCH_FAULT` for
+  the write path and no read-path analogue, so no rule could induce a read
+  fault, no mutant modelled one, and the wrong implementation is one line:
+
+  ```text
+  let Ok(page) = fetch().await else { return Poll::Ready(None) };
+  ```
+
+  A failed fetch reported as the end of the log. Every consumer downstream reads
+  `Ok`: a projection runner replays a short prefix, checkpoints at the truncation
+  point, and never applies the rest — with no error anywhere to log. The store
+  measured **0 of 89** rules failed with no way to arm it, and **22** with the
+  fault armed by hand; the suite was not blind to the consequence, it had no way
+  to produce one. It is now `SwallowedReadFaultStore` in the testkit's own
+  mutation registry, and `PagedStreamStore` beside it is the same paging store
+  meeting the same fault and yielding the `Err` the port provides for.
+
+  A fixture whose store can absorb every read fault it is able to arm MUST
+  decline the capability with that as its stated reason, which is CF-39's shape
+  one path over.
+- **One conformance rule, and it is breaking in practice: pin
+  `happenstance-testkit` exactly before taking this.** `happenstance-testkit`
+  gains **`read_from_composes_with_limit`**, the ninetieth event-store rule. An
+  adapter that passes today can go red on it, which is what the note at the top
+  of this file means when it says to treat a minor bump of this crate as a break;
+  CF-29 makes that policy rather than advice. `0.2.0` is the cheap moment to take
+  it, because it is the release that creates the adapter population — the same
+  rule landing at `0.2.1` costs every adapter a red build.
+
+  The defect it detects is a forward read that branches on the presence of a
+  cursor and never threads the caller's budget into that branch:
+
+  ```text
+  if let Some(from) = options.from {
+      self.read_resume(from)          // <- limit never reaches here
+  } else {
+      self.read_paged(options.limit)
+  }
+  ```
+
+  That is the order a SQL adapter is written in — the paging query first, the
+  resume cursor threaded through it afterwards — and it survived every rule the
+  suite had. Three `[FROZEN]` clauses name forwards `from` composed with `limit`
+  as the consumer that motivates them: ES-14's budget over the whole ordered
+  result, VT-28's paging loop writing `.limit(budget - fetched)`, and CF-12's
+  cursor over a multi-item query. The suite composed `from` with `to`, with
+  `backwards`, and with `backwards` **and** `limit` — and issued forwards `from`
+  with `limit` at no call site at all. A store with exactly that defect and its
+  backwards branch left correct passed all eighty-nine rules and was
+  indistinguishable from a conformant one.
+
+  What a caller loses without the rule is a page it sized. A projection runner
+  that asks for five hundred events from its checkpoint is handed the whole
+  stream instead, the read model behind it buffers a batch nobody budgeted for,
+  and the loop's own arithmetic is arithmetic about a number the store ignored.
+  Nothing errors, so nothing retries, and the ceiling that the budget existed to
+  hold stops holding. The rule reads through a **two-item** query at a window
+  that straddles both items' matches, so it also rejects the two adapter shapes
+  that get the merged result wrong under a budget — the unparenthesised
+  `WHERE a OR b AND position >= ?`, whose cursor binds to the last item alone,
+  and the store that emits one statement per query item and writes `LIMIT n` onto
+  each of them.
+- **Every published crate now re-exports the crates its own public signatures
+  name.** `happenstance-core` re-exports `futures_core` (it already re-exported
+  `bytes`); `happenstance-sqlite` re-exports `rusqlite` and `happenstance_core`;
+  `happenstance-cloudflare` re-exports `worker` and `happenstance_core`; and
+  `happenstance` re-exports `happenstance_core`. Before this, `pub use
+  happenstance_core;` appeared in **no** crate, so a consumer implementing
+  against `SqliteEventStore` had no way to name `Query` or `AppendCondition`
+  except by adding a `happenstance-core` line the resolver was free to fork on.
+
+  What a re-export buys is *type identity and discoverability* — the
+  `rusqlite::Error` you match on is the one the adapter's error enum actually
+  carries, rather than a second copy that prints the same and meets you as
+  `error[E0308]` on the error path. It is not a substitute for your own
+  dependency line and it forwards no features you did not enable. Each path is
+  proved to resolve from outside its crate by a doctest.
 
 - **Four demonstration applications, each on a real SQLite file.** Between them
   the existing three examples left the library's most compelling behaviour
@@ -322,6 +586,860 @@ not the same as what a user needed to be told.
   unnoticed — the miss the previous milestone's harness scan could not see,
   because it read one directory. `cargo xtask ci` now runs the adapter's
   eighty-one cases on `wasm32-unknown-unknown` wherever the runner resolves.
+- **CF-17 says what declaring `REOPEN` commits a fixture to, and the registry
+  carries the fixture that lies about it.** A fixture declaring
+  `Fixture::REOPEN` supported MUST make `reopen` discard process state over a
+  medium that outlives the process's hold on it, MUST state the mechanism, and —
+  where its store has no such medium — MUST decline the capability with that as
+  its stated reason. **No rule enforces it, and that is the finding rather than
+  an omission.** `MID_BATCH_FAULT` is closable because arming it forces the
+  append to answer `Err`, which is what CF-39 is written on; reopening has no
+  port-observable consequence at all, so a rule rejecting an empty `reopen` over
+  a `Vec` would reject an honest one over a real file with it.
+
+  The claim is stronger than "no rule happens to catch it", and the testkit now
+  carries the evidence rather than the argument: `LiveHandleReopenFixture` is
+  `happenstance-sqlite`'s fixture in miniature — an honest reopen that closes the
+  connections the *fixture* holds and leaves the medium alone, because reopening
+  a file does not replace it — and it is indistinguishable from an empty `reopen`
+  on every observation anyone has proposed. An honest reopen that *replaces* the
+  live log is distinguishable, so two honest fixtures sit on opposite sides of
+  that partition with the liar on one of them.
+
+  What is new is that the hazard is *stated* and its wrong implementation is
+  driven. `NoopReopenFixture` — `REOPEN: SUPPORTED`, `async fn reopen(&self) {}`,
+  over a completely correct volatile store — is pinned by
+  `reopen_over_claiming_is_undetectable_and_this_is_the_record`, which drives it
+  through every rule and asserts the two things that are measurable: it fails
+  none of them, and it converts `acknowledged_writes_survive_a_reopen`,
+  `reopened_store_does_not_reissue_an_event_id` and
+  `recorded_time_survives_a_reopen` — this suite's whole durability certification
+  — from reported skips into passes, while an honest twin one line apart reports
+  them as skips. The incentive inversion is now measured in-tree and goes red if
+  it ever stops being true. No conformance rule was added, so no adapter's build
+  changes.
+- **`happenstance_testkit::bench::BenchmarkRecord::is_complete`, and the
+  completion half of `report` that was documented and never performed.**
+  `report`'s own line says it *"asserts that the scenario completed and that the
+  record is well-formed"*; only the second half existed, and neither conjunct of
+  `is_well_formed` could be false. `BenchmarkPass::is_well_formed` is an
+  invariant of the private `count`, which increments `attempts` and exactly one
+  of the four outcome counters on every call, and `!passes.is_empty()` held
+  because all three scenarios push a pass unconditionally before any early
+  return.
+
+  What that hid is one early return, two lines below its own pass:
+  `conditional_append_under_contention` returns as soon as the boundary seed
+  fails to land, so the **contended pass — the entire measurement — is absent
+  rather than zero**, and the run reports as fine. An adapter author tracking
+  `BENCH` lines across releases sees the number vanish, not a failure, and the
+  difference between *contention produced no rejections* and *contention never
+  happened* is exactly what the record was built to preserve.
+
+  A record now carries the passes its scenario owes, and the declaration is
+  pinned from both sides so that it cannot be filled in by something with
+  nothing to do with the run: `push` aborts on a label the scenario did not
+  declare, so a scenario cannot narrow the list to what it reaches on its
+  unhappy path, and `report` aborts on an owed label that never arrived, so it
+  cannot pad it either. `tests/memory_benchmarks.rs` drives the early return
+  through a fixture whose first append is armed to violate.
+
+  Additive: `BenchmarkRecord::new` and `push` are private, so no caller could
+  construct a record, and `passes`, `pass`, `scenario`, `summary` and
+  `is_well_formed` all keep their signatures. Still no threshold, at any budget
+  — an incomplete run is not a slow one (CF-34).
+
+### Removed
+
+- **`happenstance-sqlite` no longer re-exports `tokio`.** It did, briefly and
+  unreleased. `tokio::task::JoinError` and `tokio::runtime::TryCurrentError` are
+  variants of this crate's error enums, so `tokio` qualified for the set on the
+  arithmetic above — but this crate takes it at `features = ["rt"]`, so
+  `happenstance_sqlite::tokio` was a **partial** `tokio`, with no `macros`, no
+  `rt-multi-thread` and no `time`. A consumer who reached the type through that
+  path and then wrote `#[tokio::main]` got an `error[E0433]` *further* from its
+  cause than the mismatch the re-export was there to prevent, which makes it a
+  longer route to the type rather than a shorter one.
+
+  **If you match on `JoinError` or `TryCurrentError`, add `tokio = "1"` to your
+  own manifest.** Cargo unifies it with this crate's for any semver-compatible
+  requirement, so type identity survives for every consumer who already had a
+  `tokio` line; a consumer who pins a different *major* gets the
+  two-types-that-print-identically failure, and `cargo tree -d` names it. The
+  omission is fenced by a `compile_fail,E0433` doctest on the old path
+  (`crates/happenstance-sqlite/src/lib.rs:158`), so re-adding the re-export
+  turns a test red rather than passing unnoticed.
+
+### Changed
+
+- **The crate's front page now names every emitter it ships, says they are
+  `#[doc(hidden)]`, and says what that costs.** CF-23 `[FROZEN]` makes the
+  per-test wrapper an adapter-supplied parameter; the `__emit_*` macros are the
+  only concrete instances of that parameter anyone has, and
+  `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is the
+  in-tree proof that the cross-crate reach is load-bearing. The page's table
+  carried three rows — the event-store family's — while twelve emitters existed
+  across four families, and the paragraph above it said *"Three emitters ship"*.
+  An author writing a model, benchmark or concurrency harness on anything but
+  the default runtime had no rendered name to write, and `#[doc(hidden)]` meant
+  searching the API for one returned nothing.
+
+  The table is now the count, in the shape the concurrency module page already
+  uses, and the page discloses the attribute in both directions: these names do
+  not appear on docs.rs, and `#[doc(hidden)]` is the marker `cargo-semver-checks`
+  uses to exclude an item — so the one instrument in this repository that would
+  report a rename of `__emit_wasm` as breaking is the instrument the attribute
+  switches off. Whether the names are a *promise* is stated as open rather than
+  answered: §6.6 governs rule addition, rule meaning-change and the version key
+  and says nothing about the emitters. The argument for both arms is in
+  `.kb/_intake/remediation-2026-09-04-briefs/emitter-surface-stability.md`.
+
+  `crates/happenstance-testkit/tests/emitter_surface.rs` is the instrument, and
+  it is a generalisation rather than an invention: the same bijection existed for
+  one family's module page in `tests/memory_concurrency_conformance.rs`, written
+  after that page said *"one"* while two shipped, and it read
+  `src/concurrency.rs` and nothing else.
+
+- **Every item path an exported `happenstance-testkit` macro expands to now goes
+  through `__private`, and a check keeps it that way.** The onboarding page
+  states the discipline as an absolute — the expansion *"never assumes what you
+  have in scope"* — and the entry two releases below cites that sentence to
+  classify a documentation change as not a MINOR event. It was two-thirds true.
+  Twenty-two paths in four of the five suite macros reached past the module:
+  `$crate::concurrency::ConcurrentFixture`, `$crate::bench::BenchmarkParams`,
+  `$crate::block_on`, and each family's `rules` module.
+
+  What that cost was not a caller writing a wrong path but a caller writing
+  **none**. `happenstance_testkit::event_store_concurrency_conformance!(F::new());`
+  is one line, and it compiled only while `$crate::concurrency::ConcurrentFixture`
+  resolved — so moving `ConcurrentFixture` to the crate root, demoting
+  `pub mod concurrency` to private with selective re-exports, or relocating
+  `BenchmarkParams` was a **major** break of this crate that broke one-line
+  callers, and `cargo-semver-checks` could not see it: it reads item paths, not
+  macro bodies. Widening `__private` is additive and is what makes those
+  relocations cheap again.
+
+  The same rule was broken in the other direction one file over, and is fixed
+  with it: `require_read_through!` named `ProjectionProbe` bare, so it resolved
+  against `projection.rs`'s own imports rather than against the expansion site.
+  It is not exported, so it was latent — but that module's own header argues
+  these three helper macros get copied per family, and the copy is where a bare
+  path becomes an `error[E0405]` inside a macro the author did not write.
+
+  `crates/happenstance-testkit/tests/macro_expansion_paths.rs` is the instrument.
+  Macro names stay exempt and the exemption is mechanical rather than a
+  judgement: `macro_rules!` lives in a flat crate-root textual namespace, so
+  `$crate::__private::__emit_tokio` does not exist and cannot be made to. What
+  those emitter names promise is a separate, open question.
+
+- **`ProjectionProbe::probe_read_through`'s page now records the adapter shape
+  it cannot serve.** Documentation only, on an item behind `conformance`, which
+  makes no semver promise; the signature is untouched and is not this entry's to
+  move.
+
+  The method is synchronous, infallible, and takes `&Self::Batch`. Every store
+  that has ever declared `READS_THROUGH_BATCH = true` in this workspace answers
+  from an in-process map or a buffer; the one adapter that has run the projection
+  suite declares `false`. That looked like scarcity. It is structural: a batch
+  that *is* an open transaction needs `&mut` to issue a statement — `sqlx`'s
+  `Executor for &mut Transaction` — and `.await` because the statement is I/O,
+  and the declaration supplies neither. Two `compile_fail` doctests pin the
+  halves separately, at `E0596` and `E0728`.
+
+  `crates/happenstance-core/tests/probe_live_transaction_shape.rs` runs the three
+  bodies that remain against a store whose batch is a transaction: declining the
+  capability states something false about the store and takes the read-through
+  rule as a reported skip; answering from committed state returns `None` for a
+  row the transaction can see; blocking on the future panics with *"Cannot start
+  a runtime from within a runtime"*, because the suite always calls the probe
+  from inside one.
+
+  This matters to `spec/SPECIFICATION.md` §4's PS-2, which is `[FROZEN]` and
+  names a live-transaction adapter as the unbuilt end of the batch-shape axis,
+  and to ADR-0036, which reads that end's absence as nobody having got to it.
+  Both stand; what is added is a cause. The section and the declaration are
+  pinned to each other by a test, so a signature that moves takes the page with
+  it.
+
+- **`DomainEvent::tags` now says what its totality costs, and carries the
+  example that pays it.** Documentation only; the signature is untouched.
+
+  The method returns `Tags` and cannot fail, and `Tags` has no infallible
+  constructor from strings — `Tag::key_value` refuses an empty value, a value
+  past the length ceiling, and a set of control and bidirectional formatting
+  characters. So an identifier that arrived as a `String` cannot become a tag
+  inside `tags`: there is no `Result` for a `?`, and the route left is an
+  `expect` on the write path, inside `commit`, after the decision has been
+  taken. The method carried one line of documentation; its sibling
+  `DecisionModel::scope` carried four for the opposite choice, and every one of
+  the eight rendered examples of `tags` was `Tags::empty()` — the one case where
+  the totality is free.
+
+  The page now names the cost and the resolution — hold the validated `Tag` on
+  your identifier type, pay the `?` in that type's constructor, and `.collect()`
+  through the infallible `FromIterator<Tag> for Tags` — and a compiled
+  `# Examples` fence shows it, refusal included.
+
+  **Whether the signature should be fallible is not settled here** and is not
+  this change's to settle: `.kb/open-questions/d-1-the-validated-type-has-no-total-path.md`
+  is accepted and open. What this repairs is the half that needed no decision —
+  the residual was undocumented on the rendered surface.
+
+- **`run_projection`'s page now prices its one knob and states what an operator
+  can see while it runs.** Documentation only, on items behind
+  `unstable-projection` that make no semver promise.
+
+  `chunk: NonZeroUsize` had no specification beyond its declaration: the page
+  named it once, as the unit of the buffer, and the doctest supplied `64` with
+  no reason. The new *Choosing `chunk`* section now says what moves in each direction — one
+  transaction per event at the small end; at the large end a write set holding
+  every application since the last commit, which for `SqliteProjectionStore` is
+  an owned statement list, plus more work re-read on a restart because a failed
+  chunk is discarded whole. It also says the number has no default and no named
+  type where its sibling `Retry` has both, that this is a gap rather than a
+  position, and that what settles it is a measurement in `experiments/` that
+  nobody has run.
+
+  *What can be seen while it runs* says the thing the page never did: there is
+  no callback, no channel and no `tracing`, `Progressed` is returned once at the
+  end, and a rebuild over a large log is indistinguishable from a hang unless a
+  second handle polls `ProjectionStore::checkpoint`. That is the page's own
+  recommended rebuild workflow, and it was silent about being silent.
+
+  Neither gap is repaired in code, and both repairs stay free: ADR-0036 records
+  the semver exemption these items carry, so a named type for `chunk` and an
+  observed entry point cost the same after `0.2.0` as before it. Both belong to
+  the projection-store freeze. What the exemption does not buy is silence on the
+  page, which is read today.
+
+- **`Codec`'s page now states what the trait's unsealed-ness does not buy, and
+  `CodecError::UnknownTag`'s says which of its two meanings a reader has.** No
+  behaviour changed; what changed is that a documented promise stopped being
+  half-stated.
+
+  `Codec` is not sealed, and its page invites a codec of your own in as many
+  words. Writing one works. *Reading* one back does not, past the moment a
+  second codec is in play: an event is framed with the tag of the codec that
+  wrote it, and a foreign tag is resolved against a fixed chain of `Json`,
+  `Postcard` and `Cbor`. A tag answering to none of them is `UnknownTag`, and
+  for a codec outside this crate there is no registration seam, so no build can
+  ever resolve it except one already reading with that codec. An application on
+  its own codec that later adopts `Json` reads every historical event as
+  `UnknownTag` — an empty fold, and an append condition matching nothing.
+
+  `UnknownTag`'s page previously said the refusal *"means exactly one thing: a
+  tag was written and this build cannot honour it"*, which is true of the three
+  built-ins — where the repair is one feature flag — and permanently untrue of
+  a third-party tag. Both pages now separate the two, and `commit_with`, whose
+  title offers a codec of your own, points at the section.
+
+  **Whether the limit is repaired is not settled here.** A defaulted resolution
+  method on `Codec`, a registry, or sealing the trait and withdrawing the
+  invitation each cost a caller something different; the first two are additive
+  on a published trait and the third is breaking, which is why the choice
+  belongs before `0.2.0` and to an ADR rather than to this change.
+  `crates/happenstance/tests/codec_extension_point.rs` pins today's behaviour so
+  whichever option lands has one place that has to move.
+
+- **BREAKING (`happenstance-cloudflare`): `StringifiedThrow::message` is no
+  longer a public field. It is read through `StringifiedThrow::message()`, and
+  the type can no longer be built by a caller at all.** Free today and only
+  today: the crate holds a `0.0.0` placeholder on the registry, so no released
+  version carries either shape, and the `0.2.0` release it is deferred past is
+  where both become permanent.
+
+  It was the one error type in the five publishable crates a caller could mint
+  *and* mutate, and it carries the classifier `is_constraint_violation()`, which
+  is a substring test over that same field. So the classification was a function
+  of caller-controlled state, and one value could give three answers with no
+  boundary crossed:
+
+  ```text
+  let mut throw = StringifiedThrow { message: "connection reset by peer".into() };
+  throw.is_constraint_violation();   // false
+  throw.message = "UNIQUE constraint failed: event.position".into();
+  throw.is_constraint_violation();   // true
+  ```
+
+  What that costs is not the classifier: it is a DCB command loop reading a
+  transport fault as a lost append condition, retrying a decision the store
+  never refused, and succeeding — a successful conditional write that nothing
+  ever justified, which is the failure mode DCB exists to make impossible.
+  `JsThrow` beside it has had a private field since it was written; this is the
+  same decision at the same boundary.
+
+  `#[non_exhaustive]` was considered and is deliberately **not** what landed. It
+  blocks the struct literal and forces `..` in a pattern, and does nothing to an
+  assignment on a value a caller already holds — so it would have closed the
+  semver half and left the classifier hazard exactly where it was. Two
+  `compile_fail` doctests, each with a compiling twin that differs by one
+  expression, now hold both halves.
+
+  What is **not** settled here, and is staged as a brief in `.kb/_intake/`:
+  whether this type should be public at all. Its two in-crate roles are the
+  recorded ES-6 alternative and the positive control the `!Send` probes need,
+  and neither needs a consumer.
+- **An append through a `happenstance-sqlite` handle the file has outgrown is
+  refused, and there is a new error variant to say so:
+  `SqliteEventStoreError::IdentityMoved`.** `remint_identity`'s documented
+  procedure says to run it *"with nothing else holding the database open"*, and
+  nothing enforced it. A handle reads the database's incarnation once, at
+  construction, so a handle that outlives a re-mint — a surviving handle from
+  before an in-place restore, or a health check that reopened the store early —
+  went on minting `EventId`s under the incarnation that was retired. Nothing
+  errored locally; the collision surfaced only when a replication peer saw the
+  same `(StoreId, SequencePosition)` twice, and by then its dedup had dropped
+  real facts.
+
+  VT-6 permits mint-once *only if* an adapter can detect that its state was
+  restored or cloned, **or** the deployment is documented to invoke the
+  re-mint — and this adapter takes the second branch, so the procedure is the
+  half of the permission it rests on. The check reads the file's own incarnation
+  inside the append transaction, under the lock the writer already holds, and
+  compares it with the handle's. It is one indexed lookup on a four-row
+  `WITHOUT ROWID` table.
+
+  A second stale-handle bug goes with it, one field over: an append now also
+  refuses with `UnsupportedSchemaVersion` if a newer build migrated the file
+  while this handle was open.
+
+  Guarding inside `remint_identity` was rejected rather than skipped: a
+  process-wide open-path registry needs a canonical path key that symlinks,
+  hardlinks, `file:` URIs, UNC paths and two paths to one inode all defeat, and
+  it would see nothing at all when the re-mint is another process. The check
+  where the write is covers both.
+- **A `happenstance-sqlite` read page is bounded in bytes as well as in rows,
+  and it stops holding the connection across the whole page.** `PAGE_SIZE = 512`
+  was the only knob over both, and it is a **row count**, which bounds neither.
+
+  **Residency.** A row is not a bounded quantity: each one owns its `data`, up
+  to `MAX_EVENT_DATA_LEN`, and its `metadata`, which this store does not bound
+  at all. So a page bounded only in rows was bounded, in bytes, by SQLite's
+  near-gigabyte blob limit rather than by anything this crate stated. One page
+  of 512 events at the data ceiling peaked at **537,036,800 live bytes — 512.2
+  MiB** — in one buffer before a single row reached the caller. An operator
+  rebuilding a projection over large events, on a container capped below that,
+  had the process killed with no diagnostic pointing at a read.
+
+  `SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT` is the new budget: **8 MiB**,
+  eight maximal payloads, public so a caller can compute the bound and a test
+  can compute the boundary. It is checked *after* each row is taken, so a page
+  always makes progress — `metadata` is unbounded, so one row can exceed the
+  whole budget by itself. A wide query is several statements merged, so the
+  stated ceiling on one page is this number times `planned_statement_count`.
+
+  **Lock hold.** `PAGE_SIZE`'s own doc said *"one `spawn_blocking` hop"* and the
+  code took the connection mutex once and held it across the selectivity lookup,
+  every statement of the plan, and the merge. Every `append` sharing the handle
+  waited behind all of it: 640.7 ms held against 1.7 ms waited, a **371x**
+  asymmetry, with the sharing appender's p50 untouched at 0.148 ms and its p99
+  at 799.041 ms. Nothing in the median warned anyone. The connection is now
+  taken once per statement, which is sound *because of* ADR-0011's ceiling and
+  not in spite of it: every statement carries `position <= H`, so what commits
+  between two of them is invisible to all of them.
+
+  **What this does not do is pick a different number.** `PAGE_SIZE` is
+  unchanged, and its doc no longer says *"a placeholder until it is measured"* —
+  it has been measured, and the measurement refused to settle it: the aggregate
+  lock hold over a replay scales as `1/PAGE` (2,929.2 s at 64 against 99.1 s at
+  2,048) while residency scales linearly with it, so the two consequences are
+  not co-optimisable by any value of one row count. Whether a read page should
+  be budgeted in rows, in bytes, or by the caller is a decision that adds public
+  surface, and a brief is staged in `.kb/_intake/`.
+- **`happenstance-sqlite` plans a wide query about 33x faster, and the saving is
+  taken with the write lock held.** Translating a query into SQL accumulated the
+  query's distinct tags into a `Vec<String>` guarded by
+  `if !wanted.contains(&tag)`, which is quadratic in that count — and the shape
+  that reaches the quadratic is not a corner but **VT-23's own floor**: every
+  store must evaluate at least 128 query items, and nothing bounds tags per
+  item. At 128 items carrying this adapter's 128 tags apiece that is about 134
+  million string comparisons before a single statement is prepared.
+
+  It ran twice per operation: once per 512-row read page, so it multiplied by
+  the page count of a replay; and once per append guard **inside `BEGIN
+  IMMEDIATE`**, where a quarter-second of pure-Rust planning is a quarter-second
+  every other writer waits. The accumulator is a `BTreeSet<&str>` now — sorted
+  rather than hashed so the plan stays reproducible run to run, and borrowed
+  rather than owned so the per-tag `String` goes too. Measured at 1.68 s against
+  50 ms in a debug build; `experiments/shipped-append-condition-sql` measured
+  40.1x in release, with the outputs asserted byte-identical before either was
+  timed.
+
+  A second, smaller dedup went with it: the per-item one was **dead work**, not
+  merely quadratic. VT-16 `[FROZEN]` makes `Tags` canonical — sorted and
+  deduplicated at construction — so the guard could never remove anything. Both
+  callers of it are `O(1)` now, and a test holds the premise, because it is a
+  premise about a type in another crate.
+
+  No public surface moves: both functions are crate-private, and the outputs are
+  identical by assertion rather than by argument.
+- **`happenstance-sqlite` no longer has to wait for `happenstance-testkit` to
+  publish first.** Its dev-dependency on the testkit inherited
+  `[workspace.dependencies]`' `version = "0.2.0-alpha.1"`, and a dev-dependency
+  carrying a version has to resolve from the registry at publish time. The
+  testkit versions independently by design — that is CF-32 `[FROZEN]`, and this
+  file's own header says to treat a minor bump there as breaking — so the next
+  testkit-only bump would have blocked the next `happenstance-sqlite` release
+  for a dependency no consumer of it ever sees.
+
+  It now uses the path-only spelling `crates/happenstance/Cargo.toml` has used,
+  with an eleven-line explanation, since NF-006. The published manifest carries
+  no `happenstance-testkit` dev-dependency at all, which is what cargo does with
+  a versionless one. Nothing changes for a consumer.
+
+  The root `[workspace.dependencies]` line still carries the version, and it is
+  load-bearing for nothing — every reference to the testkit in this workspace is
+  a dev-dependency. Moving it instead would fix this once for every future
+  adapter; `happenstance-cloudflare` carries the same spelling today. That
+  choice is briefed, not taken.
+- **BREAKING (`happenstance-sqlite`, `projection-store` feature):
+  `SqliteBatch::push` takes `&'static str`, and the free-form spelling moved to
+  `SqliteBatch::push_raw_sql`.** The batch is the only place in the workspace a
+  consumer is handed a SQL-text seam, and the values flowing through it are
+  exactly the bytes this library guarantees it does not inspect — ADR-0003 makes
+  payloads opaque `Bytes`. So a statement `format!`-ed around an account name
+  decoded out of an event payload compiled, read like the type-level doc
+  invited, and was a SQL injection whose source was the event log. It commits
+  inside the same `BEGIN IMMEDIATE` that advances the checkpoint, so a
+  successful one is recorded as *progress*: nothing replays those events and
+  nothing re-derives the corrupted rows.
+
+  A paragraph would have been a control nothing enforces —
+  `standards/rust/70-rustdoc-obligations.md`, RS-70-5: *"Nothing in the gate
+  reads prose."* `&'static str` is the narrowest type that admits every
+  statement written in source and refuses every statement assembled at run time,
+  and a `compile_fail,E0308` doctest on `push` is what holds it. Every caller in
+  this workspace — the crate's own two probe writers and
+  `examples/transfers-on-sqlite` — already passed a literal and is untouched.
+
+  `push_raw_sql` is the escape hatch, for the one case the narrower type cannot
+  express: a statement whose *shape* is computed, of which an `IN (…)` list
+  sized at run time is the honest example. It is separately named so that
+  reaching for it is a decision.
+
+  What this does **not** settle is the seam's final shape. ADR-0017 answered
+  what the batch owns; whether the parameterised path should be a statement type
+  minted by a macro rather than a bare `&'static str` belongs with whoever
+  freezes `ProjectionStore` under PS-2, because a signature narrowed twice is
+  worse than one narrowed once. A brief is staged in `.kb/_intake/`.
+- **`SqliteEventStore::planned_statement_count` counts the real partition, so
+  the number it returns for a query of wide items has changed.** The signature is
+  untouched and the count is unchanged for every query whose items are narrow —
+  which is every query any test in this workspace had built. For a query of 400
+  items carrying 128 tags each it used to return `1`, and that one statement
+  could not be prepared. It now returns the number of statements that will
+  actually run.
+
+  Anyone who had pinned the old number for a wide-tag query was pinning a plan
+  the driver refuses. Whether this function continues to mean *"arms"* or is
+  understood from here as *"the partition"*, and whether
+  `MAX_QUERY_ARMS_PER_STATEMENT` stays public now that it is no longer the whole
+  partition, are public-surface decisions deliberately not settled here; a brief
+  for both is staged in `.kb/_intake/`.
+- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` gained a
+  `to` field, and the model can now disagree about an upper bound.** The variant
+  was documented as carrying *"every read option in play"* and carried four of
+  five. `to` was the missing one, so the generator emitted no upper bound,
+  `Model::apply` never called `.to(..)`, and the two `to` branches of
+  `Model::select` were dead code — under a comment stating, correctly, that a
+  model which ignores an option *"would agree with every implementation, which
+  is the one thing a reference model must not do"*.
+
+  It had agreed with three. `ToBoundIgnoredStore` (the options struct matched on
+  the fields the adapter recognises), `ToIsExclusiveStore` and
+  `BackwardsToIsAnUpperBoundStore` were all recorded as passing the model, and
+  all three are rejected now without any of them changing. A fourth store was
+  written for this release and exists only because the model can see it:
+  `UnparenthesisedToPredicateStore`, `WHERE a OR b AND position <= ?` — the
+  precedence bug the suite already registers for the *lower* bound, one bound
+  over. Every rule that exercises `to` issues `Query::all()`, so no rule in the
+  ninety can see it; the wrong outcome is a bounded backfill worker reading past
+  its own window and re-delivering events the tail worker has already processed.
+
+  What breaks: `Op` is reachable as `happenstance_testkit::model::Op` whenever
+  the `proptest` feature is on, and adding a field to a struct-form variant of a
+  `pub enum` with no `#[non_exhaustive]` breaks any downstream `match` written
+  with a struct pattern, and any construction. `Op::Read { query, from,
+  backwards, limit }` becomes `Op::Read { query, from, to, backwards, limit }`,
+  with `to: Anchor::Unset` reproducing the old behaviour. Whether the variant
+  should also carry `#[non_exhaustive]` — so that the *next* field is not a
+  second break — is deliberately not settled here; it belongs with the crate's
+  public surface at first publish, and a brief for it is staged in
+  `.kb/_intake/`.
+
+  The `to` bound is generated weighted towards absent, four reads in five, and
+  that weighting is measured rather than tidy: sampling it the way the other
+  four options are sampled dilutes every combination of them, and the first
+  version of the change lost `LimitPerItemStore` — a defect the model had
+  rejected for three phases. `MODEL_COVERAGE` is what noticed.
+
+### Fixed
+
+- **The onboarding page's account of an adapter's feature graph was wrong
+  outward and silent inward.** Outward, step 1 of *Writing a projection adapter
+  from outside this workspace* told the reader that `conformance` *"implies no
+  other feature — not `std`, not `memory`"*, while
+  `crates/happenstance-core/Cargo.toml` says `conformance =
+  ["unstable-projection"]` — and told them to write it inside `[dependencies]`,
+  where `happenstance_core::ProjectionProbe`'s own recipe forwards it from a
+  feature of the adapter's own crate. That is not a nicety: `unstable-projection`
+  is the surface PS-3 holds exempt from semver, and Cargo's feature unification
+  is global and additive, so the manifest the page prescribed handed it to every
+  application downstream of that adapter. It was also the exact manifest
+  `examples/outside-projection-adapter`'s own `tests/` was written to reject —
+  *"the wrong implementation this rejects is the one that shipped"* — printed
+  from the crate a stranger reads first.
+
+  Inward, the page said nothing about the features its own dev-dependency turns
+  on. Cargo does not unify a dev-dependency's features into `cargo build` and
+  does unify them into `cargo test`, so an adapter's `src/` compiles against a
+  larger `happenstance-core` whenever the suite is in the graph. The page now
+  says so, says which command to run instead, and says who it bites: only an
+  author who wrote `default-features = false` — the `no_std` or `wasm32`
+  population CF-20 exists for — because otherwise `std` and `memory` are already
+  theirs. That qualification is measured rather than reasoned. Adding a
+  `MemoryEventStore` import to `examples/outside-projection-adapter`'s `src/`
+  with `default-features = false` on its dependency gives
+  `error[E0432]: unresolved import happenstance_core::MemoryEventStore` under
+  `cargo build -p outside-projection-adapter` and a green
+  `cargo test -p outside-projection-adapter --no-run`; without that flag both are
+  green, and the first draft of this entry did not know it.
+
+  `cargo xtask lint-pages` gains **`feature_cost_is_stated`**, and it derives
+  every requirement rather than restating one. What `conformance` implies is read
+  from the contract crate's manifest; the manifest the testkit's copy must
+  prescribe is read from the port's own fence, the same fence
+  `crates/happenstance-core/tests/projection_recipe.rs` holds to the gates
+  `lib.rs` carries; and the dev-dependency's extra features are a set difference.
+  The instrument for the outward half existed one crate over and had never been
+  pointed at the copy.
+
+- **The only copy-pasteable manifest `happenstance-testkit`'s rendered page
+  publishes could not resolve against the registry.** Step 1 of *Writing a
+  projection adapter from outside this workspace* asked for
+  `happenstance-core = { version = "0.2", … }` and `happenstance-testkit = "0.2"`
+  while `0.2.0-alpha.1` is the only version either crate has on crates.io. A
+  requirement naming no pre-release never matches a pre-release version, so an
+  adapter author who copied the block was told by `cargo` that no candidate
+  matched — on the first screen of the extension surface. Both requirements now
+  name the pre-release, and the page says why, so that the day a stable `0.2.0`
+  ships and a caret becomes idiomatic again the reason is on the record rather
+  than in a commit message.
+
+  The second half is CF-30's, and CF-30 already conceded it: *"The testkit's
+  documentation should say so; nothing checks that it does."* The
+  recommendation to pin the testkit exactly — and the non-obvious reasoning
+  that makes it right here, that Cargo does not resolve a non-root package's
+  dev-dependencies at all, so the pin propagates to nobody — lived only in
+  `crates/happenstance-testkit/README.md`, which `src/lib.rs` includes under
+  `#![cfg_attr(doctest, …)]`. It compiled and reached no reader of docs.rs. It
+  is now on the module page, where the fence it argues about is, and the fence
+  asks for `"=0.2.0-alpha.1"` rather than a caret it disagrees with.
+
+  `cargo xtask lint-pages` gains **`recipe_fence_resolves`**, which is the thing
+  that was missing rather than the prose. It reads the requirement strings out of
+  the page's own `toml` fences and compares them against the versions the
+  manifests that own them declare — the workspace key for `happenstance-core`,
+  the testkit's independent CF-32 key for itself — so the block moves when the
+  version does. It does not call crates.io, for the reason its neighbours give:
+  a gate step that needs the network fails on a train.
+
+- **Every `Serialize` impl in `happenstance-core` deep-cloned the value it was
+  handed; `SequencedEvent` did it twice.** No byte moved and no signature moved —
+  the wire mirrors are private, inside `#[cfg(feature = "serde")] mod
+  serde_impls`, and four golden vectors pin the encodings against the bytes the
+  previous commit produced.
+
+  Measured, on rustc 1.97.1, with the encoder's own allocations cancelled by a
+  byte-identity control: encoding **one** 64-tag `SequencedEvent` to postcard
+  cost **140 heap operations to produce 587 bytes**, of which **130 (93%) were
+  transient clones that produced no output. It now costs 8.** At 128 tags —
+  `SqliteEventStore::MAX_TAGS_PER_EVENT`, the only documented adapter ceiling in
+  the workspace — it was 269 and is now 9. One 64-tag `QueryItem` was 139 and is
+  now 8. The delta between the two tag regimes is **zero at 0, 1, 8, 32, 64 and
+  128 tags in both postcard and serde_json**, where it was `t + 1` for `Event`
+  and `2(t + 1)` for `SequencedEvent`.
+
+  A sync runner encoding one batch at the crate's own floors — VT-24's 128 events
+  by VT-22's 64 tags — did **16,640** transient allocations that produced no
+  bytes. (AE-2 states 16,896, having used the *clone* cost `t + 2` where the
+  measured *encode delta* is `t + 1`; the `Box<[Tag]>` allocation is in both arms
+  and cancels.)
+
+  The fix is serde's own idiom for an asymmetry the crate had not taken:
+  `Deserialize` must produce owned values because it is turning bytes into a
+  value, and `Serialize` must not, because it already has one. Five impls —
+  `Event`, `SequencedEvent`, `QueryItem`, `Query`, `AppendCondition` — now build
+  a borrowing mirror with the same `rename`, the same fields in the same order
+  and the same payload routing.
+
+  The table is `experiments/event-clone-allocations/results/clone-cost.md`, which
+  keeps the before-rows. The regression guard is in the gate and reads the source
+  rather than the behaviour, which is unusual and is the point: the mirrors are
+  private, the bytes are unchanged, and the workspace forbids the `unsafe` a
+  counting allocator needs, so no behavioural test in any format can tell the two
+  shapes apart. Review was the only other instrument and it passed this five
+  times.
+
+- **`happenstance`'s crates.io front page claimed a feature parity three codec
+  keys contradict.** Under `## Guarantees` it read *"Every feature this crate has
+  is forwarded from `happenstance-core`, so the two cannot disagree about what
+  `default-features = false` means"*, and `Cargo.toml` said the same thing a
+  second time. `json`, `postcard` and `cbor` exist only here, each turning on a
+  third-party dependency; `conformance` exists only in the contract crate; and
+  `json` is in these defaults, so `default-features = false` drops a codec and a
+  type here and nothing of the kind there.
+
+  The sentence was false in exactly the way it declared impossible, and it costs
+  the reader it was written for: an integrator auditing a minimal dependency
+  graph, told there is nothing crate-specific to look at, who finds `serde_json`,
+  `postcard` and `ciborium` at `cargo tree -e features`. `ciborium` is the sharp
+  case, because the manifest records that its licence subtree was read against
+  the workspace allowlist and could have refused.
+
+  The divergence is correct and stays — ADR-0006 gave encoding to the typed
+  layer, so the codecs belong here. Both pages now name what is local instead of
+  denying that anything is, and `manifest_contract.rs` derives the set from both
+  manifests, so a fourth codec cannot be added in silence. The impossibility
+  clause is permitted again if the two feature tables are ever made identical.
+
+- **`SendEventStore`'s and `SendProjectionStore`'s docs.rs pages told the reader
+  to implement a different trait.** `trait_variant` rebuilds the derived trait
+  with `..tr.clone()`, so `EventStore`'s and `ProjectionStore`'s trait-level doc
+  blocks are rendered verbatim on the `Send` flavours as well. Three sentences
+  written for the bare flavour therefore appeared, unchanged, on the page for the
+  other one: *"This is the `!Send` flavour"*, *"implement `SendEventStore`
+  instead"* — circular where it landed — and *"Bound on this trait, not
+  `SendEventStore`"*, which is the inverse of ES-1's `[FROZEN]` binding rule on
+  the very page an adapter author is routed to.
+
+  The copying is not the bug and is not suppressed: the derived traits have no
+  doc comment of their own, so `missing_docs` under `-D warnings` is the standing
+  guard that the copying still happens, and hand-writing two blocks would give
+  that up. What changed is the register. Both blocks now name each flavour
+  instead of pointing at one, so a sentence is true on whichever page carries it.
+
+  Two tests per derivation hold it: one rejects deixis — "this trait", "the one
+  to use", "instead" — in any paragraph that draws the flavour distinction, and
+  one requires both flavours to be named in link form, so the fix cannot
+  degenerate into saying nothing.
+
+- **`ProjectionProbe`'s published manifest recipe did not compile when
+  followed.** Its `toml` fence wrote `happenstance-core = "…"` with no
+  features, and every item the recipe sends an adapter author to implement or
+  name — `ProjectionStore` first among them, then `Checkpoint`, `Authority`,
+  `CommitError`, `ResetError` and `ProjectionId` — is behind
+  `unstable-projection`, which is not in the default set. An adapter's port impl
+  is unconditional in its own `src/`, so there was no way to work around it from
+  the adapter side. The line now reads
+  `happenstance-core = { version = "…", features = ["unstable-projection"] }`
+  and says in one comment why the feature cannot be forwarded through the
+  adapter's own `[features]` table the way `conformance` deliberately is.
+
+  A `toml` fence is not a doctest — nothing in the gate compiles it — so
+  `crates/happenstance-core/tests/projection_recipe.rs` now holds it, deriving
+  each requirement from `lib.rs`'s own `#[cfg]` rather than restating it, so a
+  feature renamed everywhere except the fence fails too.
+- **The two non-vacuity reports in `happenstance-testkit`'s mutation-coverage
+  binary each stated a property their table did not have, and both are now
+  counted rather than asserted in prose.** No conformance rule was added and no
+  adapter's build changes; what changes is whether the numbers an evaluator
+  reads mean anything.
+
+  `MODEL_COVERAGE`'s heading said thirty-nine `Agreed` rows and thirty-seven
+  misses while the table held forty and thirty-eight. The same sentence had
+  been stale by nineteen for several phases, was corrected earlier in the same
+  wave, and drifted again by one inside the day when a mutant landed — because
+  the meta-test walks the table row by row and asserts nothing about the
+  sentence over it. `the_model_coverage_heading_counts_the_table` now asserts
+  both numbers, deriving the count of conformant controls it subtracts from
+  `REGISTRY` rather than writing it a second time.
+
+  The caution over `REGISTRY` closed by telling a reviewer that no rule is
+  covered by the shotgun mutant alone — the sentence a reviewer uses to stop
+  checking, and false as written: `untagged_events_match_query_all` appears in
+  exactly one `fails` list in the whole event-store registry, and it is
+  `InnerJoinTagStore`'s. The paragraph now says what holds, and
+  `the_shotgun_mutants_sole_coverage_is_pinned` requires an `expect` pin
+  wherever that mutant is a rule's only evidence, so the day the rule acquires
+  a second assertion the pin fails rather than its only registered evidence
+  quietly becoming an anchor failure. The mutant is derived from the table as
+  the broadest `fails` list and then checked against the store the paragraph
+  names, so the two cannot come to be about different stores.
+- **The concurrency family's conformant control is registered rather than
+  conventional.** CF-5 is `[FROZEN]` and the event-store and projection
+  families each assert that a conformant member is registered; the concurrency
+  family identified its control by an empty `fails` list and a provenance
+  paragraph. Deleting `LockedStore` outright — its row, its `for_each_racer!`
+  entry, and the store and fixture in `racers.rs` — left all fifteen meta-tests
+  green, which is CF-5's vacuity reintroduced in the one family whose rules are
+  macro-emitted and have no `REGISTRY` row to fall back on.
+
+  `Racer` now carries `kind`, `Declared::kind`'s twin, and the meta-test
+  asserts both that a control is registered and that `kind` and an empty
+  `fails` list agree in both directions. The field is deliberately not
+  `fails.is_empty()`: an empty list is also what a disarmed mutant looks like,
+  and this family documents its own rendezvous flakiness at length, so a
+  control derived from emptiness would be manufactured by exactly the edit it
+  exists to catch. Relabelling a real racer as the control is rejected by the
+  run rather than by a cross-check — the store still commits sixty-four
+  contenders where one may.
+- **`happenstance-testkit`'s concurrency page no longer tells a runtime-free
+  adapter it must bring `tokio`.** The module opened with *"One emitter ships
+  rather than three"* while `__emit_concurrency_blocking` shipped 979 lines
+  below it, giving the opposite reason for existing, and while this crate's own
+  `tests/memory_concurrency_conformance.rs` exercised both.
+
+  That paragraph is not a stale comment. It is the cost statement an adapter
+  author reads before deciding whether to invoke the family: told the only
+  wrapper is `#[tokio::test(flavor = "multi_thread")]`, an adapter with no
+  runtime concludes that racing costs it `tokio` with `rt-multi-thread`. It
+  does not — the blocking emitter needs nothing and races exactly as hard,
+  because the parallelism is in `std::thread::scope` rather than in the
+  runtime. The population that paid is the one the two-flavour design exists
+  for, and they would have found out by reading a file they were never expected
+  to open.
+
+  The count is gone as a *claim*: the page carries a two-row table in the crate
+  root's shape, whose rows are the count, and
+  `the_concurrency_page_lists_every_emitter_it_ships` holds those rows to the
+  `macro_rules!` definitions in the same file and refuses a spelled count
+  returning to the page. A third emitter added without a row turns it red,
+  which a written-out number cannot do — a number is falsified by an edit that
+  never touches it, which is exactly how this one came to say "one". The two
+  emitter names are also plain code font now rather than an intra-doc link to a
+  `#[doc(hidden)]` item, matching the crate root's spelling of the same class of
+  name.
+- **Two conformance assertions printed a diagnosis they could not have, naming
+  a `[FROZEN]` clause other than the one their reachable failure evidences.**
+  Message text and one private helper's return type; no public signature moves,
+  no rule is added or removed. One of the two rules is **tightened**, which is
+  breaking in practice for a store that returns nothing from every read — pin
+  `happenstance-testkit` exactly before taking it.
+
+  `query_matching_nothing_yields_empty` printed *"a query with no matches must
+  not error"*, and it could not fire on a store that errored: `read_ok` owns
+  that half one layer down and panics first. The only way to reach it is a
+  store that returned **events** — the widening case, which is exactly what its
+  one registered mutant models. An author who interned event types, had their
+  unknown-type clause dropped rather than refused, and met this rule was sent
+  to check an error path that had never run. The message now names the widening
+  and prints `positions_of(&found)`, and the rule gained the non-vacuity anchor
+  its neighbours carry: a query for the type just appended must select it,
+  because without that a store returning nothing from every read passed. That
+  anchor is what `InnerJoinTagStore` now fails, and its `REGISTRY` row says so.
+
+  `a_concurrent_reader_never_sees_a_partial_batch` folded a failed read into
+  the same list it filled with part-written batch names and reported the whole
+  list under ES-18. An adapter whose read transiently fails under contention —
+  `SQLITE_BUSY` past the handler's ceiling, a pool with no reader slot, a 503
+  from a one-shot HTTP backend — was told by name, with the clause id attached,
+  that its `append` writes rows outside a transaction. `incomplete_batches` now
+  returns a named pair and the rule asserts twice, in the shape
+  `k_disjoint_boundaries_admit_exactly_k_commits` uses 260 lines above and for
+  its stated reason: a single message describing two defects identifies
+  neither. The read-failure assertion comes first, because a run whose reads
+  failed says nothing about atomicity either way, and it reports **distinct**
+  errors — a store that cannot be read at all yielded one line per polling pass
+  and buried the count under nearly three thousand identical copies.
+- **Three reader-facing surfaces promised a skip line that a stranger's default
+  `cargo test` never shows.** `happenstance-testkit`'s crates.io front page, its
+  docs.rs module page and `Capability::declined`'s own rustdoc each said the
+  fixture's stated reason is printed. A skipped rule is a test that **passes**,
+  and libtest discards a passing test's stdout — which `RuleOutcome::report`'s
+  documentation had measured and stated exactly, twenty lines from the
+  mechanism. Three surfaces asserted the opposite of what a fourth measured, and
+  the three that were wrong are the only three a stranger reads.
+
+  Measured against a fixture already in the tree: `cargo test -p
+  happenstance-sqlite --test conformance` prints **zero** `SKIP` lines, and the
+  same command with `-- --show-output` prints **three**. The named victim is not
+  the adapter author — it is the person who chose that adapter on the strength
+  of a README saying it passes the conformance suite, and who finds out when an
+  acknowledged write is not there after a restart.
+
+  All three now name `--show-output` beside the promise, and
+  `a_promised_skip_line_names_the_flag_it_needs` requires the caveat wherever a
+  surface puts printing next to *stated reason*. **This corrects the sentences
+  and settles nothing else.** Whether CF-18's reporting obligation should be
+  discharged by a mechanism a stranger's default run can observe, or whether the
+  clause is narrowed to what libtest permits, is `[FROZEN]` and an ADR's — the
+  argument is staged in `.kb/_intake/remediation-2026-09-04-briefs/`.
+
+- **`happenstance-cloudflare` chunks a wide query instead of planning it as one
+  statement SQLite cannot take.** `positions_matching` was an unbounded
+  `.join(" UNION ")` with no `max_arms`, no chunk and no parameter budget
+  anywhere in the crate: 1,000 query items became 1,000 terms of one compound
+  `SELECT` against `SQLITE_MAX_COMPOUND_SELECT`'s 500, and 400 items carrying
+  this store's own declared `tags_per_event` of 1,024 apiece bound 409,600
+  parameters against `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766. Both walls sit above
+  shapes a conformant caller may build, and on the append path the failure would
+  have arrived inside the turn as `AppendError::Store` carrying a raw driver
+  string, with the caller's decision already taken.
+
+  It is replaced by one entry point, `query_sql::chunks`, partitioning on both
+  limits — and by one entry point only: keeping a second, unchunked spelling
+  beside a chunked one is exactly how the sibling's write path stayed unchunked
+  while its module doc claimed otherwise, and that note is why. Both callers
+  merge: the append-condition guard folds the per-chunk maxima by `max`, which is
+  exact because a guard is an inequality on the highest match; the read path
+  merges pages.
+
+  **The read merge diverges from the sibling deliberately.** It sorts,
+  de-duplicates and truncates after *every* statement rather than after all of
+  them, bounding resident rows at one page plus one chunk instead of
+  `chunks x page`. A Durable Object is a single isolate with a real memory
+  ceiling, and the incremental truncation is exact rather than approximate: a row
+  already beyond the *n*-th position of a prefix of the chunks is beyond it in
+  the full union too.
+
+  One consequence worth stating, because it is observable: a row whose
+  `position` column is not an integer at all now ends the read one step earlier
+  on a multi-statement plan than on a single-statement one, because the merge
+  has to order by it. A one-statement plan — every query any conformance rule
+  builds — takes neither the sort nor that decode, and is byte-identical to the
+  read this replaced.
+
+  It is proven by execution rather than by arithmetic.
+  `tests/wide_query_ceiling.rs` drives a query past each wall — 1,000 compound
+  terms against a limit of 500, and 32,800 bound parameters against 32,766 —
+  through `EventStore::read` and through an append-condition guard, against the
+  real SQLite behind the `DurableObjectState` shape, and its first case is a
+  control that hands this runtime the unpartitioned statement and watches the
+  driver refuse it. Against the previous implementation six of its seven cases
+  fail with SQLite's own *"too many terms in compound SELECT"* and *"too many
+  SQL variables"*; the seventh is the control, which passes either way because
+  it asserts a fact about the engine. The conformance suite cannot reach either
+  wall — its widest query is 128 items at one tag each — so the target is
+  registered in `xtask/src/proof.rs`'s `WASM_UNIT_TARGETS` and runs under
+  `cargo xtask wasm-conformance`, in 0.35 s.
+- **`happenstance-sqlite` no longer fails past `SQLITE_MAX_VARIABLE_NUMBER` on a
+  wide query — on either path, and the append path is the one that held the write
+  lock.** `query_sql::chunks` partitioned on item count alone, so a query of 400
+  items — the crate's own chunk width, exactly — carrying `MAX_TAGS_PER_EVENT`
+  tags apiece was planned as one statement binding 51,200 of SQLite's 32,766
+  parameters. `Selectivity::read_for` was not partitioned at all: it accumulates
+  every distinct tag of every multi-tag item across the *whole* query into one
+  `IN (…)`, so 16,384 ordinary two-tag items reached the same wall with no wide
+  item anywhere, and it reached it *first*, because it runs before the chunking
+  on both callers.
+
+  Both shapes are ones a conformant caller may construct — nothing in
+  `happenstance-core`'s `Query` bounds tags per item, and 128 is this store's own
+  `MAX_TAGS_PER_EVENT` — and both arrived as `AppendError::Store` wrapping
+  SQLite's *"too many SQL variables"*. On the append path that is inside
+  `BEGIN IMMEDIATE`, with the write lock held and the caller's decision already
+  taken, which is the timing VT-24 rejects by name; VT-23's `Rejects:` line names
+  the implementation itself, *"an adapter that generates one SQL parameter per
+  item and silently fails past a driver limit"*.
+
+  Both sites now partition on both of SQLite's pushdown limits, at the one entry
+  point the module already had. Nothing is refused that was served before: a
+  wider query becomes more statements, merged exactly as the arm partition's
+  already are. `crates/happenstance-sqlite/tests/wide_tags.rs` is the standing
+  guard — the conformance suite cannot reach either wall, because its floor is
+  128 items at one tag each — and it asserts the partition one parameter under
+  the budget, exactly at it, and one over.
 
 ## [0.2.0-alpha.1] — 2026-08-16
 
@@ -1936,4 +3054,6 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Wet-Ink-Corporation/happenstance/releases/tag/v0.2.0
 [0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

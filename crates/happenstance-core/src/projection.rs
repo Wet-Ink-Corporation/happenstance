@@ -297,9 +297,13 @@ pub enum ResetError<E> {
 /// shape exists to enforce, for why the batch is owned, and for its provisional
 /// status.
 ///
-/// As with [`EventStore`](crate::EventStore), this is the `!Send` flavour and
-/// the one to use in bounds; adapters that can be `Send` should implement
-/// [`SendProjectionStore`] and get this for free.
+/// Two traits, one set of doc attributes. `trait_variant` derives
+/// [`SendProjectionStore`] from [`ProjectionStore`] and copies this block onto
+/// it, so every sentence here is written to hold on whichever of the two pages
+/// you opened. [`ProjectionStore`] states no `Send` requirement and is what
+/// generic code binds; [`SendProjectionStore`] adds it and hands back
+/// [`ProjectionStore`] free. The same split as
+/// [`EventStore`](crate::EventStore), for the same reason.
 ///
 /// # Implementing it
 ///
@@ -542,7 +546,13 @@ pub trait ProjectionStore {
 ///
 /// ```toml
 /// [dependencies]
-/// happenstance-core = "…"
+/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below
+/// # is unconditional in the adapter's `src/`, and every item it names lives
+/// # behind that feature, which is not in the default set. Forwarding it
+/// # through the adapter's own `[features]` the way `conformance` is forwarded
+/// # would leave the port impl unable to compile without a flag no consumer
+/// # would know to pass.
+/// happenstance-core = { version = "…", features = ["unstable-projection"] }
 ///
 /// [features]
 /// # Forwards to the contract crate. The `impl ProjectionProbe` lives in `src/`
@@ -621,6 +631,72 @@ pub trait ProjectionProbe: ProjectionStore {
     ///
     /// Only called when [`READS_THROUGH_BATCH`](Self::READS_THROUGH_BATCH) is
     /// `true`; may be `unimplemented!()` otherwise.
+    ///
+    /// # This signature cannot be met by a batch that is a live transaction
+    ///
+    /// Stated here because the freeze decision reads this page and would
+    /// otherwise read it as scarcity. Synchronous, infallible and `&Self::Batch`
+    /// is answerable by a store that holds its pending writes in a map or a
+    /// buffer — which is every implementation in this workspace — and is not
+    /// answerable at all by one whose batch *is* an open transaction, because a
+    /// driver borrows the connection mutably to issue a statement and the
+    /// statement is I/O.
+    ///
+    /// Both halves are compiler-checked below rather than asserted. The mutable
+    /// borrow first:
+    ///
+    /// ```compile_fail,E0596
+    /// /// `sqlx`'s `Executor for &mut Transaction`, and `rusqlite`'s `&mut
+    /// /// Transaction`, in the smallest shape that carries the obligation.
+    /// struct Transaction;
+    /// impl Transaction {
+    ///     fn select(&mut self, key: &str) -> Option<u64> {
+    ///         let _ = key;
+    ///         None
+    ///     }
+    /// }
+    ///
+    /// // error[E0596]: cannot borrow `*batch` as mutable, as it is behind a
+    /// // `&` reference — which is the receiver `probe_read_through` supplies.
+    /// fn probe_read_through(batch: &Transaction, key: &str) -> Option<u64> {
+    ///     batch.select(key)
+    /// }
+    /// ```
+    ///
+    /// and then the await, with the borrow already conceded:
+    ///
+    /// ```compile_fail,E0728
+    /// struct Transaction;
+    /// impl Transaction {
+    ///     async fn select(&mut self, key: &str) -> Option<u64> {
+    ///         let _ = key;
+    ///         None
+    ///     }
+    /// }
+    ///
+    /// // error[E0728]: `await` is only allowed inside `async` functions and
+    /// // blocks — and this method is not one.
+    /// fn probe_read_through(batch: &mut Transaction, key: &str) -> Option<u64> {
+    ///     batch.select(key).await
+    /// }
+    /// ```
+    ///
+    /// The three bodies that remain are each wrong in a different way, and
+    /// `tests/probe_live_transaction_shape.rs` runs all three against a store
+    /// whose batch is a transaction: declaring `READS_THROUGH_BATCH = false`
+    /// states something false about the store and takes the read-through rule as
+    /// a reported skip; answering from committed state returns `None` for a row
+    /// the transaction can see, which is what this method's own first sentence
+    /// forbids; and blocking on the future panics with *"Cannot start a runtime
+    /// from within a runtime"*, because the suite always calls the probe from
+    /// inside one.
+    ///
+    /// **Nothing is decided here.** `spec/SPECIFICATION.md` §4's PS-2 is
+    /// `[FROZEN]` and names a live-transaction adapter as the end of the
+    /// batch-shape axis still to be built; whether this signature moves before
+    /// that adapter is written belongs to that clause's owner, not to this
+    /// method's documentation. What is recorded is that that end's absence has
+    /// a cause in this line, and not only in nobody having got to it.
     fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
 }
 
@@ -819,5 +895,116 @@ mod tests {
     fn a_non_send_batch_still_implements_the_bare_flavour() {
         fn accepts_the_bare_flavour<P: ProjectionStore>() {}
         accepts_the_bare_flavour::<Witness>();
+    }
+}
+
+/// The trait-level doc block, read as text because it is published on **two**
+/// pages.
+///
+/// The same mechanism as `store.rs`'s module of this name, and the same defect:
+/// `#[trait_variant::make(SendProjectionStore: Send)]` rebuilds the derived trait
+/// with `..tr.clone()`, so every `///` line above the derivation is rendered
+/// verbatim on `SendProjectionStore`'s page too. `SendProjectionStore` has no doc
+/// comment of its own, so the copying is load-bearing — `missing_docs` is what
+/// would notice it stopping — and the sentences therefore have to be true on
+/// whichever page a reader opened.
+///
+/// The extractor is duplicated from `store.rs` rather than shared: sharing it
+/// would put a test-only module in the crate root, which is the file
+/// `happenstance`'s `contract_surface.rs` derives every gate from.
+#[cfg(test)]
+mod derived_flavour_doc {
+    #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
+
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// This file's own source. The doc block is the deliverable, so it is read
+    /// rather than trusted.
+    const SOURCE: &str = include_str!("projection.rs");
+
+    /// The derivation whose expansion copies the block above it onto a second page.
+    const DERIVATION: &str = "#[trait_variant::make(SendProjectionStore: Send)]";
+
+    /// The two flavours, in the link form a reader can click from either page.
+    const FLAVOURS: [&str; 2] = ["[`ProjectionStore`]", "[`SendProjectionStore`]"];
+
+    /// The `///` lines the derivation copies, marker removed and fences dropped.
+    fn copied_prose() -> Vec<&'static str> {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let make = lines
+            .iter()
+            .position(|line| line.trim_end() == DERIVATION)
+            .expect("the derivation that copies this block onto the second page");
+        let start = lines[..make]
+            .iter()
+            .rposition(|line| {
+                !(line.starts_with("///") || line.starts_with("//") || line.starts_with("#["))
+            })
+            .map_or(0, |index| index + 1);
+        let mut fenced = false;
+        lines[start..make]
+            .iter()
+            .filter_map(|line| {
+                let text = line.strip_prefix("///")?;
+                let text = text.strip_prefix(' ').unwrap_or(text);
+                if text.trim_start().starts_with("```") {
+                    fenced = !fenced;
+                    return None;
+                }
+                if fenced { None } else { Some(text) }
+            })
+            .collect()
+    }
+
+    /// The copied prose in blank-line-separated paragraphs.
+    fn paragraphs() -> Vec<String> {
+        copied_prose()
+            .split(|line| line.is_empty())
+            .filter(|block| !block.is_empty())
+            .map(|block| block.join(" "))
+            .collect()
+    }
+
+    /// A paragraph that distinguishes the flavours names them; it does not point.
+    #[test]
+    fn no_paragraph_tells_the_flavours_apart_by_deixis() {
+        /// Pointers that resolve against the page rather than against a name.
+        const DEIXIS: [&str; 6] = [
+            "this trait",
+            "this is",
+            "this flavour",
+            "this one",
+            "the one to use",
+            "instead",
+        ];
+        for paragraph in paragraphs() {
+            let lower = paragraph.to_lowercase();
+            if !lower.contains("send") {
+                continue;
+            }
+            for pointer in DEIXIS {
+                assert!(
+                    !lower.contains(pointer),
+                    "{DERIVATION} copies this paragraph verbatim onto \
+                     `SendProjectionStore`, where {pointer:?} points at the wrong \
+                     trait. Name the flavour: {paragraph}"
+                );
+            }
+        }
+    }
+
+    /// Both flavours are named, in link form, in the prose a reader lands on.
+    #[test]
+    fn the_block_names_both_flavours_in_link_form() {
+        let prose = copied_prose().join("\n");
+        for flavour in FLAVOURS {
+            assert!(
+                prose.contains(flavour),
+                "the block is rendered on both pages, so it must name {flavour} \
+                 rather than leave a reader to infer which trait they are on. \
+                 Prose as read:\n{prose}"
+            );
+        }
     }
 }

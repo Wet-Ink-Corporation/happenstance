@@ -1,0 +1,90 @@
+name: Bug report
+description: A published crate does something other than what it says it does.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Before filing: if the surprising behaviour is an **append condition
+        admitting a write it should have rejected**, a **read returning events a
+        query did not nominate**, a **projection commit that separated the
+        read-model write from its checkpoint**, or a **conformance rule that a
+        deliberately-unsound store passes**, please report it privately instead —
+        those are in `SECURITY.md`'s scope, because the guarantee is the product.
+
+  - type: input
+    id: crate
+    attributes:
+      label: Crate and version
+      description: >-
+        As it appears in your `Cargo.lock`. If more than one is involved, name
+        them all — feature unification across a workspace is itself a common
+        cause.
+      placeholder: happenstance-sqlite 0.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: features
+    attributes:
+      label: Features enabled
+      description: >-
+        The off-by-default ones matter most. `unstable-projection` is exempt from
+        semver and says so.
+      placeholder: default + projection-store
+    validations:
+      required: true
+
+  - type: input
+    id: toolchain
+    attributes:
+      label: Toolchain and target
+      description: "`rustc -vV` in one line, plus the target if it is not the host."
+      placeholder: rustc 1.97.1 (8bab26f4f 2026-07-14), wasm32-unknown-unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what said so
+      description: >-
+        A specification clause id, a rustdoc sentence or a README line if you
+        have one. "It surprised me" is a legitimate answer and worth filing — a
+        surface that surprises a careful reader is a defect in the surface even
+        when the code is right.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Error text verbatim where there is any, rather than paraphrased.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >-
+        Smallest thing that shows it. A failing test against `MemoryEventStore`
+        is worth far more than a description, and if it reproduces there it is a
+        contract bug rather than an adapter one — which is a different fix in a
+        different crate.
+      render: rust
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before submitting
+      options:
+        - label: >-
+            I checked whether the behaviour is covered by a `[PROVISIONAL]` or
+            `[DEFERRED]` clause in `spec/SPECIFICATION.md`.
+        - label: >-
+            This is not a vulnerability under `SECURITY.md`'s scope (see the note
+            at the top).

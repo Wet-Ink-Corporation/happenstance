@@ -20,6 +20,40 @@
 //! and `impl ProjectionProbe for OutsideProjectionStore` is `error[E0117]`. The
 //! transcript is in the gap record above; the placement here is its disposition.
 //!
+//! # The manifest, which is the third claim and was the unfalsified one
+//!
+//! The paragraph above claims three things behave as they would for a stranger,
+//! and for two of them the compiler is the witness. The third — the feature
+//! flags — had no witness, because **a manifest is not compiled against a
+//! document**. This crate declared no features of its own and turned
+//! `conformance` on inside `[dependencies]`, which is not the shape the port's
+//! own recipe prescribes and is not the shape `happenstance-sqlite` writes; it
+//! stayed that way, green, until the pre-publication review read the two
+//! manifests side by side.
+//!
+//! It now writes what the recipe prescribes. `unstable-projection` is
+//! unconditional, because the six port types this store implements against are
+//! behind it and an adapter cannot make its own port impl optional;
+//! `conformance` is a feature *of this crate* that forwards to the contract
+//! crate's, and the two `impl ProjectionProbe` blocks below carry the `#[cfg]`
+//! that goes with it. The cost is one further feature-powerset combination for
+//! this member, which the story that built the crate declined to pay on the
+//! ground that the crate should declare no features at all. That reasoning
+//! missed that the feature table *is* part of the surface being falsified: a
+//! falsifier that skips the one manifest shape the recipe specifies has
+//! falsified everything except the recipe.
+//!
+//! `tests/outside_projection_manifest.rs` is what holds it there, and it is the
+//! only assertion in this crate that reads a file instead of driving a store.
+//! Two consequences a reader should know before running anything: the three
+//! suite-driving targets are behind `conformance` and so a bare `cargo test -p
+//! outside-projection-adapter` runs the manifest checks and nothing else — the
+//! whole of it is `cargo test -p outside-projection-adapter --all-features`,
+//! which is the configuration the gate runs. And the recipe itself is short in
+//! one place: its `[dependencies]` fence names no features, which does not
+//! compile for the reason above. That is the port's rustdoc to repair, not this
+//! crate's to work around, and the test states it rather than asserting on it.
+//!
 //! # What is in here
 //!
 //! [`OutsideProjectionStore`] is the conformant one — an in-process key/value
@@ -37,9 +71,14 @@ use std::sync::{Arc, Mutex};
 // is imported here: the bare one is the weaker requirement, and having both in
 // scope makes every method call ambiguous.
 use happenstance_core::{
-    Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
-    SequencePosition,
+    Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError, SequencePosition,
 };
+// Split out from the six above and gated, because the probe is the *suite's*
+// seam and not the store's. The name only exists in the dependency when this
+// crate's own `conformance` flag forwards it, so the `#[cfg]` here and the two
+// on the impls below are the same decision written where it is enforced.
+#[cfg(feature = "conformance")]
+use happenstance_core::ProjectionProbe;
 
 /// Mints one identity per **backing store**, so a batch can say where it came
 /// from.
@@ -94,6 +133,40 @@ impl core::error::Error for OutsideStoreError {}
 pub struct OutsideBatch {
     stamp: u64,
     operations: Vec<Operation>,
+}
+
+impl OutsideBatch {
+    /// Records one row into this batch.
+    ///
+    /// **This is the store's own write path, and it exists because putting the
+    /// probe behind a feature flag proved that there was not one.** Until the
+    /// `conformance` impls acquired their `#[cfg]`, `ProjectionProbe` was the
+    /// only thing in this crate that ever constructed an `Operation` — so
+    /// the store compiled to a read model nothing could write to, and turning
+    /// the flag off made `rustc` say so as a `dead_code` error on the enum.
+    ///
+    /// That matters beyond a compile fix. `ProjectionProbe`'s own rustdoc
+    /// describes it as a *seam onto the adapter's write path*, which presumes
+    /// there is one to reach; a store whose only writer is the probe is a store
+    /// the suite is driving through a path no application would ever take. So
+    /// the probes below now forward here, and the suite exercises the same two
+    /// methods a caller would.
+    pub fn write(&mut self, key: &str, value: u64) {
+        self.operations.push(Operation::Write {
+            key: key.to_owned(),
+            value,
+        });
+    }
+
+    /// Queues deletion of every row this batch's store holds.
+    ///
+    /// The other half of the write path, and the one
+    /// [`reset`](ProjectionStore::reset) consumes: `reset` applies the caller's
+    /// own deletes rather than inventing a truncation of its own, so a store
+    /// with no way to express "delete everything" cannot be reset at all.
+    pub fn delete_all(&mut self) {
+        self.operations.push(Operation::DeleteAll);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +407,7 @@ impl ProjectionStore for OutsideProjectionStore {
     }
 }
 
+#[cfg(feature = "conformance")]
 impl ProjectionProbe for OutsideProjectionStore {
     // This store's batch is a list of intentions and the committed rows are a
     // map, so overlaying one on the other is cheap and honest. An adapter that
@@ -341,15 +415,17 @@ impl ProjectionProbe for OutsideProjectionStore {
     // port permits outright.
     const READS_THROUGH_BATCH: bool = true;
 
+    // Forwarded to the batch's own write path rather than reaching past it into
+    // `operations`. That is what the port asks of a probe: the suite drives the
+    // methods a caller drives, so a bug in the write path is a bug the suite can
+    // reach. Pushing the operation here instead would give the suite a private
+    // road around the code under test.
     fn probe_write(&self, batch: &mut OutsideBatch, key: &str, value: u64) {
-        batch.operations.push(Operation::Write {
-            key: key.to_owned(),
-            value,
-        });
+        batch.write(key, value);
     }
 
     fn probe_delete_all(&self, batch: &mut OutsideBatch) {
-        batch.operations.push(Operation::DeleteAll);
+        batch.delete_all();
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, OutsideStoreError> {
@@ -478,18 +554,21 @@ impl ProjectionStore for CheckpointOnlyStore {
     }
 }
 
+#[cfg(feature = "conformance")]
 impl ProjectionProbe for CheckpointOnlyStore {
     const READS_THROUGH_BATCH: bool = true;
 
+    // Forwarded to the batch's own write path rather than reaching past it into
+    // `operations`. That is what the port asks of a probe: the suite drives the
+    // methods a caller drives, so a bug in the write path is a bug the suite can
+    // reach. Pushing the operation here instead would give the suite a private
+    // road around the code under test.
     fn probe_write(&self, batch: &mut OutsideBatch, key: &str, value: u64) {
-        batch.operations.push(Operation::Write {
-            key: key.to_owned(),
-            value,
-        });
+        batch.write(key, value);
     }
 
     fn probe_delete_all(&self, batch: &mut OutsideBatch) {
-        batch.operations.push(Operation::DeleteAll);
+        batch.delete_all();
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, OutsideStoreError> {

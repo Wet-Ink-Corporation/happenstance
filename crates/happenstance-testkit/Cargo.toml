@@ -12,17 +12,33 @@ description = "DCB conformance suite for happenstance event store adapters."
 # passing adapter to go red is the event this crate's independent number exists
 # to signal.
 #
-# And moved *down* to a pre-release for the alpha, which reads as a mistake
-# unless the reason is here. CF-32 gives this crate an independent **number**,
-# not an independent **maturity**: the rule set it publishes measures a port that
-# is still moving, and a stable `0.2.0` would promise adapter authors — who are
-# told to pin this crate exactly — a bar that is going to change under them. The
-# suite goes stable when the contract it measures does.
-version = "0.2.0-alpha.1"
+# It moved *down* to a pre-release for the alpha, which read as a mistake unless
+# the reason was written here: CF-32 gives this crate an independent **number**,
+# not an independent **maturity**, and a stable number would have promised
+# adapter authors — who are told to pin this crate exactly — a bar that was still
+# moving under them. That reservation is discharged rather than forgotten. The
+# contract this suite measures is what went stable at `0.2.0`: the frozen
+# `EventStore` clauses are semver-binding, and the rule set that checks them is
+# no longer a moving target.
+#
+# What is still moving is the projection family, and it is fenced rather than
+# hidden: `ProjectionStore` ships behind an off-by-default `unstable-projection`
+# feature with a written semver exemption until two adapters at opposite ends of
+# the batch-shape axis have passed it. A projection rule appearing or changing
+# is inside that exemption; an event-store rule is not.
+#
+# **Pin this crate exactly anyway.** A stable number does not make a new
+# conformance rule harmless — it makes it *minor*, which is precisely the bump
+# `cargo update` takes without being asked, and the one that turns a passing
+# adapter red. That advice is in this crate's README and its rustdoc, and the
+# number moving to `0.2.0` does not soften it.
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance-testkit"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true

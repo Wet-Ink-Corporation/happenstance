@@ -140,7 +140,7 @@ spawns — discovered by the first application that runs two projections
 concurrently, in a published crate whose only fix is a new impl on a new type.
 
 **Evidence.** `crates/happenstance-core/src/memory.rs:300 (impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send)` ·
-`crates/happenstance-testkit/src/fixtures.rs:186 (a handle that quietly weakened)` ·
+`crates/happenstance-testkit/src/fixtures.rs:188 (a handle that quietly weakened)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
@@ -306,9 +306,9 @@ adapter" in a release note is the failure — and if a rule looks wrong once you
 run it, the change is to the rule, in the same commit, with the wrong
 implementation it now rejects added to the testkit's own `tests/`.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:13 (not considered to exist)` ·
-`crates/happenstance-testkit/src/lib.rs:484 (Migrating from)` ·
-`crates/happenstance-testkit/src/fixtures.rs:252 (Creates a fixture over an **existing** store)` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:12 (not considered to exist)` ·
+`crates/happenstance-testkit/src/lib.rs:604 (Migrating from)` ·
+`crates/happenstance-testkit/src/fixtures.rs:254 (Creates a fixture over an **existing** store)` ·
 `references/adapter-shapes.md:302 (A skeleton falsifies a signature)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-15](../../spec/SPECIFICATION.md)

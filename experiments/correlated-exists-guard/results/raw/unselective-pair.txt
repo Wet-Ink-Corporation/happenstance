@@ -1,0 +1,18 @@
+   Compiling correlated-exists-guard v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\experiments\correlated-exists-guard)
+    Finished `release` profile [optimized] target(s) in 5.07s
+     Running tests\unselective_pair.rs (target\release\deps\unselective_pair-8fd68aaa75eeb649.exe)
+
+running 1 test
+test neither_tag_selective ... CARDINALITY	all_yes=Some(500000)	shard_cold=Some(500000)	size=500000
+UNSELECTIVE	shape=chain-as-shipped	size=500000	scenario=accepted-2tag-at-head	boundary=500000	us_median=971073	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=chain-bounded-all-arms	size=500000	scenario=accepted-2tag-at-head	boundary=500000	us_median=108	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=grouped-adr0022	size=500000	scenario=accepted-2tag-at-head	boundary=500000	us_median=386961	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=chain-exists	size=500000	scenario=accepted-2tag-at-head	boundary=500000	us_median=117	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=chain-as-shipped	size=500000	scenario=rejected-2tag-unbounded	boundary=0	us_median=1049801	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=chain-bounded-all-arms	size=500000	scenario=rejected-2tag-unbounded	boundary=0	us_median=1133517	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=grouped-adr0022	size=500000	scenario=rejected-2tag-unbounded	boundary=0	us_median=446460	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+UNSELECTIVE	shape=chain-exists	size=500000	scenario=rejected-2tag-unbounded	boundary=0	us_median=159	rounds=15	journal_mode=wal synchronous=1 busy_timeout_ms=5000 sqlite=3.53.2
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 69.47s
+

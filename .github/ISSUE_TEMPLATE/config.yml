@@ -1,0 +1,28 @@
+# Blank issues stay off, and the reason is the same one the forms below exist
+# for: almost every useful report against this project needs to say which crate,
+# which version and which of the four conformance families it touches, and a
+# blank box reliably produces a report that says none of those. The contact
+# links cover the two cases a form would be the wrong shape for.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Wet-Ink-Corporation/happenstance/security/advisories/new
+    about: >-
+      Do not open a public issue. Use GitHub's private reporting, or email
+      security@wet-ink.net. SECURITY.md says what is in scope, and a conformance
+      rule that passes an unsound store is in scope.
+
+  - name: A question about a decision, before filing anything
+    url: https://github.com/Wet-Ink-Corporation/happenstance/tree/main/.kb/decisions
+    about: >-
+      Most "why is it like this?" questions already have a written answer. The
+      decision atoms are one page each; references/adr/ holds the full records
+      with the compiler transcripts and the measurements behind them.
+
+  - name: What is frozen, provisional or deferred
+    url: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md
+    about: >-
+      Every clause carries a maturity marker, the conformance rule that checks
+      it, and the wrong implementation it forbids. If a behaviour surprised you,
+      the clause is the fastest way to find out whether it is a promise.

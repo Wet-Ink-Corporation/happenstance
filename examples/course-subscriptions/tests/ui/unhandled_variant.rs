@@ -1,7 +1,7 @@
 //! The worked example's domain, plus one new fact the fold has not been taught.
 //!
-//! A mirror of `examples/course-subscriptions/src/main.rs:194-207` (the domain
-//! enum) and `:341-379` (the `Seats` decision model and its fold). It restates
+//! A mirror of `examples/course-subscriptions/src/main.rs:170-183` (the domain
+//! enum) and `:317-355` (the `Seats` decision model and its fold). It restates
 //! them rather than importing them, for two mechanical reasons: a variant
 //! cannot be added to an imported enum, and the example is a binary crate with
 //! no lib target to import from in any case. The mirror is the thing most

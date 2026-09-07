@@ -27,8 +27,11 @@
 //! two `wire` targets to the negative controls that make them mean anything;
 //! `cargo xtask spec-trace`, which holds the architectural specification to its
 //! own cross-references and regenerates its traceability table; six
-//! file-reading lints described below; a seventh manifest lint for D12, kept out
-//! of that group because it names no clause (ADR-0016 §14); and
+//! file-reading lints described below; a seventh manifest lint for D12, outside
+//! that clause-named group (ADR-0016 §14) and inside `cargo xtask lints`;
+//! `cargo xtask lint-workflows`, which is the same family one artefact further
+//! out — `.github/workflows/` is the only file here that runs with a
+//! credential, and until it was added nothing in the gate opened it; and
 //! `cargo xtask package-check`, which asserts the licences and README are
 //! actually inside each publishable artifact rather than merely promised by
 //! its metadata.
@@ -83,6 +86,7 @@ mod affected;
 mod lint_constitution;
 mod lint_narrative;
 mod lint_pages;
+mod lint_workflows;
 mod lints;
 mod narrative_doctests;
 mod package;
@@ -574,6 +578,24 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // CF-24. The in-crate scanners cover two of the five enumerations and
+        // are each other's copy; this reads the macro bodies from outside, so a
+        // family that never acquires a scanner of its own is still covered.
+        name: "every rule appears in its family's enumeration",
+        program: "cargo",
+        args: &[
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "lint-enumerations",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // CF-6's cheap second line. `GappedPositionStore` is the enforcement and
         // it runs in the step above this file's `proof-artefact` entry; this
         // catches the habit at the spelling, which is the half that names the
@@ -733,10 +755,10 @@ const REQUIRED: &[Step] = &[
         // Its own step rather than a line in `tests`, for the reason
         // `proof-artefact` has one: the workspace test step passes just as
         // happily with one fewer doctest as with one more, so an atom whose
-        // examples quietly stopped being compiled would not show up there. And
-        // `RUSTDOCFLAGS` is the only way `-D warnings` reaches rustdoc — clippy
-        // does not lint doctests at all, so this is the whole of what the
-        // constitution's examples are held to.
+        // examples quietly stopped being compiled would not show up there.
+        // `RUSTDOCFLAGS` reaches nothing lexically inside a fence (RS-01-4),
+        // and clippy never lints doctests either, so this step proves only
+        // that the constitution's examples compile.
         name: "the constitution's examples compile",
         program: "cargo",
         args: &["test", "--locked", "-p", "xtask", "--doc"],
@@ -866,6 +888,7 @@ const REQUIRED: &[Step] = &[
         env: &[],
         probe: None,
     },
+    lint_workflows::STEP,
 ];
 
 const OPTIONAL: &[Step] = &[
@@ -1038,9 +1061,11 @@ fn main() -> ExitCode {
         Some("lint-testkit-version") => lints::testkit_version(),
         Some("lint-core-alloc-features") => lints::core_alloc_features(),
         Some("lint-changelog") => lints::changelog_names_every_rule(),
+        Some("lint-enumerations") => lints::rules_are_enumerated(),
         Some("lint-position-literals") => lints::no_position_literals(),
         Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lint-workflows") => lint_workflows::run(),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),
@@ -1091,11 +1116,11 @@ fn print_help() {
     println!("         the mandatory steps only, dropping that last group; it is the bar a");
     println!("         non-terminal project's integration gate runs, never the release bar.");
     println!("  affected [--base <ref>]");
-    println!("         The story-grain gate: the six file-reading lints and spec-trace,");
-    println!("         then fmt, clippy and tests for the packages this diff could have");
-    println!("         broken and everything depending on them. Base defaults to `main`.");
-    println!("         Errs toward more packages — see the module docs for the two ways it");
-    println!("         can be wrong and why only one of them is allowed to happen.");
+    println!("         The story-grain gate: unconditionally, every check the whole gate");
+    println!("         reads a document for, bar lint-constitution — affected's own docs");
+    println!("         argue that one. Then fmt, clippy and tests for the packages this diff");
+    println!("         could have broken and everything depending on them. Base defaults to");
+    println!("         `main`, and it errs toward more packages — the module docs say why.");
     println!("  wasm   The whole wasm32-unknown-unknown family. Five builds — happenstance-core,");
     println!("         the conformance harnesses, the two wasm32 adapters (cloudflare, neon)");
     println!("         and the typed layer (happenstance, the crate a Workers application");
@@ -1111,13 +1136,13 @@ fn print_help() {
     println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
     println!("         what the checker computes, and fails when they differ. --write");
     println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the six file-reading checks: CF-33 (no clock in the suite),");
-    println!("         CF-6 (no literal position values), CF-29 (a changelog entry per");
-    println!("         rule), CF-32 (the testkit's own version key), §7.4's disposed-rule");
-    println!("         check, and every stated rule count against the enumeration.");
-    println!("         Each is also available on its own as lint-clock,");
-    println!("         lint-position-literals, lint-changelog, lint-testkit-version,");
-    println!("         lint-retired-rules and lint-rule-counts.");
+    println!("  lints  Run just the file-reading checks — every step that reads a document");
+    println!("         rather than compiling a package. The rows below are printed from the");
+    println!("         selection this command runs; each is also a subcommand of its own:");
+    for step in lint_steps() {
+        let subcommand = step.args.last().copied().unwrap_or(step.name);
+        println!("           {subcommand:<25}{}", step.name);
+    }
     println!("  package-check");
     println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
     println!("         and README.md inside each publishable crate's artifact.");
@@ -1193,23 +1218,25 @@ fn wasm_steps() -> Vec<&'static Step> {
     ])
 }
 
-/// The five checks phase 3 stage 6 added, selected by name.
-///
-/// They are ordinary `REQUIRED` steps and `cargo xtask ci` runs them like any
-/// other; this exists so that working on one does not mean running the whole
-/// gate to see it. Each is a file read and a string match, so the whole set
-/// finishes in the time it takes cargo to decide `xtask` is up to date.
+/// Every `REQUIRED` step that reads a document rather than compiling a package,
+/// selected by name. It carried a count until the count went wrong — it said
+/// *five* while naming nine of the eleven — so [`print_help`] prints the
+/// selection, and `affected.rs` holds the selection to the step table.
 fn lint_steps() -> Vec<&'static Step> {
     steps_named(&[
+        "specification traceability",
         "no retired rule is still live",
         "no conformance rule reads a clock",
+        "every rule appears in its family's enumeration",
         "no literal position values in the suite",
         "every conformance rule has a changelog entry",
         "every stated rule count matches the suite",
         "the testkit carries its own version",
+        "happenstance-core names serde/alloc and base64/alloc",
         "the Rust constitution is internally consistent",
         lint_narrative::STEP,
         lint_pages::STEP,
+        lint_workflows::STEP.name,
     ])
 }
 
@@ -1905,5 +1932,167 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The two names `ARTEFACTS` holds for `projection_harness_parity`.
+    ///
+    /// One row of the nine, and the smallest: two names, one target, and a
+    /// transcript short enough to quote whole.
+    /// In the row's own order, which is not libtest's — the assertion below
+    /// reads them out of `ARTEFACTS` rather than trusting this copy.
+    const PARITY: &[&str] = &[
+        "projection_harness_parity::no_harness_lists_a_rule_by_hand",
+        "projection_harness_parity::each_harness_invokes_the_suite_exactly_once",
+    ];
+
+    /// That target's libtest stdout when its tests run, verbatim from the gate's
+    /// own transcript
+    /// (`experiments/gate-vacuity/results/raw/baseline-ci.txt:7570-7574`).
+    const PARITY_RAN: &str = "running 2 tests
+test projection_harness_parity::each_harness_invokes_the_suite_exactly_once ... ok
+test projection_harness_parity::no_harness_lists_a_rule_by_hand ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// The same target with an `#[ignore = \"…\"]` on both tests, verbatim from
+    /// `experiments/gate-vacuity/results/raw/ignore-all-ignore-reason-ci.txt:7082-7086`.
+    ///
+    /// The process exited **0** over this and the step printed *"2 named tests
+    /// present"* about it.
+    const PARITY_IGNORED: &str = "running 2 tests
+test projection_harness_parity::each_harness_invokes_the_suite_exactly_once ... ignored, measured by experiments/gate-vacuity
+test projection_harness_parity::no_harness_lists_a_rule_by_hand ... ignored, measured by experiments/gate-vacuity
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// The same *count* of passes, from two tests the gate does not name.
+    ///
+    /// Held here because it is what separates the two remediations the audit
+    /// left open: comparing the reported `passed` count against `tests.len()`
+    /// reads `2 passed` and is satisfied, while both named tests are gone.
+    const PARITY_SUBSTITUTED: &str = "running 2 tests
+test projection_harness_parity::a_test_the_gate_does_not_name ... ok
+test projection_harness_parity::another_test_the_gate_does_not_name ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+    /// A proof artefact's named test that did not **run** fails the gate.
+    ///
+    /// This is the assertion behind `proof.rs`'s central claim (`:29-30`, *"the
+    /// names are asserted, out of `--list`, before the tests run"*) and behind
+    /// the other places in this workspace that say an `#[ignore]` on a named
+    /// proof test cannot pass — among them `proof.rs:217`, `:2050` and `:2408`,
+    /// and RS-81-4's own `Rejects:` line.
+    ///
+    /// It was measured false. `experiments/gate-vacuity/results/raw/list-diff.txt`
+    /// is **empty**: libtest's `--list` output is byte-identical with and without
+    /// an `#[ignore]`, so an assertion over that listing cannot observe the
+    /// attribute, and `cargo xtask ci` exits 0 with all 31 named tests ignored.
+    ///
+    /// The wrong implementations it rejects, in order of how tempting they are:
+    /// a presence check over the run's text — both names appear in
+    /// [`PARITY_IGNORED`], on their `ignored` lines — and a comparison of the
+    /// reported `passed` count against `tests.len()`, which [`PARITY_SUBSTITUTED`]
+    /// satisfies with neither named test having run.
+    ///
+    /// It lives in `main.rs` rather than beside its subject for two reasons. This
+    /// file is already where the gate says an `#[ignore]` on a named test is
+    /// caught by the runner rather than by a listing (`:402-404`), so the claim
+    /// and its proof sit together; and a test inside `proof.rs` could not tell an
+    /// implementation reverted from a test reverted along with it.
+    #[test]
+    fn a_named_proof_test_that_did_not_run_fails_the_gate() {
+        // The fixture's own non-vacuity first, in the shape `proof.rs`'s
+        // `a_registry_count_belongs_to_the_target_it_is_printed_beside` uses:
+        // every assertion below holds trivially over an empty `PARITY`, so
+        // emptying it is a one-token edit that keeps this test green and retires
+        // it. Read out of `ARTEFACTS` rather than believed, so the names are the
+        // row's own and a rename has this to disagree with too.
+        let row = crate::proof::ARTEFACTS
+            .iter()
+            .find(|artefact| artefact.target == "projection_harness_parity")
+            .expect("`projection_harness_parity` is an `ARTEFACTS` row");
+        assert_eq!(
+            row.tests, PARITY,
+            "the transcripts below are that row's, and this test is about names \
+             the gate actually holds"
+        );
+        assert_eq!(
+            PARITY.len(),
+            2,
+            "one name would still exercise the mechanism; zero would exercise \
+             nothing and pass"
+        );
+
+        assert!(
+            crate::proof::unexecuted(PARITY, PARITY_RAN).is_empty(),
+            "a target whose named tests both passed is reported as unexecuted"
+        );
+
+        assert_eq!(
+            crate::proof::unexecuted(PARITY, PARITY_IGNORED),
+            PARITY.to_vec(),
+            "both named tests were `ignored` and the gate found nothing to say; \
+             this is the measured defect, and a step that reads only the exit \
+             status is checking that the target compiles"
+        );
+
+        assert_eq!(
+            crate::proof::unexecuted(PARITY, PARITY_SUBSTITUTED),
+            PARITY.to_vec(),
+            "two tests passed, neither of them the ones the clauses cite — a \
+             `passed`-count comparison is satisfied here and the names it was \
+             counting are gone"
+        );
+    }
+
+    /// S-3: `constitution.rs` and this file's own step comment claimed
+    /// `RUSTDOCFLAGS=-D warnings` partially recovers lint coverage inside a
+    /// doctest fence. RS-01-4 (`standards/rust/01-standard-of-evidence.md:180-188`)
+    /// already denied that, and `experiments/gate-vacuity/results/`
+    /// `constitution-fence.md` measured it false a second time, against this
+    /// very corpus: the same `RUSTDOCFLAGS` arm let a `non_snake_case`
+    /// violation compile and run at exit 0. A text scan, not a doctest — the
+    /// false sentence compiles fine, so only reading the prose catches its
+    /// return.
+    ///
+    /// Deliberately not placed in `constitution.rs`: `lint-constitution`'s
+    /// `check_harness` reads that file's `mod` lines as the atom registry, so
+    /// a bare `mod tests {` there is flagged as naming an atom that does not
+    /// exist. This file carries no such reading.
+    #[test]
+    fn constitution_rs_does_not_restate_the_rustdocflags_recovery_claim() {
+        let production = include_str!("constitution.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(
+            !production.contains("recovers rustc's")
+                && !production.contains("the recovery is partial"),
+            "constitution.rs restates the RUSTDOCFLAGS partial-recovery claim RS-01-4 denies"
+        );
+    }
+
+    /// The companion claim, in this file's own step comment: it leaned on
+    /// the same false premise to justify what the constitution's examples
+    /// are "held to".
+    ///
+    /// Scoped to the *line-anchored* `#[cfg(test)]` marker, normalising CRLF
+    /// first — same reason `lint_narrative.rs`'s `production_source()` does
+    /// both: a bare substring split would also cut at line 293's comment,
+    /// which names the attribute in backticks and sits well above this
+    /// module, truncating "production" before the target line is even
+    /// reached.
+    #[test]
+    fn main_rs_does_not_restate_the_rustdocflags_recovery_claim() {
+        let normalised = include_str!("main.rs").replace("\r\n", "\n");
+        let production = normalised.split("\n#[cfg(test)]\n").next().unwrap();
+        assert!(
+            !production.contains("is the only way `-D warnings` reaches rustdoc"),
+            "main.rs restates the RUSTDOCFLAGS partial-recovery claim RS-01-4 denies"
+        );
     }
 }

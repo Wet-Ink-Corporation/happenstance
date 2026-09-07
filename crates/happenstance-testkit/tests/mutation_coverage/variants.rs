@@ -119,6 +119,10 @@ pub(crate) struct GappedPositionStore {
     live: Rc<RefCell<Log>>,
     committed: Rc<RefCell<Vec<Event>>>,
     fault: Fault,
+    /// The read path's arming, kept apart from `fault` above on purpose: a
+    /// single cell would make arming a write fault arm a read one, and this
+    /// variant is the control that must be wrong about nothing.
+    read_fault: Fault,
 }
 
 impl EventStore for GappedPositionStore {
@@ -129,11 +133,14 @@ impl EventStore for GappedPositionStore {
         query: &Query,
         options: ReadOptions,
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
-        Snapshot::new(
+        Snapshot::faulted(
             self.live
                 .try_borrow()
                 .map_err(|_| LogError::AlreadyBorrowed)
                 .map(|log| log.select(query, options)),
+            // Taken rather than read: the fault fires once, which is what
+            // `Fixture::arm_read_fault` promises.
+            self.read_fault.take(),
         )
     }
 
@@ -236,6 +243,7 @@ pub(crate) struct GappedPositionFixture {
     /// closed file.
     live: RefCell<Rc<RefCell<Log>>>,
     fault: Fault,
+    read_fault: Fault,
 }
 
 impl Fixture for GappedPositionFixture {
@@ -244,6 +252,10 @@ impl Fixture for GappedPositionFixture {
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
     const REOPEN: Capability = Capability::SUPPORTED;
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
+    // This variant is the one fixture in the binary that supports *everything*,
+    // and `capability_skips_are_reported` asserts it skips nothing — so a
+    // capability it declined would be a rule that never ran against a control.
+    const READ_FAULT: Capability = Capability::SUPPORTED;
 
     // CF-40. Stated at the floors rather than above them, so that this variant is
     // simultaneously the tightest legal store and a passing one: VT-21 – VT-24
@@ -266,11 +278,19 @@ impl Fixture for GappedPositionFixture {
             live: Rc::clone(&self.live.borrow()),
             committed: Rc::clone(&self.committed),
             fault: Rc::clone(&self.fault),
+            read_fault: Rc::clone(&self.read_fault),
         }
     }
 
     async fn arm_mid_batch_fault(&self, after: usize) {
         self.fault.set(Some(after));
+    }
+
+    // After two items, the same arming `PagedStreamFixture` and
+    // `mutants::SwallowedReadFaultFixture` use, so all three are talking about
+    // the same fault: some of the read delivered, then a fetch that failed.
+    async fn arm_read_fault(&self) {
+        self.read_fault.set(Some(2));
     }
 
     async fn reopen(&self) {
@@ -302,6 +322,7 @@ impl Subject for GappedPositionFixture {
             committed: Rc::new(RefCell::new(Vec::new())),
             live: RefCell::new(Rc::new(RefCell::new(Log::new(gapped)))),
             fault: Rc::new(Cell::new(None)),
+            read_fault: Rc::new(Cell::new(None)),
         }
     }
 }
@@ -330,22 +351,40 @@ pub(crate) struct PagedStream {
     /// Whether the next poll is the one that fetches rather than the one that
     /// waits.
     ready: bool,
+    /// How many items to yield before an armed fetch failure arrives, or `None`
+    /// for "no fault armed".
+    ///
+    /// The **correct** answer to `Fixture::READ_FAULT`, and the reason it lives
+    /// on a conformant variant rather than on a mutant: this stream and
+    /// `mutants::SwallowingPagedStream` meet the same armed failure between two
+    /// pages, and the only difference between them is that this one yields
+    /// `Some(Err(..))` where that one yields `None`. A rule no legal store could
+    /// pass would be a rule about nothing.
+    fail_after: Option<usize>,
+    /// Items yielded so far, which is what `fail_after` is counted against.
+    yielded: usize,
 }
 
 impl PagedStream {
     /// A paging stream over `selected`, or over the failure that prevented
-    /// reading it.
-    fn new(selected: Result<Vec<SequencedEvent>, LogError>) -> Self {
+    /// reading it, failing after `fail_after` items if a fault is armed.
+    fn new(selected: Result<Vec<SequencedEvent>, LogError>, fail_after: Option<usize>) -> Self {
         match selected {
             Ok(events) => Self {
                 error: None,
                 events: events.into_iter(),
                 ready: false,
+                fail_after,
+                yielded: 0,
             },
             Err(err) => Self {
                 error: Some(err),
                 events: Vec::new().into_iter(),
                 ready: false,
+                // A read that could not start already carries an error; arming a
+                // second one would make this stream wrong in two ways.
+                fail_after: None,
+                yielded: 0,
             },
         }
     }
@@ -372,13 +411,31 @@ impl Stream for PagedStream {
         if let Some(err) = this.error.take() {
             return Poll::Ready(Some(Err(err)));
         }
-        Poll::Ready(this.events.next().map(Ok))
+
+        // The armed fetch failure, surfaced the way the port provides for: an
+        // `Err` ITEM rather than the end of the stream. It fires once and is
+        // spent, so a caller that reads again gets the whole log.
+        if this.fail_after == Some(this.yielded) {
+            this.fail_after = None;
+            return Poll::Ready(Some(Err(LogError::ReadFailed)));
+        }
+
+        let next = this.events.next();
+        if next.is_some() {
+            this.yielded += 1;
+        }
+        Poll::Ready(next.map(Ok))
     }
 }
 
 /// A conformant store whose `read` stream yields one item per two polls.
 #[derive(Debug, Clone)]
-pub(crate) struct PagedStreamStore(Rc<RefCell<Log>>);
+pub(crate) struct PagedStreamStore {
+    log: Rc<RefCell<Log>>,
+    /// Shared with the fixture and every other handle, so an arming reaches a
+    /// handle a rule already holds.
+    fault: Fault,
+}
 
 impl EventStore for PagedStreamStore {
     type Error = LogError;
@@ -389,10 +446,13 @@ impl EventStore for PagedStreamStore {
         options: ReadOptions,
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
         PagedStream::new(
-            self.0
+            self.log
                 .try_borrow()
                 .map_err(|_| LogError::AlreadyBorrowed)
                 .map(|log| log.select(query, options)),
+            // Taken rather than read: the fault fires once, which is what
+            // `Fixture::arm_read_fault` promises.
+            self.fault.take(),
         )
     }
 
@@ -402,7 +462,7 @@ impl EventStore for PagedStreamStore {
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         let mut log = self
-            .0
+            .log
             .try_borrow_mut()
             .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
         log.append(events, condition)
@@ -413,17 +473,20 @@ impl EventStore for PagedStreamStore {
     // returns a stream, so a `Poll::Pending` future here would be a second
     // difference on a control that is only allowed one.
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        LogStore::over(&self.0).head().await
+        LogStore::over(&self.log).head().await
     }
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-        LogStore::over(&self.0).contains_event_id(id).await
+        LogStore::over(&self.log).contains_event_id(id).await
     }
 }
 
 /// One log, and any number of paging handles onto it.
 #[derive(Debug)]
-pub(crate) struct PagedStreamFixture(Rc<RefCell<Log>>);
+pub(crate) struct PagedStreamFixture {
+    log: Rc<RefCell<Log>>,
+    fault: Fault,
+}
 
 impl Fixture for PagedStreamFixture {
     type Store = PagedStreamStore;
@@ -438,8 +501,25 @@ impl Fixture for PagedStreamFixture {
          behind an Rc with no durable medium",
     );
 
+    // Supported, and this variant is where the read-fault rule is shown to be
+    // passable at all. It is `mutants::SwallowedReadFaultStore` with exactly one
+    // difference: both page, both meet the same armed failure part way through,
+    // and this one yields it as the `Err` item the port provides for while that
+    // one answers `Poll::Ready(None)`.
+    const READ_FAULT: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Store {
-        PagedStreamStore(Rc::clone(&self.0))
+        PagedStreamStore {
+            log: Rc::clone(&self.log),
+            fault: Rc::clone(&self.fault),
+        }
+    }
+
+    // After two items, so that some of the read has already been delivered when
+    // the failure arrives — the same arming `SwallowedReadFaultFixture` uses, so
+    // the two are talking about the same fault.
+    async fn arm_read_fault(&self) {
+        self.fault.set(Some(2));
     }
 }
 
@@ -447,7 +527,10 @@ impl Subject for PagedStreamFixture {
     const NAME: &'static str = "PagedStreamStore";
 
     fn open() -> Self {
-        Self(Rc::new(RefCell::new(Log::new(dense))))
+        Self {
+            log: Rc::new(RefCell::new(Log::new(dense))),
+            fault: Rc::new(Cell::new(None)),
+        }
     }
 }
 
@@ -529,6 +612,15 @@ impl DecliningFixture {
     pub(crate) const MID_BATCH_FAULT_REASON: &'static str = "this instrument declines everything, and it has no transaction to fail \
          part way through in any case";
 
+    /// The reason this fixture gives for declining `READ_FAULT`.
+    ///
+    /// Stated rather than inherited, for [`MID_BATCH_FAULT_REASON`](Self::MID_BATCH_FAULT_REASON)'s
+    /// reason: a default reaching the report would be the testkit's words, and
+    /// `capability_skips_are_reported` would then be checking a string this
+    /// fixture never said.
+    pub(crate) const READ_FAULT_REASON: &'static str = "this instrument declines everything, and its read is an iterator over a \
+         Vec with no fetch to fail in any case";
+
     /// A fresh instrument over a completely correct, densely-allocating store.
     pub(crate) fn new() -> Self {
         Self {
@@ -544,6 +636,7 @@ impl Fixture for DecliningFixture {
     const SECOND_HANDLE: Capability = Capability::declined(Self::SECOND_HANDLE_REASON);
     const REOPEN: Capability = Capability::declined(Self::REOPEN_REASON);
     const MID_BATCH_FAULT: Capability = Capability::declined(Self::MID_BATCH_FAULT_REASON);
+    const READ_FAULT: Capability = Capability::declined(Self::READ_FAULT_REASON);
 
     async fn connect(&self) -> Self::Store {
         let taken = self.connects.get() + 1;

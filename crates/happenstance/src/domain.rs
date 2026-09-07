@@ -76,6 +76,56 @@ pub trait DomainEvent: Sized {
     fn event_type(&self) -> EventType;
 
     /// The tags this event carries.
+    ///
+    /// **It is total, and [`Tags`] has no infallible constructor from
+    /// strings.**
+    /// [`Tag::key_value`](happenstance_core::Tag::key_value) refuses an
+    /// empty value, a value past the length ceiling, and a set of control
+    /// and bidirectional formatting characters — so an identifier that
+    /// arrived as a `String`, off a request or out of a queue, cannot be
+    /// turned into a tag *here*. There is no `Result` for a `?` to sit on,
+    /// and the one route left is an `expect` on the write path, inside
+    /// `commit`, after the decision has already been taken.
+    ///
+    /// The resolution is [`DecisionModel::scope`]'s, one level down: hold
+    /// the validated [`Tag`](happenstance_core::Tag) on your identifier
+    /// type, pay the `?` in that type's constructor — where a `Result` is
+    /// still welcome — and `.collect()` through the infallible
+    /// `FromIterator<Tag> for Tags`. Both worked examples in the repository
+    /// do exactly that, and
+    /// [carry your invariant](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/carry-your-invariant.md) walks it.
+    ///
+    /// Whether this signature should itself be fallible is open and is not
+    /// this page's to answer.
+    ///
+    /// # Examples
+    ///
+    /// The ordinary case: an identifier that is not a literal.
+    ///
+    /// ```
+    /// use happenstance::{InvalidTag, Tag, Tags};
+    ///
+    /// struct CourseId {
+    ///     tag: Tag,
+    /// }
+    ///
+    /// impl CourseId {
+    ///     // The only constructor, and the only place a bad
+    ///     // identifier is refused.
+    ///     fn new(id: &str) -> Result<Self, InvalidTag> {
+    ///         Ok(Self { tag: Tag::key_value("course", id)? })
+    ///     }
+    /// }
+    /// # fn main() -> Result<(), InvalidTag> {
+    /// let course = CourseId::new("c1")?; // the edge
+    /// assert!(CourseId::new("").is_err());
+    ///
+    /// // And the body of `tags`, which cannot fail: `Tags` has an
+    /// // infallible constructor from tags that already exist.
+    /// let tags: Tags = [course.tag.clone()].into_iter().collect();
+    /// assert_eq!(tags.len(), 1);
+    /// # Ok(()) }
+    /// ```
     fn tags(&self) -> Tags;
 
     /// Encodes this event's payload with `codec`.

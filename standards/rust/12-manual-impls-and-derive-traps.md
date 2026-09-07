@@ -39,6 +39,7 @@ is visible:
 ```rust
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 // The derive spans `arity` *and* `name`; `borrow` yields only `name`.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,10 +54,46 @@ impl Borrow<str> for Kind {
     }
 }
 
-let mut registry: HashMap<Kind, &str> = HashMap::new();
-registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
+// What `Hash` is *fed*, rather than what it returns. The disagreement between the
+// owned key and its borrowed probe is the bug, and this is the one face of it no
+// hash seed can flip.
+#[derive(Default)]
+struct Fed(Vec<u8>);
 
-assert_eq!(registry.get("CourseDefined"), None, "the entry is present and unreachable");
+impl Hasher for Fed {
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.extend_from_slice(bytes);
+    }
+    fn finish(&self) -> u64 {
+        0
+    }
+}
+
+fn fed<T: Hash + ?Sized>(value: &T) -> Vec<u8> {
+    let mut hasher = Fed::default();
+    value.hash(&mut hasher);
+    hasher.0
+}
+
+// rs_12_1_counterexample_must_hold_for_every_seed: `RandomState` is drawn afresh
+// per `HashMap`, so one map is one sample and a counterexample asserted on one
+// sample is a coin toss, not evidence. `registry.get("CourseDefined") == None` is
+// exactly that coin toss — `get` picks a bucket by hash and then compares by
+// equality *within* it, so on the seeds where the borrowed probe lands in the
+// owned key's bucket `borrow` returns `"CourseDefined"`, the comparison succeeds,
+// and the entry is found: 1,619 of 200,000 seeds measured, one gate run in 126.
+for _ in 0..4096 {
+    let mut registry: HashMap<Kind, &str> = HashMap::new();
+    registry.insert(Kind { arity: 3, name: "CourseDefined".into() }, "decode");
+
+    let owned = Kind { arity: 3, name: "CourseDefined".into() };
+    assert_eq!(registry.get(&owned), Some(&"decode"), "the entry is present");
+    assert_ne!(
+        fed(&owned),
+        fed(<Kind as Borrow<str>>::borrow(&owned)),
+        "and unreachable: `Borrow` requires the owned and borrowed forms to hash alike"
+    );
+}
 
 // `Ord` breaks the same way, and that is the ordering a `BTreeMap` searches by.
 let (a, b) = (Kind { arity: 2, name: "aa".into() }, Kind { arity: 1, name: "zz".into() });
@@ -73,7 +110,7 @@ an owned key and a borrowed probe, which is why the counterexample above is
 written that way and not as a round trip.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:136 (promises the borrowed form hashes)` ·
-`crates/happenstance-core/src/event.rs:932 (a_map_keyed_by_event_type_is_probed_by_str)` ·
+`crates/happenstance-core/src/event.rs:1007 (a_map_keyed_by_event_type_is_probed_by_str)` ·
 [SPECIFICATION VT-32](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION VT-33](../../spec/SPECIFICATION.md) ·
 [std `Borrow`](https://doc.rust-lang.org/std/borrow/trait.Borrow.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -268,6 +305,6 @@ in the CI log of every adapter that runs the suite — retained for as long as t
 CI provider keeps logs, in a repository whose whole design premise is that the
 contract layer never looks inside a payload.
 
-**Evidence.** `crates/happenstance-core/src/event.rs:440 (Payloads are frequently large and rarely UTF-8)` ·
-`crates/happenstance-core/src/event.rs:443 (struct ByteLen)` ·
-`Cargo.toml:104 (missing_debug_implementations)`
+**Evidence.** `crates/happenstance-core/src/event.rs:447 (Payloads are frequently large and rarely UTF-8)` ·
+`crates/happenstance-core/src/event.rs:450 (struct ByteLen)` ·
+`Cargo.toml:183 (missing_debug_implementations)`

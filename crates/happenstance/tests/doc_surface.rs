@@ -127,11 +127,18 @@ fn crate_root_renders_the_codec_surface() {
     }
 
     // The mount itself: every codec is reachable from the crate root, beside
-    // the glob that must survive.
+    // the contract's own surface.
+    //
+    // This used to require the *glob* — `pub use happenstance_core::*;` — and
+    // that is the assertion that made a leak look like policy: a glob mounts
+    // whatever the compiled contract crate exposes, gated on **its** features
+    // rather than this crate's. The promise the facade actually owes is that
+    // the contract's paths resolve here, and `tests/contract_surface.rs` holds
+    // it name by name and gate by gate.
     let root = read("lib.rs");
     assert!(
-        root.contains("pub use happenstance_core::*;"),
-        "the contract crate's glob re-export must survive"
+        root.contains("pub use happenstance_core::{EventStore, SendEventStore,"),
+        "the contract crate's surface is not re-exported at the crate root"
     );
     for (feature, item) in [("json", "Json"), ("postcard", "Postcard"), ("cbor", "Cbor")] {
         if !shipped_features().contains(&feature.to_owned()) {
@@ -321,9 +328,13 @@ fn crate_root_renders_the_projection_surface() {
         "the Features table says nothing about `unstable-projection`: {table}"
     );
 
-    // The mount: every item is re-exported at the root beside the glob, and
-    // the glob itself survives.
-    assert!(root.contains("pub use happenstance_core::*;"));
+    // The mount: every item is re-exported at the root beside the contract's
+    // own projection surface, which arrives behind the same feature.
+    //
+    // The glob this line used to require is gone; see
+    // `crate_root_renders_the_codec_surface` above, and
+    // `tests/contract_surface.rs`, for why requiring it was the defect.
+    assert!(root.contains("pub use happenstance_core::projection;"));
     for item in [
         "Projection",
         "run_projection",
@@ -586,4 +597,91 @@ fn no_local_projection_store() {
             path.display()
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// The caller's obligation, stated where the caller stands
+// ---------------------------------------------------------------------------
+
+/// The `#`-headed sections of a doc block, each keyed by its heading text.
+///
+/// Every topic on `run_projection`'s page is a section, and a claim is only
+/// worth reading where its qualifications are: "exactly one runner" in one
+/// section and "the caller's" three screens away is two half-sentences a
+/// reader is asked to join up. Splitting here is what lets an assertion say
+/// *together*.
+fn doc_sections(doc: &[String]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for line in doc {
+        match line.strip_prefix("# ") {
+            Some(heading) => out.push((heading.trim().to_owned(), String::new())),
+            None => {
+                if let Some((_, body)) = out.last_mut() {
+                    body.push_str(line);
+                    body.push(' ');
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Two runners on one `(store, ProjectionId)` is the rolling-redeploy shape
+/// PS-22's `Rejects:` paragraph already names, and PS-22 guards only the
+/// **backwards** half — the stale runner dragging the checkpoint down. Two
+/// runners both advancing forwards never trip `CheckpointRegression`; they
+/// interleave, and the monotonic checkpoint is the evidence that nothing went
+/// wrong. Nothing in this crate guards that, so the page a caller reads has to
+/// say whose obligation it is, and say it in one place.
+///
+/// A source read, deliberately: the *mechanism* — a lease, a lock, an
+/// ownership token — is a real design question and belongs with the
+/// projection-store freeze. The sentence does not.
+#[test]
+fn run_projection_states_the_single_writer_obligation() {
+    // No feature guard, deliberately. This test reads `runner.rs` as TEXT and
+    // compiles nothing behind `unstable-projection`, so a `cfg!` here gates the
+    // assertion on a feature it does not depend on — and gates it in the one
+    // direction that lets a bare `cargo test` report `ok` without ever reading
+    // the page. A guard that can only ever silence its own check is exactly the
+    // vacuity RS-81 rejects, and it was this test's own named self-refutation.
+
+    let source = read("runner.rs");
+    let doc = item_doc(&source, "pub async fn run_projection<");
+    let sections = doc_sections(&doc);
+
+    // One section carries the whole claim. The page already says "the caller's"
+    // about spawning and already names `ProjectionId` under rebuilding, so an
+    // assertion over the joined page would be satisfied by what is there now.
+    let (heading, body) = sections
+        .iter()
+        .find(|(_, body)| body.to_lowercase().contains("exactly one"))
+        .unwrap_or_else(|| {
+            panic!(
+                "no section of `run_projection`'s page says that exactly one \
+                 runner may drive a projection at a time; the sections are {:?}",
+                sections.iter().map(|(h, _)| h).collect::<Vec<_>>()
+            )
+        });
+    let lowered = body.to_lowercase();
+
+    assert!(
+        lowered.contains("runner"),
+        "`{heading}` says \"exactly one\" of something other than a runner: {body}"
+    );
+    assert!(
+        body.contains("ProjectionId") && lowered.contains("caller"),
+        "`{heading}` does not name the obligation as the caller's, per \
+         `(store, ProjectionId)`: {body}"
+    );
+    // The load-bearing half. `CheckpointRegression` is the guard a reader
+    // already knows about, and it catches only the stale runner going
+    // backwards; two runners both advancing forwards never trip it. A page
+    // that states the obligation without naming that gap leaves the reader
+    // believing the guard they already have covers this.
+    assert!(
+        body.contains("CheckpointRegression") && lowered.contains("forward"),
+        "`{heading}` states the obligation without saying that \
+         `CheckpointRegression` guards only the backwards half: {body}"
+    );
 }

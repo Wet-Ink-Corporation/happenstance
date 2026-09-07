@@ -431,7 +431,7 @@ impl Event {
 ///
 /// `#[non_exhaustive]`, so a later part is additive: downstream destructures
 /// with `..` or reads fields by name.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct EventParts {
     /// The event's type.
@@ -444,22 +444,22 @@ pub struct EventParts {
     pub metadata: Option<Bytes>,
 }
 
+// Payloads are frequently large and rarely UTF-8; printing the length
+// keeps test failures legible.
+/// Renders a payload as its length rather than its contents.
+struct ByteLen(Option<usize>);
+
+impl fmt::Debug for ByteLen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(len) => write!(f, "<{len} bytes>"),
+            None => f.write_str("None"),
+        }
+    }
+}
+
 impl fmt::Debug for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Payloads are frequently large and rarely UTF-8; printing the length
-        // keeps test failures legible.
-        /// Renders a payload as its length rather than its contents.
-        struct ByteLen(Option<usize>);
-
-        impl fmt::Debug for ByteLen {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                match self.0 {
-                    Some(len) => write!(f, "<{len} bytes>"),
-                    None => f.write_str("None"),
-                }
-            }
-        }
-
         f.debug_struct("Event")
             .field("event_type", &self.event_type)
             .field("data", &ByteLen(Some(self.data.len())))
@@ -654,23 +654,31 @@ mod serde_impls {
             }
         }
 
+        /// Routes one payload through the branch above, borrowed.
+        ///
+        /// Used by both mirrors below. On the `Option` side it is what keeps an
+        /// `Option<Bytes>` from being cloned to be written; on the `Bytes` side
+        /// it is what lets the *borrowing* mirror name a field type at all,
+        /// since serde's `with` attribute hands the function `&Field` and a
+        /// field of type `&Bytes` would arrive as `&&Bytes`.
+        pub(in crate::event::serde_impls) struct Encode<'a>(
+            pub(in crate::event::serde_impls) &'a Bytes,
+        );
+
+        impl Serialize for Encode<'_> {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serialize(self.0, serializer)
+            }
+        }
+
         /// The same branch for `Option<Bytes>`.
         ///
         /// The `Option` layer stays serde's, rather than being folded into one
         /// impl, because that is what keeps `Some(Bytes::new())` — the JSON
         /// string `""` — apart from `None`, which is `null`.
         pub(super) mod optional {
-            use super::{Bytes, Deserialize, Deserializer, Serialize, Serializer};
-
-            /// Routes one payload through the branch above. Borrowed on the way
-            /// out so an `Option<Bytes>` is not cloned to be written.
-            struct Encode<'a>(&'a Bytes);
-
-            impl Serialize for Encode<'_> {
-                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                    super::serialize(self.0, serializer)
-                }
-            }
+            pub(in crate::event::serde_impls) use super::Encode;
+            use super::{Bytes, Deserialize, Deserializer, Serializer};
 
             /// The same, on the way in, where the bytes must be owned.
             struct Decode(Bytes);
@@ -750,13 +758,47 @@ mod serde_impls {
         metadata: Option<Bytes>,
     }
 
+    /// The borrowing counterpart of [`EventWire`], used on the way **out**.
+    ///
+    /// Same `rename`, same field names in the same order, same payload routing —
+    /// so the bytes are the ones `EventWire` wrote and `Deserialize` still reads.
+    /// Nothing here is owned, so encoding allocates nothing of its own.
+    ///
+    /// This is serde's own idiom for the asymmetry: `Deserialize` must produce
+    /// owned values because it is turning bytes into a value, and `Serialize`
+    /// must not, because it already has one. Writing a single mirror and cloning
+    /// into it is what cost a 64-tag `Event` sixty-five transient allocations per
+    /// encode, and a `SequencedEvent` a hundred and thirty
+    /// (`experiments/event-clone-allocations/results/clone-cost.md`).
+    ///
+    /// The two mirrors have to agree, and nothing in the type system makes them:
+    /// `crates/happenstance-core/tests/wire.rs` round-trips every value through
+    /// both formats, which is what catches a field renamed or reordered on one
+    /// side only.
+    #[derive(Serialize)]
+    #[serde(rename = "Event")]
+    struct EventRef<'a> {
+        event_type: &'a EventType,
+        data: payload::Encode<'a>,
+        tags: &'a crate::Tags,
+        /// `Option<Encode>` rather than a `with` module, and it emits exactly
+        /// what `payload::optional::serialize` emits: `serialize_some(&Encode)`
+        /// or `serialize_none`. `Some(Bytes::new())` and `None` stay apart.
+        ///
+        /// **Field order is load-bearing**, here and above: postcard writes a
+        /// struct as its fields in declaration order with no names at all, so a
+        /// mirror whose fields are reordered is a different wire format that
+        /// still compiles and still round-trips against itself.
+        metadata: Option<payload::Encode<'a>>,
+    }
+
     impl Serialize for Event {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            EventWire {
-                event_type: self.event_type().clone(),
-                data: self.data().clone(),
-                tags: self.tags().clone(),
-                metadata: self.metadata().cloned(),
+            EventRef {
+                event_type: self.event_type(),
+                data: payload::Encode(self.data()),
+                tags: self.tags(),
+                metadata: self.metadata().map(payload::Encode),
             }
             .serialize(serializer)
         }
@@ -798,13 +840,37 @@ mod serde_impls {
         event: Event,
     }
 
+    /// The borrowing counterpart of [`SequencedEventWire`].
+    ///
+    /// `event` is an [`EventRef`] rather than an `&Event`, and the difference is
+    /// the whole of this type's reason to exist. `&Event` would forward to
+    /// `Serialize for Event`, which is correct and is *also* what made this value
+    /// pay the copy twice: once cloning the `Event` into the owned mirror, and
+    /// once more inside the impl that mirror's derive called. Naming the
+    /// borrowing mirror inline removes both, and emits the same bytes because
+    /// `EventRef` does.
+    #[derive(Serialize)]
+    #[serde(rename = "SequencedEvent")]
+    struct SequencedEventRef<'a> {
+        position: SequencePosition,
+        id: crate::identity::EventId,
+        recorded_at: crate::identity::RecordedAt,
+        event: EventRef<'a>,
+    }
+
     impl Serialize for SequencedEvent {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            SequencedEventWire {
+            let event = &self.event;
+            SequencedEventRef {
                 position: self.position,
                 id: self.id,
                 recorded_at: self.recorded_at,
-                event: self.event.clone(),
+                event: EventRef {
+                    event_type: event.event_type(),
+                    data: payload::Encode(event.data()),
+                    tags: event.tags(),
+                    metadata: event.metadata().map(payload::Encode),
+                },
             }
             .serialize(serializer)
         }
@@ -984,5 +1050,53 @@ mod tests {
 
         assert_eq!(event.tags().len(), 1);
         assert_eq!(event.metadata().unwrap().as_ref(), b"trace");
+    }
+
+    /// AE-5. `EventParts` is one `into_parts()` call away from `Event`, whose
+    /// hand-written `Debug` redacts the payload for exactly this reason
+    /// (RS-12-5). The derive on `EventParts` has no such redaction, so it
+    /// prints the bytes `Event::fmt` was written to hide.
+    #[test]
+    fn event_parts_debug_is_bounded_not_the_bytes() {
+        let parts = Event::new("SeatMapPublished", &b"authorization: hunter2"[..])
+            .unwrap()
+            .into_parts();
+
+        let rendered = format!("{parts:?}");
+
+        assert!(
+            rendered.contains("<22 bytes>"),
+            "expected a bounded length, got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("hunter2"),
+            "payload bytes leaked into Debug: {rendered}"
+        );
+    }
+}
+
+// AE-5 (RS-12-5): field for field identical to `Event`'s `Debug` impl above —
+// one `into_parts()` call separates the two types, and the `derive(Debug)`
+// this replaces printed `data`'s and `metadata`'s bytes where `Event`
+// redacts them.
+//
+// `clippy::items_after_test_module` fires on the position, not the impl, and
+// is allowed here on purpose: every other constitution-atom citation into
+// this file (`standards/rust/10-newtypes-and-niches.md`,
+// `standards/rust/11-const-construction-and-panics.md`,
+// `standards/rust/12-manual-impls-and-derive-traps.md`'s RS-12-1) anchors a
+// line number inside or before `mod tests` above, each already within a few
+// lines of `lint_constitution`'s slack. Inserting this block anywhere before
+// `mod tests` shifts every one of them out of range; standards/rust/**.md is
+// outside this crate and not this change's to edit.
+#[allow(clippy::items_after_test_module)]
+impl fmt::Debug for EventParts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventParts")
+            .field("event_type", &self.event_type)
+            .field("data", &ByteLen(Some(self.data.len())))
+            .field("tags", &self.tags)
+            .field("metadata", &ByteLen(self.metadata.as_ref().map(Bytes::len)))
+            .finish()
     }
 }

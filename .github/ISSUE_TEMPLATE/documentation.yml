@@ -1,0 +1,57 @@
+name: The documentation taught the wrong thing
+description: >-
+  A page, rustdoc item or example was accurate but misleading, out of date, or
+  missing the thing you actually needed.
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Filed as its own kind on purpose. Every other check in this repository is
+        satisfied by an API that is correct and unusable, and "I read the page
+        and still built it wrong" is a defect report about the page, not about
+        the reader.
+
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: >-
+        A docs.rs URL, a repository path, or the crate and item name. A line
+        number helps and is not required.
+      placeholder: docs.rs/happenstance-testkit — event_store_conformance!
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you concluded from it
+      description: >-
+        What you believed after reading, in your own words. This is the most
+        valuable field in the form: the gap between what a page says and what a
+        careful reader takes away from it is invisible from the inside, and it is
+        the thing no gate in this repository can see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What turned out to be true
+      description: How you found out, if it was the hard way.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Closest description
+      options:
+        - It is wrong now (it may have been right once)
+        - It is accurate but I drew the wrong conclusion
+        - It answers a question next to mine, not mine
+        - The example compiles but does not show the thing it claims to
+        - I could not find where this was documented at all
+    validations:
+      required: true

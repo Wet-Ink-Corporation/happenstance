@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>happenstance — round 3: the brightness-glyph collision</title>
+<style>
+  :root{--sun:#FFB627;--ember:#A85B00;--ink:#2A211B;--paper:#FFFCF4;
+        --rule:rgba(42,33,27,.13);--mute:rgba(42,33,27,.58);}
+  *{box-sizing:border-box}
+  body{margin:0;padding:44px 30px 90px;background:#F4F1EA;color:var(--ink);
+    font-family:'IBM Plex Sans','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .shell{max-width:1000px;margin:0 auto}
+  h1{font-size:21px;font-weight:650;letter-spacing:-.02em;margin:0 0 8px}
+  .sub{font-size:13.5px;line-height:1.62;color:var(--mute);max-width:70ch;margin:0 0 30px}
+  h2{font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--ember);
+     margin:38px 0 4px;padding-bottom:9px;border-bottom:1px solid var(--rule)}
+  .lede{font-size:13px;line-height:1.62;color:var(--mute);max-width:72ch;margin:12px 0 18px}
+  .lede b{color:var(--ink);font-weight:640}
+  .card{background:var(--paper);border:1px solid var(--rule);border-radius:14px;
+        display:grid;grid-template-columns:180px 92px 92px 1fr;gap:20px;align-items:center;
+        padding:16px 20px;margin-bottom:12px}
+  .card.win{border:1.5px solid var(--sun);background:#FFFBEE}
+  .plate{background:rgba(42,33,27,.04);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:8px}
+  .badges{display:flex;align-items:center;gap:10px;justify-content:center}
+  .nm{font-size:12.5px;font-weight:650;margin-bottom:5px}
+  .vd{font-size:12px;line-height:1.55;color:var(--mute)}
+  .vd b{color:var(--ink);font-weight:640}
+  .tag{display:inline-block;font-size:9.5px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;
+       padding:2px 7px;border-radius:20px;margin-bottom:6px}
+  .t-no{background:rgba(163,52,31,.12);color:#A3341F}
+  .t-yes{background:rgba(27,107,58,.13);color:#1B6B3A}
+  .t-mid{background:rgba(168,91,0,.13);color:var(--ember)}
+  .hdr{display:grid;grid-template-columns:180px 92px 92px 1fr;gap:20px;padding:0 20px 6px;
+       font-size:9.5px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+  code{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;font-size:11.5px;
+       background:rgba(42,33,27,.07);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="pA"><circle cx="50" cy="50" r="15"/><rect x="46" y="11.5" width="8" height="13" rx="3.2"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(45 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(90 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(135 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(180 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(225 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(270 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(315 50 50)"/></g>
+  <g id="pB"><circle cx="50" cy="50" r="15"/><rect x="46" y="11.5" width="8" height="13" rx="3.2"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(51.4286 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(102.857 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(154.286 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(205.714 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(257.143 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="3.2" transform="rotate(308.571 50 50)"/></g>
+  <g id="pC"><circle cx="50" cy="50" r="17"/><rect x="43.5" y="14" width="13" height="8" rx="3.2"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(45 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(90 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(135 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(180 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(225 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(270 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(315 50 50)"/></g>
+  <g id="pD"><circle cx="50" cy="50" r="17"/><rect x="43.5" y="14" width="13" height="8" rx="3.2"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(51.4286 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(102.857 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(154.286 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(205.714 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(257.143 50 50)"/><rect x="43.5" y="14" width="13" height="8" rx="3.2" transform="rotate(308.571 50 50)"/></g>
+  <g id="pE"><circle cx="50" cy="50" r="15"/><rect x="46" y="11.5" width="8" height="13" rx="1.2"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(45 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(90 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(135 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(180 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(225 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(270 50 50)"/><rect x="46" y="11.5" width="8" height="13" rx="1.2" transform="rotate(315 50 50)"/></g>
+  <g id="pC6"><circle cx="50" cy="50" r="17"/><rect x="42.5" y="14" width="15" height="8" rx="3.2"/><rect x="42.5" y="14" width="15" height="8" rx="3.2" transform="rotate(60 50 50)"/><rect x="42.5" y="14" width="15" height="8" rx="3.2" transform="rotate(120 50 50)"/><rect x="42.5" y="14" width="15" height="8" rx="3.2" transform="rotate(180 50 50)"/><rect x="42.5" y="14" width="15" height="8" rx="3.2" transform="rotate(240 50 50)"/><rect x="42.5" y="14" width="15" height="8" rx="3.2" transform="rotate(300 50 50)"/></g>
+  <g id="pC10"><circle cx="50" cy="50" r="17"/><rect x="44.5" y="14" width="11" height="8" rx="3.2"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(36 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(72 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(108 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(144 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(180 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(216 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(252 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(288 50 50)"/><rect x="44.5" y="14" width="11" height="8" rx="3.2" transform="rotate(324 50 50)"/></g>
+  <g id="cA"><circle cx="50" cy="50" r="22"/><rect x="43.5" y="3" width="13" height="20" rx="5"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(45 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(90 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(135 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(180 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(225 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(270 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(315 50 50)"/></g>
+  <g id="cB"><circle cx="50" cy="50" r="22"/><rect x="43.5" y="3" width="13" height="20" rx="5"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(51.4286 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(102.857 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(154.286 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(205.714 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(257.143 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="5" transform="rotate(308.571 50 50)"/></g>
+  <g id="cC"><circle cx="50" cy="50" r="24"/><rect x="40" y="6.5" width="20" height="13" rx="5"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(45 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(90 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(135 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(180 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(225 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(270 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(315 50 50)"/></g>
+  <g id="cD"><circle cx="50" cy="50" r="24"/><rect x="40" y="6.5" width="20" height="13" rx="5"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(51.4286 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(102.857 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(154.286 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(205.714 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(257.143 50 50)"/><rect x="40" y="6.5" width="20" height="13" rx="5" transform="rotate(308.571 50 50)"/></g>
+  <g id="cE"><circle cx="50" cy="50" r="22"/><rect x="43.5" y="3" width="13" height="20" rx="1.8"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(45 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(90 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(135 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(180 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(225 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(270 50 50)"/><rect x="43.5" y="3" width="13" height="20" rx="1.8" transform="rotate(315 50 50)"/></g>
+  <g id="cC6"><circle cx="50" cy="50" r="24"/><rect x="38.5" y="6.5" width="23" height="13" rx="5"/><rect x="38.5" y="6.5" width="23" height="13" rx="5" transform="rotate(60 50 50)"/><rect x="38.5" y="6.5" width="23" height="13" rx="5" transform="rotate(120 50 50)"/><rect x="38.5" y="6.5" width="23" height="13" rx="5" transform="rotate(180 50 50)"/><rect x="38.5" y="6.5" width="23" height="13" rx="5" transform="rotate(240 50 50)"/><rect x="38.5" y="6.5" width="23" height="13" rx="5" transform="rotate(300 50 50)"/></g>
+  <g id="cC10"><circle cx="50" cy="50" r="24"/><rect x="41.5" y="6.5" width="17" height="13" rx="5"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(36 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(72 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(108 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(144 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(180 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(216 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(252 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(288 50 50)"/><rect x="41.5" y="6.5" width="17" height="13" rx="5" transform="rotate(324 50 50)"/></g>
+</defs></svg>
+
+<div class="shell">
+<h1>Round 3 — the brightness-glyph collision</h1>
+<p class="sub">SD-0002 names one unresolved defect: rasterised, the mark reads as the display-brightness glyph every operating system ships. The annotation placement protects the <em>lockup</em>; it does nothing for the standalone mark, which is what appears in the favicon, the crates.io avatar and the GitHub org icon — the surfaces a Rust library is actually seen on. These are the three levers SD-0002 named, cut and judged at the size where it matters.</p>
+
+<div class="hdr"><span>Display · 96px</span><span>32px</span><span>16px</span><span>Verdict</span></div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pA" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cA" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cA" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-no">Collides</span><div class="nm">A · eight radial</div><div class="vd">The control. Clean and warm, and <b>indistinguishable from a brightness control</b> at every size. At 16px the arms fuse into a cross.</div></div>
+</div>
+
+<div class="card win">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pB" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cB" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cB" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-yes">Adopted</span><div class="nm">B · seven radial</div><div class="vd">Breaking the eight-fold symmetry defeats the system-glyph reading — <b>no icon set uses seven</b> — and it feels drawn rather than generated. One block at twelve o'clock puts the gap at six and keeps the mark symmetric about the vertical axis, so the odd count reads as chosen rather than as a piece that fell off. <b>Keeps the sun, which the brief asked for.</b></div></div>
+</div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pC" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-mid">Fallback</span><div class="nm">C · eight tangential</div><div class="vd">Each record turned 90° to lie <em>around</em> the ring instead of pointing out of it. <b>The brightness reading disappears completely</b> — light radiates, records queue — and it holds at 16px better than anything else here. <b>Rejected on cost: it is no longer a sun.</b> Retained as the fallback if seven proves insufficient.</div></div>
+</div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pD" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cD" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cD" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-no">Rejected</span><div class="nm">D · seven tangential</div><div class="vd">Both levers at once. Tangential blocks need even spacing to read as a sequence; at seven they <b>tile badly and the ring looks mis-set</b>. The two mitigations interfere.</div></div>
+</div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pE" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cE" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cE" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-no">Rejected</span><div class="nm">E · eight radial, sharp corners</div><div class="vd">Predicted in the brand sheet and confirmed: squaring the corners buys nothing against brightness and <b>walks straight back into the gear</b>. The trade was real and it is a bad one.</div></div>
+</div>
+
+<h2>Tangential element count, for the record</h2>
+<p class="lede">Recorded because C is the standing fallback. Tangential blocks are a rhythm, and the count sets what the rhythm reads as. Too many and it becomes a <b>loading spinner</b>, which is a worse collision than the one being solved.</p>
+
+<div class="hdr"><span>Display · 96px</span><span>32px</span><span>16px</span><span>Verdict</span></div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pC6" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC6" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC6" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><div class="nm">six</div><div class="vd">Sparse. Reads as a disc with a few marks rather than a sequence — the gaps dominate.</div></div>
+</div>
+
+<div class="card win">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pC" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><span class="tag t-yes">Best of the form</span><div class="nm">eight</div><div class="vd">Block and gap near parity, so it reads as an <b>ordered sequence</b> without closing into a ring.</div></div>
+</div>
+
+<div class="card">
+  <div class="plate"><svg viewBox="0 0 100 100" width="96" height="96"><use href="#pC10" fill="#FFB627"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="32" height="32"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC10" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div class="badges"><svg viewBox="0 0 100 100" width="16" height="16"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#cC10" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg></div>
+  <div><div class="nm">ten</div><div class="vd">The dashes close up into a continuous edge. <b>Reads as a spinner</b>, or as milling on a coin. Twelve is worse.</div></div>
+</div>
+
+<h2>What this settles, and what it does not</h2>
+<p class="lede"><b>Adopted: B, seven radial.</b> It defeats the eight-fold reading, keeps the sun the brief asked for, and holds its form at the sizes where the mark stands alone. The count is now part of the identity and is recorded as binding in SD-0002.</p>
+<p class="lede"><b>What is not settled is the evidence.</b> Seven is a reasoned defence that has been looked at by the people who already know what the mark is meant to be, which is the weakest possible test. The check that would settle it is showing the mark at 16px to three Rust developers who have seen neither it nor the record, and asking what they think it is. Until then the collision is mitigated and unfalsified rather than closed.</p>
+</div>
+</body>
+</html>

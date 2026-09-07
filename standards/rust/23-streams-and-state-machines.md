@@ -61,10 +61,10 @@ against logs of tens of events. The buffering is invisible until the first
 production backfill loads a million-event replay into memory, which is the
 outcome returning a stream at all exists to prevent.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1130 (needs no pin)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1514 (needs no pin)` ·
 `crates/happenstance-postgres/src/read_stream.rs:201 (the design above, and it is what makes every field)` ·
 `crates/happenstance-neon/src/event_store.rs:349 (Every field is)` ·
-`crates/happenstance-testkit/src/registry.rs:300 (the alternative — hand-writing a)` ·
+`crates/happenstance-testkit/src/registry.rs:306 (the alternative — hand-writing a)` ·
 [ES-42](../../spec/SPECIFICATION.md)
 
 ## RS-23-2. Take the state by value with `mem::replace`, never match it through `&mut`.
@@ -121,8 +121,8 @@ deliver — ends the stream mid-replay. A truncated read is indistinguishable fr
 a legitimately short one, so the consumer rebuilds a decision model from half a
 log and appends against it.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1445 (std::mem::replace(&mut this.state)` ·
-`crates/happenstance-postgres/src/read_stream.rs:209 (Taking the state by value)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1983 (std::mem::replace(&mut this.state)` ·
+`crates/happenstance-postgres/src/read_stream.rs:206 (Taking the state by value)` ·
 [ES-11](../../spec/SPECIFICATION.md) *(no visible event may be omitted)*
 
 ## RS-23-3. Hold the owner and re-borrow it per step; store nothing that borrows a connection.
@@ -188,7 +188,7 @@ ceiling no later than the first poll and bound every later statement by it.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:26 (does not live long enough)` ·
 `crates/happenstance-postgres/src/read_stream.rs:284 (taking the cursor by value and handing it back)` ·
-`crates/happenstance-testkit/tests/mutation_coverage.rs:1619 (RefetchingPagedStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage.rs:1832 (RefetchingPagedStore)` ·
 [ES-11](../../spec/SPECIFICATION.md) ·
 [ADR-0011](../../.kb/decisions/0011-read-laziness-and-isolation.md) ·
 [adapter-shapes §2.1](../../references/adapter-shapes.md)
@@ -246,7 +246,7 @@ which removes it from every consumer that spawns.
 
 **Evidence.** `crates/happenstance-postgres/src/read_stream.rs:54 (unnameable)` ·
 `crates/happenstance-postgres/src/read_stream.rs:358 (read_stream_is_send)` ·
-`crates/happenstance-cloudflare/src/send_shape.rs:35 (a coroutine's auto traits are inferred)` ·
+`crates/happenstance-cloudflare/src/send_shape.rs:34 (a coroutine's auto traits are inferred)` ·
 [ES-2](../../spec/SPECIFICATION.md)
 
 ## RS-23-5. There is no async `Drop`; compensation must be done before the future can be dropped.
@@ -323,7 +323,7 @@ rows already written stay written and no `Result` exists for anyone to read.
 `dropped_append_future_leaves_no_partial_batch` is the only thing that reports it,
 and only for an adapter that has run the suite.
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1659 (YieldingRowAtATimeStore)` ·
-`crates/happenstance-postgres/src/read_stream.rs:149 (Dropping the cursor drops the transaction)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1895 (YieldingRowAtATimeStore)` ·
+`crates/happenstance-postgres/src/read_stream.rs:148 (Dropping the cursor drops the transaction)` ·
 [ES-22](../../spec/SPECIFICATION.md) ·
 [E0053](https://doc.rust-lang.org/error_codes/E0053.html) *(checked 2026-08-09, rustc 1.97.1)*

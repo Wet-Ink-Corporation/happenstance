@@ -6,17 +6,28 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
 
 [dependencies]
-# No `features` here: every one is forwarded below, so that a consumer of the
-# facade has exactly the switches a consumer of the contract crate has. Adding a
-# default here instead would make `happenstance` and `happenstance-core` disagree
-# about what `default-features = false` means, which is the kind of difference
-# nobody discovers until a no_std build fails three crates away.
+# No `features` key here: each of the contract crate's four switches is
+# re-declared in `[features]` below and forwards there unchanged in meaning, so
+# nothing of the contract crate's is turned on behind a consumer's back. Turning
+# one on from this line instead would make `happenstance` enable a contract-crate
+# feature that a consumer reading `[features]` cannot see, which is the kind of
+# difference nobody discovers until a no_std build fails three crates away.
+#
+# That is a claim about *forwarding*, not about parity, and the difference is not
+# pedantry — an earlier version of this comment said the two crates have "exactly
+# the switches" one another has, which is false: `json`, `postcard` and `cbor`
+# exist only here and `conformance` only there, and `json` is in these defaults,
+# so `default-features = false` is not the same act on the two crates.
+# `manifest_contract.rs` derives that set from both manifests and fails this file
+# and the README if either claims otherwise.
 happenstance-core = { workspace = true }
 # The typed layer's whole job is encoding, so `serde` is a real, unconditional
 # dependency here. ADR-0003 forbids it in `happenstance-core`'s defaults and says
