@@ -51,7 +51,11 @@ sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-happenstance-testkit.workspace = true
+# `proptest` is what the model family is behind: `event_store_model_conformance!`
+# does not exist without it, so omitting the feature does not fail to compile --
+# it silently mounts one fewer family, which is the failure this whole crate's
+# gating is written against.
+happenstance-testkit = { workspace = true, features = ["proptest"] }
 # `rt-multi-thread` is not decoration: the concurrency family starts
 # `CONTENDERS` contenders, and a current-thread runtime turns that family from a
 # race into a queue.

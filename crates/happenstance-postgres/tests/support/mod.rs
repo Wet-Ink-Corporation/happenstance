@@ -60,6 +60,7 @@ use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
 use happenstance_testkit::concurrency::CONTENDERS;
 use happenstance_testkit::{Capability, Fixture};
+use testcontainers::ReuseDirective;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -86,6 +87,10 @@ const POSTGRES_PORT: u16 = 5432;
 /// container on a mapped ephemeral port that is destroyed with the test binary.
 /// Written as constants rather than inline so the two places that need them
 /// cannot drift.
+/// The reused container's name. Fixed, so a second run finds the first's server
+/// rather than starting another one.
+const CONTAINER_NAME: &str = "happenstance-postgres-conformance";
+
 const POSTGRES_USER: &str = "postgres";
 const POSTGRES_PASSWORD: &str = "postgres";
 const POSTGRES_DB: &str = "postgres";
@@ -136,6 +141,28 @@ async fn server() -> &'static Server {
                 .with_env_var("POSTGRES_PASSWORD", POSTGRES_PASSWORD)
                 .with_env_var("POSTGRES_USER", POSTGRES_USER)
                 .with_env_var("POSTGRES_DB", POSTGRES_DB)
+                // Reused across runs, under a fixed name, and this is a bug fix
+                // rather than an optimisation.
+                //
+                // The `ContainerAsync` handle lives in the `static` above, and
+                // Rust does not drop statics at process exit -- so nothing ever
+                // stopped the container, and every invocation of this test
+                // binary left another Postgres running. Twenty-seven had
+                // accumulated before anything noticed, and what noticed was the
+                // machine running out of memory in the middle of a suite run,
+                // not the gate. A leak whose only symptom is that the NEXT
+                // measurement is unreliable is the worst shape a test-harness
+                // bug can take.
+                //
+                // The crate's `watchdog` feature is the intended fix and does
+                // not build on Windows (`SIGQUIT` is Unix-only), which this
+                // workspace treats as first-class. Reuse bounds the leak at one
+                // container instead: the first run starts it, every later run
+                // attaches to it. Safe because isolation here is per-SCHEMA and
+                // schema names carry the process id, so a reused server holds
+                // one schema per fixture instance per run and no two collide.
+                .with_container_name(CONTAINER_NAME)
+                .with_reuse(ReuseDirective::Always)
                 // The experiment that chose this adapter's mechanism ran
                 // with `max_connections=200` and nothing else off-default
                 // (`experiments/position-visibility/README.md` section 1).

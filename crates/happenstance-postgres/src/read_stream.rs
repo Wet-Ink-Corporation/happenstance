@@ -72,43 +72,40 @@
 //! pooled connection *and* an open transaction for as long as the caller holds
 //! the stream. A slow consumer pins a connection and holds back `VACUUM`.
 
-//! # The two rules this adapter does not pass, and why the clause is what gives
+//! # ES-11, and a wrong conclusion that is worth recording
 //!
-//! `read_result_is_stable_under_concurrent_append` and
-//! `query_items_share_one_snapshot` fail here, deterministically, and both fail
-//! for one reason that is not a defect in the code below.
+//! Both `read_result_is_stable_under_concurrent_append` and
+//! `query_items_share_one_snapshot` pass. They did not always, and the reason
+//! they now do is worth writing down, because the first diagnosis was wrong in a
+//! way that would have cost a specification amendment.
 //!
-//! ES-11 requires a read to be evaluated against a state **fixed no later than
-//! the first poll**. `happenstance-sqlite` satisfies that literally: `rusqlite`
-//! is synchronous, so it samples its position ceiling on the polling thread,
-//! inside `poll_next`, before it hands anything to a worker. An async driver
-//! cannot. The first poll can only *start* the round trip that takes the
-//! snapshot; the snapshot itself lands when that round trip completes, which is
-//! necessarily after the poll returned `Pending`.
+//! ES-11 requires a read to be evaluated against a state fixed **no later than
+//! the first poll**. Both rules exploit the gap deliberately: poll once, append,
+//! then drain. With the cursor's opening held as an inline future, that future
+//! makes progress only while someone is polling it — so the snapshot was taken
+//! during the *drain*, strictly after the append, and both rules failed five
+//! times in five runs.
 //!
-//! Both rules exploit exactly that gap: they poll once, append, and then drain.
-//! The appended event is therefore inside the snapshot, and the read returns
-//! four events where three were seeded. Handing the work to the runtime at the
-//! first poll — `Handle::spawn` rather than an inline future, which is what the
-//! code below does — narrows the window and does not close it; it was measured
-//! at five failures in five runs either way.
+//! The conclusion drawn from that was that an async driver cannot satisfy the
+//! clause at all, since its first poll can only *start* the round trip. That was
+//! wrong, and consistent failure is what made it look right.
 //!
-//! The remaining ways to close it both cost more than they buy. Opening the
-//! transaction in `read` itself would fix the snapshot early enough, and would
-//! break ADR-0011's read laziness and the requirement that an unpolled stream
-//! take no pool checkout — trading a `[PROVISIONAL]` clause for an accepted
-//! decision record. Blocking inside `poll_next` on async I/O is not available at
-//! all.
+//! What fixes it is that the work is **handed to the runtime** at the first
+//! poll and every other operation is too. `open_cursor` is spawned here;
+//! `append` is spawned through `PostgresEventStore::on_runtime`. Both land in
+//! the same queue, the read's task was enqueued first, and so the snapshot is
+//! taken before the append runs. "Fixed no later than the first poll" becomes
+//! true in the only sense available to an async adapter: the work was
+//! *committed to* at that poll and no longer depends on the caller polling
+//! again.
 //!
-//! So this is recorded rather than worked around. ES-11 is `[PROVISIONAL]` and
-//! names its own falsifier as an adapter on a different axis; the axis it
-//! anticipated was transport (one-shot HTTP, no cursor), and the one that
-//! arrived is the **driver** being asynchronous at all. Which way the clause
-//! should move is a specification amendment and belongs to an ADR, not to this
-//! module: *"where it cannot pass a rule, the rule's clause is what has to
-//! give."*
+//! The bridge was not built for this. It was built because `sqlx` panics
+//! without a runtime in thread-local scope and the conformance suite's
+//! concurrency family drives its contenders on raw threads. That it also
+//! settles ES-11 is why the earlier diagnosis survived as long as it did: the
+//! two failures looked structural because the thing that would have disproved
+//! them had not been written yet.
 //!
-
 use std::collections::VecDeque;
 use std::fmt;
 use std::future::Future;
@@ -163,6 +160,13 @@ type Fetched = (Box<PgCursor>, Result<Vec<PgRow>, sqlx::Error>);
 #[derive(Debug)]
 struct CursorPlan {
     pool: PgPool,
+    /// The runtime captured by the store that produced this plan.
+    ///
+    /// Carried rather than looked up, for the reason the store's own field
+    /// documents: a read may be polled on a thread with no runtime at all --
+    /// the conformance suite's concurrency family does exactly that -- and
+    /// `Handle::try_current` there finds nothing.
+    runtime: Option<Handle>,
     query: Query,
     options: ReadOptions,
 }
@@ -174,7 +178,64 @@ struct CursorPlan {
 /// pooled connection outright, so the cursor can be moved into and out of each
 /// step future without borrowing anything that might not outlive it.
 struct PgCursor {
-    tx: Transaction<'static, Postgres>,
+    /// `Option` only so that [`Drop`] can move the transaction out. It is
+    /// `Some` for the whole of the cursor's useful life.
+    tx: Option<Transaction<'static, Postgres>>,
+    /// The runtime this cursor's connection must be returned on.
+    runtime: Option<Handle>,
+}
+
+impl PgCursor {
+    /// The live transaction.
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: the `Option` exists for [`Drop`] and is `Some` until
+    /// the cursor is being destroyed, at which point nothing calls this.
+    fn transaction(&mut self) -> &mut Transaction<'static, Postgres> {
+        self.tx
+            .as_mut()
+            .expect("the cursor's transaction is taken only by `Drop`")
+    }
+}
+
+/// Returns the pooled connection on a runtime, because `sqlx` cannot do it
+/// anywhere else.
+///
+/// `PoolConnection::drop` calls `sqlx`'s own `rt::spawn` to hand the connection
+/// back to the pool, and that **panics** when no runtime is in thread-local
+/// scope (`sqlx-core-0.8.6/src/pool/connection.rs:200-210`). A read stream is
+/// routinely dropped where that is true: the conformance suite's concurrency
+/// family runs each contender on a raw OS thread driving `block_on`, so
+/// `a_concurrent_reader_never_sees_a_partial_batch` panicked here on its first
+/// run even after every other rule in the family had gone green.
+///
+/// Moving the transaction onto the captured runtime lets its own `Drop` run
+/// where `sqlx` expects to be. The rollback is explicit rather than implicit
+/// because a read holds a `REPEATABLE READ READ ONLY` transaction open, and
+/// leaving it to an implicit drop makes the moment it ends depend on when the
+/// spawned task happens to be scheduled — which is exactly the kind of open
+/// transaction the frontier mechanism is most sensitive to.
+impl Drop for PgCursor {
+    fn drop(&mut self) {
+        let Some(tx) = self.tx.take() else {
+            return;
+        };
+        let Some(handle) = self.runtime.clone().or_else(|| Handle::try_current().ok()) else {
+            // No runtime anywhere. Returning the connection is impossible, and
+            // so is reporting it — `Drop` has no channel. Forgetting the
+            // transaction leaks the pooled connection, which is strictly better
+            // than the panic-inside-panic a naive drop would produce here.
+            std::mem::forget(tx);
+            return;
+        };
+        handle.spawn(async move {
+            // The result is deliberately discarded: a read wrote nothing, so a
+            // failed rollback changes no state a caller could observe, and
+            // there is nobody left to tell.
+            let _ = tx.rollback().await;
+        });
+    }
 }
 
 /// Where the stream is.
@@ -228,10 +289,16 @@ impl fmt::Debug for PgReadStream {
 
 impl PgReadStream {
     /// Captures what the read needs, without doing any of it.
-    pub(crate) fn new(pool: PgPool, query: &Query, options: ReadOptions) -> Self {
+    pub(crate) fn new(
+        pool: PgPool,
+        runtime: Option<Handle>,
+        query: &Query,
+        options: ReadOptions,
+    ) -> Self {
         Self {
             state: ReadState::Unstarted(Box::new(CursorPlan {
                 pool,
+                runtime,
                 query: query.clone(),
                 options,
             })),
@@ -276,7 +343,12 @@ impl Stream for PgReadStream {
                     // `spawn` needs a runtime, and `read` may legally be called
                     // outside one. `NoRuntime` is the honest answer there rather
                     // than a panic from inside a library.
-                    let Ok(handle) = Handle::try_current() else {
+                    // The store's captured handle first, then the caller's own,
+                    // and only then an error. A read polled from a raw thread
+                    // has no current runtime, which is not hypothetical: the
+                    // concurrency family's contenders are exactly that.
+                    let handle = plan.runtime.clone().or_else(|| Handle::try_current().ok());
+                    let Some(handle) = handle else {
                         this.state = ReadState::Done;
                         return Poll::Ready(Some(Err(PostgresEventStoreError::NoRuntime)));
                     };
@@ -347,6 +419,9 @@ impl Stream for PgReadStream {
 /// One future rather than three states, because all three are one round trip's
 /// worth of latency apart and splitting them would buy nothing but arms.
 async fn open_cursor(plan: CursorPlan) -> Opened {
+    // Captured before `plan` is consumed, so the cursor can return its
+    // connection on the same runtime that opened it.
+    let runtime = plan.runtime.clone();
     // `begin_with` rather than `begin`, because the isolation level is not
     // decoration: ES-11 requires the whole read to see one state of the store,
     // and REPEATABLE READ is how the server is asked for it.
@@ -367,7 +442,13 @@ async fn open_cursor(plan: CursorPlan) -> Opened {
 
     let rows = sqlx::query(&fetch_sql()).fetch_all(&mut *tx).await?;
 
-    Ok((Box::new(PgCursor { tx }), rows))
+    Ok((
+        Box::new(PgCursor {
+            tx: Some(tx),
+            runtime,
+        }),
+        rows,
+    ))
 }
 
 /// Fetches one chunk, taking the cursor by value and handing it back.
@@ -378,7 +459,9 @@ async fn open_cursor(plan: CursorPlan) -> Opened {
 async fn fetch_chunk(mut cursor: Box<PgCursor>) -> Fetched {
     // The `&mut` borrow of the transaction begins and ends inside this call, so
     // the cursor is free to move again on the next line.
-    let rows = sqlx::query(&fetch_sql()).fetch_all(&mut *cursor.tx).await;
+    let rows = sqlx::query(&fetch_sql())
+        .fetch_all(&mut **cursor.transaction())
+        .await;
     (cursor, rows)
 }
 

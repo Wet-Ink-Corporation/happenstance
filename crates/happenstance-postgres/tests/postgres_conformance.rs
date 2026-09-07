@@ -76,9 +76,74 @@ macro_rules! emit_ignored_tokio {
 }
 pub(crate) use emit_ignored_tokio;
 
+/// The concurrency family's emitter, plus `#[ignore]`.
+///
+/// A separate macro rather than a parameter on the one above, because the
+/// families differ in two ways that matter: the rules live under
+/// `concurrency::rules`, and each test needs
+/// `#[tokio::test(flavor = "multi_thread")]`. A current-thread runtime turns
+/// `CONTENDERS` contenders from a race into a queue, and a queue passes every
+/// rule in this family for the wrong reason.
+macro_rules! emit_ignored_concurrency_tokio {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[tokio::test(flavor = "multi_thread")]
+            #[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+            async fn $name() {
+                happenstance_testkit::concurrency::rules::$name(__conformance_fixture)
+                    .await
+                    .report(::core::stringify!($name));
+            }
+        )*
+    };
+}
+pub(crate) use emit_ignored_concurrency_tokio;
+
+/// The model family's emitter, plus `#[ignore]`.
+macro_rules! emit_ignored_model_tokio {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[tokio::test]
+            #[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+            async fn $name() {
+                happenstance_testkit::model::rules::$name(__conformance_fixture)
+                    .await
+                    .report(::core::stringify!($name));
+            }
+        )*
+    };
+}
+pub(crate) use emit_ignored_model_tokio;
+
 happenstance_testkit::event_store_conformance!(
     mod_name = dcb_conformance,
     emit = crate::emit_ignored_tokio,
+    fixture = PostgresFixture::new()
+);
+
+// The concurrency family. This is the bar the whole crate exists to clear: the
+// first adapter in the portfolio to run it against a store whose writers are
+// **not** serialised. A mechanism that passed by funnelling every write through
+// one lock would pass these rules too, and would have deleted the axis rather
+// than filled it.
+//
+// `PostgresFixture` is named at the call site rather than returned as an opaque
+// `impl Fixture`, because an opaque type carries only the bounds written on it
+// and `F::Store: Send` would be unprovable — which is the one line
+// `ConcurrentFixture` exists for. No second impl is owed: the trait is
+// blanket-implemented for any `Fixture` whose `Store` is `Send`, and a `PgPool`
+// is `Send + Sync`.
+happenstance_testkit::event_store_concurrency_conformance!(
+    mod_name = dcb_concurrency_conformance,
+    emit = crate::emit_ignored_concurrency_tokio,
+    fixture = PostgresFixture::new()
+);
+
+// The model family: the suite's rules checked against a reference model under
+// `proptest`, which is why the testkit dev-dependency names that feature.
+happenstance_testkit::event_store_model_conformance!(
+    mod_name = dcb_model_conformance,
+    emit = crate::emit_ignored_model_tokio,
     fixture = PostgresFixture::new()
 );
 

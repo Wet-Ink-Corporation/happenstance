@@ -2,12 +2,14 @@
 //!
 //! # Status
 //!
-//! Implemented, and run rather than asserted: 93 of the 95 rules
-//! `event_store_conformance!` expands to pass against a live PostgreSQL 17.10.
-//! The two that do not are `read_result_is_stable_under_concurrent_append` and
-//! `query_items_share_one_snapshot`, and they fail for a clause reason rather
-//! than a defect — see [`crate::read_stream`], which carries the argument in
-//! full, and the failure is recorded rather than skipped.
+//! Implemented, and run rather than asserted: **101 of 101** gated tests pass
+//! against a live PostgreSQL 17.10 — the 89 rules of `event_store_conformance!`,
+//! the 5 of `event_store_concurrency_conformance!` at `CONTENDERS = 64`, the
+//! model family, and this crate's own six.
+//!
+//! The concurrency family is the one that matters most: it is the first time an
+//! adapter in this portfolio has cleared it against a store whose writers are
+//! **not** serialised, which is the whole reason this crate is in the tree.
 //!
 //! The projection store beside this one is still a skeleton, which is what the
 //! crate's remaining `#![allow(clippy::todo)]` is for.
@@ -89,7 +91,9 @@ use happenstance_core::{
     RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId, StoreLimit,
 };
 use sqlx::{PgPool, Postgres, Transaction};
+use std::future::Future;
 use std::sync::{Arc, OnceLock};
+use tokio::runtime::Handle;
 
 use crate::error::PostgresEventStoreError;
 use crate::read_stream::PgReadStream;
@@ -114,6 +118,33 @@ pub struct PostgresEventStore {
     /// benign race is two handles reading the same committed row and one
     /// `set` losing, which costs a round trip and changes no value.
     store_id: Arc<OnceLock<StoreId>>,
+    /// The runtime every operation hops onto, captured at construction.
+    ///
+    /// # Why a store needs this at all
+    ///
+    /// `sqlx` requires a tokio runtime in thread-local scope, and this store is
+    /// called from threads that have none. That is not hypothetical: the
+    /// conformance suite's concurrency family runs each contender on a raw OS
+    /// thread driving `block_on`, deliberately -- the testkit has no runtime
+    /// dependency and must not acquire one, because CF-20 and CF-23 exist so the
+    /// suite runs on `wasm32` and under a caller-supplied harness. Without a
+    /// bridge, every rule in that family panics inside `sqlx`'s `missing_rt`,
+    /// which is exactly what the first run of it did.
+    ///
+    /// Captured here rather than looked up per call because a store is
+    /// *constructed* inside the harness's runtime and *used* outside it. The
+    /// same shape `happenstance-sqlite` carries, for the same reason one layer
+    /// down.
+    ///
+    /// # Why `spawn` and not `Handle::enter`
+    ///
+    /// `enter` is smaller and does not work. Its `EnterGuard` is `!Send`, so
+    /// holding one across an `await` makes the future `!Send` and
+    /// `SendEventStore` stops being implementable -- ADR-0001's constraint
+    /// arriving from the other direction. Spawning moves the work onto the
+    /// runtime that owns the reactor and leaves the caller's bare `block_on`
+    /// waiting on a `JoinHandle`, which is a plain future and needs nothing.
+    runtime: Option<Handle>,
 }
 
 impl PostgresEventStore {
@@ -173,7 +204,45 @@ impl PostgresEventStore {
         Self {
             pool,
             store_id: Arc::new(OnceLock::new()),
+            // `try_current` rather than `current`: `new` may legitimately be
+            // called outside a runtime, and panicking there would make a library
+            // out of a caller's ordering choice. The failure surfaces at the
+            // first operation, as `NoRuntime`, if no runtime is found by then
+            // either.
+            runtime: Handle::try_current().ok(),
         }
+    }
+
+    /// The runtime this store's work runs on.
+    ///
+    /// The handle captured at construction first, then the caller's current one,
+    /// and only then an error. The second chance matters: a store built outside
+    /// a runtime and used inside one is a legitimate wiring order.
+    ///
+    /// # Errors
+    ///
+    /// [`PostgresEventStoreError::NoRuntime`] when there is no runtime in either
+    /// place.
+    fn runtime(&self) -> Result<Handle, PostgresEventStoreError> {
+        self.runtime
+            .clone()
+            .or_else(|| Handle::try_current().ok())
+            .ok_or(PostgresEventStoreError::NoRuntime)
+    }
+
+    /// Runs `work` on this store's runtime and waits for it.
+    ///
+    /// Every method that touches the server goes through here, so that "which
+    /// thread am I on" is answered once rather than at four call sites.
+    async fn on_runtime<T, F>(&self, work: F) -> Result<T, PostgresEventStoreError>
+    where
+        F: Future<Output = Result<T, PostgresEventStoreError>> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.runtime()?
+            .spawn(work)
+            .await
+            .map_err(PostgresEventStoreError::Worker)?
     }
 
     /// This store's identity, read from `store_meta` and cached.
@@ -191,10 +260,15 @@ impl PostgresEventStore {
             return Ok(*cached);
         }
 
-        let stored: Option<Vec<u8>> =
-            sqlx::query_scalar("SELECT v FROM store_meta WHERE k = 'store_id'")
-                .fetch_optional(&self.pool)
-                .await?;
+        let pool = self.pool.clone();
+        let stored: Option<Vec<u8>> = self
+            .on_runtime(async move {
+                sqlx::query_scalar("SELECT v FROM store_meta WHERE k = 'store_id'")
+                    .fetch_optional(&pool)
+                    .await
+                    .map_err(PostgresEventStoreError::from)
+            })
+            .await?;
         let stored = stored.ok_or(PostgresEventStoreError::MissingIdentity)?;
         let bytes: [u8; 16] = stored
             .as_slice()
@@ -259,7 +333,7 @@ impl SendEventStore for PostgresEventStore {
         // this is the one method whose *whole body* has to be real: acquiring
         // the connection is deferred into the stream's first poll, and the
         // laziness stops being a nicety and becomes load-bearing.
-        PgReadStream::new(self.pool.clone(), query, options)
+        PgReadStream::new(self.pool.clone(), self.runtime.clone(), query, options)
     }
 
     async fn append(
@@ -283,7 +357,20 @@ impl SendEventStore for PostgresEventStore {
         Self::check_ceilings(events)?;
 
         let store_id = self.store_id().await.map_err(AppendError::Store)?;
-        match append_in_transaction(&self.pool, events, condition, now(), store_id)
+
+        // Owned, because the future crosses onto another runtime and must be
+        // `'static`. `Event` is `Bytes`-backed, so the clone is a refcount bump
+        // per event rather than a copy of the payload.
+        let pool = self.pool.clone();
+        let owned: Vec<Event> = events.to_vec();
+        let condition = condition.cloned();
+        let recorded_at = now();
+
+        match self
+            .on_runtime(async move {
+                append_in_transaction(&pool, &owned, condition.as_ref(), recorded_at, store_id)
+                    .await
+            })
             .await
             .map_err(AppendError::Store)?
         {
@@ -315,11 +402,17 @@ impl SendEventStore for PostgresEventStore {
         // transaction anywhere in the cluster — a five-second write in an
         // unrelated database moved it from 0.7 ms to 4,010 ms when it was
         // measured — which is a documented capability limit, not a tuning knob.
-        let highest: Option<i64> = sqlx::query_scalar(
-            "SELECT max(position) FROM event              WHERE xact_id < pg_snapshot_xmin(pg_current_snapshot())",
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let highest: Option<i64> = self
+            .on_runtime(async move {
+                sqlx::query_scalar(
+                    "SELECT max(position) FROM event              WHERE xact_id < pg_snapshot_xmin(pg_current_snapshot())",
+                )
+                .fetch_one(&pool)
+                .await
+                .map_err(PostgresEventStoreError::from)
+            })
+            .await?;
 
         // `transpose`, not `and_then`: a stored value that fails to decode is a
         // corrupt store and must not be spelled the same way as an empty one.
@@ -346,15 +439,21 @@ impl SendEventStore for PostgresEventStore {
         // This is recorded, not settled. ES-41 stays `[PROVISIONAL]` and the
         // replication semantics that would settle it belong to the project that
         // owns ingest, not to this adapter.
-        let store = id.store().to_bytes();
+        let store = id.store().to_bytes().to_vec();
         let position = as_i64(id.position());
-        let found: Option<i32> = sqlx::query_scalar(
-            "SELECT 1 FROM event WHERE origin_store = $1 AND origin_position = $2",
-        )
-        .bind(&store[..])
-        .bind(position)
-        .fetch_optional(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let found: Option<i32> = self
+            .on_runtime(async move {
+                sqlx::query_scalar(
+                    "SELECT 1 FROM event WHERE origin_store = $1 AND origin_position = $2",
+                )
+                .bind(store)
+                .bind(position)
+                .fetch_optional(&pool)
+                .await
+                .map_err(PostgresEventStoreError::from)
+            })
+            .await?;
         Ok(found.is_some())
     }
 }
