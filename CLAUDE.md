@@ -72,6 +72,9 @@ references/                      evidence kept for citation, binding nothing.
   scenarios/                       six deployments the contract was walked against.
   adapter-shapes.md                what the six skeletons told the type checker.
   adr/                             the full decision records. cite these by line.
+  architecture/                    the workspace drawn — one traced command loop, the
+                                   in-process boundary, and where operator-owned
+                                   storage begins. self-contained HTML and its source.
   seeds/                           raw material for `/redkiln:initiative`.
 docs/                            user documentation. nothing else.
 RUNBOOK.md                       the plan of record, and how far it has got.
