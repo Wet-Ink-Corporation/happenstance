@@ -70,6 +70,9 @@ hold, same load; only the predicate differs.
 3. **What bound should the docs promise?** Sub-millisecond unloaded; the duration
    of the longest open write transaction anywhere on the cluster otherwise. It is
    the *remainder* of the holder, not a fraction: 4799 ms against a 5000 ms hold.
+   That is the planning figure the open question asked for, and HS-S0066 has put
+   it on `happenstance-postgres`'s crate root where a consumer meets it before
+   any method — so sub-question 3 is closed in the docs and not only in a record.
 4. **Reconsider B-tag?** No. Its branch was "if arm C proves structurally
    expensive"; it did not. B-tag stays rejected on the invariant — per-boundary
    where ES-10 is global — not on cost.
@@ -81,6 +84,31 @@ A (serialised sequence table) 0.062 and B-const (constant advisory lock) 0.033 a
 Postgres. B-tag 0.935 — nearly free, and it reproduces the baseline inversion on
 disjoint keys. **B-tag is cheap because it buys something weaker**, so ranking by
 throughput would have chosen it.
+
+## Where the bill is stated normatively — no new clause, decided not defaulted
+
+`postgres-structural-bill` (HS-S0066) owed a *decision* on whether the three
+consumer-facing consequences — frontier `head`, no read-your-own-writes,
+cluster-wide staleness — are owed a clause of their own or stay prose inside
+ES-10. **Verdict: no new clause.** Long form §9.
+
+Two reasons, the first decisive:
+
+- **No conformance rule can fail an adapter over them.** They are *permissions*
+  granted to an adapter, not requirements binding one, and a clause that names no
+  rule and no wrong implementation is decorative (CF-4). The single testable
+  sentence — a head is a **bound**, not an equality — is already
+  `head_is_the_highest_visible_position` under ES-30.
+- **A second copy of the visibility invariant is a drift this document has
+  already suffered.** ES-10 declares itself the sole statement because VT-12's
+  copy diverged within one editing pass. The drift is demonstrable now, not
+  merely predicted: ES-10's frozen prose still quotes phase 2's 0.688 ms /
+  4010.719 ms, which the adapter re-measurement above supersedes, and the clause
+  is `[FROZEN]` and not edited.
+
+The auditor's reading order is recorded in the long form: ES-10, then ES-30's
+rule, then §3–§4 here, then the crate's own rustdoc. **`spec/SPECIFICATION.md` is
+unedited by phase 10.**
 
 ## Inherited, not owned
 

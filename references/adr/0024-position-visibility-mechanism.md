@@ -225,6 +225,63 @@ schedule changed accordingly, with ES-10 untouched.
 `POLL_BUDGET` as a fixture capability is now **moot**: the new schedule stopped
 counting polls, so CF-33's tension never has to be resolved.
 
+### 9. Where the bill is stated normatively: no new clause, and its loser named
+
+The consumer-facing bill this mechanism buys — a frontier `head`, no
+read-your-own-writes, and a staleness bound that is a property of the cluster —
+is stated today as **prose inside ES-10** (`spec/SPECIFICATION.md:2883-2893`) and
+carries no rule id of its own. `postgres-structural-bill` (HS-S0066) was required
+to decide whether a clause of its own is owed, *as a decision rather than a
+default*, and this section is where that verdict is recorded.
+
+**The verdict is no new clause**, and it rests on two things rather than on
+inertia.
+
+**First, and decisively: a clause must name a rule that can fail an adapter, and
+this one cannot.** Every clause in the specification names the conformance rule
+that checks it and the wrong implementation it forbids; CF-4 and `CLAUDE.md` both
+refuse a check no implementation can fail. The three consequences are
+**permissions granted to an adapter**, not requirements binding one — an adapter
+is *permitted* to report a head below the highest position it has assigned,
+*permitted* not to offer read-your-own-writes, *permitted* to be as stale as its
+cluster's longest write transaction. A rule can only fail a store that does
+something forbidden, and none of that is forbidden. The single testable sentence
+in the vicinity — that a head is a **bound** and not an equality — is already
+`head_is_the_highest_visible_position` under ES-30
+(`spec/SPECIFICATION.md:4044-4047`), whose `Rejects:` names three compiling
+implementations it catches. Minting a clause that greps for prose instead would
+be decorative in exactly the way this repository keeps finding.
+
+**Second: the second copy is the failure this document already carries a scar
+from.** ES-10 ends by declaring itself *"the sole statement of the visibility
+invariant"*, because VT-12 carried a second copy and the two drifted apart within
+one editing pass (`spec/SPECIFICATION.md:2902-2906`; VT-12 survives as a
+cross-reference at `:1086`). A sibling clause restating arm C's consequences is
+that second copy with the serial number filed off — and this record can
+demonstrate the drift rather than merely predict it: **ES-10's frozen prose
+quotes phase 2's staleness pair, 0.688 ms and 4010.719 ms, which §4 above has
+superseded** with numbers taken against the built adapter and against a control
+arm phase 2 did not have. The clause is `[FROZEN]` and is not edited to say so.
+A second clause would have acquired the same lag, in a second place.
+
+**What a phase-12 auditor reads instead**, in this order:
+
+1. **ES-10** (`spec/SPECIFICATION.md:2866-2975`) — the normative invariant, and at
+   `:2883-2893` the three consequences of buying it this way. Frozen. Its
+   staleness magnitudes are phase 2's and are superseded by §4 of this record.
+2. **ES-30's `head_is_the_highest_visible_position`**
+   (`spec/SPECIFICATION.md:4044-4047`) — the only one of the three consequences
+   any conformance rule observes, and it observes it as a bound.
+3. **§3 and §4 of this record** — the structural half of the bill, and the
+   magnitudes with their conditions and their control.
+4. **The crate's own rustdoc** — `crates/happenstance-postgres/src/lib.rs`'s
+   crate root, where a consumer meets all three before any method, and the
+   `append` and `head` item docs beneath it.
+
+That the bill is checked by no conformance rule is not concealed by this verdict.
+It **is** the verdict's reason, and it is written here so that an auditor finds it
+at the ledger rather than reconstructing it.
+
 ## Consequences
 
 - `happenstance-postgres` occupies the position-allocation axis's far end with a
@@ -238,6 +295,10 @@ counting polls, so CF-33's tension never has to be resolved.
   it: no rival lost by a few percent.
 - CF-13 cannot detect an off-poll adapter's visibility defect. That is a live
   limitation of the suite, recorded and not closed here.
+- **The bill gets no clause of its own** (§9). It stays prose inside ES-10, on
+  the grounds that no conformance rule can fail an adapter over it and that a
+  second copy of the visibility invariant is a drift this document has already
+  suffered once. `spec/SPECIFICATION.md` is therefore unedited by phase 10.
 
 ## What this does not decide
 

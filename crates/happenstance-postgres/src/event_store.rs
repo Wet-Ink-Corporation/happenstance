@@ -32,7 +32,7 @@
 //! this module's ES-10 note below: a `serial` column is `nextval()`, and
 //! `nextval()` is where the invariant is lost.
 //!
-//! # ES-10, and what each candidate mechanism costs the types
+//! # ES-10, and what this adapter pays for it
 //!
 //! ES-10 says position order is visibility order: once a reader has seen
 //! position *P*, nothing at or below *P* may appear later. A naive Postgres
@@ -43,61 +43,59 @@
 //! failing test; there is a read model that is correct about a state the
 //! business forbids.
 //!
-//! Three mechanisms are named as candidates. What matters here is not their
-//! throughput — this crate has no server to measure against and will not invent
-//! numbers — but what each asks of the adapter's **types** and its **append
-//! path**, and in particular whether it serialises writers, which would destroy
-//! the axis this crate exists to occupy.
+//! **This adapter buys the invariant with `xid8` + `pg_snapshot_xmin`, and the
+//! choice was measured rather than preferred.** ADR-0024 is the record. Each row
+//! stamps `pg_current_xact_id()`; every read and `head` admit only rows below
+//! `pg_snapshot_xmin(pg_current_snapshot())`, the frontier beneath which no
+//! transaction can still be in flight. The mechanism does not deny that
+//! `nextval()` allocates outside the transaction — it stops treating position
+//! order as *visibility* order and moves the guard to the read side.
 //!
-//! * **A serialised sequence table.** `UPDATE hs_sequence SET n = n + 1
-//!   RETURNING n` inside the append transaction. The row lock is held to commit,
-//!   so allocation order *is* commit order and ES-10 holds trivially.
-//!   [`SendEventStore::append`]'s signature is untouched
-//!   and no round trip is added — the `UPDATE ... RETURNING` folds into the
-//!   statement that was going to run anyway. **It also serialises every writer
-//!   in the store on one row.** That is the mechanism that makes this adapter
-//!   stop being an instrument: an adapter that funnels all writes through a
-//!   single lock is `MemoryEventStore` with network latency, and freezing the
-//!   port against it would freeze it against the shape the workspace already
-//!   has four of.
-//! * **A transaction-scoped advisory lock.** `pg_advisory_xact_lock(k)` taken
-//!   before allocation and released by the commit. Signature untouched; one
-//!   extra statement, not necessarily an extra round trip, since it can be
-//!   pipelined into the same batch. Serialisation is the same as the sequence
-//!   table if `k` is a constant, and only *partial* if `k` is derived from the
-//!   append condition's tags — which is the interesting version, and also the
-//!   one that changes what the adapter needs to know: it must derive a lock key
-//!   from an [`AppendCondition`], which is a
-//!   contract type it currently only forwards. That is the first of the three
-//!   that would push anything back toward the port.
-//! * **`xid8` + `pg_snapshot_xmin`.** Stop pretending the sequence is the order.
-//!   Store the transaction's `xid8` alongside the row and let readers admit only
-//!   rows below `pg_snapshot_xmin(pg_current_snapshot())` — the frontier beneath
-//!   which no transaction can still be in flight. Writers do not serialise at
-//!   all, which is exactly the property this crate exists to have. The cost is
-//!   paid on the read side and it is structural, not incremental: every read
-//!   gains a visibility predicate, `head` must report the frontier rather than
-//!   the maximum position, and freshly committed events are invisible until the
-//!   frontier passes them. That last part is a **capability** limit rather than
-//!   a type error — the adapter compiles, and then read-your-own-writes does not
-//!   hold — which is precisely the second kind of row the phase-2 portfolio table
-//!   asks for.
+//! What that asks of this adapter's types and its append path:
 //!
-//! **The measurement was owed and has been taken. ADR-0024 is the record.**
+//! * **Writers do not serialise at all**, which is the property this crate
+//!   exists to have, and [`SendEventStore::append`]'s signature is untouched.
+//!   What the async boundary did force is the conditional path: under
+//!   `READ COMMITTED` two writers racing one boundary both find no conflict and
+//!   both win, so a conditional append runs `SERIALIZABLE` — whose SSI is
+//!   optimistic and takes no locks, so disjoint boundaries still proceed in
+//!   parallel — and retries a `40001`. Holding a write lock instead is the move
+//!   this crate exists *not* to make.
+//! * **The cost is read-side, and it is structural rather than incremental.**
+//!   Every read gains the visibility predicate, and the predicate is composed
+//!   into the cursor's `DECLARE` inside one `REPEATABLE READ` transaction and
+//!   evaluated once. Not per `FETCH`: the frontier advances between chunks, and
+//!   a per-chunk predicate lets rows appear beneath positions the caller has
+//!   already been handed — ES-10's own violation arriving through the read path
+//!   while the write path was being fixed.
+//! * **`head` reports the frontier rather than the maximum position**, so
+//!   freshly committed events are invisible until the frontier passes them. That
+//!   is a **capability** limit rather than a type error: the adapter compiles,
+//!   and then read-your-own-writes does not hold.
 //!
-//! The choice is `xid8` + `pg_snapshot_xmin`, on two numbers rather than a
-//! preference. Steady state, against this built adapter with the predicate
-//! removed as the paired baseline: the median ratio straddles 1.0 at every
-//! concurrency level with about a 20% spread, so no cost large enough to matter
-//! is measurable — and the two arms that cost 16x and 30x would be unmissable at
-//! that precision. Staleness, which is the real bill: 0.59 ms unloaded and
-//! **4,799 ms behind a five-second write transaction held anywhere on the
-//! cluster**, against an unguarded arm unaffected by the same hold at 0.60 ms.
+//! **The two numbers.** Steady state, measured against this built adapter with
+//! the predicate removed as the paired baseline: the median ratio straddles 1.0
+//! at every concurrency level with about a 20% spread, so no cost large enough
+//! to matter is measurable — and the arms that cost 16x and 30x would be
+//! unmissable at that precision. Staleness, which is the real bill: a median of
+//! 0.593 ms unloaded and **4,799 ms behind a five-second write transaction held
+//! anywhere on the cluster**, against an unguarded arm unaffected by the same
+//! hold at 0.595 ms.
+//!
+//! **The alternative that lost, named once so it is not re-proposed.** A
+//! tag-keyed advisory lock is the cheapest rival — 0.935 of baseline at 64
+//! writers, nearly free — and it lost on the **invariant** rather than on cost:
+//! it buys a per-boundary property where ES-10 states a global one, which makes
+//! `AppendCondition` sound and the projection checkpoint unsound. Ranking the
+//! arms by throughput would have selected it. The two that serialise every
+//! writer, a sequence table and a constant advisory lock, are correct and lost
+//! on cost at 0.062 and 0.033.
 //!
 //! What follows for a caller, and the crate does not soften it: `head` is a
 //! frontier, read-your-own-writes does not hold and is not claimed, and the
-//! staleness bound is the longest open write transaction on the server — which a
-//! consumer neither controls nor can necessarily observe.
+//! staleness bound is the longest open write transaction on the cluster — which
+//! a consumer neither controls nor can necessarily observe. The crate root
+//! states that bill where a consumer meets it first.
 //!
 //! `references/adr/0024-position-visibility-mechanism.md` carries the argument,
 //! the losing arms and what each lost on, and the parts this decision inherits
@@ -118,11 +116,19 @@ use crate::read_stream::PgReadStream;
 
 /// A Postgres-backed event store.
 ///
-/// # Status: not implemented
-///
 /// Holds a [`PgPool`] rather than a connection, which is the shape difference
 /// that makes this crate an instrument: readers and writers do not queue behind
 /// one another, so nothing about the storage layer supplies ES-10 for free.
+///
+/// # What this store does not promise
+///
+/// It buys ES-10 on the read side, with `xid8` + `pg_snapshot_xmin`, so
+/// [`head`](SendEventStore::head) reports a **visibility frontier** rather than
+/// the highest position assigned, and **read-your-own-writes does not hold**.
+/// Staleness is bounded by the longest open write transaction anywhere on the
+/// cluster. Those are capability limits rather than defects; the crate root
+/// states them in full, and [`append`](SendEventStore::append) and
+/// [`head`](SendEventStore::head) each state the half a caller meets there.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct PostgresEventStore {
@@ -431,6 +437,36 @@ impl SendEventStore for PostgresEventStore {
         )
     }
 
+    /// Appends a batch and returns the position of its last event.
+    ///
+    /// # What `Ok(P)` does and does not promise
+    ///
+    /// It promises that the batch is committed, at positions ending at *P*, and
+    /// that the append condition held when it was evaluated.
+    ///
+    /// It does **not** promise that the next [`head`](SendEventStore::head) is
+    /// at or above *P*, and it does not promise that a read issued immediately
+    /// afterwards contains what was just written. This store reports a
+    /// visibility frontier, the frontier trails the positions it has already
+    /// assigned, and **read-your-own-writes does not hold**.
+    ///
+    /// That is a documented **capability limit** of this adapter rather than a
+    /// bug to report: there is no setting that turns it off, and the staleness
+    /// is bounded by the longest open write transaction anywhere on the
+    /// cluster — measured at a median of 0.593 ms with no holder, and 4,799 ms
+    /// behind a five-second write transaction held in an unrelated database. A
+    /// caller who needs the position immediately should keep the one this method
+    /// returned rather than reading it back; the crate root explains why reading
+    /// it back is not available here.
+    ///
+    /// # Errors
+    ///
+    /// [`AppendError::NoEvents`] for an empty batch, refused before the
+    /// condition is evaluated; [`AppendError::ExceedsStoreLimit`] for a batch
+    /// over one of this store's stated ceilings, refused before anything reaches
+    /// the wire; [`AppendError::ConditionViolated`] when the condition found a
+    /// matching event, which is not an adapter failure; and
+    /// [`AppendError::Store`] for anything the driver or this adapter reports.
     async fn append(
         &self,
         events: &[Event],
@@ -479,24 +515,37 @@ impl SendEventStore for PostgresEventStore {
         }
     }
 
+    /// The highest position beneath this store's **visibility frontier**, or
+    /// `None` when nothing is visible yet.
+    ///
+    /// # What a frontier is, and why it is not `max(position)`
+    ///
+    /// A head is a promise that nothing at or below it will appear later
+    /// (ES-10). `max(position)` cannot make that promise here: `nextval()`
+    /// allocates outside the transaction, so the highest position assigned can
+    /// name a row whose predecessors are still in flight. Each row therefore
+    /// stamps its appending transaction's `xid8`, and the frontier is
+    /// `pg_snapshot_xmin(pg_current_snapshot())` — the transaction id below
+    /// which nothing can still be running. Everything beneath it has settled,
+    /// and that is what this method reports.
+    ///
+    /// The frontier legitimately **trails** the position
+    /// [`append`](SendEventStore::append) just returned, so
+    /// **read-your-own-writes does not hold** and this crate does not claim it;
+    /// ES-30's `head_is_the_highest_visible_position` asserts a *bound* rather
+    /// than an equality precisely to admit that. How far it trails is bounded by
+    /// the longest open write transaction anywhere on the cluster — a median of
+    /// 0.593 ms with no holder, and 4,799 ms behind a five-second write held in
+    /// an unrelated database, against an unguarded arm unaffected by the same
+    /// hold at 0.595 ms. A documented **capability limit**, not a tuning knob:
+    /// nothing an operator configures moves it.
+    ///
+    /// # Errors
+    ///
+    /// The adapter's own error if the query fails, or if a stored position
+    /// cannot be decoded — which is a corrupt store and is deliberately not
+    /// spelled the same way as an empty one.
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        // The **visibility frontier**, not `max(position)`, and the difference
-        // is the whole reason this crate is in the tree.
-        //
-        // `nextval()` allocates outside the transaction, so `max(position)` can
-        // name a row whose predecessors are still in flight — and a head is a
-        // promise that nothing at or below it will appear later (ES-10). The row
-        // stamps the appending transaction's `xid8`, and the frontier is
-        // `pg_snapshot_xmin(pg_current_snapshot())`: the id below which no
-        // transaction can still be running. Everything beneath it has settled.
-        //
-        // This legitimately trails the position `append` just returned, so
-        // **read-your-own-writes does not hold** and this crate does not claim
-        // it. ES-30's rule asserts a *bound* rather than an equality precisely
-        // to admit that. Staleness is bounded by the longest open write
-        // transaction anywhere in the cluster — a five-second write in an
-        // unrelated database moved it from 0.7 ms to 4,010 ms when it was
-        // measured — which is a documented capability limit, not a tuning knob.
         let pool = self.pool.clone();
         let predicate = self.visibility.predicate();
         let highest: Option<i64> = self

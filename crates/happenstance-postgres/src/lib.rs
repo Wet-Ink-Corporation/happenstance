@@ -1,16 +1,22 @@
 //! Postgres adapters for happenstance: an event store and a projection store.
 //!
-//! # Status: not implemented
+//! # Status
 //!
-//! The crate compiles and its types are real, but every body that would touch a
-//! server is `todo!()`. It is `publish = false` until it passes
-//! [`happenstance-testkit`](https://docs.rs/happenstance-testkit)'s conformance
-//! suite — which is the bar for any adapter in this workspace, not a formality.
+//! The **event store is implemented**, and run rather than asserted: 101 of 101
+//! gated tests pass against a live PostgreSQL 17.10, including the concurrency
+//! family at `CONTENDERS = 64`. That is the first time an adapter in this
+//! workspace has cleared that family against a store whose writers are **not**
+//! serialised, which is the whole reason the crate is in the tree.
 //!
-//! # Why this crate exists before it is needed
+//! The projection store beside it is still a skeleton — every body that would
+//! touch a server is `todo!()`, which is what the crate's remaining
+//! `#![allow(clippy::todo)]` covers — and the crate is `publish = false` until
+//! it is packaged.
 //!
-//! It is an instrument first and a target second. Every adapter in the
-//! workspace today — `MemoryEventStore`, a `RefCell` store, rusqlite, a Durable
+//! # Why this crate exists
+//!
+//! It is an instrument first and a target second. Every other adapter in the
+//! workspace — `MemoryEventStore`, a `RefCell` store, rusqlite, a Durable
 //! Object — assigns positions under a lock it holds until commit, so all four
 //! satisfy the specification's ES-10 (*position order is visibility order*) for
 //! free, and none of them votes for it. Postgres is the one shape on the roadmap
@@ -20,23 +26,86 @@
 //! appear beneath it. `AppendCondition::after(100)` evaluates `99 <= 100` and
 //! reports no violation, so the consistency boundary silently stops enforcing.
 //!
-//! Nothing here buys the invariant yet. What this crate does today is make the
-//! *shape* that can violate it exist in-tree, so that the port is frozen against
-//! a networked, pooled, non-serialising adapter rather than against SQLite
-//! wearing four hats.
+//! This crate buys the invariant back rather than avoiding the shape, and the
+//! next section is what that costs the caller.
 //!
-//! # Open decisions
+//! # What this store costs a caller
 //!
-//! * **How ES-10 is bought.** `xid8` + `pg_snapshot_xmin`, a
-//!   transaction-scoped advisory lock, or a serialised sequence table. Each
-//!   costs something real, the choice is owed a measurement rather than a
-//!   preference, and the deciding question is which of them does *not*
-//!   serialise writers — because an adapter that serialises its writers has
-//!   stopped being the instrument this crate exists to be. See
-//!   [`event_store`] for what each one asks of the types.
-//! * **Tag matching.** A join table, a `text[]` column with a GIN index, or
-//!   `jsonb`. [`Tags`](happenstance_core::Tags) is canonically sorted so that
-//!   the containment operator (`@>`) stays available.
+//! Read this before choosing the adapter. Everything below is a **capability
+//! limit** — a thing the store does not do — and not a defect to report, not a
+//! setting, and not something an operator can tune down.
+//!
+//! ES-10 is bought with `xid8` + `pg_snapshot_xmin`. Every row stamps the
+//! transaction that wrote it, and every read admits only rows beneath
+//! `pg_snapshot_xmin(pg_current_snapshot())` — the transaction id below which
+//! nothing can still be in flight. Writers are never serialised, which is the
+//! property this crate exists to have; the entire bill is paid on the read side.
+//! Three things follow, and the crate does not soften them.
+//!
+//! **`head()` reports a visibility frontier, not `max(position)`, and the
+//! frontier trails the maximum.** A head is a promise that nothing at or below
+//! it will appear later; `max(position)` cannot make that promise here, because
+//! it can name a row whose predecessors are still uncommitted. So `head()`
+//! returns the highest position beneath the frontier, which legitimately sits
+//! below the highest position this store has already assigned. The conformance
+//! rule for a head asserts a *bound* rather than an equality for exactly this
+//! reason.
+//!
+//! **Read-your-own-writes does not hold, and is not claimed.** `append`
+//! returning `Ok(P)` does **not** promise that the next `head()` is at or above
+//! *P*, and a read issued immediately after a successful append may not contain
+//! the event that append just wrote. Nothing is lost — the row is committed and
+//! will become visible — but a workflow that writes and then reads back through
+//! this store to confirm the write is not one this adapter serves.
+//!
+//! **Staleness is bounded by the longest open write transaction anywhere on the
+//! cluster.** Not on this table and not in this database: any write transaction
+//! held open by anything connected to the same server holds the frontier where
+//! it is. A migration, a batch job, an idle-in-transaction connection or an
+//! unrelated tenant is enough, and it is a bound a consumer of this crate
+//! neither controls nor can necessarily observe.
+//!
+//! **What to budget for.** Sub-millisecond when nothing else is holding a write
+//! transaction open, and **the whole remaining duration of the longest one that
+//! is** otherwise. The remainder of the holder, not a fraction of it.
+//!
+//! Measured against this adapter, nine samples per cell: a median of 0.593 ms
+//! with no holder, and 4,799 ms behind a five-second held write transaction
+//! writing to its own unrelated table — while the same adapter with the
+//! visibility predicate removed is unaffected by the identical hold, at
+//! 0.595 ms. Same server, same hold, same load; only the predicate differs. So
+//! the figure to plan for is whatever your cluster's longest write transaction
+//! is, and if you cannot bound that, you cannot bound this.
+//!
+//! ```no_run
+//! use happenstance_core::{Event, SendEventStore};
+//! use happenstance_postgres::event_store::PostgresEventStore;
+//!
+//! # async fn confirm(
+//! #     store: &PostgresEventStore,
+//! #     events: &[Event],
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let written = store.append(events, None).await?;
+//!
+//! // `written` is where the event landed. It is not a position `head()`
+//! // promises to have reached, so this is a bound and never an equality —
+//! // `head() == Some(written)` is the assertion a caller must not write.
+//! assert!(store.head().await? <= Some(written));
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Three other mechanisms were measured and lost, and naming them once is
+//! cheaper than having them re-proposed: a serialised sequence table (0.062 of
+//! baseline throughput at 64 writers) and a constant advisory lock (0.033) are
+//! both correct and both buy ES-10 by deleting the reason to reach for Postgres,
+//! while a tag-keyed advisory lock is nearly free (0.935) and lost on the
+//! **invariant** rather than on cost — it buys a per-boundary property where
+//! ES-10 states a global one. `references/adr/0024-position-visibility-mechanism.md`
+//! in this crate's repository carries the argument and the measurements.
+//!
+//! # Still open
+//!
 //! * **TLS.** Deliberately not selected, and the reason is measured rather than
 //!   assumed. `sqlx`'s `tls-rustls` fails the workspace's `cargo deny` licence
 //!   allowlist — not on `ring`, which is `Apache-2.0 AND ISC` and passes, but on
