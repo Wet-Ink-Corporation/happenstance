@@ -3011,6 +3011,31 @@ every statement after the first by `position <= H` — or `>= H` under
 `backwards` — one extra round trip at most, and zero if the first statement
 returns the head alongside the first page.
 
+**What "no later than the first poll" means for an asynchronous driver**, stated
+here because it is not obvious and the plausible wrong answer is expensive. A
+synchronous driver satisfies this clause by doing the work: `rusqlite` blocks,
+so `happenstance-sqlite`'s first poll *is* the sample. An asynchronous driver
+cannot do that — its first poll can only **start** the round trip that takes the
+snapshot — and the conclusion that therefore no async adapter can conform is
+wrong.
+
+What conforms is **handing the work to the runtime at the first poll**, rather
+than holding it as an inline future that advances only while a caller is polling
+it. The obligation is then met in the only sense available on that shape: the
+sample was *committed to* at that poll and no longer depends on the caller
+polling again. A read spawned at its first poll and an append spawned afterwards
+land in the same queue in that order, so the snapshot precedes the append without
+either operation having completed when the poll returned.
+
+The distinction is worth the paragraph because the failure is *consistent*, which
+makes the wrong diagnosis look structural. `happenstance-postgres` failed
+`read_result_is_stable_under_concurrent_append` and `query_items_share_one_snapshot`
+five times in five runs while its cursor's opening was an inline future, and the
+inference drawn was that the clause could not be met at all. It could; the
+adapter's bridge to the runtime — built for an unrelated reason, because `sqlx`
+panics with no runtime in thread-local scope on the concurrency family's bare
+contender threads — settled it, and all rules pass.
+
 The ceiling is only a ceiling if nothing below *H* can become visible later,
 which is ES-10. **ES-11 and ES-12 reduce to ES-10 plus a ceiling**: neither is
 implementable on any multi-statement adapter without ES-10, and both are nearly
