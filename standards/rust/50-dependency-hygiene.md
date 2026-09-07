@@ -229,6 +229,6 @@ reasoning for the state you are leaving is what a reviewer checks the change
 against.
 
 **Evidence.** `crates/happenstance-cloudflare/Cargo.toml:44 (was deliberately absent)` ·
-`crates/happenstance-cloudflare/src/lib.rs:518 (exists to run four assertions)` ·
+`crates/happenstance-cloudflare/src/lib.rs:593 (exists to run four assertions)` ·
 `crates/happenstance-cloudflare/src/sql_storage.rs:5 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

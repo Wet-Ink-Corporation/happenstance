@@ -217,8 +217,10 @@ impl JsThrow {
     ///
     /// Reached by property lookup on the live value where there is one, and by
     /// the message `worker` cached at conversion where there is not. Compare
-    /// [`StringifiedThrow::is_constraint_violation`], which answers the same
-    /// question from the message text alone — the comparison is the evidence
+    /// `StringifiedThrow::is_constraint_violation` — named rather than linked,
+    /// because that type is `pub(crate)` and a link to it from this public page
+    /// is `rustdoc::private_intra_doc_links`, which the gate denies — which
+    /// answers the same question from the message text alone — the comparison is the evidence
     /// ADR-0009 asks for, and the finding is that on this question the two
     /// answer identically, because Workers puts the SQLite error text in
     /// `.message` and exposes no numeric `code`.
@@ -288,40 +290,82 @@ const CONSTRAINT_CODE_KEY: &str = "code";
 /// is the standing argument against decorating a type with one that buys
 /// nothing. [`JsThrow`] carries none, for the same reason.
 ///
-/// ```compile_fail
-/// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+/// # Why this is `pub(crate)`, and what left with the `pub`
 ///
-/// fn classify(throw: &JsThrow) -> bool {
-///     let stringified = StringifiedThrow {
-///         message: "UNIQUE constraint failed: event.position".to_owned(),
-///     };
-///     stringified.is_constraint_violation()
-/// }
-/// # let _ = classify;
-/// ```
+/// **Both of this type's in-crate roles are satisfied by a private type.** It
+/// is the recorded alternative to [`JsThrow`], and it is
+/// `the_probe_is_not_vacuous`'s positive control — the `Send` type without
+/// which the crate root's whole `!Send` probe module would also pass if the
+/// probe were simply broken. Neither role needs a caller.
 ///
-/// The fence above is spelled bare `compile_fail`, never `compile_fail,E0451`:
-/// rustdoc on 1.97.1 silently ignores an error-code annotation it cannot match,
-/// so the stricter-looking spelling is the weaker check — the measurement is
-/// recorded in `crates/happenstance-testkit/src/contract.rs`. Bare
-/// `compile_fail` passes when the snippet fails to compile for *any* reason, so
-/// the **twin** below is what makes the pair sound. It is the same function with
-/// one expression changed — the struct literal becomes the sanctioned
-/// constructor — and it must compile, so a rename or a wrong path breaks the
-/// twin rather than quietly satisfying its partner.
+/// **And nothing in the workspace ever consumed it as a caller would.** The
+/// evidence for a public audience does not exist rather than being outweighed:
+/// this crate has never been in anyone's hands — `happenstance-cloudflare`
+/// holds a `0.0.0` placeholder on the registry, which is not a predecessor
+/// because there was never anything under it — so `0.2.0` is the one release at
+/// which withdrawing the name costs nobody anything. After it, the same change
+/// is a major version.
 ///
-/// ```
-/// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
+/// **What went with the `pub` is four rendered doctests, and they are not
+/// replaced in kind.** Two proved the struct literal is unbuildable downstream
+/// and two that the field cannot be assigned on a value already held. Both
+/// facts are still true and both are now *subsumed*: a caller who cannot name
+/// the type cannot reach either seal to test it. `pub(crate)` is the strictly
+/// stronger statement, checked by the compiler on every build of every crate
+/// that depends on this one, which is a better instrument than a `compile_fail`
+/// pair and a cheaper one. What the pair below proves is therefore the new seal
+/// rather than the old ones — see `stringified_throw_is_crate_private` in the
+/// crate root.
 ///
-/// fn classify(throw: &JsThrow) -> bool {
-///     let stringified = StringifiedThrow::from_throw(throw);
-///     stringified.is_constraint_violation()
-/// }
-/// # let _ = classify;
-/// ```
+/// **The argument the deleted doctests carried is kept**, because it is the
+/// reason the field was private before the type was: whoever writes the message
+/// decides what this crate calls a conflict, so an error-normalising middleware
+/// or a test double that puts `UNIQUE constraint failed` into the text makes a
+/// DCB command loop read a transport fault as a lost append condition and retry
+/// a decision the store never refused. The retry succeeds, so nothing in any
+/// log says otherwise. That is RS-13-1's shape with the message here in place of
+/// the position there, and it is why the field stays private even now that the
+/// type is unreachable — the seal a future in-crate module meets is still the
+/// field's.
+///
+/// # The consequence the brief did not name: in a shipped build, nobody uses it
+///
+/// Withdrawing the `pub` made the type dead code outside a test build, and
+/// `-D warnings` said so immediately — *"struct `StringifiedThrow` is never
+/// constructed"*, plus its four associated items. Both remaining uses are
+/// `#[cfg(test)]`: the crate root's `!Send` probes, and this module's own
+/// `wasm32` tests. That is not a surprise to be suppressed; it is the honest
+/// arithmetic of Option B, and it is recorded here because a reader meeting the
+/// `allow` below deserves to know it was reasoned about rather than reached for.
+///
+/// **`#[cfg(test)]` on the type would be the tidier answer and is the wrong
+/// one.** The ratified decision is about *visibility*, and swapping it for a
+/// compilation gate answers a different question — it would make the recorded
+/// alternative to [`JsThrow`] stop existing in the artefact the crate actually
+/// ships, so ES-6's fork would have one arm in the binary and one in the test
+/// profile. The two shapes are meant to be comparable in the same build.
+///
+/// So the `allow` is scoped to `not(test)` rather than written flat. In a test
+/// build the lint stays live, which means the day the probes stop using this
+/// type — the day it becomes *genuinely* dead rather than dead-outside-tests —
+/// `cargo test` says so. A flat `#[allow(dead_code)]` would silence that too,
+/// and the only thing keeping this type honest is that something still asserts
+/// on it.
+///
+/// **Neither of those two names is a link, and neither can be.** The `!Send`
+/// probes live in `lib.rs`'s `#[cfg(test)] mod not_send_assertions`, and the
+/// seal's compiled proof is its `#[cfg(doctest)] mod
+/// stringified_throw_is_crate_private`. A documentation build compiles neither
+/// configuration, so rustdoc resolves neither path and
+/// `-D rustdoc::broken-intra-doc-links` rejects the attempt. Naming them in
+/// prose is the spelling that cannot rot into a broken link — which is the same
+/// trade this crate already makes one type up, where `JsThrow`'s page names
+/// `StringifiedThrow::is_constraint_violation` without linking it because that
+/// item is now private.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("JavaScript threw: {message}")]
-pub struct StringifiedThrow {
+#[cfg_attr(not(test), allow(dead_code, reason = "the only users are cfg(test)"))]
+pub(crate) struct StringifiedThrow {
     /// `String(value)` applied at the boundary.
     ///
     /// Private, and read through [`message`](Self::message). The two doctests
@@ -330,29 +374,44 @@ pub struct StringifiedThrow {
     message: String,
 }
 
+// Gated on the *wasm32* test build rather than on `test`, because that is
+// where this impl's users actually are and a lint that is off where its subject
+// is used is not a lint. The host `cfg(test)` build reaches the type — the
+// `!Send` probe names it — and none of these four methods; only this module's
+// `#[cfg(all(test, target_arch = "wasm32"))]` tests call them. So under
+// `cargo test` on the host they are dead, under `cargo test` on wasm32 they are
+// not, and the lint is live in exactly the second case. Widening this to
+// `not(test)` would match the attribute on the type above and would switch the
+// check off in the one configuration that can perform it.
+#[cfg_attr(
+    not(all(test, target_arch = "wasm32")),
+    allow(dead_code, reason = "the callers are this module's wasm32 tests")
+)]
 impl StringifiedThrow {
-    /// The stringified value, as `String(value)` produced it.
-    ///
-    /// The read half of the seal. A caller normalising errors, logging one or
-    /// matching on its text has everything they had when the field was `pub`;
-    /// what they no longer have is a way to make this crate's classifier say
-    /// something the boundary did not.
-    #[must_use]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-
-    /// Stringifies a thrown value at the boundary.
-    #[must_use]
-    pub fn new(thrown: &JsHandle) -> Self {
-        Self {
-            message: thrown.stringify(),
-        }
-    }
+    // `message(&self) -> &str` and `new(&JsHandle)` stood here and are gone,
+    // and their absence is a result rather than tidying. Both were `pub` on a
+    // `pub` type, which is a configuration in which `dead_code` can never fire:
+    // an exported item always has a hypothetical caller. Narrowing the type to
+    // `pub(crate)` made the compiler look, and it found that neither had a real
+    // one — not in this crate, not in its tests, not on either target.
+    //
+    // `message` was the read half of the field seal and its whole justification
+    // was written in terms of a caller ("a caller normalising errors, logging
+    // one or matching on its text has everything they had when the field was
+    // `pub`"). That caller is exactly who Option B withdrew, so the method
+    // outlived its argument by one commit. `new` stringified a `JsHandle`
+    // directly and was the same operation as `from_throw` one input earlier;
+    // nothing ever reached for it. The `Display` impl reads the field, not the
+    // accessor, so the type still renders its text and ES-6's comparison is
+    // undamaged.
+    //
+    // Keeping them behind the `allow` below was the alternative and it loses:
+    // that attribute exists to say "the users are in another configuration",
+    // which would have been false of these two in every configuration there is.
 
     /// Stringifies a classified throw at the boundary.
     #[must_use]
-    pub fn from_throw(throw: &JsThrow) -> Self {
+    pub(crate) fn from_throw(throw: &JsThrow) -> Self {
         Self {
             message: throw.error().to_string(),
         }
@@ -368,40 +427,17 @@ impl StringifiedThrow {
     ///
     /// # The input is not the caller's to write
     ///
-    /// The type's own documentation says why. What the pair below adds is the
-    /// half `#[non_exhaustive]` would *not* have closed: an attribute blocks the
-    /// struct literal and forces `..` in a pattern, and does nothing at all to
-    /// an assignment on a value already held (RS-13-1, and RS-13-3's own
-    /// "Remediation" note). A private field is what closes both.
-    ///
-    /// ```compile_fail
-    /// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
-    ///
-    /// fn classify(throw: &JsThrow) -> bool {
-    ///     let mut stringified = StringifiedThrow::from_throw(throw);
-    ///     stringified.message = "UNIQUE constraint failed: event.position".to_owned();
-    ///     stringified.is_constraint_violation()
-    /// }
-    /// # let _ = classify;
-    /// ```
-    ///
-    /// And its twin, which must compile: the same function with the assignment
-    /// replaced by the read it is sanctioned to do. Reading the message is the
-    /// capability this type exists to offer — it is the whole content of
-    /// "stringified" — and the seal is on the write.
-    ///
-    /// ```
-    /// use happenstance_cloudflare::{JsThrow, StringifiedThrow};
-    ///
-    /// fn classify(throw: &JsThrow) -> bool {
-    ///     let stringified = StringifiedThrow::from_throw(throw);
-    ///     let _text: &str = stringified.message();
-    ///     stringified.is_constraint_violation()
-    /// }
-    /// # let _ = classify;
-    /// ```
+    /// The type's own documentation says why, and since the type became
+    /// `pub(crate)` there is no caller who could write it. The narrower fact the
+    /// deleted doctest pair proved is still worth stating, because it is about
+    /// the *field* rather than the type and it is what a future in-crate module
+    /// meets: `#[non_exhaustive]` blocks the struct literal and forces `..` in a
+    /// pattern, and does nothing at all to an assignment on a value already held
+    /// (RS-13-1, and RS-13-3's own "Remediation" note). A private field is what
+    /// closes both, which is why the field stays private rather than being
+    /// relaxed now that the type is unreachable.
     #[must_use]
-    pub fn is_constraint_violation(&self) -> bool {
+    pub(crate) fn is_constraint_violation(&self) -> bool {
         reads_as_constraint_violation(&self.message)
     }
 }

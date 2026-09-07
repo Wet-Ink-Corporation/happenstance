@@ -117,6 +117,54 @@ not the same as what a user needed to be told.
   block was additionally compiled as an ordinary test to confirm `E0639` is the
   only error it produces.
 
+- **BREAKING (`happenstance-cloudflare`): `StringifiedThrow` is `pub(crate)`,
+  and the crate root's invitation to reach for it is withdrawn with it.** Both
+  of the type's roles are satisfied by a private type — it is the recorded
+  alternative to `JsThrow`, and it is `the_probe_is_not_vacuous`'s positive
+  control, the `Send` type without which the whole `!Send` probe module would
+  also pass if the probe were simply broken. Nothing in the workspace ever
+  consumed it as a caller would, so the evidence for a public audience does not
+  exist rather than being outweighed. The crate holds a `0.0.0` placeholder on
+  the registry, which is not a predecessor because nothing was ever under it, so
+  this is the one release at which withdrawing the name costs nobody anything.
+
+  **Four rendered doctests went with the `pub` and are not replaced in kind.**
+  Two proved the struct literal unbuildable downstream and two that the field
+  could not be assigned on a value already held. Both facts survive and both are
+  subsumed: a caller who cannot name the type cannot reach either seal. What
+  replaces them is one pair proving the *new* seal — naming the type through its
+  module path is `error[E0603]`, and a twin naming `JsThrow` on the same path
+  must compile. The re-export half needs no test, because a `pub use` of a
+  `pub(crate)` item is `error[E0365]`: the compiler will not let the two edits
+  drift apart.
+
+  **The consequence the brief did not name, recorded rather than suppressed.**
+  Withdrawing the `pub` made the type dead code outside a test build, and
+  `-D warnings` said so at once. Its two remaining users are not even in the
+  same configuration: the host `cfg(test)` build reaches the *type* (the `Send`
+  probe names it) and none of its methods, while the methods are called only by
+  `js.rs`'s own `#[cfg(all(test, target_arch = "wasm32"))]` tests. So the two
+  `allow`s are gated differently — `not(test)` on the type,
+  `not(all(test, target_arch = "wasm32"))` on the impl — each staying live in
+  the configuration that can actually perform the check. `#[cfg(test)]` on the
+  type would have been tidier and is the wrong answer: it would make ES-6's
+  recorded alternative absent from the artefact the crate ships, leaving one arm
+  of the fork in the binary and one in the test profile.
+
+  **`StringifiedThrow::message` and `StringifiedThrow::new` are removed, and
+  finding them is an argument for the change rather than a cost of it.** Both
+  were `pub` methods on a `pub` type, which is a configuration in which
+  `dead_code` can never fire — an exported item always has a hypothetical
+  caller. Narrowing the type made the compiler look, and neither had a real one
+  in any crate, any test or either target. `message` was the read half of the
+  field seal and its justification was written in terms of a caller, which is
+  precisely who this change withdrew; `new` was `from_throw`'s operation one
+  input earlier and nothing ever reached for it. `Display` reads the field
+  rather than the accessor, so the type still renders its text and the ES-6
+  comparison is undamaged. Keeping them behind the `allow` would have made that
+  attribute say "the users are in another configuration" about two items that
+  had users in none.
+
 ## [0.2.0] — 2026-09-06
 
 The first stable release, and the first to carry all five crates. What the

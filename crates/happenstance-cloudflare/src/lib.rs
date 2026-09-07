@@ -285,8 +285,8 @@
 //!    caller needs
 //!
 //! [`js::JsThrow`] keeps the thrown value and can call
-//! [`js::JsHandle::property`]; [`js::StringifiedThrow`] keeps `String(value)`
-//! and cannot. On the one question the port makes a caller ask — was this a
+//! [`js::JsHandle::property`]; `StringifiedThrow` keeps `String(value)` and
+//! cannot. On the one question the port makes a caller ask — was this a
 //! conflict? — they answer identically, because a Durable Object surfaces
 //! SQLite's own text (`UNIQUE constraint failed: event.position`) through the
 //! thrown `Error`'s `message` and exposes no numeric code. **Confirmed against
@@ -296,6 +296,17 @@
 //! through to the message every time. The capability that is genuinely lost is
 //! *forward* compatibility: a caller holding the live value can read a field
 //! nobody has thought of yet.
+//!
+//! **`StringifiedThrow` is `pub(crate)` and is deliberately not linked above.**
+//! Read the paragraph as the comparison it is — the two shapes ES-6 had to
+//! choose between — and not as an invitation, because the route it describes is
+//! one this crate has withdrawn. The finding is unchanged by the withdrawal: it
+//! is about what stringifying *costs*, which is a fact about the two shapes and
+//! not about which of them a caller can name. Keeping the name in prose while
+//! removing the link is the whole of the edit, and it is the point — a page that
+//! argues for a route the API no longer offers is worse than one that never
+//! mentioned it. `js.rs` carries why the type stayed and why it stopped being
+//! public.
 //!
 //! **Now observed rather than predicted, and from the caller's seat rather than
 //! this module's.** The `es6_reconstruction` tests in this file drive a
@@ -494,8 +505,72 @@ pub mod send_shape;
 pub mod sql_storage;
 
 pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStream};
-pub use js::{JsHandle, JsThrow, StringifiedThrow};
+// `StringifiedThrow` was here and is `pub(crate)` now. The re-export and the
+// visibility are one decision, and the compiler is what keeps them one: a
+// `pub use` of a crate-private item is `error[E0365]`, so this line could not
+// have been left behind by accident. What could be left behind is the *reason*,
+// which is on the type's own page in `js.rs`, and the crate root's Finding 2,
+// which argued for a route this crate has now withdrawn and was edited with it.
+pub use js::{JsHandle, JsThrow};
 pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
+
+/// Compiled proof that `StringifiedThrow` cannot be named from outside this
+/// crate, and that the module it lives in still can.
+///
+/// **This replaces four doctests rather than adding a fifth.** Two proved the
+/// struct literal unbuildable downstream and two that the field could not be
+/// assigned on a value already held; both facts survive and both are subsumed,
+/// because a caller who cannot name the type cannot reach either seal. What is
+/// worth proving after the narrowing is the narrowing.
+///
+/// **Why the type is `pub(crate)`.** Both of its in-crate roles — the recorded
+/// alternative to [`JsThrow`], and `the_probe_is_not_vacuous`'s positive
+/// control — are satisfied by a private type, and nothing in the workspace ever
+/// consumed it as a caller would. The evidence for a public audience does not
+/// exist rather than being outweighed: this crate holds a `0.0.0` placeholder
+/// on the registry, which is not a predecessor because nothing was ever under
+/// it, so this is the one release at which withdrawing a name costs nobody
+/// anything. After it the same change is a major version.
+///
+/// **Rejects:** restoring `pub struct StringifiedThrow`. The first block then
+/// compiles and the test fails with *"Test compiled successfully, but it's
+/// marked `compile_fail`"*. The block names the type through its module path
+/// rather than through the re-export above, deliberately — that is the path a
+/// consumer reaches for once a re-export is gone, and it is the one the `pub`
+/// on the type controls.
+///
+/// **The other half needs no test, because the compiler will not let the two
+/// disagree.** A `pub use` of a `pub(crate)` item is `error[E0365]`, so putting
+/// the name back into the re-export above without also restoring the `pub`
+/// fails to build this crate at all. The two edits cannot drift apart, which is
+/// why there is one doctest here and not two.
+///
+/// Checked against the compiler rather than asserted: compiled as an ordinary
+/// integration test, the block is `error[E0603]: struct `StringifiedThrow` is
+/// private` and nothing else — the only error, reported once per mention.
+///
+/// ```compile_fail
+/// fn seen(t: happenstance_cloudflare::js::StringifiedThrow)
+///     -> happenstance_cloudflare::js::StringifiedThrow { t }
+/// # fn main() {}
+/// ```
+///
+/// The **twin** must compile, and it differs by one identifier. Bare
+/// `compile_fail` passes when a snippet fails for *any* reason — a typo in the
+/// crate name, a module that moved, a `js` that stopped being `pub` would all
+/// report ok against a false claim — and the error-code spelling is the weaker
+/// check rather than the stricter one, because rustdoc on 1.97.1 silently
+/// ignores an annotation it cannot match. The measurement behind that is
+/// recorded in `happenstance-testkit`'s `contract.rs`, and this crate's own
+/// `js.rs` already relied on it.
+///
+/// ```
+/// fn seen(t: happenstance_cloudflare::js::JsThrow)
+///     -> happenstance_cloudflare::js::JsThrow { t }
+/// # fn main() {}
+/// ```
+#[cfg(doctest)]
+pub mod stringified_throw_is_crate_private {}
 
 /// The two crates whose types this adapter's own signatures name, re-exported so
 /// a caller cannot end up holding a second, identically-printing copy of either.

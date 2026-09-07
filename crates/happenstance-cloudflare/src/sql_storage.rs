@@ -122,7 +122,8 @@ impl SqlRow {
 /// # Why `Thrown` carries a live error rather than a `String`
 ///
 /// This is the ES-6 fork, made concrete. Replacing [`JsThrow`] with
-/// [`StringifiedThrow`](crate::js::StringifiedThrow) here would make this enum,
+/// `StringifiedThrow` — the crate-private alternative `js` keeps — here would
+/// make this enum,
 /// [`CloudflareEventStoreError`](crate::event_store::CloudflareEventStoreError)
 /// and every future over them `Send + Sync`, and would delete the only type in
 /// this workspace that can fail such a bound. The crate documentation records
