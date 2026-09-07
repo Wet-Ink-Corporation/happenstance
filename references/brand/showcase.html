@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>happenstance — Identity in Use</title>
+<style>
+  :root{--sun:#FFB627;--deep:#E08700;--ember:#A85B00;--ink:#2A211B;--paper:#FFFCF4;--stone:#F4F1EA;
+        --rule:rgba(42,33,27,.13);--mute:rgba(42,33,27,.58);--gh:#0D1117;--ghline:#30363D;}
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 0 120px;background:var(--stone);color:var(--ink);
+    font-family:'IBM Plex Sans','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .shell{max-width:1120px;margin:0 auto;padding:0 34px}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+  .cover{background:var(--ink);color:var(--paper);padding:78px 34px 70px;margin-bottom:46px}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--sun);margin:0 0 14px}
+  .cover h1{font-size:36px;font-weight:600;letter-spacing:-.03em;margin:0 0 14px;line-height:1}
+  .cover p{margin:0;font-size:15.5px;line-height:1.62;color:rgba(255,252,244,.72);max-width:56ch}
+  h2{font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--ember);
+     margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--rule)}
+  section{margin-bottom:52px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:20px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+  .frame{border-radius:16px;overflow:hidden;border:1px solid var(--rule);background:var(--paper)}
+  .fcap{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);
+        margin-top:10px;display:block}
+  .gh-light{background:#fff;padding:30px 32px}
+  .gh-dark{background:var(--gh);padding:30px 32px}
+  .badges{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0 16px}
+  .badge{display:flex;font-size:10.5px;font-weight:600;border-radius:4px;overflow:hidden;font-family:'IBM Plex Mono',monospace}
+  .badge span{padding:3px 7px}
+  .badge .k{background:#555;color:#fff}
+  .badge .v{background:var(--sun);color:#2A211B}
+  .badge .v2{background:#3FA65B;color:#fff}
+  .gh-light p{font-size:13.5px;line-height:1.62;color:#4a4a4a;margin:0 0 12px;max-width:60ch}
+  .gh-dark p{font-size:13.5px;line-height:1.62;color:#8B949E;margin:0 0 12px;max-width:60ch}
+  .codeblk{background:#F6F8FA;border:1px solid #D0D7DE;border-radius:8px;padding:11px 14px;font-size:12.5px}
+  .codeblk.d{background:#161B22;border-color:var(--ghline);color:#C9D1D9}
+  .note{border-left:3px solid var(--sun);padding:2px 0 2px 13px;font-size:12.5px;line-height:1.6}
+  .crate{background:#fff;padding:24px 26px}
+  .crate-hd{display:flex;align-items:center;gap:12px}
+  .crate-nm{font-size:22px;font-weight:650;letter-spacing:-.02em}
+  .ver{font-size:11px;font-weight:600;color:#666;background:#EEE;border-radius:20px;padding:2px 9px}
+  .crate-meta{display:flex;gap:20px;margin-top:16px;font-size:11.5px;color:#666}
+  .docsbar{background:#131313;padding:11px 18px;display:flex;align-items:center;gap:12px}
+  .docsbar .nm{color:#fff;font-size:14px;font-weight:600}
+  .docsbar .v{color:#888;font-size:12px}
+  .docsbody{background:#fff;padding:20px 22px;font-size:12.5px;color:#333;line-height:1.7}
+  .docsbody .kw{color:#A85B00;font-weight:600}
+  .browser{background:#DEE1E6;padding:9px 9px 0}
+  .tabs{display:flex;gap:5px}
+  .tab{background:#F1F3F4;border-radius:9px 9px 0 0;padding:8px 13px;display:flex;align-items:center;gap:8px;
+       font-size:11.5px;color:#5F6368;min-width:0}
+  .tab.on{background:#fff;color:#202124;font-weight:600}
+  .tab .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .urlbar{background:#fff;padding:9px 12px}
+  .url{background:#F1F3F4;border-radius:20px;padding:6px 14px;font-size:11.5px;color:#5F6368}
+  .avrow{background:var(--gh);padding:26px;display:flex;align-items:center;gap:16px}
+  .avname{color:#E6EDF3;font-size:17px;font-weight:650}
+  .avsub{color:#8B949E;font-size:12.5px;margin-top:2px}
+  .term{background:#1B1613;padding:0}
+  .termbar{background:#2A211B;padding:9px 14px;display:flex;align-items:center;gap:7px}
+  .tdot{width:10px;height:10px;border-radius:50%}
+  .termbody{padding:18px 20px;font-size:12.5px;line-height:1.85;color:#D6CCC2}
+  .tprompt{color:var(--sun)}
+  .tdim{color:#7E736A}
+  .tok{color:#7FBF7F}
+  .og{background:var(--ink);aspect-ratio:1200/630;display:flex;flex-direction:column;justify-content:space-between;
+      padding:52px 54px;position:relative;overflow:hidden}
+  .og h3{margin:0;font-size:27px;font-weight:600;letter-spacing:-.025em;color:var(--paper);line-height:1.3;max-width:20ch}
+  .og .foot{display:flex;justify-content:space-between;align-items:flex-end;color:rgba(255,252,244,.5);font-size:12px}
+  .stickers{background:repeating-linear-gradient(45deg,#EAE5DA 0 10px,#E4DFD3 10px 20px);padding:34px;
+            display:flex;gap:22px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .st-circ{width:112px;height:112px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center;
+           border:5px solid var(--paper)}
+  .st-pill{background:var(--sun);border-radius:44px;padding:15px 26px;border:5px solid var(--paper);display:flex;align-items:center}
+  .st-sq{width:112px;height:112px;border-radius:24px;background:var(--sun);display:flex;align-items:center;justify-content:center;
+         border:5px solid var(--paper)}
+  .slide{background:var(--paper);aspect-ratio:16/9;padding:52px 56px;display:flex;flex-direction:column;justify-content:space-between}
+  .slide h3{margin:0;font-size:31px;font-weight:600;letter-spacing:-.03em;line-height:1.22;max-width:22ch}
+  .slide .sfoot{display:flex;justify-content:space-between;align-items:flex-end;font-size:11.5px;color:var(--mute)}
+  .accent{width:56px;height:5px;background:var(--sun);border-radius:3px;margin-bottom:22px}
+  .icons{background:linear-gradient(160deg,#4A5A6A,#2E3A46);padding:34px;display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+  .icn{display:flex;flex-direction:column;align-items:center;gap:9px}
+  .icn span{font-size:10.5px;color:rgba(255,255,255,.82)}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<path id="word" d="M7.4 -74H20.2V-43.5H20.7Q22.3 -47.7 25.8 -50.6Q29.2 -53.4 35.3 -53.4Q43.4 -53.4 47.7 -48.1Q52 -42.8 52 -33V0H39.2V-31.7Q39.2 -37.3 37.2 -40.1Q35.2 -42.9 30.6 -42.9Q28.6 -42.9 26.8 -42.4Q24.9 -41.8 23.5 -40.8Q22 -39.7 21.1 -38.2Q20.2 -36.6 20.2 -34.5V0H7.4Z M101.9 0Q97.7 0 95.2 -2.5Q92.8 -4.9 92.2 -9H91.6Q90.3 -3.9 86.3 -1.4Q82.3 1.2 76.4 1.2Q68.4 1.2 64.1 -3Q59.8 -7.2 59.8 -14.2Q59.8 -22.3 65.6 -26.2Q71.4 -30.2 82.1 -30.2H91V-34Q91 -38.4 88.7 -40.8Q86.4 -43.2 81.3 -43.2Q76.8 -43.2 74.1 -41.2Q71.3 -39.3 69.4 -36.6L61.8 -43.4Q64.7 -47.9 69.5 -50.7Q74.3 -53.4 82.2 -53.4Q92.8 -53.4 98.3 -48.6Q103.8 -43.8 103.8 -34.8V-10.2H109V0ZM80.7 -8.1Q85 -8.1 88 -10Q91 -11.9 91 -15.6V-22.5H82.8Q72.8 -22.5 72.8 -16.1V-14.4Q72.8 -11.2 74.8 -9.7Q76.9 -8.1 80.7 -8.1Z M116.7 -52.2H129.5V-43.6H129.9Q131.3 -48.1 135.2 -50.8Q139.1 -53.4 144.3 -53.4Q154.3 -53.4 159.6 -46.4Q164.8 -39.3 164.8 -26.2Q164.8 -13 159.6 -5.9Q154.3 1.2 144.3 1.2Q139.1 1.2 135.2 -1.5Q131.4 -4.2 129.9 -8.7H129.5V20H116.7ZM140.2 -9.4Q145.2 -9.4 148.3 -12.7Q151.4 -16 151.4 -21.6V-30.6Q151.4 -36.2 148.3 -39.6Q145.2 -42.9 140.2 -42.9Q135.6 -42.9 132.6 -40.6Q129.5 -38.3 129.5 -34.5V-17.9Q129.5 -13.8 132.6 -11.6Q135.6 -9.4 140.2 -9.4Z M174 -52.2H186.8V-43.6H187.2Q188.6 -48.1 192.5 -50.8Q196.4 -53.4 201.6 -53.4Q211.6 -53.4 216.9 -46.4Q222.1 -39.3 222.1 -26.2Q222.1 -13 216.9 -5.9Q211.6 1.2 201.6 1.2Q196.4 1.2 192.6 -1.5Q188.7 -4.2 187.2 -8.7H186.8V20H174ZM197.5 -9.4Q202.5 -9.4 205.6 -12.7Q208.7 -16 208.7 -21.6V-30.6Q208.7 -36.2 205.6 -39.6Q202.5 -42.9 197.5 -42.9Q192.9 -42.9 189.9 -40.6Q186.8 -38.3 186.8 -34.5V-17.9Q186.8 -13.8 189.9 -11.6Q192.9 -9.4 197.5 -9.4Z M252.4 1.2Q246.6 1.2 242.1 -0.8Q237.5 -2.7 234.4 -6.2Q231.2 -9.8 229.5 -14.9Q227.8 -19.9 227.8 -26.2Q227.8 -32.4 229.5 -37.4Q231.1 -42.4 234.2 -46Q237.3 -49.5 241.8 -51.5Q246.3 -53.4 252 -53.4Q258.1 -53.4 262.6 -51.3Q267.1 -49.2 270 -45.6Q272.9 -42 274.4 -37.2Q275.8 -32.5 275.8 -27.1V-22.9H241.1V-21.6Q241.1 -15.9 244.3 -12.4Q247.5 -9 253.8 -9Q258.6 -9 261.7 -11Q264.7 -13 267.1 -16.1L274 -8.4Q270.8 -3.9 265.3 -1.4Q259.7 1.2 252.4 1.2ZM252.2 -43.8Q247.1 -43.8 244.1 -40.4Q241.1 -37 241.1 -31.6V-30.8H262.5V-31.7Q262.5 -37.1 259.9 -40.5Q257.2 -43.8 252.2 -43.8Z M284.4 0V-52.2H297.2V-43.5H297.7Q299.3 -47.7 302.8 -50.6Q306.2 -53.4 312.3 -53.4Q320.4 -53.4 324.7 -48.1Q329 -42.8 329 -33V0H316.2V-31.7Q316.2 -37.3 314.2 -40.1Q312.2 -42.9 307.6 -42.9Q305.6 -42.9 303.8 -42.4Q301.9 -41.8 300.5 -40.8Q299 -39.7 298.1 -38.2Q297.2 -36.6 297.2 -34.5V0Z M357.6 1.2Q350.1 1.2 345 -1.4Q339.9 -3.9 336 -8.4L343.8 -16Q346.7 -12.7 350.2 -10.8Q353.6 -8.9 358.1 -8.9Q362.7 -8.9 364.8 -10.5Q366.8 -12.1 366.8 -14.9Q366.8 -17.2 365.4 -18.6Q363.9 -19.9 360.4 -20.4L355.2 -21.1Q346.7 -22.2 342.3 -26Q337.8 -29.7 337.8 -36.9Q337.8 -40.7 339.2 -43.8Q340.6 -46.8 343.2 -49Q345.8 -51.1 349.5 -52.2Q353.1 -53.4 357.6 -53.4Q361.4 -53.4 364.4 -52.9Q367.3 -52.3 369.7 -51.2Q372.1 -50.2 374.1 -48.7Q376.1 -47.1 378 -45.2L370.5 -37.7Q368.2 -40.1 365 -41.7Q361.8 -43.3 358 -43.3Q353.8 -43.3 352 -41.8Q350.1 -40.3 350.1 -37.9Q350.1 -35.3 351.7 -34Q353.2 -32.6 356.9 -32L362.2 -31.3Q379.1 -28.9 379.1 -15.9Q379.1 -12.1 377.6 -9Q376 -5.8 373.2 -3.6Q370.4 -1.3 366.5 0Q362.5 1.2 357.6 1.2Z M403.2 0Q396.6 0 393.2 -3.5Q389.7 -6.9 389.7 -13.3V-42H382V-52.2H386Q388.9 -52.2 390 -53.6Q391 -54.9 391 -57.6V-66.5H402.5V-52.2H413.2V-42H402.5V-10.2H412.4V0Z M460 0Q455.8 0 453.4 -2.5Q450.9 -4.9 450.3 -9H449.7Q448.4 -3.9 444.4 -1.4Q440.4 1.2 434.5 1.2Q426.5 1.2 422.2 -3Q417.9 -7.2 417.9 -14.2Q417.9 -22.3 423.7 -26.2Q429.5 -30.2 440.2 -30.2H449.1V-34Q449.1 -38.4 446.8 -40.8Q444.5 -43.2 439.4 -43.2Q434.9 -43.2 432.2 -41.2Q429.4 -39.3 427.5 -36.6L419.9 -43.4Q422.8 -47.9 427.6 -50.7Q432.4 -53.4 440.3 -53.4Q450.9 -53.4 456.4 -48.6Q461.9 -43.8 461.9 -34.8V-10.2H467.1V0ZM438.8 -8.1Q443.1 -8.1 446.1 -10Q449.1 -11.9 449.1 -15.6V-22.5H440.9Q430.9 -22.5 430.9 -16.1V-14.4Q430.9 -11.2 433 -9.7Q435 -8.1 438.8 -8.1Z M474.8 0V-52.2H487.6V-43.5H488.1Q489.7 -47.7 493.2 -50.6Q496.6 -53.4 502.7 -53.4Q510.8 -53.4 515.1 -48.1Q519.4 -42.8 519.4 -33V0H506.6V-31.7Q506.6 -37.3 504.6 -40.1Q502.6 -42.9 498 -42.9Q496 -42.9 494.2 -42.4Q492.3 -41.8 490.9 -40.8Q489.4 -39.7 488.5 -38.2Q487.6 -36.6 487.6 -34.5V0Z M551.5 1.2Q545.7 1.2 541.2 -0.7Q536.7 -2.6 533.7 -6.2Q530.6 -9.8 529 -14.9Q527.4 -19.9 527.4 -26.2Q527.4 -32.5 529 -37.5Q530.6 -42.5 533.7 -46Q536.7 -49.6 541.2 -51.5Q545.7 -53.4 551.5 -53.4Q559.4 -53.4 564.5 -49.9Q569.7 -46.4 572 -40.2L561.5 -35.5Q560.6 -38.8 558.2 -41Q555.7 -43.1 551.5 -43.1Q546.1 -43.1 543.5 -39.7Q540.8 -36.3 540.8 -30.8V-21.3Q540.8 -15.8 543.5 -12.4Q546.1 -9.1 551.5 -9.1Q556.1 -9.1 558.6 -11.4Q561.1 -13.8 562.5 -17.3L572.3 -12.6Q569.7 -5.7 564.4 -2.2Q559.1 1.2 551.5 1.2Z M600.1 1.2Q594.3 1.2 589.8 -0.8Q585.2 -2.7 582 -6.2Q578.9 -9.8 577.2 -14.9Q575.5 -19.9 575.5 -26.2Q575.5 -32.4 577.2 -37.4Q578.8 -42.4 581.9 -46Q585 -49.5 589.5 -51.5Q594 -53.4 599.7 -53.4Q605.8 -53.4 610.3 -51.3Q614.8 -49.2 617.7 -45.6Q620.6 -42 622 -37.2Q623.5 -32.5 623.5 -27.1V-22.9H588.8V-21.6Q588.8 -15.9 592 -12.4Q595.2 -9 601.5 -9Q606.3 -9 609.4 -11Q612.4 -13 614.8 -16.1L621.7 -8.4Q618.5 -3.9 613 -1.4Q607.4 1.2 600.1 1.2ZM599.9 -43.8Q594.8 -43.8 591.8 -40.4Q588.8 -37 588.8 -31.6V-30.8H610.2V-31.7Q610.2 -37.1 607.5 -40.5Q604.9 -43.8 599.9 -43.8Z"/>
+<g id="mk"><circle cx="50" cy="50" r="15"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(51.4286 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(102.8571 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(154.2857 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(205.7143 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(257.1429 50 50)"/><rect x="45.5" y="11.5" width="9" height="13" rx="3.6" transform="rotate(308.5714 50 50)"/></g>
+<g id="mkc"><circle cx="50" cy="50" r="22"/><rect x="42.5" y="3" width="15" height="20" rx="5.5"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(51.4286 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(102.8571 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(154.2857 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(205.7143 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(257.1429 50 50)"/><rect x="42.5" y="3" width="15" height="20" rx="5.5" transform="rotate(308.5714 50 50)"/></g>
+</defs></svg>
+
+<div class="cover">
+  <div class="shell">
+    <p class="kicker">Showcase</p>
+    <h1>The identity in use</h1>
+    <p>The same seven blocks and one wordmark, placed on the surfaces a Rust library is actually met on — the README, the registry, the docs, the browser tab, the terminal, and the table at the back of a conference room.</p>
+  </div>
+</div>
+
+<div class="shell">
+
+<section>
+  <h2>The README</h2>
+  <div class="grid2">
+    <div>
+      <div class="frame">
+        <div class="gh-light">
+          <svg viewBox="-14 -90 689 130" style="width:100%;max-width:300px;display:block" aria-label="happenstance"><use href="#word" fill="#2A211B"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+          <div class="badges">
+            <span class="badge"><span class="k">crates.io</span><span class="v">0.2.0</span></span>
+            <span class="badge"><span class="k">docs</span><span class="v2">passing</span></span>
+            <span class="badge"><span class="k">conformance</span><span class="v">89 rules</span></span>
+            <span class="badge"><span class="k">license</span><span class="v">MIT / Apache-2.0</span></span>
+          </div>
+          <p>A storage-agnostic, DCB-compliant event sourcing library for Rust. Ports plus a published conformance suite, so that “storage agnostic” is a claim anyone can check.</p>
+          <div class="note" style="color:#4a4a4a">Early, and worth being precise about. <span class="mono" style="font-size:11.5px">0.2.0</span> is published; the surface is not yet frozen.</div>
+          <div class="codeblk mono" style="margin-top:16px">cargo add happenstance</div>
+        </div>
+      </div>
+      <span class="fcap">GitHub · light</span>
+    </div>
+    <div>
+      <div class="frame" style="border-color:var(--ghline)">
+        <div class="gh-dark">
+          <svg viewBox="-14 -90 689 130" style="width:100%;max-width:300px;display:block" aria-label="happenstance"><use href="#word" fill="#FFFCF4"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+          <div class="badges">
+            <span class="badge"><span class="k">crates.io</span><span class="v">0.2.0</span></span>
+            <span class="badge"><span class="k">docs</span><span class="v2">passing</span></span>
+            <span class="badge"><span class="k">conformance</span><span class="v">89 rules</span></span>
+            <span class="badge"><span class="k">license</span><span class="v">MIT / Apache-2.0</span></span>
+          </div>
+          <p>A storage-agnostic, DCB-compliant event sourcing library for Rust. Ports plus a published conformance suite, so that “storage agnostic” is a claim anyone can check.</p>
+          <div class="note" style="color:#8B949E">Early, and worth being precise about. <span class="mono" style="font-size:11.5px">0.2.0</span> is published; the surface is not yet frozen.</div>
+          <div class="codeblk d mono" style="margin-top:16px">cargo add happenstance</div>
+        </div>
+      </div>
+      <span class="fcap">GitHub · dark · <span class="mono">#0D1117</span>, Sun reads 10.79:1</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Registry and documentation</h2>
+  <div class="grid2">
+    <div>
+      <div class="frame">
+        <div class="crate">
+          <div class="crate-hd">
+            <svg viewBox="0 0 100 100" width="40" height="40"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg>
+            <span class="crate-nm mono">happenstance</span><span class="ver mono">0.2.0</span>
+          </div>
+          <p style="font-size:13px;color:#555;line-height:1.6;margin:14px 0 0">Storage-agnostic, DCB-compliant event sourcing. Ports, typed layer, and a published conformance suite.</p>
+          <div class="crate-meta mono">
+            <span>↓ 41,208 all-time</span><span>⚖ MIT OR Apache-2.0</span><span>⬢ 4 crates</span>
+          </div>
+        </div>
+      </div>
+      <span class="fcap">crates.io · the badge carries its own contrast</span>
+    </div>
+    <div>
+      <div class="frame">
+        <div class="docsbar">
+          <svg viewBox="0 0 100 100" width="24" height="24"><use href="#mkc" fill="#FFB627"/></svg>
+          <span class="nm mono">happenstance</span><span class="v mono">0.2.0</span>
+        </div>
+        <div class="docsbody mono">
+          <span class="kw">pub trait</span> EventStore {<br>
+          &nbsp;&nbsp;<span class="kw">async fn</span> read(&amp;self, q: Query) -&gt; Result&lt;Stream&gt;;<br>
+          &nbsp;&nbsp;<span class="kw">async fn</span> append(&amp;self, e: Events, c: Condition) -&gt; Result&lt;Position&gt;;<br>
+          }
+        </div>
+      </div>
+      <span class="fcap">docs.rs · mark on the dark bar, never on the page ground</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Small sizes</h2>
+  <div class="grid2">
+    <div>
+      <div class="frame">
+        <div class="browser">
+          <div class="tabs">
+            <div class="tab on"><svg viewBox="0 0 100 100" width="15" height="15" style="flex:none"><rect width="100" height="100" rx="22" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg><span class="t">happenstance — docs.rs</span></div>
+            <div class="tab"><span style="width:15px;height:15px;border-radius:4px;background:#CE422B;flex:none"></span><span class="t">crates.io</span></div>
+            <div class="tab"><span style="width:15px;height:15px;border-radius:4px;background:#24292F;flex:none"></span><span class="t">GitHub</span></div>
+          </div>
+        </div>
+        <div class="urlbar"><div class="url mono">docs.rs/happenstance/0.2.0</div></div>
+      </div>
+      <span class="fcap">Favicon at 16px, beside the crates.io and GitHub marks</span>
+    </div>
+    <div>
+      <div class="frame" style="border-color:var(--ghline)">
+        <div class="avrow">
+          <svg viewBox="0 0 100 100" width="66" height="66" style="border-radius:50%"><rect width="100" height="100" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg>
+          <div>
+            <div class="avname">happenstance</div>
+            <div class="avsub">Event sourcing for Rust · Wet Ink Corporation</div>
+          </div>
+        </div>
+      </div>
+      <span class="fcap">GitHub organisation avatar · circular crop</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Terminal</h2>
+  <div class="frame">
+    <div class="term">
+      <div class="termbar">
+        <span class="tdot" style="background:#FF5F57"></span><span class="tdot" style="background:#FEBC2E"></span><span class="tdot" style="background:#28C840"></span>
+        <span class="mono" style="color:#8A7D72;font-size:11px;margin-left:8px">~/projects/coldchain</span>
+      </div>
+      <div class="termbody mono">
+        <span class="tprompt">❯</span> cargo add happenstance<br>
+        <span class="tdim">&nbsp;&nbsp;&nbsp;&nbsp;Updating</span> crates.io index<br>
+        <span class="tok">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Adding</span> happenstance v0.2.0 to dependencies<br>
+        <span class="tprompt">❯</span> cargo test --package happenstance-testkit<br>
+        <span class="tok">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ok</span> <span class="tdim">89 conformance rules · 0 failed</span>
+      </div>
+    </div>
+  </div>
+  <span class="fcap">Ink is a terminal background as well as a page colour · Sun as the prompt accent</span>
+</section>
+
+<section>
+  <h2>Social and presentation</h2>
+  <div class="grid2">
+    <div>
+      <div class="frame">
+        <div class="og">
+          <svg viewBox="-14 -90 689 130" style="width:56%;max-width:330px" aria-label="happenstance"><use href="#word" fill="#FFFCF4"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+          <h3>The consistency boundary is drawn by what actually happened.</h3>
+          <div class="foot mono"><span>Event sourcing for Rust</span><span>0.2.0 · MIT / Apache-2.0</span></div>
+        </div>
+      </div>
+      <span class="fcap">Open Graph card · 1200 × 630</span>
+    </div>
+    <div>
+      <div class="frame">
+        <div class="slide">
+          <div>
+            <div class="accent"></div>
+            <h3>Storage agnostic is a claim anyone can check.</h3>
+          </div>
+          <div class="sfoot">
+            <svg viewBox="-14 -90 689 130" style="width:180px" aria-label="happenstance"><use href="#word" fill="#2A211B"/><use href="#mk" fill="#FFB627" transform="translate(641 -56) scale(0.51948) translate(-50 -50)"/></svg>
+            <span class="mono">RustConf · 2026</span>
+          </div>
+        </div>
+      </div>
+      <span class="fcap">Presentation · 16 : 9</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Physical and app icons</h2>
+  <div class="grid2">
+    <div>
+      <div class="frame">
+        <div class="stickers">
+          <div class="st-circ"><svg viewBox="0 0 100 100" width="66" height="66"><use href="#mk" fill="#FFB627"/></svg></div>
+          <div class="st-sq"><svg viewBox="0 0 100 100" width="66" height="66"><use href="#mk" fill="#2A211B"/></svg></div>
+          <div class="st-pill"><svg viewBox="-14 -83.8 655.4 123.8" style="width:150px"><use href="#word" fill="#2A211B"/></svg></div>
+        </div>
+      </div>
+      <span class="fcap">Die-cut stickers · the mark inverts cleanly in both directions</span>
+    </div>
+    <div>
+      <div class="frame">
+        <div class="icons">
+          <div class="icn">
+            <svg viewBox="0 0 100 100" width="66" height="66" style="border-radius:15px"><rect width="100" height="100" fill="#2A211B"/><use href="#mkc" fill="#FFB627" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg>
+            <span>Ink badge</span>
+          </div>
+          <div class="icn">
+            <svg viewBox="0 0 100 100" width="66" height="66" style="border-radius:15px"><rect width="100" height="100" fill="#FFB627"/><use href="#mkc" fill="#2A211B" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg>
+            <span>Sun plate</span>
+          </div>
+          <div class="icn">
+            <svg viewBox="0 0 100 100" width="66" height="66" style="border-radius:15px"><rect width="100" height="100" fill="#FFFCF4"/><use href="#mkc" fill="#2A211B" transform="translate(50 50) scale(0.72) translate(-50 -50)"/></svg>
+            <span>Paper plate</span>
+          </div>
+        </div>
+      </div>
+      <span class="fcap">App and extension icons · three approved plates</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>The system at a glance</h2>
+  <div class="grid3">
+    <div class="frame" style="padding:26px;display:flex;flex-direction:column;gap:14px">
+      <svg viewBox="0 0 100 100" width="56" height="56"><use href="#mk" fill="#FFB627"/></svg>
+      <div><div style="font-size:14px;font-weight:650">Seven records</div>
+      <div style="font-size:12.5px;line-height:1.6;color:var(--mute);margin-top:5px">Equal blocks at a 51.4286° pitch, standing clear of a solid disc.</div></div>
+    </div>
+    <div class="frame" style="padding:26px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;gap:7px">
+        <span style="width:34px;height:34px;border-radius:9px;background:#FFB627"></span>
+        <span style="width:34px;height:34px;border-radius:9px;background:#E08700"></span>
+        <span style="width:34px;height:34px;border-radius:9px;background:#A85B00"></span>
+        <span style="width:34px;height:34px;border-radius:9px;background:#2A211B"></span>
+        <span style="width:34px;height:34px;border-radius:9px;background:#FFFCF4;border:1px solid var(--rule)"></span>
+      </div>
+      <div><div style="font-size:14px;font-weight:650">Warm, on purpose</div>
+      <div style="font-size:12.5px;line-height:1.6;color:var(--mute);margin-top:5px">Amber against warm near-black, in an ecosystem of greys and blues.</div></div>
+    </div>
+    <div class="frame" style="padding:26px;display:flex;flex-direction:column;gap:14px">
+      <svg viewBox="-14 -83.8 655.4 123.8" style="width:150px"><use href="#word" fill="#2A211B"/></svg>
+      <div><div style="font-size:14px;font-weight:650">Lowercase, always</div>
+      <div style="font-size:12.5px;line-height:1.6;color:var(--mute);margin-top:5px">IBM Plex Sans SemiBold, outlined, matching the crate name exactly.</div></div>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
