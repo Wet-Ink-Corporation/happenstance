@@ -165,6 +165,47 @@ not the same as what a user needed to be told.
   attribute say "the users are in another configuration" about two items that
   had users in none.
 
+- **`Codec` gains `reads_tag`, a defaulted method by which a codec declares
+  which tags it can decode.** Additive — no implementor breaks, and a codec that
+  says nothing behaves exactly as before. It settles what `Codec`'s own page
+  recorded as an open question: until now a tag written by a codec outside this
+  crate was a dead end, because `decode_event` resolved a foreign tag through a
+  fixed chain naming three concrete types and no build could grow a fourth.
+
+  **The shape of the repair is narrower than a registry, and the documentation
+  says so rather than implying otherwise.** The orphan rule means nobody outside
+  `happenstance` can override the method for `Json`, `Postcard` or `Cbor`. So
+  the migration this serves is *"my codec also reads the tag I used to write"* —
+  a rename, or one codec that knows several encodings. The migration it does
+  **not** serve is *"I switched to `Json` and expect my history back"*: that
+  build still gets `CodecError::UnknownTag`, and should, because nothing in it
+  knows how those bytes were written. A registry would have answered both and
+  costs global mutable state, an initialisation order, and a log that reads
+  differently depending on what has been registered yet. Sealing the trait
+  stays open and is the cheaper answer if no fourth codec ever appears.
+
+  **A wrong override cannot lock a codec out of its own log.** `decode_event`
+  checks `tag == C::TAG` before consulting the method, so `reads_tag` can only
+  widen. The obvious mistake — writing `tag == "myapp"` and dropping the
+  `|| tag == Self::TAG` — would otherwise produce a codec that reads its
+  predecessor's events and not its own, which is a defect that surfaces on the
+  *second* deployment rather than the one that introduced it.
+
+  Two tests hold this, and each rejects a different wrong implementation,
+  verified by building both: `a_codec_that_claims_a_foreign_tag_reads_it` goes
+  red when the method is added to the trait and never consulted on the decode
+  path — a version that compiles, documents a seam and satisfies every prose
+  check — and `an_override_that_forgets_its_own_tag_still_reads_what_it_wrote`
+  goes red when `reads_tag` is consulted *instead of* the own-tag check rather
+  than after it. Neither fails against the other's defect.
+
+  `a_codec_of_your_own_writes_a_tag_no_other_codec_can_read` **survives this
+  change**, and its own documentation previously said it would not — it claimed
+  to fail "under every option on the table", which was true of a registry and
+  false of a per-codec method. Corrected in place rather than deleted, because
+  the reason it survives is exactly the thing a reader needs to understand about
+  what landed.
+
 ## [0.2.0] — 2026-09-06
 
 The first stable release, and the first to carry all five crates. What the

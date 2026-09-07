@@ -35,19 +35,36 @@ use crate::domain::DomainEvent;
 /// the feature that turns it on. A tag answering to none of them is
 /// [`CodecError::UnknownTag`].
 ///
-/// For those three the refusal is one feature away from going away. For a
-/// codec of your own it is permanent: nothing registers one, so no build
-/// resolves its tag except a build already reading with that codec. An
-/// application that writes under its own codec for a year and then adopts
-/// `Json` reads every historical event as `UnknownTag` — an empty fold, and
-/// an append condition matching nothing.
+/// For those three the refusal is one feature away from going away: turn
+/// `postcard` on and the same event decodes. For a codec of your own nothing
+/// registers one, so no build resolves its tag on its own — and until `0.2.0`
+/// that was the end of the sentence. An application that wrote under its own
+/// codec for a year and then adopted `Json` read every historical event as
+/// `UnknownTag`: an empty fold, and an append condition matching nothing.
 ///
-/// So a codec of your own is safe as the **only** codec a log is ever read
-/// with, and not as one of several. That limit is recorded as an open
-/// question rather than defended as a design: the repair — a defaulted
-/// resolution method here, a registry, or sealing this trait and withdrawing
-/// the invitation above — has not been decided, and the three cost a caller
-/// different things.
+/// **[`reads_tag`](Codec::reads_tag) is the seam that ends it**, and it is the
+/// answer to what this page used to record as an open question. A codec
+/// declares which tags it can read; the codec you pass is asked before the
+/// built-in chain, so a log carrying tags you know about stays readable by you.
+/// The default claims your own tag and nothing else, so the behaviour above is
+/// unchanged for every codec that says nothing.
+///
+/// **Read the shape of the repair carefully, because it is narrower than a
+/// registry.** The orphan rule puts `Json`, `Postcard` and `Cbor` out of your
+/// reach, so you cannot teach *them* your tag; what you can do is keep passing
+/// a codec of your own that claims both. The migration that works is *"my codec
+/// also reads the tag I used to write"*. The one that does not is *"I switched
+/// to `Json` and expect my history back"* — that build still gets
+/// [`UnknownTag`](CodecError::UnknownTag), and it should, because nothing in it
+/// knows how those bytes were written.
+///
+/// The two options that lost are recorded rather than dropped. A **registry**
+/// would answer the second migration too and costs global mutable state, an
+/// initialisation order and a failure mode where the same log reads differently
+/// depending on what has been registered yet. **Sealing the trait** would
+/// withdraw the invitation above and is the cheaper, truer answer if no fourth
+/// codec ever appears; it stays open, because it is additive to take later and
+/// impossible to undo.
 ///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
@@ -90,6 +107,84 @@ pub trait Codec {
     /// truncated, written by a different codec, or written by an older version
     /// of the type.
     fn decode<T: serde::de::DeserializeOwned>(&self, data: &[u8]) -> Result<T, CodecError>;
+
+    /// Whether this codec can decode a payload framed with `tag`.
+    ///
+    /// Defaulted, so implementing it is optional and adding it broke nobody.
+    /// The default claims exactly this codec's own tag, which is what a reader
+    /// already assumed; overriding it is how a codec says it can read payloads
+    /// it did not write.
+    ///
+    /// # What this is for
+    ///
+    /// It is the seam the section above calls open. Without it a tag written by
+    /// a codec outside this crate is a dead end forever, because the resolution
+    /// chain names three concrete types and no build can grow a fourth. With
+    /// it, the codec **you** pass gets asked first, so a log carrying tags you
+    /// know about stays readable by you.
+    ///
+    /// The migration it serves, concretely: an application writes under `myapp`
+    /// for a year, renames the tag, and the new codec claims both. Same
+    /// encoding, two tags, one line —
+    ///
+    /// ```
+    /// # use happenstance::bytes::Bytes;
+    /// # use happenstance::{Codec, CodecError};
+    /// # use serde::Serialize;
+    /// # use serde::de::DeserializeOwned;
+    /// struct MyApp;
+    ///
+    /// impl Codec for MyApp {
+    ///     const TAG: &'static str = "myapp-v2";
+    ///
+    ///     fn reads_tag(&self, tag: &str) -> bool {
+    ///         tag == Self::TAG || tag == "myapp"
+    ///     }
+    /// #   fn encode<T: Serialize>(&self, v: &T)
+    /// #       -> Result<Bytes, CodecError> {
+    /// #       serde_json::to_vec(v)
+    /// #           .map(Bytes::from)
+    /// #           .map_err(|e| CodecError::Encode(Box::new(e)))
+    /// #   }
+    /// #   fn decode<T: DeserializeOwned>(&self, d: &[u8])
+    /// #       -> Result<T, CodecError> {
+    /// #       serde_json::from_slice(d)
+    /// #           .map_err(|e| CodecError::Decode(Box::new(e)))
+    /// #   }
+    /// }
+    ///
+    /// assert!(MyApp.reads_tag("myapp"));
+    /// assert!(MyApp.reads_tag("myapp-v2"));
+    /// assert!(!MyApp.reads_tag("json"));
+    /// ```
+    ///
+    /// # What it deliberately does not buy
+    ///
+    /// **It cannot teach `Json` to read your tag.** Overriding a method means
+    /// writing an `impl`, the orphan rule puts this crate's three codecs out of
+    /// your reach, and nothing here is a registry. So the shape of the repair
+    /// is *the codec you hold declares what it reads* — not *the ecosystem
+    /// learns about your codec*. A build that switched to `Json` outright still
+    /// gets [`CodecError::UnknownTag`] on its own history; the answer is to
+    /// keep passing a codec of your own that claims both tags.
+    ///
+    /// **Returning `true` does not make bytes readable.** This says which tags
+    /// to *try*, and [`decode`](Self::decode) still has to succeed on the
+    /// payload. A codec claiming a tag whose bytes it cannot parse turns
+    /// `UnknownTag` into [`CodecError::Decode`], which is a better error and
+    /// not a working read.
+    ///
+    /// # A wrong override cannot lock you out of your own log
+    ///
+    /// The decode path checks `tag == Self::TAG` before it asks this method, so
+    /// an override that forgets to include its own tag still decodes what it
+    /// wrote. The method can only ever widen. That belt is worth the line: the
+    /// obvious mistake here is writing `tag == "myapp"` and dropping the `||`,
+    /// and its punishment would otherwise be a log that reads its predecessor
+    /// and not itself.
+    fn reads_tag(&self, tag: &str) -> bool {
+        tag == Self::TAG
+    }
 }
 
 /// Why a payload could not be turned into bytes, or bytes into a value.
@@ -109,13 +204,20 @@ pub enum CodecError {
     /// already in hand, because refusing it would make every log written
     /// before the typed layer existed unreadable.
     ///
-    /// **Two conditions, and they differ in whether they can be repaired.** A
-    /// tag naming one of this crate's three codecs is a feature away: turn
-    /// `postcard` on and the same event decodes. A tag written by a codec
-    /// from outside this crate is a dead end — nothing registers one, so no
-    /// build resolves it except one reading with that codec itself. See
-    /// [`Codec`]'s *Reading a tag this build did not write* for why the
-    /// second case exists and what is open about it.
+    /// **Two conditions, and they differ in how they are repaired.** A tag
+    /// naming one of this crate's three codecs is a feature away: turn
+    /// `postcard` on and the same event decodes. A tag written by a codec from
+    /// outside this crate is not — nothing registers one, so no build resolves
+    /// it on its own, and no feature exists to turn on.
+    ///
+    /// The second case is repairable from the reading side rather than the
+    /// build's: a codec claims the tag with
+    /// [`Codec::reads_tag`], and the codec you pass is asked before the
+    /// built-in chain. What that cannot do is teach `Json` your tag — the
+    /// orphan rule is in the way — so a build that reads with a codec claiming
+    /// nothing still lands here. See [`Codec`]'s *Reading a tag this build did
+    /// not write* for the shape of the repair and the two options that lost
+    /// to it.
     #[error("no codec is registered for tag `{tag}`")]
     UnknownTag {
         /// The tag read off the event.
@@ -362,7 +464,11 @@ pub(crate) fn decode_event<E: DomainEvent, C: Codec>(
 
     match recover(event.event.metadata())? {
         None => E::decode(codec, event_type, data),
-        Some(tag) if tag == C::TAG => E::decode(codec, event_type, data),
+        // `tag == C::TAG` is spelled out rather than left to `reads_tag`'s
+        // default, and the short-circuit is the point: a codec always decodes
+        // what it wrote, whatever its own override says. `reads_tag` can widen
+        // this and cannot narrow it.
+        Some(tag) if tag == C::TAG || codec.reads_tag(tag) => E::decode(codec, event_type, data),
         Some(tag) => decode_by_tag(tag, event_type, data),
     }
 }

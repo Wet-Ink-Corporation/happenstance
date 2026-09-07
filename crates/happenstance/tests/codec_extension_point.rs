@@ -11,19 +11,30 @@
 //! For the three built-ins that refusal is temporary and means what
 //! `UnknownTag`'s own page says it means — *a tag was written and this build
 //! cannot honour it* — because turning the feature on makes the build able to.
-//! For a codec of your own it is permanent: no feature exists to turn on, so no
-//! build can ever become able to. An application that runs on its own codec for
-//! months and then adopts `Json` gets `UnknownTag` from `Boundary::absorb` on
-//! every historical event, which is an empty fold and an append condition
-//! matching nothing.
+//! For a codec of your own no feature exists to turn on, so nothing about the
+//! *build* can ever make it able to.
 //!
-//! Whether that is repaired — a defaulted resolution method on `Codec`, a
-//! registry, or sealing the trait and withdrawing the invitation — is a
-//! decision with its own ADR number, and this file does not take it. What it
-//! holds is the part that is true whichever way that goes: **the invitation and
-//! its limit must travel together.** An extension point documented as open, on
-//! a page that never says what the extension cannot do, is how a reader finds
-//! out from their own production log.
+//! **The decision this file was written to await was taken at `0.2.0`, and it
+//! is `Codec::reads_tag`**: a defaulted method by which a codec declares the
+//! tags it can read, consulted before the built-in chain. A registry and
+//! sealing the trait were the alternatives; `codec.rs` records why each lost
+//! and that sealing stays open.
+//!
+//! **The paragraph above is deliberately not rewritten to say the limit is
+//! gone, because it is not.** The repair is *per codec*, and the orphan rule
+//! means nobody outside `happenstance` can write an override for `Json`. So the
+//! migration that works is "my codec also reads the tag I used to write", and
+//! the one in the story above — an application that runs on its own codec for
+//! months and then adopts `Json` — still gets `UnknownTag` from
+//! `Boundary::absorb` on every historical event. That build was never told how
+//! those bytes were written, and there is nowhere for it to have learned.
+//!
+//! What this file holds is therefore the part that was true before the decision
+//! and is still true after it: **the invitation and its limit must travel
+//! together.** An extension point documented as open, on a page that never says
+//! what the extension cannot do, is how a reader finds out from their own
+//! production log — and a page that announces a repair without saying which
+//! half of the problem it repairs is the same defect wearing better news.
 
 use std::path::{Path, PathBuf};
 
@@ -203,6 +214,33 @@ mod behaviour {
         }
     }
 
+    /// A second codec of your own, which claims the first one's tag.
+    ///
+    /// The migration `Codec::reads_tag` exists for, at its smallest: the same
+    /// encoding under a new name, with the old name still in the log. Nothing
+    /// here reaches into `happenstance` — this is an `impl` a stranger could
+    /// write, in a crate that owns neither the trait's other implementors nor
+    /// the resolution chain.
+    struct Elder;
+
+    impl Codec for Elder {
+        const TAG: &'static str = "elder";
+
+        fn encode<T: Serialize>(&self, value: &T) -> Result<Bytes, CodecError> {
+            serde_json::to_vec(value)
+                .map(Bytes::from)
+                .map_err(|error| CodecError::Encode(Box::new(error)))
+        }
+
+        fn decode<T: serde::de::DeserializeOwned>(&self, data: &[u8]) -> Result<T, CodecError> {
+            serde_json::from_slice(data).map_err(|error| CodecError::Decode(Box::new(error)))
+        }
+
+        fn reads_tag(&self, tag: &str) -> bool {
+            tag == Self::TAG || tag == Runic::TAG
+        }
+    }
+
     const CUT: EventType = EventType::from_static("RuneCut");
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -270,19 +308,28 @@ mod behaviour {
         }
     }
 
-    /// A tag written by a codec outside this crate is unreadable by any other.
+    /// A tag written by a codec outside this crate is unreadable by a codec
+    /// that does not claim it.
     ///
-    /// **This test passes on the commit that introduced it.** It characterises
-    /// today's behaviour rather than repairing it: the repair is a decision with
-    /// its own ADR number, and this lane does not take it. What the test buys is
-    /// that the refusal has a name, a call site and an assertion, so whichever
-    /// way that decision goes there is one place that has to change and says so.
+    /// **The decision this test was written to await has been taken, and the
+    /// test survives it — which its own previous wording said it would not.**
+    /// It used to claim it "fails under every option on the table: a resolution
+    /// seam on `Codec`, a registry, or sealing the trait". That was true of a
+    /// registry and false of the seam that landed, and the difference is worth
+    /// keeping rather than editing away: `Codec::reads_tag` is a **per-codec**
+    /// declaration, and the orphan rule means nobody outside `happenstance` can
+    /// write an override for `Json`. So `Json` still cannot read `runic`, still
+    /// should not, and this assertion still holds.
     ///
-    /// It is not decorative, because it fails under every option on the table: a
-    /// resolution seam on `Codec`, a registry, or sealing the trait — the last
-    /// of which stops `Runic` compiling at all. The wrong implementation it
-    /// therefore rejects is a *silent* repair: a seam added while `Codec`'s page
-    /// still tells a reader the limit stands.
+    /// What it therefore characterises now is the *shape* of the repair rather
+    /// than the absence of one: the reading side declares what it reads, and a
+    /// build that was never told is unchanged. Its companion,
+    /// [`a_codec_that_claims_a_foreign_tag_reads_it`], is the other half — and
+    /// the two together are what stop `reads_tag` being decorative, because a
+    /// method wired into the trait and never consulted by `decode_event` fails
+    /// the companion while leaving this one green.
+    ///
+    /// [`a_codec_that_claims_a_foreign_tag_reads_it`]: self::a_codec_that_claims_a_foreign_tag_reads_it
     #[tokio::test]
     async fn a_codec_of_your_own_writes_a_tag_no_other_codec_can_read() {
         // Written through the crate's own writer, so the framing region is the
@@ -314,5 +361,106 @@ mod behaviour {
             matches!(&refusal, CodecError::UnknownTag { tag } if &**tag == "runic"),
             "expected `UnknownTag` naming the codec's own tag, got {refusal:?}"
         );
+    }
+
+    /// A codec that claims a foreign tag reads events written under it.
+    ///
+    /// This is the repair, exercised end to end: `Runic` writes, `Elder` reads,
+    /// and the only thing connecting them is `Elder::reads_tag` naming
+    /// `Runic::TAG`. Nothing is registered, no feature is turned on, and
+    /// `happenstance` is not modified — which is the whole claim, because the
+    /// application in the story owns both codecs and neither of this crate's.
+    ///
+    /// **The wrong implementation it rejects** is `reads_tag` added to the trait
+    /// and never consulted on the decode path. That version compiles, documents
+    /// a seam, satisfies every source-scanning test on this file's pages, and
+    /// leaves the sibling test above green — and this one goes red on it,
+    /// because `Elder` would fall through to the built-in chain and get
+    /// `UnknownTag`. A second wrong implementation it rejects is a `reads_tag`
+    /// consulted *instead of* the `tag == C::TAG` check rather than after it;
+    /// `an_override_that_forgets_its_own_tag_still_reads_what_it_wrote` is what
+    /// covers that one.
+    #[tokio::test]
+    async fn a_codec_that_claims_a_foreign_tag_reads_it() {
+        let store = MemoryEventStore::new();
+        let written = commit_with(&store, Ward::new(), &Runic, Retry::once(), |_: &Ward| {
+            Ok::<_, core::convert::Infallible>(vec![Rune::Cut])
+        })
+        .await
+        .expect("the command loop writes under a codec of your own");
+        assert_eq!(written.attempts, 1);
+
+        let mut ward = Ward::new();
+        let query = ward.query().expect("a constrained boundary");
+        let (events, _anchor) = read_decision_model(&store, &query)
+            .await
+            .expect("the memory store reads");
+        assert_eq!(events.len(), 1, "the loop wrote one event");
+
+        ward.absorb(&events[0], &Elder)
+            .expect("a codec that claims the tag reads the event");
+        assert_eq!(
+            ward.cuts, 1,
+            "the event was folded, not merely accepted: a repair that decodes \
+             and drops the value would satisfy `absorb` and change nothing"
+        );
+    }
+
+    /// A codec that claims a foreign tag and forgets its own still reads its own.
+    ///
+    /// `reads_tag`'s documented guarantee, exercised. The obvious mistake when
+    /// overriding is to write `tag == Runic::TAG` and drop the `|| tag ==
+    /// Self::TAG`, and the punishment would be a codec that reads its
+    /// predecessor's log and not the one it is writing now — a defect that
+    /// appears on the *second* deployment, not the one that introduced it.
+    ///
+    /// `decode_event` checks `tag == C::TAG` before consulting the method, so
+    /// the method can only widen. This test is what holds that ordering: swap
+    /// the two and it goes red.
+    #[tokio::test]
+    async fn an_override_that_forgets_its_own_tag_still_reads_what_it_wrote() {
+        /// Deliberately wrong in the one way the ordering protects against.
+        struct Forgetful;
+
+        impl Codec for Forgetful {
+            const TAG: &'static str = "forgetful";
+
+            fn encode<T: Serialize>(&self, value: &T) -> Result<Bytes, CodecError> {
+                serde_json::to_vec(value)
+                    .map(Bytes::from)
+                    .map_err(|error| CodecError::Encode(Box::new(error)))
+            }
+
+            fn decode<T: serde::de::DeserializeOwned>(&self, data: &[u8]) -> Result<T, CodecError> {
+                serde_json::from_slice(data).map_err(|error| CodecError::Decode(Box::new(error)))
+            }
+
+            fn reads_tag(&self, tag: &str) -> bool {
+                // The `|| tag == Self::TAG` is missing, and that is the point.
+                tag == Runic::TAG
+            }
+        }
+
+        let store = MemoryEventStore::new();
+        let written = commit_with(
+            &store,
+            Ward::new(),
+            &Forgetful,
+            Retry::once(),
+            |_: &Ward| Ok::<_, core::convert::Infallible>(vec![Rune::Cut]),
+        )
+        .await
+        .expect("the command loop writes under a codec of your own");
+        assert_eq!(written.attempts, 1);
+
+        let mut ward = Ward::new();
+        let query = ward.query().expect("a constrained boundary");
+        let (events, _anchor) = read_decision_model(&store, &query)
+            .await
+            .expect("the memory store reads");
+
+        ward.absorb(&events[0], &Forgetful)
+            .expect("a codec reads what it wrote even when its override forgot to say so");
+        assert_eq!(ward.cuts, 1, "and folds it");
     }
 }
