@@ -40,7 +40,31 @@ Plus a smaller, separable one: arm 2 is exercised by two mutants and by no
 **over**-specifying. Whether CF-5's conformant-control obligation runs per rule or
 per *branch* is undecided, and ES-22 is the first place the difference is visible.
 
-## The decision
+## Discharged, the same day, and the reason is worth keeping
+
+**The residual is answered and the hold is lifted.** `lane/postgres-neon-stores`
+already held a substantially built `happenstance-postgres` when the hold was
+taken; the decision rested on a report that phase 10 was `not started` and eleven
+days away, read out of `RUNBOOK.md`'s status table, which was stale. From the
+lane's own commit:
+
+> `MID_BATCH_FAULT` was declined because `append` did not exist; it exists, so
+> the fixture arms an `AFTER INSERT` trigger and **both fault rules pass**. It
+> works because the batch is one multi-row statement, so the raise aborts
+> precisely the unit `append` promises atomic.
+
+A trigger raising mid-batch on a live pinned server is a real medium in exactly
+the sense the residual required. The lane is merged.
+
+**What the episode is evidence of.** A stale status row in the plan of record
+deferred a release — the same class of defect the `0.2.0` pass spent its length
+repairing in the falsifier ledger and the clause census, occurring in the same
+file while that repair was in progress. The decision below was sound on the
+information available and the information was wrong. That is worth recording
+under its own heading rather than folded into a correction, because the failure
+was not the judgement.
+
+## The decision as taken
 
 **`0.2.0` waits for phase 10.** The store that answers the residual is
 `happenstance-postgres` — the first adapter in this workspace with a connection

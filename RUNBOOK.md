@@ -4773,23 +4773,35 @@ is an `Rc<RefCell<…>>` in the testkit's own test target, where *"the future wa
 dropped"* means a local went out of scope rather than a connection was severed.
 The store that would answer it is phase 10's.
 
-The repository owner chose to hold the release for that answer. It is worth
-recording that this runs **against** the pre-publication review's own verdict on
-this class — *"no fix here is a breaking change, and every one of them is
-available at the same price after `0.2.0`"* — and against this file's own
-sequencing argument, which put phase 10 off the trunk precisely because its
-design contribution was already spent. The trade is roughly eleven days and two
-adapters against publishing a conformance suite whose atomicity rule has only
-ever been proved against a `RefCell`. Taken deliberately, with the counter-argument
-in front of it.
+The repository owner chose to hold the release for that answer, and it was
+**discharged the same day**. The hold was taken on a report that phase 10 was
+`not started` and eleven days away — read out of this file's own status table,
+which was stale. `lane/postgres-neon-stores` already held a substantially built
+`happenstance-postgres`, and its own commit says what answers F2-5:
 
-**Two consequences follow, and neither is a cost.** The seventeen briefs ratified
-at the release pass were ratified because their window closed at `0.2.0`;
-deferring the release widens that window rather than closing it, so the
-implementation queue they created can be worked unhurried. And the repository
-stays private until the release, so the documents that now describe `0.2.0` in the
-present tense are visible only to whoever picks this tree up — which is the one
-group they can still mislead.
+> `MID_BATCH_FAULT` was declined because `append` did not exist; it exists, so
+> the fixture arms an `AFTER INSERT` trigger and **both fault rules pass**. It
+> works because the batch is one multi-row statement, so the raise aborts
+> precisely the unit `append` promises atomic.
+
+That is F2-5's residual met in its own terms: a store with a real medium under
+it, where the fault is a trigger raising mid-batch on a live pinned server rather
+than a local going out of scope. The lane is merged; the hold is lifted.
+
+**Two things are worth keeping from the episode rather than tidying away.** The
+first is that a stale status row in *this file* caused a release to be deferred —
+which is the same class of defect the `0.2.0` pass spent its length repairing in
+the falsifier ledger and the clause census, and it happened while that repair was
+in progress. The second is that the hold cost nothing and bought a re-read: the
+conformance suite's atomicity rule now has an answer from a real medium, recorded
+here rather than assumed.
+
+**What phase 10 still owes phase 12 is `happenstance-neon`, not Postgres.** The
+Postgres half meets phase 10's exit criterion — the concurrency family green at
+64 contenders against a live server, with the visibility cost measured in
+ADR-0024's arm C. Whether the Neon half is a dependency of *publication* or of
+phase 10's own closure is a live question, and the dependency row above should be
+re-read before it is trusted again.
 
 And what "why here" is *not*: it is not "publishing freezes the public API". The
 API was frozen in phases 4 – 6, on evidence, which is what makes publishing safe.
