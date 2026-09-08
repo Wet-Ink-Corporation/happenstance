@@ -118,7 +118,8 @@ pub const PROJECTION_SCHEMA_VERSION: u32 = 1;
 ///
 /// # Errors
 ///
-/// [`PostgresProjectionStoreError::Driver`] if the server rejects the statements
+/// [`Driver`](crate::error::PostgresProjectionStoreError::Driver) if the server
+/// rejects the statements
 /// — most plausibly because the role cannot create objects in the target schema.
 #[cfg(feature = "projection-store")]
 pub async fn apply_projection<'e, E>(

@@ -289,7 +289,7 @@ attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
 **Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
-`crates/happenstance-ladybug/src/lib.rs:77 (Phase 11 removes both the bodies)` ·
+`crates/happenstance-ladybug/src/lib.rs:98 (Phase 11 removes both the bodies)` ·
 `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 
 ---
