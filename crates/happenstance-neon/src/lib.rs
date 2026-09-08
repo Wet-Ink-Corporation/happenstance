@@ -1,19 +1,48 @@
 //! Neon serverless Postgres adapters for happenstance, over the one-shot `/sql`
 //! HTTP endpoint.
 //!
-//! # Status: not implemented
+//! # Status
 //!
-//! Every body is `todo!()` and the crate is `publish = false`. Its associated
-//! types are real, because those are the only part of a skeleton a type checker
-//! can disagree with.
+//! Implemented, and run rather than asserted: the conformance suite passes
+//! against a **live Neon endpoint** (PostgreSQL 18.6 behind the pooler), event
+//! store and projection store both, including the concurrency family at
+//! `CONTENDERS = 64`.
+//!
+//! It is still `publish = false`, and that is not an oversight. `0.2.0` ships
+//! five crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
+//! `happenstance-sqlite` and `happenstance-cloudflare` — and this is not one of
+//! them. What packaging this crate owes beyond a green suite belongs to
+//! `deskeleton-and-package-readiness`, and the flag stays until that story
+//! removes it.
+//!
+//! # It owns no HTTP client, and that is still true
+//!
+//! [`SqlTransport`] is a one-method trait and [`NullTransport`] is the only
+//! implementation in `src/`. See the [`transport`] module for why: a real client
+//! needs a TLS stack on the host and `wasm-bindgen`'s `fetch` on `wasm32`, they
+//! are two different clients, and neither is what this crate is here to prove.
+//!
+//! The conformance suite reaches the live endpoint through a `hyper` + `rustls`
+//! transport that lives in `tests/`, as a **`[dev-dependencies]`** and never as a
+//! feature. That distinction is load-bearing rather than tidy: `cargo xtask ci`
+//! runs `cargo hack check -p happenstance-neon --target wasm32-unknown-unknown
+//! --feature-powerset --no-dev-deps`, a feature is not target-scoped, and a
+//! `live-transport` feature would therefore be switched on for `wasm32` and fail
+//! to build. Dev-dependencies are invisible to that powerset and to the MSRV
+//! job's `--no-dev-deps` check, so the client reaches no consumer's graph, no
+//! feature combination and no licence surface.
+//!
+//! What that still costs is recorded honestly: the crate demonstrates a
+//! licence-clean client for the **host**, and not for `wasm32`. The shape above
+//! it does not need to know which one it has.
 //!
 //! # What this adapter is an instrument for
 //!
 //! It is deliberately the **least capable** store in the workspace, and it is in
-//! the tree to sit at the far end of the transport axis from
-//! `MemoryEventStore`, a `RefCell` store, rusqlite and a Durable Object — all of
-//! which serialise their writers behind a lock and can hold a transaction open
-//! across a decision. Neon's `/sql` endpoint can do none of that:
+//! the tree to sit at the far end of the transport axis from `MemoryEventStore`,
+//! a `RefCell` store, rusqlite and a Durable Object — all of which serialise
+//! their writers behind a lock and can hold a transaction open across a decision.
+//! Neon's `/sql` endpoint can do none of that:
 //!
 //! | | |
 //! |---|---|
@@ -31,86 +60,69 @@
 //! # The trap this crate exists to spring
 //!
 //! An `append` that probes for a condition violation and then writes, in two
-//! statements, **type-checks against [`EventStore`](happenstance_core::EventStore)
-//! perfectly**. [`ProbeThenWriteStore`] is that implementation, written out in
-//! full so the compiling call site can be pointed at. It is also silently wrong
-//! here: two statements are two round trips, each its own implicit transaction,
-//! with a network-latency-wide window between them and no snapshot spanning it.
-//! A conflicting append committed inside that window is invisible to the probe
-//! and unopposed by the insert.
+//! **round trips**, type-checks against
+//! [`EventStore`](happenstance_core::EventStore) perfectly.
+//! [`ProbeThenWriteStore`] is that implementation, written out in full so the
+//! compiling call site can be pointed at. It is also silently wrong here: two
+//! round trips are two implicit transactions, with a network-latency-wide window
+//! between them and no snapshot spanning it. A conflicting append committed
+//! inside that window is invisible to the probe and unopposed by the insert.
 //!
 //! A shape table that recorded only `error[E….]` would therefore rank this crate
-//! the most compatible adapter in the workspace. It is the least. The limits
-//! that matter here are not type errors.
+//! the most compatible adapter in the workspace. It is the least. The limits that
+//! matter here are not type errors.
 //!
 //! # Can the condition and the write collapse into one statement?
 //!
-//! Yes — and, contrary to the standing assumption in the decision ledger, the
-//! collapse **keeps** `ConditionViolated::conflicting_position`. The naive
-//! `INSERT … SELECT … WHERE NOT EXISTS` cannot: it returns zero rows on
-//! conflict and zero rows carry no position. But a CTE can compute both on one
-//! snapshot and project them side by side:
+//! **Yes, and it must not.** This is the one place where the crate's own recorded
+//! answer was overturned by a measurement rather than by an argument, so the old
+//! answer is stated before the new one.
 //!
-//! ```sql
-//! WITH probe AS (
-//!     SELECT min(position) AS conflict
-//!       FROM event
-//!      WHERE position > $1              -- AppendCondition::after
-//!        AND (<the condition's Query>)
-//! ), ins AS (
-//!     INSERT INTO event (event_type, data, metadata, tags)
-//!     SELECT * FROM unnest($2::text[], $3::bytea[], $4::bytea[], $5::text[][])
-//!      WHERE NOT EXISTS (SELECT 1 FROM probe WHERE conflict IS NOT NULL)
-//!     RETURNING position
-//! )
-//! SELECT (SELECT max(position) FROM ins)   AS appended,
-//!        (SELECT conflict      FROM probe) AS conflict;
-//! ```
+//! It used to say: a single CTE computes the probe and the insert on one snapshot
+//! and projects both, so `ConditionViolated::conflicting_position` survives the
+//! collapse — one statement, one round trip, one snapshot. Every word of that is
+//! true of *SQL*. It is false of *this endpoint*, because
+//! `Neon-Batch-Isolation-Level` is honoured only on a request carrying **two or
+//! more** statements. Both halves are measured against the live endpoint:
+//! `current_setting('transaction_isolation')` answers `serializable` inside a
+//! two-statement batch carrying the header, and `read committed` inside a
+//! one-statement request carrying the same header.
 //!
-//! One statement, one round trip, one snapshot, and a row that says both which
-//! position was assigned and — when nothing was — which position conflicted.
-//! So Neon, the case the ledger names as forcing `conflicting_position` down to
-//! a hint, does not in fact force it. It costs one extra aggregate index scan on
-//! every append including the uncontended ones, and it needs
-//! [`IsolationLevel::Serializable`] to be sound, which is why
-//! [`NeonConfig`]'s default is `Serializable` rather than Postgres'
-//! `ReadCommitted`. Both are prices, and neither is a `None`.
+//! So the single CTE runs at `READ COMMITTED`, where two racers both find no
+//! conflict and both insert — the lost update [`ProbeThenWriteStore`] exists to
+//! name, arriving through the door left open while the other one was being
+//! closed. The append is therefore a **two-statement batch**: a probe that
+//! reports the conflicting position, and a guarded `INSERT … WHERE NOT EXISTS`,
+//! on one `SERIALIZABLE` snapshot in one round trip.
+//!
+//! Two statements in one request is safe; two round trips is not. That sentence
+//! is the whole of this adapter's append design, and
+//! [`event_store`] carries the measurement behind it.
 //!
 //! # Which flavour, and which claim
 //!
 //! [`NeonEventStore`] implements the **bare**
-//! [`EventStore`](happenstance_core::EventStore), and
-//! [`NeonProjectionStore`] the bare
-//! [`ProjectionStore`](happenstance_core::ProjectionStore). The crate compiles
-//! for the host target and for `wasm32-unknown-unknown`, *implementing the bare
-//! flavour on each*. That is not the same claim as satisfying both flavours: the
-//! contract crate's implication table runs one way only, so nothing here
-//! satisfies `SendEventStore`, on either target, even where the transport
+//! [`EventStore`](happenstance_core::EventStore), and [`NeonProjectionStore`] the
+//! bare [`ProjectionStore`](happenstance_core::ProjectionStore). The crate
+//! compiles for the host target and for `wasm32-unknown-unknown`, *implementing
+//! the bare flavour on each*. That is not the same claim as satisfying both
+//! flavours: the contract crate's implication table runs one way only, so nothing
+//! here satisfies `SendEventStore`, on either target, even where the transport
 //! happens to be `Send`.
-//!
-//! # It owns no HTTP client
-//!
-//! [`SqlTransport`] is a one-method trait and [`NullTransport`] is the in-tree
-//! implementation. See the [`transport`] module for why: a real client needs a
-//! TLS stack on the host and `wasm-bindgen`'s `fetch` on `wasm32`, they are two
-//! different clients, and neither is what this crate is here to prove. What that
-//! costs is recorded honestly — the crate cannot demonstrate that a licence-clean
-//! client exists for both targets, only that the shape above it does not need to
-//! know which one it has.
 
 #![doc(html_no_source)]
-// `clippy::todo` is denied workspace-wide. Scoped here rather than left open in
-// the workspace manifest so it is visible in review and disappears with the last
-// `todo!()`. Phase 10 removes both the bodies and this line.
-#![allow(clippy::todo)]
 
 pub mod config;
 pub mod error;
+pub mod migration;
 pub mod transport;
 pub mod wire;
 
 #[cfg(feature = "event-store")]
 pub mod event_store;
+
+#[cfg(feature = "event-store")]
+mod query_sql;
 
 #[cfg(feature = "projection-store")]
 pub mod projection_store;

@@ -268,6 +268,18 @@ error: this lint expectation is unfulfilled
     = note: `#[warn(unfulfilled_lint_expectations)]` on by default
 ```
 
+That transcript is kept, and the attribute it points at is **gone** — phase 10b
+wrote `decode_append_response`, the expectation went unfulfilled exactly as the
+`reason` predicted, and the same commit removed the attribute. The rule
+consuming its own worked example is the rule working, so the transcript stays as
+the recorded diagnostic and the Evidence line below cites a **live** instance of
+the same claim instead:
+`projection_mutation_coverage.rs`'s `StorePanic` arm, whose reason says it goes
+red the day a row uses it, beside the arm two entries above it whose
+`#[expect(dead_code)]` "came off" on the day its deferral ended. Both halves of
+the claim — the attribute that fires, and the attribute that is then removed
+rather than downgraded — are in that one file.
+
 **Rejects.** A workspace-wide `todo = "allow"` added for "intentionally
 unimplemented stub crates". This repository shipped one; a grep found no
 `todo!()` anywhere in the tree, so the allow protected nothing and stood ready to
@@ -278,7 +290,7 @@ reviewer reads the enum.
 
 **Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
 `crates/happenstance-ladybug/src/lib.rs:77 (Phase 11 removes both the bodies)` ·
-`crates/happenstance-neon/src/event_store.rs:239 (constructed by decode_append_response)`
+`crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 
 ---
 
@@ -354,7 +366,7 @@ transaction, no cursor, one round trip per operation, a hard 64 MiB response cap
 the far end of the transport axis. The limits are found by whoever writes the
 bodies, against a port already frozen on the strength of their absence.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:390 (It compiles, and that is the finding)` ·
-`crates/happenstance-neon/src/lib.rs:42 (would therefore rank this crate)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1019 (It compiles, and that is the finding)` ·
+`crates/happenstance-neon/src/lib.rs:71 (would therefore rank this crate)` ·
 `references/adapter-shapes.md:207 (limits that are not type errors)` ·
 [adapter-shapes §3](../../references/adapter-shapes.md)
