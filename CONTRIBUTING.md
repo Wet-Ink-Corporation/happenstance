@@ -319,17 +319,25 @@ else, so its examples compile and its citations resolve.
 Keep the reasoning in the commit message. A diff shows what changed; the message
 should say what constraint made that the right change.
 
-Pull requests run an extra `cargo-semver-checks` job over all three publishable
-crates, with `--baseline-rev` pointed at the commit the branch started from. A
-breaking change is fine — an accidental one is not.
+Pull requests run an extra `cargo-semver-checks` job over all five publishable
+crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
+`happenstance-sqlite` and `happenstance-cloudflare` — with `--baseline-rev`
+pointed at the commit the branch started from. A breaking change is fine — an
+accidental one is not.
+
+The crates are named rather than counted, because the count was wrong here: this
+paragraph said *three* from the release that had three until the `0.2.0`
+closeout, through two phases that each added one. A number in a document nobody
+re-reads is a number that goes stale silently, and `xtask/src/package.rs`'s
+`PUBLISHABLE` is the list that is actually held against the manifests.
 
 Know what that job proves and what it does not. It proves *this pull request*
 does not break the API it branched from. It proves nothing about the last
 released version: a break merged two pull requests ago is part of the baseline
-and so is invisible. The registry baseline that would catch it is not available
-yet — the three reserved names sit at `0.0.0`, and Cargo treats every `0.0.x`
-version as incompatible with every other, so there is no compatible predecessor
-to compare against. Phase 12 keeps both baselines once a real `0.1.0` exists.
+and so is invisible. The registry baseline that would catch it is the outstanding
+half of phase 12's `cargo-semver-checks` work — it cannot be added before the
+registry carries `0.2.0`, because there is nothing to diff against until then,
+and it must be added immediately after, because from that moment there is.
 
 A separate weekly job runs `cargo deny check advisories` and nothing else. A new
 advisory against a dependency nobody has touched is the only failure that arrives

@@ -4935,8 +4935,13 @@ is the release.
 - [ ] `cargo publish --dry-run` per crate; verify each `.crate` against phase 0's
       `--list` assertion.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
-      `happenstance` → `happenstance-sqlite`. Each must be live before the next
-      resolves against it.
+      `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare`. Each
+      must be live before the next resolves against it. The order is forced
+      rather than chosen: both adapters dev-depend on the testkit at the
+      workspace version. **This list named four crates** while the goal above and
+      `HANDOVER.md` both say five — `happenstance-cloudflare` joined `PUBLISHABLE`
+      at phase 9 and this line did not move, which is the same silent-count defect
+      the goal paragraph already spells out with its members for.
 - [ ] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
       crate. A clean build with it denied is the proof that no stub survives.
 - [ ] Tag; cut the GitHub release.
