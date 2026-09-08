@@ -791,3 +791,68 @@ sentences. Recorded rather than quietly fixed.)*
 
 `HANDOVER.md` records what that gap was worth last time: 53 commits, three weeks,
 a row saying `Gate | exit 0` the whole time, and it was true.
+
+---
+
+## Review status — where the walkthrough got to
+
+Reviewed with the owner on 2026-09-08. **O-4 and D-01 through D-09 are closed.**
+D-10 and D-11 were not reached, and the questions they hold are written out here
+rather than left to be re-derived.
+
+| | Outcome |
+|---|---|
+| O-4 | Missed by the session and **not reported as outstanding**, which was the worse half. Placeholder generated and dry-run verified; the publish is the owner's. |
+| D-01 | Ratified silently — no carve-out written into `CLAUDE.md`, because a stated exception is one people widen. The `_intake` hole is redkiln's to fix, by re-anchoring at promotion. |
+| D-02 | Ratified. The crate's founding argument survives its own wrong reason. The `ladybug` CI job was to ship unmeasured — overtaken by the freeze below. |
+| D-03 | **Escalated well past the finding.** ADR-0060 written, PS-2's `Rule` amended, the gate re-evaluated and kept on a new reason, a probe-signature change proposed. |
+| D-04 | **Overturned.** The release set is seven, not five. |
+| D-05 | Ratified, with an accidental asymmetry corrected: the ledger lint now requires an owner on both tables. |
+| D-06 | Both acceptances ratified — ES-39 with a price that had changed underneath it. |
+| D-07, D-08, D-09 | Stand as recorded. Ladybug **frozen** until `lbug` stabilises; the three upstream defects recorded locally and deliberately not filed. |
+
+### D-10, unreviewed — and one fact moved under it
+
+**The release set going to seven changed what this decision is about.**
+`happenstance-neon` was unpublished when D-10 was written. It now **ships at
+`0.2.0` with a conformance rule it does not pass**, against a `[PROVISIONAL]`
+clause its own marker named as the thing that would falsify it. That is defensible
+— a provisional clause is one a published crate may fail to satisfy, and the
+crate's README names the rule, the measurement and the reason — but it was decided
+when the crate was not going out, and it deserves a second look now that it is.
+
+**And the CI cost is smaller than the log says.** Every step of the `live-neon`
+job is gated on `env.NEON_CONNECTION != ''`, and the job prints a notice saying it
+*"proves NOTHING"* when the secret is absent. No such repository secret appears to
+be set, so the job currently runs nothing and the *"red about 1 run in 40"* is
+**hypothetical until somebody adds the secret**. The decision to keep the job
+strict rather than tolerate a named failure still stands on its own argument;
+what changes is that it costs nothing today and starts costing on the day the
+secret lands.
+
+Three questions were queued and not asked:
+
+1. **ES-11's ADR** — the one item on the owner's list with a deadline. Three ways
+   out are named in
+   `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`:
+   amend ES-11 to name one-shot HTTP as a shape its sufficiency condition does not
+   cover; record that `happenstance-neon` does not satisfy ES-11 and leave the
+   clause alone; or mint a capability so the rule becomes a reported skip. None
+   was chosen, because choosing is the clause owner's. **Check it against the
+   ES-11 escalation `HANDOVER.md` records as made in error and retracted** — that
+   one claimed something different and weaker.
+2. **Whether a published crate should ship with a known failing rule**, now that
+   the answer is not hypothetical.
+3. **`SERIALISATION_ATTEMPTS = 8`** — eight is double the smallest sufficient
+   value on a four-runs-per-value measurement. Defensible, and a reader could
+   reasonably want three or five.
+
+### D-11, unreviewed
+
+One real question: **Ladybug's `COMMIT_FAULT` injection faults the *first* batch
+statement**, so unlike SQLite's checkpoint-side trigger it does not refute the
+specific wrong implementation the rule's message names — apply the rows, fail the
+checkpoint, keep the rows. That is a property of the schema rather than the
+adapter, and both near-misses are written into the fixture with their measured
+errors. It is now **frozen along with the rest of the effort**, so it is a
+question for whenever `lbug` stabilises rather than one for this release.
