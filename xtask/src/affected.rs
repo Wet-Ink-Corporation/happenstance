@@ -143,6 +143,14 @@ pub(crate) struct Member {
 /// changed (including a `base` that does not resolve to a commit — a gate that
 /// cannot tell what changed must not report green), when a member manifest
 /// declares no package name, or when any check it runs fails.
+/// The one package this command compiles at its default features rather than at
+/// `--all-features`.
+///
+/// Named as a constant because it is used three times in one function and a
+/// typo in any of them is a silent widening rather than an error: the package
+/// would simply stay in the `--all-features` selection.
+const LADYBUG: &str = "happenstance-ladybug";
+
 pub(crate) fn run(base: Option<&str>) -> Result<()> {
     let base = base.unwrap_or("main");
     let root = workspace_root()?;
@@ -224,10 +232,54 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // let an unaffected package drift out of format between releases.
     run_step("formatting", "cargo", &["fmt", "--all", "--check"])?;
 
+    // `happenstance-ladybug` is held out of the two `--all-features` steps
+    // below, and it is `xtask/src/main.rs`'s four exclusions at the story grain
+    // rather than a second decision (ADR-0025 §9). `--all-features` turns on
+    // this workspace's only dependency that arrives as a 1.44 GB static archive
+    // and needs an OpenSSL toolchain, and a command whose whole promise is
+    // "only what this diff could break, in the time a story allows" cannot pay
+    // that -- least of all on a diff that touched the adapter, which is exactly
+    // when this command is reached.
+    //
+    // It is held out rather than dropped: the step below compiles it at its
+    // default features, which is the configuration a consumer who did not ask
+    // for LadybugDB gets, and the driver's own coverage is `cargo xtask ci`'s
+    // probed conformance step. Reporting green over a package nothing compiled
+    // is the failure this module's documentation is about.
+    let ladybug_affected = affected.iter().any(|name| name == LADYBUG);
     let selection: Vec<String> = affected
         .iter()
+        .filter(|name| name.as_str() != LADYBUG)
         .flat_map(|name| ["-p".to_owned(), name.clone()])
         .collect();
+
+    if ladybug_affected {
+        run_step(
+            "clippy (happenstance-ladybug, without its driver)",
+            "cargo",
+            &[
+                "clippy",
+                "--locked",
+                "-p",
+                LADYBUG,
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ],
+        )?;
+    }
+
+    // Every affected package may have been this one, in which case the two
+    // steps below would run `cargo clippy --locked --all-targets
+    // --all-features` with no `-p` at all -- which is the *whole workspace*,
+    // driver included. The empty check is what stops a narrowing from becoming
+    // a widening.
+    if selection.is_empty() {
+        println!("\nno package left to compile at `--all-features`");
+        println!("\naffected gate passed");
+        return Ok(());
+    }
 
     let mut clippy = vec!["clippy".to_owned(), "--locked".to_owned()];
     clippy.extend(selection.iter().cloned());
