@@ -30,7 +30,7 @@ last_reviewed: 2026-09-07
 
 `SqliteEventStore::append`, `head` and `contains_event_id` keep running inline, under a
 blocking `std::sync::Mutex`, on whatever thread polls them
-(`crates/happenstance-sqlite/src/event_store.rs:1229-1296`, `:1137-1146`, `:1158-1174`).
+(`crates/happenstance-sqlite/src/event_store.rs:1396-1431`, `:1447-1462`, `:1474-1490`).
 They are **not** routed through `in_blocking_task`, the `spawn_blocking` seam
 `SqliteProjectionStore::commit` already uses (`projection_store.rs:342-361`), even though
 the projection store's own module doc calls a crate answering the same question two ways
