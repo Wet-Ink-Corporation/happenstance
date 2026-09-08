@@ -101,8 +101,17 @@ jobs:
       # skipped in CI" there. A `skipped` line that is expected on two runners is
       # a `skipped` line nobody reads on the third. Uniformity is worth the
       # minute.
+      #
+      # `--target wasm32-unknown-unknown` is load-bearing and was missing until
+      # the first pull request ran this job. `rust-toolchain.toml`'s `targets`
+      # key applies to the *pinned* toolchain, not to a second one installed
+      # beside it, so nightly arrived with a host std and nothing else — and the
+      # wasm32 half of the step below then failed with `can't find crate for
+      # core`, which reads like a broken crate and is a missing target. It went
+      # unseen because a lane-branch push runs no CI and every local machine
+      # that had run the step already had the target installed for nightly.
       - name: Install nightly, for the docs.rs configuration step
-        run: rustup toolchain install nightly --profile minimal
+        run: rustup toolchain install nightly --profile minimal --target wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -940,7 +949,25 @@ jobs:
           # than remembering to add the line later, and a public surface no
           # instrument watches is the thing this job exists to prevent. That
           # foresight is why this line needed no edit at the release.
-          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon
+          #
+          # **Two names are deliberately absent, and only from this baseline.**
+          # `happenstance-postgres` and `happenstance-neon` had no published
+          # version before `0.2.0`: on `main` they are phase-2 skeletons, so
+          # diffing their surface against the base commit compares two states a
+          # consumer has never been able to install, and every difference it
+          # finds is a "break" against nothing. The first pull request to run
+          # this job proved the point rather than argued it — it failed on
+          # `inherent_method_const_removed` for `NeonProjectionStore::new`,
+          # which stopped being `const` because the store gained a per-instance
+          # stamp and a `const fn` would hand every instance the same one
+          # (`crates/happenstance-neon/src/projection_store.rs:224-228`). A true
+          # finding, about a crate with no consumers.
+          #
+          # **They rejoin the moment `0.2.0` is on the registry**, which is the
+          # same moment the registry baseline below turns on — and that one
+          # watches them for the thing that actually matters. Until then this
+          # line is the honest scope of a rev baseline, not a hole in it.
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
 
       # THE REGISTRY BASELINE, AND IT IS ONE WORD FROM WORKING.
       #
