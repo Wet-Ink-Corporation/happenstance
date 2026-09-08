@@ -52,6 +52,32 @@ at line numbers, because the work in front of them is adjudication.
 citations under `.kb/_intake`, in a directory with no citation checker at all,
 alongside ~2,700 under `references/` and ~25,700 under `.bklg/`.
 
+## Decided at review: re-anchor at promotion
+
+**The owner chose repair 2 below.** `/redkiln:kb-ingest` resolves every `path:line`
+against `HEAD` as it authors an atom, and **refuses the wave** rather than the atom
+when one does not resolve.
+
+Two things follow that this document must not leave implicit.
+
+**It is not a change to this repository.** The ingest workflow lives in the
+redkiln plugin, not in `.redkiln/` — which holds config, the pinned process pack,
+templates and telemetry, and no workflow. So the repair belongs on redkiln's own
+backlog, which already carries a `fix-kb-ingest-defects` project, and nothing in
+happenstance can implement it.
+
+**Until it lands, this hole is open and the next wave can redden the gate the same
+way.** The interim mitigation is not a code change but a habit: run `cargo xtask
+ci` immediately after an ingest wave merges, rather than trusting the pre-merge
+green. The wave that caused this one was the last commit on `main` and the gate
+was not re-run after it.
+
+The alternative the owner did **not** take was scanning `_intake` as a warning.
+The argument against is not that it would fail to work — it would — but that it
+puts the check on the wrong side of the boundary: a warning in *this* repository
+about documents *that* tool is about to promote makes happenstance responsible for
+noticing redkiln's defect, on every run, forever.
+
 ## Two repairs, and they are not alternatives
 
 1. **Bring `_intake` into scope as a warning rather than a failure.** A staged

@@ -71,9 +71,25 @@ guard, not a guard against history — measurably weaker than the prose around i
 implies, and it cannot distinguish a referent repair from a reversal. Staged for
 the KB as an open question rather than treated as a licence.
 
-**Left behind for the owner:** `.kb/_intake` should be inside the citation checker's
-scope, or the ingest should re-anchor citations as it promotes them. Either closes
-this hole; nothing else does.
+**Ratified at review**, and deliberately without a written carve-out in
+`CLAUDE.md`: a stated exception is an exception people widen. The reasoning lives
+here and in the commit message instead.
+
+**The structural hole is decided too — the ingest re-anchors at promotion**,
+resolving every `path:line` against `HEAD` as it authors an atom and refusing the
+*wave* rather than the atom when one does not resolve. That fails the wave rather
+than the next person to run the gate.
+
+**It is not a happenstance change.** The ingest workflow lives in the redkiln
+plugin, which already carries a `fix-kb-ingest-defects` project on its own
+backlog; `.redkiln/` here holds config, the pinned pack, templates and telemetry,
+and no workflow. The rejected alternative — scanning `_intake` as a warning here —
+would have worked and was declined for the right reason: it makes happenstance
+permanently responsible for noticing another tool's defect.
+
+**Until it lands, the interim is a habit rather than a check:** run `cargo xtask
+ci` immediately after an ingest wave merges. The wave that caused this was the
+last commit on `main` and nobody re-ran the gate after it.
 
 ---
 
