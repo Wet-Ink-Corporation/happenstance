@@ -316,6 +316,19 @@ blank cell reads as covered.
 
 **Today it reports 46 provisional across 20 groups and 12 deferred, all owned.**
 
+**Ratified at review, and one boundary was accidental rather than reasoned.** The
+check required an owning phase on *provisional* rows only, while the deferred
+table carries the same column. That is now checked on both — it passed on all
+twelve without a change, so it costs nothing today and guards the same drift on
+the table where an unowned row is arguably worse: a deferral nobody owns is a
+decision taken by omission, where an unowned provisional group is a falsifier
+merely unscheduled. Proven to fire before it landed, on a blanked ES-39 owner.
+
+The *deliberate* boundary stands: the lint does not check whether an owning phase
+is the **right** one. The cell must name a number; whether that number is where
+the falsifier gets built is a judgement, and a lint pretending otherwise would be
+the decorative kind.
+
 ### D-06 — phase 12's deferred-clause criterion counted one and there are seven
 
 The criterion said *"One qualifies, and it is safe: WF-1."* Classifying all twelve

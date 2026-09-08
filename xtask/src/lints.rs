@@ -2448,7 +2448,7 @@ fn ledger_rows(runbook: &str, heading: &str, clause_col: usize) -> Vec<(usize, S
 }
 
 /// `RUNBOOK.md`'s provisional and deferred ledgers name exactly the clauses
-/// `§7.2` marks that way, and every provisional row names an owner.
+/// `§7.2` marks that way, and every row of both names an owner.
 ///
 /// # Why this exists as a check rather than as a pass someone does
 ///
@@ -2511,11 +2511,19 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
         let mut named = BTreeSet::new();
         for (line, cell, owner) in &rows {
             named.extend(ledger_clauses(cell));
-            if marker == "PROVISIONAL" && !owner.chars().any(|c| c.is_ascii_digit()) {
+            // Both tables. The asymmetry this used to carry — provisional rows
+            // checked, deferred rows not — was accidental rather than reasoned,
+            // and an unowned *deferred* row is arguably the worse of the two: a
+            // deferral nobody owns is a decision taken by omission, where an
+            // unowned provisional group is a falsifier merely unscheduled.
+            if !owner.chars().any(|c| c.is_ascii_digit()) {
+                let what = if marker == "PROVISIONAL" {
+                    "this provisional group names no owning phase. A clause whose falsifier is scheduled nowhere is one phase 12's criterion cannot pass"
+                } else {
+                    "this deferred clause names no owning phase. A deferral nobody owns is a decision taken by omission, which is the shape phase 12's criterion exists to refuse"
+                };
                 problems.push(format!(
-                    "{RUNBOOK}:{line} — this provisional group names no owning phase. A clause \
-                     whose falsifier is scheduled nowhere is one phase 12's criterion cannot \
-                     pass, and a blank cell reads as covered."
+                    "{RUNBOOK}:{line} — {what}, and a blank cell reads as covered."
                 ));
             }
         }
@@ -2546,7 +2554,7 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
         println!(
             "runbook_clause_ledgers_match_the_specification: {provisional} provisional and \
              {deferred} deferred clause(s) in §7.2, each named by exactly one ledger row, every \
-             provisional group owned"
+             row of both owned"
         );
         return Ok(());
     }
