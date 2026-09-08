@@ -41,13 +41,24 @@
 //!
 //! # The blocking question
 //!
-//! Every `lbug` method blocks and the port's methods are `async`. Because the
-//! store is `'static` and owns its database, `tokio::task::spawn_blocking` is
-//! *available* here — a connection can be built inside the spawned closure —
-//! but it is not used, because reaching for it would put a tokio dependency in
-//! a runtime-agnostic adapter. Phase 11 decides between blocking the executor
-//! thread and a runtime-gated `spawn_blocking` feature; the skeleton records
-//! that the owned-`Database` layout is what leaves both open.
+//! Every `lbug` method blocks and the port's methods are `async`. ADR-0025
+//! settles it **blocking-only**, because reaching for `spawn_blocking` would put
+//! a tokio dependency in a runtime-agnostic adapter.
+//!
+//! **The reason this paragraph used to give for the alternative being open was
+//! wrong, and it is corrected rather than deleted, because it is the kind of
+//! wrong a reader would act on.** It said `spawn_blocking` is *available* here
+//! because the store is `'static` and owns its database. It is not available on
+//! those grounds: `spawn_blocking` requires `FnOnce + Send + 'static`, and every
+//! method of this port takes `&self`. Whether a closure can be `'static` is a
+//! decision about the store's **fields** — an `Arc<Database>` rather than a
+//! `Database` — and not about the call site. ADR-0025 takes that field decision
+//! for an unrelated reason (a second `Database` on one directory is refused by a
+//! file lock), which is what would make the feature possible later; it is not
+//! what makes it unnecessary now.
+//!
+//! Runtime-agnosticism is falsified rather than asserted: the conformance suite
+//! is mounted twice, once under an emitter that needs no runtime at all.
 //!
 //! # What this does not settle
 //!

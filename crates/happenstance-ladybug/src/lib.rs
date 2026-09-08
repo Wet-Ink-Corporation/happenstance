@@ -23,13 +23,24 @@
 //!
 //! # The driver is deliberately absent
 //!
-//! The `lbug` crate builds LadybugDB's C++ from source through `cxx` and
-//! `cmake`. That is exactly why this adapter is a separate crate rather than a
-//! feature flag somewhere else: nobody who only wants SQLite should pay a
-//! multi-minute native build. It is also why the dependency is still not here —
-//! a skeleton whose job is to type-check needs the *shapes*, not the C++, and
-//! [`stand_in`] carries those with its sources cited. docs.rs itself fails to
-//! build `lbug` 0.19.1, which is the same cost seen from outside.
+//! This adapter is a separate crate rather than a feature flag somewhere else
+//! because nobody who only wants SQLite should pay for the driver, and the
+//! dependency is still not here because a skeleton whose job is to type-check
+//! needs the *shapes*, not the C++ — [`stand_in`] carries those with its sources
+//! cited.
+//!
+//! **What the cost actually is was measured at phase 11 and is not what this
+//! paragraph used to say.** It said `lbug` builds LadybugDB's C++ from source
+//! through `cxx` and `cmake`. Its `build.rs` tries a **prebuilt download first**
+//! and only falls back to the source build; on the machine that measured it the
+//! prebuilt path succeeded and cmake was never invoked. What arrives instead is a
+//! single **1.44 GB static archive**, plus an OpenSSL toolchain that no feature
+//! turns off. `experiments/ladybug-driver-probes/` carries the transcript.
+//!
+//! That is a different cost with a different remedy, and ADR-0025 takes it:
+//! `cargo check` and `cargo clippy` do not link, `cargo test --workspace` does,
+//! so the driver ships behind an off-by-default feature and the conformance run
+//! is a probed step rather than a workspace one.
 //!
 //! # What this skeleton establishes
 //!
@@ -59,17 +70,27 @@
 //! * Whether the checkpoint lives in the graph as a node or beside it. As a
 //!   node property is what keeps it inside the same `BEGIN TRANSACTION`, which
 //!   is the only way to satisfy the port's transactional invariant — so this is
-//!   nearly settled, and what remains is the `INT64`/`NonZeroU64` narrowing
-//!   that [`LadybugProjectionStoreError::MalformedCheckpoint`] and
-//!   [`LadybugProjectionStoreError::PositionOutOfRange`] exist for.
+//!   nearly settled. **The narrowing those two error variants were written for
+//!   does not exist**: a `UINT64` column round-trips `u64::MAX - 1` exactly, so
+//!   `SequencePosition`'s `NonZeroU64` fits whole — unlike the two adapters over
+//!   a signed `bigint`. ADR-0025 therefore deletes
+//!   [`LadybugProjectionStoreError::PositionOutOfRange`], which no code path
+//!   could construct, and narrows
+//!   [`LadybugProjectionStoreError::MalformedCheckpoint`] to a stored zero.
 //! * Whether `lbug`'s synchronous API is wrapped in `spawn_blocking` or the
-//!   adapter is offered as blocking-only. See the [`projection_store`] module
-//!   documentation for what the store's layout leaves open.
+//!   adapter is offered as blocking-only. **Settled blocking-only by ADR-0025**,
+//!   with runtime-agnosticism falsified by mounting the suite under both the
+//!   blocking and the tokio emitters.
 //! * How a projection expresses graph mutations: raw Cypher, or a typed
 //!   builder. [`GraphStatement`] is the raw-Cypher answer, and it is deliberate
-//!   that it is *the port's* answer too — PS-9 and PS-11 ask whether generic
-//!   code needs a write vocabulary on `Batch`, and this crate is one of the two
-//!   data points.
+//!   that it is *the port's* answer too.
+//!
+//!   **This crate is not one of PS-9's or PS-11's data points**, which this
+//!   paragraph used to claim. Those clauses' falsifier names *a second generic
+//!   consumer* — library code `happenstance` itself ships that must write into an
+//!   unknown adapter's batch — and assigns it to another phase. An adapter is
+//!   evidence about what the clauses **cost**, which is worth reporting and is a
+//!   different thing from the evidence they are waiting on.
 
 #![doc(html_no_source)]
 // `clippy::todo` is denied workspace-wide. Scoped here rather than left open in
