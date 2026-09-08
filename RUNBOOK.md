@@ -4932,8 +4932,26 @@ Most of the old phase-7 list moved to phase 0, where it was cheaper. What remain
 is the release.
 
 - [ ] `CHANGELOG.md` finalised for 0.2.0 — it has been accumulating since phase 0.
-- [ ] `cargo publish --dry-run` per crate; verify each `.crate` against phase 0's
-      `--list` assertion.
+- [x] Verify each `.crate` against phase 0's `--list` assertion. `cargo xtask
+      package-check` is green on all five: the publishable set agrees with the
+      manifests in both directions, and each carries `LICENSE-MIT`,
+      `LICENSE-APACHE` and `README.md` — 29, 38, 53, 25 and 21 files packaged.
+
+- [ ] `cargo publish --dry-run` per crate. **Only the first crate can be
+      dry-run before the release, and that is the constraint rather than a
+      shortfall.** `--dry-run` resolves dependencies from the *registry*, so
+      `happenstance-testkit`, `happenstance`, `happenstance-sqlite` and
+      `happenstance-cloudflare` all fail with *"failed to select a version for the
+      requirement `happenstance-core = ^0.2.0` … candidate versions found which
+      didn't match: 0.2.0-alpha.1, 0.0.0"* — which is precisely the
+      each-must-be-live-before-the-next ordering, arriving as an error message
+      instead of as a sentence. `happenstance-core`'s dry-run is the one that can
+      run now, and it does.
+
+      So the four downstream dry-runs happen **during** the publish, between one
+      crate going live and the next being pushed, and not before it. What covers
+      them beforehand is `package-check`'s `--list` assertion above, and what
+      covers them afterwards is `scripts/stranger-install-smoke.sh`.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
       `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare`. Each
       must be live before the next resolves against it. The order is forced
