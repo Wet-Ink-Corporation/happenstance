@@ -138,8 +138,8 @@ checkpoint until the runner has caught up, and `200` after.
 | [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0` — 116 rules across four families |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ on crates.io at `0.2.0`; passes the suite against a real file |
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ on crates.io at `0.2.0`; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ both roles pass their suites against a live server; **not** in the `0.2.0` release set |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ passes its suites against a live Neon endpoint, with one open clause question; **not** in the `0.2.0` release set |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ on crates.io at `0.2.0`; both roles pass their suites against a live server, and the only adapter clearing the concurrency family against a store that does not serialise its writers |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ on crates.io at `0.2.0`; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ✅ passes the projection suite against the real driver; **cannot** be published — `lbug` does not render on docs.rs |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 

@@ -1082,6 +1082,10 @@ const OPTIONAL: &[Step] = &[
             "happenstance-testkit",
             "-p",
             "happenstance-sqlite",
+            "-p",
+            "happenstance-postgres",
+            "-p",
+            "happenstance-neon",
             "--all-features",
             "--no-deps",
         ],
@@ -1089,7 +1093,7 @@ const OPTIONAL: &[Step] = &[
         probe: Some(&["cargo", "+nightly", "--version"]),
     },
     Step {
-        // The fifth publishable crate, and it needs its own step rather than a
+        // The one publishable crate that does not render on the host, and it needs its own step rather than a
         // fifth `-p` above: `happenstance-cloudflare`'s manifest sets
         // `default-target = "wasm32-unknown-unknown"` and `targets = []`, so
         // docs.rs renders it for wasm32 and nothing else. Rendering it on the

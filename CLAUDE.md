@@ -380,9 +380,10 @@ build of `happenstance-core` (three configurations in all with the workspace
 `--all-features` one, because a link from a `memory` page into a `conformance`
 item is broken at neither end of that range and only in the middle, which is
 where a consumer stands),
-and a `cargo package --list` assertion that each of the **five** publishable
+and a `cargo package --list` assertion that each of the **seven** publishable
 crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — carries both licence files
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — carries both licence files
 and a README. The number is spelled with its members now because it had already
 drifted once: this sentence read *"three"* through phase 9's promotion of
 `happenstance-cloudflare` and did not move, so a count on its own turned out to

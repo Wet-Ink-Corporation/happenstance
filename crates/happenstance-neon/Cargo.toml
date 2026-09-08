@@ -17,7 +17,11 @@ categories.workspace = true
 # honest in both directions, so flipping this flag without also moving that set is
 # a red gate rather than a quiet publish. `deskeleton-and-package-readiness` owns
 # both halves.
-publish = false
+# Published from `0.2.0`, with one open clause question stated in the crate
+# root rather than hidden: ES-11's falsifier fired on this adapter, and the
+# clause is `[PROVISIONAL]` pending an ADR. The release set was re-opened at
+# the release review and settled at seven; see `SESSION-DECISIONS-0.2.0.md`'s
+# D-04.
 
 [dependencies]
 # `unstable-projection` is named rather than inherited. Feature unification is
@@ -143,3 +147,11 @@ conformance = ["happenstance-core/conformance"]
 
 [lints]
 workspace = true
+
+# Both keys, for the reason every publishable crate here carries them: without
+# `all-features` docs.rs renders the default set and the projection half
+# disappears from the page, and `--cfg docsrs` is what makes `doc(cfg(...))`
+# render its gate rather than nothing.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

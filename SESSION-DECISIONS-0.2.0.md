@@ -254,9 +254,39 @@ flag, and a flag that says "do not publish this" is not evidence of unreadiness
 when the release set is five by decision. The crate-root prose now says which of
 the two it is, because they were reading as the same thing.
 
-**Left for the owner:** if `happenstance-postgres` should ship after all, it is
-one line in `PUBLISHABLE`, one flag, a README, two licence files and a docs.rs
-metadata block — not a re-plan.
+**Overturned at review, and it was the owner's to overturn.** The release set is
+now **seven**: `happenstance-postgres` and `happenstance-neon` both ship at
+`0.2.0`. The five-crate decision sat on `HANDOVER.md`'s do-not-re-open list, and
+what makes re-opening it right rather than churn is that the facts under it moved
+between the two decisions — both crates were skeletons when five was decided and
+are conformant adapters now.
+
+**Checked before the claim rather than after.** Rendering on docs.rs is this
+project's bar for a published crate, and it is what disqualified
+`happenstance-ladybug`; both of these render under `--cfg docsrs` and both build
+under `DOCS_RS=1`. `package-check` agrees on all seven, each carrying a README,
+both licence files and docs.rs metadata.
+
+**What it changed, in full:** `PUBLISHABLE`, both manifests, two new READMEs, four
+licence files, `CHANGELOG.md`'s scope sentence (there is a lint holding it to
+`PUBLISHABLE`), `SECURITY.md`'s supported list, `CLAUDE.md`'s count, the `semver`
+job's two package lists, the nightly `docsrs` step, `README.md`'s status rows and
+the RUNBOOK's goal and publish order. Phase 10b's second exit criterion —
+*"`publish = false` removed"* — is met for the first time, having been the thing
+that gave when the two decisions collided.
+
+**One small finding fell out of it.** `scan_publishable` reads `PUBLISHABLE` by
+pulling quoted strings out of the block, so a double-quoted phrase in a *comment*
+inside that array is indistinguishable from a crate name. The comment explaining
+the ladybug exclusion had two, and the changelog-scope lint promptly reported
+`unfinished` and `out of this release` as publishable crates. Fixed, and the
+array now carries a note saying not to do it.
+
+**`happenstance-neon` ships with ES-11's falsifier fired against it**, and that is
+deliberate rather than overlooked: a `[PROVISIONAL]` clause is one a published
+crate may fail to satisfy — that is what the marker means — and the crate's README
+names the rule and the measurement rather than leaving a reader to discover it
+from a red CI job.
 
 ### D-05 — the clause audits are a gate step rather than a pass somebody did
 
@@ -599,9 +629,10 @@ says which it means.
    milestone row's whole dependency closure to read `done`, so the row must come
    after the flip and not before it.
 
-4. **`happenstance-postgres` is finished and deliberately not published.** That is
-   the five-crate decision rather than a readiness judgement; D-04 records what
-   shipping it would take if you want it in.
+4. **The release set is seven, not five** — `happenstance-postgres` and
+   `happenstance-neon` joined at the review. The publish order gains two steps at
+   the end, and both must come after `happenstance-testkit` because all four
+   adapters dev-depend on it with a version.
 
 5. **Set "require approval for first-time contributors"** in Actions settings
    before going public. `pull_request` carries no filter, so every fork PR fires

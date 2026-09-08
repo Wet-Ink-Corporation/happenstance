@@ -1,7 +1,8 @@
 # Changelog
 
 Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — every crate this
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — every crate this
 workspace currently publishes.
 
 `cargo xtask lints` derives that set from `xtask/src/package.rs`'s
@@ -31,6 +32,28 @@ not the same as what a user needed to be told.
 ## [Unreleased]
 
 ### Added
+
+- **`happenstance-postgres` and `happenstance-neon` join the published set**, at
+  the `0.2.0` release review. Both previously held `0.0.0` placeholders, which are
+  not predecessors: there is no upgrade path from one because there was never
+  anything under it.
+
+  The release set was **five, decided**, and the owner re-opened it. What changed
+  between the two decisions is that both crates stopped being skeletons:
+  `happenstance-postgres` clears 132 gated tests against a live PostgreSQL 17.10
+  including the concurrency family at 64 contenders — the only adapter here that
+  clears that family against a store which does not serialise its writers — and
+  `happenstance-neon` clears 124 against a live Neon endpoint.
+
+  `happenstance-neon` ships with **one conformance rule it does not pass**:
+  `read_result_is_stable_under_concurrent_append` is a network race for a store
+  whose read and append are two independent HTTP requests, and ES-11's own
+  `[PROVISIONAL]` marker named a one-shot-HTTP adapter as the thing that would
+  falsify it. The clause is owed an amendment; the crate's README names the rule,
+  the measurement and the reason rather than leaving it to be found in CI.
+
+  `happenstance-ladybug` is finished and is **not** published: `lbug` does not
+  render on docs.rs, which is this project's bar for a published crate.
 
 - **`happenstance-postgres` has a projection store.** `PostgresProjectionStore`
   implements `SendProjectionStore` over a live server and clears the projection

@@ -96,7 +96,7 @@ is the expensive failure mode here, not implementing them.
 
 | Decision | Where |
 |---|---|
-| **Five crates** in `0.2.0`, cloudflare included | `xtask/src/package.rs`'s `PUBLISHABLE`; README, SECURITY.md and ci.yml reconciled to it |
+| ~~**Five crates** in `0.2.0`, cloudflare included~~ **→ seven.** Re-opened by the owner at the `0.2.0` release review and settled at seven: `happenstance-postgres` and `happenstance-neon` joined once both stopped being skeletons and both were shown to render under `--cfg docsrs`. | `xtask/src/package.rs`'s `PUBLISHABLE`; README, SECURITY.md, CHANGELOG and ci.yml reconciled to it. `SESSION-DECISIONS-0.2.0.md`'s D-04 |
 | **Stable `0.2.0`**, not another alpha | `Cargo.toml`'s version comment |
 | **ES-42 frozen** — nothing needs `dyn EventStore` the E11 wrapper cannot box | `.kb/_intake/es-42-marker-earned-off-at-0-2-0.md` |
 | **Seventeen briefs ratified** — nine on their own recommendations, eight reviewed | `.kb/_intake/ratifications-2026-09-06-pre-publication.md` |

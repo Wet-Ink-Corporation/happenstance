@@ -4785,21 +4785,20 @@ skip list, which is the transport axis's far end stated honestly.
       **Until that ADR lands, this adapter's honest conformance statement is 104
       of 105 rules with one open clause question, not 105.**
 
-- [~] No `todo!()` on either path; `publish = false` removed. **The Postgres half
-      is done**: `PostgresProjectionStore`'s five bodies are written, the crate
+- [x] No `todo!()` on either path; `publish = false` removed. **Both halves, and
+      the second one only became true at the release review.** The Postgres half
+      is done: `PostgresProjectionStore`'s five bodies are written, the crate
       carries no `todo!()`, and `#![allow(clippy::todo)]` left with the last one —
       which is the contract that allow was written under. Neon's half is open.
 
-      **`publish = false` stays, and the criterion is what gives.** Removing it
-      collides with a decision already taken and listed under *do not re-open*:
-      `0.2.0` ships **five crates** and this is not one of them. The collision is
-      hard rather than soft — `xtask/src/package.rs`'s `reconcile` holds
-      `PUBLISHABLE` against the manifests in both directions, so dropping the flag
-      without adding the crate reddens the gate and adding it makes a sixth
-      published crate. The criterion's *substance* — no stub survives — is met and
-      is checkable; what remains is a release-set flag, and a flag saying "do not
-      publish this" is not evidence of unreadiness when the release set is five by
-      decision. Recorded at `SESSION-DECISIONS-0.2.0.md`'s D-04.
+      **`publish = false` is gone from both crates**, which this criterion asked
+      for and which the session could not do: removing it collided with the
+      five-crate release decision, and `reconcile` holds `PUBLISHABLE` against the
+      manifests in both directions, so half the change reddens the gate. The
+      owner re-opened the release set at the review and settled it at **seven**.
+      Both crates now carry a README, both licence files and docs.rs metadata,
+      both render under `--cfg docsrs`, and `package-check` agrees on all seven.
+      Recorded at `SESSION-DECISIONS-0.2.0.md`'s D-04.
 
 - [x] `PostgresFixture` arms `READ_FAULT` rather than declining it.
       `arming_a_read_fault_makes_the_stream_yield_an_error` runs against it and
@@ -5031,8 +5030,26 @@ have been three.
 ## Phase 12 — Publish `0.2.0`
 
 **Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — **five crates**, decided at
-the `0.2.0` release pass — on crates.io, rendering on docs.rs.
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — **seven crates** — on crates.io, rendering on docs.rs.
+
+**It was five, decided at the `0.2.0` release pass, and the owner re-opened it at
+the release review.** That decision sat on `HANDOVER.md`'s do-not-re-open list,
+and the owner is the one party entitled to re-open it. What changed is that both
+Postgres crates stopped being skeletons between the two decisions:
+`happenstance-postgres` clears 132 gated tests against a live PostgreSQL 17.10
+including the concurrency family at 64 contenders, and `happenstance-neon` clears
+124 against a live endpoint. Both render under `--cfg docsrs`, which is this
+phase's bar and which is checked before the claim rather than after.
+
+`happenstance-neon` ships with **ES-11's falsifier fired against it** and the
+clause still `[PROVISIONAL]`. That is deliberate: a provisional clause is one a
+published crate may fail to satisfy — that is what the marker means — and the
+crate's own README says which rule and why rather than leaving a reader to find
+out from a red CI job.
+
+`happenstance-ladybug` is finished and is **not** in the set, and cannot be:
+`lbug` does not render on docs.rs. See phase 11.
 
 **Why here.** Publication no longer waits on replication: with identity settled in
 phase 5 and `IngestStore` living in the sync crate, nothing in `happenstance-sync`
@@ -5141,13 +5158,16 @@ is the release.
       them beforehand is `package-check`'s `--list` assertion above, and what
       covers them afterwards is `scripts/stranger-install-smoke.sh`.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
-      `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare`. Each
-      must be live before the next resolves against it. The order is forced
-      rather than chosen: both adapters dev-depend on the testkit at the
-      workspace version. **This list named four crates** while the goal above and
-      `HANDOVER.md` both say five — `happenstance-cloudflare` joined `PUBLISHABLE`
-      at phase 9 and this line did not move, which is the same silent-count defect
-      the goal paragraph already spells out with its members for.
+      `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare` →
+      `happenstance-postgres` → `happenstance-neon`. Each must be live before the
+      next resolves against it. The order is forced rather than chosen: **all
+      four adapters dev-depend on the testkit at the workspace version**, and a
+      dev-dependency carrying a version has to resolve from the registry at
+      publish time.
+
+      This list named four crates while the goal said five, then five while the
+      goal said seven. It is spelled out in full each time for the reason the
+      goal paragraph gives: a count is the part nobody re-reads.
 - [x] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
       crate. A clean build with it denied is the proof that no stub survives.
       Denied workspace-wide already; **verified rather than assumed** — no

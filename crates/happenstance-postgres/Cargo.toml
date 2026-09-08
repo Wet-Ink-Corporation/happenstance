@@ -9,7 +9,11 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Published from `0.2.0`. The five-crate release set was re-opened at the
+# release review and settled at seven: this crate clears 132 gated tests
+# against a live PostgreSQL 17.10, including the concurrency family at 64
+# contenders, and its projection store clears the projection suite. See
+# `SESSION-DECISIONS-0.2.0.md`'s D-04.
 
 [dependencies]
 # `unstable-projection` is named rather than inherited. Feature unification is
@@ -110,3 +114,11 @@ naive-arm = []
 
 [lints]
 workspace = true
+
+# Both keys, for the reason every publishable crate here carries them: without
+# `all-features` docs.rs renders the default set and the projection half
+# disappears from the page, and `--cfg docsrs` is what makes `doc(cfg(...))`
+# render its gate rather than nothing.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

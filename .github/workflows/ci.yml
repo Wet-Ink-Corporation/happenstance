@@ -905,7 +905,7 @@ jobs:
           # than remembering to add the line later, and a public surface no
           # instrument watches is the thing this job exists to prevent. That
           # foresight is why this line needed no edit at the release.
-          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon
 
       # THE REGISTRY BASELINE, AND IT IS ONE WORD FROM WORKING.
       #
@@ -941,7 +941,7 @@ jobs:
         if: false # ← delete this line when `0.2.0` is on crates.io
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon
 
   # A newly published advisory against a dependency nobody has touched is the one
   # class of failure that arrives with no commit behind it, so it needs a clock
