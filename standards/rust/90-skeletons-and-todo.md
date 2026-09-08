@@ -373,7 +373,7 @@ transaction, no cursor, one round trip per operation, a hard 64 MiB response cap
 the far end of the transport axis. The limits are found by whoever writes the
 bodies, against a port already frozen on the strength of their absence.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:1092 (It compiles, and that is the finding)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1100 (It compiles, and that is the finding)` ·
 `crates/happenstance-neon/src/lib.rs:71 (would therefore rank this crate)` ·
 `references/adapter-shapes.md:207 (limits that are not type errors)` ·
 [adapter-shapes §3](../../references/adapter-shapes.md)

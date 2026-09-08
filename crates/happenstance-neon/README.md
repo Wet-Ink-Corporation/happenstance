@@ -75,10 +75,18 @@ afterwards land in the same queue in that order"* — true where both operations
 enter one pool, and false by construction where there is no queue at all.
 
 ES-11 is `[PROVISIONAL]`, and its own marker named a one-shot-HTTP adapter as the
-thing that would falsify it. This is that adapter. The clause is owed an
-amendment; until it lands, **this crate does not claim ES-11**, and the
+thing that would falsify it. This is that adapter. ADR-0061 settled what follows:
+the clause's sufficiency condition is corrected to say *spawned at the first poll,
+**and** ordered against a later append by something the store itself honours* —
+which removes spawn order alone as a route to a conformance claim rather than
+weakening what a store must do — and **this crate does not claim ES-11**. The
 conformance job that checks it is deliberately kept strict rather than taught to
 tolerate a named failure.
+
+The figure is **104 of 105 rules observed**, and the missing certainty is worth a
+sentence: `query_items_share_one_snapshot` passes, but it appends after the first
+poll and asserts the drained set unchanged, which is structurally the same race.
+It has not lost it in sixty measured runs. That is not the same as immunity.
 
 ## Things the endpoint does that will surprise you
 

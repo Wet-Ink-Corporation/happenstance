@@ -74,11 +74,16 @@
 //! What remains is a **capability limit of this adapter**, not a flake to retry
 //! away. Receiving two requests in order does not make one backend's snapshot
 //! precede another backend's commit, and no configuration of this client can
-//! make it. The residual belongs to the clause's owner rather than to this file:
-//! it is either an ES-11 amendment naming one-shot HTTP as a shape the
-//! sufficiency condition does not cover, or a finding that this adapter cannot
-//! claim ES-11 at all. **Nothing here suppresses it** — the rule is mounted, it
-//! is not gated by a capability, and a run that loses the race is red.
+//! make it. **Nothing here suppresses it** — the rule is mounted, it is not gated
+//! by a capability, and a run that loses the race is red.
+//!
+//! The residual belonged to the clause's owner rather than to this file, and
+//! **ADR-0061 settled it**: the sufficiency sentence quoted above is corrected to
+//! say *spawned at the first poll, **and** ordered against a later append by
+//! something the store itself honours* — a narrowing, since it removes spawn order
+//! alone as a route to a conformance claim — and `happenstance-neon` does not
+//! satisfy ES-11. The MUST did not move and no capability was minted, which is why
+//! this file still mounts the rule and still goes red when it loses.
 //!
 //! # It owns a runtime, and the shape that looks right does not work
 //!

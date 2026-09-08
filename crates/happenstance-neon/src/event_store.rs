@@ -982,7 +982,15 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// direction, with the read seeing an event appended after it was issued. A
 /// caller that needs the two ordered must sequence them itself; this store has
 /// nothing it could do about it, and the transport's own documentation carries
-/// the numbers and the clause question they raise.
+/// the numbers.
+///
+/// ADR-0061 settled the clause question those numbers raised. ES-11's sufficiency
+/// condition for an asynchronous driver — *"a read spawned at its first poll and
+/// an append spawned afterwards land in the same queue in that order"* — was a
+/// fact about pooled drivers stated as one about async drivers generally, and it
+/// is corrected to require an ordering primitive the *store* honours rather than
+/// only the client. **This store does not satisfy ES-11**, and that is a stated
+/// limitation rather than a defect awaiting a fix.
 pub struct NeonReadStream<'a, T: SqlTransport> {
     state: ReadState<'a, T>,
     max_response_bytes: usize,

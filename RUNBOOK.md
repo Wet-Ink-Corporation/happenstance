@@ -4777,13 +4777,25 @@ skip list, which is the transport axis's far end stated honestly.
       stated, so nothing in the event-store, concurrency or model families skips.
 
       **The fourth is `read_result_is_stable_under_concurrent_append`, and it is
-      neither a skip nor an amended clause — deliberately.** ES-11's falsifier has
+      neither a skip nor a weakened clause — deliberately.** ES-11's falsifier has
       fired on the adapter its own marker named, and amending a clause that ES-12
-      reduces to is an ADR's work rather than an adapter lane's. The residual is
-      in the provisional ledger above and staged at
-      `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`.
-      **Until that ADR lands, this adapter's honest conformance statement is 104
-      of 105 rules with one open clause question, not 105.**
+      reduces to is an ADR's work rather than an adapter lane's.
+
+      **That ADR landed at the release review: ADR-0061.** It corrects ES-11's
+      asynchronous-driver *sufficiency condition*, which asserted that a read and
+      an append "land in the same queue in that order" — a fact about pooled
+      drivers stated as one about async drivers generally. That is a **narrowing**:
+      it removes spawn-order-alone as a route to a conformance claim. ES-11's MUST,
+      maturity, `Rule` and `Cases` do not move, no capability is minted, and the
+      `live-neon` job stays strict. `happenstance-neon` **does not satisfy ES-11**,
+      as a stated limitation.
+
+      **This adapter's honest conformance statement is 104 of 105 rules observed**,
+      and the ADR records why that has a soft edge:
+      `query_items_share_one_snapshot` appends after the first poll and asserts the
+      drained set unchanged, which is structurally the same exposure, and sixty
+      measured runs at the sibling rule's rate separate luck from immunity poorly.
+      It passes; it is not proven immune.
 
 - [x] No `todo!()` on either path; `publish = false` removed. **Both halves, and
       the second one only became true at the release review.** The Postgres half

@@ -5,6 +5,19 @@
 **Found by:** running the conformance suite against a live Neon endpoint at phase 10b
 **Owner:** ES-11's, and it is owed an ADR before `happenstance-neon` can claim conformance
 
+> **Settled on 2026-09-08 by ADR-0061**, whose brief is
+> `2026-09-08-adr-0061-es-11s-sufficiency-condition-assumed-a-queue.md`. This file
+> stays as the *finding*, unedited below this line, because the three options it
+> lists and the reasons two of them lost are the argument the decision rests on.
+> The choice was a fourth reading of option 1: the clause's async sufficiency
+> sentence is **corrected** rather than its scope narrowed to exclude one-shot HTTP
+> — a narrowing that removes a route to a conformance claim — together with option
+> 2's stated limitation. **Two claims below did not survive the pass.** The CI cost
+> is not *"red about 1 run in 40"* but **zero**, because `NEON_CONNECTION` is not a
+> repository secret and every step of `live-neon` is gated on it. And *"104 of 105"*
+> has a soft edge: `query_items_share_one_snapshot` is exposed to the same race by
+> construction and has not yet lost it, which is a different statement from passing.
+
 ## What the marker said would happen
 
 ES-11's `[PROVISIONAL]` marker, verbatim:
