@@ -251,6 +251,22 @@ impl<T> NeonEventStore<T> {
     /// after a `40001`, and the retry itself is the backoff, at one round trip
     /// each.
     ///
+    /// **What it costs when it *is* needed, stated because "costs nothing" is only
+    /// half the ledger.** There is no sleep between attempts, so the whole budget
+    /// is up to eight *serial* round trips to the endpoint before a `40001`
+    /// surfaces — the one path in this store where a single `append` call can spend
+    /// eight network latencies. That is the price of the margin, and it is paid
+    /// only by a caller already losing a serialisation fight: the winner commits on
+    /// its first attempt, and every contender on the *same* boundary answers
+    /// `ConditionViolated` on its second rather than racing again. It is the
+    /// disjoint-boundary case above, where the relation-wide predicate lock puts a
+    /// retry straight back into the same fight, that can walk the budget.
+    ///
+    /// A caller that would rather fail fast than wait has the shape available:
+    /// `ConditionViolated` and `Sql(40001)` are distinct outcomes, so a retry
+    /// policy of its own can sit above this one. What it cannot do is lower this
+    /// constant — it is `pub` to be *read*, and the number is the adapter's.
+    ///
     /// Exhaustion is not silent: it surfaces as
     /// `AppendError::Store(NeonError::Sql(…))` carrying SQLSTATE `40001`, which is
     /// a named, documented outcome rather than a `ConditionViolated` this adapter
