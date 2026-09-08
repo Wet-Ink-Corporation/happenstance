@@ -109,7 +109,9 @@ use happenstance_core::{
 };
 use sqlx::{PgPool, Postgres, Transaction};
 use std::future::Future;
+use std::hash::{BuildHasher, Hasher, RandomState};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tokio::runtime::Handle;
 
 use crate::error::PostgresEventStoreError;
@@ -636,15 +638,26 @@ impl SendEventStore for PostgresEventStore {
 /// `Failed("postgres rejected the work")` where the rule requires a commit or a
 /// `ConditionViolated`.
 ///
+/// **Eight alone did not fix it, and the reason is the whole finding.** Raised
+/// from three, the rule failed again on CI with *more* exhausted contenders —
+/// two at three attempts, five at eight. A budget is not a mechanism: without a
+/// wait between them, every loser re-enters at once and collides with every other
+/// loser, so extra attempts are extra transactions in the same fight. What was
+/// missing is spacing, and [`backoff`] is where it now lives — read that first,
+/// because this constant only bounds a loop that behaves the way that function
+/// makes it behave.
+///
 /// **The number is adopted rather than re-measured here, and that is stated
 /// rather than smoothed over.** Eight comes from Neon's table against a shared
-/// cause, corroborated by this adapter failing at three; it is not four runs per
-/// value against a live PostgreSQL server, which is the bar ADR-0024 sets for a
-/// choice like this. Re-measuring it here is owed and is cheap to do once the
-/// live job is green again. It costs nothing when it is not needed — a retry
-/// happens only after a `40001` — and when it is needed the whole budget is up to
-/// eight serial round trips, which on a pooled local connection is a fraction of
-/// the same budget's cost on Neon's transport.
+/// cause; it is not four runs per value against a live PostgreSQL server, which
+/// is the bar ADR-0024 sets for a choice like this. Re-measuring both this and
+/// the backoff window together is owed, and should be done on a CI-sized runner
+/// rather than a developer machine — local hardware is precisely what hid this.
+///
+/// It still costs nothing when it is not needed: a retry happens only after a
+/// `40001`. When it is needed the cost is now eight round trips *plus* the waits,
+/// which [`BACKOFF_CAP`] bounds at roughly a quarter of a second in the worst
+/// case, paid only by a writer already losing a serialisation fight.
 const SERIALISATION_ATTEMPTS: u32 = 8;
 
 /// Postgres's `serialization_failure`.
@@ -700,10 +713,86 @@ async fn append_in_transaction(
                 // Nothing was committed — Postgres aborted the whole
                 // transaction — so re-running is not a partial retry. The next
                 // attempt reads a log that now contains the winner's rows.
+                //
+                // Waiting first, and it is the half this loop was missing.
+                tokio::time::sleep(backoff(attempt)).await;
             }
             other => return other,
         }
     }
+}
+
+/// The shortest wait between two attempts, doubled per attempt from here.
+const BACKOFF_BASE: Duration = Duration::from_millis(2);
+
+/// The longest wait between two attempts, whatever the exponent says.
+///
+/// Sixty-four milliseconds is a ceiling rather than a target: with full jitter
+/// the *expected* wait is half the window, and `SERIALISATION_ATTEMPTS`
+/// exhausting at this cap costs a caller roughly a quarter of a second in the
+/// worst case — paid only by a writer already losing a serialisation fight.
+const BACKOFF_CAP: Duration = Duration::from_millis(64);
+
+/// How long to wait before re-running an aborted conditional append.
+///
+/// # Why a retry needs a wait at all, which this adapter did not know until CI
+///
+/// `SERIALISATION_ATTEMPTS`'s doc block explains why *more* attempts were needed
+/// and it is only half the story; the other half is that attempts have to be
+/// **spread out**, and nothing here was spreading them.
+///
+/// `k_disjoint_boundaries_admit_exactly_k_commits` races twelve contenders over
+/// four boundaries. The SSI predicate lock is relation-wide on a small table, so
+/// all twelve conflict with each other whatever boundary they are racing. With no
+/// wait, every loser re-enters at once and collides with every other loser — a
+/// thundering herd that a bigger budget makes *worse* rather than better, because
+/// each extra attempt is another transaction in the same fight. Measured on CI:
+/// the rule failed with two exhausted contenders at three attempts and **five** at
+/// eight. The budget was the wrong lever.
+///
+/// **`happenstance-neon` does not need this and that is why the number did not
+/// transfer.** Its retry costs a network round trip to a pooled proxy — on the
+/// order of a hundred milliseconds — so its transport supplies the spacing for
+/// free, and its doc block says so in terms: *"the retry itself is the backoff"*.
+/// That sentence is true there and false here, where a retry against a pooled
+/// local connection costs well under a millisecond. Adopting Neon's value without
+/// its transport adopted half a mechanism.
+///
+/// # The shape: exponential, capped, full jitter
+///
+/// Full jitter — uniform in `[0, ceiling]` rather than `ceiling ± a bit` — is the
+/// arm that actually decorrelates a herd. Equal-and-opposite jitter around a
+/// common centre leaves the population clustered at that centre, which is the
+/// defect being fixed.
+///
+/// The randomness is [`RandomState`] rather than a `rand` dependency. Each
+/// `RandomState::new()` carries a fresh seed, so hashing a constant yields an
+/// independent draw per call with no new licence surface, no advisory surface and
+/// no MSRV exposure — which the workspace manifest is explicit about wanting for
+/// a crate that needs exactly one thing.
+///
+/// # What it requires of the caller's runtime, and why that is not new
+///
+/// [`tokio::time::sleep`] needs a runtime with the timer enabled. This adds no
+/// requirement: `sqlx`'s pool already enforces an acquire timeout, so a runtime
+/// that could not tell the time could never have handed this store a connection.
+fn backoff(attempt: u32) -> Duration {
+    let shift = (attempt - 1).min(5);
+    let ceiling = BACKOFF_BASE.saturating_mul(1_u32 << shift).min(BACKOFF_CAP);
+    ceiling.mul_f64(jitter())
+}
+
+/// A uniform draw in `[0, 1]`, from the standard library and nothing else.
+///
+/// `RandomState::new()` is freshly seeded per instance, so the hash of a constant
+/// differs between calls. The top thirty-two bits are taken because `f64::from`
+/// is lossless on `u32` and a `u64`-to-`f64` cast is not — the same reason the
+/// crate's lints would refuse the shorter spelling.
+fn jitter() -> f64 {
+    let mut hasher = RandomState::new().build_hasher();
+    hasher.write_u8(0);
+    let bits = u32::try_from(hasher.finish() >> 32).unwrap_or(u32::MAX);
+    f64::from(bits) / f64::from(u32::MAX)
 }
 
 /// True for Postgres's `40001`, and only for it.
