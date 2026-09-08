@@ -5177,8 +5177,30 @@ is the release.
       it is not true yet, and an accepted decision atom is immutable, so lifting a
       marker is a superseding atom rather than an edit — which is a
       `/redkiln:kb-ingest` job, not a hand edit.
-- [ ] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
-      release safety, `--baseline-rev` for review signal.
+- [x] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
+      release safety, `--baseline-rev` for review signal. **Written, and one word
+      from working.** The registry step is in the `semver` job carrying `if:
+      false` and the reason: omitting `baseline-rev` diffs against the newest
+      *compatible* published version, and there is none — the registry carries
+      `0.2.0-alpha.1`, and Cargo treats a prerelease as incompatible with the
+      release it precedes. Enabling it is deleting one line, in the same change
+      that marks this phase `done`. Written now rather than left as a checklist
+      entry because after a release is exactly when nobody reads checklists, and
+      `if: false` rather than absent for the reason the `backlog` job records: a
+      check that quietly stops running is worth less than none, and one that was
+      never written leaves nothing to mark the hole.
+
+- [x] **Decide the `benchmarks/` blind spot** — `HANDOVER.md` left it open with
+      *"whoever takes phase 12 should decide rather than inherit this."*
+      **Decided: a CI-only `cargo check --benches --tests`.** The crate calls the
+      public API and mounts the conformance suite, nothing compiled it, and on
+      2026-09-07 it was carrying three independent breakages all of them green —
+      including `commit`'s new return type, the first real downstream break this
+      workspace has produced, invisible for four commits. `cargo check` produces
+      no number, so this is not what CF-34 rejects: that clause is about a
+      threshold nobody can justify becoming a threshold everybody raises, and
+      there is no threshold here. CI-only rather than a gate step, so a developer
+      pays nothing and `benchmarks/` stays a crate the root manifest cannot see.
 - [ ] README status table: no more 🔲 for what shipped, and the "batteries"
       tagline reconciled with what actually shipped.
 

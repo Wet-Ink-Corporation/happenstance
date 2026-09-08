@@ -907,6 +907,42 @@ jobs:
           # foresight is why this line needed no edit at the release.
           package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
 
+      # THE REGISTRY BASELINE, AND IT IS ONE WORD FROM WORKING.
+      #
+      # This is the outstanding half of phase 12's `cargo-semver-checks` work,
+      # written out at the `0.2.0` closeout so that turning it on is an edit to
+      # `if:` rather than a step somebody has to compose from a checklist line
+      # after a release, which is exactly when nobody is reading checklists.
+      #
+      # It is `if: false` rather than absent, and the two are not the same. The
+      # `backlog` job one file-section up records the argument in full: a check
+      # that quietly stops running is worth less than none, because the green
+      # tick keeps arriving. A check that was never written is worse still —
+      # nothing marks the hole.
+      #
+      # **Why it cannot run yet, and it is not shyness.** Omitting `baseline-rev`
+      # makes the action diff against the newest *compatible* published version.
+      # There is none: the registry carries `0.2.0-alpha.1`, and Cargo treats a
+      # prerelease as incompatible with the release it precedes, so this step
+      # fails today with "no baseline" for a reason that has nothing to do with
+      # the code. A job that fails because the version it names does not exist
+      # teaches nobody anything, and it teaches them it loudly.
+      #
+      # **To enable it:** delete the `if: false` line below, in the same change
+      # that marks phase 12 `done`. Nothing else about this step needs to move.
+      #
+      # Both baselines are kept rather than one replacing the other, and they
+      # answer different questions. The rev baseline above catches a break
+      # introduced *by this pull request* and is silent about a break merged two
+      # pull requests ago, which is part of its baseline. This one catches breaks
+      # against the last thing a consumer can actually install, and is silent
+      # about which pull request introduced them.
+      - name: semver against the published baseline
+        if: false # ← delete this line when `0.2.0` is on crates.io
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
+
   # A newly published advisory against a dependency nobody has touched is the one
   # class of failure that arrives with no commit behind it, so it needs a clock
   # rather than a push. Licence and ban checks do not have that property — they
@@ -929,3 +965,51 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check advisories
+
+  # The benchmark crate is a CONSUMER, and nothing compiled it.
+  #
+  # `benchmarks/` sits outside the workspace behind a bare `[workspace]` table
+  # and `affected.rs` lists it as INERT. Both are right and neither is in
+  # question: CF-34 forbids a benchmark *result* gating a merge, `run.sh` says it
+  # must never become a gate step, and the crate installs a counting
+  # `#[global_allocator]` that the root's `unsafe_code = "forbid"` physically
+  # cannot host.
+  #
+  # But it calls the public API and it mounts the conformance suite over its own
+  # SQLite fixture. On 2026-09-07 it was found carrying three independent
+  # breakages, all of them green: `commit`'s new return type unnoticed for four
+  # commits — the first real downstream break this workspace has produced, and it
+  # was invisible — a seventh fixture inheriting `READ_FAULT`, missed because
+  # CF-18's check cannot run where it is not compiled, and a `Cargo.lock` still
+  # recording the path dependencies at `0.2.0-alpha.1`.
+  #
+  # **This is a decision taken at phase 12 rather than inherited**, which is what
+  # `HANDOVER.md` asked of whoever took it. `cargo check` produces no number, so
+  # this is not what CF-34 rejects — that clause is about a threshold nobody can
+  # justify becoming a threshold everybody raises, and there is no threshold here.
+  # Against that: adding a step to the gate for a crate whose entire design is to
+  # sit outside it deserves an argument. The argument is that the crate is a
+  # consumer, downstream breaks are exactly what a consumer catches, and this one
+  # caught the only one this workspace has produced — four commits late, by hand.
+  #
+  # CI-only rather than a `cargo xtask ci` step, deliberately. A developer running
+  # the gate pays nothing; the check runs where it costs nobody's inner loop, and
+  # `benchmarks/` stays a crate the root manifest cannot see.
+  #
+  # `--benches --tests`, no `--run`: this compiles the harness and never executes
+  # a measurement, so no number is produced and none can drift into a threshold.
+  benchmarks:
+    name: the benchmark crate still compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: benchmarks
+      # Its own lockfile, because it is its own workspace. `--locked` would fail
+      # the first time a path dependency's manifest changed, which is the event
+      # this job exists to notice rather than to refuse.
+      - name: Compile the benchmark harness and its tests
+        working-directory: benchmarks
+        run: cargo check --benches --tests
