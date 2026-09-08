@@ -135,6 +135,22 @@ the same argument the crate's own `Cargo.toml` NOTE makes for why Ladybug is a
 separate crate at all, one level further in — and it was reached by measurement
 here rather than by preference.
 
+**Ratified at review, with the architecture explicitly re-confirmed.** The crate's
+founding NOTE is factually wrong and its *conclusion* survives: the reason for a
+separate crate changed from "a multi-minute cmake build" to "a 1.4 GB link plus an
+OpenSSL toolchain", and both equally justify keeping it out of anything a stranger
+installs. The prose is corrected; the architecture is not revisited.
+
+**And the `ladybug` CI job ships unmeasured, deliberately.** It has never run, and
+two things cannot be observed from here: the Linux archive's size and whether
+`Swatinem/rust-cache` covers the registry's `.cache/` directory it lands in. Its
+first run *is* the measurement, which is the only place those numbers exist. It
+gates nothing on `main` — it is not a required check — so the cost of being wrong
+about it is a slow job rather than a blocked merge, and narrowing it afterwards
+would be done with a number instead of a guess. The rejected alternative was
+moving it to the weekly cron first, which buys certainty about cost at the price
+of same-PR feedback on the adapter it exists to check.
+
 ---
 
 ### D-03 — `PostgresProjectionStore::Batch` could not be what the skeleton declared
