@@ -32,7 +32,9 @@ crates/happenstance/             the typed layer. today a facade over the contra
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
-crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
+crates/happenstance-ladybug/     graph projection store only. real and conformant at
+                                 phase 11, on the real driver. publish = false, and here
+                                 that means CANNOT: `lbug` does not render on docs.rs.
 crates/happenstance-postgres/    the store that does not serialise its writers. both roles
                                  real and conformant at phase 10b. publish = false, by the
                                  five-crate release decision rather than by unreadiness.
@@ -116,14 +118,19 @@ adapter over storage this workspace does not control to do so. Both crates'
 `#![allow(clippy::todo)]` left with their last stub, which is the contract those
 allows were written under.
 
-**Two carry the marker whole — `happenstance-ladybug` and `happenstance-sync` —
-and for one of them the marker is already half spent.** Ladybug's decision record
-is written first, as the phase-11 protocol requires (ADR-0025), and its driver is
-measured (`experiments/ladybug-driver-probes/`); what it has not done is run the
-suite, which is the line between an instrument and an adapter. Read its crate root
-rather than this paragraph — a count in a file that loads on every task is a count
-nobody re-reads, which this file already says one section down and has now been
-wrong about twice.
+**One carries the marker whole, and it is `happenstance-sync`.** Read each crate's
+own root rather than this paragraph for which side of the line it is on — a count
+in a file that loads on every task is a count nobody re-reads, which this file
+already says one section down and has now been wrong about twice.
+
+**Three kinds of `publish = false` now live in this workspace and they are not the
+same fact.** `happenstance-sync` is unfinished. `happenstance-postgres` and
+`happenstance-neon` are finished and out of the five-crate release set.
+`happenstance-ladybug` is finished and **cannot** be published: `lbug`'s build
+script returns early under `DOCS_RS` before emitting the `cargo:rustc-env` lines
+its own `lib.rs` requires, so an undefined `env!` makes the docs.rs build a
+compile error — and rendering on docs.rs is phase 12's bar for a published crate.
+The manifests look identical; each crate root says which it means.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.

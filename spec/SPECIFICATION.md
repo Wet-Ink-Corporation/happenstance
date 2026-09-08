@@ -389,7 +389,7 @@ unrelated crate wanted replication.
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:141-316` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; two — transport and completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — **one** of them still a skeleton — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is one**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding cannot be discharged** — `begin` is total, synchronous and infallible and every route to a `sqlx` transaction is `async` and fallible — so it is now an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`). Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). `LadybugProjectionStore` is the remaining skeleton (`crates/happenstance-ladybug/src/projection_store.rs:287`). **Three of the five now run against the suite** — `SqliteProjectionStore` since phase 8, and `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, each through `happenstance_testkit::projection_store_conformance!` against a live server | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is one**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding cannot be discharged** — `begin` is total, synchronous and infallible and every route to a `sqlx` transaction is `async` and fallible — so it is now an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`). Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). `LadybugProjectionStore` is the remaining skeleton (`crates/happenstance-ladybug/src/projection_store.rs:287`). **Three of the five now run against the suite** — `SqliteProjectionStore` since phase 8, and `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, each through `happenstance_testkit::projection_store_conformance!` against a live server | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point. `EventStore` is frozen because it has evidence:
@@ -4752,27 +4752,32 @@ reading a stronger claim than this section makes.
 
 Four facts frame everything below.
 
-**The port has five implementers and, since phase 8, one adapter.** `grep -rn
+**The port has five implementers and, since phase 11, four adapters.** `grep -rn
 "ProjectionStore for"` matches `SqliteProjectionStore`
 (`crates/happenstance-sqlite/src/projection_store.rs:529`),
 `PostgresProjectionStore`
-(`crates/happenstance-postgres/src/projection_store.rs:94`),
+(`crates/happenstance-postgres/src/projection_store.rs:284`),
 `LadybugProjectionStore`
-(`crates/happenstance-ladybug/src/projection_store.rs:258`),
+(`crates/happenstance-ladybug/src/projection_store.rs:530`),
 `LiveHandleProjectionStore`
 (`experiments/live-handle-projection-batch/live_handle.rs:174`) and
 `NeonProjectionStore<T>`
-(`crates/happenstance-neon/src/projection_store.rs:153`). Four are still phase-2
-skeletons whose claims about transactions nothing has executed. The fifth is
-not: `SqliteProjectionStore` has real bodies in all four port methods and
-`crates/happenstance-sqlite/tests/projection.rs` mounts
-`happenstance_testkit::projection_store_conformance!` against a real temporary
-file, so **the suite it did not write now exists and it passes it**. What that
-does not buy is PS-2, which wants the suite green against two adapters at
-opposite ends of the batch-shape axis; this is a third replay-at-commit shape
-beside `MemoryProjectionStore` and the testkit's buffering variant, and no
-`rusqlite` adapter can supply the other end (a `rusqlite::Transaction<'_>` is
-`!Send`). For the other four the *kind* of ignorance is still what it was: the
+(`crates/happenstance-neon/src/projection_store.rs:210`). **This paragraph said
+four were phase-2 skeletons and one was an adapter, and that was true through
+phase 8.** Three of the four have since been written and have run the suite —
+`PostgresProjectionStore` and `NeonProjectionStore` at phase 10b,
+`LadybugProjectionStore` at phase 11 — leaving `LiveHandleProjectionStore`, which
+is an experiment rather than an adapter and is not going to run one.
+
+**What none of that buys is PS-2**, and the reason is now stronger than "nobody
+has got to it". The clause wants the suite green against two adapters at opposite
+ends of the batch-shape axis. All four are replay-at-commit shapes, beside
+`MemoryProjectionStore` and the testkit's buffering variant — six agreements at
+one end. And phase 10b established that the other end is **forbidden by the port**
+for both drivers PS-2 names: a `rusqlite::Transaction<'_>` is `!Send` and costs
+the `SendProjectionStore` impl, and a `sqlx` transaction cannot be produced by a
+`begin` that is total, synchronous and infallible. That is a finding against a
+`[FROZEN]` clause and is owed an ADR rather than an edit here. For the other four the *kind* of ignorance is still what it was: the
 signatures have been disagreed with by a type checker and nothing more.
 
 **`error[E0195]` is real, reproduced twice, and explains nothing about the

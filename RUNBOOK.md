@@ -163,7 +163,7 @@ turned out to be one DCB already provides.
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10a | [Postgres event store](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | **done** | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 10b | [Postgres projections, and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | `happenstance-neon`'s capability skip list — the transport axis's far end stated honestly — and no `todo!()` left on either crate |
-| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
+| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
 | 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10a** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10a, 10b, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
@@ -4903,7 +4903,12 @@ monotonic append with a conditional write, and forcing that onto an engine built
 for analytical traversal produces something that satisfies the trait and not the
 specification.
 
-**Decisions it settles.** ADR-0025. Fills the batch-shape axis.
+**Decisions it settles.** ADR-0025. **Fills the write-vocabulary axis** — Cypher
+rather than SQL, a graph rather than tables. It was written here as *"fills the
+batch-shape axis"* and that is not what it filled: Ladybug is the fifth
+owned-buffered-batch implementer, so it is a sixth agreement at one end rather
+than the second shape PS-2 wants, and phase 10b established that PS-2's other end
+is forbidden by the port for both drivers the clause names.
 
 **Work**
 
@@ -4930,17 +4935,96 @@ have been three.
 
 **Exit criteria**
 
-- [ ] Projection conformance green, with capability skips reported.
-- [ ] The verdict on phase 6's freeze is written down either way — "it held" is a
-      result and must be recorded as one.
-- [ ] Build cost measured and the CI decision recorded here.
-- [ ] `publish = false` removed.
+- [x] Projection conformance green, with capability skips reported. **42 listed,
+      42 executed, 42 passed, 0 failed, 0 ignored** against the real driver. The
+      suite is mounted **twice** — once under an emitter that needs no runtime at
+      all — which is what makes "blocking-only costs the port nothing" a
+      falsifiable claim rather than an assertion. 14 rules Ran and 3 are reported
+      capability skips per mount.
+
+- [x] The verdict on phase 6's freeze is written down either way. **It held**,
+      against a rubric committed before any body was written (ADR-0025 §8): the
+      capability profile matched the prediction exactly on all four constants, and
+      none of the four named "it did not hold" conditions fired. The one thing the
+      port did not give the skeleton — a store stamp — is expressible as a private
+      field of the adapter's own owned batch, exactly as `SqliteBatch` carries one.
+
+      **Its worth is bounded, and was bounded before the run rather than after.**
+      Ladybug is the **fifth** owned-buffered-batch implementer, not PS-2's second
+      shape. Six implementations now agree at one end of the batch-shape axis, and
+      phase 10b established that the other end is *forbidden by the port* for both
+      drivers PS-2 names. A sixth agreement is weak evidence and this phase does
+      not claim otherwise.
+
+- [x] Build cost measured and the CI decision recorded here. The driver is a
+      **1.44 GB prebuilt static archive** plus an OpenSSL toolchain no feature
+      turns off, and CMake is not needed — which is the opposite of what the
+      crate's own manifest claimed. Measured in
+      `experiments/ladybug-driver-probes/`. `cargo check` and `cargo clippy` do
+      not link and `cargo test --workspace --all-features` does, so the driver is
+      behind an off-by-default feature, this crate is excluded from the workspace
+      steps, and the suite runs as a probed step that prints `skipped` when the
+      driver is not configured — the shape `cargo deny` already has. A **mandatory
+      no-driver step** sits beside it, because the exclusions otherwise take the
+      crate's default configuration off the gate entirely and a `cfg` typo would
+      be caught by nothing.
+
+- [~] `publish = false` removed. **It is not, and the block is upstream rather
+      than here.** `DOCS_RS=1 cargo check -p happenstance-ladybug --features
+      driver` fails with two `env!` errors: `lbug`'s build script returns early
+      under `DOCS_RS` *before* emitting the `cargo:rustc-env` lines its own
+      `src/lib.rs` requires, and an undefined `env!` is a compile error rather
+      than a fallback. So this crate cannot render on docs.rs, which is phase 12's
+      standing bar for a published crate. `PUBLISHABLE` and `CLAUDE.md`'s crate
+      set are therefore untouched. The flag says "cannot be published yet", not
+      "not finished" — the crate root says which.
 
 **Cases this makes writable.** The third-shape half of E2E-19 and E2E-24.
 
 **Estimate.** 6 days.
 
 **Session log**
+
+- **2026-09-08 — the adapter is real, the suite is green, and the pre-registered
+  verdict held.** ADR-0025 was written first, from measurements rather than from
+  the crate's own notes — three of which were calibrated against `lbug` 0.16.1 and
+  wrong about 0.20.3. The structural pass was written against the stand-in first
+  and then compiled against the real driver **with zero API mismatches**, which is
+  the whole argument for a skeleton stated as a result.
+
+  **Where ADR-0025 was wrong, and it is worth more than where it was right.** §8
+  predicted `COMMIT_FAULT = SUPPORTED` and gave a mechanism: a `CREATE` against a
+  pre-planted primary key raises, where a `MERGE` would not. Both halves are true,
+  and together they are fatal — **nothing a fixture can reach makes this store
+  issue a `CREATE`**, because the checkpoint write is a `MERGE` and so is the probe
+  write. §8's own observation, applied one step further than §8 applied it, rules
+  out §8's own injection. The capability prediction survived; its reason did not.
+  What landed instead recreates the probe table with a primary key the store's
+  `MERGE` cannot satisfy.
+
+  **And a named limitation the rule cannot see.** That injection faults the
+  *first* batch statement, so unlike SQLite's checkpoint-side trigger it does not
+  refute the specific wrong implementation the rule's message names — apply the
+  rows, fail the checkpoint, keep the rows. That is a property of the schema
+  rather than of the adapter: the rule's immediate checkpoint read-back needs
+  `__hs_checkpoint` intact down to both property types, so every fault arm-able on
+  that table breaks the assertion it arms for. Both near-misses are written into
+  the fixture with their measured errors.
+
+  **Four findings that are not in the ADR.** The driver **segfaults** — a
+  connection issuing a statement after its own `BEGIN TRANSACTION` was refused
+  kills the process with `STATUS_ACCESS_VIOLATION`; the adapter cannot reach it,
+  and a test pins the refactor that would reintroduce it. `BEGIN TRANSACTION`
+  claims a single writer slot, which is what made `WriteTransactionInUse`
+  constructible — it was one commit away from being the decorative variant
+  ADR-0025 deleted `PositionOutOfRange` for. `UInt64` coerces silently to `STRING`,
+  so type-mismatch injections do not raise. And `SystemConfig::default()` reserves
+  4 GiB per database, which is invisible for one and decisive for forty in a test
+  binary.
+
+  ADR-0025 §7 needs one refinement, recorded on `commit`: the **regression** path
+  must issue a `ROLLBACK`, because no statement failed there and the transaction
+  is still open. §7's prohibition is about the error path specifically.
 
 ---
 
