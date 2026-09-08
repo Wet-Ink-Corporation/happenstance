@@ -12,6 +12,7 @@ related:
   - kb-decision-0011
   - kb-open-question-es-6-unwritable-rule-001
   - kb-reference-phase-4-5-spec-reconciliation-001
+  - kb-open-question-es-18-byte-identical-conformance-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - .kb/_intake/0011-read-laziness-and-isolation.md

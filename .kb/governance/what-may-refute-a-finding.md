@@ -23,20 +23,31 @@ summary: >-
   accepted decision may have silently drifted - the highest-value class available and the one a
   naive "the ADR covers this" reading discards. Specification clauses are exempt from the
   computation because cargo xtask spec-trace is a gate step, so their citations resolve at HEAD by
-  construction.
+  construction. A fourth follows from two 2026-09 episodes: a refutation is itself a finding and
+  is held to the same standard of evidence, so an empirical counter-claim owes a measurement
+  rather than a quotation, and the strongest label a brief can attach to a reason - decisive -
+  carries the highest burden rather than exempting it.
 depends_on: []
 related:
   - kb-governance-referent-not-reasoning-001
   - kb-playbook-anchoring-citations-001
   - kb-playbook-verify-referent-report-coverage-001
+  - kb-playbook-count-or-index-nobody-re-derives-001
   - kb-decision-0022
+  - kb-decision-0040
+  - kb-decision-0059
+  - kb-reference-mutation-coverage-arm-two-001
+  - kb-open-question-cf-5-per-rule-or-branch-001
   - kb-open-question-adr-0022-falsifiers-fired-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
+  - .kb/_intake/f2-5-holds-the-release-for-phase-10.md
+  - .kb/_intake/remediation-2026-09-04-briefs/domain-event-guard-and-decode.md
+  - .kb/_intake/remediation-2026-09-04-briefs/es-22-arm-two-is-reached-the-finding-is-wrong.md
   - references/evaluation/review-pre-publication-2026-09-03.md
   - standards/rust/README.md
   - standards/rust/01-standard-of-evidence.md
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-07
 ---
 
 # What may refute a finding, and how an accepted decision's currency is computed
@@ -81,6 +92,55 @@ that line has moved or been removed, the correct verdict is **an accepted decisi
 silently drifted from the code it once described** — which is the class of finding the naive
 reading ("the ADR already covers this, dismiss it") reliably discards, because that reading stops
 at the citation resolving rather than checking what it resolves *to*.
+
+## The first rule's sharpest instance, and it was not a review
+
+The `0.2.0` release pass supplies the strongest case yet for holding `RUNBOOK.md` at the
+bottom of the ladder, and what it cost was not a suppressed finding but a deferred release.
+The decision to hold `0.2.0` for phase 10 rested on a report that phase 10 was `not started`
+and eleven days away, read out of `RUNBOOK.md`'s status table. The row was stale —
+`lane/postgres-neon-stores` already held a substantially built `happenstance-postgres`, and
+the residual the hold was taken for was discharged the same day
+([`kb-decision-0040`](../decisions/0040-f2-5-holds-the-release-for-phase-10.md)). The defect
+occurred in the same file whose census that pass was at that moment repairing.
+
+Two things generalise. **The rule is not confined to refutation.** Dated evidence read as
+current fact drives a decision as readily as it suppresses a finding, by the same mechanism:
+a document recording a past state of the tree gets consulted as though it recorded the
+present one. Anything read out of `RUNBOOK.md` or `references/evaluation/*` as an *input* is
+owed the re-derivation an auditor owes a citation. **And the judgement was sound.** The
+decision was correct on the information available and the information was wrong; keeping
+those apart is the value of recording it, because a correction that folds them together
+teaches the next reader to distrust the reasoning rather than the referent.
+
+## A fourth consequence: a refutation is itself a finding
+
+Two 2026-09 episodes force the standard of evidence to run in both directions.
+
+**An empirical counter-claim owes a measurement, not a quotation.** The brief on the domain
+event guard rejected its Option B on three reasons and labelled the third *decisive*: the
+option would fire spuriously against sixteen named-const impls this repository writes itself.
+Nobody had measured it, and those sixteen have no call site at all — the guard is called from
+three places, which the brief's own *"What this does not settle"* section had enumerated
+throughout, and that is what made the error findable. With the counterfactual struck, nothing
+remained that carried a rejection and the recommendation flipped
+([`kb-decision-0059`](../decisions/0059-the-domain-event-guard-checks-positional-agreement.md)).
+The *decisive* label raises the burden on a reason; it does not discharge it.
+
+**Where the question is what the code does, run it.** F2-5's actionable half — that ES-22's
+`landed == 0` arm had never executed — was refuted by mutating that arm so anything reaching
+it must fail, then watching two registered stores fail it in both feature configurations
+([`kb-reference-mutation-coverage-arm-two-001`](../reference/mutation-coverage-arm-two-measurement-2026-09.md)).
+The finding looked true because the corpus was read *by axis*, and the store whose name
+advertises the axis is not one of the two that reach the arm. Reading found the wrong store;
+only running found the right ones.
+
+**A partial refutation restates the residual rather than striking the finding.** Both
+episodes overturned one half of a two-part claim and left the other standing, narrower and in
+its own words: F2-5's untouched half became the hold above, and the leftover question of
+whether a conformant control is owed per rule or per *branch* went to
+[`kb-open-question-cf-5-per-rule-or-branch-001`](../open-questions/cf-5-conformant-control-per-rule-or-per-branch.md)
+instead of dying with the half that was wrong.
 
 ## The one exemption, and why it needs none of this
 

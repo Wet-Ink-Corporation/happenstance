@@ -31,6 +31,7 @@ related:
   - kb-reference-spec-trace-has-suite-001
   - kb-decision-0022
   - kb-open-question-adr-status-vocabulary-001
+  - kb-reference-intake-citation-drift-census-001
 source_paths:
   - .kb/_intake/0034-what-the-phase-8-reconciliation-cost.md
   - RUNBOOK.md

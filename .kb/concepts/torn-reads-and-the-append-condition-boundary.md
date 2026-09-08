@@ -22,6 +22,7 @@ related:
   - kb-decision-0013
   - kb-decision-0022
   - kb-decision-sd-0001
+  - kb-decision-0054
 source_paths:
   - .kb/_intake/0011-read-laziness-and-isolation.md
   - references/adr/0011-read-laziness-and-isolation.md

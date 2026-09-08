@@ -31,6 +31,7 @@ related:
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-reference-nested-block-on-lost-wakeup-001
   - kb-open-question-testkit-contention-tolerance-001
+  - kb-reference-one-connection-latency-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - references/evaluation/review-pre-publication-2026-09-03.md

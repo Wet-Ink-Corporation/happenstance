@@ -32,6 +32,11 @@ related:
   - kb-open-question-ps-32-adr-0007-correction-owed-001
   - kb-open-question-cf-36-unperformed-cross-reference-001
   - kb-open-question-no-ps-rule-name-resolved-001
+  - kb-decision-0051
+  - kb-decision-0056
+  - kb-open-question-cf-38-case-naming-no-clause-001
+  - kb-open-question-dagger-convention-vs-maturity-markers-001
+  - kb-open-question-es-18-byte-identical-conformance-001
 source_paths:
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md
   - spec/SPECIFICATION.md

@@ -2,7 +2,8 @@
 id: kb-open-question-no-ps-rule-name-resolved-001
 title: No PS rule name is resolved, because the dagger that marks it unwritten is also what disables the check
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-open-question-dagger-convention-vs-maturity-markers-001
 authority_tier: note
 summary: >-
   CF-38 is FROZEN, and PS-27 and PS-30 are the visible symptoms of a check
@@ -31,6 +32,7 @@ related:
   - kb-open-question-cf-36-unperformed-cross-reference-001
   - kb-open-question-provisional-falsifiers-001
   - kb-playbook-repair-frozen-clause-001
+  - kb-open-question-es-6-unwritable-rule-001
 source_paths:
   - .kb/_intake/contract-defect-log-phase-7.md
   - references/evaluation/phase-7-contract-defects.md

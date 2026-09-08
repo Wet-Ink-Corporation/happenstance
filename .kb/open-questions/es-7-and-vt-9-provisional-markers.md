@@ -31,6 +31,7 @@ related:
   - kb-open-question-adr-status-vocabulary-001
   - kb-reference-spec-trace-has-suite-001
   - kb-open-question-no-ps-rule-name-resolved-001
+  - kb-open-question-cf-17-cf-14-markers-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/0001-async-port-flavours.md

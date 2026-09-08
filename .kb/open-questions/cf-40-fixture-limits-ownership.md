@@ -24,6 +24,7 @@ related:
   - kb-decision-0034
   - kb-decision-0023
   - kb-open-question-event-metadata-no-floor-001
+  - kb-open-question-cf-17-cf-14-markers-001
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - .kb/_intake/0012-append-shape-and-preconditions.md

@@ -31,6 +31,7 @@ depends_on: []
 related:
   - kb-decision-0020
   - kb-decision-0033
+  - kb-reference-macros-ceremony-second-example-001
 source_paths:
   - .kb/_intake/happenstance-macros-verdict.md
   - references/evaluation/phase-7-macros-verdict.md

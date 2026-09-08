@@ -48,7 +48,30 @@ summary: >-
   `kb-open-question-adapter-default-projection-feature-001` to superseded there — resolved by a
   direct manifest fix in both adapter crates rather than by an answering decision atom — and
   amended `kb-playbook-anchoring-citations-001` in place with a second dated section rather than
-  moving it, per the merge-over-create bias.
+  moving it, per the merge-over-create bias. The 2026-09-07 wave (`2026-09-07-intake`) added
+  twenty-three decision atoms across three existing domains and opened a fourth. The ports domain
+  gained fifteen (ADR-0024, ADR-0038 through ADR-0040, ADR-0042, ADR-0043, ADR-0048, ADR-0050
+  through ADR-0056, ADR-0058), four new reference atoms (a postgres remeasurement, a
+  mutation-coverage arm-two measurement, sqlite's one-connection latency under contention, and the
+  shipped adapter's append-condition SQL shape), and a new concept — a mutation `Kind` needs a bar
+  tethered to a real observed/control pair, the lesson `Kind::StatedOnlyDefect`'s withdrawal left
+  behind. The typed layer domain gained four decisions (ADR-0046, ADR-0047, ADR-0049, ADR-0059),
+  its first concept (growing a sealed trait's own member set is not a breaking change, correcting
+  `boundary.rs`'s own doc comment) and first playbook (require the property a guard exists to
+  enforce, not the mechanism that happens to spell it today), plus a second macros-ceremony
+  reference atom. Specification governance & conformance gained one decision (ADR-0045), three
+  reference atoms (an intake-wide citation-drift census, the `PROPTEST_CASES` cliff a model-family
+  clause would be quantified over, and spec-trace's now-declared unresolvable rule-name
+  declarations) and one playbook (a count or an index nobody re-derives). A new domain,
+  "Publication and release readiness," opened for three decisions about the crate boundary a
+  publish draws rather than about a port or the typed layer (ADR-0041, ADR-0044, ADR-0057).
+  Thirty-nine new open questions were filed and four existing ones flipped to superseded
+  (`kb-open-question-poll-count-rule-strength-001` by ADR-0024's own successor question,
+  `kb-open-question-postgres-arm-c-cost-001` and `kb-open-question-event-metadata-no-floor-001` by
+  ADR-0024 and ADR-0043 respectively, and `kb-open-question-query-plan-parameter-chunking-001` by
+  ADR-0052/ADR-0053 together with the shipped-SQL reference atom); see
+  [`open-questions-index.md`](open-questions-index.md) for the full list rather than repeating it
+  here.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -64,7 +87,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
   - .kb/_governance/integration-waves/2026-09-02-intake
   - .kb/_governance/integration-waves/2026-09-04-intake
-last_reviewed: 2026-09-04
+  - .kb/_governance/integration-waves/2026-09-07-intake
+last_reviewed: 2026-09-07
 ---
 
 # Domain map
@@ -88,6 +112,13 @@ does when it finds they do not. Established by the 2026-08-10 phase 4/5
 specification reconciliation, an unscheduled pass that read the specification
 back against the tree phases 4 and 5 had already changed.
 
+**Decisions**
+
+- [`0045-a-citation-anchor-matches-exactly-or-the-lint-refuses.md`](../decisions/0045-a-citation-anchor-matches-exactly-or-the-lint-refuses.md)
+  (`kb-decision-0045`) — added 2026-09-07. `lint_constitution.rs`'s citation checker now requires
+  an exact line match; `ANCHOR_SLACK`'s twelve-line tolerance on `spec-trace`'s derived citations
+  is left as a separate, undischarged residual.
+
 **Reference**
 
 - [`phase-4-5-specification-reconciliation-census.md`](../reference/phase-4-5-specification-reconciliation-census.md)
@@ -107,6 +138,20 @@ back against the tree phases 4 and 5 had already changed.
   criterion's arithmetic bullet had no clause range to close against, and 14
   of 20 repairs were false sentences no gate step could reach. Extends, does
   not replace, the phase-4/5 census above. Added 2026-08-20.
+- [`intake-citation-drift-census-2026-09.md`](../reference/intake-citation-drift-census-2026-09.md)
+  (`kb-reference-intake-citation-drift-census-001`) — a census of pre-ingest citation drift across
+  `.kb/_intake`: 699 citations checked, 77 drifted, 20 into `references/`, 57 still live, 25
+  recoverable. A third instance of the same defect class, over the staging directory rather than
+  the specification or the constitution. Added 2026-09-07.
+- [`model-family-case-count-cliff-2026-09.md`](../reference/model-family-case-count-cliff-2026-09.md)
+  (`kb-reference-model-family-case-cliff-001`) — `MODEL_COVERAGE`'s per-store table is true only at
+  `PROPTEST_CASES >= 192` (a cliff between 176 and 192, tied to the `to` generator change); the
+  default of 256 carries a 1.33x margin. Names what a model-family clause would have to be
+  quantified over. Added 2026-09-07.
+- [`spec-trace-unresolved-rule-declarations-2026-09.md`](../reference/spec-trace-unresolved-rule-declarations-2026-09.md)
+  (`kb-reference-spec-trace-unresolved-declarations-001`) — after `schedules_new`'s retirement, the
+  45 rule-name declarations `spec-trace`'s check 4 now resolves against: 26 `Elsewhere`, 4
+  `NotARuleName`, 15 `Scheduled`. Added 2026-09-07.
 
 **Playbooks** — transferable practice this pass extracted
 
@@ -126,6 +171,11 @@ back against the tree phases 4 and 5 had already changed.
   (`kb-playbook-repair-frozen-clause-001`) — the mechanical test for whether
   a correction to a `[FROZEN]` clause is a repair or a gap, and the safe form
   for each.
+- [`a-count-or-an-index-nobody-re-derives.md`](../playbooks/a-count-or-an-index-nobody-re-derives.md)
+  (`kb-playbook-count-or-index-nobody-re-derives-001`) — a stale bare count (CLAUDE.md's
+  "seventeen atoms," `ci.yml`'s "101") and a curated index mistaken for a completeness proof share
+  one repair: drop the count where a command answers it, use a floor not an equality assertion, and
+  verify coverage independently of a curated index. Added 2026-09-07.
 
 **Open questions** — see [`open-questions-index.md`](open-questions-index.md)
 for the full, self-contained list. The ones this domain owns:
@@ -144,7 +194,35 @@ byte-identical),
 and claims a level-marker cross-reference `cargo xtask spec-trace` does not perform),
 `kb-open-question-no-ps-rule-name-resolved-001` (added 2026-08-17 — CF-38 is `[FROZEN]`; a bare
 dagger in a clause's `Rule:` line, not the `has_suite` family switch this domain's own reference
-atom records fixed, is what still leaves every `PS` rule name unresolved).
+atom records fixed, is what still leaves every `PS` rule name unresolved. **Superseded** 2026-09-07
+by `kb-open-question-dagger-convention-vs-maturity-markers-001`: `schedules_new` is retired and
+zero clause `Rule:` lines carry a hand-authored dagger — the premise no longer describes anything in
+the file — so the successor restates the question against the generated `†` marker section 7.2 now
+emits),
+`kb-open-question-dagger-convention-vs-maturity-markers-001` (added 2026-09-07, superseding the
+entry above — does a generated `†` say anything `UNRESOLVABLE_RULE_NAMES`'s three kinds
+(`Elsewhere`, `NotARuleName`, `Scheduled`) do not),
+`kb-open-question-cf-38-case-naming-no-clause-001` (added 2026-09-07 — whether CF-38's fourth
+condition means "a case no clause claims" (checked, green) or "a case body naming a clause," the
+reading 54 of 58 E2E cases fail and CF-37's own text asks for),
+`kb-open-question-gate-step-first-check-hides-001` (added 2026-09-07 — `lints::stated_rule_counts`
+bundles three checks in one pass; the ordering/bundling question, scoped narrowly, since the V-6
+anchor-derivation half of the same source brief routes to the anchoring-citations playbook
+instead),
+`kb-open-question-exact-anchor-residue-001` (added 2026-09-07 — three residues ADR-0045's own
+ratification left open: `spec_trace.rs`'s undocumented `ANCHOR_SLACK = 12`, no rule requiring
+anchor uniqueness, and no shipped idempotent `--repoint`),
+`kb-open-question-docs-citation-anchor-contradiction-001` (added 2026-09-07 — three stacked
+defects in `docs/append-conditions.md`: a citation of ES-40 that contradicts it, a dead `file:line`
+landing mid-paragraph, and an unrecognised bare `:NNN` shorthand; a mechanical
+contradiction-detector is judged impossible),
+`kb-open-question-sole-evidence-pin-generality-001` (added 2026-09-07 —
+`the_shotgun_mutants_sole_coverage_is_pinned` only pins REGISTRY's one shotgun mutant, while a
+crude regex found roughly sixteen rules sharing the same sole-evidence hazard CF-1 exists to
+police, most unpinned),
+`kb-open-question-references-adr-correction-policy-001` (added 2026-09-07 — CLAUDE.md never states
+whether `references/adr/`'s full-length records may be corrected in place; grounded in a live
+falsified figure at `references/adr/0012-append-shape-and-preconditions.md:172-174`).
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
@@ -175,7 +253,13 @@ instead behind the off-by-default `unstable-projection` feature. The 2026-09-04 
 `.kb/decisions/0037`, phase 12: the pre-publication review's MSRV atom, extending the
 `kb-decision-0004` → `kb-decision-0029` amendment lineage by one more link rather than superseding
 either — `0.2.0` turns the 1.97.1 floor from a self-imposed constraint into a promise a published
-consumer relies on, without moving the number. The full decision list, including
+consumer relies on, without moving the number. The 2026-09-07 wave added fifteen more: ADR-0024
+(phase 10, filling the number RUNBOOK.md had reserved — `happenstance-postgres` buys position
+visibility with `xid8` and `pg_snapshot_xmin`), ADR-0038 (phase 10, `async-trait` exempted a
+second time, through `testcontainers`/`tonic`), ADR-0040 (phase 10, the same-day F2-5 hold and
+discharge), and twelve phase-12 pre-publication ratifications settling the port and the testkit
+(ADR-0039, ADR-0042, ADR-0043, ADR-0048, ADR-0050, ADR-0051, ADR-0052, ADR-0053, ADR-0054,
+ADR-0055, ADR-0056, ADR-0058). None supersedes a row on this map. The full decision list, including
 status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated here.
 
 **Reference**
@@ -205,6 +289,24 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
   on this runtime (a Node isolate has no per-isolate cap), and the category finding — no streaming
   entry point for a human-readable payload — reproduces the published cost table exactly. Added
   2026-08-20.
+- [`position-visibility-adapter-remeasurement-2026-09.md`](../reference/position-visibility-adapter-remeasurement-2026-09.md)
+  (`kb-reference-position-visibility-adapter-remeasurement-001`) — the 2026-09 remeasurement
+  against the now-real `happenstance-postgres`: steady-state ratios and a staleness table, carved
+  out of ADR-0024's own intake per the reference-layer separation rule. Added 2026-09-07.
+- [`mutation-coverage-arm-two-measurement-2026-09.md`](../reference/mutation-coverage-arm-two-measurement-2026-09.md)
+  (`kb-reference-mutation-coverage-arm-two-001`) — ES-22's arm 2 (the byte-identical before/after
+  snapshot) is reached and passed by two stores registered as mutants for other rules, with no
+  `Kind::ConformantVariant` built to exercise it; the measurement F2-5's discharge and CF-5's
+  question both rest on. Added 2026-09-07.
+- [`one-connection-latency-2026-09.md`](../reference/one-connection-latency-2026-09.md)
+  (`kb-reference-one-connection-latency-001`) — `happenstance-sqlite`'s reactor-stall,
+  lock-hold/residency and connection-sharing tail-latency tables under contention, the shared
+  evidence ADR-0058 and ADR-0053 each rest on. Added 2026-09-07.
+- [`shipped-append-condition-sql-experiment-2026-09.md`](../reference/shipped-append-condition-sql-experiment-2026-09.md)
+  (`kb-reference-shipped-append-condition-sql-001`) — a remeasurement of ADR-0022's SQL shape
+  against the shipped adapter rather than the phase-8 prototype: the chain-vs-aggregate loss
+  widens, a most-selective-tag-first assumption in §8 measures backwards, and a fourth,
+  boundary-bound arm beats the chain outright in most cells. Added 2026-09-07.
 - [`event-clone-allocations-and-layout-2026-09.md`](../reference/event-clone-allocations-and-layout-2026-09.md)
   (`kb-reference-event-clone-allocations-001`) — the t+2 allocation cost of `Tags::from_pairs`
   versus `Tag::from_static`, the `Bytes::clone` first-clone allocation, and the corrected 24-byte
@@ -227,6 +329,11 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
   (`kb-concept-torn-read-append-boundary-001`) — why the append condition, derived from the
   read's own observed maximum, cannot catch a torn read; the mechanism ADR-0011, ADR-0012 and
   ADR-0013 each protect without stating.
+- [`a-mutation-kind-needs-a-tethered-bar.md`](../concepts/a-mutation-kind-needs-a-tethered-bar.md)
+  (`kb-concept-mutation-kind-tethered-bar-001`) — why `Kind::StatedOnlyDefect` was withdrawn: an
+  untethered `fn() -> String` observed/control pair is satisfiable by a defect-free subject, and a
+  positive-control repair does not close that gap. `Witness`'s tie to `<T as Defect>::select`
+  escapes the same flaw; `Fixture` (RPITIT, not dyn-compatible) has no analogue. Added 2026-09-07.
 
 **Governance**
 
@@ -266,8 +373,12 @@ self-contained list. The ones this domain owns:
 `kb-decision-0017`; sub-question 3 stays open, with the typed layer),
 `kb-open-question-query-union-rule-unowned-001`,
 `kb-open-question-global-vs-boundary-visibility-001`,
-`kb-open-question-postgres-arm-c-cost-001`,
-`kb-open-question-poll-count-rule-strength-001`,
+`kb-open-question-postgres-arm-c-cost-001` (**superseded** 2026-09-07 by `kb-decision-0024`: the
+shipped adapter measures no discriminating steady-state cost, and the residual moves to
+`kb-open-question-off-poll-visibility-defect-001`),
+`kb-open-question-poll-count-rule-strength-001` (**superseded** 2026-09-07 by
+`kb-decision-0024`, whose own successor question, `kb-open-question-off-poll-visibility-defect-001`,
+carries the residual: an off-poll adapter has no suspension point a poll-based schedule can reach),
 `kb-open-question-es-38-and-gap-read-unowned-001`,
 `kb-open-question-projection-id-unvalidated-001`,
 `kb-open-question-cf-40-ownership-001`,
@@ -300,7 +411,9 @@ decision atom, since `kb-decision-0036` already commits the port to an off-by-de
 adapters honouring it settles no fork of its own.
 `kb-open-question-event-metadata-no-floor-001` (added 2026-09-04 — `happenstance-core`'s four
 `MIN_SUPPORTED_*` limits and three-variant `StoreLimit` enum declare no floor for `Event::metadata`
-itself, and no accepted decision states one),
+itself, and no accepted decision states one. **Superseded** 2026-09-07 by `kb-decision-0043`, which
+mints a refusal channel with `guaranteed_minimum() == 0` rather than a non-zero floor, chosen
+because a separate floor is incommensurable with `happenstance-sync`'s own `payload_len` budget),
 `kb-open-question-read-page-budget-001` (added 2026-09-04 — `happenstance-sqlite`'s private
 `PAGE_SIZE = 512` is not a port concept, and ADR-0011 settles `read`'s promises without settling
 what a page of it should cost),
@@ -313,11 +426,92 @@ test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker
 same-process assertion rather than the cross-instance one its text describes),
 `kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter
 budget is enforced on `write_tag_rows`'s insert path but not proven never to be hit on the
-400-arm-per-statement query-chunking path),
+400-arm-per-statement query-chunking path. **Superseded** 2026-09-07 by `kb-decision-0052` and
+`kb-decision-0053` together with `kb-reference-shipped-append-condition-sql-001`: the "400 arms is
+conservative enough" branch is refuted by measurement — 400 items at `MAX_TAGS_PER_EVENT` is
+51,200 bound parameters against SQLite's 32,766 ceiling — and the chunking mechanism now takes a
+fourth `per_arm_extra` parameter this question did not describe; `Selectivity::read_for`'s own
+unpartitioned failure mode, found in the same pass, is the residual),
 `kb-open-question-adr-0022-falsifiers-fired-001` (added 2026-09-04 — two of ADR-0022's own three
 named re-open conditions have fired and the third cannot fire as written, and nobody has yet
 decided whether the decision is superseded, re-opened, or ratified as still correct with the
-firings recorded against it).
+firings recorded against it. Amended 2026-09-07 with the shipped-adapter remeasurement's sharper
+figures and a corrected reading of `busy > 0`'s rate; stays **open**),
+`kb-open-question-msrv-ratification-conflict-001` (added 2026-09-07 — the ratified pre-publication
+recommendation to lower the MSRV to 1.95 is absent from the discharge queue, and the 1.88 figure
+both `kb-decision-0029` and `kb-decision-0037` state is contradicted by a compiled bisection naming
+1.95.0 as the first passing version; filed as a conflict rather than forced to resolve),
+`kb-open-question-off-poll-visibility-defect-001` (added 2026-09-07 — an off-poll adapter,
+`happenstance-postgres` hopping onto a captured `sqlx` runtime `Handle`, has a real, demonstrated
+visibility defect no poll-based schedule can reach, because the port exposes no suspension point a
+hand-polled rule can wedge into; successor to `kb-open-question-poll-count-rule-strength-001` and
+`kb-open-question-postgres-arm-c-cost-001`, both superseded above),
+`kb-open-question-cf-5-per-rule-or-branch-001` (added 2026-09-07 — whether CF-5's
+conformant-control obligation is discharged once per rule or once per branch inside a multi-arm
+rule; ES-22's arm 2 is the first place the difference is visible),
+`kb-open-question-postgres-read-fault-declension-001` (added 2026-09-07 — `PostgresFixture`
+inherits a `READ_FAULT` declension that is false about a store whose `PgReadStream` holds a
+server-side cursor, the gap ADR-0051's CF-18 discharge found),
+`kb-open-question-read-fault-rule-no-clause-001` (added 2026-09-07 — the third entry in
+`UNCLAIMED_PENDING_ADR`, mirroring `kb-open-question-disjoint-boundaries-no-clause-001` and
+`kb-open-question-model-family-rule-no-clause-001`: a live rule with no owning clause),
+`kb-open-question-cf-18-residuals-after-declension-001` (added 2026-09-07 — what ADR-0051's
+declension-by-inheritance does not discharge: no SKIP line for a declined capability, ES-35's
+`[PROVISIONAL]` marker, and whether an adapter README must disclose declines),
+`kb-open-question-cf-23-emitter-names-unstable-001` (added 2026-09-07 — CF-23 requires named
+emitters while the shipped surface marks them `doc(hidden)`, a contradiction `cargo-semver-checks`
+cannot see because hidden items are exactly what it excludes),
+`kb-open-question-cf-25-cf-26-portfolio-check-001` (added 2026-09-07 — no check in
+`xtask/src/spec_trace.rs` performs the portfolio/axis comparison CF-25 and CF-26 both name),
+`kb-open-question-vt-30-marker-stale-unscheduled-001` (added 2026-09-07 — VT-30's `[PROVISIONAL]`
+marker is stale as written now that `happenstance-testkit/src/bench.rs` exists; the real gap
+narrows to no multi-guard workload in the harness),
+`kb-open-question-cf-17-cf-14-markers-001` (added 2026-09-07 — CF-17 gained a declaration `MUST`
+on `REOPEN` without its `[PROVISIONAL]` marker moving; CF-14 is adjacent, `[DEFERRED]`, and
+unchanged),
+`kb-open-question-model-only-kind-memberless-001` (added 2026-09-07 — `Kind::ModelOnlyMutant` has
+gone memberless now that `read_to_composes_with_multi_item_query` landed; three options recorded,
+none taken),
+`kb-open-question-read-to-backwards-limit-composition-001` (added 2026-09-07 — the unwritten
+backwards-plus-window-plus-limit read composition, deliberately unasserted because it would
+double-reject three already-registered mutants for reasons three other rules own),
+`kb-open-question-cf-33-cf-34-scope-001` (added 2026-09-07 — a timed `#[cfg(test)]` check in
+`happenstance-sqlite` sits outside CF-33's stated scope, and a benchmark completion panic sits
+adjacent to CF-34's merge-red prohibition; no governing principle reconciles both with the frozen
+text as written),
+`kb-open-question-es-23-adapter-half-001` (added 2026-09-07 — `FROZEN_DOC_MUSTS` has no recorded
+disposition for ES-23's adapter-side `MUST`, a gap two named instruments both failed to catch),
+`kb-open-question-es-18-byte-identical-conformance-001` (added 2026-09-07 — whether ES-18's
+"byte-identical" second sentence is amended to the weaker conformance reading its own rules ask, or
+narrowed to exclude the position counter; specific to `happenstance-cloudflare`'s
+compensation-based atomicity, not every counter-assigning store),
+`kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
+`ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
+phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
+`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
+`Statement` newtype follows once `ProjectionStore` freezes),
+`kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
+default plus the runner's observation seam, both priced at zero code-cost-of-delay by ADR-0036's
+exemption),
+`kb-open-question-reset-refusal-declension-001` (added 2026-09-07 — `RESET_REFUSAL` has no
+CF-39-shaped clause after ADR-0042's retraction, so a fixture can declare it and override
+`protect_from_reset` with an empty body, passing vacuously),
+`kb-open-question-projection-module-exemption-scope-001` (added 2026-09-07 — ADR-0036's
+unstable-projection exemption text names only `happenstance-core` and `happenstance`;
+`happenstance-testkit`'s projection module is unconditional and un-exempt as written),
+`kb-open-question-trait-variant-caret-001` (added 2026-09-07 — `trait_variant`'s blanket impl is
+pinned only by a caret, guarded only by `#[cfg(test)]`, which does not travel to a consumer of the
+three already-published crates),
+`kb-open-question-es-11-sqlite-ceiling-sample-cost-001` (added 2026-09-07 — ES-11's ceiling sample
+stalls 39.3x the idle floor under contention on `happenstance-sqlite`'s read path, a second native
+adapter data point against ES-11's `[PROVISIONAL]` marker),
+`kb-open-question-then-empty-emission-idiom-001` (added 2026-09-07 — how `then(&[])` reads once
+`commit`'s outcome is two-armed, and whether `decide` can express "nothing to do" distinctly from
+"refused"),
+`kb-open-question-scope-coverage-helper-projection-gap-001` (added 2026-09-07 — the additive,
+enum-total `assert_scope_covered` test helper, and the identical unchecked tags/scope pair on the
+projection port ADR-0047's fix does not reach).
 
 ## The typed layer: decision models, codecs, and payload evolution
 
@@ -368,6 +562,18 @@ supersession, since ADR-0020's own contrary prediction was published as explicit
   (`kb-decision-0033`) — added 2026-08-17. The worked example's ceremony-to-domain ratio is
   0.50:1/0.12:1 under both extreme classifications of its contested lines, against the 1.0
   threshold AC-013 set — `happenstance-macros` does not ship in 0.1.
+- [`0046-commit-reports-a-nothing-to-do-outcome.md`](../decisions/0046-commit-reports-a-nothing-to-do-outcome.md)
+  (`kb-decision-0046`) — added 2026-09-07. `commit` gains an outcome distinct from "refused" for a
+  `decide` that emits nothing to append; three of five in-tree call sites needed the new arm.
+- [`0047-tags-and-scope-must-agree-at-commit.md`](../decisions/0047-tags-and-scope-must-agree-at-commit.md)
+  (`kb-decision-0047`) — added 2026-09-07. An under-tagged model — one whose `DomainEvent::tags`
+  does not cover its own `Boundary`'s scope — is refused at commit rather than silently admitted.
+- [`0049-a-codec-declares-the-tags-it-reads.md`](../decisions/0049-a-codec-declares-the-tags-it-reads.md)
+  (`kb-decision-0049`) — added 2026-09-07. `Codec::reads_tag` is a declared, per-codec,
+  orphan-rule-bounded obligation — narrower than "a codec declares the tags it reads" sounds.
+- [`0059-the-domain-event-guard-checks-positional-agreement.md`](../decisions/0059-the-domain-event-guard-checks-positional-agreement.md)
+  (`kb-decision-0059`) — added 2026-09-07. Named-const doctests and examples plus an xtask lint
+  land now; a positional-agreement precondition on `assert_domain_event` is owed before `0.2.0`.
 
 **Reference**
 
@@ -375,13 +581,44 @@ supersession, since ADR-0020's own contrary prediction was published as explicit
   (`kb-reference-macros-ceremony-measurement-001`) — the 29-range, line-by-line ceremony/domain
   classification of `examples/course-subscriptions/src/main.rs` that `kb-decision-0033` rests on.
   Added 2026-08-17.
+- [`phase-7-macros-ceremony-second-example-2026-09.md`](../reference/phase-7-macros-ceremony-second-example-2026-09.md)
+  (`kb-reference-macros-ceremony-second-example-001`) — the ceremony ratio remeasured against a
+  second worked example, `transfers-on-sqlite`, alongside `course-subscriptions` at a later commit:
+  6.3% combined, strengthening ADR-0033 rather than reopening it. Added 2026-09-07.
+
+**Concepts**
+
+- [`growing-a-sealed-trait-is-not-a-breaking-change.md`](../concepts/growing-a-sealed-trait-is-not-a-breaking-change.md)
+  (`kb-concept-sealed-trait-growth-001`) — corrects `boundary.rs`'s own doc comment, which states
+  the sealed-trait growth rule backwards: RS-40-1's `E0046` hazard cannot apply to a sealed trait,
+  since no downstream impl exists to be missing an item. The two real residuals are
+  method-resolution ambiguity from a new name and a newly nameable associated type. Added
+  2026-09-07.
+
+**Playbooks**
+
+- [`require-the-property-not-the-mechanism.md`](../playbooks/require-the-property-not-the-mechanism.md)
+  (`kb-playbook-require-the-property-001`) — an xtask assertion and four in-crate tests all
+  required the literal `pub use happenstance_core::*` glob by name rather than the property
+  contract items resolve only through their own gates, so ten ungated names leaked under
+  `cargo test` while every check stayed green. Added 2026-09-07.
 
 **Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
-self-contained list. The one this domain owns:
+self-contained list. The ones this domain owns:
 `kb-open-question-d-1-no-total-path-001` (added 2026-08-17 — `QueryItem::new` is fallible even over
 already-validated inputs and `DomainEvent::tags` is total over a fallible `Tags`; no infallible
 route exists in either direction, and it is the single condition that would reopen ADR-0033's
-verdict).
+verdict),
+`kb-open-question-event-type-positional-mapping-001` (added 2026-09-07 — the worked examples'
+`EVENT_TYPES[n]` mapping from a fold position to a decoder is unchecked by the compiler in both
+`course-subscriptions` and `transfers-on-sqlite`; filed rather than amending ADR-0033, which the
+new ceremony measurement strengthens instead),
+`kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
+macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
+ADR-0020's decision text or the signed-off design),
+`kb-open-question-seal-the-codec-001` (added 2026-09-07 — whether `Codec` is later sealed now that
+`0.2.0` is live and the window to do so for free has closed; bundles the `UnknownTag`-split and
+`Boundary::absorb` sub-questions ADR-0049 left undone).
 
 ## Documentation standards: the page-need discipline
 
@@ -465,6 +702,38 @@ self-contained list. The one this domain owns:
 the anti-appropriation lever the commercial layer rests on is trademark, not copyright, since
 Apache-2.0 §6 grants no trademark rights — gates filing, registration and physical application,
 not the identity's continued use in software today).
+
+## Publication and release readiness
+
+The area concerned with the crate boundary a publish draws — what a published crate's manifest and
+public surface owe a consumer that neither a port decision nor a typed-layer decision is about.
+Established by the 2026-09-07 wave from the pre-publication review's remediation queue. Distinct
+from "Contract ports, conformance, and the ADR corpus": that domain is about `happenstance-core`'s
+design and the ADR corpus it rests on, while this one is about what changes the moment a crate is
+`cargo add`-able — a re-export policy, a public repository, a dropped dev-dependency version key.
+
+**Decisions**
+
+- [`0041-the-repository-is-public-and-security-has-an-email-channel.md`](../decisions/0041-the-repository-is-public-and-security-has-an-email-channel.md)
+  (`kb-decision-0041`) — the repository went public in two stages: `SECURITY.md` and an email
+  channel landed first, independent of publication, then the repository itself followed a costed
+  pre-publication sweep.
+- [`0044-a-published-crate-re-exports-its-drivers.md`](../decisions/0044-a-published-crate-re-exports-its-drivers.md)
+  (`kb-decision-0044`) — a published crate re-exports any crate whose type appears in one of its own
+  public signatures, publication-scoped and necessary-not-sufficient; `tokio` is excluded by owner
+  ruling.
+- [`0057-the-testkit-version-key-is-dropped.md`](../decisions/0057-the-testkit-version-key-is-dropped.md)
+  (`kb-decision-0057`) — `happenstance-testkit`'s resolvable dev-dependency version key is dropped
+  from every publishable crate's manifest, with a gate step asserting none carries one back; a
+  deliberate exception stands for `examples/outside-projection-adapter`.
+
+**Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
+self-contained list. The ones this domain owns:
+`kb-open-question-adapter-version-lockstep-001`,
+`kb-open-question-facade-does-not-match-adr-0006-001`,
+`kb-open-question-stale-0-0-0-name-reservations-001`,
+`kb-open-question-cloudflare-feature-gate-001`,
+`kb-open-question-rustdoc-citation-form-001`.
 
 ## Adding a domain
 

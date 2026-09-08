@@ -26,6 +26,9 @@ related:
   - kb-open-question-cf-36-unperformed-cross-reference-001
   - kb-open-question-no-ps-rule-name-resolved-001
   - kb-reference-phase-8-spec-reconciliation-001
+  - kb-open-question-cf-38-case-naming-no-clause-001
+  - kb-open-question-dagger-convention-vs-maturity-markers-001
+  - kb-reference-spec-trace-unresolved-declarations-001
 source_paths:
   - .kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md
   - references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md

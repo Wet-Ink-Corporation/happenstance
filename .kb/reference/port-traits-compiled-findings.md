@@ -30,6 +30,7 @@ related:
   - kb-decision-0031
   - kb-open-question-es-6-unwritable-rule-001
   - kb-open-question-provisional-falsifiers-001
+  - kb-decision-0039
 source_paths:
   - .kb/_intake/0001-async-port-flavours.md
   - .kb/_intake/0008-one-derivation-for-both-ports.md

@@ -15,19 +15,27 @@ summary: >-
   which phase 6 has not frozen. Refuted by a projection checkpoint design that turns out to be
   boundary-scoped, which would remove the argument the global choice rests on and make that nine
   percent real money. Owned by phase 6, the ProjectionStore freeze. If it fires, this section of
-  ADR-0013 reopens and needs its own decision.
+  ADR-0013 reopens and needs its own decision. ADR-0024 inherited the premise at phase 10 rather
+  than settling it: it rejects arm B-tag on the invariant and not on cost, so if the checkpoint
+  turns out to be boundary-scoped the reopening now takes ADR-0024's mechanism with it as well as
+  ADR-0013's argument.
 depends_on: []
 related:
   - kb-decision-0013
   - kb-decision-0018
+  - kb-decision-0024
   - kb-reference-position-visibility-experiment-001
+  - kb-reference-position-visibility-adapter-remeasurement-001
   - kb-open-question-projection-batch-no-apply-001
+  - kb-open-question-postgres-arm-c-cost-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
+  - .kb/_intake/2026-09-07-adr-0024-position-visibility-mechanism.md
   - references/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0024-position-visibility-mechanism.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-13
+last_reviewed: 2026-09-07
 ---
 
 # Whether the visibility invariant needs to be global
@@ -58,6 +66,27 @@ checkpoint, and later have 99 become visible on boundary Y — `from: checkpoint
 
 The ADR states its own honesty about the closure explicitly, in the "What this ADR leaves open"
 table: "Closed *by decision* in decision §3, not by evidence, and the decision is reversible."
+
+## What phase 10 added, and what it deliberately did not
+
+ADR-0024 (`.kb/decisions/0024-position-visibility-mechanism.md`) chose the mechanism by which
+`happenstance-postgres` buys ES-10 — `xid8` plus a `pg_snapshot_xmin` frontier predicate — and in
+doing so **inherited this premise rather than settling it**. Its fourth sub-question asked directly
+whether arm B-tag should be reconsidered now that a real adapter existed, and the answer turns on
+this question and not on money: B-tag's branch was "if arm C proves structurally expensive," arm C
+did not, and so **B-tag stays rejected on the invariant — per-boundary where ES-10 is global — and
+not on cost**. That leaves the nine percent exactly where ADR-0013 left it: foreclosed by a
+premise, not by a measurement.
+
+Two consequences follow, and both make this question larger rather than smaller. A second accepted
+decision now rests on the same unfrozen checkpoint shape, so a boundary-scoped checkpoint reopens
+ADR-0024's mechanism too — the adapter would be paying `xid8`'s bill for a guarantee its consumers
+did not need. And that bill is now priced against the built adapter rather than a bare harness
+(`kb-reference-position-visibility-adapter-remeasurement-001`): no measurable steady-state cost,
+but frontier staleness of 4799.3 ms behind an unrelated five-second held write anywhere on the
+cluster, where the unguarded control is unaffected. B-tag's per-boundary lock buys the weaker
+invariant without that cluster-wide coupling, which is what makes the premise worth re-testing and
+not merely worth noting.
 
 ## What is not decided
 
@@ -94,3 +123,6 @@ new ADR, per this repository's standing rule that a frozen clause changes by ADR
 4. Is there a hybrid worth naming before phase 6 — a checkpoint that is per-boundary but
    accompanied by a global watermark for the "have I seen everything below here" case the current
    argument relies on?
+5. If the premise falls, is ADR-0024 reopened as well as ADR-0013 — and is the trigger the
+   throughput ratio it was priced at in phase 2, or the cluster-wide staleness coupling the phase
+   10 remeasurement exposed, which is the cost B-tag would actually avoid?
