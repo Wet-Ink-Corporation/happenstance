@@ -77,6 +77,50 @@ this hole; nothing else does.
 
 ---
 
+
+### D-02 — Ladybug's build cost, measured rather than estimated
+
+Phase 11's exit criteria ask for the build cost to be measured and the CI decision
+recorded. Measured first, on this machine (`x86_64-pc-windows-msvc`, rustc 1.97.1),
+in a scratch crate outside the workspace so nothing was disturbed:
+
+| Fact | Value |
+|---|---|
+| CMake needed? | **No.** `lbug` 0.20.3's `build.rs` tries a prebuilt download first and it succeeded, so the cmake-from-source fallback the crate's own `Cargo.toml` NOTE warns about never ran. |
+| Prebuilt artefact | `lbug.lib`, **1,444,941,838 bytes — 1.44 GB**, a single static archive, plus `lbug.h` and `lbug.hpp` |
+| Rust-side compile | 17 crates, unremarkable |
+| Link | **fails**: `LINK : fatal error LNK1181: cannot open input file 'libssl.lib'` |
+
+**OpenSSL is not optional.** `build.rs`'s `link_libraries` calls `link_openssl()`
+and then emits `cargo:rustc-link-lib=dylib=libssl` / `=libcrypto` unconditionally
+in static mode, and it is called in the dylib branch too. There is no feature or
+environment variable that turns it off. `OPENSSL_DIR` is honoured and only adds a
+link-search path, so any directory holding `libssl.lib` and `libcrypto.lib` will do.
+
+**The install went wrong in a way worth recording.** `winget install
+ShiningLight.OpenSSL.Dev` raised a UAC prompt and sat on it. On an unattended run
+nobody clicks it, so the command hung until it was killed — the machine-scope MSI
+has no user-scope arm. The no-admin route taken instead is a user-space `vcpkg`
+building `openssl:x64-windows-static-md`, which `lbug`'s `build.rs` already looks
+for through `vcpkg::find_package("openssl")`.
+*(A UAC dialog was left on the desktop by the killed installer and needs dismissing
+by hand — the process behind it is gone.)*
+
+**What this already settles about the CI question**, before the adapter exists: a
+1.44 GB static archive plus an OpenSSL toolchain cannot sit on the path of
+`cargo test --workspace --all-features`, which is gate step 3 and which *links*.
+`cargo check` and `cargo clippy` do not link, so the cost lands on exactly one
+step — but it lands hard, on every machine and all three CI platforms.
+
+The consequence is a design constraint rather than a scheduling one: **the `lbug`
+dependency has to be behind an off-by-default feature**, so the default gate never
+links it, and the conformance run is gated the way the Postgres suite is. That is
+the same argument the crate's own `Cargo.toml` NOTE makes for why Ladybug is a
+separate crate at all, one level further in — and it was reached by measurement
+here rather than by preference.
+
+---
+
 ## Left for the owner
 
 *(accumulated as the work reveals them)*
