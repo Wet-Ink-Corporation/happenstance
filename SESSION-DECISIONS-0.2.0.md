@@ -623,6 +623,22 @@ has to carry `0.2.0` first.
 requires every phase in it to read `done`; adding it now costs either a red gate
 or a lie about an unpublished release.
 
+### The branch is pushed, and CI has still not seen it
+
+`lane/0.2.0-closeout` is on `origin` — 41 commits, 67 files, +11,619 / −1,190.
+**That does not run CI.** The workflow triggers on `push` to `main`,
+`pull_request`, `workflow_dispatch` and a weekly schedule; a push to a lane branch
+matches none of them, and `gh run list --branch lane/0.2.0-closeout` is empty
+because nothing was queued rather than because something failed. That is the shape
+of evidence this repository has been caught by before, so it is said out loud
+rather than left as an absence.
+
+**Opening a pull request is the single action that closes the gap below**, and it
+is deliberately left to the owner: it is the first outward-facing step of this
+release. It would run the three-OS matrix, `msrv`, `live-postgres`, the new
+`ladybug` and `benchmarks` jobs, and `semver` — which is pull-request-only and has
+therefore never run against any of this work.
+
 ### The one thing that would change a reader's mind
 
 Every claim above rests on **one machine**. Three CI jobs cannot run here at all —
