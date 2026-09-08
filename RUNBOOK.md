@@ -5180,6 +5180,67 @@ frozen ones cost something to change.
 
 **Session log**
 
+- **2026-09-08 — everything phase 12 can do before the release is done, and the
+  two criteria that cannot be are named rather than ticked.**
+
+  **The baseline was red and had been since the KB intake wave.** `cargo xtask ci`
+  failed on one citation: `.kb/decisions/0058`'s three ranges were stale on
+  arrival, inherited from a brief written on 2026-09-04 against a tree the
+  merge-join read path later moved. `a4616ca` repointed what that merge moved in
+  code and documentation and touched no `.kb` file, correctly — nothing there was
+  in scope, because `.kb/_intake` is excluded from the citation scan
+  (`xtask/src/lints.rs`). The ingest then promoted the brief into `.kb/decisions/`,
+  which *is* checked. **The ingest is the moment invisible drift becomes a red
+  gate, and it is the moment nobody is reading line numbers.** Staged as a finding
+  with two repairs, of which re-anchoring at promotion is the stronger.
+
+  **The `docs.rs` step covered three of the five publishable crates.** Its whole
+  argument is that a broken `doc(cfg(…))` fails where it can no longer be fixed —
+  and on the release that publishes five crates it was covering three of them.
+  `happenstance-cloudflare` needed its own step, because its manifest renders it
+  for `wasm32` and nothing else.
+
+  **Both auditable exit criteria are discharged, and one is now a gate step.**
+  `runbook_clause_ledgers_match_the_specification` holds both clause ledgers
+  against §7.2 — which `spec-trace` generates and equality-checks — in both
+  directions, with every provisional group required to name an owner. It reports
+  46 provisional across 20 groups and 12 deferred. Proven non-decorative before it
+  landed: a dropped clause, a clause the specification no longer marks, and a
+  blank owner cell are each rejected. The criterion said to audit *"against the
+  ledger and `spec-trace`, not against prose"*; a check that runs on every commit
+  is the strongest reading of that available, and the ledger has been wrong in
+  both directions twice with nothing noticing.
+
+  **The deferred criterion counted one and there are seven.** Classified by
+  publishing crate: WF-1, ES-39, PS-18, PS-27, PS-30, CF-14 and CF-27 are on a
+  published surface; the five `SY` clauses are not, because `happenstance-sync` is
+  `publish = false`. Each of the seven now ships under a stated disposition, and
+  two — ES-39 and CF-14 — are **accepted in writing as possible breaking 0.2s**
+  rather than assumed free.
+
+  **Packaging:** `package-check` green on all five, each carrying both licence
+  files and a README. `happenstance-core`'s `--dry-run` passes, verified by
+  compiling from its own tarball. **The other four cannot be dry-run before the
+  release** — `--dry-run` resolves from the registry and they fail with *"candidate
+  versions found which didn't match: 0.2.0-alpha.1, 0.0.0"*, which is the
+  each-must-be-live-before-the-next ordering arriving as a refusal rather than a
+  sentence. Those four happen during the publish.
+
+  **`scripts/stranger-install-smoke.sh` is written and its Rust validated against
+  the local crates**, so it cannot fail at the release for a typo — which already
+  paid, because the first draft did not compile. It has never resolved from
+  crates.io, which is the whole proposition and needs the release to exist.
+
+  **Not ticked, and neither can be before the release:** *crates live; docs.rs
+  green*, and *`cargo-semver-checks` against a real published baseline*. The
+  registry has to carry `0.2.0` before either means anything.
+
+  **The `0.2.0` milestone row is deliberately not added**, and phase 12 stays `in
+  progress`. `runbook_status_matches_the_registry` walks a milestone row's whole
+  dependency closure and requires every phase in it to read `done`; adding the row
+  now would either redden the gate or require marking phase 12 `done` over an
+  unpublished release. The order stays publish → mark `done` → add the row.
+
 ---
 
 ## Phase 13 — `happenstance-sync` and its testkit
